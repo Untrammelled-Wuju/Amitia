@@ -9,6 +9,7 @@ import 'package:amitia_app/core/backend_connection/backend_connection_repository
 import 'package:amitia_app/core/backend_connection/backend_connection_source.dart';
 import 'package:amitia_app/core/backend_connection/providers/backend_connection_providers.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_snapshot.dart';
+import 'package:amitia_app/core/runtime/runtime_bridge_provider.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -174,6 +175,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      await container.read(runtimeSnapshotProvider.future);
       await container
           .read(backendConnectionProvider.future)
           .catchError((_) => const BackendConnectionUnavailable());

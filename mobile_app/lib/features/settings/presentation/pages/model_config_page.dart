@@ -6,6 +6,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_editor.dart';
@@ -35,6 +37,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   bool _loading = true;
   bool _busy = false;
   bool _visionSuspended = false;
+  bool _canConfigure = false;
   String? _error;
 
   String get _typeName => _typeLabels[widget.modelType] ?? '模型配置';
@@ -59,9 +62,19 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (!mounted) return;
     setState(() {
       _loading = true;
+      _canConfigure = false;
       _error = null;
     });
     try {
+      final deployment = ref.read(mobileDeploymentConfigProvider);
+      if (deployment.mode == MobileDeploymentMode.cloud) {
+        final policy = await ref.read(deviceMeshServiceProvider).coordination();
+        if (policy['canAdminister'] != true) {
+          if (!mounted) return;
+          setState(() { _configs = const []; _providers = const []; _loading = false; _error = 'AI 服务由云端 Core 提供。当前设备没有云端管理员权限，请在 Core 控制页面修改模型配置。'; });
+          return;
+        }
+      }
       final visionSuspended = widget.modelType == 'vision'
           ? await ref.read(visionServiceProvider).mainModelVision()
           : false;
@@ -72,6 +85,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         _configs = configs;
         _visionSuspended = visionSuspended;
         _providers = providers;
+        _canConfigure = true;
         _loading = false;
       });
     } catch (e) {
@@ -143,7 +157,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         actions: <Widget>[
           IconButton(
             tooltip: '新建',
-            onPressed: _busy ? null : () => _showConfigSheet(null),
+            onPressed: _busy || !_canConfigure ? null : () => _showConfigSheet(null),
             icon: const Icon(Icons.add),
           ),
           IconButton(

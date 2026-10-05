@@ -818,10 +818,14 @@ func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
 }
 
 func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition, scope InvocationScope) resolvedExecution {
-	if def.Runtime.RuntimeType == capability.RuntimeTypeGameHost {
+	owned := false
+	if scope.ExecContext != nil {
+		owned, _ = scope.ExecContext.Metadata["ownedDeviceTarget"].(bool)
+	}
+	if !owned && def.Runtime.RuntimeType == capability.RuntimeTypeGameHost {
 		return resolvedExecution{}
 	}
-	if strings.TrimSpace(string(def.CapabilityID)) == "" && def.Runtime.RuntimeType != "" {
+	if !owned && strings.TrimSpace(string(def.CapabilityID)) == "" && def.Runtime.RuntimeType != "" {
 		return resolvedExecution{}
 	}
 	if f.capabilityResolver == nil {
@@ -832,6 +836,7 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 		capID = capability.CapabilityID(def.ID)
 	}
 	req := capability.CapabilityResolutionRequest{
+		SpaceID:            runtimeidentity.SpaceID(scope.SpaceID),
 		CapabilityID:       capID,
 		ExtensionID:        def.ExtensionID,
 		ModuleID:           def.ModuleID,
@@ -848,6 +853,29 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 			req.RequiredDeviceID = runtimeidentity.DeviceID(deviceID)
 			req.PreferredDeviceID = runtimeidentity.DeviceID(deviceID)
 			req.AllowCore = false
+		}
+	}
+	if owned {
+		placement, _ := def.Runtime.Metadata["modulePlacement"].(string)
+		device := placement == "device"
+		if placement == "" {
+			switch def.Runtime.RuntimeType {
+			case capability.RuntimeTypeAndroid_Native, capability.RuntimeTypeAndroidLinux, capability.RuntimeTypeIOS_Native, capability.RuntimeTypeDesktop_Extension, capability.RuntimeTypeWorkspace, capability.RuntimeTypeBrowser, capability.RuntimeTypeGameHost, capability.RuntimeTypePluginJS:
+				device = true
+			}
+		}
+		if device {
+			if scope.ExecContext.RuntimeTarget == nil || scope.ExecContext.RuntimeTarget.DeviceID == "" {
+				return resolvedExecution{missingCapability: capID, resolutionCode: "CAPABILITY_DEVICE_TARGET_REQUIRED", resolutionDetail: "设备能力缺少明确的目标设备"}
+			}
+			req.RequiredPlacement = capability.ProviderPlacementDevice
+			req.PreferredPlacement = capability.ProviderPlacementDevice
+			req.RequiredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+			req.PreferredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+			req.AllowCore = false
+		} else if placement == "cloud" {
+			req.RequiredPlacement = capability.ProviderPlacementCore
+			req.AllowDevice = false
 		}
 	}
 	if def.RoutingMode == capability.RoutingModeProviderRequired || def.RoutingMode == capability.RoutingModeProviderPreferred {
@@ -872,6 +900,9 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 			detail = fmt.Sprintf("capability %s has no executable provider", capID)
 		}
 		return resolvedExecution{missingCapability: capID, resolutionCode: code, resolutionDetail: detail}
+	}
+	if owned && ((req.RequiredPlacement != "" && result.ExecutionTarget.Placement != string(req.RequiredPlacement)) || (req.RequiredDeviceID != "" && result.ExecutionTarget.DeviceID != req.RequiredDeviceID) || (result.ExecutionTarget.SpaceID != "" && result.ExecutionTarget.SpaceID != req.SpaceID)) {
+		return resolvedExecution{missingCapability: capID, resolutionCode: "CAPABILITY_TARGET_MISMATCH", resolutionDetail: "能力提供者与本次授权的设备或空间不一致"}
 	}
 	return resolvedExecution{target: result.ExecutionTarget}
 }
@@ -1110,6 +1141,10 @@ func unifiedResultToDispatch(result capability.UnifiedToolResult) ToolDispatchRe
 		}
 	}
 	return dispatch
+}
+
+func ToolDispatchResultFromUnified(result capability.UnifiedToolResult) ToolDispatchResult {
+	return unifiedResultToDispatch(result)
 }
 
 func boolPtr(v bool) *bool {

@@ -9,6 +9,9 @@
     </div>
 
     <div class="toolbar">
+	  <el-select v-if="mesh.enabled.value" v-model="characterId" placeholder="选择工作角色" @change="refresh">
+	    <el-option v-for="role in mesh.roles.value" :key="role.id" :label="role.name" :value="role.id" />
+	  </el-select>
       <el-input v-model="query" clearable placeholder="搜索标题、目标或当前状态" @keyup.enter="refresh" />
       <el-select v-model="statusFilter" clearable placeholder="全部状态" @change="refresh">
         <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -38,9 +41,12 @@
 
     <el-drawer v-model="detailOpen" size="min(720px, 92vw)" :title="detail?.thread.title || '持续事项'">
       <template v-if="detail">
+	    <el-alert v-if="detail.pausedReason" :title="detail.pausedReason" type="warning" :closable="false" show-icon />
         <div class="detail-actions">
           <el-button v-if="detail.thread.status !== 'paused' && !terminal(detail.thread.status)" @click="setStatus('paused')">暂停</el-button>
-          <el-button v-if="detail.thread.status === 'paused'" type="primary" @click="setStatus('active')">恢复</el-button>
+          <el-button v-if="detail.thread.status === 'paused'" type="primary" :disabled="detail.lease?.state === 'unknown'" @click="setStatus('active')">恢复</el-button>
+          <el-button v-if="detail.lease?.state === 'unknown'" :loading="saving" @click="confirmExecution('completed')">确认执行已完成</el-button>
+          <el-button v-if="detail.lease?.state === 'unknown'" :loading="saving" type="warning" @click="confirmExecution('abandoned')">放弃本次执行</el-button>
           <el-button v-if="!terminal(detail.thread.status)" type="success" @click="setStatus('completed')">完成</el-button>
           <el-button @click="waitDialog = true" :disabled="terminal(detail.thread.status)">添加等待条件</el-button>
         </div>
@@ -130,8 +136,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import {
   cancelContinuityWait,
+  confirmContinuityExecution,
   createContinuityThread,
   createContinuityWait,
   getContinuityThread,
@@ -146,6 +154,8 @@ import {
 } from "./api";
 
 const loading = ref(false);
+const mesh = useDeviceOwnedConversation();
+const characterId = ref("");
 const saving = ref(false);
 const threads = ref<ContinuityThread[]>([]);
 const selectedId = ref("");
@@ -157,6 +167,22 @@ const createDialog = ref(false);
 const waitDialog = ref(false);
 const createForm = reactive({ title: "", goal: "", nextAction: "" });
 const waitForm = reactive({ type: "user", description: "", dueAt: "", conditionJson: "{}", resumeHint: "" });
+
+async function confirmExecution(outcome: "completed" | "abandoned") {
+  const current = detail.value;
+  if (!current?.lease) return;
+  let result = "";
+  try {
+    if (outcome === "completed") {
+      const input = await ElMessageBox.prompt("请核实原设备的执行结果，填写结果摘要。确认后事项保持暂停，不会重新执行本次等待。", "确认执行已完成", { inputType: "textarea", inputValidator: (value) => !!value.trim() || "请填写结果摘要" });
+      result = input.value;
+    } else await ElMessageBox.confirm("请先核实原设备状态。放弃后不会重复执行本次等待，已发生的操作仍然保留，事项保持暂停。", "放弃本次执行", { type: "warning" });
+  } catch { return; }
+  saving.value = true;
+  try { await confirmContinuityExecution(current.thread.id, current.lease.id, outcome, result); await reloadDetail(); }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : "执行确认失败"); }
+  finally { saving.value = false; }
+}
 
 const statusOptions: Array<{ label: string; value: ThreadStatus }> = [
   { label: "进行中", value: "active" }, { label: "等待中", value: "waiting" }, { label: "已阻塞", value: "blocked" },
@@ -172,7 +198,11 @@ function eventSummary(raw: string) { try { const data = JSON.parse(raw || "{}");
 async function refresh() {
   loading.value = true;
   try {
-    threads.value = await listContinuityThreads({ q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
+    if (await mesh.refresh()) {
+      if (!mesh.roles.value.some((role) => role.id === characterId.value)) characterId.value = mesh.selectInitialRole();
+      if (!characterId.value) { threads.value = []; return; }
+    }
+    threads.value = await listContinuityThreads({ characterId: characterId.value || undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
   } finally { loading.value = false; }
 }
 
@@ -216,7 +246,7 @@ async function createThread() {
   if (!createForm.title.trim()) { ElMessage.warning("请输入标题"); return; }
   saving.value = true;
   try {
-    const item = await createContinuityThread({ ...createForm });
+    const item = await createContinuityThread({ ...createForm, characterId: characterId.value || undefined });
     createDialog.value = false;
     createForm.title = ""; createForm.goal = ""; createForm.nextAction = "";
     await refresh();

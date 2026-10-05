@@ -136,7 +136,7 @@ export function useDashboardData() {
 
   async function fetchModelInfo() {
     try {
-      const configs = await get<any[]>("/api/model/configs");
+      const configs = await get<any[]>("/api/model/available");
       if (configs && configs.length > 0) {
         const active = configs.find((c: any) => c.isActive);
         if (active) modelName.value = active.modelName || active.name || "";

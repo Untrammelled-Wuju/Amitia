@@ -9,6 +9,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
+	"github.com/u-ai/backend/internal/devicemesh/pairing"
+	"github.com/u-ai/backend/internal/devicemesh/proof"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
@@ -2539,6 +2543,29 @@ var schemaMigrations = []string{
 		cutover_id TEXT PRIMARY KEY,
 		completed_at TEXT NOT NULL
 	)`,
+	coordination.PolicySchema,
+	coordination.ResourceSchema,
+	coordination.InboxSchema,
+	coordination.OutboxSchema,
+	coordination.ProviderSchema,
+	coordination.RequestRegistrySchema,
+	coordination.CapabilityGrantsSchema,
+	coordination.MemoryJobsSchema,
+	proof.IdentitySchema,
+	proof.NonceSchema,
+	pairing.ApprovalPolicySchema,
+	pairing.ApprovalSchema,
+	executionjournal.Schema,
+	executionjournal.FenceSchema,
+	pairing.OfferTargetSchema,
+	pairing.SuccessorModeSchema,
+	coordination.ContinuityJobsSchema,
+	coordination.ProjectionSchema,
+	coordination.ProjectionLocationsSchema,
+	coordination.RemoteAuthoritySchema,
+	coordination.SourceAuthoritySchema,
+	coordination.CancelledAuthoritySchema,
+	coordination.DeliveryFailuresSchema,
 }
 
 type dbExecutor interface {

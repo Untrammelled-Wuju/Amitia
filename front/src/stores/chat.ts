@@ -4,6 +4,7 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { Message } from "@/types";
 import { apiClient } from "@/composables/useApi";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 
 export interface ConversationItem {
   id: string;
@@ -39,6 +40,7 @@ export interface SidebarData {
 }
 
 export const useChatStore = defineStore("chat", () => {
+  const owned=useDeviceOwnedConversation();
   const messages = ref<Message[]>([]);
   const loading = ref(false);
   const currentConversationId = ref<string | null>(null);
@@ -61,6 +63,18 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function fetchSidebar() {
+    if (owned.enabled.value) {
+      const role=owned.selectInitialRole();
+      if (!role) { sidebar.value={pinned:[],recent:[],projects:[]};return; }
+      const conversations=await owned.conversations(role);
+      const rows=new Map<string,ConversationItem>();
+      for (const value of conversations) {
+        if (value?.id) rows.set(value.id,{...value,channel:"web",projectId:value.projectId || "",source:value.source || "device-mesh",messageCount:value.messageCount || 0});
+      }
+      const visible=[...rows.values()].filter((row)=>!row.archivedAt).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      sidebar.value={pinned:visible.filter((row)=>Boolean(row.pinnedAt)),recent:visible.filter((row)=>!row.pinnedAt),projects:[]};
+      return;
+    }
     const response = await apiClient.get<SidebarData>("/api/web-chat/sidebar");
     const data = response.data || { pinned: [], recent: [], projects: [] };
     sidebar.value = {
@@ -99,17 +113,20 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function renameConversation(conversationId: string, title: string) {
-    await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { title });
+    if (owned.enabled.value) await owned.edit("conversation",conversationId,{title});
+    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { title });
     await fetchSidebar();
   }
 
   async function setConversationPinned(conversationId: string, pinned: boolean) {
-    await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { pinned });
+    if (owned.enabled.value) await owned.edit("conversation",conversationId,{pinned});
+    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { pinned });
     await fetchSidebar();
   }
 
   async function archiveConversation(conversationId: string) {
-    await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { archived: true });
+    if (owned.enabled.value) await owned.edit("conversation",conversationId,{archived:true});
+    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { archived: true });
     if (currentConversationId.value === conversationId) {
       currentConversationId.value = null;
       currentProjectId.value = "";
@@ -119,13 +136,15 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function restoreConversation(conversationId: string) {
-    await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { archived: false });
+    if (owned.enabled.value) await owned.edit("conversation",conversationId,{archived:false});
+    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { archived: false });
     await fetchSidebar();
     archivedRevision.value += 1;
   }
 
   async function deleteConversation(conversationId: string) {
-    await apiClient.delete(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`);
+    if (owned.enabled.value) await owned.edit("conversation",conversationId,{}, {deleted:true});
+    else await apiClient.delete(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`);
     if (currentConversationId.value === conversationId) {
       currentConversationId.value = null;
       currentProjectId.value = "";

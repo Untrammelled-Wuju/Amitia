@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/outputlease"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -431,6 +433,31 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func (h *Handler) AvailableModels(c *gin.Context) {
+	actor := security.GetActor(c)
+	if actor == nil {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	if actor.HasPermission(auth.PermSystemAdmin) {
+		h.ListModels(c)
+		return
+	}
+	models, err := h.service.ListModels()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	available := make([]gin.H, 0, 1)
+	for _, model := range models {
+		if model.IsActive != 1 || model.APIType == "doubao-vision" {
+			continue
+		}
+		available = append(available, gin.H{"id": 0, "name": "云端 AI 服务", "apiType": model.APIType, "modelName": model.ModelName, "isActive": 1, "supportsReasoning": model.SupportsReasoning, "supportsVision": model.SupportsVision, "managedByCore": true})
+	}
+	util.SuccessResponse(c, available)
 }
 
 func (h *Handler) ListModels(c *gin.Context) {

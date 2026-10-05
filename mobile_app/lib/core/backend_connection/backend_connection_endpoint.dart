@@ -5,6 +5,7 @@ class BackendConnectionEndpoint {
   final String webSocketScheme;
   final String livenessPath;
   final String readinessPath;
+  final String pathPrefix;
 
   BackendConnectionEndpoint({
     required this.host,
@@ -13,7 +14,10 @@ class BackendConnectionEndpoint {
     required this.webSocketScheme,
     required this.livenessPath,
     required this.readinessPath,
+    this.pathPrefix = '',
   }) {
+    if (pathPrefix.isNotEmpty && pathPrefix != '/internal/device-mesh/provider') throw ArgumentError('unsupported endpoint path prefix');
+    if (pathPrefix.isNotEmpty && host != '127.0.0.1') throw ArgumentError('provider proxy must use the local runtime');
     if (host.isEmpty) throw ArgumentError('host must not be empty');
     if (host == 'localhost') throw ArgumentError.value(host, 'host', 'must not be localhost');
     if (host == '0.0.0.0') throw ArgumentError.value(host, 'host', 'must not be 0.0.0.0');

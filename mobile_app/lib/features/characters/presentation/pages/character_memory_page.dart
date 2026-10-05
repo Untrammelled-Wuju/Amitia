@@ -10,6 +10,7 @@ import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/models/memory.dart';
+import '../../../memory/presentation/pages/owned_memory_page.dart';
 
 class CharacterMemoryPage extends ConsumerStatefulWidget {
   final String characterId;
@@ -33,6 +34,8 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ownedPage = ownedMemoryGate(ref, characterId: widget.characterId);
+    if (ownedPage != null) return ownedPage;
     final memoriesAsync = ref.watch(memoryListByCharacterProvider(widget.characterId));
 
     return AmitiaScaffold(

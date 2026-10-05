@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +27,7 @@ func TestBootstrapExchangeUsesPublicRoute(t *testing.T) {
 			t.Error("exchange identity mismatch")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(ExchangeResponse{CredentialID: "credential-a", DeviceID: "device-a", RuntimeID: "runtime-a"})
+		_ = json.NewEncoder(w).Encode(ExchangeResponse{CredentialID: "credential-a", DeviceID: "device-a", RuntimeID: "runtime-a", Protocol: meshprotocol.ProtocolName, EnvelopeVersion: meshprotocol.EnvelopeVersion, SchemaVersion: meshprotocol.SchemaVersion, WebSocketPath: meshprotocol.WebSocketPath})
 	}))
 	defer server.Close()
 	result, err := NewBootstrapClient().Exchange(context.Background(), server.URL+"/", "test-ticket", "device-a", "runtime-a", "windows", "test")

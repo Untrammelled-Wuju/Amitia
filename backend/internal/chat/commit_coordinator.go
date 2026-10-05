@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/conversationstream"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	syncapi "github.com/u-ai/backend/internal/sync"
@@ -52,6 +53,11 @@ type messageCommitResult struct {
 }
 
 func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan) (*messageCommitResult, error) {
+	ctx, finish, authorityErr := s.beginInference(ctx)
+	if authorityErr != nil {
+		return nil, authorityErr
+	}
+	defer finish()
 	result := &messageCommitResult{}
 	suppressReply := plan.Request.SuppressReplyPersistence
 	log.Printf("[commitInteraction] enter InteractionID=%s HasRuntime=%v ExpectedVersion=%d ReplyBytes=%d", plan.Request.InteractionID, plan.Request.Runtime != nil, plan.Request.ExpectedStatusVersion, len(plan.Reply))
@@ -86,155 +92,157 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 
 	messageSequences := make(map[string]int64)
 	var userMessageSequence int64
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.acquireAndValidateCommitTokenTx(tx, &plan); err != nil {
-			return err
-		}
-
-		items := make([]interaction.MessagePlanItem, 0, len(messageOutputs)+1)
-		deliverySequence := 1
-		persistOutput := func(output MessageOutput) error {
-			message := buildMessageFromOutput(plan, deliveryGroupID, deliverySequence, output)
-			if err := tx.Create(message).Error; err != nil {
+	err := coordination.CommitCurrent(ctx, func() error {
+		return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := s.acquireAndValidateCommitTokenTx(tx, &plan); err != nil {
 				return err
 			}
-			if s.artifactResolver != nil {
-				if artifactID, parseErr := artifact.ParseURI(output.Part.URL); parseErr == nil {
-					if err := s.artifactResolver.RegisterReferenceGormTx(tx, string(artifactID), "message_attachment", message.ID); err != nil {
+
+			items := make([]interaction.MessagePlanItem, 0, len(messageOutputs)+1)
+			deliverySequence := 1
+			persistOutput := func(output MessageOutput) error {
+				message := buildMessageFromOutput(plan, deliveryGroupID, deliverySequence, output)
+				if err := tx.Create(message).Error; err != nil {
+					return err
+				}
+				if s.artifactResolver != nil {
+					if artifactID, parseErr := artifact.ParseURI(output.Part.URL); parseErr == nil {
+						if err := s.artifactResolver.RegisterReferenceGormTx(tx, string(artifactID), "message_attachment", message.ID); err != nil {
+							return err
+						}
+					}
+				}
+				if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
+					return err
+				}
+				messageSequences[message.ID] = message.Sequence
+				result.MessageIDs = append(result.MessageIDs, message.ID)
+				result.LastSequence = message.Sequence
+				if strings.TrimSpace(plan.TurnID) != "" {
+					encoded, err := json.Marshal(output.Part)
+					if err != nil {
+						return err
+					}
+					now := nowString()
+					turnItem := AssistantTurnItem{
+						ID: uuid.NewString(), TurnID: plan.TurnID, ConversationID: plan.Conversation, ItemType: output.Part.Type,
+						Status: assistantTurnStatusCompleted, Revision: 2, Content: message.Content, ResultJSON: string(encoded),
+						MessageID: message.ID, CreatedAt: now, UpdatedAt: now,
+					}
+					if err := appendAssistantTurnItemTx(tx, &turnItem); err != nil {
+						return err
+					}
+					result.TurnItems = append(result.TurnItems, turnItem)
+				}
+				items = append(items, interaction.MessagePlanItem{
+					MessageID: message.ID, Sequence: deliverySequence, Type: output.Part.Type,
+					ExtensionType: output.Part.ExtensionType, Content: message.Content, AltText: output.Part.AltText,
+					MIMEType: output.Part.MIMEType, IsAnimated: output.Part.IsAnimated, Width: output.Part.Width, Height: output.Part.Height,
+					OriginalAssetReference: output.Part.URL, FallbackAssetReference: output.Part.FallbackURL,
+				})
+				deliverySequence++
+				return nil
+			}
+
+			outputIndex := 0
+			for outputIndex < len(messageOutputs) && messageOutputs[outputIndex].Placement == "before_text" {
+				if err := persistOutput(messageOutputs[outputIndex]); err != nil {
+					return err
+				}
+				outputIndex++
+			}
+
+			if !suppressReply && strings.TrimSpace(plan.Reply) != "" {
+				aiMsg := &Message{
+					ID: uuid.NewString(), ConversationID: plan.Conversation, CharacterID: plan.Character,
+					Role: "assistant", Content: plan.Reply, MsgType: "text", Source: plan.Source,
+					Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID,
+					DeliveryGroupID: deliveryGroupID, DeliverySequence: deliverySequence,
+				}
+				if err := tx.Create(aiMsg).Error; err != nil {
+					return err
+				}
+				if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
+					return err
+				}
+				result.TextMessageID = aiMsg.ID
+				messageSequences[aiMsg.ID] = aiMsg.Sequence
+				result.MessageIDs = append(result.MessageIDs, aiMsg.ID)
+				result.LastSequence = aiMsg.Sequence
+				items = append(items, interaction.MessagePlanItem{MessageID: aiMsg.ID, Sequence: deliverySequence, Type: "text", Content: plan.Reply})
+				deliverySequence++
+			}
+
+			for outputIndex < len(messageOutputs) {
+				if err := persistOutput(messageOutputs[outputIndex]); err != nil {
+					return err
+				}
+				outputIndex++
+			}
+
+			managed := strings.EqualFold(plan.Request.Channel, "web") || !plan.ForceVoice
+			result.MessagePlan = &interaction.MessagePlan{DeliveryGroupID: deliveryGroupID, Managed: managed, Items: items}
+			now := time.Now().Format("2006-01-02 15:04:05")
+			if plan.UserMessageID != "" {
+				if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Select("sequence").Scan(&userMessageSequence).Error; err != nil {
+					userMessageSequence = 0
+				}
+			}
+			if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": now}).Error; err != nil {
+				if plan.Source != "proactive" {
+					return err
+				}
+			}
+			if err := tx.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", now, plan.Conversation, plan.Conversation).Error; err != nil {
+				return err
+			}
+			if strings.TrimSpace(plan.Reasoning) != "" && result.TextMessageID != "" {
+				if err := tx.Model(&Message{}).Where("id = ?", result.TextMessageID).Updates(map[string]interface{}{
+					"reasoning_content": plan.Reasoning, "reasoning_duration_ms": plan.ReasoningDurationMS,
+				}).Error; err != nil {
+					return err
+				}
+			}
+			if err := persistAssistantTurnItemsTx(tx, plan.TurnItems); err != nil {
+				return err
+			}
+			if err := completeAssistantTurnTx(tx, plan.TurnID, plan.Reply, result.TextMessageID); err != nil {
+				return err
+			}
+			result.TurnID = plan.TurnID
+			if err := s.commitAttachmentsTx(tx, plan, plan.UserMessageID); err != nil {
+				return err
+			}
+			if shouldCommitRuntime(plan.Request) {
+				if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
+					if err := s.applyAppraisalResultTx(tx, plan); err != nil {
 						return err
 					}
 				}
-			}
-			if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
-				return err
-			}
-			messageSequences[message.ID] = message.Sequence
-			result.MessageIDs = append(result.MessageIDs, message.ID)
-			result.LastSequence = message.Sequence
-			if strings.TrimSpace(plan.TurnID) != "" {
-				encoded, err := json.Marshal(output.Part)
+				if err := s.updatePsycheStateTx(tx, plan); err != nil {
+					return err
+				}
+				if err := s.updateRelationshipStateTx(tx, plan); err != nil {
+					return err
+				}
+				if err := s.updateNeedStateTx(tx, plan); err != nil {
+					return err
+				}
+				if err := s.finalizeRelationshipTimeTx(tx, plan); err != nil {
+					return err
+				}
+				events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
 				if err != nil {
 					return err
 				}
-				now := nowString()
-				turnItem := AssistantTurnItem{
-					ID: uuid.NewString(), TurnID: plan.TurnID, ConversationID: plan.Conversation, ItemType: output.Part.Type,
-					Status: assistantTurnStatusCompleted, Revision: 2, Content: message.Content, ResultJSON: string(encoded),
-					MessageID: message.ID, CreatedAt: now, UpdatedAt: now,
-				}
-				if err := appendAssistantTurnItemTx(tx, &turnItem); err != nil {
-					return err
-				}
-				result.TurnItems = append(result.TurnItems, turnItem)
+				result.Events = events
+				result.DeliveryIntentIDs = deliveryIntentIDs
 			}
-			items = append(items, interaction.MessagePlanItem{
-				MessageID: message.ID, Sequence: deliverySequence, Type: output.Part.Type,
-				ExtensionType: output.Part.ExtensionType, Content: message.Content, AltText: output.Part.AltText,
-				MIMEType: output.Part.MIMEType, IsAnimated: output.Part.IsAnimated, Width: output.Part.Width, Height: output.Part.Height,
-				OriginalAssetReference: output.Part.URL, FallbackAssetReference: output.Part.FallbackURL,
-			})
-			deliverySequence++
+			if err := s.transitionInteractionCommittedTx(tx, plan, result); err != nil {
+				return err
+			}
 			return nil
-		}
-
-		outputIndex := 0
-		for outputIndex < len(messageOutputs) && messageOutputs[outputIndex].Placement == "before_text" {
-			if err := persistOutput(messageOutputs[outputIndex]); err != nil {
-				return err
-			}
-			outputIndex++
-		}
-
-		if !suppressReply && strings.TrimSpace(plan.Reply) != "" {
-			aiMsg := &Message{
-				ID: uuid.NewString(), ConversationID: plan.Conversation, CharacterID: plan.Character,
-				Role: "assistant", Content: plan.Reply, MsgType: "text", Source: plan.Source,
-				Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID,
-				DeliveryGroupID: deliveryGroupID, DeliverySequence: deliverySequence,
-			}
-			if err := tx.Create(aiMsg).Error; err != nil {
-				return err
-			}
-			if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.SpaceID); err != nil {
-				return err
-			}
-			result.TextMessageID = aiMsg.ID
-			messageSequences[aiMsg.ID] = aiMsg.Sequence
-			result.MessageIDs = append(result.MessageIDs, aiMsg.ID)
-			result.LastSequence = aiMsg.Sequence
-			items = append(items, interaction.MessagePlanItem{MessageID: aiMsg.ID, Sequence: deliverySequence, Type: "text", Content: plan.Reply})
-			deliverySequence++
-		}
-
-		for outputIndex < len(messageOutputs) {
-			if err := persistOutput(messageOutputs[outputIndex]); err != nil {
-				return err
-			}
-			outputIndex++
-		}
-
-		managed := strings.EqualFold(plan.Request.Channel, "web") || !plan.ForceVoice
-		result.MessagePlan = &interaction.MessagePlan{DeliveryGroupID: deliveryGroupID, Managed: managed, Items: items}
-		now := time.Now().Format("2006-01-02 15:04:05")
-		if plan.UserMessageID != "" {
-			if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Select("sequence").Scan(&userMessageSequence).Error; err != nil {
-				userMessageSequence = 0
-			}
-		}
-		if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": now}).Error; err != nil {
-			if plan.Source != "proactive" {
-				return err
-			}
-		}
-		if err := tx.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", now, plan.Conversation, plan.Conversation).Error; err != nil {
-			return err
-		}
-		if strings.TrimSpace(plan.Reasoning) != "" && result.TextMessageID != "" {
-			if err := tx.Model(&Message{}).Where("id = ?", result.TextMessageID).Updates(map[string]interface{}{
-				"reasoning_content": plan.Reasoning, "reasoning_duration_ms": plan.ReasoningDurationMS,
-			}).Error; err != nil {
-				return err
-			}
-		}
-		if err := persistAssistantTurnItemsTx(tx, plan.TurnItems); err != nil {
-			return err
-		}
-		if err := completeAssistantTurnTx(tx, plan.TurnID, plan.Reply, result.TextMessageID); err != nil {
-			return err
-		}
-		result.TurnID = plan.TurnID
-		if err := s.commitAttachmentsTx(tx, plan, plan.UserMessageID); err != nil {
-			return err
-		}
-		if shouldCommitRuntime(plan.Request) {
-			if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
-				if err := s.applyAppraisalResultTx(tx, plan); err != nil {
-					return err
-				}
-			}
-			if err := s.updatePsycheStateTx(tx, plan); err != nil {
-				return err
-			}
-			if err := s.updateRelationshipStateTx(tx, plan); err != nil {
-				return err
-			}
-			if err := s.updateNeedStateTx(tx, plan); err != nil {
-				return err
-			}
-			if err := s.finalizeRelationshipTimeTx(tx, plan); err != nil {
-				return err
-			}
-			events, deliveryIntentIDs, err := s.appendInteractionOutboxTx(tx, plan, result.MessageIDs, result.MessagePlan)
-			if err != nil {
-				return err
-			}
-			result.Events = events
-			result.DeliveryIntentIDs = deliveryIntentIDs
-		}
-		if err := s.transitionInteractionCommittedTx(tx, plan, result); err != nil {
-			return err
-		}
-		return nil
+		})
 	})
 	if err != nil {
 		if plan.LeaseID != "" {

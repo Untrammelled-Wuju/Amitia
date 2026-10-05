@@ -4,6 +4,7 @@ internal data class RuntimeEnvironment(
     val hostProcess: Map<String, String>,
     val guestRuntime: Map<String, String>,
 ) {
+    override fun toString(): String = "RuntimeEnvironment(hostKeys=${hostProcess.keys}, guestKeys=${guestRuntime.keys})"
     init {
         validateKeys(hostProcess)
         validateKeys(guestRuntime)

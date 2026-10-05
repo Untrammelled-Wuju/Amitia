@@ -94,6 +94,8 @@ object AndroidRuntimeModule {
 
         val environmentBuilder = com.amitia.amitia_app.runtime.proot.internal.DefaultRuntimeEnvironmentBuilder(
             File(appContext.applicationInfo.nativeLibraryDir, "libamitia_loader.so").absolutePath,
+            com.amitia.amitia_app.runtime.security.AndroidIdentityVault(appContext)::key,
+            com.amitia.amitia_app.runtime.security.AndroidLANAddresses(appContext)::addresses,
         )
         val prootEnvironmentAssembler = com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler(
             layout = layout,

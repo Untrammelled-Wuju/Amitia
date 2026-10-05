@@ -5,6 +5,10 @@ import {
   type DeviceMeshStatusResponse,
   type DeviceMeshBootstrapRequest,
   type DeviceMeshBootstrapResponse,
+  type CloudPairingClaimRequest,
+  type DeviceIdentityProof,
+  type CloudBootstrapTicketResponse,
+  type MeshPairingInput,
 } from "./protocol";
 import type { LocalVoiceASRFinalEvent } from "../../shared/types";
 import { getLocalAdminHeaders } from "../backend-session-client";
@@ -83,6 +87,37 @@ export async function getMeshIdentity(): Promise<DeviceMeshLocalIdentity | null>
   }
 }
 
+export async function signMeshPairingClaim(coreId: string, body: CloudPairingClaimRequest): Promise<DeviceIdentityProof> {
+  const res = await httpRequest(LOCAL_MESH_BASE_URL, "/internal/device-mesh/identity/sign-claim", "POST", {
+    coreId,
+    body: { deviceId: body.deviceId, runtimeId: body.runtimeId, platform: body.platform.trim(), label: body.label?.trim() || "", offerToken: body.offerToken?.trim() || "", setupCode: body.setupCode?.trim() || "" },
+  }, getAuthHeaders());
+  if (res.status !== 200) {
+    const error = JSON.parse(res.data) as { message?: string };
+    throw new Error(error.message || "无法为本机配对身份签名");
+  }
+  return JSON.parse(res.data) as DeviceIdentityProof;
+}
+
+export async function claimPinnedMeshPairing(baseURL: string, input: MeshPairingInput): Promise<CloudBootstrapTicketResponse> {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+  const response = await httpRequest(LOCAL_MESH_BASE_URL, "/internal/device-mesh/pairing/claim", "POST", {
+    endpoint: { url: baseURL, fingerprint: input.fingerprint, coreId: input.coreId },
+    offerToken: input.offerToken, setupCode: input.setupCode,
+  }, getAuthHeaders());
+  const data = JSON.parse(response.data) as CloudBootstrapTicketResponse & { message?: string };
+  if (response.status === 202) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+    continue;
+  }
+  if (response.status !== 200) throw new Error(data.message || "局域网配对失败");
+  if (!data.ticket || data.spaceId !== input.coreId) throw new Error("配对服务身份与二维码不一致");
+  return data;
+  }
+  throw new Error("等待服务提供设备批准配对超时，可再次扫描同一配对码继续等待");
+}
+
 
 export interface DeviceMeshCloudAuth {
   authorization: string;
@@ -91,6 +126,7 @@ export interface DeviceMeshCloudAuth {
   deviceId: string;
   runtimeId: string;
   expiresAt: string;
+  fingerprint?: string;
 }
 
 export async function getMeshCloudAuth(): Promise<DeviceMeshCloudAuth | null> {

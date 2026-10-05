@@ -34,6 +34,9 @@ func TestCorsMiddleware_AllowsDesktopDevelopmentUploadPreflight(t *testing.T) {
 		t.Fatalf("expected preflight status %d, got %d", http.StatusNoContent, response.Code)
 	}
 	allowed := strings.ToLower(response.Header().Get("Access-Control-Allow-Headers"))
+	if !strings.Contains(allowed, "x-amitia-device-proof") {
+		t.Fatal("signed device requests blocked by CORS")
+	}
 	for _, header := range []string{
 		"content-type",
 		"cache-control",

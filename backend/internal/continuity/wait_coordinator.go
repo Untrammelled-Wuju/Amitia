@@ -353,6 +353,8 @@ func waitMatchesSignal(wait Wait, signal Signal) bool {
 	return matchedSpecific
 }
 
+func WaitMatchesSignal(wait Wait, signal Signal) bool { return waitMatchesSignal(wait, signal) }
+
 func (c *WaitCoordinator) dispatchWake(ctx context.Context, wait *Wait) error {
 	if wait == nil || c.dispatcher == nil {
 		return nil

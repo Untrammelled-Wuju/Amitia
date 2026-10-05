@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/conversationstream"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/temporal"
@@ -349,6 +350,9 @@ func main() {
 			os.Exit(1)
 		}
 		srv.Handler = r
+		if err := startMeshLAN(appCtx, services, r); err != nil {
+			log.Warn("局域网加密服务启动失败: ", err)
+		}
 		if err := startCoreWorkers(appCtx, services, srv); err != nil {
 			log.Error("核心Worker启动失败:", err)
 			cleanup()
@@ -386,6 +390,17 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	services.UnifiedEntry.SetOrchestratorReady(true)
 	services.OutboxWorker.Start(appCtx)
 	services.DeliveryWorker.Start(appCtx)
+	if services.OwnedBusiness != nil {
+		go services.OwnedBusiness.RunMemoryWorker(appCtx)
+		go services.OwnedBusiness.RunContinuityWorker(appCtx)
+	}
+	if services.DeviceMesh != nil {
+		for _, source := range []coordination.DataPort{services.DeviceMesh.CoreDataPort, services.DeviceMesh.LocalDeviceDataPort} {
+			if port, ok := source.(*meshLocalDataPort); ok {
+				go runOwnedProjections(appCtx, port)
+			}
+		}
+	}
 	if services.ContinuityCoordinator != nil {
 		services.ContinuityCoordinator.Start(appCtx)
 	}

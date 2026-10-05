@@ -4,6 +4,7 @@ package asr
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
@@ -358,6 +359,16 @@ func submitOpenAI(cfg *AsrConfig, audioURL string, language string) (string, err
 	if err != nil {
 		return "", err
 	}
+	text, err := recognizeOpenAI(context.Background(), cfg, audioData, filename, language)
+	if err != nil {
+		return "", err
+	}
+	taskID := "sync:" + uuid.New().String()
+	syncResults.Store(taskID, text)
+	return taskID, nil
+}
+
+func recognizeOpenAI(ctx context.Context, cfg *AsrConfig, audioData []byte, filename, language string) (string, error) {
 
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
@@ -385,7 +396,7 @@ func submitOpenAI(cfg *AsrConfig, audioURL string, language string) (string, err
 	}
 	writer.Close()
 
-	req, err := http.NewRequest("POST", baseURL+"/audio/transcriptions", body)
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/audio/transcriptions", body)
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -400,21 +411,21 @@ func submitOpenAI(cfg *AsrConfig, audioURL string, language string) (string, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		rawBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("OpenAI ASR 返回 %d: %s", resp.StatusCode, string(rawBody))
+		return "", fmt.Errorf("OpenAI ASR 返回 %d", resp.StatusCode)
 	}
 
 	var result struct {
 		Text string `json:"text"`
 	}
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, err := readPrivateASRResponse(resp.Body)
+	if err != nil {
+		return "", err
+	}
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return "", fmt.Errorf("解析响应失败: %w", err)
 	}
 
-	taskID := "sync:" + uuid.New().String()
-	syncResults.Store(taskID, result.Text)
-	return taskID, nil
+	return strings.TrimSpace(result.Text), nil
 }
 
 func buildAzureShortAudioURL(baseURL string, language string) (string, error) {
@@ -459,12 +470,22 @@ func submitAzure(cfg *AsrConfig, audioURL string, language string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	text, err := recognizeAzure(context.Background(), cfg, audioData, language)
+	if err != nil {
+		return "", err
+	}
+	taskID := "sync:" + uuid.New().String()
+	syncResults.Store(taskID, text)
+	return taskID, nil
+}
+
+func recognizeAzure(ctx context.Context, cfg *AsrConfig, audioData []byte, language string) (string, error) {
 
 	endpoint, err := buildAzureShortAudioURL(cfg.BaseURL, language)
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(audioData))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(audioData))
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -482,15 +503,17 @@ func submitAzure(cfg *AsrConfig, audioURL string, language string) (string, erro
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		rawBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("Azure ASR 返回 %d: %s", resp.StatusCode, string(rawBody))
+		return "", fmt.Errorf("Azure ASR 返回 %d", resp.StatusCode)
 	}
 
 	var result struct {
 		DisplayText string `json:"DisplayText"`
 		Text        string `json:"text"`
 	}
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, err := readPrivateASRResponse(resp.Body)
+	if err != nil {
+		return "", err
+	}
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return "", fmt.Errorf("解析响应失败: %w", err)
 	}
@@ -500,9 +523,7 @@ func submitAzure(cfg *AsrConfig, audioURL string, language string) (string, erro
 		text = result.Text
 	}
 
-	taskID := "sync:" + uuid.New().String()
-	syncResults.Store(taskID, text)
-	return taskID, nil
+	return strings.TrimSpace(text), nil
 }
 
 func submitAliyun(cfg *AsrConfig, audioURL string, language string) (string, error) {

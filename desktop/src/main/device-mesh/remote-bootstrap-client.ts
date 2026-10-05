@@ -1,4 +1,6 @@
-import { getMeshCloudAuth } from "./local-agent-client";
+import { getMeshCloudAuth, signMeshPairingClaim } from "./local-agent-client";
+import { getLocalAdminHeaders } from "../backend-session-client";
+import { LOCAL_MESH_BASE_URL } from "./protocol";
 import {
   type CloudBootstrapTicketResponse,
   type CloudDeviceListResponse,
@@ -13,6 +15,7 @@ function sameOrigin(a: string, b: string): boolean {
 }
 
 async function deviceAuthHeaders(cloudBaseURL: string): Promise<Record<string, string>> {
+  if (sameOrigin(cloudBaseURL, LOCAL_MESH_BASE_URL)) return getLocalAdminHeaders();
   const auth = await getMeshCloudAuth();
   if (!auth?.authorization || !sameOrigin(auth.cloudBaseUrl, cloudBaseURL)) return {};
   return {
@@ -24,9 +27,15 @@ async function deviceAuthHeaders(cloudBaseURL: string): Promise<Record<string, s
 }
 
 async function cloudFetch(cloudBaseURL: string, path: string, method: string, body?: unknown, authenticated = true): Promise<Response> {
-  const url = new URL(path, cloudBaseURL).toString();
+  let url = new URL(path, cloudBaseURL).toString();
   const headers: Record<string, string> = { Accept: "application/json" };
+  const auth = authenticated ? await getMeshCloudAuth() : null;
+  if (auth?.cloudBaseUrl && sameOrigin(auth.cloudBaseUrl, cloudBaseURL)) {
+    url = LOCAL_MESH_BASE_URL + "/internal/device-mesh/provider" + path;
+    Object.assign(headers, getLocalAdminHeaders());
+  } else {
   if (authenticated) Object.assign(headers, await deviceAuthHeaders(cloudBaseURL));
+  }
   const init: RequestInit = { method, headers };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -45,26 +54,37 @@ async function responseError(res: Response, fallback: string): Promise<Error> {
 }
 
 export async function getPairingStatus(cloudBaseURL: string): Promise<CloudPairingStatusResponse> {
-  const res = await cloudFetch(cloudBaseURL, "/api/public/device-mesh/v1/pairing/status", "GET", undefined, false);
+  const res = await cloudFetch(cloudBaseURL, "/api/public/device-mesh/v1/pairing/status", "GET");
   if (!res.ok) throw await responseError(res, "pairing status failed");
   return res.json() as Promise<CloudPairingStatusResponse>;
 }
 
 export async function claimPairing(cloudBaseURL: string, req: CloudPairingClaimRequest): Promise<CloudBootstrapTicketResponse> {
-  const res = await cloudFetch(cloudBaseURL, "/api/public/device-mesh/v1/pairing/claim", "POST", req, false);
+  const status = await getPairingStatus(cloudBaseURL);
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+  const proof = await signMeshPairingClaim(status.spaceId, req);
+  const res = await cloudFetch(cloudBaseURL, "/api/public/device-mesh/v1/pairing/claim", "POST", { ...req, proof }, false);
   if (!res.ok) throw await responseError(res, "pairing claim failed");
+  if (res.status === 202) { await new Promise<void>((resolve) => setTimeout(resolve, 1000)); continue; }
   return res.json() as Promise<CloudBootstrapTicketResponse>;
+  }
+  throw new Error("等待服务提供设备批准配对超时，请再次扫码");
 }
 
 export async function createPairingOffer(cloudBaseURL: string, ttlSeconds = 300): Promise<CloudPairingOfferResponse> {
-  const res = await cloudFetch(cloudBaseURL, "/api/device-mesh/v1/pairing/offers", "POST", { ttlSeconds }, true);
+  let endpoint = new URL(cloudBaseURL).origin;
+  if (sameOrigin(cloudBaseURL, LOCAL_MESH_BASE_URL)) {
+    const response = await fetch(LOCAL_MESH_BASE_URL + "/internal/device-mesh/lan", { headers: getLocalAdminHeaders() });
+    if (!response.ok) throw await responseError(response, "无法读取局域网地址");
+    const data = await response.json() as { endpoints: { url: string }[] };
+    if (!data.endpoints?.length) throw new Error("当前设备没有可用的局域网加密地址");
+    endpoint = data.endpoints[0].url;
+  }
+  const res = await cloudFetch(cloudBaseURL, "/api/device-mesh/v1/pairing/offers", "POST", { ttlSeconds, endpoint }, true);
   if (!res.ok) throw await responseError(res, "create pairing offer failed");
   const offer = await res.json() as CloudPairingOfferResponse;
-  const endpoint = new URL(cloudBaseURL).origin;
-  const pairingURL = new URL("amitia://pair");
-  pairingURL.searchParams.set("endpoint", endpoint);
-  pairingURL.searchParams.set("offer", offer.offerToken);
-  return { ...offer, qrPayload: pairingURL.toString() };
+  return offer;
 }
 
 export async function listDevices(cloudBaseURL: string): Promise<CloudDeviceListResponse> {

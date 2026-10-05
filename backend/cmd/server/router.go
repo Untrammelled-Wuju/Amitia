@@ -38,6 +38,7 @@ import (
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
+	devicemeshlan "github.com/u-ai/backend/internal/devicemesh/lan"
 	devicemeshpairing "github.com/u-ai/backend/internal/devicemesh/pairing"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -236,7 +237,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	}
 
 	var localMeshIdentity *devicemeshagent.LocalIdentity
-	if services.RuntimeProfile == runtimeprofile.ProfileLocal {
+	if services.RuntimeProfile.IsCore() {
 		localMeshIdentity, err = devicemeshagent.NewIdentityStore(config.AppCfg.Storage.DataDir).Load()
 		if err != nil {
 			return nil, fmt.Errorf("initialize local mesh identity: %w", err)
@@ -254,6 +255,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}); err != nil {
 			return nil, fmt.Errorf("register local mesh identity: %w", err)
 		}
+		if err := services.DeviceMesh.Coordination.InitializeCoreConsole(context.Background(), spaceID, localMeshIdentity.DeviceID.String()); err != nil {
+			return nil, fmt.Errorf("initialize Core console ownership: %w", err)
+		}
 	}
 	newAuthConfig := func(mode string) security.AuthConfig {
 		cfg := security.AuthConfig{
@@ -268,6 +272,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.DeviceMesh != nil {
 			cfg.DeviceCredentials = services.DeviceMesh.CredentialSvc
 			cfg.DeviceRegistry = services.DeviceMesh.DeviceReg
+			cfg.Coordination = services.DeviceMesh.Coordination
 		}
 		return cfg
 	}
@@ -500,10 +505,17 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry)
 
 	apiGroup := r.Group("/api")
+	if services.DeviceMesh != nil && services.DeviceMesh.LocalHandler != nil {
+		services.DeviceMesh.LocalHandler.RegisterRoutes(r, security.LocalRuntimeControlMiddleware(localCredentialStore, config.AppCfg.Server.Host), security.AuthenticationMiddleware(newAuthConfig("local_single_user")))
+	}
 	apiGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
+	if services.DeviceMesh != nil && services.DeviceMesh.BusinessCoordinationReady {
+		apiGroup.Use(security.DeviceExecutionAuthority(services.DeviceMesh.Coordination, spaceID))
+	}
 	if webAccessSvc != nil && services.DeviceMesh != nil && services.DeviceMesh.DeviceReg != nil {
 		apiGroup.Use(security.RequireWebAccessForWebDevice(webAccessSvc, services.DeviceMesh.DeviceReg))
 	}
+	registerMeshBusinessRouter(apiGroup, services, spaceID)
 	{
 		apiGroup.GET("/space", func(c *gin.Context) {
 			identity := spaceStore.Identity()
@@ -790,15 +802,35 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				return nil, fmt.Errorf("device mesh: initialize pairing service: %w", pairingErr)
 			}
 			if err := devicemeshserver.RegisterCloudRoutes(r, deviceMeshAuthMW, deviceMeshWebAccessMW, deviceMeshPublicWebAccessMW, &devicemeshserver.RouterDeps{
-				DB:            meshSQLDB,
-				Sessions:      services.DeviceMesh.GetSessions(),
-				BootstrapSvc:  services.DeviceMesh.BootstrapSvc,
-				CredentialSvc: services.DeviceMesh.CredentialSvc,
-				Hub:           services.DeviceMesh.Hub,
-				Handler:       services.DeviceMesh.Handler,
-				Probe:         services.DeviceMesh.Probe,
-				DeviceReg:     services.DeviceMesh.DeviceReg,
-				PairingSvc:    pairingSvc,
+				DB:                        meshSQLDB,
+				Sessions:                  services.DeviceMesh.GetSessions(),
+				BootstrapSvc:              services.DeviceMesh.BootstrapSvc,
+				CredentialSvc:             services.DeviceMesh.CredentialSvc,
+				Hub:                       services.DeviceMesh.Hub,
+				Handler:                   services.DeviceMesh.Handler,
+				Probe:                     services.DeviceMesh.Probe,
+				DeviceReg:                 services.DeviceMesh.DeviceReg,
+				PairingSvc:                pairingSvc,
+				Coordination:              services.DeviceMesh.Coordination,
+				BusinessCoordinationReady: services.DeviceMesh.BusinessCoordinationReady,
+				ProviderPath:              services.DeviceMesh.LocalHandler.ProviderPath,
+				Successor: func(ctx context.Context, device string) (any, error) {
+					policy, err := services.DeviceMesh.Coordination.Get(ctx, spaceID, device)
+					if err != nil {
+						return nil, err
+					}
+					result, err := services.DeviceMesh.LocalHandler.PrepareSuccessor(ctx, device, policy.Coordinated)
+					if result == nil {
+						return nil, err
+					}
+					return result, err
+				},
+				LANEndpoints: func() []devicemeshlan.Endpoint {
+					if services.DeviceMesh.LocalHandler == nil {
+						return nil
+					}
+					return services.DeviceMesh.LocalHandler.LANEndpoints()
+				},
 				GetSpaceID: func(c *gin.Context) (runtimeidentity.SpaceID, bool) {
 					actor := security.GetActor(c)
 					if actor == nil || actor.SpaceID == "" {
@@ -867,18 +899,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 						claim.ConnectionGeneration, claim.WorkerID, leaseDuration,
 					)
 				}),
-				TaskHeartbeatPayloadHandler: devicemeshserver.TaskHeartbeatPayloadAdapter(func(heartbeat protocol.TaskHeartbeatPayload) {
+				TaskHeartbeatPayloadHandler: devicemeshserver.TaskHeartbeatPayloadAdapter(func(heartbeat protocol.TaskHeartbeatPayload) bool {
 					if services.DeviceMesh.PendingTasks == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
-						return
+						return false
 					}
 					const leaseExtension = 5 * time.Minute
 					if !services.DeviceMesh.PendingTasks.HeartbeatBound(heartbeat.TaskRunID, heartbeat.AttemptID, heartbeat.LeaseID, heartbeat.RuntimeSessionID.String(), heartbeat.ConnectionGeneration, heartbeat.Sequence, leaseExtension) {
-						return
+						return false
 					}
 					if err := services.KernelContainer.TaskRuntimeService.HeartbeatRemoteTask(context.Background(), heartbeat.TaskRunID, heartbeat.AttemptID, heartbeat.LeaseID, leaseExtension); err != nil {
 						services.DeviceMesh.PendingTasks.Cancel(heartbeat.TaskRunID, "task runtime heartbeat persist failed")
 						log.Error("device mesh task heartbeat persist failed", "taskRunId", heartbeat.TaskRunID, "error", err)
+						return false
 					}
+					return true
 				}),
 				TaskProgressPayloadHandler: devicemeshserver.TaskProgressPayloadAdapter(func(progress protocol.TaskProgressPayload) {
 					if services.DeviceMesh.PendingTasks == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
@@ -909,7 +943,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					if !services.DeviceMesh.PendingTasks.ValidateBound(complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.RuntimeSessionID.String(), complete.ConnectionGeneration) {
 						return
 					}
-					if err := services.KernelContainer.TaskRuntimeService.HandleCompletion(context.Background(), complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.Success, complete.Result, complete.Error); err != nil {
+					if complete.OutcomeUnknown {
+						if complete.Success || len(complete.Result) != 0 || complete.ResultArtifactID != "" {
+							return
+						}
+						if err := services.KernelContainer.TaskRuntimeService.HandleRemoteUnconfirmed(context.Background(), complete.TaskRunID, complete.AttemptID, complete.LeaseID); err == nil {
+							services.DeviceMesh.PendingTasks.Cancel(complete.TaskRunID, "设备任务结果尚未确认")
+						}
+						return
+					}
+					artifacts := []string{}
+					if complete.ResultArtifactID != "" {
+						artifacts = append(artifacts, complete.ResultArtifactID)
+					}
+					if err := services.KernelContainer.TaskRuntimeService.HandleCompletionArtifact(context.Background(), complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.Success, complete.Result, complete.Error, artifacts...); err != nil {
 						log.Error("device mesh task completion persist failed", "taskRunId", complete.TaskRunID, "error", err)
 						return
 					}

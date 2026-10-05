@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'owned_memory_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
@@ -25,6 +26,8 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ownedPage = ownedMemoryGate(ref, kind: 'episodic');
+    if (ownedPage != null) return ownedPage;
     final memoriesAsync = ref.watch(episodicListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -48,11 +51,17 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                 subtitle: '对话中识别到完整场景后会自动记录',
               );
             }
-            final filtered = memories.where((memory) {
-              if (_retentionFilter != 0 && memory.retentionLevel != _retentionFilter) return false;
-              if (_decayFilter.isNotEmpty && memory.decayState != _decayFilter) return false;
-              return true;
-            }).toList(growable: false);
+            final filtered = memories
+                .where((memory) {
+                  if (_retentionFilter != 0 &&
+                      memory.retentionLevel != _retentionFilter)
+                    return false;
+                  if (_decayFilter.isNotEmpty &&
+                      memory.decayState != _decayFilter)
+                    return false;
+                  return true;
+                })
+                .toList(growable: false);
             return Column(
               children: [
                 _buildFilterBar(context),
@@ -79,8 +88,10 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                               AppSpacing.pagePadding,
                             ),
                             itemCount: filtered.length,
-                            separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                            itemBuilder: (context, index) => _buildCard(context, filtered[index]),
+                            separatorBuilder: (_, _) =>
+                                SizedBox(height: AppSpacing.sm),
+                            itemBuilder: (context, index) =>
+                                _buildCard(context, filtered[index]),
                           ),
                   ),
                 ),
@@ -147,8 +158,8 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
     final sentimentType = memory.sentimentScore >= 40
         ? BadgeType.success
         : memory.sentimentScore <= -40
-            ? BadgeType.error
-            : BadgeType.neutral;
+        ? BadgeType.error
+        : BadgeType.neutral;
     return AmitiaCard(
       onTap: () => _showDetail(context, memory),
       child: Column(
@@ -159,24 +170,41 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-                child: Icon(Icons.psychology_outlined, color: context.accentPrimary, size: 22),
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  borderRadius: AppRadius.brSmall,
+                ),
+                child: Icon(
+                  Icons.psychology_outlined,
+                  color: context.accentPrimary,
+                  size: 22,
+                ),
               ),
               SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(memory.title.isEmpty ? '未命名情景' : memory.title, style: AppTypography.cardTitle(context)),
+                    Text(
+                      memory.title.isEmpty ? '未命名情景' : memory.title,
+                      style: AppTypography.cardTitle(context),
+                    ),
                     const SizedBox(height: 2),
                     Text(
-                      _formatTime(memory.messageTimeStart.isNotEmpty ? memory.messageTimeStart : memory.createdAt),
+                      _formatTime(
+                        memory.messageTimeStart.isNotEmpty
+                            ? memory.messageTimeStart
+                            : memory.createdAt,
+                      ),
                       style: AppTypography.caption(context),
                     ),
                   ],
                 ),
               ),
-              AmitiaStatusBadge(label: '$sentiment ${memory.sentimentScore}', type: sentimentType),
+              AmitiaStatusBadge(
+                label: '$sentiment ${memory.sentimentScore}',
+                type: sentimentType,
+              ),
             ],
           ),
           SizedBox(height: AppSpacing.sm),
@@ -185,17 +213,33 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
             runSpacing: AppSpacing.xs,
             children: [
               AmitiaStatusBadge(
-                label: 'L${_retention(memory.retentionLevel)} · ${(memory.memoryStrength.clamp(0.0, 1.0) * 100).round()}%',
+                label:
+                    'L${_retention(memory.retentionLevel)} · ${(memory.memoryStrength.clamp(0.0, 1.0) * 100).round()}%',
                 type: _retentionBadge(memory.retentionLevel),
               ),
-              if (memory.decayState == 'archived') const AmitiaStatusBadge(label: '已归档', type: BadgeType.neutral),
-              if (memory.decayState == 'fading') const AmitiaStatusBadge(label: '淡化中', type: BadgeType.warning),
-              if (memory.sceneType.isNotEmpty) AmitiaStatusBadge(label: memory.sceneType, type: BadgeType.info),
-              if (memory.triggerKeywords.isNotEmpty) AmitiaStatusBadge(label: memory.triggerKeywords, type: BadgeType.neutral),
+              if (memory.decayState == 'archived')
+                const AmitiaStatusBadge(label: '已归档', type: BadgeType.neutral),
+              if (memory.decayState == 'fading')
+                const AmitiaStatusBadge(label: '淡化中', type: BadgeType.warning),
+              if (memory.sceneType.isNotEmpty)
+                AmitiaStatusBadge(
+                  label: memory.sceneType,
+                  type: BadgeType.info,
+                ),
+              if (memory.triggerKeywords.isNotEmpty)
+                AmitiaStatusBadge(
+                  label: memory.triggerKeywords,
+                  type: BadgeType.neutral,
+                ),
             ],
           ),
           SizedBox(height: AppSpacing.sm),
-          Text(memory.content, style: AppTypography.bodySmall(context), maxLines: 3, overflow: TextOverflow.ellipsis),
+          Text(
+            memory.content,
+            style: AppTypography.bodySmall(context),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
           SizedBox(height: AppSpacing.xs),
           Text(
             '强化 ${memory.reinforceCount} 次${memory.lastReinforcedAt.isEmpty ? '' : ' · 上次 ${_formatTime(memory.lastReinforcedAt)}'}',
@@ -214,7 +258,12 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
                 onSelected: (level) => _updateRetention(context, memory, level),
                 itemBuilder: (_) => [
                   for (var level = 1; level <= 5; level++)
-                    PopupMenuItem<int>(value: level, child: Text('L$level${level == memory.retentionLevel ? ' · 当前' : ''}')),
+                    PopupMenuItem<int>(
+                      value: level,
+                      child: Text(
+                        'L$level${level == memory.retentionLevel ? ' · 当前' : ''}',
+                      ),
+                    ),
                 ],
                 child: const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -230,7 +279,11 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
               const Spacer(),
               TextButton.icon(
                 onPressed: () => _delete(context, memory),
-                icon: Icon(Icons.delete_outline, size: 16, color: context.error),
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: context.error,
+                ),
                 label: Text('删除', style: TextStyle(color: context.error)),
               ),
             ],
@@ -250,19 +303,35 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
         maxChildSize: 0.95,
         expand: false,
         builder: (sheetContext, controller) => Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            0,
+            AppSpacing.xl,
+            AppSpacing.xl,
+          ),
           child: ListView(
             controller: controller,
             children: [
-              Text(memory.title.isEmpty ? '情景详情' : memory.title, style: AppTypography.sectionTitle(context)),
+              Text(
+                memory.title.isEmpty ? '情景详情' : memory.title,
+                style: AppTypography.sectionTitle(context),
+              ),
               SizedBox(height: AppSpacing.lg),
               _row(context, '记忆层级', 'L${_retention(memory.retentionLevel)}'),
-              _row(context, '当前强度', '${(memory.memoryStrength.clamp(0.0, 1.0) * 100).round()}%'),
+              _row(
+                context,
+                '当前强度',
+                '${(memory.memoryStrength.clamp(0.0, 1.0) * 100).round()}%',
+              ),
               _row(context, '遗忘状态', _decayLabel(memory.decayState)),
               _row(context, '强化次数', '${memory.reinforceCount}'),
               _row(context, '上次强化', memory.lastReinforcedAt),
               _row(context, '场景类型', memory.sceneType),
-              _row(context, '情感分值', '${memory.sentimentScore}（${_sentiment(memory.sentimentScore)}）'),
+              _row(
+                context,
+                '情感分值',
+                '${memory.sentimentScore}（${_sentiment(memory.sentimentScore)}）',
+              ),
               _row(context, '触发关键词', memory.triggerKeywords),
               _row(context, '对话', memory.sourceConvId),
               _row(context, '开始消息', memory.messageIdStart),
@@ -272,15 +341,24 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
               SizedBox(height: AppSpacing.md),
               Text('上下文之前', style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.xs),
-              Text(memory.contextBefore.isEmpty ? '—' : memory.contextBefore, style: AppTypography.bodySmall(context)),
+              Text(
+                memory.contextBefore.isEmpty ? '—' : memory.contextBefore,
+                style: AppTypography.bodySmall(context),
+              ),
               SizedBox(height: AppSpacing.md),
               Text('情景内容', style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.xs),
-              Text(memory.content.isEmpty ? '—' : memory.content, style: AppTypography.bodySmall(context).copyWith(height: 1.6)),
+              Text(
+                memory.content.isEmpty ? '—' : memory.content,
+                style: AppTypography.bodySmall(context).copyWith(height: 1.6),
+              ),
               SizedBox(height: AppSpacing.md),
               Text('上下文之后', style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.xs),
-              Text(memory.contextAfter.isEmpty ? '—' : memory.contextAfter, style: AppTypography.bodySmall(context)),
+              Text(
+                memory.contextAfter.isEmpty ? '—' : memory.contextAfter,
+                style: AppTypography.bodySmall(context),
+              ),
             ],
           ),
         ),
@@ -295,19 +373,29 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 88, child: Text(label, style: AppTypography.label(context))),
+          SizedBox(
+            width: 88,
+            child: Text(label, style: AppTypography.label(context)),
+          ),
           Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
         ],
       ),
     );
   }
 
-  Future<void> _updateRetention(BuildContext context, EpisodicDto memory, int level) async {
+  Future<void> _updateRetention(
+    BuildContext context,
+    EpisodicDto memory,
+    int level,
+  ) async {
     try {
       await ref.read(episodicServiceProvider).updateRetention(memory.id, level);
       ref.invalidate(episodicListProvider);
     } catch (error) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('调整层级失败：$error')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('调整层级失败：$error')));
     }
   }
 
@@ -316,7 +404,10 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
       await ref.read(episodicServiceProvider).restore(memory.id);
       ref.invalidate(episodicListProvider);
     } catch (error) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('恢复失败：$error')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('恢复失败：$error')));
     }
   }
 
@@ -327,8 +418,14 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
         title: const Text('删除情景记忆'),
         content: Text('确定删除“${memory.title}”吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text('删除', style: TextStyle(color: context.error))),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('删除', style: TextStyle(color: context.error)),
+          ),
         ],
       ),
     );
@@ -337,7 +434,10 @@ class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
       await ref.read(episodicServiceProvider).delete(memory.id);
       ref.invalidate(episodicListProvider);
     } catch (error) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+      if (context.mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
     }
   }
 

@@ -65,6 +65,10 @@ func DeviceAuthMiddleware(svc *Service, devices *host_registry.Registry) gin.Han
 			c.AbortWithStatusJSON(500, gin.H{"code": "mesh.trust_registry_unavailable", "message": "device trust registry unavailable"})
 			return
 		}
+		if err := svc.VerifyRequest(c.Request.Context(), cred.DeviceID.String(), cred.SpaceID.String(), c.Request); err != nil {
+			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.identity_proof_invalid", "message": "设备身份签名无效或已重放"})
+			return
+		}
 		if err := devices.RequireTrustedDevice(c.Request.Context(), cred.SpaceID, cred.DeviceID); err != nil {
 			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.device_not_trusted", "message": err.Error()})
 			return
@@ -127,6 +131,10 @@ func BootstrapTicketAuthMiddleware(svc *Service, validator BootstrapTicketValida
 			DeviceID:  snapshot.DeviceID,
 			RuntimeID: snapshot.RuntimeID,
 			ExpiresAt: snapshot.ExpiresAt,
+		}
+		if err := svc.VerifyRequest(c.Request.Context(), snapshot.DeviceID.String(), snapshot.SpaceID.String(), c.Request); err != nil {
+			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.identity_proof_invalid", "message": "设备身份签名无效或已重放"})
+			return
 		}
 
 		c.Set(string(principalKey), principal)

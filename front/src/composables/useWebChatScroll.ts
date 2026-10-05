@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, type Ref, nextTick, watch } from "vue";
 import { useApi } from "./useApi";
+import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 import {
   mergeMessageCollections,
   normalizeRealtimeMessage,
@@ -13,8 +14,10 @@ export function useWebChatScroll(
   convId: Ref<string>,
   showScrollBtn: Ref<boolean>,
   loadOlderTurns?: () => Promise<unknown>,
+  characterId?: Ref<string>,
 ) {
   const { get } = useApi();
+  const owned = useDeviceOwnedConversation();
   const userScrolledUp = ref(false);
   const autoFollow = ref(true);
   const isPulling = ref(false);
@@ -115,6 +118,25 @@ export function useWebChatScroll(
 
   async function loadOlderMessages() {
     if (isLoadingHistory.value || !hasMoreHistory.value || !convId.value) return;
+    if (owned.enabled.value) {
+      const conversation = convId.value;
+      const role = characterId?.value || owned.selectInitialRole();
+      if (!role || !owned.hasMore(conversation, role)) { hasMoreHistory.value = false; return; }
+      isLoadingHistory.value = true;
+      const el = msgAreaRef.value?.rootEl;
+      const previousHeight = el?.scrollHeight || 0;
+      try {
+        const result = await owned.query(conversation, role, true);
+        if (conversation !== convId.value || role !== characterId?.value) return;
+        const older = owned.messages(result);
+        const seen = new Set(messages.value.map((message) => message.uiKey || `${message.ownerId}:${message.id}`));
+        messages.value = [...older.filter((message) => !seen.has(message.uiKey)), ...messages.value];
+        hasMoreHistory.value = owned.hasMore(conversation, role);
+        await nextTick();
+        if (el) el.scrollTop = el.scrollHeight - previousHeight;
+      } finally { isLoadingHistory.value = false; }
+      return;
+    }
     if (historyBeforeSequence.value <= 0) {
       const sequences = messages.value
         .map((message) => Number(message?.sequence || 0))

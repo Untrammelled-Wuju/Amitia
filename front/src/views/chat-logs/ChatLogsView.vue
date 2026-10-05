@@ -61,6 +61,23 @@
             <small>归档于 {{ formatTime(selectedConversation.archivedAt) }}</small>
           </div>
           <el-button
+            v-if="owned.enabled.value"
+            size="small"
+            :loading="generatingSummary"
+            :disabled="messageLoading"
+            @click="generateSelectedSummary"
+          >
+            生成摘要
+          </el-button>
+          <el-button
+            v-if="owned.enabled.value"
+            size="small"
+            :loading="exporting"
+            @click="exportSelectedConversation"
+          >
+            导出 JSON
+          </el-button>
+          <el-button
             type="primary"
             plain
             size="small"
@@ -70,6 +87,7 @@
             撤销归档
           </el-button>
         </header>
+        <el-alert v-if="generatedSummary" :title="generatedSummary" type="info" :closable="false" />
         <div ref="messageListRef" v-loading="messageLoading" class="message-list">
           <div
             v-for="message in displayMessages"
@@ -106,6 +124,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "@/composables/useApi";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import ArchiveConversationIcon from "@/components/ArchiveConversationIcon.vue";
 import ChatBubble from "@/components/ChatBubble.vue";
 import { useChatStore } from "@/stores/chat";
@@ -121,6 +140,7 @@ interface ArchivedConversation {
   messageCount: number;
   archivedAt?: string;
   projectId?: string;
+  characterId?: string;
 }
 
 interface ArchivedMessage {
@@ -138,6 +158,7 @@ interface ArchivedMessage {
 
 const { get } = useApi();
 const chatStore = useChatStore();
+const owned = useDeviceOwnedConversation();
 const conversations = ref<ArchivedConversation[]>([]);
 const messages = ref<ArchivedMessage[]>([]);
 const projects = ref<any[]>([]);
@@ -148,8 +169,14 @@ const selectedId = ref("");
 const loading = ref(false);
 const messageLoading = ref(false);
 const restoringId = ref("");
+const exporting = ref(false);
+const generatingSummary = ref(false);
+const generatedSummary = ref("");
 const messageListRef = ref<HTMLElement | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
+let listRequest = 0;
+let messageRequest = 0;
+let disposed = false;
 
 const selectedConversation = computed(
   () => conversations.value.find((item) => item.id === selectedId.value) || null,
@@ -205,6 +232,12 @@ function scheduleSearch() {
 }
 
 async function loadFilters() {
+  if (await owned.refresh()) {
+    if (disposed) return;
+    projects.value = [];
+    characters.value = owned.roles.value;
+    return;
+  }
   const [sidebar, characterList] = await Promise.all([
     get<any>("/api/web-chat/sidebar"),
     get<any[]>("/api/characters"),
@@ -214,15 +247,21 @@ async function loadFilters() {
 }
 
 async function loadConversations() {
+  const ticket = ++listRequest;
+  const projectId = projectFilter.value;
+  const search = keyword.value.trim().toLowerCase();
   loading.value = true;
   try {
-    const response = await get<any>("/api/web-chat/conversations", {
+    const active = await owned.refresh();
+    const role = owned.selectInitialRole();
+    const response = active ? { items: (await owned.conversations(role, search)).filter((row) => row.archivedAt && (!projectId || row.projectId === projectId)) } : await get<any>("/api/web-chat/conversations", {
       page: 1,
       pageSize: 200,
       archivedOnly: true,
       projectId: projectFilter.value || undefined,
       keyword: keyword.value.trim() || undefined,
     });
+    if (disposed || ticket !== listRequest || projectId !== projectFilter.value || search !== keyword.value.trim().toLowerCase()) return;
     conversations.value = [...(response?.items || [])].sort((left, right) => {
       const leftTime = Date.parse(left.archivedAt || "");
       const rightTime = Date.parse(right.archivedAt || "");
@@ -232,27 +271,36 @@ async function loadConversations() {
     });
     if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
       selectedId.value = "";
+      messageRequest++;
       messages.value = [];
     }
+  } catch (error: any) {
+    if (!disposed && ticket === listRequest) ElMessage.error(error?.message || "归档对话加载失败");
   } finally {
-    loading.value = false;
+    if (ticket === listRequest) loading.value = false;
   }
 }
 
 async function selectConversation(conversation: ArchivedConversation) {
+  const ticket = ++messageRequest;
+  generatedSummary.value = "";
   selectedId.value = conversation.id;
   messageLoading.value = true;
   try {
-    const response = await get<any>(
+    const response = owned.enabled.value ? { items: await owned.allMessages(conversation.id, conversation.characterId || owned.selectInitialRole()) } : await get<any>(
       `/api/web-chat/conversations/${encodeURIComponent(conversation.id)}/messages`,
       { page: 1, pageSize: 200 },
     );
+    if (disposed || ticket !== messageRequest || selectedId.value !== conversation.id) return;
     messages.value = response?.items || [];
     requestAnimationFrame(() => {
+      if (disposed || ticket !== messageRequest) return;
       if (messageListRef.value) messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
     });
+  } catch (error: any) {
+    if (!disposed && ticket === messageRequest) ElMessage.error(error?.message || "归档消息加载失败");
   } finally {
-    messageLoading.value = false;
+    if (ticket === messageRequest) messageLoading.value = false;
   }
 }
 
@@ -272,6 +320,47 @@ async function restoreConversation(conversation: ArchivedConversation) {
   }
 }
 
+async function exportSelectedConversation() {
+  const conversation = selectedConversation.value;
+  if (!conversation || exporting.value) return;
+  const ticket = messageRequest;
+  exporting.value = true;
+  try {
+    const result = await owned.exportConversation(conversation.id, conversation.characterId || owned.selectInitialRole());
+    if (disposed || ticket !== messageRequest || selectedId.value !== conversation.id) return;
+    const url = URL.createObjectURL(new Blob([result.content], { type: result.mimeType }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    ElMessage.success("会话已导出");
+  } catch (error: any) {
+    if (!disposed && ticket === messageRequest) ElMessage.error(error?.message || "会话导出失败");
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function generateSelectedSummary() {
+  const conversation = selectedConversation.value;
+  if (!conversation || generatingSummary.value || messageLoading.value) return;
+  const ticket = messageRequest;
+  generatingSummary.value = true;
+  try {
+    const viewId = await owned.prepareSummaryGeneration(conversation.id, conversation.characterId || owned.selectInitialRole());
+    if (disposed || ticket !== messageRequest || selectedId.value !== conversation.id) return;
+    const result = await owned.generateConversationSummary(conversation.id, viewId);
+    if (disposed || ticket !== messageRequest || selectedId.value !== conversation.id) return;
+    generatedSummary.value = result.summaryText;
+    ElMessage.success("摘要已由数据所有者确认保存");
+  } catch (error: any) {
+    if (!disposed && ticket === messageRequest) ElMessage.error(error?.message || "摘要生成失败");
+  } finally {
+    generatingSummary.value = false;
+  }
+}
+
 onMounted(() => {
   void loadFilters();
   void loadConversations();
@@ -285,6 +374,9 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  disposed = true;
+  listRequest++;
+  messageRequest++;
   if (searchTimer) clearTimeout(searchTimer);
 });
 </script>

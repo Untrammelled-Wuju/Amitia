@@ -34,14 +34,18 @@ export async function processResult(
   const artifacts = result.artifacts;
   const metadata = result.metadata;
 
-  let serialized: string;
+  let serialized: string | undefined;
   try {
     serialized = JSON.stringify(output);
   } catch {
-    serialized = "";
+    return { task_run_id: taskRunId, status: "failed", error: { code: "task_output_not_serializable", message: "任务输出无法序列化为 JSON" } };
   }
 
-  if (serialized.length <= INLINE_JSON_LIMIT) {
+  if (typeof serialized !== "string") {
+    return { task_run_id: taskRunId, status: "failed", error: { code: "task_output_not_serializable", message: "任务输出无法序列化为 JSON" } };
+  }
+
+  if (Buffer.byteLength(serialized, "utf8") <= INLINE_JSON_LIMIT) {
     return {
       task_run_id: taskRunId,
       status: "succeeded",

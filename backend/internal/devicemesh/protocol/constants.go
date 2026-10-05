@@ -11,7 +11,7 @@ const (
 	RuntimeContractVersion = "1.0"
 	WebSocketPath          = "/api/device-mesh/v1/runtime/ws"
 	HelloTimeoutSeconds    = 10
-	MaxMessageSizeBytes    = 1 << 20
+	MaxMessageSizeBytes    = 8 << 20
 	ReadDeadlineSeconds    = 75
 	HeartbeatInterval      = 20
 	BootstrapTicketTTL     = 300

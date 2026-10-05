@@ -72,6 +72,11 @@ func (s *service) callLLMWithoutThinking(ctx context.Context, cfg *ModelConfig, 
 }
 
 func (s *service) callLLMMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+	ctx, finish, err := s.beginInference(ctx)
+	if err != nil {
+		return "", 0, err
+	}
+	defer finish()
 	switch protocolForApiType(cfg.APIType) {
 	case "mnn":
 		return s.callMNNMode(ctx, cfg, messages, jsonOnly)
@@ -116,11 +121,19 @@ func (s localModelEventSink) OnUsage(usage localmodel.LocalModelUsage) error {
 }
 
 func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, sink ModelEventSink) (string, string, []map[string]interface{}, int, error) {
+	ctx, finish, authorityErr := s.beginInference(ctx)
+	if authorityErr != nil {
+		return "", "", nil, 0, authorityErr
+	}
+	defer finish()
 	if sink == nil {
 		sink = noopEventSink{}
 	}
 	if s.llmWithTools != nil {
 		text, reasoning, calls, tokens, err := s.llmWithTools(ctx, cfg, messages, tools)
+		if cause := context.Cause(ctx); cause != nil {
+			return "", "", nil, 0, cause
+		}
 		if reasoning != "" {
 			if emitErr := sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDelta, TextDelta: reasoning}); emitErr != nil {
 				return "", "", nil, 0, emitErr
@@ -595,6 +608,11 @@ func (s *service) callLLMWithAdapter(ctx context.Context, cfg *ModelConfig, mess
 }
 
 func (s *service) callLLMWithAdapterMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool, disableThinking bool) (string, int, error) {
+	ctx, finish, authorityErr := s.beginInference(ctx)
+	if authorityErr != nil {
+		return "", 0, authorityErr
+	}
+	defer finish()
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
 	req := messagesToModelRequest(cfg, messages, nil, jsonOnly)
@@ -646,6 +664,11 @@ func applyLegacyAnthropicThinking(
 }
 
 func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, jsonOnly bool, disableThinking bool, sink ModelEventSink) (*ModelResult, error) {
+	ctx, finish, authorityErr := s.beginInference(ctx)
+	if authorityErr != nil {
+		return nil, authorityErr
+	}
+	defer finish()
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
 	req := messagesToModelRequest(cfg, messages, tools, jsonOnly)

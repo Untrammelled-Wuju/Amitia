@@ -35,6 +35,8 @@ dependencies:
   just_audio: ^0.10.6
   video_player: ^2.11.1
   path_provider: ^2.1.6
+  mobile_scanner: 7.1.4
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   image_picker_platform_interface: ^2.11.1

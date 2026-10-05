@@ -180,6 +180,21 @@ func (h *ConnectionHub) CloseAll() {
 	}
 }
 
+func (h *ConnectionHub) CloseDevice(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
+	h.mu.Lock()
+	var conns []*MeshConnection
+	for key, conn := range h.connections {
+		if conn.SpaceID == spaceID && conn.DeviceID == deviceID {
+			conns = append(conns, conn)
+			delete(h.connections, key)
+		}
+	}
+	h.mu.Unlock()
+	for _, conn := range conns {
+		_ = conn.Close(4003, "device_revoked")
+	}
+}
+
 func (h *ConnectionHub) SendEnvelope(sessionID runtimeidentity.RuntimeSessionID, generation int64, msgType protocol.MessageType, payload interface{}) bool {
 	h.mu.RLock()
 	c, ok := h.connections[sessionID.String()]
@@ -194,8 +209,6 @@ func (h *ConnectionHub) SendEnvelope(sessionID runtimeidentity.RuntimeSessionID,
 		return false
 	}
 
-	seq := c.nextOutboundSequence()
-
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -206,7 +219,6 @@ func (h *ConnectionHub) SendEnvelope(sessionID runtimeidentity.RuntimeSessionID,
 		RuntimeID:            c.RuntimeID,
 		RuntimeSessionID:     c.SessionID,
 		ConnectionGeneration: c.Generation,
-		Sequence:             seq,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),

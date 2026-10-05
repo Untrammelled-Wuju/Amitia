@@ -10,6 +10,7 @@ void main() {
     int port = 18899,
     String httpScheme = 'http',
     String webSocketScheme = 'ws',
+    String pathPrefix = '',
   }) {
     return BackendConnectionConfig(
       schemaVersion: 1,
@@ -21,6 +22,7 @@ void main() {
         webSocketScheme: webSocketScheme,
         livenessPath: '/healthz',
         readinessPath: '/readyz',
+        pathPrefix: pathPrefix,
       ),
       authStrategy: BackendAuthStrategy.localToken,
       credential: BackendConnectionCredential.tryCreate('a' * 32)!,
@@ -32,6 +34,18 @@ void main() {
 
     setUp(() {
       builder = BackendUriBuilder();
+    });
+
+    test('provider connection keeps HTTP and WebSocket routes inside the local authenticated channel', () {
+      final config = _config(pathPrefix: '/internal/device-mesh/provider');
+      final http = builder.http(config, '/api/device-mesh/v1/business/messages', queryParameters: {'roleId': 'role-a'});
+      expect(http.host, '127.0.0.1');
+      expect(http.port, 18899);
+      expect(http.path, '/internal/device-mesh/provider/api/device-mesh/v1/business/messages');
+      expect(http.queryParameters['roleId'], 'role-a');
+      expect(builder.webSocket(config, '/api/events/ws').path, '/internal/device-mesh/provider/api/events/ws');
+      expect(() => _config(host: '192.168.1.2', pathPrefix: '/internal/device-mesh/provider'), throwsArgumentError);
+      expect(() => _config(pathPrefix: '/arbitrary-proxy'), throwsArgumentError);
     });
 
     group('httpBase', () {

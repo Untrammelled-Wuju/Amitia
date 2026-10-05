@@ -9,6 +9,8 @@ import { createRequestEnvelope } from "../utils/requestEnvelope";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { useConversationWorkspace } from "./useConversationWorkspace";
 import { useChatAppearancePreference } from "./useChatAppearancePreference";
+import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
+import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, type OwnedAttachment } from "@/runtime/device-owned-attachments";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -37,6 +39,7 @@ export function useWebChatSend(
   failPendingAssistant?: (requestId: string) => void,
 ) {
   const { post, del } = useApi();
+  const owned = useDeviceOwnedConversation();
   const { messageStyle } = useChatAppearancePreference();
   const { currentWorkspace, getWorkspaceRequestFields } = useConversationWorkspace();
   const isSubmitting = ref(false);
@@ -63,6 +66,11 @@ export function useWebChatSend(
 
   async function handleVoiceAudio(blob: Blob, transcript?: string, duration?: number) {
     try {
+			if (await owned.refresh()) {
+				const attachment = await ownedAudioAttachment(blob, blob.type.startsWith("audio/wav") ? "voice.wav" : "voice.webm");
+				await doActualSend("[语音]", undefined, true, undefined, attachment);
+				return;
+			}
       const formData = new FormData();
       formData.append("audio", blob, "voice.webm");
       const [url, init] = await Promise.all([
@@ -78,7 +86,7 @@ export function useWebChatSend(
       await doActualSend(typeof transcript === "string" && transcript.trim() ? transcript : "[语音]", audioUrl, true);
     } catch (err: any) {
       console.error("[Voice] upload failed:", err);
-      ElMessage.error("语音发送失败");
+      ElMessage.error(err?.message || "语音发送失败");
     }
   }
 
@@ -87,6 +95,14 @@ export function useWebChatSend(
   }
 
   async function handleImageSend(text: string, imageBase64: string) {
+    if (await owned.refresh()) {
+      await ownedImageAttachment(imageBase64, currentImageFile.value?.name || "image.png");
+      currentImageBase64.value = null;
+      currentImageFile.value = null;
+      pendingImageBase64.value = imageBase64;
+      await doActualSend(text.trim() || "[图片]");
+      return;
+    }
     let resourceUri = imageBase64;
     let file = currentImageFile.value;
     if (!file && imageBase64.startsWith("data:")) {
@@ -136,7 +152,7 @@ export function useWebChatSend(
     await doActualSend(text);
   }
 
-  async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string) {
+  async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string, ownedAudio?: OwnedAttachment) {
     const safeText = typeof text === "string" ? text : "";
     if (isSubmitting.value || sending.value) return;
     isSubmitting.value = true;
@@ -164,7 +180,7 @@ export function useWebChatSend(
       role: "user",
       content: sendContent,
       imageUrl: imgUrl || undefined,
-      audioUrl: finalAudioUrl || undefined,
+      audioUrl: ownedAudio ? ownedAudioURL([ownedAudio]) : finalAudioUrl || undefined,
       videoUrl: finalVideoUrl || undefined,
       status: "sending",
       conversationId: convId.value,
@@ -173,13 +189,57 @@ export function useWebChatSend(
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
     });
-    beginPendingAssistant?.(requestEnvelope.requestId, characterId.value);
+    if (!owned.enabled.value) beginPendingAssistant?.(requestEnvelope.requestId, characterId.value);
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
     notifyDesktopPetChatState("assistant_thinking", requestEnvelope.requestId);
 
     try {
+      if (owned.enabled.value) {
+        if (finalAudioUrl || finalVideoUrl) throw new Error("当前设备数据通道尚未接入音频和视频保存，消息未发送");
+				if (ownedAudio && imgUrl) throw new Error("语音消息不能同时携带图片");
+        const attachments = ownedAudio ? [ownedAudio] : imgUrl ? [await ownedImageAttachment(imgUrl)] : undefined;
+        const assistantId = `${requestEnvelope.requestId}/assistant`;
+        const previousCore = [...messages.value].reverse().find((message) => message.executionScope?.coreId && message.executionScope.coreId !== owned.coreId.value)?.executionScope?.coreId;
+        const context = previousCore && convId.value ? {
+          previousCoreId: previousCore, conversationId: convId.value,
+          summary: owned.previousSummary(previousCore, convId.value),
+          messages: messages.value.filter((message) => message.id !== userMsgLocalId && ["user", "assistant"].includes(message.role) && !["sending", "failed"].includes(message.status)).slice(-128).map((message) => ({ id: message.id, ownerId: message.ownerId || message.executionScope?.resourceOwnerId, role: message.role, content: String(message.content || ""), status: message.status })),
+        } : undefined;
+        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, context, attachments }, (event) => {
+          if (event.type === "started") {
+            const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
+            if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope?.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId };
+            if (event.conversationId && !convId.value) { convId.value = event.conversationId; localStorage.setItem("webchat-conv-id", event.conversationId); }
+            messages.value.push({ id: assistantId, uiKey: `${event.executionScope?.resourceOwnerId}:${assistantId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", createdAt: new Date().toISOString(), characterId: event.executionScope?.roleId, conversationId: event.conversationId, executionScope: event.executionScope });
+          }
+					if (event.type === "transcribed") {
+						const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === event.executionScope?.resourceOwnerId);
+						if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: event.text, sourceRevision: 2 };
+					}
+          const index = messages.value.findIndex((message) => message.id === assistantId);
+          if (index >= 0 && event.type === "delta") {
+            const field = event.reasoning ? "reasoningContent" : "content";
+            messages.value[index] = { ...messages.value[index], [field]: (messages.value[index][field] || "") + (event.text || "") };
+          }
+          if (index >= 0 && (event.type === "interrupted" || event.type === "failed")) messages.value[index] = { ...messages.value[index], status: "interrupted", saved: event.data?.saved === true };
+          scrollToBottom(true);
+        });
+        const index = messages.value.findIndex((message) => message.id === assistantId);
+				const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === response.executionScope.resourceOwnerId);
+				if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: response.transcription || messages.value[userIndex].content, sourceRevision: response.userRevision || 1 };
+        const assistant = { id: assistantId, uiKey: `${response.executionScope.resourceOwnerId}:${assistantId}`, ownerId: response.executionScope.resourceOwnerId, sourceRevision: response.saved ? 1 : undefined, requestId: response.requestId, role: "assistant", content: response.reply, reasoningContent: response.reasoning, status: "completed", conversationId: response.conversationId, characterId: response.executionScope.roleId, executionScope: response.executionScope, saved: response.saved, memoryStatus: response.memoryStatus, createdAt: new Date().toISOString() };
+        if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
+        else messages.value.push(assistant);
+        convId.value = response.conversationId;
+        sending.value = false;
+        notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
+        if (replyTarget) replyTarget.value = null;
+        await onConversationCreated?.(response.conversationId);
+        return;
+      }
+			if (ownedAudio) throw new Error("设备服务状态已变化，语音未发送");
       const result = await post<any>("/api/web-chat/messages", {
         requestId: requestEnvelope.requestId,
         sessionId: requestEnvelope.sessionId,
@@ -226,6 +286,10 @@ export function useWebChatSend(
       modelError.value = errMsg;
       const index = messages.value.findIndex((message) => message.id === userMsgLocalId);
       if (index >= 0) messages.value[index] = { ...messages.value[index], status: "failed" };
+      if (owned.enabled.value) {
+        const assistantIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/assistant`);
+        if (assistantIndex >= 0) messages.value[assistantIndex] = { ...messages.value[assistantIndex], status: "interrupted" };
+      }
       sending.value = false;
       notifyDesktopPetChatState("assistant_error", requestEnvelope.requestId, errMsg);
     } finally {
@@ -235,6 +299,7 @@ export function useWebChatSend(
   }
 
   async function handleStop() {
+    if (owned.enabled.value) { await owned.interrupt().catch((error) => ElMessage.error(error?.message || "停止失败")); return; }
     const conversationId = String(convId.value || "").trim();
     const turnId = String(activeTurnId?.value || "").trim();
     if (!conversationId || !turnId) return;
@@ -247,6 +312,7 @@ export function useWebChatSend(
 
   async function handleRetry(msg: any) {
     if (sending.value) return;
+    if (owned.enabled.value) { ElMessage.info("请继续发送新消息；已发起的请求不会自动重放。记忆保存任务会单独重试。"); return; }
     const turnId = String(msg?.turnId || msg?.assistantTurn?.id || "").trim();
     const conversationId = String(convId.value || "").trim();
     if (!conversationId || !turnId) {
@@ -261,13 +327,20 @@ export function useWebChatSend(
   }
 
   async function handleClear() {
+    const conversationId = convId.value;
+    const roleId = characterId.value;
     try {
       await ElMessageBox.confirm("确定清空当前会话的所有消息？", "提示", {
         type: "warning",
         confirmButtonText: "清空",
       });
+      if (convId.value !== conversationId || characterId.value !== roleId) return;
       disconnectRuntime();
-      if (convId.value) await del(`/api/web-chat/conversations/${convId.value}/messages`);
+      if (conversationId) {
+        if (owned.enabled.value) await owned.edit("conversation", conversationId, {}, { clear: true, characterId: roleId });
+        else await del(`/api/web-chat/conversations/${conversationId}/messages`);
+      }
+      if (convId.value !== conversationId || characterId.value !== roleId) return;
       messages.value = [];
       sending.value = false;
       ElMessage.success("已清空");

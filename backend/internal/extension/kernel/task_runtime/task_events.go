@@ -23,6 +23,7 @@ const (
 	TaskEventFailed                   TaskDomainEventType = "failed"
 	TaskEventCancelled                TaskDomainEventType = "cancelled"
 	TaskEventPaused                   TaskDomainEventType = "paused"
+	TaskEventPausing                  TaskDomainEventType = "pausing"
 	TaskEventResumed                  TaskDomainEventType = "resumed"
 	TaskEventTimedOut                 TaskDomainEventType = "timed_out"
 	TaskEventRecoveryRequired         TaskDomainEventType = "recovery_required"

@@ -1,6 +1,7 @@
 package task_runtime
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -166,51 +167,52 @@ func MustTransition(from, to TaskRunStatus) error {
 // 未来只能扩展 execution placement / assigned provider / device 等字段。
 // 禁止创建平行 RemoteTask、CloudTask、DeviceTask 状态机。
 type TaskRun struct {
-	TaskRunID            string                 `json:"taskRunId"`
-	OperationID          string                 `json:"operationId"`
-	InvocationID         string                 `json:"invocationId"`
-	TaskDefinitionID     string                 `json:"taskDefinitionId"`
-	ExtensionID          string                 `json:"extensionId"`
-	ModuleID             string                 `json:"moduleId"`
-	Status               TaskRunStatus          `json:"status"`
-	Priority             int                    `json:"priority"`
-	ExecutionPlacement   TaskExecutionPlacement `json:"executionPlacement,omitempty"`
-	ExecutionTarget      TaskExecutionTarget    `json:"executionTarget,omitempty"`
-	ExecutionAttemptID   TaskExecutionAttemptID `json:"executionAttemptId,omitempty"`
-	ExecutionResolvedAt  *time.Time             `json:"executionResolvedAt,omitempty"`
-	ExecutionResolvedBy  string                 `json:"executionResolvedBy,omitempty"`
-	Input                json.RawMessage        `json:"input"`
-	InputHash            string                 `json:"inputHash"`
-	InputArtifactID      *string                `json:"inputArtifactId,omitempty"`
-	TraceID              string                 `json:"traceId,omitempty"`
-	CorrelationID        string                 `json:"correlationId,omitempty"`
-	CausationID          string                 `json:"causationId,omitempty"`
-	Source               string                 `json:"source,omitempty"`
-	ScopeSnapshotID      string                 `json:"scopeSnapshotId,omitempty"`
-	PermissionSnapshotID string                 `json:"permissionSnapshotId,omitempty"`
-	DependencySnapshotID string                 `json:"dependencySnapshotId,omitempty"`
-	RuntimeInstanceID    *string                `json:"runtimeInstanceId,omitempty"`
-	CheckpointID         *string                `json:"checkpointId,omitempty"`
-	ResultArtifactID     *string                `json:"resultArtifactId,omitempty"`
-	Attempt              int                    `json:"attempt"`
-	MaxAttempts          int                    `json:"maxAttempts"`
-	CreatedAt            time.Time              `json:"createdAt"`
-	QueuedAt             *time.Time             `json:"queuedAt,omitempty"`
-	StartedAt            *time.Time             `json:"startedAt,omitempty"`
-	FinishedAt           *time.Time             `json:"finishedAt,omitempty"`
-	DeadlineAt           *time.Time             `json:"deadlineAt,omitempty"`
-	CancelRequestedAt    *time.Time             `json:"cancelRequestedAt,omitempty"`
-	PauseReason          *string                `json:"pauseReason,omitempty"`
-	PauseRequestedAt     *time.Time             `json:"pauseRequestedAt,omitempty"`
-	PausedAt             *time.Time             `json:"pausedAt,omitempty"`
-	ResumedAt            *time.Time             `json:"resumedAt,omitempty"`
-	ErrorCode            *string                `json:"errorCode,omitempty"`
-	ErrorMessage         *string                `json:"errorMessage,omitempty"`
-	Generation           int64                  `json:"generation"`
-	Revision             int64                  `json:"revision"`
-	LeaseID              string                 `json:"leaseId,omitempty"`
-	LeaseExpiresAt       *time.Time             `json:"leaseExpiresAt,omitempty"`
-	LastHeartbeatAt      *time.Time             `json:"lastHeartbeatAt,omitempty"`
+	TaskRunID             string                 `json:"taskRunId"`
+	OperationID           string                 `json:"operationId"`
+	InvocationID          string                 `json:"invocationId"`
+	TaskDefinitionID      string                 `json:"taskDefinitionId"`
+	DefinitionFingerprint string                 `json:"definitionFingerprint,omitempty"`
+	ExtensionID           string                 `json:"extensionId"`
+	ModuleID              string                 `json:"moduleId"`
+	Status                TaskRunStatus          `json:"status"`
+	Priority              int                    `json:"priority"`
+	ExecutionPlacement    TaskExecutionPlacement `json:"executionPlacement,omitempty"`
+	ExecutionTarget       TaskExecutionTarget    `json:"executionTarget,omitempty"`
+	ExecutionAttemptID    TaskExecutionAttemptID `json:"executionAttemptId,omitempty"`
+	ExecutionResolvedAt   *time.Time             `json:"executionResolvedAt,omitempty"`
+	ExecutionResolvedBy   string                 `json:"executionResolvedBy,omitempty"`
+	Input                 json.RawMessage        `json:"input"`
+	InputHash             string                 `json:"inputHash"`
+	InputArtifactID       *string                `json:"inputArtifactId,omitempty"`
+	TraceID               string                 `json:"traceId,omitempty"`
+	CorrelationID         string                 `json:"correlationId,omitempty"`
+	CausationID           string                 `json:"causationId,omitempty"`
+	Source                string                 `json:"source,omitempty"`
+	ScopeSnapshotID       string                 `json:"scopeSnapshotId,omitempty"`
+	PermissionSnapshotID  string                 `json:"permissionSnapshotId,omitempty"`
+	DependencySnapshotID  string                 `json:"dependencySnapshotId,omitempty"`
+	RuntimeInstanceID     *string                `json:"runtimeInstanceId,omitempty"`
+	CheckpointID          *string                `json:"checkpointId,omitempty"`
+	ResultArtifactID      *string                `json:"resultArtifactId,omitempty"`
+	Attempt               int                    `json:"attempt"`
+	MaxAttempts           int                    `json:"maxAttempts"`
+	CreatedAt             time.Time              `json:"createdAt"`
+	QueuedAt              *time.Time             `json:"queuedAt,omitempty"`
+	StartedAt             *time.Time             `json:"startedAt,omitempty"`
+	FinishedAt            *time.Time             `json:"finishedAt,omitempty"`
+	DeadlineAt            *time.Time             `json:"deadlineAt,omitempty"`
+	CancelRequestedAt     *time.Time             `json:"cancelRequestedAt,omitempty"`
+	PauseReason           *string                `json:"pauseReason,omitempty"`
+	PauseRequestedAt      *time.Time             `json:"pauseRequestedAt,omitempty"`
+	PausedAt              *time.Time             `json:"pausedAt,omitempty"`
+	ResumedAt             *time.Time             `json:"resumedAt,omitempty"`
+	ErrorCode             *string                `json:"errorCode,omitempty"`
+	ErrorMessage          *string                `json:"errorMessage,omitempty"`
+	Generation            int64                  `json:"generation"`
+	Revision              int64                  `json:"revision"`
+	LeaseID               string                 `json:"leaseId,omitempty"`
+	LeaseExpiresAt        *time.Time             `json:"leaseExpiresAt,omitempty"`
+	LastHeartbeatAt       *time.Time             `json:"lastHeartbeatAt,omitempty"`
 }
 
 func (r *TaskRun) EffectiveExecutionPlacement() TaskExecutionPlacement {
@@ -420,20 +422,31 @@ type TaskQueueEntry struct {
 }
 
 type TaskRuntimeConfig struct {
-	GlobalMaxConcurrent        int
-	PerExtensionMaxConcurrent  int
-	PerDefinitionMaxConcurrent int
-	DefaultTimeout             time.Duration
-	MaxProgressPerSecond       int
-	MaxCheckpointBytes         int
-	MaxInlineResultBytes       int
-	MaxRetryAttempts           int
-	WorkspaceRoot              string
-	NodeEnvironmentResolver    script_host.NodeEnvironmentResolver
-	HostArtifactResolver       script_host.ArtifactResolver
-	LeaseDuration              time.Duration
-	CancelGracePeriod          time.Duration
-	PauseGracePeriod           time.Duration
+	AuthoritySnapshots           TaskAuthoritySnapshotStore
+	OwnedExecutionGuard          OwnedTaskExecutionGuard
+	OwnedInputs                  OwnedTaskInputPort
+	OwnedCheckpoints             OwnedTaskCheckpointPort
+	OwnedOutcomes                OwnedTaskOutcomePort
+	OwnedProgress                OwnedTaskProgressPort
+	OwnedStorage                 OwnedTaskStoragePort
+	OwnedArtifacts               OwnedTaskArtifactPort
+	OwnedTargetDefinitions       OwnedTaskTargetDefinitionPort
+	InstalledDefinitionValidator func(context.Context, *TaskDefinition) error
+	GlobalMaxConcurrent          int
+	PerExtensionMaxConcurrent    int
+	PerDefinitionMaxConcurrent   int
+	DefaultTimeout               time.Duration
+	MaxProgressPerSecond         int
+	MaxCheckpointBytes           int
+	MaxInlineResultBytes         int
+	MaxRetryAttempts             int
+	WorkspaceRoot                string
+	NodeEnvironmentResolver      script_host.NodeEnvironmentResolver
+	HostArtifactResolver         script_host.ArtifactResolver
+	EntryResolver                func(context.Context, *TaskDefinition) (string, error)
+	LeaseDuration                time.Duration
+	CancelGracePeriod            time.Duration
+	PauseGracePeriod             time.Duration
 }
 
 func DefaultTaskRuntimeConfig() TaskRuntimeConfig {

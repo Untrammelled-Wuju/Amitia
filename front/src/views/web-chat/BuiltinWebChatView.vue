@@ -13,6 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   />
   <div v-else class="webchat-page">
     <section class="chat-surface">
+    <el-alert v-if="owned.notice.value" :title="owned.notice.value" type="warning" show-icon :closable="false" />
     <AutomationStatusIndicator :status="automationStatus" />
 <ChatBanners
       :model-missing="modelMissing"
@@ -85,6 +86,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :actions="conversationHostActions"
         ref="msgAreaRef"
         :messages="messages"
+        :device-owned="owned.enabled.value"
         :model-error="modelError"
         :history-messages="persistedMessages"
         :char-name="charName"
@@ -181,7 +183,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       @select="handleSwitchChar"
     />
 
-    <MemoryPanel v-model:visible="showMemories" :memories="memories" />
+    <DeviceOwnedMemoryPanel v-if="owned.enabled.value" v-model:visible="showMemories" :character-id="characterId" :conversation-id="convId" />
+    <MemoryPanel v-else v-model:visible="showMemories" :memories="memories" />
 
     <el-drawer v-model="showSummaryDrawer" title="会话摘要" direction="rtl" size="420px">
       <div v-if="convSummary" class="summary-drawer-text">{{ convSummary }}</div>
@@ -204,6 +207,7 @@ import AutomationStatusIndicator from "../../components/AutomationStatusIndicato
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
+import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
 import { useConversationWorkspace } from "../../composables/useConversationWorkspace";
 import {
   loadChatPermissionMode,
@@ -216,6 +220,7 @@ import MessagesArea from "../../components/MessagesArea.vue";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import MemoryPanel from "../../components/MemoryPanel.vue";
+import DeviceOwnedMemoryPanel from "../../components/DeviceOwnedMemoryPanel.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
@@ -268,6 +273,10 @@ async function handleEndCall() {
 }
 
 const { get, post, put, del } = useApi();
+const owned = useDeviceOwnedConversation();
+let ownedPolicyTimer: ReturnType<typeof setInterval> | null = null;
+let ownedPolling = false;
+let ownedDisposed = false;
 const {
   currentWorkspace,
   recentWorkspaces,
@@ -439,11 +448,22 @@ async function handleFileSend(file: File) {
   }
 }
 
-async function deleteConversationMessage(messageId: string) {
+function findConversationMessage(messageId: string, ownerId?: string) {
+  const matches = persistedMessages.value.filter((item: any) => String(item.id) === messageId && (ownerId === undefined || item.ownerId === ownerId));
+  if (matches.length !== 1) throw new Error("消息来源不唯一或已变化，请重新选择消息");
+  return matches[0];
+}
+
+async function deleteConversationMessage(messageId: string, ownerId?: string) {
   const id = String(messageId || "").trim();
   if (!id) return;
-  await del(`/api/chats/messages/${encodeURIComponent(id)}`);
-  const index = persistedMessages.value.findIndex((item) => String(item.id) === id);
+  if (owned.enabled.value) {
+    const message = findConversationMessage(id, ownerId);
+    if (!message?.executionScope || !message?.ownerId || !message?.sourceRevision) throw new Error("该消息缺少原始数据来源，请重新加载或在原设备管理历史数据");
+    await owned.edit("message", id, {}, { deleted: true, characterId: characterId.value, expectedExecutionScope: message.executionScope, expectedOwnerId: message.ownerId, expectedRevision: message.sourceRevision });
+  }
+  else await del(`/api/chats/messages/${encodeURIComponent(id)}`);
+  const index = persistedMessages.value.findIndex((item: any) => String(item.id) === id && (ownerId === undefined || item.ownerId === ownerId));
   if (index >= 0) persistedMessages.value.splice(index, 1);
 }
 
@@ -460,12 +480,16 @@ async function handleEditMessage(msg: any) {
     });
     const content = String(result.value || "").trim();
     if (!content || content === String(msg.content || "")) return;
-    const updated = await put<any>(`/api/web-chat/messages/${encodeURIComponent(msg.id)}`, { content });
-    const index = persistedMessages.value.findIndex((item) => String(item.id) === String(msg.id));
+    if (owned.enabled.value && (!msg.executionScope || !msg.ownerId || !msg.sourceRevision)) throw new Error("该消息缺少原始数据来源，请重新加载或在原设备管理历史数据");
+    const updated = owned.enabled.value
+      ? (await owned.edit("message", msg.id, { content }, { characterId: characterId.value, expectedExecutionScope: msg.executionScope, expectedOwnerId: msg.ownerId, expectedRevision: msg.sourceRevision }), { content, sourceRevision: msg.sourceRevision + 1 })
+      : await put<any>(`/api/web-chat/messages/${encodeURIComponent(msg.id)}`, { content });
+    const index = persistedMessages.value.findIndex((item: any) => String(item.id) === String(msg.id) && item.ownerId === msg.ownerId);
     if (index >= 0) {
       persistedMessages.value[index] = {
         ...persistedMessages.value[index],
         content: updated?.content ?? content,
+        sourceRevision: updated?.sourceRevision ?? persistedMessages.value[index].sourceRevision,
         updatedAt: updated?.updatedAt ?? new Date().toISOString(),
       };
     }
@@ -500,7 +524,7 @@ function handleSetReply(msg: any) {
 
 async function loadLlmModels() {
   try {
-    const models = await get<any[]>("/api/model/configs");
+    const models = await get<any[]>("/api/model/available");
     llmModels.value = Array.isArray(models)
       ? models.filter((model: any) => {
           const type = String(model.apiType || "").toLowerCase();
@@ -648,6 +672,7 @@ const {
   convId,
   showScrollBtn,
   () => loadOlderRuntimeTurns(),
+  characterId,
 );
 
 const {
@@ -726,6 +751,7 @@ const {
       path: "/chat",
       query: { conversationId },
     });
+    if (owned.enabled.value) { await fetchConversations(); return; }
     void connectSSE(false);
     void chatStore.fetchSidebar().catch(() => {
       ElMessage.warning("消息已发送，侧栏刷新失败，请稍后重试");
@@ -770,11 +796,11 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
   "conversation.send": async (input) => handleSend(String(input?.text ?? input ?? ""), input?.imageBase64, input?.videoBase64),
   "conversation.stop": async () => handleStop(),
   "conversation.retry": async (input) => { const id = String(input?.messageId ?? input ?? ""); const msg = messages.value.find((item) => item.id === id); if (msg) await handleRetry(msg); },
-  "conversation.delete": async (input) => deleteConversationMessage(String(input?.messageId ?? input ?? "")),
+  "conversation.delete": async (input) => deleteConversationMessage(String(input?.messageId ?? input ?? ""), input?.ownerId),
   "conversation.new": async () => handleNewChat(),
   "conversation.clear": async () => handleClear(),
   "conversation.reply": async (input) => { const msg = messages.value.find((item) => item.id === String(input?.messageId ?? input ?? "")); if (msg) handleSetReply(msg); },
-  "conversation.edit": async (input) => { const msg = messages.value.find((item) => item.id === String(input?.messageId ?? input ?? "")); if (msg) await handleEditMessage(msg); },
+  "conversation.edit": async (input) => { const msg = findConversationMessage(String(input?.messageId ?? input ?? ""), input?.ownerId); await handleEditMessage(msg); },
   "conversation.sendFile": async (input) => {
     if (input?.file instanceof File) return handleFileSend(input.file);
     const resourceUri = String(input?.resourceUri ?? "").trim();
@@ -907,6 +933,45 @@ onMounted(async () => {
       callActive.value = false;
     }) ?? null;
   void loadLlmModels();
+  let ownedInitialized = false;
+  const initializeOwned = async () => {
+    characters.value = owned.roles.value;
+    const selectedId = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
+    const selected = characters.value.find((character) => character.id === selectedId);
+    if (selected) selectCharacter(selected);
+    else { characterId.value = ""; modelError.value = characters.value.length ? "请选择调用角色后发送消息" : "没有可用角色，拒绝调用"; }
+    if (characterId.value) { await loadCharacterConversation(); await fetchConversations(); }
+    ownedInitialized = true;
+  };
+  const startOwnedPolling = () => {
+    if (ownedDisposed || ownedPolicyTimer) return;
+    ownedPolicyTimer = setInterval(async () => {
+      if (ownedDisposed || ownedPolling) return;
+      ownedPolling = true;
+      try {
+        const available = await owned.refresh();
+        if (ownedDisposed || !available) return;
+        if (!ownedInitialized) { await initializeOwned(); return; }
+        characters.value = owned.roles.value;
+        if (!characters.value.some((character) => character.id === characterId.value)) { characterId.value = ""; modelError.value = "当前角色已失效，请重新选择角色"; }
+      } catch {
+        if (!ownedDisposed && !owned.notice.value.includes("等待新服务批准")) owned.stopLocal("云端服务暂不可用，当前回复已中断；不会自动切换到本机模型。");
+      } finally { ownedPolling = false; }
+    }, 3000);
+  };
+  let available = false;
+  try { available = await owned.refresh(); }
+  catch (error) {
+    modelError.value = error instanceof Error ? error.message : "云端服务暂不可用";
+    startOwnedPolling();
+    return;
+  }
+  if (ownedDisposed) return;
+  if (available) {
+    await initializeOwned();
+    startOwnedPolling();
+    return;
+  }
   connectProactiveSSE();
   history.scrollRestoration = "manual";
 
@@ -1004,6 +1069,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  ownedDisposed = true;
+  if (ownedPolicyTimer) clearInterval(ownedPolicyTimer);
+  ownedPolicyTimer = null;
   stopCallWindowListener?.();
   stopCallWindowListener = null;
   cleanupSSE();

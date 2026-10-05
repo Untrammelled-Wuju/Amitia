@@ -16,6 +16,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type { DeploymentModeConfig } from "../shared/types";
+import type { MeshPairingInput } from "./device-mesh/protocol";
 import { ConfigStore } from "./config-store";
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
@@ -516,12 +517,7 @@ export function registerIpcHandlers(
       if (!cloudAuth?.authorization) {
         return {};
       }
-      return {
-        Authorization: cloudAuth.authorization,
-        "X-Amitia-Device-ID": cloudAuth.deviceId,
-        "X-Amitia-Runtime-ID": cloudAuth.runtimeId,
-        "X-Amitia-Space-ID": cloudAuth.spaceId,
-      };
+      return getDesktopAuthHeaders();
     }
     return getDesktopAuthHeaders();
   });
@@ -538,7 +534,7 @@ export function registerIpcHandlers(
     return getMeshIdentity();
   });
 
-  ipcMain.handle(IPC_CHANNELS.meshProvision, async (_event, cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string }) => {
+  ipcMain.handle(IPC_CHANNELS.meshProvision, async (_event, cloudBaseUrl: string, pairing?: MeshPairingInput) => {
     if (!cloudBaseUrl || typeof cloudBaseUrl !== "string") {
       throw new Error("cloudBaseUrl is required");
     }

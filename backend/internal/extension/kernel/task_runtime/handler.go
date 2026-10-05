@@ -65,6 +65,7 @@ func TaskRunToDTO(run *TaskRun) *TaskDTO {
 		ResultArtifactID:  run.ResultArtifactID,
 		Attempt:           run.Attempt,
 		MaxAttempts:       run.MaxAttempts,
+		Generation:        run.Generation,
 		CreatedAt:         run.CreatedAt.Format("2006-01-02T15:04:05.000Z07:00"),
 		PauseReason:       run.PauseReason,
 		ErrorCode:         run.ErrorCode,

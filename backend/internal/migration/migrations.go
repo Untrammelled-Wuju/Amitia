@@ -217,6 +217,8 @@ func DefaultMigrations() []Migration {
 		SearchApiCredentialsMigration(),
 		TemporalRelationshipPresenceUniqueIndexMigration(),
 		TemporalRelationshipIndexesRepairMigration(),
+		QdrantOwnedProjectionMigration(),
+		SurrealOwnedProjectionMigration(),
 	}
 }
 

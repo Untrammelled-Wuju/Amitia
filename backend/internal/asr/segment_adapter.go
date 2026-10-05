@@ -8,17 +8,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type SegmentASRAdapter struct {
 	config    *AsrConfig
 	mu        sync.Mutex
 	audioBuf  []byte
+	bufferErr error
 	sessionID string
 	language  string
 }
@@ -32,6 +30,14 @@ func NewSegmentASRAdapter(config *AsrConfig) *SegmentASRAdapter {
 func (a *SegmentASRAdapter) AppendPCM(pcm []byte) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.bufferErr != nil {
+		return
+	}
+	if len(pcm) > maxPrivateAudioBytes-44-len(a.audioBuf) {
+		a.audioBuf = nil
+		a.bufferErr = fmt.Errorf("语音片段超过 2 MiB")
+		return
+	}
 	a.audioBuf = append(a.audioBuf, pcm...)
 }
 
@@ -64,10 +70,16 @@ func (a *SegmentASRAdapter) Reset() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.audioBuf = a.audioBuf[:0]
+	a.bufferErr = nil
 }
 
 func (a *SegmentASRAdapter) Recognize(ctx context.Context) (string, error) {
 	a.mu.Lock()
+	if a.bufferErr != nil {
+		err := a.bufferErr
+		a.mu.Unlock()
+		return "", err
+	}
 	if len(a.audioBuf) == 0 {
 		a.mu.Unlock()
 		return "", fmt.Errorf("segment asr: no audio buffered")
@@ -82,38 +94,19 @@ func (a *SegmentASRAdapter) Recognize(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("segment asr: config is nil")
 	}
 
-	tmpFile := filepath.Join(os.TempDir(), "amitia_segment_"+uuid.New().String()+".wav")
-	if err := writeWAV(tmpFile, audioCopy, 16000, 1); err != nil {
-		return "", fmt.Errorf("segment asr: write temp audio failed: %w", err)
+	if len(audioCopy)%2 != 0 {
+		return "", fmt.Errorf("PCM16 音频片段未对齐")
 	}
-	defer os.Remove(tmpFile)
-
-	taskID, err := SubmitTask(config, "file://"+tmpFile, lang)
-	if err != nil {
-		return "", fmt.Errorf("segment asr: submit failed: %w", err)
-	}
-
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(500 * time.Millisecond):
-		}
-
-		resp, err := QueryTask(config, taskID)
-		if err != nil {
-			continue
-		}
-		if resp.Status == "success" && resp.Result != "" {
-			return resp.Result, nil
-		}
-	}
-
-	return "", fmt.Errorf("segment asr: recognition timeout")
+	recognition, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return RecognizePrivateAudio(recognition, config, encodeWAV(audioCopy, 16000, 1), "audio/wav", lang)
 }
 
 func writeWAV(path string, pcm []byte, sampleRate int, channels int) error {
+	return os.WriteFile(path, encodeWAV(pcm, sampleRate, channels), 0600)
+}
+
+func encodeWAV(pcm []byte, sampleRate int, channels int) []byte {
 	header := make([]byte, 44)
 
 	dataSize := len(pcm)
@@ -170,7 +163,7 @@ func writeWAV(path string, pcm []byte, sampleRate int, channels int) error {
 	buf.Write(header)
 	buf.Write(pcm)
 
-	return os.WriteFile(path, buf.Bytes(), 0600)
+	return buf.Bytes()
 }
 
 type SegmentASRSession struct {

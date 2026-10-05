@@ -32,6 +32,8 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
   String? _error;
   String? _searchError;
   String? _statusFilter;
+  List<Map<String, dynamic>> _roles = [];
+  String _selectedRole = '';
   Timer? _refreshTimer;
   Timer? _searchDebounce;
   int _searchRevision = 0;
@@ -63,6 +65,13 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
       });
     }
     try {
+      final service = ref.read(continuityServiceProvider);
+      final roles = await service.availableRoles();
+      if (!mounted) return;
+      setState(() {
+        _roles = roles;
+        _selectedRole = service.selectedRole;
+      });
       final values = await ref
           .read(continuityServiceProvider)
           .list(status: _statusFilter ?? '');
@@ -204,6 +213,32 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
   Widget _buildBrowseView() {
     return Column(
       children: [
+        if (_roles.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpacing.pagePadding,
+              vertical: AppSpacing.sm,
+            ),
+            child: DropdownButtonFormField<String>(
+              key: ValueKey(_selectedRole),
+              initialValue: _roles.any((role) => role['id'] == _selectedRole)
+                  ? _selectedRole
+                  : null,
+              decoration: const InputDecoration(labelText: '工作角色'),
+              items: _roles
+                  .map(
+                    (role) => DropdownMenuItem(
+                      value: role['id'].toString(),
+                      child: Text((role['name'] ?? role['id']).toString()),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                ref.read(continuityServiceProvider).selectedRole = value ?? '';
+                unawaited(_load());
+              },
+            ),
+          ),
         Padding(
           padding: EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,

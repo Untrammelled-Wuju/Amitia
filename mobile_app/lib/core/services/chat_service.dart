@@ -7,6 +7,7 @@ import '../backend_transport/backend_service_api.dart';
 import '../models/conversation.dart';
 import '../models/project.dart';
 import '../native_bridge/device_timezone_cache.dart';
+import 'device_owned_chat_service.dart';
 
 class ChatSubmitResult {
   final String conversationId;
@@ -207,10 +208,20 @@ class ConversationWorkspaceDto {
 
 class ChatService {
   final BackendServiceApi _api;
+  final DeviceOwnedChatService owned;
 
-  ChatService(this._api);
+  ChatService(
+    this._api, {
+    String Function()? providerKey,
+    Future<Map<String, dynamic>?> Function()? providerTransition,
+  }) : owned = DeviceOwnedChatService(
+         _api,
+         providerKey: providerKey,
+         providerTransition: providerTransition,
+       );
 
   Future<List<ConversationDto>> listConversations() async {
+    if (await owned.refresh()) return owned.conversations();
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/conversations',
       queryParameters: const {'page': 1, 'pageSize': 200},
@@ -227,6 +238,17 @@ class ChatService {
     String projectId = '',
     String keyword = '',
   }) async {
+    if (await owned.refresh()) {
+      final search = keyword.trim().toLowerCase();
+      final rows = await owned.conversations(keyword: search);
+      return rows
+          .where(
+            (row) =>
+                row.archivedAt.isNotEmpty &&
+                (projectId.isEmpty || row.projectId == projectId),
+          )
+          .toList();
+    }
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/conversations',
       queryParameters: {
@@ -285,6 +307,15 @@ class ChatService {
   }
 
   Future<ConversationSidebarDto> conversationSidebar() async {
+    if (await owned.refresh()) {
+      final rows = (await owned.conversations())
+          .where((row) => row.archivedAt.isEmpty)
+          .toList();
+      return ConversationSidebarDto(
+        pinned: rows.where((row) => row.pinnedAt.isNotEmpty).toList(),
+        recent: rows.where((row) => row.pinnedAt.isEmpty).toList(),
+      );
+    }
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/sidebar',
       fromJson: (e) => Map<String, dynamic>.from(e as Map),
@@ -371,9 +402,13 @@ class ChatService {
 
   Future<List<MessageDto>> getMessages(
     String conversationId, {
+    String? characterId,
     int beforeSequence = 0,
     int limit = 50,
   }) async {
+    if (await owned.refresh()) {
+      return owned.allMessages(conversationId, characterId: characterId);
+    }
     final result = await getMessageHistory(
       conversationId,
       beforeSequence: beforeSequence,
@@ -479,6 +514,10 @@ class ChatService {
   }
 
   Future<bool> deleteConversation(String id) async {
+    if (owned.enabled) {
+      await owned.edit('conversation', id, deleted: true);
+      return true;
+    }
     await _api.delete('/api/web-chat/conversations/$id');
     return true;
   }
@@ -486,6 +525,10 @@ class ChatService {
   Future<void> renameConversation(String id, String title) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty) throw ArgumentError('会话标题不能为空');
+    if (owned.enabled) {
+      await owned.edit('conversation', id, changes: {'title': trimmed});
+      return;
+    }
     await _api.put<Map<String, dynamic>>(
       '/api/web-chat/conversations/$id',
       data: {'title': trimmed},
@@ -493,6 +536,10 @@ class ChatService {
   }
 
   Future<void> setConversationPinned(String id, bool pinned) async {
+    if (owned.enabled) {
+      await owned.edit('conversation', id, changes: {'pinned': pinned});
+      return;
+    }
     await _api.put<Map<String, dynamic>>(
       '/api/web-chat/conversations/$id',
       data: {'pinned': pinned},
@@ -500,6 +547,10 @@ class ChatService {
   }
 
   Future<void> archiveConversation(String id) async {
+    if (owned.enabled) {
+      await owned.edit('conversation', id, changes: {'archived': true});
+      return;
+    }
     await _api.put<Map<String, dynamic>>(
       '/api/web-chat/conversations/$id',
       data: {'archived': true},
@@ -507,6 +558,10 @@ class ChatService {
   }
 
   Future<void> restoreArchivedConversation(String id) async {
+    if (owned.enabled) {
+      await owned.edit('conversation', id, changes: {'archived': false});
+      return;
+    }
     await _api.put<Map<String, dynamic>>(
       '/api/web-chat/conversations/$id',
       data: {'archived': false},
@@ -514,14 +569,61 @@ class ChatService {
   }
 
   Future<void> deleteMessages(String conversationId) async {
+    if (owned.enabled) {
+      await owned.edit('conversation', conversationId, clear: true);
+      return;
+    }
     await _api.delete('/api/chats/conversations/$conversationId/messages');
   }
 
-  Future<void> deleteMessage(String messageId) async {
+  Future<void> deleteMessage(
+    String messageId, {
+    Map<String, dynamic>? expectedScope,
+    String? expectedOwnerId,
+    int? expectedRevision,
+  }) async {
+    if (owned.enabled) {
+      if (expectedScope == null ||
+          expectedOwnerId == null ||
+          expectedRevision == null) {
+        throw StateError('消息缺少原始数据来源，请重新加载后再操作');
+      }
+      await owned.edit(
+        'message',
+        messageId,
+        deleted: true,
+        expectedScope: expectedScope,
+        expectedOwnerId: expectedOwnerId,
+        expectedRevision: expectedRevision,
+      );
+      return;
+    }
     await _api.delete('/api/chats/messages/$messageId');
   }
 
-  Future<void> updateMessage(String messageId, String content) async {
+  Future<void> updateMessage(
+    String messageId,
+    String content, {
+    Map<String, dynamic>? expectedScope,
+    String? expectedOwnerId,
+    int? expectedRevision,
+  }) async {
+    if (owned.enabled) {
+      if (expectedScope == null ||
+          expectedOwnerId == null ||
+          expectedRevision == null) {
+        throw StateError('消息缺少原始数据来源，请重新加载后再操作');
+      }
+      await owned.edit(
+        'message',
+        messageId,
+        changes: {'content': content.trim()},
+        expectedScope: expectedScope,
+        expectedOwnerId: expectedOwnerId,
+        expectedRevision: expectedRevision,
+      );
+      return;
+    }
     await _api.put<Map<String, dynamic>>(
       '/api/web-chat/messages/$messageId',
       data: {'content': content.trim()},
@@ -535,27 +637,57 @@ class ChatService {
   Future<Map<String, dynamic>?> conversationSummary(
     String conversationId,
   ) async {
+    if (owned.enabled) {
+      return owned.conversationSummary(conversationId);
+    }
     return _api.get<Map<String, dynamic>>(
       '/api/chats/conversations/$conversationId/summary',
     );
   }
 
   Future<Map<String, dynamic>?> generateConversationSummary(
-    String conversationId,
-  ) async {
+    String conversationId, {
+    String characterId = '',
+  }) async {
+    if (await owned.refresh()) {
+      return owned.generateConversationSummary(
+        conversationId,
+        characterId: characterId,
+      );
+    }
     return _api.post<Map<String, dynamic>>(
       '/api/chats/conversations/$conversationId/summary/generate',
     );
   }
 
-  Future<void> deleteConversationSummary(String conversationId) async {
+  Future<void> deleteConversationSummary(
+    String conversationId, {
+    String? displayedViewId,
+  }) async {
+    if (owned.enabled) {
+      await owned.editConversationSummary(
+        conversationId,
+        deleted: true,
+        displayedViewId: displayedViewId,
+      );
+      return;
+    }
     await _api.delete('/api/chats/conversations/$conversationId/summary');
   }
 
   Future<Map<String, dynamic>?> updateConversationSummary(
     String conversationId,
-    String summaryText,
-  ) {
+    String summaryText, {
+    String? displayedViewId,
+  }) async {
+    if (owned.enabled) {
+      await owned.editConversationSummary(
+        conversationId,
+        text: summaryText,
+        displayedViewId: displayedViewId,
+      );
+      return {'summaryText': summaryText.trim()};
+    }
     return _api.put<Map<String, dynamic>>(
       '/api/chats/conversations/$conversationId/summary',
       data: {'summaryText': summaryText.trim()},
@@ -565,7 +697,42 @@ class ChatService {
   Future<String> exportConversation(
     String conversationId, {
     String format = 'markdown',
+    String characterId = '',
   }) async {
+    if (await owned.refresh()) {
+      final rows = await owned.allMessages(
+        conversationId,
+        characterId: characterId,
+      );
+      if (format == 'json') {
+        return jsonEncode({
+          'conversationId': conversationId,
+          'messages': rows
+              .map(
+                (row) => {
+                  'id': row.id,
+                  'ownerId': row.sourceOwnerId,
+                  'role': row.role,
+                  'content': row.content,
+                  'createdAt': row.createdAt,
+                  if (row.imageUrl.isNotEmpty) 'imageUrl': row.imageUrl,
+                  if (row.audioUrl.isNotEmpty) 'audioUrl': row.audioUrl,
+                },
+              )
+              .toList(),
+        });
+      }
+      return rows
+          .map(
+            (row) =>
+                '## ${row.role == 'user'
+                    ? '用户'
+                    : row.role == 'assistant'
+                    ? '助手'
+                    : '系统'}\n\n${row.content}\n',
+          )
+          .join('\n');
+    }
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/chats/export',
       data: {

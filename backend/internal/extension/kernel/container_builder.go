@@ -139,6 +139,7 @@ type ContainerBuilder struct {
 	meshHub                  *server.ConnectionHub
 	pendingInvocationManager *capability.PendingInvocationManager
 	pendingTaskManager       *task_runtime.PendingTaskManager
+	taskOwnershipBinding     *task_runtime.OwnedRuntimeBinding
 
 	nativeBridgeRelay *nativebridge.RelayHandler
 
@@ -388,6 +389,11 @@ func (b *ContainerBuilder) WithMCPRuntimeConnectPort(port acquisition.MCPRuntime
 
 func (b *ContainerBuilder) WithPendingTaskManager(mgr *task_runtime.PendingTaskManager) *ContainerBuilder {
 	b.pendingTaskManager = mgr
+	return b
+}
+
+func (b *ContainerBuilder) WithTaskOwnershipBinding(binding *task_runtime.OwnedRuntimeBinding) *ContainerBuilder {
+	b.taskOwnershipBinding = binding
 	return b
 }
 
@@ -784,9 +790,31 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	var taskHandler *task_runtime.TaskRuntimeHandler
 	if b.runtimePolicy.TaskRuntime {
 		taskCfg := task_runtime.DefaultTaskRuntimeConfig()
+		taskCfg.AuthoritySnapshots = scopeStore
+		if b.taskOwnershipBinding != nil {
+			b.taskOwnershipBinding.Apply(&taskCfg)
+		}
 		taskCfg.WorkspaceRoot = b.extRoot
 		taskCfg.NodeEnvironmentResolver = nodeResolver
 		taskCfg.HostArtifactResolver = artifactResolver
+		taskCfg.InstalledDefinitionValidator = func(ctx context.Context, definition *task_runtime.TaskDefinition) error {
+			if definition == nil {
+				return fmt.Errorf("任务定义不存在")
+			}
+			if definition.InstalledGeneration > 0 {
+				installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(definition.ExtensionID))
+				if err != nil || installation.Generation != definition.InstalledGeneration {
+					return fmt.Errorf("任务安装版本已变化，请确认后重新创建任务")
+				}
+			}
+			return nil
+		}
+		taskCfg.EntryResolver = func(ctx context.Context, definition *task_runtime.TaskDefinition) (string, error) {
+			if err := taskCfg.InstalledDefinitionValidator(ctx, definition); err != nil {
+				return "", err
+			}
+			return task_runtime.ResolveTaskEntry(ctx, resolveExtensionBundlePath(b.extRoot, definition.ExtensionID), definition)
+		}
 		taskRuntimeService = task_runtime.NewTaskRuntimeService(taskRepo, taskCfg)
 		taskHandler = task_runtime.NewTaskRuntimeHandler(taskRuntimeService)
 	}

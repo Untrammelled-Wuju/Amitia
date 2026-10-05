@@ -53,6 +53,8 @@ func (r *repository) FindByID(id string) (*Character, error) {
 }
 
 func (r *repository) Create(c *Character) error {
+	unlock := LockRoleSource(r.db)
+	defer unlock()
 	if c.ID == "" {
 		c.ID = uuid.New().String()
 	}
@@ -60,16 +62,33 @@ func (r *repository) Create(c *Character) error {
 }
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {
-	return r.db.Model(&Character{}).Where("id = ?", id).Updates(updates).Error
+	unlock := LockRoleSource(r.db)
+	defer unlock()
+	values := make(map[string]interface{}, len(updates)+1)
+	for key, value := range updates {
+		if key != "revision" {
+			values[key] = value
+		}
+	}
+	values["revision"] = gorm.Expr("revision + 1")
+	return r.db.Model(&Character{}).Where("id = ? AND deleted_at IS NULL", id).Updates(values).Error
 }
 
 func (r *repository) Delete(id string) error {
+	unlock := LockRoleSource(r.db)
+	defer unlock()
 	return r.db.Where("id = ?", id).Delete(&Character{}).Error
 }
 
 func (r *repository) SetActive(id string) error {
-	r.db.Model(&Character{}).Where("is_active = 1 AND deleted_at IS NULL").Update("is_active", 0)
-	return r.db.Model(&Character{}).Where("id = ? AND deleted_at IS NULL", id).Update("is_active", 1).Error
+	unlock := LockRoleSource(r.db)
+	defer unlock()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Character{}).Where("is_active = 1 AND id <> ? AND deleted_at IS NULL", id).Updates(map[string]interface{}{"is_active": 0, "revision": gorm.Expr("revision + 1")}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&Character{}).Where("id = ? AND deleted_at IS NULL", id).Updates(map[string]interface{}{"is_active": 1, "revision": gorm.Expr("revision + 1")}).Error
+	})
 }
 
 func (r *repository) FindTemplateByID(id string) (*CharacterTemplate, error) {
@@ -105,16 +124,7 @@ func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
 		}
 	}
 	if err != nil {
-		if strings.TrimSpace(id) != "" {
-			log.Printf("[RoleRuntimeProfile] requested character %s not found or disabled, trying fallback", id)
-			err = r.db.Where("is_default = 1 AND status = ? AND deleted_at IS NULL", "enabled").Limit(1).First(&c).Error
-			if err != nil {
-				err = r.db.Where("status = ? AND deleted_at IS NULL", "enabled").Order("sort_order, created_at").Limit(1).First(&c).Error
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	diagnostics := []string{}
 	personalityConfig := parseRuntimeJSON(c.ID, "personality_config", c.PersonalityConfig, &diagnostics)

@@ -35,7 +35,7 @@ type TaskClaimPayloadHandler func(claim protocol.TaskClaimPayload) bool
 type TaskCompletePayloadHandler func(complete protocol.TaskCompletePayload)
 type TaskProgressPayloadHandler func(progress protocol.TaskProgressPayload)
 type TaskCheckpointPayloadHandler func(checkpoint protocol.TaskCheckpointPayload)
-type TaskHeartbeatPayloadHandler func(heartbeat protocol.TaskHeartbeatPayload)
+type TaskHeartbeatPayloadHandler func(heartbeat protocol.TaskHeartbeatPayload) bool
 
 type Handler struct {
 	sessions                *deviceruntime.Service
@@ -228,11 +228,6 @@ func (h *Handler) handleConnection(ctx context.Context, conn *websocket.Conn, pr
 		return fmt.Errorf("cursor reset required")
 	}
 
-	if env.ConnectionGeneration != result.Session.ConnectionGeneration {
-		h.sendError(conn, "mesh.generation_mismatch", "connection generation does not match session", true)
-		return fmt.Errorf("generation mismatch: expected %d, got %d", result.Session.ConnectionGeneration, env.ConnectionGeneration)
-	}
-
 	session := result.Session
 	meshConn := NewMeshConnection(conn, session.ID, session.ConnectionGeneration, principal.SpaceID, principal.DeviceID, principal.RuntimeID)
 
@@ -276,7 +271,7 @@ func (h *Handler) handleConnection(ctx context.Context, conn *websocket.Conn, pr
 		}
 	}
 
-	return h.messageLoop(ctx, meshConn, session.ID, session.ConnectionGeneration)
+	return h.messageLoop(ctx, meshConn, session.ID, session.ConnectionGeneration, env.Sequence)
 }
 
 func (h *Handler) readHello(conn *websocket.Conn) ([]byte, error) {
@@ -294,8 +289,11 @@ func (h *Handler) parseHello(data []byte, principal credential.DeviceRuntimePrin
 		return nil, nil, fmt.Errorf("parse envelope: %w", err)
 	}
 
-	if err := env.Validate(meshprotocol.RuntimeProtocolDescriptor); err != nil {
+	if err := env.ValidateBase(meshprotocol.RuntimeProtocolDescriptor); err != nil {
 		return nil, nil, fmt.Errorf("validate envelope: %w", err)
+	}
+	if !env.VerifyPayloadHash() {
+		return nil, nil, fmt.Errorf("hello payload hash mismatch")
 	}
 
 	if env.MessageType != protocol.MessageTypeHello {
@@ -309,6 +307,9 @@ func (h *Handler) parseHello(data []byte, principal credential.DeviceRuntimePrin
 
 	if hello.RuntimeContractVersion != meshprotocol.RuntimeContractVersion {
 		return nil, nil, fmt.Errorf("unsupported contract version: %s", hello.RuntimeContractVersion)
+	}
+	if hello.DeviceID != principal.DeviceID || hello.RuntimeID != principal.RuntimeID {
+		return nil, nil, fmt.Errorf("hello payload identity does not match credential")
 	}
 
 	return &env, &hello, nil
@@ -324,8 +325,7 @@ func (h *Handler) sendHelloAck(conn *MeshConnection, sessionID runtimeidentity.R
 	return h.sendEnvelope(conn, protocol.MessageTypeHelloAck, helloAck)
 }
 
-func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, sessionID runtimeidentity.RuntimeSessionID, generation int64) error {
-	var clientSequence int64
+func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, sessionID runtimeidentity.RuntimeSessionID, generation int64, clientSequence int64) error {
 	for {
 		conn.Conn.SetReadDeadline(time.Now().Add(meshprotocol.ReadDeadlineSeconds * time.Second))
 		_, data, err := conn.Conn.ReadMessage()
@@ -345,6 +345,10 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 		if err := json.Unmarshal(data, &env); err != nil {
 			h.sendErrorConn(conn, "mesh.protocol_error", "invalid envelope", false)
 			continue
+		}
+		if env.Protocol != meshprotocol.ProtocolName || env.EnvelopeVersion != meshprotocol.EnvelopeVersion || env.PayloadSchemaVersion != 1 || env.SpaceID != conn.SpaceID || env.DeviceID != conn.DeviceID || env.RuntimeID != conn.RuntimeID || env.Sequence < 1 {
+			h.sendErrorConn(conn, "mesh.protocol_error", "invalid protocol or device identity", false)
+			return fmt.Errorf("设备通道收到不匹配的协议或身份")
 		}
 
 		if !env.VerifyPayloadHash() {
@@ -461,16 +465,22 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 		case protocol.MessageTypeTaskClaim:
 			var claim protocol.TaskClaimPayload
 			if err := json.Unmarshal(env.Payload, &claim); err == nil {
-				if h.onTaskClaimPayload != nil {
-					h.onTaskClaimPayload(claim)
-				} else if h.onTaskClaim != nil {
-					h.onTaskClaim(claim.TaskRunID, claim.AttemptID, claim.WorkerID, time.Duration(claim.LeaseDurationMs)*time.Millisecond)
+				accepted := false
+				valid := claim.DeviceID == conn.DeviceID && claim.RuntimeID == conn.RuntimeID && claim.RuntimeSessionID == conn.SessionID && claim.ConnectionGeneration == conn.Generation && claim.TaskRunID != "" && claim.AttemptID != "" && claim.LeaseID != "" && claim.WorkerID == conn.RuntimeID.String() && claim.LeaseDurationMs > 0 && claim.LeaseDurationMs <= 300000
+				if valid && h.onTaskClaimPayload != nil {
+					accepted = h.onTaskClaimPayload(claim)
+				} else if valid && h.onTaskClaim != nil {
+					accepted = h.onTaskClaim(claim.TaskRunID, claim.AttemptID, claim.WorkerID, time.Duration(claim.LeaseDurationMs)*time.Millisecond)
 				}
+				_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: claim.TaskRunID, AttemptID: claim.AttemptID, LeaseID: claim.LeaseID, Accepted: accepted, LeaseDurationMs: claim.LeaseDurationMs, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
 			}
 
 		case protocol.MessageTypeTaskComplete:
 			var complete protocol.TaskCompletePayload
 			if err := json.Unmarshal(env.Payload, &complete); err == nil {
+				if complete.DeviceID != conn.DeviceID || complete.RuntimeID != conn.RuntimeID || complete.RuntimeSessionID != conn.SessionID || complete.ConnectionGeneration != conn.Generation {
+					continue
+				}
 				if h.onTaskCompletePayload != nil {
 					h.onTaskCompletePayload(complete)
 				} else if h.onTaskComplete != nil {
@@ -481,6 +491,9 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 		case protocol.MessageTypeTaskProgress:
 			var progress protocol.TaskProgressPayload
 			if err := json.Unmarshal(env.Payload, &progress); err == nil {
+				if progress.DeviceID != conn.DeviceID || progress.RuntimeID != conn.RuntimeID || progress.RuntimeSessionID != conn.SessionID || progress.ConnectionGeneration != conn.Generation {
+					continue
+				}
 				if h.onTaskProgressPayload != nil {
 					h.onTaskProgressPayload(progress)
 				} else if h.onTaskProgress != nil {
@@ -491,6 +504,9 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 		case protocol.MessageTypeTaskCheckpoint:
 			var checkpoint protocol.TaskCheckpointPayload
 			if err := json.Unmarshal(env.Payload, &checkpoint); err == nil {
+				if checkpoint.DeviceID != conn.DeviceID || checkpoint.RuntimeID != conn.RuntimeID || checkpoint.RuntimeSessionID != conn.SessionID || checkpoint.ConnectionGeneration != conn.Generation {
+					continue
+				}
 				if h.onTaskCheckpointPayload != nil {
 					h.onTaskCheckpointPayload(checkpoint)
 				} else if h.onTaskCheckpoint != nil {
@@ -501,11 +517,12 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 		case protocol.MessageTypeTaskHeartbeat:
 			var heartbeat protocol.TaskHeartbeatPayload
 			if err := json.Unmarshal(env.Payload, &heartbeat); err == nil {
-				if h.onTaskHeartbeatPayload != nil {
-					h.onTaskHeartbeatPayload(heartbeat)
-				} else if h.onTaskHeartbeat != nil {
-					h.onTaskHeartbeat(heartbeat.TaskRunID, heartbeat.AttemptID, heartbeat.ReportedAt)
+				accepted := false
+				valid := heartbeat.DeviceID == conn.DeviceID && heartbeat.RuntimeID == conn.RuntimeID && heartbeat.RuntimeSessionID == conn.SessionID && heartbeat.ConnectionGeneration == conn.Generation && heartbeat.Sequence > 0
+				if valid && h.onTaskHeartbeatPayload != nil {
+					accepted = h.onTaskHeartbeatPayload(heartbeat)
 				}
+				_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: heartbeat.TaskRunID, AttemptID: heartbeat.AttemptID, LeaseID: heartbeat.LeaseID, Sequence: heartbeat.Sequence, Accepted: accepted, LeaseDurationMs: 300000, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
 			}
 
 		case protocol.MessageTypeRuntimeCancel:
@@ -528,8 +545,6 @@ func (h *Handler) sendEnvelope(conn *MeshConnection, msgType protocol.MessageTyp
 		return err
 	}
 
-	seq := conn.nextOutboundSequence()
-
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -540,7 +555,6 @@ func (h *Handler) sendEnvelope(conn *MeshConnection, msgType protocol.MessageTyp
 		RuntimeID:            conn.RuntimeID,
 		RuntimeSessionID:     conn.SessionID,
 		ConnectionGeneration: conn.Generation,
-		Sequence:             seq,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),

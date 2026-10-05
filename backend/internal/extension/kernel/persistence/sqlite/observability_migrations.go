@@ -2,6 +2,12 @@ package sqlite
 
 func init() {
 	appendObservabilityMigrations()
+	schemaMigrations = append(schemaMigrations, `ALTER TABLE extension_task_runs ADD COLUMN definition_fingerprint TEXT NOT NULL DEFAULT ''`)
+	schemaMigrations = append(schemaMigrations,
+		`ALTER TABLE extension_task_runs ADD COLUMN lease_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE extension_task_runs ADD COLUMN lease_expires_at DATETIME`,
+		`ALTER TABLE extension_task_runs ADD COLUMN last_heartbeat_at DATETIME`,
+	)
 }
 
 func appendObservabilityMigrations() {

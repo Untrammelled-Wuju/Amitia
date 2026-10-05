@@ -4,7 +4,7 @@ import { ref, reactive, computed, inject } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
 import { createAuthenticatedFetchInit } from "../../../runtime/request-auth";
-import { resolveApiUrl } from "../../../runtime/runtime-adapter";
+import { resolveApiUrl, getDeploymentConfig } from "../../../runtime/runtime-adapter";
 import {
   type TemplateItem,
   DEFAULT_BOUNDARY,
@@ -31,6 +31,23 @@ export function useCharacterConfig() {
   const activeTab = ref("edit");
   const generationSession = ref(0);
   const saving = ref(false);
+  const readOnly = ref(false);
+
+  async function refreshRolePermission() {
+    if ((await getDeploymentConfig()).mode !== "cloud") {
+      readOnly.value = false;
+      return;
+    }
+    readOnly.value = true;
+    const state = await get<any>("/api/device-mesh/v1/coordination/me");
+    readOnly.value = state?.policy?.coordinated === true && state?.canAdminister !== true;
+  }
+
+  function allowEditing() {
+    if (!readOnly.value) return true;
+    ElMessage.warning("当前使用 Core 角色，只有 Core 管理员可以修改");
+    return false;
+  }
   const showFullPrompt = ref(false);
   const showFullBounds = ref(false);
 
@@ -97,6 +114,7 @@ export function useCharacterConfig() {
 
   async function fetchChars() {
     try {
+      await refreshRolePermission();
       characters.value = (await get<any[]>("/api/characters")) || [];
     } catch {}
   }
@@ -136,6 +154,7 @@ export function useCharacterConfig() {
   }
 
   function createNew() {
+    if (!allowEditing()) return;
     generationSession.value++;
     cardDataExtra.value = {};
     selected.value = { id: "", name: "", isActive: false };
@@ -162,6 +181,7 @@ export function useCharacterConfig() {
   }
 
   async function createFromTemplate(tpl: TemplateItem) {
+    if (!allowEditing()) return;
     try {
       const result = await post<any>(
         `/api/character-templates/${tpl.id}/create-character`,
@@ -178,6 +198,7 @@ export function useCharacterConfig() {
   }
 
   function copyChar(c: any) {
+    if (!allowEditing()) return;
     const cardData = parseCardData(c.cardData);
     createNew();
     cardDataExtra.value = cardData;
@@ -210,6 +231,7 @@ export function useCharacterConfig() {
   }
 
   async function saveChar() {
+    if (!allowEditing()) return;
     if (!form.name.trim()) {
       ElMessage.warning("请输入角色名称");
       return;
@@ -296,6 +318,7 @@ export function useCharacterConfig() {
   }
 
   async function uploadAvatar(file: File): Promise<string | null> {
+    if (!allowEditing()) return null;
     if (!selectedId.value) {
       ElMessage.warning("请先保存角色");
       return null;
@@ -328,6 +351,7 @@ export function useCharacterConfig() {
   }
 
   async function delChar(c: any) {
+    if (!allowEditing()) return;
     if (c.isActive) {
       const others = characters.value.filter((x) => x.id !== c.id);
       if (others.length === 0) {
@@ -363,6 +387,7 @@ export function useCharacterConfig() {
   }
 
   return {
+    readOnly,
     generationSession,
     templates,
     showTemplateDialog,

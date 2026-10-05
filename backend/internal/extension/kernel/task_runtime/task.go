@@ -57,6 +57,7 @@ type TaskDefinition struct {
 	ResultPolicy                 TaskResultPolicy        `json:"resultPolicy,omitempty"`
 	CleanupPolicy                TaskCleanupPolicy       `json:"cleanupPolicy,omitempty"`
 	DefinitionVersion            int                     `json:"definitionVersion,omitempty"`
+	InstalledGeneration          int64                   `json:"installedGeneration,omitempty"`
 	DefinitionHash               string                  `json:"definitionHash,omitempty"`
 	Version                      string                  `json:"version,omitempty"`
 	MaxDuration                  time.Duration           `json:"maxDuration,omitempty"`

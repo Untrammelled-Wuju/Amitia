@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/continuity"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	applog "github.com/u-ai/backend/log"
 )
 
@@ -21,13 +22,14 @@ const (
 )
 
 type PostProcessPayload struct {
-	Version          string              `json:"version"`
-	ConversationID   string              `json:"conversationId"`
-	CharacterID      string              `json:"characterId"`
-	Source           string              `json:"source"`
-	RequestID        string              `json:"requestId"`
-	Reply            string              `json:"reply"`
-	PipelineMessages []map[string]string `json:"pipelineMessages"`
+	ExecutionScope   *coordination.ExecutionScope `json:"executionScope,omitempty"`
+	Version          string                       `json:"version"`
+	ConversationID   string                       `json:"conversationId"`
+	CharacterID      string                       `json:"characterId"`
+	Source           string                       `json:"source"`
+	RequestID        string                       `json:"requestId"`
+	Reply            string                       `json:"reply"`
+	PipelineMessages []map[string]string          `json:"pipelineMessages"`
 }
 
 func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFields, spaceID, convID, threadID, executionID, charID, source, requestID, userMessage string, pipelineMessages []map[string]string, reply string) {
@@ -39,6 +41,9 @@ func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFie
 		return
 	}
 	payload := PostProcessPayload{Version: postProcessPayloadVersion, ConversationID: convID, CharacterID: charID, Source: source, RequestID: requestID, Reply: reply, PipelineMessages: pipelineMessages}
+	if scope, ok := coordination.FromContext(ctx); ok {
+		payload.ExecutionScope = &scope
+	}
 	data, _ := json.Marshal(payload)
 	s.appendPostProcessOutbox(convID, postProcessEventContextTrim, requestID+"|"+postProcessEventContextTrim, data)
 	s.appendPostProcessOutbox(convID, postProcessEventMoodRecovery, requestID+"|"+postProcessEventMoodRecovery, data)
@@ -68,6 +73,12 @@ func (s *service) ReplayPostProcess(eventType string, payload []byte) error {
 		return err
 	}
 	ctx := context.Background()
+	if pp.ExecutionScope != nil {
+		if pp.ExecutionScope.ResourceOwnerID != pp.ExecutionScope.CoreID {
+			return coordination.ErrWrongOwner
+		}
+		ctx = coordination.WithScope(ctx, *pp.ExecutionScope)
+	}
 	switch eventType {
 	case postProcessEventPipelineExecute:
 		if s.pipeline != nil {

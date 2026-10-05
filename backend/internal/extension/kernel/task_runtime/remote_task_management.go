@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
 func (s *TaskRuntimeService) HandleRemoteProgress(ctx context.Context, taskRunID, attemptID string, seq int64, current, total, percentage *float64, stage, message string) error {
@@ -15,6 +17,14 @@ func (s *TaskRuntimeService) HandleRemoteProgress(ctx context.Context, taskRunID
 	}
 	if run == nil {
 		return NewTaskError(ErrTaskNotFound, "task not found")
+	}
+	guarded, finish, owned, err := s.callbackAuthority(ctx, run, attemptID, run.Generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		return s.handleProgress(guarded, taskRunID, seq, current, total, percentage, stage, message, run)
 	}
 	if run.ExecutionAttemptID.String() != attemptID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
@@ -53,6 +63,18 @@ func (s *TaskRuntimeService) HandleRemoteCheckpoint(ctx context.Context, taskRun
 	}
 	if run == nil {
 		return NewTaskError(ErrTaskNotFound, "task not found")
+	}
+	guarded, finish, owned, err := s.callbackAuthority(ctx, run, attemptID, run.Generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		def, err := s.store.GetTaskDefinition(guarded, run.TaskDefinitionID)
+		if err != nil {
+			return err
+		}
+		return s.handleCheckpoint(guarded, run, def, payload, payloadHash, version)
 	}
 	if run.ExecutionAttemptID.String() != attemptID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
@@ -93,6 +115,15 @@ func (s *TaskRuntimeService) UpdateLease(ctx context.Context, taskRunID, leaseID
 	}
 	if current == nil {
 		return NewTaskError(ErrTaskNotFound, "task not found")
+	}
+	guarded, finish, _, err := s.callbackAuthority(ctx, current, current.ExecutionAttemptID.String(), current.Generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	ctx = guarded
+	if current.Status != RunStatusRunning || extension <= 0 || extension > 5*time.Minute {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务状态或续租时长无效")
 	}
 	if current.LeaseID != leaseID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
@@ -136,6 +167,9 @@ func (s *TaskRuntimeService) ReclaimExpiredLeases(ctx context.Context) (int, err
 }
 
 func (s *TaskRuntimeService) recoverStaleTask(ctx context.Context, run *TaskRun) error {
+	if run.ScopeSnapshotID != "" {
+		return s.markTaskRecoveryUnknown(ctx, run)
+	}
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
 	if err != nil {
 		return err
@@ -203,7 +237,47 @@ func (s *TaskRuntimeService) ValidateRemoteCompletion(ctx context.Context, taskR
 	return nil
 }
 
-func (s *TaskRuntimeService) ApplyRemoteCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) error {
+func (s *TaskRuntimeService) ApplyRemoteCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string, artifactIDs ...string) error {
+	artifactID := ""
+	if len(artifactIDs) > 1 || len(artifactIDs) == 1 && (!success || len(result) != 0) {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务产物结果与终态不一致")
+	}
+	if len(artifactIDs) == 1 {
+		artifactID = artifactIDs[0]
+	}
+	completed, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil || completed == nil {
+		return NewTaskError(ErrTaskNotFound, "任务结果来源不存在")
+	}
+	if completed.Status.IsTerminal() {
+		guarded, finish, _, err := s.callbackAuthority(ctx, completed, attemptID, completed.Generation)
+		if err != nil {
+			return err
+		}
+		defer finish()
+		if completed.ExecutionAttemptID.String() != attemptID || completed.LeaseID != "" && completed.LeaseID != leaseID {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "重复结果的执行身份不一致")
+		}
+		if success {
+			metadata, err := s.store.GetResult(guarded, taskRunID)
+			matches := metadata != nil && (artifactID == "" && metadata.ResultHash == hashBytes(result) || artifactID != "" && metadata.ArtifactID == artifactID && metadata.ResultType == ResultArtifact)
+			if err != nil || completed.Status != RunStatusSucceeded || !matches {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "重复结果与已确认结果不一致")
+			}
+			if artifactID != "" {
+				if s.config.OwnedArtifacts == nil {
+					return NewTaskError(ErrTaskScopeDenied, "重复任务产物缺少所有者复核端口")
+				}
+				_, hash, err := s.config.OwnedArtifacts.Result(guarded, completed, artifactID)
+				if err != nil || hash != metadata.ResultHash {
+					return NewTaskError(ErrTaskExecutionAttemptInvalid, "重复结果的所有者产物已变化或失效")
+				}
+			}
+		} else if completed.Status != RunStatusFailed && completed.Status != RunStatusCancelled || len(result) != 0 {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "重复终态与已确认状态不一致")
+		}
+		return coordination.ValidateCurrent(guarded)
+	}
 	if err := s.ValidateRemoteCompletion(ctx, taskRunID, attemptID, leaseID); err != nil {
 		return err
 	}
@@ -211,6 +285,21 @@ func (s *TaskRuntimeService) ApplyRemoteCompletion(ctx context.Context, taskRunI
 	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return err
+	}
+	guarded, finish, owned, err := s.callbackAuthority(ctx, current, attemptID, current.Generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		status, code := "succeeded", ""
+		if !success {
+			status, code = "failed", "remote_completed"
+		}
+		return s.handleFinished(guarded, current, status, result, artifactID, code, errMsg)
+	}
+	if artifactID != "" {
+		return NewTaskError(ErrTaskScopeDenied, "普通远端任务不能提交所有者产物引用")
 	}
 
 	next := cloneTaskRun(current)
@@ -282,6 +371,15 @@ func (s *TaskRuntimeService) HandleRemoteClaim(ctx context.Context, taskRunID, a
 	if current == nil {
 		return NewTaskError(ErrTaskNotFound, "task not found")
 	}
+	guarded, finish, _, err := s.callbackAuthority(ctx, current, attemptID, current.Generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	ctx = guarded
+	if leaseID == "" || len(leaseID) > 256 || !leaseExpiresAt.After(time.Now()) || leaseExpiresAt.After(time.Now().Add(5*time.Minute+time.Second)) {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "远端任务租约无效")
+	}
 	if current.ExecutionAttemptID.String() != attemptID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
 	}
@@ -325,6 +423,15 @@ func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID,
 	}
 	if current == nil {
 		return NewTaskError(ErrTaskNotFound, "task not found")
+	}
+	guarded, finish, _, err := s.callbackAuthority(ctx, current, attemptID, current.Generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	ctx = guarded
+	if extendDuration <= 0 || extendDuration > 5*time.Minute {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "远端任务续租时长无效")
 	}
 	if current.ExecutionAttemptID.String() != attemptID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
@@ -370,6 +477,10 @@ func (s *TaskRuntimeService) HandleCheckpoint(ctx context.Context, taskRunID, at
 
 func (s *TaskRuntimeService) HandleCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) error {
 	return s.ApplyRemoteCompletion(ctx, taskRunID, attemptID, leaseID, success, result, errMsg)
+}
+
+func (s *TaskRuntimeService) HandleCompletionArtifact(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string, artifactIDs ...string) error {
+	return s.ApplyRemoteCompletion(ctx, taskRunID, attemptID, leaseID, success, result, errMsg, artifactIDs...)
 }
 
 func (s *TaskRuntimeService) validateRemoteAttemptLease(ctx context.Context, taskRunID, attemptID, leaseID string) error {

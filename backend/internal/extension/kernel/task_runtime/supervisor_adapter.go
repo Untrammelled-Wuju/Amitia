@@ -2,6 +2,7 @@ package task_runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -99,6 +100,18 @@ func (a *SupervisorAdapter) RefreshProgress(
 	if run.Generation != generation {
 		return fmt.Errorf("stale progress: generation mismatch")
 	}
+	guarded, finish, owned, err := a.service.callbackAuthority(ctx, run, run.ExecutionAttemptID.String(), generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		var progress TaskRunProgress
+		if len(progressJSON) > 64<<10 || json.Unmarshal(progressJSON, &progress) != nil || progress.TaskRunID != taskRunID || run.StartedAt == nil || !run.StartedAt.Equal(startedAt) {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务监管进度格式或执行起点不一致")
+		}
+		return a.service.handleProgress(guarded, taskRunID, progress.Sequence, progress.Current, progress.Total, progress.Percentage, progress.Stage, progress.Message, run)
+	}
 	return a.service.store.PutProgress(ctx, taskRunID, time.Now().UnixNano(), progressJSON)
 }
 
@@ -118,8 +131,12 @@ func (a *SupervisorAdapter) UpdateProgress(
 		return fmt.Errorf("stale progress: generation mismatch")
 	}
 	percentage := computePercentage(current, total)
-	a.service.handleProgress(ctx, taskRunID, seq, current, total, percentage, stage, message)
-	return nil
+	guarded, finish, _, err := a.service.callbackAuthority(ctx, run, run.ExecutionAttemptID.String(), generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	return a.service.handleProgress(guarded, taskRunID, seq, current, total, percentage, stage, message, run)
 }
 
 func computePercentage(current, total *float64) *float64 {

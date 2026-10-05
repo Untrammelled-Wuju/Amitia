@@ -94,9 +94,36 @@ class OnboardingService {
     String label = '',
     String offerToken = '',
     String setupCode = '',
+    String fingerprint = '',
+    String coreId = '',
   }) async {
+    if (fingerprint.isNotEmpty) {
+      final deadline = DateTime.now().add(const Duration(minutes: 2));
+      while (DateTime.now().isBefore(deadline)) {
+      final response = await _api.post<Map<String, dynamic>>('/internal/device-mesh/pairing/claim', data: {
+        'endpoint': {'url': coreUri, 'fingerprint': fingerprint, 'coreId': coreId},
+        'offerToken': offerToken.trim(), 'setupCode': setupCode.trim(), 'label': label.trim(),
+      });
+      if (response?['pending'] == true) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        continue;
+      }
+      if (response == null || response['spaceId'] != coreId) throw StateError('配对服务身份与二维码不一致');
+      return response;
+      }
+      throw StateError('等待服务提供设备批准配对超时，可再次扫描同一码继续等待');
+    }
     final dio = _publicClientAt(coreUri);
     try {
+      final status = await pairingStatusAt(coreUri);
+      final claimBody = <String, dynamic>{
+        'deviceId': deviceId.trim(), 'runtimeId': runtimeId.trim(), 'platform': platform.trim(),
+        'label': label.trim(), 'offerToken': offerToken.trim(), 'setupCode': setupCode.trim(),
+      };
+      final deadline = DateTime.now().add(const Duration(minutes: 2));
+      while (DateTime.now().isBefore(deadline)) {
+      final proof = await _api.post<Map<String, dynamic>>('/internal/device-mesh/identity/sign-claim', data: {'coreId': status['spaceId'], 'body': claimBody});
+      if (proof == null) throw StateError('无法为本机配对身份签名');
       final response = await dio.post<dynamic>(
         '/api/public/device-mesh/v1/pairing/claim',
         data: <String, dynamic>{
@@ -106,9 +133,14 @@ class OnboardingService {
           if (label.trim().isNotEmpty) 'label': label.trim(),
           if (offerToken.trim().isNotEmpty) 'offerToken': offerToken.trim(),
           if (setupCode.trim().isNotEmpty) 'setupCode': setupCode.trim(),
+          'proof': proof,
         },
       );
-      return _unwrapPublicResponse(response.data);
+      final result = _unwrapPublicResponse(response.data);
+      if (result['pending'] == true) { await Future<void>.delayed(const Duration(seconds: 1)); continue; }
+      return result;
+      }
+      throw StateError('等待服务提供设备批准配对超时，请再次扫码');
     } finally {
       dio.close(force: true);
     }

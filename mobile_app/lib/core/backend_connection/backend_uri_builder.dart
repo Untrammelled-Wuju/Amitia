@@ -6,6 +6,7 @@ class BackendUriBuilder {
       scheme: config.endpoint.httpScheme,
       host: config.endpoint.host,
       port: config.endpoint.port,
+      path: config.endpoint.pathPrefix,
     );
   }
 
@@ -19,7 +20,7 @@ class BackendUriBuilder {
       scheme: config.endpoint.httpScheme,
       host: config.endpoint.host,
       port: config.endpoint.port,
-      path: path,
+      path: config.endpoint.pathPrefix + path,
       queryParameters: _normalizeQueryParameters(queryParameters),
     );
   }
@@ -29,6 +30,7 @@ class BackendUriBuilder {
       scheme: config.endpoint.webSocketScheme,
       host: config.endpoint.host,
       port: config.endpoint.port,
+      path: config.endpoint.pathPrefix,
     );
   }
 
@@ -42,7 +44,7 @@ class BackendUriBuilder {
       scheme: config.endpoint.webSocketScheme,
       host: config.endpoint.host,
       port: config.endpoint.port,
-      path: path,
+      path: config.endpoint.pathPrefix + path,
       queryParameters: _normalizeQueryParameters(queryParameters),
     );
   }

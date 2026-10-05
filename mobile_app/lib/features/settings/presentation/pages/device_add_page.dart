@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'device_pair_scan_page.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -28,9 +31,43 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
   bool _submitting = false;
   bool _generating = false;
   String _offerPayload = '';
+  List<Map<String, dynamic>> _approvals = const [];
+  Timer? _approvalTimer;
+  bool _refreshingApprovals = false;
+  String _approvalBusy = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _approvalTimer = Timer.periodic(const Duration(seconds: 2), (_) => _refreshApprovals());
+  }
+
+  Future<void> _refreshApprovals() async {
+    if (_refreshingApprovals || !mounted) return;
+    _refreshingApprovals = true;
+    try {
+      final service = ref.read(deviceMeshServiceProvider);
+      final policy = await service.coordination();
+      final approvals = policy['canAdminister'] == true ? await service.pendingApprovals() : const <Map<String, dynamic>>[];
+      if (mounted) setState(() => _approvals = approvals);
+    } catch (_) {}
+    finally { _refreshingApprovals = false; }
+  }
+
+  Future<void> _decideApproval(Map<String, dynamic> request, bool allow) async {
+    final requestId = request['requestId']?.toString() ?? '';
+    setState(() => _approvalBusy = requestId);
+    try {
+      await ref.read(deviceMeshServiceProvider).decideApproval(requestId, allow: allow, expectedRevision: (request['revision'] as num).toInt());
+      await _refreshApprovals();
+      if (mounted) _show(allow ? '已批准设备配对' : '已拒绝设备配对');
+    } catch (error) { if (mounted) _show(_message(error)); }
+    finally { if (mounted) setState(() => _approvalBusy = ''); }
+  }
 
   @override
   void dispose() {
+    _approvalTimer?.cancel();
     _labelController.dispose();
     _pairingController.dispose();
     super.dispose();
@@ -44,7 +81,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
     final cloudUri = deployment.remoteCoreUri?.trim() ?? '';
     final cloudReady = deployment.mode == MobileDeploymentMode.cloud && cloudUri.isNotEmpty;
     final localState = (status.asData?.value?['state'] ?? 'unknown').toString().toLowerCase();
-    final isTrusted = localState == 'connected' || localState == 'connecting';
+    final isTrusted = ['connected', 'connecting', 'ready', 'handshaking', 'degraded', 'backoff'].contains(localState);
 
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
@@ -59,6 +96,14 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
           AppSpacing.xl,
         ),
         children: [
+          for (final request in _approvals) _CompactCard(child: Column(children: [
+            Text('配对请求：${request['label']?.toString().isNotEmpty == true ? request['label'] : request['deviceId']}'),
+            Text('${request['platform']}'),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton(onPressed: _approvalBusy.isEmpty ? () => _decideApproval(request, false) : null, child: const Text('拒绝')),
+              FilledButton(onPressed: _approvalBusy.isEmpty ? () => _decideApproval(request, true) : null, child: const Text('批准配对')),
+            ]),
+          ])),
           _InfoCard(
             icon: Icons.hub_outlined,
             title: isTrusted ? '为新设备生成配对 Offer' : '将本机加入 Cloud Core',
@@ -76,7 +121,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
             cloudUri: cloudUri,
             onOpenDeployment: () => context.push(AppRoutes.settingsDeployment),
           ),
-          if (isTrusted) ...[
+          if (isTrusted || deployment.mode == MobileDeploymentMode.local) ...[
             SizedBox(height: AppSpacing.lg),
             AmitiaButton(
               label: _generating ? '正在生成…' : '生成一次性配对 Offer',
@@ -91,6 +136,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('二维码内容 / Offer', style: AppTypography.label(context)),
+                    Center(child: QrImageView(data: _offerPayload, size: 280, backgroundColor: Colors.white)),
                     const SizedBox(height: 8),
                     SelectableText(_offerPayload, style: AppTypography.bodySmall(context)),
                     const SizedBox(height: 8),
@@ -99,7 +145,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
                 ),
               ),
             ],
-          ] else ...[
+          ], ...[
             SizedBox(height: AppSpacing.lg),
             Text('设备名称', style: AppTypography.caption(context)),
             SizedBox(height: AppSpacing.sm),
@@ -111,6 +157,8 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
             SizedBox(height: AppSpacing.lg),
             Text('配对信息', style: AppTypography.caption(context)),
             SizedBox(height: AppSpacing.sm),
+            AmitiaButton(label: '扫描另一台设备的配对码', icon: Icons.qr_code_scanner, isFullWidth: true, onPressed: _submitting ? null : _scanPairing),
+            SizedBox(height: AppSpacing.sm),
             AmitiaTextField(
               controller: _pairingController,
               hintText: '粘贴 amitia://pair?...、Offer Token 或首设备设置码',
@@ -121,7 +169,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
               label: _submitting ? '正在配对…' : '配对并加入云端',
               icon: Icons.link_outlined,
               isFullWidth: true,
-              onPressed: !_submitting && cloudReady ? _bindCurrentDevice : null,
+              onPressed: !_submitting ? _bindCurrentDevice : null,
             ),
             SizedBox(height: AppSpacing.sm),
             Text(
@@ -138,17 +186,17 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
     if (_generating) return;
     setState(() => _generating = true);
     try {
-      final offer = await ref.read(deviceMeshServiceProvider).createPairingOffer();
+      var endpoint = '';
+      if (ref.read(mobileDeploymentConfigProvider).mode == MobileDeploymentMode.local) {
+        final endpoints = await ref.read(deviceMeshLocalServiceProvider)?.lanEndpoints() ?? const <Map<String, dynamic>>[];
+        if (endpoints.isEmpty) throw StateError('当前设备没有可用的局域网加密地址');
+        endpoint = endpoints.first['url']?.toString() ?? '';
+      }
+      final offer = await ref.read(deviceMeshServiceProvider).createPairingOffer(endpoint: endpoint);
       final token = (offer['offerToken'] ?? '').toString().trim();
       if (token.isEmpty) throw StateError('Cloud Core 未返回有效配对 Offer');
-      final cloudUri = ref.read(mobileDeploymentConfigProvider).remoteCoreUri?.trim() ?? '';
-      if (cloudUri.isEmpty) throw StateError('Cloud Core 地址未配置');
-      final endpoint = Uri.parse(cloudUri).replace(path: '', query: null, fragment: null).toString().replaceFirst(RegExp(r'/$'), '');
-      final payload = Uri(
-        scheme: 'amitia',
-        host: 'pair',
-        queryParameters: <String, String>{'endpoint': endpoint, 'offer': token},
-      ).toString();
+      final payload = (offer['qrPayload'] ?? '').toString();
+      if (payload.isEmpty) throw StateError('Core 未返回设备配对二维码');
       if (!mounted) return;
       setState(() => _offerPayload = payload);
     } catch (error) {
@@ -158,11 +206,26 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
     }
   }
 
+  Future<void> _scanPairing() async {
+    final raw = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const DevicePairScanPage()));
+    if (!mounted || raw == null || raw.isEmpty) return;
+    _pairingController.text = raw;
+    _show('已识别配对码，请核对服务地址后点击配对');
+  }
+
   Future<void> _bindCurrentDevice() async {
     if (_submitting) return;
     final deployment = ref.read(mobileDeploymentConfigProvider);
-    final cloudUri = deployment.remoteCoreUri?.trim() ?? '';
-    if (deployment.mode != MobileDeploymentMode.cloud || cloudUri.isEmpty) {
+    var cloudUri = deployment.remoteCoreUri?.trim() ?? '';
+    final raw = _pairingController.text.trim();
+    final scanned = raw.startsWith('amitia://') ? Uri.tryParse(raw) : null;
+    final fingerprint = scanned?.queryParameters['fingerprint'] ?? '';
+    final coreId = scanned?.queryParameters['core'] ?? '';
+    if (fingerprint.isNotEmpty) {
+      if (scanned?.host != 'pair' || !RegExp(r'^[0-9a-f]{64}$').hasMatch(fingerprint) || coreId.isEmpty) { _show('二维码身份信息无效'); return; }
+      cloudUri = scanned?.queryParameters['endpoint'] ?? '';
+    }
+    if (fingerprint.isEmpty && (deployment.mode != MobileDeploymentMode.cloud || cloudUri.isEmpty)) {
       _show('请先配置并启用云端模式');
       return;
     }
@@ -180,9 +243,8 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
         throw StateError('本机 Device Mesh 身份不完整');
       }
 
-      final status = await ref.read(onboardingServiceProvider).pairingStatusAt(cloudUri);
+      final status = fingerprint.isEmpty ? await ref.read(onboardingServiceProvider).pairingStatusAt(cloudUri) : <String, dynamic>{'firstDeviceSetupRequired': false};
       final first = status['firstDeviceSetupRequired'] == true;
-      final raw = _pairingController.text.trim();
       if (raw.isEmpty) throw StateError(first ? '请输入首设备设置码' : '请粘贴配对 Offer');
       final offerToken = first ? '' : _extractOffer(raw, cloudUri);
       final setupCode = first ? raw : '';
@@ -196,11 +258,16 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
             label: _labelController.text.trim(),
             offerToken: offerToken,
             setupCode: setupCode,
+            fingerprint: fingerprint,
+            coreId: coreId,
           );
       final ticket = (claim['ticket'] ?? '').toString().trim();
       if (ticket.isEmpty) throw StateError('Cloud Core 未返回 Bootstrap Ticket');
 
-      await localService.bootstrap(cloudBaseUrl: cloudUri, bootstrapTicket: ticket);
+      await localService.bootstrap(cloudBaseUrl: cloudUri, bootstrapTicket: ticket, fingerprint: fingerprint, coreId: coreId);
+      if (fingerprint.isNotEmpty) {
+        await ref.read(mobileDeploymentConfigProvider.notifier).update(MobileDeploymentConfig(mode: MobileDeploymentMode.cloud, remoteCoreUri: cloudUri));
+      }
       ref.invalidate(localDeviceMeshStatusProvider);
       ref.invalidate(localDeviceMeshIdentityProvider);
       ref.invalidate(deviceMeshDevicesProvider);

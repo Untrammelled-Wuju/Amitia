@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -34,6 +35,7 @@ type AuthConfig struct {
 	DesktopInstanceValidator func(string) bool
 	DeviceCredentials        *credential.Service
 	DeviceRegistry           *host_registry.Registry
+	Coordination             *coordination.Service
 }
 
 const (
@@ -165,6 +167,15 @@ func LocalAdminAuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 }
 
 func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
+	localToken := strings.TrimSpace(c.GetHeader("X-Amitia-Local-Token"))
+	if localToken != "" && isLoopback(c.Request.RemoteAddr) && cfg.LocalCredentials != nil && cfg.LocalCredentials.Validate(localToken) {
+		if err := validateLocalOrigin(c, cfg.AllowedOrigins); err != nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": "mesh.origin_rejected", "message": "来源不允许"})
+			return
+		}
+		applyActorToContext(c, buildLocalActor(cfg, AuthMethodLocalToken))
+		return
+	}
 	if cfg.DeviceCredentials == nil {
 		util.ErrorResponse(c, response.InternalError, "设备凭证服务未配置", nil)
 		c.Abort()
@@ -188,6 +199,10 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		c.Abort()
 		return
 	}
+	if err := cfg.DeviceCredentials.VerifyRequest(c.Request.Context(), cred.DeviceID.String(), cred.SpaceID.String(), c.Request); err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "mesh.identity_proof_invalid", "message": "设备身份签名无效或已重放"})
+		return
+	}
 	if cfg.DeviceRegistry == nil {
 		util.ErrorResponse(c, response.InternalError, "设备信任注册表未配置", nil)
 		c.Abort()
@@ -203,7 +218,18 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		c.Abort()
 		return
 	}
-	actor := &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, SpaceID: cred.SpaceID, DeviceID: cred.DeviceID, RuntimeID: cred.RuntimeID, Capabilities: []string{"*"}, Permissions: auth.OwnerDevicePermissions(), AuthMethod: AuthMethodDeviceCredential, RequestID: generateRequestID(), CorrelationID: sanitizeCorrelationID(c.GetHeader("X-Request-ID"))}
+	permissions := auth.StandardPermissions()
+	if cfg.Coordination != nil {
+		policy, policyErr := cfg.Coordination.Get(c.Request.Context(), cred.SpaceID.String(), cred.DeviceID.String())
+		if policyErr != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"code": "mesh.policy_unavailable", "message": "设备权限状态暂不可用"})
+			return
+		}
+		if policy.Coordinated && policy.Administrator {
+			permissions = auth.OwnerDevicePermissions()
+		}
+	}
+	actor := &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, SpaceID: cred.SpaceID, DeviceID: cred.DeviceID, RuntimeID: cred.RuntimeID, Capabilities: []string{"*"}, Permissions: permissions, AuthMethod: AuthMethodDeviceCredential, RequestID: generateRequestID(), CorrelationID: sanitizeCorrelationID(c.GetHeader("X-Request-ID"))}
 	applyActorToContext(c, actor)
 }
 
@@ -222,6 +248,16 @@ func isWebUIResourcePath(path string) bool {
 }
 
 func handleLocalAuth(c *gin.Context, cfg AuthConfig) {
+	if strings.HasPrefix(strings.TrimSpace(c.GetHeader("Authorization")), "AmitiaDevice ") {
+		if !isLoopback(c.Request.RemoteAddr) && c.Request.TLS == nil {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "局域网设备访问必须使用加密连接"})
+			return
+		}
+		deviceConfig := cfg
+		deviceConfig.LocalCredentials = nil
+		handleNetworkAuth(c, deviceConfig)
+		return
+	}
 	if isLocalPublicPath(c.Request.URL.Path) {
 		c.Next()
 		return

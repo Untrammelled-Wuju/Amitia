@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
@@ -120,6 +121,7 @@ func (NoopIdempotencyHook) OnIdempotencyReleased(ctx context.Context, key string
 var (
 	ErrIdempotencyTakeoverForbidden = errors.New("idempotency: prior reservation present and takeover forbidden")
 	ErrIdempotencyIndeterminate     = errors.New("idempotency: prior reservation indeterminate, caller must retry")
+	ErrIdempotencyFingerprint       = errors.New("动作编号对应的参数或执行范围已变化，拒绝重复执行")
 )
 
 const (
@@ -165,10 +167,17 @@ func (g *IdempotencyGuard) Begin(ctx context.Context, identity IdempotencyIdenti
 	if f, ok := g.flights[key]; ok {
 		g.mu.Unlock()
 		g.hooks.OnIdempotencySingleFlightJoin(ctx, key)
-		<-f.done
+		select {
+		case <-f.done:
+		case <-ctx.Done():
+			return IdempotencyReservation{IdempotencyKey: key, Cause: context.Cause(ctx)}, false, context.Cause(ctx)
+		}
 		rec, findErr := g.storage.Find(ctx, key)
 		if findErr != nil || rec == nil {
 			return IdempotencyReservation{IdempotencyKey: key, Cause: findErr}, false, findErr
+		}
+		if rec.RequestFingerprint != fingerprint {
+			return IdempotencyReservation{IdempotencyKey: key, Cause: ErrIdempotencyFingerprint}, false, ErrIdempotencyFingerprint
 		}
 		if rec.State == IdempotencyStateDone {
 			return IdempotencyReservation{
@@ -189,8 +198,14 @@ func (g *IdempotencyGuard) Begin(ctx context.Context, identity IdempotencyIdenti
 	if findErr != nil && !errors.Is(findErr, sql.ErrNoRows) {
 		return IdempotencyReservation{IdempotencyKey: key, Cause: findErr}, false, findErr
 	}
+	if _, owned := coordination.FromContext(ctx); owned && rec != nil && rec.State != IdempotencyStateDone {
+		return IdempotencyReservation{IdempotencyKey: key, Cause: ErrIdempotencyIndeterminate}, false, ErrIdempotencyIndeterminate
+	}
 
 	if rec != nil && !rec.ExpiresAt.IsZero() && rec.ExpiresAt.After(now) {
+		if rec.RequestFingerprint != fingerprint {
+			return IdempotencyReservation{IdempotencyKey: key, Cause: ErrIdempotencyFingerprint}, false, ErrIdempotencyFingerprint
+		}
 		switch rec.State {
 		case IdempotencyStateDone:
 			g.hooks.OnIdempotencyCacheHit(ctx, key)
@@ -296,6 +311,15 @@ func (g *IdempotencyGuard) Complete(ctx context.Context, res IdempotencyReservat
 			return err
 		}
 		resultJSON = data
+	}
+	if scope, owned := coordination.FromContext(ctx); owned && !scope.Coordinated {
+		var err error
+		resultJSON, err = storeOwnedToolResult(ctx, workResult)
+		if err != nil {
+			_, _ = g.storage.MarkIndeterminate(context.Background(), key)
+			g.signalFlight(key)
+			return err
+		}
 	}
 
 	var opErr error

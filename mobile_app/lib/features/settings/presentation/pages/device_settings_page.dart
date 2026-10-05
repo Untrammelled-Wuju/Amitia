@@ -24,6 +24,7 @@ class DeviceSettingsPage extends ConsumerWidget {
     final connected = state.toLowerCase() == 'connected';
     final cloudBaseUrl = status.asData?.value?['cloudBaseUrl']?.toString().trim();
     final deviceCount = devices.asData?.value.length;
+    final coordination = ref.watch(deviceCoordinationProvider);
 
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
@@ -34,6 +35,7 @@ class DeviceSettingsPage extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(localDeviceMeshStatusProvider);
           ref.invalidate(deviceMeshDevicesProvider);
+          ref.invalidate(deviceCoordinationProvider);
           await Future.wait([
             ref.read(localDeviceMeshStatusProvider.future),
             ref.read(deviceMeshDevicesProvider.future),
@@ -43,6 +45,33 @@ class DeviceSettingsPage extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, AppSpacing.xl),
           children: [
+            coordination.when(
+              loading: () => const LinearProgressIndicator(),
+              error: (_, _) => const SizedBox.shrink(),
+              data: (data) {
+                final policy = Map<String, dynamic>.from(data['policy'] as Map? ?? const {});
+                final enabled = policy['coordinated'] == true;
+                final available = data['coordinationAvailable'] == true;
+                return SwitchListTile.adaptive(
+                  title: const Text('统筹模式'),
+                  subtitle: Text(!available ? '统筹模式暂不可用，当前数据仍由现有服务管理。' : enabled ? '使用 Core 角色，新数据由 Core 管理；历史数据保留原归属。' : '使用设备角色，新数据由本机管理；AI 服务仍由 Core 提供。'),
+                  value: enabled,
+                  onChanged: !available ? null : (value) async {
+                    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(title: const Text('切换统筹模式'), content: const Text('切换会中断正在进行的回复。已有数据不迁移，关闭统筹会撤销云端管理员权限。'), actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')), TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('切换'))]));
+                    if (confirmed != true) return;
+                    try {
+                      await ref.read(deviceMeshServiceProvider).changeCoordination(coordinated: value, expectedRevision: (policy['modeRevision'] as num).toInt(), selectedRole: policy['selectedRole']?.toString() ?? '');
+                      ref.invalidate(deviceCoordinationProvider);
+                      ref.invalidate(deviceMeshDevicesProvider);
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('统筹模式已更新，当前回复已中断')));
+                    } catch (error) {
+                      ref.invalidate(deviceCoordinationProvider);
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+                    }
+                  },
+                );
+              },
+            ),
             _sectionTitle(context, '云端协同'),
             _group(context, [
               _StatusTile(

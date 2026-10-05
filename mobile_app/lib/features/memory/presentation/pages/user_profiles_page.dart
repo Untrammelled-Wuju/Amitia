@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'owned_memory_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/app_routes.dart';
@@ -43,6 +44,8 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ownedPage = ownedMemoryGate(ref, kind: 'profile');
+    if (ownedPage != null) return ownedPage;
     final profilesAsync = ref.watch(profileListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(

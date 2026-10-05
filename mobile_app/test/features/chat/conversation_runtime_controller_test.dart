@@ -21,6 +21,29 @@ class _FakeChatService extends ChatService {
   String submittedRequestId = '';
   String submittedStyle = '';
   int submitCount = 0;
+  Completer<void>? mutation;
+  List<MessageDto> Function(String)? snapshotMessages;
+
+  @override
+  Future<void> deleteMessage(
+    String messageId, {
+    Map<String, dynamic>? expectedScope,
+    String? expectedOwnerId,
+    int? expectedRevision,
+  }) async {
+    await mutation?.future;
+  }
+
+  @override
+  Future<void> updateMessage(
+    String messageId,
+    String content, {
+    Map<String, dynamic>? expectedScope,
+    String? expectedOwnerId,
+    int? expectedRevision,
+  }) async {
+    await mutation?.future;
+  }
 
   @override
   Future<ChatSubmitResult> submitMessage({
@@ -85,7 +108,7 @@ class _FakeChatService extends ChatService {
         reasoningEnabled: 1,
       ),
       workspace: null,
-      messages: const <MessageDto>[],
+      messages: snapshotMessages?.call(conversationId) ?? const <MessageDto>[],
       turns: const <AssistantTurnDto>[],
       messageNextBefore: 0,
       hasMoreMessages: false,
@@ -121,6 +144,36 @@ Map<String, dynamic> _event({
 }
 
 void main() {
+  test('旧页面的编辑或删除确认不能修改后来打开的同名消息', () async {
+    SharedPreferences.setMockInitialValues({});
+    for (final edit in [true, false]) {
+      final events = StreamController<ChatStreamEvent>.broadcast();
+      final service = _FakeChatService(events);
+      service.snapshotMessages = (conversationId) => [
+        MessageDto(
+          id: 'same-message',
+          conversationId: conversationId,
+          role: 'user',
+          content: conversationId,
+          createdAt: '2026-10-04T00:00:00Z',
+        ),
+      ];
+      final controller = ConversationRuntimeController(service);
+      await controller.openConversation('first');
+      service.mutation = Completer<void>();
+      final operation = edit
+          ? controller.editMessage('same-message', 'edited')
+          : controller.deleteMessage('same-message');
+      await Future<void>.delayed(Duration.zero);
+      await controller.openConversation('second');
+      service.mutation!.complete();
+      await operation;
+      expect(controller.conversationId, 'second');
+      expect(controller.messages.single.content, 'second');
+      controller.dispose();
+      await events.close();
+    }
+  });
   test('loads saved bubble mode before sending the request', () async {
     SharedPreferences.setMockInitialValues({
       chatMessageStyleStorageKey: 'bubble',

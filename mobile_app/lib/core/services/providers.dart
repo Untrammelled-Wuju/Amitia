@@ -36,6 +36,8 @@ import '../models/episodic.dart';
 import '../models/worldbook.dart';
 import '../models/reminder.dart';
 import '../models/model_config.dart';
+import '../runtime/backend/mobile_backend_providers.dart';
+import '../runtime/backend/mobile_deployment_mode.dart';
 
 BackendServiceApi _getDynamicServiceApi(Ref ref) {
   return ref.read(backendServiceProvider);
@@ -58,12 +60,36 @@ final characterDetailServiceProvider = Provider<CharacterDetailService>(
 );
 
 final chatServiceProvider = Provider<ChatService>(
-  (ref) => ChatService(_getDynamicServiceApi(ref)),
+  (ref) => ChatService(
+    _getDynamicServiceApi(ref),
+    providerKey: () {
+      final config = ref.read(mobileDeploymentConfigProvider);
+      return config.mode == MobileDeploymentMode.cloud
+          ? config.remoteCoreUri ?? ''
+          : '';
+    },
+    providerTransition: () async {
+      final localApi = ref.read(rawDeviceLocalBackendServiceApiProvider);
+      return localApi?.get<Map<String, dynamic>>(
+        '/internal/device-mesh/status',
+      );
+    },
+  ),
 );
 
 final memoryServiceProvider = Provider<MemoryService>(
   (ref) => MemoryService(_getDynamicServiceApi(ref)),
 );
+
+final ownedMemoryModeProvider = FutureProvider<bool>((ref) async {
+  final config = ref.watch(mobileDeploymentConfigProvider);
+  final owned = ref.watch(chatServiceProvider).owned;
+  final ready = await owned.refresh();
+  if (!ready && config.mode == MobileDeploymentMode.cloud) {
+    throw StateError('当前 Core 的设备数据服务尚未就绪，请恢复服务后重试');
+  }
+  return ready;
+});
 
 final profileServiceProvider = Provider<ProfileService>(
   (ref) => ProfileService(_getDynamicServiceApi(ref)),
@@ -177,6 +203,11 @@ final deviceMeshLocalServiceProvider = Provider<DeviceMeshLocalService?>((ref) {
 final deviceMeshDevicesProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
       return ref.read(deviceMeshServiceProvider).devices();
+    });
+
+final deviceCoordinationProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+      return ref.watch(deviceMeshServiceProvider).coordination();
     });
 
 final localDeviceMeshIdentityProvider =
@@ -386,7 +417,7 @@ final reminderListProvider = FutureProvider.autoDispose<List<ReminderDto>>((
 final modelConfigListProvider =
     FutureProvider.autoDispose<List<ModelConfigDto>>((ref) async {
       final svc = ref.read(modelConfigServiceProvider);
-      return svc.list();
+      return svc.available();
     });
 
 final companionStateProvider =

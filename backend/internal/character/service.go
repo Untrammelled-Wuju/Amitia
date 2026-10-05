@@ -111,6 +111,8 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 }
 
 func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*Character, error) {
+	unlock := LockRoleSource(s.db)
+	defer unlock()
 	c := &Character{
 		ID: uuid.New().String(), SpaceID: normalizeCharacterOwner(spaceID), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
@@ -233,6 +235,8 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 }
 
 func (s *service) UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID string) (*Character, error) {
+	unlock := LockRoleSource(s.db)
+	defer unlock()
 	_, err := s.requireCharacterOwner(id, spaceID)
 	if err != nil {
 		return nil, fmt.Errorf("角色不存在")
@@ -408,6 +412,8 @@ func (s *service) Delete(id string) error {
 }
 
 func (s *service) DeleteForSpace(id string, spaceID string) error {
+	unlock := LockRoleSource(s.db)
+	defer unlock()
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
 		if err := s.characterOwnerQuery(tx.Where("id = ?", id), spaceID).First(&current).Error; err != nil {
@@ -438,6 +444,8 @@ func (s *service) DeleteForSpace(id string, spaceID string) error {
 }
 
 func (s *service) updateCharacterFieldsForSpace(id string, updates map[string]interface{}, spaceID string) (*Character, error) {
+	unlock := LockRoleSource(s.db)
+	defer unlock()
 	var updated Character
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
@@ -511,6 +519,8 @@ func (s *service) SetActive(id string) (*Character, error) {
 }
 
 func (s *service) SetActiveForSpace(id string, spaceID string) (*Character, error) {
+	unlock := LockRoleSource(s.db)
+	defer unlock()
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var chars []Character
 		if err := s.characterOwnerQuery(tx.Where("deleted_at IS NULL AND (is_active = 1 OR id = ?)", id), spaceID).Find(&chars).Error; err != nil {
@@ -714,6 +724,8 @@ func (s *service) ImportCard(data []byte, filename string, confirm bool) (*CardI
 }
 
 func (s *service) ImportCardForSpace(data []byte, filename string, confirm bool, spaceID string) (*CardImportResult, error) {
+	unlock := LockRoleSource(s.db)
+	defer unlock()
 	parser := card.NewCardParser()
 	c, _, err := parser.Parse(data, filename)
 	if err != nil {

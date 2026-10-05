@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/artifact/artifact_service.dart';
+import '../../../../core/services/owned_audio_source.dart';
 import '../amitia_message_theme.dart';
 import '../amrp.dart';
 import '../preview/amitia_html_preview.dart';
@@ -710,6 +711,25 @@ class _ResolvedImageState extends State<_ResolvedImage> {
         if (snapshot.hasError || uri == null) {
           return _ImageFailure(alt: widget.image.alt);
         }
+        if (uri.scheme == 'data') {
+          try {
+            final data = uri.data!;
+            if (!const [
+                  'image/png',
+                  'image/jpeg',
+                  'image/gif',
+                ].contains(data.mimeType) ||
+                uri.toString().length > 1400000)
+              return _ImageFailure(alt: widget.image.alt);
+            return Image.memory(
+              data.contentAsBytes(),
+              fit: widget.fit,
+              errorBuilder: (_, _, _) => _ImageFailure(alt: widget.image.alt),
+            );
+          } catch (_) {
+            return _ImageFailure(alt: widget.image.alt);
+          }
+        }
         if (uri.scheme == 'http' || uri.scheme == 'https') {
           return Image.network(
             uri.toString(),
@@ -778,8 +798,14 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
 
   Future<void> _load() async {
     try {
-      final uri = await _resolveMediaUri(context, widget.block.url);
-      await _player.setUrl(uri.toString());
+      if (widget.block.url.startsWith('data:audio/')) {
+        await _player.setAudioSource(
+          OwnedAudioSource.fromDataURI(widget.block.url),
+        );
+      } else {
+        final uri = await _resolveMediaUri(context, widget.block.url);
+        await _player.setUrl(uri.toString());
+      }
       if (mounted) {
         setState(() {
           _error = null;

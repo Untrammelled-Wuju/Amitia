@@ -1,24 +1,33 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	"github.com/u-ai/backend/internal/secretstore"
 )
 
 type StoredCredential struct {
-	CloudBaseUrl string                    `json:"cloudBaseUrl"`
-	CredentialID string                    `json:"credentialId"`
-	Credential   string                    `json:"credential"`
-	SpaceID      runtimeidentity.SpaceID   `json:"spaceId"`
-	DeviceID     runtimeidentity.DeviceID  `json:"deviceId"`
-	RuntimeID    runtimeidentity.RuntimeID `json:"runtimeId"`
-	ExpiresAt    time.Time                 `json:"expiresAt"`
-	Protocol     string                    `json:"protocol"`
+	CloudBaseUrl     string                    `json:"cloudBaseUrl"`
+	CredentialID     string                    `json:"credentialId"`
+	Credential       string                    `json:"credential"`
+	SpaceID          runtimeidentity.SpaceID   `json:"spaceId"`
+	DeviceID         runtimeidentity.DeviceID  `json:"deviceId"`
+	RuntimeID        runtimeidentity.RuntimeID `json:"runtimeId"`
+	ExpiresAt        time.Time                 `json:"expiresAt"`
+	Protocol         string                    `json:"protocol"`
+	Fingerprint      string                    `json:"fingerprint,omitempty"`
+	ProviderPath     []string                  `json:"providerPath,omitempty"`
+	PreviousCoreID   string                    `json:"previousCoreId,omitempty"`
+	ProviderChangeID string                    `json:"providerChangeId,omitempty"`
 }
 
 type SessionCursor struct {
@@ -31,15 +40,26 @@ type SessionCursor struct {
 }
 
 type CredentialStore struct {
-	mu       sync.Mutex
+	mu       *sync.Mutex
 	dirPath  string
 	credFile string
 	sessFile string
 }
 
+var credentialLocks sync.Map
+
 func NewCredentialStore(dataDir string) *CredentialStore {
 	dir := filepath.Join(dataDir, "device-mesh")
+	key, err := filepath.Abs(dir)
+	if err != nil {
+		key = filepath.Clean(dir)
+	}
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	mutex, _ := credentialLocks.LoadOrStore(key, &sync.Mutex{})
 	return &CredentialStore{
+		mu:       mutex.(*sync.Mutex),
 		dirPath:  dir,
 		credFile: filepath.Join(dir, "credential.json"),
 		sessFile: filepath.Join(dir, "session-state.json"),
@@ -49,8 +69,12 @@ func NewCredentialStore(dataDir string) *CredentialStore {
 func (s *CredentialStore) LoadCredential() (*StoredCredential, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadCredentialLocked()
+}
 
-	data, err := os.ReadFile(s.credFile)
+func (s *CredentialStore) loadCredentialLocked() (*StoredCredential, error) {
+
+	data, err := secretstore.Read(s.credFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -66,6 +90,33 @@ func (s *CredentialStore) LoadCredential() (*StoredCredential, error) {
 	return &cred, nil
 }
 
+func (s *CredentialStore) WithActiveCredential(ctx context.Context, expected *StoredCredential, write func(context.Context) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	credential, err := s.loadCredentialLocked()
+	if err != nil {
+		return err
+	}
+	if credential == nil || expected == nil || credential.CredentialID != expected.CredentialID || credential.Credential != expected.Credential || credential.SpaceID != expected.SpaceID || credential.DeviceID != expected.DeviceID || credential.RuntimeID != expected.RuntimeID || !credential.ExpiresAt.After(time.Now()) {
+		return errors.New("设备绑定已失效，旧 Core 写入已拦截")
+	}
+	for _, name := range []string{"unpair-intent.json", "provider-transition.json", "candidate-credential.json"} {
+		_, err := secretstore.Read(filepath.Join(s.dirPath, name))
+		if !os.IsNotExist(err) {
+			if err != nil {
+				return err
+			}
+			return errors.New("设备正在切换服务，旧 Core 写入已拦截")
+		}
+	}
+	ctx, cancel := context.WithDeadline(ctx, credential.ExpiresAt)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return write(ctx)
+}
+
 func (s *CredentialStore) SaveCredential(cred *StoredCredential) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -79,28 +130,47 @@ func (s *CredentialStore) SaveCredential(cred *StoredCredential) error {
 		return err
 	}
 
-	tmp := s.credFile + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	return secretstore.Write(s.credFile, data)
+}
+
+func (s *CredentialStore) LoadCandidate() (*StoredCredential, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := secretstore.Read(filepath.Join(s.dirPath, "candidate-credential.json"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var credential StoredCredential
+	if err := json.Unmarshal(data, &credential); err != nil {
+		return nil, err
+	}
+	return &credential, nil
+}
+
+func (s *CredentialStore) SaveCandidate(credential *StoredCredential) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := json.Marshal(credential)
 	if err != nil {
 		return err
 	}
+	if err := os.MkdirAll(s.dirPath, 0700); err != nil {
+		return err
+	}
+	return secretstore.Write(filepath.Join(s.dirPath, "candidate-credential.json"), data)
+}
 
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
+func (s *CredentialStore) DeleteCandidate() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := os.Remove(filepath.Join(s.dirPath, "candidate-credential.json"))
+	if os.IsNotExist(err) {
+		return nil
 	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-
-	return os.Rename(tmp, s.credFile)
+	return err
 }
 
 func (s *CredentialStore) DeleteCredential() error {

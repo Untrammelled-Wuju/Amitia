@@ -7,6 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -123,15 +124,27 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
+	var confirmAuthority func(context.Context) error
+	if route.Binding.HandlerName != "coordination.data" {
+		var err error
+		invokePayload.AuthorityCallID, confirmAuthority, err = coordination.TrackCurrentRemoteAuthority(ctx, route.SpaceID.String(), route.DeviceID.String(), sessionID.String(), generation)
+		if err != nil {
+			p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, err.Error())
+			return UnifiedToolResult{InvocationID: request.Invocation.InvocationID, Status: ToolResultStatusFailed, Error: &ToolError{Code: "device_authority_expired", Message: err.Error()}}
+		}
+		if scope, ok := coordination.FromContext(ctx); ok {
+			invokePayload.OwnedExecutionScope, _ = json.Marshal(scope)
+		}
+	}
 	if !p.ports.Hub.SendEnvelope(sessionID, generation, protocol.MessageTypeRuntimeInvoke, invokePayload) {
 		p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, "failed to send")
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
 			Status:       ToolResultStatusFailed,
 			Error: &ToolError{
-				Code:      ErrorCodeRuntimeUnavailable,
-				Message:   "failed to send invoke to device",
-				Retryable: true,
+				Code:      "device_execution_unknown",
+				Message:   "设备调用的发送结果尚未确认，禁止自动重新执行",
+				Retryable: false,
 			},
 		}
 	}
@@ -151,11 +164,22 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 			InvocationID: request.Invocation.InvocationID,
 			Status:       ToolResultStatusFailed,
 			Error: &ToolError{
-				Code:      ErrorCodeTimeout,
-				Message:   fmt.Sprintf("invocation timed out: %v", err),
-				Retryable: true,
+				Code:      "device_execution_unknown",
+				Message:   fmt.Sprintf("设备调用已发起，但结果尚未确认：%v", err),
+				Retryable: false,
 			},
 		}
+	}
+	if confirmAuthority != nil {
+		confirmation, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := confirmAuthority(confirmation)
+		cancel()
+		if err != nil {
+			return UnifiedToolResult{InvocationID: request.Invocation.InvocationID, Status: ToolResultStatusFailed, Error: &ToolError{Code: "device_execution_unknown", Message: err.Error()}}
+		}
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return UnifiedToolResult{InvocationID: request.Invocation.InvocationID, Status: ToolResultStatusFailed, Error: &ToolError{Code: "device_authority_expired", Message: err.Error()}}
 	}
 	return result
 }

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
+import '../../../core/services/device_owned_attachments.dart';
 import '../../../core/services/reply_notification_service.dart';
 import '../../../core/services/providers.dart';
 import '../../../core/settings/chat_permission_preferences.dart';
@@ -26,7 +27,12 @@ class ConversationRuntimeController extends ChangeNotifier {
        _appearancePreferences = appearancePreferences,
        _permissionMode = normalizeChatPermissionMode(
          permissionPreferences?.mode,
-       );
+       ) {
+    _ownedPoll = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(_pollOwnedState()),
+    );
+  }
 
   final ChatService _chatService;
   final ReplyNotificationService? replyNotifications;
@@ -58,6 +64,11 @@ class ConversationRuntimeController extends ChangeNotifier {
   bool _hasMoreTurnHistory = false;
   bool _automationStateUncertain = false;
   int _oldestTurnSequence = 0;
+  Timer? _ownedPoll;
+  bool _ownedPolling = false;
+  String _ownedNotice = '';
+  String _ownedRequestId = '';
+  String _conversationCoreId = '';
 
   List<ChatMessage> get messages => _messages.messages;
   String? get conversationId => _conversationId;
@@ -316,6 +327,27 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? replyToMessageId,
   }) async {
     if (_sending) return;
+    try {
+      if (await _chatService.owned.refresh()) {
+        await _sendOwned(
+          localMessage,
+          message: message,
+          imageUrl: imageUrl,
+          audioUrl: audioUrl,
+          videoUrl: videoUrl,
+        );
+        return;
+      }
+    } catch (error) {
+      _lastError = error;
+      notifyListeners();
+      return;
+    }
+    if ((audioUrl ?? '').startsWith('data:audio/')) {
+      _lastError = StateError('设备服务状态已变化，语音未发送');
+      notifyListeners();
+      return;
+    }
     final requestId = _localId('mobile-');
     final pending = _cloneMessage(
       localMessage,
@@ -392,6 +424,246 @@ class ConversationRuntimeController extends ChangeNotifier {
       }
       _sending = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _pollOwnedState() async {
+    if (_ownedPolling || _disposed) return;
+    _ownedPolling = true;
+    try {
+      await _chatService.owned.poll();
+    } catch (_) {
+      if (_chatService.owned.enabled && _ownedRequestId.isNotEmpty)
+        _chatService.owned.stopLocal('云端连接中断，当前回复已暂停；恢复连接后不会自动重新发送。');
+    } finally {
+      _ownedPolling = false;
+    }
+    if (_disposed) return;
+    final notice = _chatService.owned.notice;
+    if (notice.isNotEmpty && notice != _ownedNotice) {
+      _ownedNotice = notice;
+      _messages.upsert(
+        ChatMessage(
+          id: _localId('provider-notice'),
+          role: MessageRole.system,
+          type: MessageType.systemNotice,
+          content: notice,
+          time: DateTime.now(),
+          sequence: _nextLocalSequence(),
+        ),
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> _sendOwned(
+    ChatMessage localMessage, {
+    required String message,
+    String? imageUrl,
+    String? audioUrl,
+    String? videoUrl,
+  }) async {
+    if ((videoUrl ?? '').isNotEmpty) {
+      throw StateError('设备归属对话的视频通道尚未就绪');
+    }
+    if ((audioUrl ?? '').isNotEmpty && (imageUrl ?? '').isNotEmpty)
+      throw StateError('语音消息不能同时携带图片');
+    final attachments = (audioUrl ?? '').isNotEmpty
+        ? [
+            ownedAudioAttachment(
+              audioUrl!,
+              name: localMessage.fileName ?? 'voice.wav',
+            ),
+          ]
+        : (imageUrl ?? '').isNotEmpty
+        ? [
+            ownedImageAttachment(
+              imageUrl!,
+              name: localMessage.fileName ?? 'image.png',
+            ),
+          ]
+        : null;
+    final requestId = _localId('mobile-');
+    final wasDraft = (_conversationId ?? '').isEmpty;
+    final previousContext =
+        _conversationCoreId.isNotEmpty &&
+            _conversationCoreId != _chatService.owned.coreId &&
+            (_conversationId ?? '').isNotEmpty
+        ? <String, dynamic>{
+            'previousCoreId': _conversationCoreId,
+            'conversationId': _conversationId,
+            'summary':
+                _chatService.owned.previousSummary(
+                  _conversationCoreId,
+                  _conversationId!,
+                ) ??
+                '',
+            'messages': _messages.messages
+                .where(
+                  (row) =>
+                      (row.role == MessageRole.user ||
+                          row.role == MessageRole.assistant) &&
+                      row.status != MessageStatus.sending &&
+                      row.status != MessageStatus.error,
+                )
+                .toList()
+                .reversed
+                .take(128)
+                .toList()
+                .reversed
+                .map(
+                  (row) => {
+                    'id': row.id,
+                    'ownerId': row.sourceOwnerId,
+                    'role': row.role.name,
+                    'content': row.content,
+                    'status': row.status.name,
+                  },
+                )
+                .toList(),
+          }
+        : null;
+    final pending = _cloneMessage(
+      localMessage,
+      id: '$requestId/user',
+      renderId: requestId,
+      sequence: _nextLocalSequence(),
+      status: MessageStatus.sending,
+    );
+    _messages.upsert(pending);
+    _sending = true;
+    _ownedRequestId = requestId;
+    _lastError = null;
+    var text = '';
+    var reasoning = '';
+    var accepted = false;
+    var completed = false;
+    Map<String, dynamic> acceptedScope = {};
+    int? savedRevision;
+    final time = DateTime.now();
+    final sequence = _nextLocalSequence();
+    void project(MessageStatus status) {
+      if (_disposed) return;
+      _messages.upsert(
+        ChatMessage(
+          id: '$requestId/assistant',
+          sourceOwnerId: (acceptedScope['resourceOwnerId'] ?? '').toString(),
+          sourceScope: acceptedScope,
+          sourceRevision: savedRevision,
+          renderId: _assistantRenderId(requestId),
+          characterId: _characterId ?? '',
+          role: MessageRole.assistant,
+          type: MessageType.text,
+          content: text,
+          reasoningContent: reasoning,
+          time: time,
+          sequence: sequence,
+          status: status,
+        ),
+      );
+      notifyListeners();
+    }
+
+    notifyListeners();
+    try {
+      await for (final event in _chatService.owned.send(
+        requestId: requestId,
+        message: message,
+        conversationId: _conversationId,
+        characterId: _characterId,
+        context: previousContext,
+        attachments: attachments,
+      )) {
+        if (_disposed || _ownedRequestId != requestId) break;
+        final type = event['type'];
+        if (type == 'started') {
+          accepted = true;
+          _conversationId = (event['conversationId'] ?? '').toString();
+          final scope = event['executionScope'] as Map;
+          acceptedScope = Map<String, dynamic>.from(scope);
+          _characterId = scope['roleId'].toString();
+          _conversationCoreId = scope['coreId'].toString();
+          _messages.remove(pending);
+          _messages.upsert(
+            _cloneMessage(
+              pending,
+              status: MessageStatus.delivered,
+              sourceOwnerId: scope['resourceOwnerId'].toString(),
+              sourceScope: acceptedScope,
+              sourceRevision: 1,
+            ),
+          );
+          if (wasDraft) _conversationUpdateEpoch++;
+        } else if (type == 'transcribed') {
+          final current = _messages.findById(
+            pending.id,
+            sourceOwnerId: (acceptedScope['resourceOwnerId'] ?? '').toString(),
+          );
+          if (current != null)
+            _messages.upsert(
+              _cloneMessage(
+                current,
+                content: (event['text'] ?? '').toString(),
+                sourceRevision: 2,
+              ),
+            );
+          notifyListeners();
+        } else if (type == 'delta') {
+          if (event['reasoning'] == true) {
+            reasoning += (event['text'] ?? '').toString();
+          } else {
+            text += (event['text'] ?? '').toString();
+          }
+          project(MessageStatus.streaming);
+        } else if (type == 'completed') {
+          final result = event['data'] as Map;
+          text = (result['reply'] ?? text).toString();
+          reasoning = (result['reasoning'] ?? reasoning).toString();
+          completed = true;
+          savedRevision = result['saved'] == true ? 1 : null;
+          final current = _messages.findById(
+            pending.id,
+            sourceOwnerId: (acceptedScope['resourceOwnerId'] ?? '').toString(),
+          );
+          if (current != null &&
+              result['transcription'] is String &&
+              (result['transcription'] as String).isNotEmpty)
+            _messages.upsert(
+              _cloneMessage(
+                current,
+                content: result['transcription'] as String,
+                sourceRevision: result['userRevision'] is int
+                    ? result['userRevision'] as int
+                    : 2,
+              ),
+            );
+          project(MessageStatus.delivered);
+        } else if (type == 'interrupted' && event['data'] is Map) {
+          final result = event['data'] as Map;
+          if (result['saved'] == true) {
+            text = (result['reply'] ?? text).toString();
+            reasoning = (result['reasoning'] ?? reasoning).toString();
+          }
+          project(MessageStatus.interrupted);
+        }
+      }
+    } catch (error) {
+      if (!_disposed) {
+        _lastError = error;
+        if (!accepted)
+          _messages.upsert(_cloneMessage(pending, status: MessageStatus.error));
+        if (text.isNotEmpty || reasoning.isNotEmpty)
+          project(MessageStatus.interrupted);
+      }
+    } finally {
+      if (_ownedRequestId == requestId) {
+        _ownedRequestId = '';
+        if (!_disposed) {
+          _sending = false;
+          if (completed) _conversationUpdateEpoch++;
+          notifyListeners();
+        }
+      }
     }
   }
 
@@ -705,6 +977,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     final altText = dto.altText?.trim() ?? '';
     return ChatMessage(
       id: dto.id,
+      sourceOwnerId: dto.sourceOwnerId,
+      sourceScope: dto.sourceScope,
+      sourceRevision: dto.sourceRevision,
       renderId: dto.requestId.trim().isEmpty
           ? dto.id
           : role == MessageRole.assistant
@@ -764,6 +1039,28 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
     var changed = false;
     try {
+      if (_chatService.owned.enabled) {
+        if (!_chatService.owned.hasMore(conv, characterId: _characterId)) {
+          _hasMoreMessageHistory = false;
+          return false;
+        }
+        final result = await _chatService.owned.query(
+          conv,
+          characterId: _characterId,
+          older: true,
+        );
+        if (_disposed || _conversationId != conv) return false;
+        for (final dto in _chatService.owned.messages(result)) {
+          changed = _messages.upsert(_messageFromDto(dto)) || changed;
+        }
+        _hasMoreMessageHistory = _chatService.owned.hasMore(
+          conv,
+          characterId: _characterId,
+        );
+        _hasMoreTurnHistory = false;
+        if (changed) notifyListeners();
+        return changed;
+      }
       if (_hasMoreMessageHistory && _messageBeforeSequence > 0) {
         final page = await _chatService.getMessageHistory(
           conv,
@@ -897,6 +1194,15 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    if (_ownedRequestId.isNotEmpty) {
+      try {
+        await _chatService.owned.interrupt();
+      } catch (error) {
+        _lastError = error;
+        notifyListeners();
+      }
+      return;
+    }
     final conv = _conversationId?.trim() ?? '';
     final turnId = _agentReducer.activeTurnId.trim();
     if (!_sending || conv.isEmpty || turnId.isEmpty) return;
@@ -916,21 +1222,66 @@ class ConversationRuntimeController extends ChangeNotifier {
     await _chatService.steerTurn(conv, turnId, value);
   }
 
-  Future<void> deleteMessage(String messageId) async {
+  Future<void> deleteMessage(String messageId, {String? sourceOwnerId}) async {
+    final conversationId = _conversationId;
+    final epoch = _runtimeEpoch;
     final id = messageId.trim();
     if (id.isEmpty || id.startsWith('turn:')) return;
-    await _chatService.deleteMessage(id);
-    if (_messages.removeById(id)) notifyListeners();
+    final existing = _messages.findById(id, sourceOwnerId: sourceOwnerId);
+    if (existing == null) throw StateError('消息来源不唯一或已变化，请重新选择消息');
+    await _chatService.deleteMessage(
+      id,
+      expectedScope: existing.sourceScope,
+      expectedOwnerId: existing.sourceOwnerId,
+      expectedRevision: existing.sourceRevision,
+    );
+    if (_disposed ||
+        _runtimeEpoch != epoch ||
+        _conversationId != conversationId ||
+        !identical(
+          _messages.findById(id, sourceOwnerId: existing.sourceOwnerId),
+          existing,
+        ))
+      return;
+    if (_messages.remove(existing)) notifyListeners();
   }
 
-  Future<void> editMessage(String messageId, String content) async {
+  Future<void> editMessage(
+    String messageId,
+    String content, {
+    String? sourceOwnerId,
+  }) async {
+    final conversationId = _conversationId;
+    final epoch = _runtimeEpoch;
     final id = messageId.trim();
     final value = content.trim();
     if (id.isEmpty || value.isEmpty || id.startsWith('turn:')) return;
-    await _chatService.updateMessage(id, value);
-    final existing = _messages.findById(id);
-    if (existing == null) return;
-    _messages.upsert(_cloneMessage(existing, content: value));
+    final existing = _messages.findById(id, sourceOwnerId: sourceOwnerId);
+    if (existing == null) throw StateError('消息来源不唯一或已变化，请重新选择消息');
+    await _chatService.updateMessage(
+      id,
+      value,
+      expectedScope: existing.sourceScope,
+      expectedOwnerId: existing.sourceOwnerId,
+      expectedRevision: existing.sourceRevision,
+    );
+    if (_disposed ||
+        _runtimeEpoch != epoch ||
+        _conversationId != conversationId ||
+        !identical(
+          _messages.findById(id, sourceOwnerId: existing.sourceOwnerId),
+          existing,
+        ))
+      return;
+    _messages.upsert(
+      _cloneMessage(
+        existing,
+        content: value,
+        sourceRevision: existing.sourceRevision == null
+            ? null
+            : existing.sourceRevision! + 1,
+      ),
+    );
     notifyListeners();
   }
 
@@ -957,6 +1308,30 @@ class ConversationRuntimeController extends ChangeNotifier {
       notifyListeners();
     }
     try {
+      if (await _chatService.owned.refresh()) {
+        final result = await _chatService.owned.query(
+          id,
+          characterId: _characterId,
+        );
+        if (_disposed || _conversationId != id) return;
+        _messages.clear();
+        for (final message in _chatService.owned.messages(result)) {
+          _messages.upsert(_messageFromDto(message));
+        }
+        final scope = result['executionScope'];
+        if (scope is Map) {
+          _characterId = scope['roleId']?.toString();
+          _conversationCoreId = scope['coreId']?.toString() ?? '';
+        }
+        _hasMoreMessageHistory = _chatService.owned.hasMore(
+          id,
+          characterId: _characterId,
+        );
+        _hasMoreTurnHistory = false;
+        _sending = false;
+        notifyListeners();
+        return;
+      }
       final snapshot = await _chatService.conversationSnapshot(id);
       if (_disposed || _conversationId != id) return;
       _applySnapshot(snapshot);
@@ -1024,6 +1399,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   void startDraft({ConversationWorkspaceDto? workspace}) {
+    _conversationCoreId = '';
     _disconnectRuntime();
     _draftEpoch++;
     _conversationId = null;
@@ -1042,6 +1418,9 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   void _disconnectRuntime() {
+    if (_ownedRequestId.isNotEmpty)
+      _chatService.owned.stopLocal('当前对话已切换，回复已中断。');
+    _ownedRequestId = '';
     _runtimeEpoch++;
     _eventCancellation?.cancel('runtime disconnected');
     _eventCancellation = null;
@@ -1057,6 +1436,9 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   ChatMessage _cloneMessage(
     ChatMessage message, {
+    String? sourceOwnerId,
+    Map<String, dynamic>? sourceScope,
+    int? sourceRevision,
     String? id,
     String? renderId,
     String? content,
@@ -1066,6 +1448,9 @@ class ConversationRuntimeController extends ChangeNotifier {
   }) {
     return ChatMessage(
       id: id ?? message.id,
+      sourceOwnerId: sourceOwnerId ?? message.sourceOwnerId,
+      sourceScope: sourceScope ?? message.sourceScope,
+      sourceRevision: sourceRevision ?? message.sourceRevision,
       renderId: renderId ?? message.renderId,
       characterId: message.characterId,
       role: message.role,
@@ -1324,6 +1709,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _ownedPoll?.cancel();
     _disposed = true;
     _disconnectRuntime();
     _streamScheduler.dispose();

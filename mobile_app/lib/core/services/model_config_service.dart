@@ -6,6 +6,12 @@ class ModelConfigService {
 
   ModelConfigService(this._api);
 
+  Future<List<ModelConfigDto>> available() async {
+    final resp = await _api.get<List<dynamic>>('/api/model/available');
+    if (resp == null) return [];
+    return resp.map((e) => ModelConfigDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<List<ModelConfigDto>> list() async {
     final resp = await _api.get<List<dynamic>>('/api/model/configs');
     if (resp == null) return [];

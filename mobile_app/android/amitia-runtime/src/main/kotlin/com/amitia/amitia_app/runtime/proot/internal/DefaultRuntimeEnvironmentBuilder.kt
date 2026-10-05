@@ -14,6 +14,8 @@ import java.security.SecureRandom
 
 internal class DefaultRuntimeEnvironmentBuilder(
     private val prootLoaderPath: String = "",
+    private val secretKeyProvider: (() -> String)? = null,
+    private val lanAddressesProvider: (() -> String)? = null,
 ) : RuntimeEnvironmentBuilder {
 
     override fun build(request: RuntimeEnvironmentRequest): RuntimeEnvironmentResult {
@@ -39,8 +41,16 @@ internal class DefaultRuntimeEnvironmentBuilder(
             )
         }
 
+        val secretKey = try {
+            secretKeyProvider?.invoke()
+        } catch (e: Exception) {
+            return RuntimeEnvironmentResult.Failure(RuntimeEnvironmentErrorCode.BUILD_FAILED, "device security storage unavailable")
+        }
         val hostProcess = buildHostProcessEnvironment(request.hostLayout)
-        val guestRuntime = buildGuestRuntimeEnvironment(request.endpoint)
+        val guestRuntime = buildGuestRuntimeEnvironment(request.endpoint).toMutableMap()
+        if (!secretKey.isNullOrBlank()) guestRuntime["AMITIA_SECRET_KEY"] = secretKey
+        val lanAddresses = try { lanAddressesProvider?.invoke() } catch (_: Exception) { null }
+        if (!lanAddresses.isNullOrBlank()) guestRuntime["AMITIA_LAN_ADDRESSES"] = lanAddresses
 
         return try {
             RuntimeEnvironmentResult.Success(RuntimeEnvironment(hostProcess, guestRuntime))

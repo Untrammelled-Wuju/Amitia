@@ -1,7 +1,11 @@
 package scope
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
 )
 
 type ScopeStore interface {
@@ -16,8 +20,9 @@ type ScopeStore interface {
 }
 
 type MemoryScopeStore struct {
-	bindings  map[string]ScopeBinding
-	snapshots map[string]ScopeSnapshot
+	snapshotMu sync.RWMutex
+	bindings   map[string]ScopeBinding
+	snapshots  map[string]ScopeSnapshot
 }
 
 func NewMemoryScopeStore() *MemoryScopeStore {
@@ -65,20 +70,46 @@ func (s *MemoryScopeStore) ListBindings(ctx context.Context, filter ScopeBinding
 }
 
 func (s *MemoryScopeStore) SaveSnapshot(ctx context.Context, snapshot ScopeSnapshot) error {
-	s.snapshots[snapshot.SnapshotID] = snapshot
+	if len(snapshot.OwnedExecutionScope) > 0 && (!json.Valid(snapshot.OwnedExecutionScope) || len(snapshot.OwnedExecutionScope) > 64<<10) {
+		return fmt.Errorf("设备执行授权快照无效或超过上限")
+	}
+	s.snapshotMu.Lock()
+	defer s.snapshotMu.Unlock()
+	if previous, exists := s.snapshots[snapshot.SnapshotID]; exists && len(previous.OwnedExecutionScope) > 0 {
+		oldJSON, oldErr := json.Marshal(previous)
+		newJSON, newErr := json.Marshal(snapshot)
+		if oldErr != nil || newErr != nil || !bytes.Equal(oldJSON, newJSON) {
+			return fmt.Errorf("已保存的设备执行授权快照不能修改或降级")
+		}
+	}
+	s.snapshots[snapshot.SnapshotID] = cloneScopeSnapshot(snapshot)
 	return nil
 }
 
 func (s *MemoryScopeStore) GetSnapshot(ctx context.Context, snapshotID string) (ScopeSnapshot, error) {
+	s.snapshotMu.RLock()
+	defer s.snapshotMu.RUnlock()
 	if snap, ok := s.snapshots[snapshotID]; ok {
-		return snap, nil
+		return cloneScopeSnapshot(snap), nil
 	}
 	return ScopeSnapshot{}, ErrSnapshotNotFound
 }
 
 func (s *MemoryScopeStore) DeleteSnapshot(_ context.Context, snapshotID string) error {
+	s.snapshotMu.Lock()
+	defer s.snapshotMu.Unlock()
 	delete(s.snapshots, snapshotID)
 	return nil
+}
+
+func cloneScopeSnapshot(snapshot ScopeSnapshot) ScopeSnapshot {
+	snapshot.OwnedExecutionScope = append(json.RawMessage(nil), snapshot.OwnedExecutionScope...)
+	snapshot.ResolvedScopes = append([]ScopeRef(nil), snapshot.ResolvedScopes...)
+	if snapshot.ExpiresAt != nil {
+		expires := *snapshot.ExpiresAt
+		snapshot.ExpiresAt = &expires
+	}
+	return snapshot
 }
 
 func (s *MemoryScopeStore) DeleteSnapshotsBySession(_ context.Context, _ string) error {

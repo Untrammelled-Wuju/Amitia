@@ -4,10 +4,8 @@ package security
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/auth"
 )
 
@@ -16,15 +14,11 @@ import (
 // Core requires an authenticated administrator actor.
 func SharedCoreAdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
-			c.Next()
-			return
-		}
 		actor := GetActor(c)
 		if actor == nil || !actor.HasPermission(auth.PermSystemAdmin) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"code": http.StatusForbidden,
-				"msg":  "shared Cloud Core administration requires system.admin capability",
+				"msg":  "当前设备没有云端管理员权限，模型与系统配置只能由 Core 或获授权的管理员修改",
 			})
 			return
 		}

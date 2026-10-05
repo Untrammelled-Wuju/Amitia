@@ -1,11 +1,12 @@
 package server
 
 import (
+	"encoding/json"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -40,7 +41,17 @@ func NewMeshConnection(conn *websocket.Conn, sessionID runtimeidentity.RuntimeSe
 func (c *MeshConnection) Send(data []byte) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
-	return c.Conn.WriteMessage(websocket.TextMessage, data)
+	var envelope protocol.Envelope
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+	envelope.Sequence = c.outboundSeq + 1
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		return err
+	}
+	c.outboundSeq = envelope.Sequence
+	return c.Conn.WriteMessage(websocket.TextMessage, encoded)
 }
 
 func (c *MeshConnection) Close(code int, reason string) error {
@@ -53,8 +64,4 @@ func (c *MeshConnection) Close(code int, reason string) error {
 	msg := websocket.FormatCloseMessage(code, reason)
 	_ = c.Conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(2*time.Second))
 	return c.Conn.Close()
-}
-
-func (c *MeshConnection) nextOutboundSequence() int64 {
-	return atomic.AddInt64(&c.outboundSeq, 1)
 }

@@ -4,17 +4,22 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -29,6 +34,10 @@ type MeshClientConfig struct {
 	OnState           func(AgentState)
 	RuntimeDispatcher RuntimeDispatcher
 	TaskWorker        TaskWorkerIface
+	TLSConfig         *tls.Config
+	SignRequest       func(*http.Request, string) error
+	ExecutionJournal  *executionjournal.Store
+	ExecutionGuard    RuntimeExecutionGuard
 }
 
 type TaskWorkerIface interface {
@@ -37,13 +46,18 @@ type TaskWorkerIface interface {
 }
 
 type MeshClient struct {
-	conf    MeshClientConfig
-	dialer  *websocket.Dialer
-	mu      sync.Mutex
-	conn    *websocket.Conn
-	state   *ConnectionManager
-	stopCh  chan struct{}
-	backoff *Backoff
+	conf         MeshClientConfig
+	dialer       *websocket.Dialer
+	mu           sync.Mutex
+	conn         *websocket.Conn
+	state        *ConnectionManager
+	stopCh       chan struct{}
+	stopOnce     sync.Once
+	startOnce    sync.Once
+	clientCtx    context.Context
+	cancelClient context.CancelFunc
+	doneCh       chan struct{}
+	backoff      *Backoff
 
 	handshakeOnce sync.Once
 	handshakeDone chan struct{}
@@ -54,28 +68,51 @@ type MeshClient struct {
 	remoteSequence int64
 
 	sessionID     runtimeidentity.RuntimeSessionID
+	sessionMu     sync.RWMutex
 	connectionGen int64
 
-	credentialStore *CredentialStore
+	credentialStore atomic.Pointer[CredentialStore]
+	taskLeaseMu     sync.Mutex
+	taskLeases      map[string]chan protocol.TaskLeaseAckPayload
+}
+
+func (c *MeshClient) sessionIdentity() runtimeidentity.RuntimeSessionID {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.sessionID
+}
+func (c *MeshClient) sessionGeneration() int64 {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.connectionGen
 }
 
 func NewMeshClient(conf MeshClientConfig) *MeshClient {
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+	if conf.TLSConfig != nil {
+		tlsConfig = conf.TLSConfig.Clone()
+	}
+	clientCtx, cancelClient := context.WithCancel(context.Background())
 	return &MeshClient{
 		conf: conf,
 		dialer: &websocket.Dialer{
 			HandshakeTimeout: meshprotocol.HelloTimeoutSeconds * time.Second,
-			TLSClientConfig:  &tls.Config{},
+			TLSClientConfig:  tlsConfig,
 			Proxy:            http.ProxyFromEnvironment,
 		},
 		state:         NewConnectionManager(),
 		stopCh:        make(chan struct{}),
+		clientCtx:     clientCtx,
+		cancelClient:  cancelClient,
+		doneCh:        make(chan struct{}),
 		backoff:       NewBackoff(),
 		handshakeDone: make(chan struct{}),
+		taskLeases:    make(map[string]chan protocol.TaskLeaseAckPayload),
 	}
 }
 
 func (c *MeshClient) SetCredentialStore(store *CredentialStore) {
-	c.credentialStore = store
+	c.credentialStore.Store(store)
 }
 
 func (c *MeshClient) SetTaskWorker(w TaskWorkerIface) {
@@ -83,11 +120,50 @@ func (c *MeshClient) SetTaskWorker(w TaskWorkerIface) {
 }
 
 func (c *MeshClient) Start() {
-	go c.runLoop()
+	c.startOnce.Do(func() {
+		if c.conf.Credential != "" && c.conf.Identity != nil && c.conf.SpaceID != "" {
+			c.setState(StateConnecting)
+		}
+		go c.runLoop()
+	})
 }
 
 func (c *MeshClient) Stop() {
-	close(c.stopCh)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+		c.cancelClient()
+		c.closeSocket(websocket.CloseGoingAway, "stopped")
+	})
+}
+
+func (c *MeshClient) WaitReady(ctx context.Context) error {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		state := c.State()
+		if state == StateReady {
+			return nil
+		}
+		if state == StateRevoked || state == StateStopped {
+			return fmt.Errorf("设备通道不可用: %s", state)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.stopCh:
+			return fmt.Errorf("设备通道已停止")
+		case <-ticker.C:
+		}
+	}
+}
+
+func (c *MeshClient) WaitStopped(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.doneCh:
+		return nil
+	}
 }
 
 func (c *MeshClient) State() AgentState {
@@ -95,6 +171,15 @@ func (c *MeshClient) State() AgentState {
 }
 
 func (c *MeshClient) runLoop() {
+	defer close(c.doneCh)
+	defer func() {
+		if worker, ok := c.conf.TaskWorker.(interface{ CancelAllTasks() }); ok {
+			worker.CancelAllTasks()
+		}
+		if c.State() != StateRevoked {
+			c.setState(StateStopped)
+		}
+	}()
 	for {
 		select {
 		case <-c.stopCh:
@@ -105,7 +190,6 @@ func (c *MeshClient) runLoop() {
 		}
 
 		if c.state.Get() == StateRevoked {
-			c.setState(StateStopped)
 			return
 		}
 
@@ -141,9 +225,33 @@ func (c *MeshClient) connectAndServe() error {
 	wsURL := c.wsURL()
 	header := http.Header{}
 	header.Set("Authorization", "AmitiaDevice "+c.conf.Credential)
+	if c.conf.SignRequest != nil {
+		request, err := http.NewRequestWithContext(c.clientCtx, http.MethodGet, wsURL, nil)
+		if err != nil {
+			return err
+		}
+		request.Header = header
+		if err := c.conf.SignRequest(request, c.conf.SpaceID.String()); err != nil {
+			return err
+		}
+	}
 
-	conn, _, err := c.dialer.DialContext(context.Background(), wsURL, header)
+	conn, response, err := c.dialer.DialContext(c.clientCtx, wsURL, header)
 	if err != nil {
+		if response != nil && response.Body != nil {
+			body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+			_ = response.Body.Close()
+			var denied struct {
+				Code string `json:"code"`
+			}
+			if response.StatusCode == http.StatusUnauthorized && json.Unmarshal(body, &denied) == nil {
+				switch denied.Code {
+				case "mesh.credential_revoked", "mesh.credential_expired", "mesh.credential_invalid", "mesh.device_not_trusted", "mesh.identity_proof_invalid", "mesh.identity_mismatch":
+					c.setState(StateRevoked)
+					c.cancelClient()
+				}
+			}
+		}
 		return fmt.Errorf("dial: %w", err)
 	}
 
@@ -152,18 +260,26 @@ func (c *MeshClient) connectAndServe() error {
 	c.mu.Unlock()
 
 	defer func() {
+		if c.State() == StateReady {
+			c.setState(StateDegraded)
+		}
 		if dispatcher, ok := c.conf.RuntimeDispatcher.(RuntimeDisconnectDispatcher); ok && dispatcher != nil {
 			dispatcher.CancelAllInvocations("device mesh disconnected")
 		}
-		gen := c.connectionGen
+		if worker, ok := c.conf.TaskWorker.(interface{ CancelAllTasks() }); ok {
+			worker.CancelAllTasks()
+		}
+		gen := c.sessionGeneration()
 		c.closeSocketWithGen(websocket.CloseGoingAway, "", gen)
 	}()
 
 	c.handshakeOnce = sync.Once{}
 	c.handshakeDone = make(chan struct{})
 	c.handshakeErr = nil
+	c.seqMu.Lock()
 	c.localSequence = 0
 	c.remoteSequence = 0
+	c.seqMu.Unlock()
 
 	c.setState(StateHandshaking)
 	if err := c.sendHello(); err != nil {
@@ -171,15 +287,21 @@ func (c *MeshClient) connectAndServe() error {
 		return err
 	}
 
-	select {
-	case <-c.handshakeDone:
-		if c.handshakeErr != nil {
-			return c.handshakeErr
-		}
-	case <-c.stopCh:
-		return nil
-	case <-time.After(meshprotocol.HelloTimeoutSeconds * time.Second):
-		return fmt.Errorf("handshake timeout: no HelloAck received")
+	conn.SetReadLimit(meshprotocol.MaxMessageSizeBytes)
+	if err := conn.SetReadDeadline(time.Now().Add(meshprotocol.HelloTimeoutSeconds * time.Second)); err != nil {
+		return err
+	}
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		return fmt.Errorf("握手确认读取失败: %w", err)
+	}
+	var acknowledgement protocol.Envelope
+	if err := json.Unmarshal(data, &acknowledgement); err != nil || !acknowledgement.VerifyPayloadHash() || acknowledgement.Protocol != meshprotocol.ProtocolName || acknowledgement.EnvelopeVersion != meshprotocol.EnvelopeVersion || acknowledgement.PayloadSchemaVersion != 1 || acknowledgement.MessageType != protocol.MessageTypeHelloAck || acknowledgement.SpaceID != c.conf.SpaceID || acknowledgement.DeviceID != c.conf.Identity.DeviceID || acknowledgement.RuntimeID != c.conf.Identity.RuntimeID || acknowledgement.ConnectionGeneration < 1 {
+		return fmt.Errorf("设备握手确认身份无效")
+	}
+	c.handleHelloAck(&acknowledgement)
+	if c.handshakeErr != nil {
+		return c.handshakeErr
 	}
 
 	c.setState(StateHelloAck)
@@ -187,7 +309,7 @@ func (c *MeshClient) connectAndServe() error {
 	c.setState(StateReady)
 	c.backoff.Reset()
 
-	return c.readLoop()
+	return c.readLoop(conn)
 }
 
 func (c *MeshClient) completeHandshake(err error) {
@@ -255,8 +377,6 @@ func (c *MeshClient) sendHello() error {
 		return err
 	}
 
-	seq := c.nextLocalSequence()
-
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -267,7 +387,6 @@ func (c *MeshClient) sendHello() error {
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     lastSessionID,
 		ConnectionGeneration: lastGen,
-		Sequence:             seq,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -277,37 +396,48 @@ func (c *MeshClient) sendHello() error {
 	return c.writeEnvelope(env)
 }
 
-func (c *MeshClient) nextLocalSequence() int64 {
-	c.seqMu.Lock()
-	defer c.seqMu.Unlock()
-	c.localSequence++
-	return c.localSequence
-}
-
-func (c *MeshClient) readLoop() error {
-	c.conn.SetReadLimit(meshprotocol.MaxMessageSizeBytes)
-	c.conn.SetPongHandler(func(_ string) error {
-		c.conn.SetReadDeadline(time.Now().Add(meshprotocol.ReadDeadlineSeconds * time.Second))
+func (c *MeshClient) readLoop(conn *websocket.Conn) error {
+	conn.SetReadLimit(meshprotocol.MaxMessageSizeBytes)
+	conn.SetPongHandler(func(_ string) error {
+		conn.SetReadDeadline(time.Now().Add(meshprotocol.ReadDeadlineSeconds * time.Second))
 		return nil
 	})
 
 	heartbeatTicker := time.NewTicker(meshprotocol.HeartbeatInterval * time.Second)
 	defer heartbeatTicker.Stop()
+	heartbeatDone := make(chan struct{})
+	defer close(heartbeatDone)
+	go func() {
+		for {
+			select {
+			case <-heartbeatDone:
+				return
+			case <-c.stopCh:
+				return
+			case <-heartbeatTicker.C:
+				if err := c.sendPing(); err != nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
+	}()
 
 	for {
 		select {
 		case <-c.stopCh:
 			return nil
-		case <-heartbeatTicker.C:
-			if err := c.sendPing(); err != nil {
-				return fmt.Errorf("ping: %w", err)
-			}
 		default:
 		}
 
-		c.conn.SetReadDeadline(time.Now().Add(time.Duration(meshprotocol.ReadDeadlineSeconds) * time.Second))
-		_, data, err := c.conn.ReadMessage()
+		conn.SetReadDeadline(time.Now().Add(time.Duration(meshprotocol.ReadDeadlineSeconds) * time.Second))
+		_, data, err := conn.ReadMessage()
 		if err != nil {
+			if websocket.IsCloseError(err, 4003) {
+				c.setState(StateRevoked)
+				c.cancelClient()
+				return nil
+			}
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
 				return fmt.Errorf("read: %w", err)
 			}
@@ -326,14 +456,18 @@ func (c *MeshClient) readLoop() error {
 		if !env.VerifyPayloadHash() {
 			continue
 		}
+		if env.Protocol != meshprotocol.ProtocolName || env.EnvelopeVersion != meshprotocol.EnvelopeVersion || env.PayloadSchemaVersion != 1 || env.SpaceID != c.conf.SpaceID || env.DeviceID != c.conf.Identity.DeviceID || env.RuntimeID != c.conf.Identity.RuntimeID || env.RuntimeSessionID != c.sessionIdentity() || env.ConnectionGeneration != c.sessionGeneration() || env.Sequence < 1 || env.MessageType == protocol.MessageTypeHelloAck {
+			return fmt.Errorf("设备通道收到身份、协议或会话版本不一致的消息")
+		}
 
-		if env.MessageType != protocol.MessageTypeHelloAck {
-			if env.Sequence > 0 {
-				if env.Sequence <= c.remoteSequence {
-					continue
-				}
-				c.remoteSequence = env.Sequence
-			}
+		c.seqMu.Lock()
+		accepted := env.Sequence > c.remoteSequence
+		if accepted {
+			c.remoteSequence = env.Sequence
+		}
+		c.seqMu.Unlock()
+		if !accepted {
+			continue
 		}
 
 		switch env.MessageType {
@@ -352,6 +486,8 @@ func (c *MeshClient) readLoop() error {
 			c.sendUnsupportedCommand(&env)
 		case protocol.MessageTypeTaskDispatch:
 			c.handleTaskDispatch(&env)
+		case protocol.MessageTypeTaskLeaseAck:
+			c.handleTaskLeaseAck(&env)
 		case protocol.MessageTypeTaskCancel:
 			c.handleTaskCancel(&env)
 		}
@@ -370,23 +506,28 @@ func (c *MeshClient) handleHelloAck(env *protocol.Envelope) {
 		c.setState(StateBackoff)
 		return
 	}
+	if ack.SessionID == "" || (ack.ResumeMode != protocol.ResumeModeFresh && ack.ResumeMode != protocol.ResumeModeResume && ack.ResumeMode != protocol.ResumeModeFull) {
+		c.completeHandshake(fmt.Errorf("握手会话或恢复模式无效"))
+		return
+	}
+	if env.RuntimeSessionID != "" && env.RuntimeSessionID != ack.SessionID {
+		c.completeHandshake(fmt.Errorf("握手确认中的会话身份不一致"))
+		return
+	}
 
 	if env.Sequence < 1 {
 		c.completeHandshake(fmt.Errorf("invalid remote sequence: %d", env.Sequence))
 		return
 	}
+	c.seqMu.Lock()
 	c.remoteSequence = int64(env.Sequence)
+	c.seqMu.Unlock()
 
 	if ack.ResumeMode == protocol.ResumeModeFull {
-		c.conf.Cursor = &SessionCursor{
-			ConnectionGeneration: env.ConnectionGeneration,
-			RuntimeSessionID:     ack.SessionID,
-		}
-		c.sessionID = ack.SessionID
-		c.connectionGen = env.ConnectionGeneration
+		c.conf.Cursor = &SessionCursor{}
 		c.setState(StateDegraded)
 		c.persistCursor()
-		c.completeHandshake(nil)
+		c.completeHandshake(fmt.Errorf("设备游标需要重置，将建立全新会话；不会重放旧动作"))
 		return
 	}
 
@@ -399,18 +540,21 @@ func (c *MeshClient) handleHelloAck(env *protocol.Envelope) {
 		c.conf.Cursor.RuntimeSessionID = ack.SessionID
 		c.conf.Cursor.ConnectionGeneration = env.ConnectionGeneration
 	}
+	c.sessionMu.Lock()
 	c.sessionID = ack.SessionID
 	c.connectionGen = env.ConnectionGeneration
+	c.sessionMu.Unlock()
 
 	c.persistCursor()
 	c.completeHandshake(nil)
 }
 
 func (c *MeshClient) persistCursor() {
-	if c.credentialStore == nil || c.conf.Cursor == nil {
+	store := c.credentialStore.Load()
+	if store == nil || c.conf.Cursor == nil {
 		return
 	}
-	if err := c.credentialStore.SaveCursor(c.conf.Cursor); err != nil {
+	if err := store.SaveCursor(c.conf.Cursor); err != nil {
 		log.Printf("devicemesh: agent: save cursor failed: %v", err)
 	}
 }
@@ -428,8 +572,6 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 		return
 	}
 
-	seq := c.nextLocalSequence()
-
 	pongEnv := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -438,9 +580,8 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     c.sessionIdentity(),
+		ConnectionGeneration: c.sessionGeneration(),
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -458,16 +599,14 @@ func (c *MeshClient) handleError(env *protocol.Envelope) {
 		return
 	}
 
-	if env.Sequence > 0 {
-		if env.Sequence <= c.remoteSequence {
-			return
-		}
-		c.remoteSequence = env.Sequence
-	}
-
 	switch errPayload.Code {
 	case "mesh.credential_revoked", "mesh.credential_expired":
 		c.setState(StateRevoked)
+		c.cancelClient()
+		if worker, ok := c.conf.TaskWorker.(interface{ CancelAllTasks() }); ok {
+			worker.CancelAllTasks()
+		}
+		c.closeSocket(websocket.ClosePolicyViolation, "credential unavailable")
 	case "mesh.session_superseded":
 		c.closeSocketGen(websocket.CloseNormalClosure, "superseded", env.ConnectionGeneration)
 	case "mesh.cursor_reset_required":
@@ -484,8 +623,6 @@ func (c *MeshClient) sendPing() error {
 		return err
 	}
 
-	seq := c.nextLocalSequence()
-
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -494,9 +631,8 @@ func (c *MeshClient) sendPing() error {
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     c.sessionIdentity(),
+		ConnectionGeneration: c.sessionGeneration(),
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -527,8 +663,8 @@ func (c *MeshClient) handleRuntimeInvoke(env *protocol.Envelope) {
 	if err := json.Unmarshal(env.Payload, &invoke); err != nil {
 		c.sendRuntimeError(&protocol.RuntimeErrorPayload{
 			InvocationID:         "",
-			RuntimeSessionID:     c.sessionID,
-			ConnectionGeneration: c.connectionGen,
+			RuntimeSessionID:     c.sessionIdentity(),
+			ConnectionGeneration: c.sessionGeneration(),
 			DeviceID:             c.conf.Identity.DeviceID,
 			RuntimeID:            c.conf.Identity.RuntimeID,
 			ErrorCode:            "invalid_invoke_payload",
@@ -542,15 +678,24 @@ func (c *MeshClient) handleRuntimeInvoke(env *protocol.Envelope) {
 	go func() {
 		result, err := c.executeRuntimeInvoke(invoke)
 		if err != nil {
+			code := "invoke_execution_failed"
+			retryable := invoke.Handler == "coordination.data"
+			if errors.Is(err, executionjournal.ErrUncertain) {
+				code = "device_execution_unknown"
+				retryable = false
+			} else if ownedCode := coordination.ProtocolErrorCode(err); ownedCode != "" {
+				code = ownedCode
+				retryable = false
+			}
 			c.sendRuntimeError(&protocol.RuntimeErrorPayload{
 				InvocationID:         invoke.InvocationID,
-				RuntimeSessionID:     c.sessionID,
-				ConnectionGeneration: c.connectionGen,
+				RuntimeSessionID:     invoke.RuntimeSessionID,
+				ConnectionGeneration: invoke.ConnectionGeneration,
 				DeviceID:             c.conf.Identity.DeviceID,
 				RuntimeID:            c.conf.Identity.RuntimeID,
-				ErrorCode:            "invoke_execution_failed",
+				ErrorCode:            code,
 				Message:              err.Error(),
-				Retryable:            true,
+				Retryable:            retryable,
 				IdempotencyKey:       invoke.IdempotencyKey,
 				FencingToken:         invoke.FencingToken,
 				FailedAt:             time.Now().UTC(),
@@ -578,11 +723,71 @@ func (c *MeshClient) handleRuntimeCancel(env *protocol.Envelope) {
 }
 
 func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	if invoke.Handler != "coordination.data" && len(invoke.OwnedExecutionScope) > 0 && c.conf.ExecutionJournal == nil {
+		return nil, fmt.Errorf("设备缺少持久化工具执行记录")
+	}
+	if invoke.InvocationID == "" || len(invoke.InvocationID) > 512 || invoke.SpaceID != c.conf.SpaceID || invoke.DeviceID != c.conf.Identity.DeviceID || invoke.RuntimeID != c.conf.Identity.RuntimeID || invoke.RuntimeSessionID != c.sessionIdentity() || invoke.ConnectionGeneration != c.sessionGeneration() || c.State() != StateReady {
+		return nil, fmt.Errorf("设备调用身份或会话已失效")
+	}
 	handler := c.resolveHandler(invoke.Handler)
 	if handler == nil {
 		return nil, fmt.Errorf("unsupported handler: %s", invoke.Handler)
 	}
-	return handler(invoke)
+	run := func() (*protocol.RuntimeResultPayload, error) {
+		if c.State() != StateReady || invoke.RuntimeSessionID != c.sessionIdentity() || invoke.ConnectionGeneration != c.sessionGeneration() {
+			return nil, fmt.Errorf("设备调用执行前会话已失效")
+		}
+		return handler(invoke)
+	}
+	var result *protocol.RuntimeResultPayload
+	var err error
+	execute := func(current context.Context) (*protocol.RuntimeResultPayload, error) {
+		if deadline, ok := current.Deadline(); ok {
+			remaining := time.Until(deadline).Milliseconds()
+			if remaining <= 0 {
+				return nil, context.Cause(current)
+			}
+			if invoke.DeadlineMs <= 0 || remaining < invoke.DeadlineMs {
+				invoke.DeadlineMs = remaining
+			}
+		}
+		stop := context.AfterFunc(current, func() {
+			if dispatcher, ok := c.conf.RuntimeDispatcher.(RuntimeCancelDispatcher); ok {
+				dispatcher.CancelInvocation(invoke.InvocationID)
+			}
+		})
+		defer stop()
+		if c.conf.ExecutionJournal != nil && invoke.Handler != "coordination.data" {
+			return c.conf.ExecutionJournal.Execute(current, invoke, run)
+		}
+		return run()
+	}
+	if c.conf.ExecutionGuard != nil && invoke.Handler != "coordination.data" {
+		result, err = c.conf.ExecutionGuard(c.clientCtx, invoke, execute)
+	} else if len(invoke.OwnedExecutionScope) != 0 || invoke.AuthorityCallID != "" {
+		if invoke.Handler != "coordination.data" {
+			return nil, fmt.Errorf("设备缺少工具授权校验端口")
+		}
+		result, err = execute(c.clientCtx)
+	} else {
+		result, err = execute(c.clientCtx)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if c.State() != StateReady || invoke.RuntimeSessionID != c.sessionIdentity() || invoke.ConnectionGeneration != c.sessionGeneration() {
+		return nil, fmt.Errorf("设备调用结束时会话已失效")
+	}
+	if result != nil {
+		copyResult := *result
+		result = &copyResult
+		result.InvocationID = invoke.InvocationID
+		result.DeviceID = invoke.DeviceID
+		result.RuntimeID = invoke.RuntimeID
+		result.RuntimeSessionID = invoke.RuntimeSessionID
+		result.ConnectionGeneration = invoke.ConnectionGeneration
+	}
+	return result, nil
 }
 
 func (c *MeshClient) resolveHandler(handlerName string) RuntimeInvokeHandler {
@@ -595,8 +800,6 @@ func (c *MeshClient) sendRuntimeResult(result *protocol.RuntimeResultPayload) {
 		return
 	}
 
-	seq := c.nextLocalSequence()
-
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -605,9 +808,8 @@ func (c *MeshClient) sendRuntimeResult(result *protocol.RuntimeResultPayload) {
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     result.RuntimeSessionID,
+		ConnectionGeneration: result.ConnectionGeneration,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -625,8 +827,6 @@ func (c *MeshClient) sendRuntimeError(errPayload *protocol.RuntimeErrorPayload) 
 		return
 	}
 
-	seq := c.nextLocalSequence()
-
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -635,9 +835,8 @@ func (c *MeshClient) sendRuntimeError(errPayload *protocol.RuntimeErrorPayload) 
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     errPayload.RuntimeSessionID,
+		ConnectionGeneration: errPayload.ConnectionGeneration,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -661,16 +860,25 @@ func (c *MeshClient) handleTaskDispatch(env *protocol.Envelope) {
 		return
 	}
 
-	if err := c.conf.TaskWorker.ExecuteTask(context.Background(), dispatch); err != nil {
-		c.sendTaskError(env.MessageID, dispatch.TaskRunID, "task_execution_failed", err.Error())
+	if dispatch.DeviceID != c.conf.Identity.DeviceID || dispatch.RuntimeID != c.conf.Identity.RuntimeID || dispatch.RuntimeSessionID != env.RuntimeSessionID || dispatch.ConnectionGeneration != env.ConnectionGeneration || dispatch.TaskRunID == "" || dispatch.AttemptID == "" || dispatch.LeaseID == "" {
+		c.sendTaskError(env.MessageID, dispatch.TaskRunID, "task_identity_mismatch", "任务身份或租约无效")
 		return
 	}
+	messageID := env.MessageID
+	go func() {
+		if err := c.conf.TaskWorker.ExecuteTask(c.clientCtx, dispatch); err != nil {
+			c.sendTaskError(messageID, dispatch.TaskRunID, "task_execution_failed", err.Error())
+		}
+	}()
 }
 
 func (c *MeshClient) handleTaskCancel(env *protocol.Envelope) {
 	var cancel protocol.TaskCancelPayload
 	if err := json.Unmarshal(env.Payload, &cancel); err != nil {
 		c.sendTaskError(env.MessageID, cancel.TaskRunID, "invalid_cancel_payload", err.Error())
+		return
+	}
+	if cancel.RuntimeSessionID != env.RuntimeSessionID || cancel.ConnectionGeneration != env.ConnectionGeneration {
 		return
 	}
 
@@ -683,15 +891,25 @@ func (c *MeshClient) handleTaskCancel(env *protocol.Envelope) {
 	}
 }
 
-func (c *MeshClient) sendTaskClaim(taskRunID, attemptID, leaseID, workerID string, leaseDurationMs int64) {
+func (c *MeshClient) taskSource(source []protocol.TaskDispatchPayload) (runtimeidentity.RuntimeSessionID, int64) {
+	if len(source) > 0 {
+		return source[0].RuntimeSessionID, source[0].ConnectionGeneration
+	}
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.sessionID, c.connectionGen
+}
+
+func (c *MeshClient) sendTaskClaim(taskRunID, attemptID, leaseID, workerID string, leaseDurationMs int64, source ...protocol.TaskDispatchPayload) {
+	session, generation := c.taskSource(source)
 	claim := protocol.TaskClaimPayload{
 		TaskRunID:            taskRunID,
 		AttemptID:            attemptID,
 		LeaseID:              leaseID,
 		WorkerID:             workerID,
 		LeaseDurationMs:      leaseDurationMs,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
+		RuntimeSessionID:     session,
+		ConnectionGeneration: generation,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		ClaimedAt:            time.Now().UTC(),
@@ -699,7 +917,8 @@ func (c *MeshClient) sendTaskClaim(taskRunID, attemptID, leaseID, workerID strin
 	c.sendTaskEnvelope(protocol.MessageTypeTaskClaim, claim)
 }
 
-func (c *MeshClient) sendTaskComplete(taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) {
+func (c *MeshClient) sendTaskComplete(taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string, source ...protocol.TaskDispatchPayload) {
+	session, generation := c.taskSource(source)
 	complete := protocol.TaskCompletePayload{
 		TaskRunID:            taskRunID,
 		AttemptID:            attemptID,
@@ -707,8 +926,8 @@ func (c *MeshClient) sendTaskComplete(taskRunID, attemptID, leaseID string, succ
 		Success:              success,
 		Result:               result,
 		Error:                errMsg,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
+		RuntimeSessionID:     session,
+		ConnectionGeneration: generation,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		CompletedAt:          time.Now().UTC(),
@@ -716,7 +935,8 @@ func (c *MeshClient) sendTaskComplete(taskRunID, attemptID, leaseID string, succ
 	c.sendTaskEnvelope(protocol.MessageTypeTaskComplete, complete)
 }
 
-func (c *MeshClient) sendTaskProgress(taskRunID, attemptID, leaseID string, seq int64, current, total, percentage *float64, stage, message string) {
+func (c *MeshClient) sendTaskProgress(taskRunID, attemptID, leaseID string, seq int64, current, total, percentage *float64, stage, message string, source ...protocol.TaskDispatchPayload) {
+	session, generation := c.taskSource(source)
 	progress := protocol.TaskProgressPayload{
 		TaskRunID:            taskRunID,
 		AttemptID:            attemptID,
@@ -727,8 +947,8 @@ func (c *MeshClient) sendTaskProgress(taskRunID, attemptID, leaseID string, seq 
 		Percentage:           percentage,
 		Stage:                stage,
 		Message:              message,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
+		RuntimeSessionID:     session,
+		ConnectionGeneration: generation,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		ReportedAt:           time.Now().UTC(),
@@ -736,14 +956,23 @@ func (c *MeshClient) sendTaskProgress(taskRunID, attemptID, leaseID string, seq 
 	c.sendTaskEnvelope(protocol.MessageTypeTaskProgress, progress)
 }
 
-func (c *MeshClient) sendTaskHeartbeat(taskRunID, attemptID, leaseID string, seq int64) {
+func (c *MeshClient) sendOwnedTaskComplete(dispatch protocol.TaskDispatchPayload, outcome protocol.OwnedTaskExecutionOutcome) {
+	c.sendTaskEnvelope(protocol.MessageTypeTaskComplete, protocol.TaskCompletePayload{TaskRunID: dispatch.TaskRunID, AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID, Success: true, Result: outcome.Result, ResultArtifactID: outcome.ResultArtifactID, RuntimeSessionID: dispatch.RuntimeSessionID, ConnectionGeneration: dispatch.ConnectionGeneration, DeviceID: c.conf.Identity.DeviceID, RuntimeID: c.conf.Identity.RuntimeID, CompletedAt: time.Now().UTC()})
+}
+
+func (c *MeshClient) sendOwnedTaskUnknown(dispatch protocol.TaskDispatchPayload) {
+	c.sendTaskEnvelope(protocol.MessageTypeTaskComplete, protocol.TaskCompletePayload{TaskRunID: dispatch.TaskRunID, AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID, OutcomeUnknown: true, RuntimeSessionID: dispatch.RuntimeSessionID, ConnectionGeneration: dispatch.ConnectionGeneration, DeviceID: c.conf.Identity.DeviceID, RuntimeID: c.conf.Identity.RuntimeID, CompletedAt: time.Now().UTC()})
+}
+
+func (c *MeshClient) sendTaskHeartbeat(taskRunID, attemptID, leaseID string, seq int64, source ...protocol.TaskDispatchPayload) {
+	session, generation := c.taskSource(source)
 	heartbeat := protocol.TaskHeartbeatPayload{
 		TaskRunID:            taskRunID,
 		AttemptID:            attemptID,
 		LeaseID:              leaseID,
 		Sequence:             seq,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
+		RuntimeSessionID:     session,
+		ConnectionGeneration: generation,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		ReportedAt:           time.Now().UTC(),
@@ -760,8 +989,8 @@ func (c *MeshClient) sendTaskCheckpoint(taskRunID, attemptID, leaseID, checkpoin
 		Version:              version,
 		Payload:              payload,
 		PayloadHash:          payloadHash,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
+		RuntimeSessionID:     c.sessionIdentity(),
+		ConnectionGeneration: c.sessionGeneration(),
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		CheckpointAt:         time.Now().UTC(),
@@ -770,12 +999,20 @@ func (c *MeshClient) sendTaskCheckpoint(taskRunID, attemptID, leaseID, checkpoin
 }
 
 func (c *MeshClient) sendTaskEnvelope(msgType protocol.MessageType, payload interface{}) {
+	if c.State() != StateReady {
+		return
+	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return
 	}
-
-	seq := c.nextLocalSequence()
+	var session struct {
+		RuntimeSessionID     runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
+		ConnectionGeneration int64                            `json:"connectionGeneration"`
+	}
+	if json.Unmarshal(payloadBytes, &session) != nil || session.RuntimeSessionID == "" || session.ConnectionGeneration < 1 {
+		return
+	}
 
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
@@ -785,9 +1022,8 @@ func (c *MeshClient) sendTaskEnvelope(msgType protocol.MessageType, payload inte
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     session.RuntimeSessionID,
+		ConnectionGeneration: session.ConnectionGeneration,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -800,7 +1036,6 @@ func (c *MeshClient) sendTaskEnvelope(msgType protocol.MessageType, payload inte
 }
 
 func (c *MeshClient) sendTaskError(messageID, taskRunID, code, message string) {
-	seq := c.nextLocalSequence()
 
 	errPayload := protocol.ErrorPayload{
 		Code:    code,
@@ -816,9 +1051,8 @@ func (c *MeshClient) sendTaskError(messageID, taskRunID, code, message string) {
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     c.sessionIdentity(),
+		ConnectionGeneration: c.sessionGeneration(),
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -857,12 +1091,15 @@ type CommandResult struct {
 }
 
 func (c *MeshClient) execStatusCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
+	c.seqMu.Lock()
+	localSequence, remoteSequence := c.localSequence, c.remoteSequence
+	c.seqMu.Unlock()
 	result := map[string]interface{}{
 		"state":            string(c.state.Get()),
-		"connectionGen":    c.connectionGen,
-		"localSequence":    c.localSequence,
-		"remoteSequence":   c.remoteSequence,
-		"runtimeSessionId": c.sessionID.String(),
+		"connectionGen":    c.sessionGeneration(),
+		"localSequence":    localSequence,
+		"remoteSequence":   remoteSequence,
+		"runtimeSessionId": c.sessionIdentity().String(),
 		"deviceId":         c.conf.Identity.DeviceID.String(),
 		"runtimeId":        c.conf.Identity.RuntimeID.String(),
 	}
@@ -882,14 +1119,12 @@ func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *Comman
 		CommandID:        result.CommandID,
 		CommandSequence:  result.CommandSequence,
 		Status:           "completed",
-		RuntimeSessionID: c.sessionID,
+		RuntimeSessionID: c.sessionIdentity(),
 		ReceivedAt:       time.Now().UTC(),
 	}
 
 	resultBytes, _ := json.Marshal(result.Result)
 	ack.PayloadHash = protocol.ComputePayloadHash(resultBytes)
-
-	seq := c.nextLocalSequence()
 
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
@@ -899,9 +1134,8 @@ func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *Comman
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     c.sessionIdentity(),
+		ConnectionGeneration: c.sessionGeneration(),
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(mustMarshal(ack)),
 		SentAt:               time.Now().UTC(),
@@ -914,7 +1148,6 @@ func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *Comman
 }
 
 func (c *MeshClient) sendCommandReject(env *protocol.Envelope, code, reason string) {
-	seq := c.nextLocalSequence()
 
 	errPayload := protocol.ErrorPayload{
 		Code:    code,
@@ -930,9 +1163,8 @@ func (c *MeshClient) sendCommandReject(env *protocol.Envelope, code, reason stri
 		SpaceID:              c.conf.SpaceID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     c.sessionID,
-		ConnectionGeneration: c.connectionGen,
-		Sequence:             seq,
+		RuntimeSessionID:     c.sessionIdentity(),
+		ConnectionGeneration: c.sessionGeneration(),
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -950,16 +1182,28 @@ func mustMarshal(v interface{}) json.RawMessage {
 }
 
 func (c *MeshClient) writeEnvelope(env protocol.Envelope) error {
-	data, err := json.Marshal(env)
-	if err != nil {
-		return err
-	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn == nil {
 		return fmt.Errorf("not connected")
 	}
+	if env.MessageType != protocol.MessageTypeHello {
+		c.sessionMu.RLock()
+		current := env.RuntimeSessionID == c.sessionID && env.ConnectionGeneration == c.connectionGen
+		c.sessionMu.RUnlock()
+		if !current {
+			return fmt.Errorf("执行会话已失效，迟到消息已拦截")
+		}
+	}
+	c.seqMu.Lock()
+	env.Sequence = c.localSequence + 1
+	data, err := json.Marshal(env)
+	if err != nil {
+		c.seqMu.Unlock()
+		return err
+	}
+	c.localSequence = env.Sequence
+	c.seqMu.Unlock()
 	return c.conn.WriteMessage(websocket.TextMessage, data)
 }
 
@@ -976,7 +1220,9 @@ func (c *MeshClient) closeSocket(code int, reason string) {
 }
 
 func (c *MeshClient) closeSocketWithGen(code int, reason string, gen int64) {
+	c.sessionMu.Lock()
 	c.connectionGen = gen
+	c.sessionMu.Unlock()
 	c.closeSocketGen(code, reason, gen)
 }
 

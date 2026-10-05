@@ -33,11 +33,26 @@ export interface DeviceMeshStatusResponse {
   lastConnectedAt: string;
   lastHeartbeatAt: string;
   lastErrorCode: string;
+  fingerprint?: string;
+  coreId?: string;
+  providerChangePending?: boolean;
+  successorCoreId?: string;
+  previousCoreId?: string;
+  providerChangeId?: string;
 }
 
 export interface DeviceMeshBootstrapRequest {
   cloudBaseUrl: string;
   bootstrapTicket: string;
+  fingerprint?: string;
+  coreId?: string;
+}
+
+export interface MeshPairingInput {
+  offerToken?: string;
+  setupCode?: string;
+  fingerprint?: string;
+  coreId?: string;
 }
 
 export interface DeviceMeshBootstrapResponse {
@@ -75,9 +90,22 @@ export interface CloudPairingStatusResponse {
 export interface CloudPairingClaimRequest extends CloudPairingDeviceIdentity {
   offerToken?: string;
   setupCode?: string;
+  proof?: DeviceIdentityProof;
+}
+
+export interface DeviceIdentityProof {
+  publicKey: string;
+  audience: string;
+  method: string;
+  path: string;
+  bodyHash: string;
+  issuedAt: number;
+  nonce: string;
+  signature: string;
 }
 
 export interface CloudPairingOfferResponse {
+	qrImage?: string;
   offerId: string;
   offerToken: string;
   qrPayload: string;

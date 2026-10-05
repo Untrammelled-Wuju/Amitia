@@ -2,7 +2,10 @@ package task_runtime
 
 import (
 	"context"
+	"fmt"
 	"time"
+
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
 type PauseTaskRequest struct {
@@ -37,6 +40,12 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 	if err != nil {
 		return NewTaskError(ErrTaskNotFound, err.Error())
 	}
+	guarded, finish, err := s.restoreTaskAuthority(ctx, current)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	ctx = guarded
 
 	def, err := s.store.GetTaskDefinition(ctx, current.TaskDefinitionID)
 	if err != nil {
@@ -65,11 +74,10 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 
 	now := time.Now().UTC()
 	pausedRun := cloneTaskRun(current)
-	pausedRun.Status = RunStatusPaused
+	pausedRun.Status = RunStatusPausing
 	reason := req.Reason
 	pausedRun.PauseReason = &reason
 	pausedRun.PauseRequestedAt = &now
-	pausedRun.PausedAt = &now
 	pausedRun.Revision = NextRevision(current.Revision)
 
 	if err := s.mutateTaskRun(ctx, taskMutationParams{
@@ -77,29 +85,69 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 		expected:   current.Status,
 		generation: current.Generation,
 		revision:   current.Revision,
-		eventType:  TaskEventPaused,
+		eventType:  TaskEventPausing,
 		eventMsg:   reason,
 	}); err != nil {
 		return err
 	}
 
 	s.mu.RLock()
-	host, ok := s.activeHosts[req.TaskRunID]
+	host := s.activeHosts[req.TaskRunID]
 	s.mu.RUnlock()
 
-	if ok {
-		statusNotify := make(chan string, 1)
-		cancelCh := host.CancelCh()
-		_ = cancelCh
-
-		select {
-		case statusNotify <- "pausing":
-		default:
-		}
-		_ = statusNotify
+	if host == nil {
+		return s.failPause(ctx, pausedRun, "任务执行进程不可用，暂停未确认")
 	}
+	pauseCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	version, err := host.Pause(pauseCtx)
+	if err != nil {
+		stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer stopCancel()
+		host.ForceStop()
+		select {
+		case <-host.Done():
+			return s.failPause(stopCtx, pausedRun, "任务进程暂停未确认")
+		case <-stopCtx.Done():
+			return NewTaskError(ErrTaskPauseInProgress, "任务进程停止尚未确认")
+		}
+	}
+	latest, err := s.store.GetTaskRun(ctx, req.TaskRunID)
+	if err != nil {
+		return err
+	}
+	cp, err := s.readTaskCheckpoint(ctx, latest)
+	if err != nil || cp == nil || cp.Version != version || cp.DefinitionHash != def.DefinitionHash || cp.InputHash != latest.InputHash || cp.PayloadHash != hashBytes(cp.Payload) {
+		return s.failPause(ctx, pausedRun, "暂停检查点未完成持久化确认")
+	}
+	if latest.Status != RunStatusPausing || latest.Generation != current.Generation || latest.ExecutionAttemptID != current.ExecutionAttemptID {
+		return NewTaskError(ErrTaskResumeStaleGeneration, "暂停期间任务执行已变化")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
+	finished := time.Now().UTC()
+	next := cloneTaskRun(latest)
+	next.Status, next.PausedAt = RunStatusPaused, &finished
+	next.Revision = NextRevision(latest.Revision)
+	return s.mutateTaskRun(ctx, taskMutationParams{next: next, expected: latest.Status, generation: latest.Generation, revision: latest.Revision, removeQ: true, eventType: TaskEventPaused, eventMsg: reason})
+}
 
-	return nil
+func (s *TaskRuntimeService) failPause(ctx context.Context, expected *TaskRun, message string) error {
+	current, err := s.store.GetTaskRun(ctx, expected.TaskRunID)
+	if err != nil {
+		return err
+	}
+	if current != nil && current.Status == RunStatusPausing && current.Generation == expected.Generation && current.ExecutionAttemptID == expected.ExecutionAttemptID {
+		next := cloneTaskRun(current)
+		next.Status = RunStatusRecoveryRequired
+		next.ErrorMessage = &message
+		next.Revision = NextRevision(current.Revision)
+		if err := s.mutateTaskRun(ctx, taskMutationParams{next: next, expected: current.Status, generation: current.Generation, revision: current.Revision, removeQ: true, eventType: TaskEventRecoveryRequired, eventMsg: message}); err != nil {
+			return err
+		}
+	}
+	return NewTaskError(ErrTaskPauseUnsupported, message)
 }
 
 func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskRequest) error {
@@ -124,46 +172,61 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 		req.ResumeKind = ResumeKindResume
 	}
 
+	if req.ResumeKind != ResumeKindResume && req.ResumeKind != ResumeKindResumeFrom {
+		return NewTaskError(ErrTaskResumeIncompatible, "恢复方式无效")
+	}
+	s.mu.RLock()
+	host := s.activeHosts[req.TaskRunID]
+	s.mu.RUnlock()
+	if host != nil {
+		return NewTaskError(ErrTaskPauseInProgress, "旧执行进程尚未完成清理")
+	}
+	def, err := s.store.GetTaskDefinition(ctx, current.TaskDefinitionID)
+	if err != nil {
+		return err
+	}
+	restored, finish, err := s.restoreTaskAuthority(ctx, current)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	cp, err := s.readTaskCheckpoint(restored, current)
+	if err != nil || cp == nil || current.CheckpointID == nil || cp.CheckpointID != *current.CheckpointID || cp.DefinitionHash != def.DefinitionHash || cp.InputHash != current.InputHash || cp.PayloadHash != hashBytes(cp.Payload) {
+		return NewTaskError(ErrTaskCheckpointIncompatible, "恢复检查点缺失或与任务不匹配")
+	}
+	_, owned := coordination.FromContext(restored)
+	if err := validateTaskDefinition(owned, current, def); err != nil {
+		return err
+	}
+	if err := coordination.ValidateCurrent(restored); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
-	nextStatus := RunStatusRunning
-	var failMsg string
-	if req.ResumeKind == ResumeKindResumeFrom {
-		if current.CheckpointID == nil || *current.CheckpointID == "" {
-			failMsg = "resume_from_checkpoint but no checkpoint available"
-			nextStatus = RunStatusFailed
-		} else {
-			cp, err := s.store.GetLatestCheckpoint(ctx, current.TaskRunID)
-			if err != nil || cp == nil {
-				failMsg = "resume_from_checkpoint but checkpoint not found"
-				nextStatus = RunStatusFailed
-			}
-		}
+	if current.DeadlineAt != nil && !current.DeadlineAt.After(now) {
+		return NewTaskError(ErrTaskResumeIncompatible, "任务执行期限已过")
 	}
-
 	resumedRun := cloneTaskRun(current)
-	resumedRun.Status = nextStatus
-	resumedRun.ResumedAt = &now
-	if failMsg != "" {
-		resumedRun.ErrorMessage = &failMsg
-	}
+	resumedRun.Status = RunStatusQueued
+	resumedRun.Generation++
+	resumedRun.ExecutionAttemptID = ""
+	resumedRun.RuntimeInstanceID = nil
+	resumedRun.ResumedAt, resumedRun.QueuedAt = &now, &now
 	resumedRun.Revision = NextRevision(current.Revision)
-
-	eventType := TaskEventResumed
-	eventMsg := ""
-	if failMsg != "" {
-		eventType = TaskEventFailed
-		eventMsg = failMsg
-	}
-	if err := s.mutateTaskRun(ctx, taskMutationParams{
-		next:       resumedRun,
-		expected:   current.Status,
-		generation: current.Generation,
-		revision:   current.Revision,
-		eventType:  eventType,
-		eventMsg:   eventMsg,
+	if err := s.store.WithinTaskTx(restored, func(txCtx context.Context) error {
+		ok, err := s.store.UpdateTaskRunCAS(txCtx, resumedRun, current.Status, current.Generation, current.Revision)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("恢复任务前执行状态已变化")
+		}
+		if err := s.queue.Enqueue(txCtx, resumedRun); err != nil {
+			return err
+		}
+		return s.publishTaskEvent(txCtx, TaskEventResumed, resumedRun, "", "")
 	}); err != nil {
 		return err
 	}
-
+	go s.tryDispatch()
 	return nil
 }

@@ -10,11 +10,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
@@ -219,6 +221,13 @@ func (s *TaskRuntimeService) Shutdown(ctx context.Context) {
 }
 
 func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest, def *TaskDefinition) (*EnqueueTaskResult, error) {
+	definitionFingerprint, err := taskDefinitionFingerprint(def)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateEnqueueAuthority(ctx, req, def); err != nil {
+		return nil, err
+	}
 	inputHash := hashBytes(req.Input)
 	runID := "tr-" + uuid.NewString()
 	now := time.Now().UTC()
@@ -244,30 +253,31 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 	}
 
 	run := &TaskRun{
-		TaskRunID:            runID,
-		OperationID:          req.OperationID,
-		InvocationID:         req.InvocationID,
-		TaskDefinitionID:     def.TaskID,
-		ExtensionID:          def.ExtensionID,
-		ModuleID:             def.ModuleID,
-		Status:               RunStatusQueued,
-		Priority:             req.Priority,
-		ExecutionPlacement:   placement,
-		Input:                req.Input,
-		InputHash:            inputHash,
-		TraceID:              req.TraceID,
-		CorrelationID:        req.CorrelationID,
-		CausationID:          req.CausationID,
-		Source:               req.Source,
-		ScopeSnapshotID:      req.ScopeSnapshotID,
-		PermissionSnapshotID: req.PermissionSnapshotID,
-		Attempt:              1,
-		MaxAttempts:          maxAttempts,
-		CreatedAt:            now,
-		QueuedAt:             &now,
-		DeadlineAt:           deadlineAt,
-		Generation:           1,
-		Revision:             1,
+		TaskRunID:             runID,
+		OperationID:           req.OperationID,
+		InvocationID:          req.InvocationID,
+		TaskDefinitionID:      def.TaskID,
+		DefinitionFingerprint: definitionFingerprint,
+		ExtensionID:           def.ExtensionID,
+		ModuleID:              def.ModuleID,
+		Status:                RunStatusQueued,
+		Priority:              req.Priority,
+		ExecutionPlacement:    placement,
+		Input:                 req.Input,
+		InputHash:             inputHash,
+		TraceID:               req.TraceID,
+		CorrelationID:         req.CorrelationID,
+		CausationID:           req.CausationID,
+		Source:                req.Source,
+		ScopeSnapshotID:       req.ScopeSnapshotID,
+		PermissionSnapshotID:  req.PermissionSnapshotID,
+		Attempt:               1,
+		MaxAttempts:           maxAttempts,
+		CreatedAt:             now,
+		QueuedAt:              &now,
+		DeadlineAt:            deadlineAt,
+		Generation:            1,
+		Revision:              1,
 	}
 
 	// Workflow and other trusted coordinators may already have resolved a
@@ -290,6 +300,15 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		}
 	}
 
+	if _, owned := coordination.FromContext(ctx); owned {
+		if s.config.OwnedInputs == nil {
+			return nil, NewTaskError(ErrTaskScopeDenied, "任务所有者输入端口不可用")
+		}
+		if err := s.config.OwnedInputs.SaveInput(ctx, run); err != nil {
+			return nil, err
+		}
+		run.Input = nil
+	}
 	if err := s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
 		if err := s.store.PutTaskRun(ctx, run); err != nil {
 			return fmt.Errorf("task_runtime: persist run: %w", err)
@@ -491,11 +510,36 @@ func (s *TaskRuntimeService) persistExecutionAttempt(
 
 func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	defer s.tryDispatch()
+	guarded, finish, authorityErr := s.restoreTaskAuthority(ctx, run)
+	if authorityErr != nil {
+		s.failRun(ctx, run, ErrTaskScopeDenied, authorityErr.Error())
+		return
+	}
+	defer finish()
+	ctx = guarded
 
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
 	if err != nil {
 		s.failRun(ctx, run, ErrTaskDefinitionInvalid, fmt.Sprintf("definition not found: %v", err))
 		return
+	}
+	_, owned := coordination.FromContext(ctx)
+	if err := validateTaskDefinition(owned, run, def); err != nil {
+		s.failRun(ctx, run, ErrTaskDefinitionInvalid, err.Error())
+		return
+	}
+	input := append(json.RawMessage(nil), run.Input...)
+	if owned {
+		ctx = s.guardOwnedTaskDefinition(ctx, run)
+		if s.config.OwnedInputs == nil {
+			s.failRun(ctx, run, ErrTaskScopeDenied, "任务所有者输入端口不可用")
+			return
+		}
+		input, err = s.config.OwnedInputs.Input(ctx, run)
+		if err != nil {
+			s.failRun(ctx, run, ErrTaskScopeDenied, err.Error())
+			return
+		}
 	}
 
 	attemptID := NewTaskExecutionAttemptID()
@@ -546,8 +590,15 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 			return
 		}
 
-		outcome := s.runRemoteExecution(ctx, run, def, executor)
+		remoteRun := CloneTaskRun(run)
+		remoteRun.Input = input
+		outcome := s.runRemoteExecution(ctx, remoteRun, def, executor)
 		s.applyExecutionOutcome(ctx, run, def, outcome)
+		if _, owned := coordination.FromContext(ctx); owned && !run.Status.IsTerminal() {
+			if err := s.waitOwnedRemoteExecution(ctx, run, executor); err != nil {
+				log.Printf("task_runtime: owned remote task requires result confirmation: %s", run.TaskRunID)
+			}
+		}
 		return
 	}
 
@@ -592,7 +643,12 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 
 	var checkpointPayload json.RawMessage
 	if run.CheckpointID != nil && *run.CheckpointID != "" {
-		cp, err := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
+		cp, err := s.readTaskCheckpoint(ctx, run)
+		if err != nil || cp == nil || cp.CheckpointID != *run.CheckpointID || cp.DefinitionHash != def.DefinitionHash || cp.InputHash != run.InputHash || cp.PayloadHash != hashBytes(cp.Payload) {
+			s.failRun(ctx, run, ErrTaskCheckpointIncompatible, "执行检查点缺失或与任务不匹配")
+			s.cleanupWorkspace(run.TaskRunID, workspace)
+			return
+		}
 		if err == nil && cp != nil {
 			checkpointPayload = cp.Payload
 			resumingRun := cloneTaskRun(startingRun)
@@ -619,7 +675,7 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	runningRun.Status = RunStatusRunning
 	runningRun.Revision = NextRevision(run.Revision)
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, runningRun, RunStatusResuming, run.Generation, run.Revision)
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, runningRun, run.Status, run.Generation, run.Revision)
 		if casErr != nil {
 			return fmt.Errorf("task_runtime: running cas: %w", casErr)
 		}
@@ -631,9 +687,12 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("persist running: %v", err))
 		return
 	}
-	run.Status = RunStatusRunning
+	CopyCommittedTaskRun(run, runningRun)
 
 	instanceID := "ri-" + uuid.NewString()
+	if run.RuntimeInstanceID != nil && *run.RuntimeInstanceID != "" {
+		instanceID = *run.RuntimeInstanceID
+	}
 
 	nodeEnv, err := s.config.NodeEnvironmentResolver.Resolve(ctx)
 	if err != nil {
@@ -649,7 +708,19 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		return
 	}
 
+	if s.config.EntryResolver == nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, "任务入口解析器不可用")
+		s.cleanupWorkspace(run.TaskRunID, workspace)
+		return
+	}
+	entryPath, err := s.config.EntryResolver(ctx, def)
+	if err != nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, err.Error())
+		s.cleanupWorkspace(run.TaskRunID, workspace)
+		return
+	}
 	hostCfg := ProcessHostConfig{
+		Generation:  run.Generation,
 		InstanceID:  instanceID,
 		TaskRunID:   run.TaskRunID,
 		ExtensionID: run.ExtensionID,
@@ -658,7 +729,8 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		NodePath:    nodeEnv.NodeBinary,
 		HostPath:    hostArtifact.EntryPath,
 		WorkDir:     workspace,
-		EntryPath:   def.Entry,
+		EntryPath:   entryPath,
+		EntryHash:   def.EntryHash,
 	}
 
 	host, err := NewTaskProcessHost(hostCfg)
@@ -673,22 +745,71 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	s.mu.Unlock()
 
 	defer func() {
-		s.mu.Lock()
-		delete(s.activeHosts, run.TaskRunID)
-		s.mu.Unlock()
 		finalRun, _ := s.store.GetTaskRun(ctx, run.TaskRunID)
-		if finalRun != nil && (finalRun.Status == RunStatusPaused || finalRun.Status == RunStatusPausing) {
-			return
+		if finalRun == nil || finalRun.Status != RunStatusPaused && finalRun.Status != RunStatusPausing {
+			s.cleanupWorkspace(run.TaskRunID, workspace)
 		}
-		s.cleanupWorkspace(run.TaskRunID, workspace)
+		s.mu.Lock()
+		if s.activeHosts[run.TaskRunID] == host {
+			delete(s.activeHosts, run.TaskRunID)
+		}
+		s.mu.Unlock()
 	}()
 
+	previousProgress, err := s.store.GetProgress(ctx, run.TaskRunID)
+	if err != nil {
+		host.ForceStop()
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, "任务进度版本不可用")
+		return
+	}
+	var progressBase int64
+	if previousProgress != nil {
+		progressBase = previousProgress.Sequence
+	}
 	callbacks := ProcessCallbacks{
+		OnRequest: func(requestCtx context.Context, requestID, method string, params json.RawMessage) (json.RawMessage, error) {
+			if _, owned := coordination.FromContext(requestCtx); !owned {
+				return nil, NewTaskError(ErrTaskScopeDenied, "任务存储缺少数据所有者执行端口")
+			}
+			live, err := s.store.GetTaskRun(requestCtx, run.TaskRunID)
+			if err != nil || live == nil || live.Generation != run.Generation || live.ExecutionAttemptID != run.ExecutionAttemptID || live.Status != RunStatusRunning && live.Status != RunStatusCheckpointing {
+				return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "任务存储所属执行状态已变化")
+			}
+			var response json.RawMessage
+			if strings.HasPrefix(method, "task.artifact.") {
+				if s.config.OwnedArtifacts == nil {
+					return nil, NewTaskError(ErrTaskScopeDenied, "任务产物所有者端口不可用")
+				}
+				response, err = s.config.OwnedArtifacts.Call(requestCtx, live, requestID, method, params)
+			} else {
+				if s.config.OwnedStorage == nil {
+					return nil, NewTaskError(ErrTaskScopeDenied, "任务存储所有者端口不可用")
+				}
+				response, err = s.config.OwnedStorage.Call(requestCtx, live, requestID, method, params)
+			}
+			if err != nil {
+				return nil, err
+			}
+			latest, err := s.store.GetTaskRun(requestCtx, run.TaskRunID)
+			if err != nil || latest == nil || latest.Generation != live.Generation || latest.ExecutionAttemptID != live.ExecutionAttemptID || latest.Status != live.Status || latest.Revision != live.Revision {
+				return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "任务存储确认期间执行状态已变化")
+			}
+			if err := coordination.ValidateCurrent(requestCtx); err != nil {
+				return nil, err
+			}
+			return response, nil
+		},
 		OnProgress: func(seq int64, current, total, percentage *float64, stage, message string) {
-			s.handleProgress(ctx, run.TaskRunID, seq, current, total, percentage, stage, message)
+			if seq < 1 || progressBase < 0 || seq > int64(^uint64(0)>>1)-progressBase {
+				return
+			}
+			s.handleProgress(ctx, run.TaskRunID, seq+progressBase, current, total, percentage, stage, message, run)
 		},
 		OnCheckpoint: func(version int64, payload json.RawMessage, hash string) {
 			s.handleCheckpoint(ctx, run, def, payload, hash, version)
+		},
+		OnCheckpointConfirmed: func(version int64, payload json.RawMessage, hash string) error {
+			return s.handleCheckpoint(ctx, run, def, payload, hash, version)
 		},
 		OnLog: func(level, message string, fields map[string]interface{}) {
 		},
@@ -704,8 +825,24 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		taskCtx, taskCancel = context.WithDeadline(ctx, *run.DeadlineAt)
 		defer taskCancel()
 	}
+	beforeStart, err := s.store.GetTaskRun(taskCtx, run.TaskRunID)
+	if err != nil || beforeStart == nil || beforeStart.Generation != run.Generation || beforeStart.ExecutionAttemptID != run.ExecutionAttemptID || beforeStart.Status != RunStatusRunning {
+		_ = host.Cancel(context.WithoutCancel(taskCtx), "任务启动前状态已变化")
+		if err == nil && beforeStart != nil && beforeStart.Status == RunStatusCancelling {
+			s.handleFinished(ctx, run, "cancelled", nil, "", "", "任务已取消")
+		}
+		return
+	}
+	if err := coordination.ValidateCurrent(taskCtx); err != nil {
+		host.ForceStop()
+		return
+	}
 
-	if err := host.Start(taskCtx, run.Input, checkpointPayload, run.DeadlineAt, run.Attempt, run.MaxAttempts, callbacks); err != nil {
+	if err := host.Start(taskCtx, input, checkpointPayload, run.DeadlineAt, run.Attempt, run.MaxAttempts, callbacks); err != nil {
+		if host.State() == "cancelled" {
+			s.handleFinished(ctx, run, "cancelled", nil, "", "", "任务已取消")
+			return
+		}
 		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, err.Error())
 		return
 	}
@@ -718,16 +855,49 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 
 	if exitCode != 0 && !run.Status.IsTerminal() {
 		s.handleCrash(ctx, run, def, exitCode)
+	} else if run.ScopeSnapshotID != "" && run.Status != RunStatusPaused && run.Status != RunStatusPausing {
+		latest, err := s.store.GetTaskRun(context.WithoutCancel(ctx), run.TaskRunID)
+		if err == nil && latest != nil && latest.Generation == run.Generation && latest.ExecutionAttemptID == run.ExecutionAttemptID && !latest.Status.IsTerminal() {
+			_ = s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), latest)
+		}
 	}
 }
 
 func (s *TaskRuntimeService) runRemoteExecution(ctx context.Context, run *TaskRun, def *TaskDefinition, executor TaskExecutorPort) TaskExecutionOutcome {
+	var pin *TargetTaskDefinitionPin
+	if _, owned := coordination.FromContext(ctx); owned && run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		if s.config.OwnedTargetDefinitions == nil {
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired, ErrorCode: string(ErrTaskScopeDenied), ErrorMessage: "目标任务版本端口尚未就绪"}
+		}
+		prepared, err := s.config.OwnedTargetDefinitions.Prepare(ctx, run, def)
+		if err != nil {
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired, ErrorCode: string(ErrTaskDefinitionInvalid), ErrorMessage: err.Error()}
+		}
+		pin = &prepared
+	}
 	request := TaskExecutionRequest{
-		Run:        run,
-		Definition: def,
-		AttemptID:  run.ExecutionAttemptID,
-		Placement:  run.EffectiveExecutionPlacement(),
-		Target:     run.ExecutionTarget,
+		Run:                 run,
+		Definition:          def,
+		AttemptID:           run.ExecutionAttemptID,
+		Placement:           run.EffectiveExecutionPlacement(),
+		Target:              run.ExecutionTarget,
+		TargetDefinitionPin: pin,
+	}
+	if _, owned := coordination.FromContext(ctx); owned && run.CheckpointID != nil {
+		checkpoint, err := s.readTaskCheckpoint(ctx, run)
+		if err != nil || checkpoint == nil || checkpoint.CheckpointID != *run.CheckpointID {
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired, ErrorCode: string(ErrTaskCheckpointIncompatible), ErrorMessage: "设备任务缺少所有者确认的恢复检查点"}
+		}
+		request.ResumeCheckpoint = checkpoint
+	}
+	if _, owned := coordination.FromContext(ctx); owned {
+		previous, err := s.store.GetProgress(ctx, run.TaskRunID)
+		if err != nil {
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired, ErrorCode: string(ErrTaskExecutionAttemptInvalid), ErrorMessage: "任务进度基础版本不可用"}
+		}
+		if previous != nil {
+			request.ProgressBase = previous.Sequence
+		}
 	}
 	outcome, _ := executor.Execute(ctx, request)
 	return outcome
@@ -736,8 +906,27 @@ func (s *TaskRuntimeService) runRemoteExecution(ctx context.Context, run *TaskRu
 func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *TaskRun, def *TaskDefinition, outcome TaskExecutionOutcome) {
 	now := time.Now().UTC()
 	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
-	if err != nil {
+	if err != nil || current == nil || current.Generation != run.Generation || current.ExecutionAttemptID != run.ExecutionAttemptID {
 		return
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return
+	}
+	if _, owned := coordination.FromContext(ctx); owned {
+		if outcome.Status.IsTerminal() {
+			var result json.RawMessage
+			artifactID := ""
+			if outcome.Result != nil {
+				result, artifactID = outcome.Result.ResultJSON, outcome.Result.ArtifactID
+			}
+			s.handleFinished(ctx, run, string(outcome.Status), result, artifactID, outcome.ErrorCode, outcome.ErrorMessage)
+			return
+		}
+		outcome.Result = nil
+		if outcome.ErrorMessage != "" {
+			outcome.ErrorMessage = "任务执行状态尚未确认，请检查数据所有者处的任务状态"
+			outcome.ErrorCode = "task_execution_unconfirmed"
+		}
 	}
 
 	// A device result may race the executor returning its non-terminal claim
@@ -774,17 +963,17 @@ func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *Tas
 	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		if outcome.Result != nil && outcome.Status.IsTerminal() {
-			if err := s.store.PutResult(txCtx, outcome.Result); err != nil {
-				return fmt.Errorf("task_runtime: put result: %w", err)
-			}
-		}
 		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
 		if casErr != nil {
 			return fmt.Errorf("task_runtime: apply outcome cas: %w", casErr)
 		}
 		if !ok {
 			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry outcome")
+		}
+		if outcome.Result != nil && outcome.Status.IsTerminal() {
+			if err := s.store.PutResult(txCtx, outcome.Result); err != nil {
+				return fmt.Errorf("task_runtime: put result: %w", err)
+			}
 		}
 		if next.Status.IsTerminal() {
 			if err := s.store.RemoveFromQueue(txCtx, next.TaskRunID); err != nil {
@@ -817,12 +1006,36 @@ func (s *TaskRuntimeService) publishExecutionOutcomeEvent(ctx context.Context, r
 	}
 }
 
-func (s *TaskRuntimeService) handleProgress(ctx context.Context, taskRunID string, seq int64, current, total, percentage *float64, stage, message string) {
+func (s *TaskRuntimeService) handleProgress(ctx context.Context, taskRunID string, seq int64, current, total, percentage *float64, stage, message string, expected ...*TaskRun) error {
+	return s.persistTaskProgress(ctx, taskRunID, seq, current, total, percentage, stage, message, false, expected...)
+}
+
+func (s *TaskRuntimeService) persistTaskProgress(ctx context.Context, taskRunID string, seq int64, current, total, percentage *float64, stage, message string, requireConfirmation bool, expected ...*TaskRun) error {
+	if seq < 1 || len(stage) > 512 || len(message) > 32<<10 {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务进度格式无效")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
+	live, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil || live == nil || live.Status != RunStatusRunning && live.Status != RunStatusCheckpointing {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务进度所属状态无效")
+	}
+	if len(expected) > 0 && (expected[0] == nil || live.Generation != expected[0].Generation || live.ExecutionAttemptID != expected[0].ExecutionAttemptID) {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务进度所属执行已变化")
+	}
+	if _, owned := coordination.FromContext(ctx); owned && len(expected) == 0 {
+		return NewTaskError(ErrTaskScopeDenied, "任务进度缺少执行身份")
+	}
+	rate := s.config.MaxProgressPerSecond
+	if rate < 1 {
+		rate = 5
+	}
 	s.progressMu.Lock()
 	last, ok := s.progressLast[taskRunID]
-	if ok && time.Since(last) < time.Second/time.Duration(s.config.MaxProgressPerSecond) {
+	if !requireConfirmation && ok && time.Since(last) < time.Second/time.Duration(rate) {
 		s.progressMu.Unlock()
-		return
+		return nil
 	}
 	s.progressLast[taskRunID] = time.Now()
 	s.progressMu.Unlock()
@@ -837,23 +1050,53 @@ func (s *TaskRuntimeService) handleProgress(ctx context.Context, taskRunID strin
 		Message:    message,
 		UpdatedAt:  time.Now().UTC(),
 	}
+	if _, owned := coordination.FromContext(ctx); owned {
+		if s.config.OwnedProgress == nil {
+			return NewTaskError(ErrTaskScopeDenied, "任务进度所有者存储不可用")
+		}
+		prog, err = s.config.OwnedProgress.SaveProgress(ctx, live, prog)
+		if err != nil {
+			return err
+		}
+	}
 	progJSON, err := json.Marshal(prog)
 	if err != nil {
-		return
+		return err
 	}
-	if err := s.store.PutProgress(ctx, taskRunID, seq, progJSON); err != nil {
-		return
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		latest, err := s.store.GetTaskRun(txCtx, taskRunID)
+		if err != nil {
+			return err
+		}
+		if latest == nil || latest.Generation != live.Generation || latest.ExecutionAttemptID != live.ExecutionAttemptID || latest.Revision != live.Revision || latest.Status != live.Status {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务进度所属执行已变化")
+		}
+		return s.store.PutProgress(txCtx, taskRunID, seq, progJSON)
+	}); err != nil {
+		return err
 	}
+	return nil
 }
 
-func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun, def *TaskDefinition, payload json.RawMessage, hash string, version int64) {
-	if len(payload) > s.config.MaxCheckpointBytes {
-		return
+func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun, def *TaskDefinition, payload json.RawMessage, hash string, version int64) error {
+	if version < 1 || len(payload) > s.config.MaxCheckpointBytes || !json.Valid(payload) {
+		return NewTaskError(ErrTaskCheckpointTooLarge, "检查点格式或大小无效")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
+	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
+	if err != nil || current == nil || current.Generation != run.Generation || current.ExecutionAttemptID != run.ExecutionAttemptID || current.Status != RunStatusRunning && current.Status != RunStatusCheckpointing && current.Status != RunStatusPausing {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点所属执行状态已变化")
+	}
+	previous, err := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
+	if err != nil || previous != nil && previous.Version >= version {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点版本已失效")
 	}
 
 	actualHash := hashBytes(payload)
 	if hash != "" && hash != actualHash {
-		return
+		return NewTaskError(ErrTaskCheckpointHashMismatch, "检查点摘要不匹配")
 	}
 
 	cp := &TaskCheckpoint{
@@ -868,22 +1111,69 @@ func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun,
 	}
 
 	cpID := cp.CheckpointID
-	run.CheckpointID = &cpID
+	next := CloneTaskRun(current)
+	next.CheckpointID = &cpID
+	next.Revision = NextRevision(current.Revision)
+	if _, owned := coordination.FromContext(ctx); owned {
+		if s.config.OwnedCheckpoints == nil {
+			return NewTaskError(ErrTaskScopeDenied, "检查点所有者存储不可用")
+		}
+		if err := s.config.OwnedCheckpoints.SaveCheckpoint(ctx, current, cp); err != nil {
+			return err
+		}
+		metadata := *cp
+		metadata.Payload = nil
+		cp = &metadata
+	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		ok, err := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点保存前任务已变化")
+		}
 		if err := s.store.PutCheckpoint(txCtx, cp); err != nil {
 			return err
 		}
-		return s.store.PutTaskRun(txCtx, run)
+		return nil
 	}); err != nil {
-		return
+		return err
 	}
+	run.CheckpointID = &cpID
+	run.Revision = next.Revision
+	return nil
 }
 
-func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, status string, result json.RawMessage, artifactID string, errCode, errMsg string) {
+func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, status string, result json.RawMessage, artifactID string, errCode, errMsg string) error {
 	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
-	if err != nil {
-		return
+	if err != nil || current == nil || current.Status.IsTerminal() || current.Status == RunStatusPaused || current.Status == RunStatusPausing || current.Generation != run.Generation || current.ExecutionAttemptID != run.ExecutionAttemptID {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务结果所属执行状态已变化")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
+	if current.Status == RunStatusCancelling {
+		status, result, artifactID, errCode, errMsg = "cancelled", nil, "", "", "任务已取消"
+	}
+	if _, owned := coordination.FromContext(ctx); owned && status == "succeeded" && artifactID == "" && len(result) > 64<<10 {
+		if s.config.OwnedArtifacts == nil || len(result) > 1<<20 || !json.Valid(result) {
+			return NewTaskError(ErrTaskScopeDenied, "大型任务结果需要所有者产物端口")
+		}
+		params, err := json.Marshal(map[string]any{"task_run_id": run.TaskRunID, "name": "result.json", "data": result})
+		if err != nil {
+			return err
+		}
+		response, err := s.config.OwnedArtifacts.Call(ctx, current, "task-final/"+run.ExecutionAttemptID.String(), "task.artifact.saveData", params)
+		if err != nil {
+			return err
+		}
+		var metadata ownedTaskArtifactMetadata
+		if json.Unmarshal(response, &metadata) != nil || metadata.ArtifactID == "" {
+			return NewTaskError(ErrTaskScopeDenied, "任务产物确认引用无效")
+		}
+		artifactID, result = metadata.ArtifactID, nil
 	}
 	existingRevision := current.Revision
 	next := cloneTaskRun(current)
@@ -926,27 +1216,68 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 		if errMsg != "" {
 			next.ErrorMessage = &errMsg
 		}
-	default:
+	case "timed_out":
+		next.Status = RunStatusTimedOut
+		eventType = TaskEventTimedOut
+		next.ErrorCode, next.ErrorMessage = &errCode, &errMsg
+	case "manual_intervention":
+		next.Status = RunStatusManualIntervention
 		eventType = TaskEventFailed
+		next.ErrorCode, next.ErrorMessage = &errCode, &errMsg
+	default:
+		return NewTaskError(ErrTaskStateTransitionInvalid, "任务终态无效")
 	}
 
 	next.Revision = NextRevision(existingRevision)
+	if _, owned := coordination.FromContext(ctx); owned {
+		if s.config.OwnedOutcomes == nil {
+			return NewTaskError(ErrTaskScopeDenied, "任务结果所有者存储不可用")
+		}
+		if runResult != nil && runResult.ResultType == ResultArtifact {
+			if s.config.OwnedArtifacts == nil {
+				return NewTaskError(ErrTaskScopeDenied, "任务产物结果端口不可用")
+			}
+			_, hash, err := s.config.OwnedArtifacts.Result(ctx, current, runResult.ArtifactID)
+			if err != nil {
+				return err
+			}
+			runResult.ResultJSON, runResult.ResultHash = nil, hash
+		}
+		if err := s.config.OwnedOutcomes.SaveOutcome(ctx, current, status, runResult, errCode, errMsg); err != nil {
+			return err
+		}
+		if runResult != nil {
+			metadata := *runResult
+			metadata.ResultJSON = nil
+			runResult = &metadata
+		}
+		if status != "succeeded" {
+			errCode = "task_" + status
+			next.ErrorCode = &errCode
+			message := "任务已停止，详细结果保存在数据所有者处"
+			next.ErrorMessage = &message
+		}
+	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		ok, err := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务完成前状态已变化")
+		}
 		if runResult != nil {
 			if err := s.store.PutResult(txCtx, runResult); err != nil {
 				return err
 			}
-		}
-		if err := s.store.PutTaskRun(txCtx, next); err != nil {
-			return err
 		}
 		if err := s.store.RemoveFromQueue(txCtx, next.TaskRunID); err != nil {
 			return err
 		}
 		return s.publishTaskEvent(txCtx, eventType, next, "", errCode)
 	}); err != nil {
-		return
+		return err
 	}
 
 	run.Status = next.Status
@@ -955,12 +1286,27 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 	run.ErrorCode = next.ErrorCode
 	run.ErrorMessage = next.ErrorMessage
 	run.ResultArtifactID = next.ResultArtifactID
+	return nil
 }
 
 func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def *TaskDefinition, exitCode int) {
 	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
 	if err != nil {
 		return
+	}
+	if current == nil || current.Status.IsTerminal() || current.Status == RunStatusPaused || current.Status == RunStatusPausing || current.Generation != run.Generation || current.ExecutionAttemptID != run.ExecutionAttemptID {
+		return
+	}
+	if current.Status == RunStatusCancelling {
+		s.handleFinished(ctx, run, "cancelled", nil, "", "", "任务已取消")
+		return
+	}
+	if run.ScopeSnapshotID != "" {
+		_, owned, authorityErr := s.taskAuthority(ctx, run.ScopeSnapshotID, run.InvocationID, run.ExtensionID, run.ModuleID)
+		if owned || authorityErr != nil {
+			_ = s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), current)
+			return
+		}
 	}
 	existingRevision := current.Revision
 	next := cloneTaskRun(current)
@@ -1046,6 +1392,25 @@ func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def 
 func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code TaskErrorCode, message string) {
 	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
 	if err != nil {
+		return
+	}
+	if current == nil || current.Status.IsTerminal() || current.Status == RunStatusPaused || current.Status == RunStatusPausing || current.Generation != run.Generation || current.ExecutionAttemptID != run.ExecutionAttemptID {
+		return
+	}
+	if run.ScopeSnapshotID != "" {
+		_, owned, authorityErr := s.taskAuthority(ctx, run.ScopeSnapshotID, run.InvocationID, run.ExtensionID, run.ModuleID)
+		if owned || authorityErr != nil {
+			if _, scoped := coordination.FromContext(ctx); scoped && authorityErr == nil && current.ExecutionAttemptID != "" {
+				if err := s.handleFinished(ctx, run, "failed", nil, "", string(code), message); err == nil {
+					return
+				}
+			}
+			_ = s.markTaskRecoveryUnknown(context.WithoutCancel(ctx), current)
+			return
+		}
+	}
+	if current.Status == RunStatusCancelling {
+		s.handleFinished(ctx, run, "cancelled", nil, "", "", "任务已取消")
 		return
 	}
 	next := cloneTaskRun(current)
@@ -1160,7 +1525,7 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 
 	current.CancelRequestedAt = &now
 
-	if current.Status == RunStatusQueued || current.Status == RunStatusPaused || current.Status == RunStatusPausing {
+	if current.Status == RunStatusQueued || current.Status == RunStatusPaused {
 		cancelledRun := cloneTaskRun(current)
 		cancelledRun.Status = RunStatusCancelled
 		cancelledRun.FinishedAt = &now
@@ -1181,10 +1546,17 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 
 	next := cloneTaskRun(current)
 	next.Status = RunStatusCancelling
+	if current.Status == RunStatusCancelling {
+		return nil
+	}
+	if current.Status != RunStatusRunning && current.Status != RunStatusStarting && current.Status != RunStatusResuming && current.Status != RunStatusCheckpointing && current.Status != RunStatusPausing {
+		return NewTaskError(ErrTaskNotCancelable, "任务当前状态不允许取消")
+	}
+	next.CancelRequestedAt = &now
 	next.Revision = NextRevision(current.Revision)
 	if err := s.mutateTaskRun(ctx, taskMutationParams{
 		next:       next,
-		expected:   RunStatusRunning,
+		expected:   current.Status,
 		generation: current.Generation,
 		revision:   current.Revision,
 	}); err != nil {
@@ -1211,10 +1583,23 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 	if !run.Status.IsTerminal() {
 		return nil, NewTaskError(ErrTaskNotRetryable, "task not terminal")
 	}
+	guarded, finish, err := s.restoreTaskAuthority(ctx, run)
+	if err != nil {
+		return nil, err
+	}
+	defer finish()
+	ctx = guarded
+	_, owned := coordination.FromContext(ctx)
+	if owned && run.Status == RunStatusSucceeded {
+		return nil, NewTaskError(ErrTaskNotRetryable, "已完成的设备任务不能重复执行")
+	}
 
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
 	if err != nil {
 		return nil, NewTaskError(ErrTaskDefinitionInvalid, err.Error())
+	}
+	if err := validateTaskDefinition(owned, run, def); err != nil {
+		return nil, err
 	}
 
 	idempotency := def.Idempotency
@@ -1236,14 +1621,23 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 
 	now := time.Now().UTC()
 	newRun := &TaskRun{
-		TaskRunID:          "tr-" + uuid.NewString(),
-		OperationID:        run.OperationID,
-		TaskDefinitionID:   run.TaskDefinitionID,
-		ExtensionID:        run.ExtensionID,
-		ModuleID:           run.ModuleID,
-		Status:             RunStatusQueued,
-		Priority:           run.Priority,
-		ExecutionPlacement: run.ExecutionPlacement,
+		TaskRunID:             "tr-" + uuid.NewString(),
+		OperationID:           run.OperationID,
+		InvocationID:          run.InvocationID,
+		DefinitionFingerprint: run.DefinitionFingerprint,
+		ScopeSnapshotID:       run.ScopeSnapshotID,
+		PermissionSnapshotID:  run.PermissionSnapshotID,
+		DependencySnapshotID:  run.DependencySnapshotID,
+		TraceID:               run.TraceID,
+		CorrelationID:         run.CorrelationID,
+		CausationID:           run.CausationID,
+		Source:                run.Source,
+		TaskDefinitionID:      run.TaskDefinitionID,
+		ExtensionID:           run.ExtensionID,
+		ModuleID:              run.ModuleID,
+		Status:                RunStatusQueued,
+		Priority:              run.Priority,
+		ExecutionPlacement:    run.ExecutionPlacement,
 		ExecutionTarget: TaskExecutionTarget{
 			ProviderID:         run.ExecutionTarget.ProviderID,
 			ProviderInstanceID: run.ExecutionTarget.ProviderInstanceID,
@@ -1271,6 +1665,19 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 		AvailableAt: now,
 		CreatedAt:   now,
 	}
+	if owned {
+		if s.config.OwnedInputs == nil {
+			return nil, NewTaskError(ErrTaskScopeDenied, "任务所有者输入端口不可用")
+		}
+		newRun.Input, err = s.config.OwnedInputs.Input(ctx, run)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.config.OwnedInputs.SaveInput(ctx, newRun); err != nil {
+			return nil, err
+		}
+		newRun.Input = nil
+	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
 		if err := s.store.PutTaskRun(txCtx, newRun); err != nil {
@@ -1297,13 +1704,26 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 	if run.Status != RunStatusRecoveryRequired && run.Status != RunStatusManualIntervention {
 		return nil, NewTaskError(ErrTaskStateTransitionInvalid, "task not in recovery state")
 	}
+	guarded, finish, err := s.restoreTaskAuthority(ctx, run)
+	if err != nil {
+		return nil, err
+	}
+	defer finish()
+	ctx = guarded
 
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
 	if err != nil {
 		return nil, NewTaskError(ErrTaskDefinitionInvalid, err.Error())
 	}
+	_, owned := coordination.FromContext(ctx)
+	if err := validateTaskDefinition(owned, run, def); err != nil {
+		return nil, err
+	}
 
-	cp, _ := s.store.GetLatestCheckpoint(ctx, taskRunID)
+	cp, _ := s.readTaskCheckpoint(ctx, run)
+	if owned && (cp == nil || run.CheckpointID == nil || cp.CheckpointID != *run.CheckpointID || cp.PayloadHash != hashBytes(cp.Payload)) {
+		return nil, NewTaskError(ErrTaskCheckpointIncompatible, "设备任务结果未知，缺少已确认检查点，拒绝从头执行")
+	}
 	if cp != nil {
 		if cp.DefinitionHash != def.DefinitionHash {
 			return nil, NewTaskError(ErrTaskCheckpointIncompatible, "definition hash mismatch")
@@ -1358,11 +1778,45 @@ func (s *TaskRuntimeService) ListTaskRuns(ctx context.Context, filter ListTasksF
 }
 
 func (s *TaskRuntimeService) GetProgress(ctx context.Context, taskRunID string) (*TaskRunProgress, error) {
-	return s.store.GetProgress(ctx, taskRunID)
+	metadata, err := s.store.GetProgress(ctx, taskRunID)
+	if err != nil || metadata == nil {
+		return metadata, err
+	}
+	if _, owned := coordination.FromContext(ctx); !owned {
+		return metadata, nil
+	}
+	if s.config.OwnedProgress == nil {
+		return nil, NewTaskError(ErrTaskScopeDenied, "任务进度所有者端口不可用")
+	}
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateTaskReadScope(ctx, run); err != nil {
+		return nil, err
+	}
+	return s.config.OwnedProgress.Progress(ctx, run, metadata)
 }
 
 func (s *TaskRuntimeService) GetResult(ctx context.Context, taskRunID string) (*TaskRunResult, error) {
-	return s.store.GetResult(ctx, taskRunID)
+	metadata, err := s.store.GetResult(ctx, taskRunID)
+	if err != nil || metadata == nil {
+		return metadata, err
+	}
+	if _, owned := coordination.FromContext(ctx); !owned {
+		return metadata, nil
+	}
+	if s.config.OwnedOutcomes == nil {
+		return nil, NewTaskError(ErrTaskScopeDenied, "任务结果所有者端口不可用")
+	}
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateTaskReadScope(ctx, run); err != nil {
+		return nil, err
+	}
+	return s.config.OwnedOutcomes.Result(ctx, run, metadata)
 }
 
 func (s *TaskRuntimeService) GetTaskResult(ctx context.Context, taskRunID string) (*TaskRunResult, error) {
@@ -1370,7 +1824,17 @@ func (s *TaskRuntimeService) GetTaskResult(ctx context.Context, taskRunID string
 }
 
 func (s *TaskRuntimeService) GetLatestCheckpoint(ctx context.Context, taskRunID string) (*TaskCheckpoint, error) {
-	return s.store.GetLatestCheckpoint(ctx, taskRunID)
+	if _, owned := coordination.FromContext(ctx); !owned {
+		return s.store.GetLatestCheckpoint(ctx, taskRunID)
+	}
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateTaskReadScope(ctx, run); err != nil {
+		return nil, err
+	}
+	return s.readTaskCheckpoint(ctx, run)
 }
 
 func (s *TaskRuntimeService) StartupRecovery(ctx context.Context) error {
@@ -1400,6 +1864,9 @@ func (s *TaskRuntimeService) StartupRecovery(ctx context.Context) error {
 }
 
 func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error {
+	if run.ScopeSnapshotID != "" {
+		return s.markTaskRecoveryUnknown(ctx, run)
+	}
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
 	if err != nil {
 		run.Status = RunStatusManualIntervention

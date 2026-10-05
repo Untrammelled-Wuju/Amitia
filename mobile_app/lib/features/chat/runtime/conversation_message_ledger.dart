@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'package:flutter/foundation.dart';
 
 import '../../../shared/models/models.dart';
 
@@ -15,23 +16,29 @@ class ConversationMessageLedger {
   int get length => _items.length;
   bool get isEmpty => _items.isEmpty;
 
-  ChatMessage? findById(String id) {
+  ChatMessage? findById(String id, {String? sourceOwnerId}) {
     final normalized = id.trim();
     if (normalized.isEmpty) return null;
+    ChatMessage? found;
     for (final message in _items.values) {
-      if (message.id == normalized) return message;
+      if (message.id != normalized || sourceOwnerId != null && message.sourceOwnerId != sourceOwnerId) continue;
+      if (found != null) return null;
+      found = message;
     }
-    return null;
+    return found;
   }
 
-  ChatMessage? findByRenderId(String renderId, {MessageRole? role}) {
+  ChatMessage? findByRenderId(String renderId, {MessageRole? role, String? sourceOwnerId}) {
     final normalized = renderId.trim();
     if (normalized.isEmpty) return null;
+    ChatMessage? found;
     for (final message in _items.values) {
       if (role != null && message.role != role) continue;
-      if (message.renderId == normalized) return message;
+      if (message.renderId != normalized || sourceOwnerId != null && message.sourceOwnerId != sourceOwnerId) continue;
+      if (found != null) return null;
+      found = message;
     }
-    return null;
+    return found;
   }
 
   bool upsert(ChatMessage message) {
@@ -76,12 +83,12 @@ class ConversationMessageLedger {
     if (_items.containsKey(preferredKey)) return preferredKey;
     final id = message.id.trim();
     if (id.isNotEmpty) {
-      final byId = findById(id);
+      final byId = findById(id, sourceOwnerId: message.sourceOwnerId);
       if (byId != null) return _key(byId);
     }
     final renderId = message.renderId.trim();
     if (renderId.isNotEmpty) {
-      final byRenderId = findByRenderId(renderId, role: message.role);
+      final byRenderId = findByRenderId(renderId, role: message.role, sourceOwnerId: message.sourceOwnerId);
       if (byRenderId != null) return _key(byRenderId);
     }
     return null;
@@ -90,7 +97,7 @@ class ConversationMessageLedger {
   String _key(ChatMessage message) {
     final renderId = message.renderId.trim();
     final id = message.id.trim();
-    return '${message.role.name}:${renderId.isNotEmpty ? renderId : id}';
+    return '${message.sourceOwnerId}:${message.role.name}:${renderId.isNotEmpty ? renderId : id}';
   }
 
   int _compare(ChatMessage a, ChatMessage b) {
@@ -108,6 +115,9 @@ class ConversationMessageLedger {
 
   bool _same(ChatMessage a, ChatMessage b) {
     return a.id == b.id &&
+        a.sourceOwnerId == b.sourceOwnerId &&
+        a.sourceRevision == b.sourceRevision &&
+        mapEquals(a.sourceScope, b.sourceScope) &&
         a.renderId == b.renderId &&
         a.characterId == b.characterId &&
         a.role == b.role &&

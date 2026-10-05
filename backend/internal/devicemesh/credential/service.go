@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/devicemesh/proof"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -20,9 +22,19 @@ type SystemClock struct{}
 func (SystemClock) Now() time.Time { return time.Now().UTC() }
 
 type Service struct {
-	repo       *Repository
-	ttlSeconds int64
-	clock      Clock
+	repo         *Repository
+	ttlSeconds   int64
+	clock        Clock
+	requestProof bool
+}
+
+func (s *Service) EnableRequestProof() { s.requestProof = true }
+
+func (s *Service) VerifyRequest(ctx context.Context, device, core string, request *http.Request) error {
+	if !s.requestProof {
+		return nil
+	}
+	return proof.VerifyRequest(ctx, s.repo.db, device, core, request, s.clock.Now())
 }
 
 func NewService(repo *Repository, ttlSeconds int64) *Service {

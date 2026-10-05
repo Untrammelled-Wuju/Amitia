@@ -10,6 +10,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/models/memory.dart';
+import 'owned_memory_page.dart';
 
 class MemoryPage extends ConsumerStatefulWidget {
   const MemoryPage({super.key});
@@ -55,13 +56,16 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   }
 
   List<MemoryDto> _filterMemories(List<MemoryDto> memories) {
-    var result = memories.where((m) {
-      if (_selectedCategory == 0) return true;
-      return m.type == _categories[_selectedCategory];
-    }).where((m) {
-      if (_searchQuery.isEmpty) return true;
-      return m.content.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
+    var result = memories
+        .where((m) {
+          if (_selectedCategory == 0) return true;
+          return m.type == _categories[_selectedCategory];
+        })
+        .where((m) {
+          if (_searchQuery.isEmpty) return true;
+          return m.content.toLowerCase().contains(_searchQuery.toLowerCase());
+        })
+        .toList();
 
     result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return result;
@@ -69,6 +73,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ownedPage = ownedMemoryGate(ref);
+    if (ownedPage != null) return ownedPage;
     final memoriesAsync = ref.watch(memoryListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -100,13 +106,24 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: context.textSecondary,
+                  ),
                   const SizedBox(height: 16),
-                  Text('加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                    style: AppTypography.body(context).copyWith(color: context.error),
-                    textAlign: TextAlign.center),
+                  Text(
+                    '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                    style: AppTypography.body(
+                      context,
+                    ).copyWith(color: context.error),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 16),
-                  AmitiaButton(label: '重试', onPressed: () => ref.invalidate(memoryListProvider)),
+                  AmitiaButton(
+                    label: '重试',
+                    onPressed: () => ref.invalidate(memoryListProvider),
+                  ),
                 ],
               ),
             ),
@@ -133,7 +150,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                             horizontal: AppSpacing.pagePadding,
                           ),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+                          separatorBuilder: (_, _) =>
+                              SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) {
                             return _buildMemoryCard(context, filtered[index]);
                           },
@@ -149,7 +167,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
 
   Widget _buildSearchView(BuildContext context, List<MemoryDto> memories) {
     final query = _searchQuery.trim();
-    final results = query.isEmpty ? const <MemoryDto>[] : _filterMemories(memories);
+    final results = query.isEmpty
+        ? const <MemoryDto>[]
+        : _filterMemories(memories);
     return Column(
       children: [
         Padding(
@@ -184,7 +204,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                   subtitle: '尝试更换关键词',
                 )
               : ListView.separated(
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: EdgeInsets.symmetric(
                     horizontal: AppSpacing.pagePadding,
                     vertical: AppSpacing.sm,
@@ -217,12 +238,19 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               });
             },
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: 8,
+              ),
               decoration: BoxDecoration(
-                color: isSelected ? context.accentPrimary : context.surfaceSecondary,
+                color: isSelected
+                    ? context.accentPrimary
+                    : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
                 border: Border.all(
-                  color: isSelected ? context.accentPrimary : Colors.transparent,
+                  color: isSelected
+                      ? context.accentPrimary
+                      : Colors.transparent,
                   width: 0.5,
                 ),
               ),
@@ -302,12 +330,42 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
 
   Widget _buildMemoryTools(BuildContext context) {
     final tools = <_ToolEntry>[
-      _ToolEntry(title: '记忆管理', subtitle: '查看与管理全部记忆', icon: Icons.folder_special_outlined, route: AppRoutes.memoryManager),
-      _ToolEntry(title: '情景记忆', subtitle: '回顾情景与事件', icon: Icons.event_note_outlined, route: AppRoutes.memoryEpisodic),
-      _ToolEntry(title: '记忆图谱', subtitle: '可视化记忆关联', icon: Icons.account_tree_outlined, route: AppRoutes.memoryGraph),
-      _ToolEntry(title: '记忆时间线', subtitle: '按时间浏览记忆', icon: Icons.timeline, route: AppRoutes.memoryTimeline),
-      _ToolEntry(title: '用户画像', subtitle: '用户偏好与特征', icon: Icons.person_outline, route: AppRoutes.memoryProfiles),
-      _ToolEntry(title: '世界书', subtitle: '世界观与设定', icon: Icons.menu_book_outlined, route: AppRoutes.memoryWorldBook),
+      _ToolEntry(
+        title: '记忆管理',
+        subtitle: '查看与管理全部记忆',
+        icon: Icons.folder_special_outlined,
+        route: AppRoutes.memoryManager,
+      ),
+      _ToolEntry(
+        title: '情景记忆',
+        subtitle: '回顾情景与事件',
+        icon: Icons.event_note_outlined,
+        route: AppRoutes.memoryEpisodic,
+      ),
+      _ToolEntry(
+        title: '记忆图谱',
+        subtitle: '可视化记忆关联',
+        icon: Icons.account_tree_outlined,
+        route: AppRoutes.memoryGraph,
+      ),
+      _ToolEntry(
+        title: '记忆时间线',
+        subtitle: '按时间浏览记忆',
+        icon: Icons.timeline,
+        route: AppRoutes.memoryTimeline,
+      ),
+      _ToolEntry(
+        title: '用户画像',
+        subtitle: '用户偏好与特征',
+        icon: Icons.person_outline,
+        route: AppRoutes.memoryProfiles,
+      ),
+      _ToolEntry(
+        title: '世界书',
+        subtitle: '世界观与设定',
+        icon: Icons.menu_book_outlined,
+        route: AppRoutes.memoryWorldBook,
+      ),
     ];
 
     return Column(
@@ -333,7 +391,10 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               return GestureDetector(
                 onTap: () => context.push(t.route),
                 child: AmitiaCard(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
                   child: Row(
                     children: [
                       Container(
@@ -343,7 +404,11 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                           color: context.accentSoft,
                           borderRadius: AppRadius.brSmall,
                         ),
-                        child: Icon(t.icon, size: 18, color: context.accentPrimary),
+                        child: Icon(
+                          t.icon,
+                          size: 18,
+                          color: context.accentPrimary,
+                        ),
                       ),
                       SizedBox(width: AppSpacing.sm),
                       Expanded(
@@ -351,9 +416,19 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(t.title, style: AppTypography.body(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              t.title,
+                              style: AppTypography.body(context),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             const SizedBox(height: 2),
-                            Text(t.subtitle, style: AppTypography.label(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              t.subtitle,
+                              style: AppTypography.label(context),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
                       ),

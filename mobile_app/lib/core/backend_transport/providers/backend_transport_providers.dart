@@ -478,5 +478,6 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
   return RoutedBackendServiceApiProxy(
     businessApi: businessApi,
     deviceLocalApi: deviceLocalApi,
+    isCloudDeployment: () => ref.read(mobileDeploymentConfigProvider).mode == MobileDeploymentMode.cloud,
   );
 });

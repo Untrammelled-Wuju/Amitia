@@ -4,6 +4,7 @@ package embedding
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -91,9 +92,44 @@ func (s *Service) Embed(text string) ([]float32, error) {
 }
 
 func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
+	return s.embedWithContext(context.Background(), text)
+}
+
+func (s *Service) EmbedContext(ctx context.Context, text string) ([]float32, error) {
+	vector, _, err := s.embedWithContext(ctx, text)
+	return vector, err
+}
+
+func (s *Service) EmbedContextWithFingerprint(ctx context.Context, text string) ([]float32, string, error) {
+	baseURL, apiKey, model, apiType, provider := s.getConfig()
+	if apiType != "llama_cpp" && (baseURL == "" || apiKey == "") {
+		return nil, "", nil
+	}
+	fingerprint := embeddingConfigFingerprint(model+"\x00"+apiType+"\x00"+baseURL, provider)
+	vector, _, err := s.embedConfiguredContext(ctx, text, baseURL, apiKey, model, apiType, provider)
+	return vector, fingerprint, err
+}
+
+func (s *Service) embedWithContext(ctx context.Context, text string) ([]float32, string, error) {
 	baseURL, apiKey, modelName, apiType, providerConfigJSON := s.getConfig()
+	return s.embedConfiguredContext(ctx, text, baseURL, apiKey, modelName, apiType, providerConfigJSON)
+}
+
+func (s *Service) embedConfiguredContext(ctx context.Context, text, baseURL, apiKey, modelName, apiType, providerConfigJSON string) ([]float32, string, error) {
+	ctx, finish, authorityErr := s.beginInference(ctx)
+	if authorityErr != nil {
+		return nil, "", authorityErr
+	}
+	defer finish()
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
 	if apiType == "llama_cpp" {
-		return s.embedLocal(text, modelName, providerConfigJSON)
+		vector, raw, err := s.embedLocal(text, modelName, providerConfigJSON)
+		if cancelErr := ctx.Err(); cancelErr != nil {
+			return nil, "", cancelErr
+		}
+		return vector, raw, err
 	}
 	if baseURL == "" || apiKey == "" {
 		return nil, "", fmt.Errorf("嵌入服务未配置: baseURL/apiKey 为空")
@@ -121,7 +157,7 @@ func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
 
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err.Error(), err
 	}

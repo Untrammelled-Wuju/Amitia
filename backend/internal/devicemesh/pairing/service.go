@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
+	"github.com/u-ai/backend/internal/devicemesh/proof"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
@@ -60,11 +61,13 @@ type ClaimRequest struct {
 	RuntimeID  runtimeidentity.RuntimeID
 	Platform   runtimeidentity.Platform
 	Label      string
+	Proof      *proof.Proof
 }
 
 type ClaimResult struct {
 	Ticket    *bootstrap.BootstrapTicket
 	RawTicket string
+	Pending   *Approval
 }
 
 func NewService(db *sql.DB, dataDir string, spaceID runtimeidentity.SpaceID, devices *host_registry.Registry, bootstrapSvc *bootstrap.Service) (*Service, error) {
@@ -86,7 +89,27 @@ func NewService(db *sql.DB, dataDir string, spaceID runtimeidentity.SpaceID, dev
 
 func (s *Service) SpaceID() runtimeidentity.SpaceID { return s.spaceID }
 
-func (s *Service) CreateOffer(ctx context.Context, creator runtimeidentity.DeviceID, ttl time.Duration) (*Offer, string, error) {
+func (s *Service) CreateOffer(ctx context.Context, creator runtimeidentity.DeviceID, ttl time.Duration, requireApproval ...bool) (*Offer, string, error) {
+	required := len(requireApproval) > 0 && requireApproval[0]
+	return s.createOffer(ctx, creator, ttl, required, "")
+}
+
+func (s *Service) CreateSuccessorOffer(ctx context.Context, creator, target runtimeidentity.DeviceID, coordinated ...bool) (*Offer, string, error) {
+	if target == "" || target == creator || len(target.String()) > 512 {
+		return nil, "", ErrSelfPairing
+	}
+	offer, token, err := s.createOffer(ctx, creator, DefaultOfferTTL, true, target.String())
+	if err != nil {
+		return nil, "", err
+	}
+	enabled := len(coordinated) > 0 && coordinated[0]
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO kernel_device_pairing_successor_modes(offer_id,coordinated) VALUES(?,?)`, offer.OfferID, enabled); err != nil {
+		return nil, "", err
+	}
+	return offer, token, nil
+}
+
+func (s *Service) createOffer(ctx context.Context, creator runtimeidentity.DeviceID, ttl time.Duration, required bool, target string) (*Offer, string, error) {
 	if strings.TrimSpace(creator.String()) == "" {
 		return nil, "", errors.New("pairing: creator device is required")
 	}
@@ -105,13 +128,38 @@ func (s *Service) CreateOffer(ctx context.Context, creator runtimeidentity.Devic
 		OfferID: uuid.NewString(), SpaceID: s.spaceID, CreatedByDeviceID: creator,
 		Status: "active", ExpiresAt: now.Add(ttl), CreatedAt: now,
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO kernel_device_pairing_offers
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	defer tx.Rollback()
+	var active int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_pairing_offers WHERE space_id=? AND created_by_device_id=? AND status='active' AND julianday(expires_at)>julianday(?)`, s.spaceID.String(), creator.String(), now.Format(time.RFC3339Nano)).Scan(&active); err != nil {
+		return nil, "", err
+	}
+	if active >= 128 {
+		return nil, "", errors.New("待处理配对入口已达到上限，请处理或等待过期后重试")
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_pairing_offers
 		(offer_id, offer_hash, space_id, created_by_device_id, status, expires_at, consumed_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
 		offer.OfferID, hash(raw), s.spaceID.String(), creator.String(), offer.Status,
 		offer.ExpiresAt.Format(time.RFC3339Nano), offer.CreatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, "", fmt.Errorf("pairing: create offer: %w", err)
+	}
+	if required {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_pairing_approval_policy(offer_id,required) VALUES(?,1)`, offer.OfferID); err != nil {
+			return nil, "", err
+		}
+	}
+	if target != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_pairing_offer_targets(offer_id,device_id) VALUES(?,?)`, offer.OfferID, target); err != nil {
+			return nil, "", err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, "", err
 	}
 	return offer, raw, nil
 }
@@ -163,6 +211,40 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 	}
 	if existing != nil && existing.TrustState == host_registry.DeviceTrustPending && activeTickets > 0 {
 		return nil, ErrPairingPending
+	}
+	if req.Proof != nil {
+		body := proof.ClaimBody{DeviceID: req.DeviceID.String(), RuntimeID: req.RuntimeID.String(), Platform: req.Platform.String(), Label: strings.TrimSpace(req.Label), OfferToken: strings.TrimSpace(req.OfferToken), SetupCode: strings.TrimSpace(req.SetupCode)}
+		if err := proof.BindTx(ctx, tx, *req.Proof, s.spaceID.String(), body, now); err != nil {
+			return nil, err
+		}
+	} else {
+		var bound int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_identity_keys WHERE device_id=?`, req.DeviceID.String()).Scan(&bound); err != nil {
+			return nil, err
+		}
+		if bound > 0 {
+			return nil, proof.ErrProof
+		}
+	}
+	if offerID != "" {
+		pending, err := s.approvalTx(ctx, tx, offerID, req, now)
+		if err != nil {
+			return nil, err
+		}
+		if pending != nil {
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			return &ClaimResult{Pending: pending}, nil
+		}
+		var coordinated bool
+		if err := tx.QueryRowContext(ctx, `SELECT coordinated FROM kernel_device_pairing_successor_modes WHERE offer_id=?`, offerID).Scan(&coordinated); err == nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated) VALUES(?,?,?) ON CONFLICT(space_id,device_id) DO UPDATE SET coordinated=excluded.coordinated,administrator=0,mode_revision=mode_revision+1,permission_revision=permission_revision+1,selected_role=''`, s.spaceID.String(), req.DeviceID.String(), coordinated); err != nil {
+				return nil, err
+			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_mesh_bootstrap_tickets SET status='revoked', updated_at=?
 		WHERE space_id=? AND device_id=? AND status='active'`, now.Format(time.RFC3339Nano), s.spaceID.String(), req.DeviceID.String()); err != nil {
@@ -239,6 +321,14 @@ func (s *Service) validateOfferTx(ctx context.Context, tx *sql.Tx, raw string, d
 	if runtimeidentity.ParseDeviceID(creator) == deviceID {
 		return "", ErrSelfPairing
 	}
+	var target string
+	err = tx.QueryRowContext(ctx, `SELECT device_id FROM kernel_device_pairing_offer_targets WHERE offer_id=?`, offerID).Scan(&target)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if err == nil && target != deviceID.String() {
+		return "", errors.New("该配对入口仅供指定设备连接新服务提供者")
+	}
 	existing, err := s.devices.GetDeviceTx(ctx, tx, deviceID)
 	if err != nil {
 		return "", err
@@ -288,6 +378,10 @@ func (s *Service) authorizeFirstDeviceTx(ctx context.Context, tx *sql.Tx, setupC
 
 func (s *Service) ensureSchema(ctx context.Context) error {
 	stmts := []string{
+		ApprovalPolicySchema,
+		ApprovalSchema,
+		OfferTargetSchema,
+		SuccessorModeSchema,
 		`CREATE TABLE IF NOT EXISTS kernel_device_pairing_offers (
 			offer_id TEXT PRIMARY KEY,
 			offer_hash TEXT NOT NULL UNIQUE,

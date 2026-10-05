@@ -9,6 +9,8 @@ import (
 
 type RuntimeInvokePayload struct {
 	InvocationID         string                           `json:"invocationId"`
+	AuthorityCallID      string                           `json:"authorityCallId,omitempty"`
+	OwnedExecutionScope  json.RawMessage                  `json:"ownedExecutionScope,omitempty"`
 	RuntimeType          string                           `json:"runtimeType"`
 	Handler              string                           `json:"handler"`
 	Input                json.RawMessage                  `json:"input,omitempty"`

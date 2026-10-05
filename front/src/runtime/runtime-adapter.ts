@@ -7,6 +7,7 @@ import {
   provisionWebDevice,
   createWebPairingOffer,
   clearWebDeviceCredential,
+  signWebAuthenticatedFetch,
   type PairingInput,
   type PairingStatus,
   type PairingOffer,
@@ -14,9 +15,16 @@ import {
 
 let cachedConnection: RuntimeConnection | null = null;
 let cachedConfig: DeploymentModeConfig | null = null;
+let roleSourceCache: { key: string; expires: number; local: boolean } | null = null;
+let roleSourcePending: { key: string; promise: Promise<boolean> } | null = null;
+let roleSourceGeneration = 0;
 const WEB_DEPLOYMENT_CONFIG_KEY = "amitia.web.deployment.v1";
 
 export const LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
+
+export async function getNativeProviderTransition() {
+  return window.amitiaDesktop?.getMeshStatus ? window.amitiaDesktop.getMeshStatus() : null;
+}
 
 // Canonical registry for Desktop Pet state-authority routes. Cloud deployment
 // code must consult this registry rather than open-coding singular/plural path
@@ -50,7 +58,36 @@ export async function getApiBaseURLForPath(path: string): Promise<string> {
   if (window.amitiaDesktop && isDeviceLocalApiPath(path)) {
     return LOCAL_DEVICE_RUNTIME_BASE_URL;
   }
+  if (window.amitiaDesktop && isDeviceRoleManagementPath(path) && (await getDeploymentConfig()).mode === "cloud") {
+    const runtime = await getRuntimeConnection();
+    const base = runtime.apiBaseURL;
+    const key = `${(await getDeploymentConfig()).serverURL}|${base}`;
+    const generation = roleSourceGeneration;
+    if (roleSourceCache?.key === key && roleSourceCache.expires > Date.now()) return roleSourceCache.local ? LOCAL_DEVICE_RUNTIME_BASE_URL : base;
+    if (roleSourcePending?.key !== key) {
+      const promise = (async () => {
+        const response = await fetch(base + "/api/device-mesh/v1/coordination/me", { headers: await getBackendAuthHeaders("business"), redirect: "error" });
+        if (!response.ok) throw new Error("无法确认角色所属设备，请恢复 Core 连接后重试");
+        const payload = await response.json();
+        const policy = payload.data?.policy || payload.policy;
+        if (typeof policy?.coordinated !== "boolean") throw new Error("角色来源状态无效");
+        const local = !policy.coordinated;
+        if (generation !== roleSourceGeneration) throw new Error("Core 已切换，请重新加载角色");
+        roleSourceCache = { key, expires: Date.now()+2000, local };
+        return local;
+      })();
+      roleSourcePending = { key, promise };
+      promise.finally(() => { if (roleSourcePending?.promise === promise) roleSourcePending = null; }).catch(() => {});
+    }
+    return await roleSourcePending!.promise ? LOCAL_DEVICE_RUNTIME_BASE_URL : base;
+  }
   return getApiBaseURL();
+}
+
+export function isDeviceRoleManagementPath(path: string): boolean {
+  const normalized = path.split("?", 1)[0];
+  if (normalized === "/api/characters/generate-card" || normalized.endsWith("/test")) return false;
+  return ["/api/characters", "/api/character-templates", "/api/companion/role-profile"].some((prefix) => normalized === prefix || normalized.startsWith(prefix+"/"));
 }
 
 function normalizeHTTPBaseURL(raw: string): string {
@@ -85,12 +122,13 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
   cachedConfig = config;
 
   if (config.mode === "cloud" && config.serverURL) {
-    const normalizedURL = normalizeHTTPBaseURL(config.serverURL);
-    cachedConnection = {
-      apiBaseURL: normalizedURL,
-      websocketBaseURL: toWebSocketBaseURL(normalizedURL),
-    };
-    return cachedConnection;
+    const status = await api.getMeshStatus?.();
+    if (status?.cloudBaseUrl) {
+      const proxy = LOCAL_DEVICE_RUNTIME_BASE_URL + "/internal/device-mesh/provider";
+      cachedConnection = { apiBaseURL: proxy, websocketBaseURL: toWebSocketBaseURL(proxy) };
+      return cachedConnection;
+    }
+    throw new Error("本机尚未建立经过验证的云端绑定，请重新配对设备");
   }
 
   const isDev = (import.meta as any).env?.DEV === true;
@@ -166,6 +204,9 @@ export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
 export async function saveDeploymentConfig(
   config: DeploymentModeConfig,
 ): Promise<DeploymentModeConfig> {
+  roleSourceGeneration++;
+  roleSourceCache = null;
+  roleSourcePending = null;
   cachedConnection = null;
   cachedConfig = null;
 
@@ -184,11 +225,17 @@ export async function saveDeploymentConfig(
 }
 
 export function clearRuntimeCache(): void {
+  roleSourceGeneration++;
+  roleSourceCache = null;
+  roleSourcePending = null;
   cachedConnection = null;
   cachedConfig = null;
 }
 
 export function resetRuntimeConnectionCache(): void {
+  roleSourceGeneration++;
+  roleSourceCache = null;
+  roleSourcePending = null;
   cachedConnection = null;
   cachedConfig = null;
 }
@@ -204,6 +251,7 @@ function sameOrigin(a: string, b: string): boolean {
 
 export async function getCurrentDevicePairingStatus(baseURL: string): Promise<PairingStatus> {
   const api = window.amitiaDesktop;
+  if (api && baseURL.endsWith("/internal/device-mesh/provider")) baseURL = (await getDeploymentConfig()).serverURL || baseURL;
   if (api?.getMeshPairingStatus) return api.getMeshPairingStatus(baseURL);
   return getWebPairingStatus(baseURL);
 }
@@ -215,6 +263,7 @@ export async function isCurrentDevicePaired(baseURL: string): Promise<boolean> {
     const state = String(status?.state || "").toLowerCase();
     if (!status || ["", "unprovisioned", "revoked", "stopped"].includes(state)) return false;
     const boundURL = String(status.cloudBaseUrl || "").trim();
+    if (status.fingerprint && baseURL.endsWith("/internal/device-mesh/provider")) return sameOrigin(boundURL, (await getDeploymentConfig()).serverURL || "");
     return Boolean(boundURL) && sameOrigin(boundURL, baseURL);
   }
   return Boolean(getWebDeviceCredential(baseURL));
@@ -231,6 +280,8 @@ export async function provisionCurrentDeviceMesh(baseURL: string, pairing: Pairi
 
 export async function createCurrentDevicePairingOffer(baseURL: string, ttlSeconds = 600): Promise<PairingOffer> {
   const api = window.amitiaDesktop;
+  if (api && (await getDeploymentConfig()).mode === "local") baseURL = LOCAL_DEVICE_RUNTIME_BASE_URL;
+  if (api && baseURL.endsWith("/internal/device-mesh/provider")) baseURL = (await getDeploymentConfig()).serverURL || baseURL;
   if (api?.createMeshPairingOffer) return api.createMeshPairingOffer(baseURL, ttlSeconds);
   return createWebPairingOffer(baseURL, ttlSeconds);
 }
@@ -244,14 +295,24 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string): Promise<voi
     ? await api.getBackendAuthHeaders("business")
     : getWebDeviceAuthHeaders(baseURL);
 
-  if (identity?.deviceId && authHeaders.Authorization) {
+  const nativeStatus = api?.getMeshStatus ? await api.getMeshStatus() : null;
+  if (api && !nativeStatus?.cloudBaseUrl && (authHeaders.Authorization || authHeaders["X-Amitia-Desktop-Session"])) {
+    throw new Error("当前设备没有可验证的云端绑定，无法撤销远端设备凭证");
+  }
+  const revokeBaseURL = api && nativeStatus?.cloudBaseUrl
+    ? `${LOCAL_DEVICE_RUNTIME_BASE_URL}/internal/device-mesh/provider`
+    : baseURL;
+  if (identity?.deviceId && (authHeaders.Authorization || authHeaders["X-Amitia-Desktop-Session"])) {
     let response: Response;
     try {
-      response = await fetch(`${baseURL.replace(/\/+$/, "")}/api/device-mesh/v1/devices/${encodeURIComponent(identity.deviceId)}`, {
+      const url = `${revokeBaseURL.replace(/\/+$/, "")}/api/device-mesh/v1/devices/${encodeURIComponent(identity.deviceId)}`;
+      const init: RequestInit = {
         method: "DELETE",
         headers: { ...authHeaders, Accept: "application/json" },
         credentials: api ? undefined : "include",
-      });
+        redirect: "error",
+      };
+      response = await fetch(url, api ? init : await signWebAuthenticatedFetch(baseURL, url, init));
     } catch (error: any) {
       throw new Error(error?.message || "无法连接 Cloud Core，云端设备凭证尚未撤销");
     }

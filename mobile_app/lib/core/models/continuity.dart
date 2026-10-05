@@ -167,12 +167,20 @@ class ContinuityDetailDto {
     required this.thread,
     required this.waits,
     required this.events,
+    this.pausedReason = '',
+    this.leaseId = '',
+    this.leaseState = '',
   });
 
   factory ContinuityDetailDto.fromJson(Map<String, dynamic> json) {
     final waits = (json['waits'] as List?) ?? const <dynamic>[];
     final events = (json['events'] as List?) ?? const <dynamic>[];
     return ContinuityDetailDto(
+      pausedReason: _stringValue(json['pausedReason']),
+      leaseId: json['lease'] is Map ? _stringValue(json['lease']['id']) : '',
+      leaseState: json['lease'] is Map
+          ? _stringValue(json['lease']['state'])
+          : '',
       thread: ContinuityThreadDto.fromJson(
         Map<String, dynamic>.from((json['thread'] as Map?) ?? const {}),
       ),
@@ -196,4 +204,7 @@ class ContinuityDetailDto {
   final ContinuityThreadDto thread;
   final List<ContinuityWaitDto> waits;
   final List<ContinuityEventDto> events;
+  final String pausedReason;
+  final String leaseId;
+  final String leaseState;
 }

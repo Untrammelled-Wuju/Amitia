@@ -45,6 +45,7 @@ func registerChatRoutes(r *gin.RouterGroup, handler *Handler) {
 	}
 	modelGroup := r.Group("/model")
 	{
+		modelGroup.GET("/available", handler.AvailableModels)
 		admin := security.SharedCoreAdminOnly()
 		modelGroup.GET("/configs", admin, handler.ListModels)
 		modelGroup.GET("/configs/:id", admin, handler.GetModel)

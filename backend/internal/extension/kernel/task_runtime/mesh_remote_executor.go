@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -74,6 +75,12 @@ func (e *MeshRemoteTaskExecutor) SupportsPlacement(placement TaskExecutionPlacem
 }
 
 func (e *MeshRemoteTaskExecutor) Execute(ctx context.Context, request TaskExecutionRequest) (TaskExecutionOutcome, error) {
+	if request.Run == nil || request.Definition == nil || request.AttemptID == "" || request.Run.ExecutionAttemptID != request.AttemptID {
+		return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, NewTaskError(ErrTaskExecutionAttemptInvalid, "远端任务缺少一致的执行身份")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, err
+	}
 	if e.hub == nil {
 		return TaskExecutionOutcome{
 			Status:       RunStatusRecoveryRequired,
@@ -97,6 +104,12 @@ func (e *MeshRemoteTaskExecutor) Execute(ctx context.Context, request TaskExecut
 }
 
 func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request TaskExecutionRequest) (TaskExecutionOutcome, error) {
+	if scope, owned := coordination.FromContext(ctx); owned {
+		pin := request.TargetDefinitionPin
+		if pin == nil || pin.DeviceID != scope.TargetDeviceID || pin.TaskID != request.Run.TaskDefinitionID || pin.InstalledGeneration < 1 || !validTaskFingerprint(pin.DefinitionFingerprint) {
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, NewTaskError(ErrTaskDefinitionInvalid, "远端任务缺少目标设备已确认的插件版本")
+		}
+	}
 	if e.PendingTasks == nil {
 		return TaskExecutionOutcome{
 			Status:       RunStatusFailed,
@@ -152,6 +165,8 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 	}
 
 	dispatch := protocol.TaskDispatchPayload{
+		TaskGeneration:       request.Run.Generation,
+		ProgressBase:         request.ProgressBase,
 		TaskRunID:            request.Run.TaskRunID,
 		TaskDefinitionID:     request.Run.TaskDefinitionID,
 		AttemptID:            request.AttemptID.String(),
@@ -165,6 +180,46 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		RuntimeSessionID:     sessionID,
 		ConnectionGeneration: generation,
 		SentAt:               time.Now().UTC(),
+	}
+	if scope, owned := coordination.FromContext(ctx); owned {
+		metadata := CloneTaskRun(request.Run)
+		metadata.Input = nil
+		dispatch.RootTaskMetadata, err = json.Marshal(metadata)
+		if err == nil && request.ResumeCheckpoint != nil {
+			dispatch.ResumeCheckpoint, err = json.Marshal(request.ResumeCheckpoint)
+		}
+		if err != nil || len(dispatch.RootTaskMetadata) > 64<<10 || len(dispatch.ResumeCheckpoint) > (1<<20)+(64<<10) {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "root metadata invalid")
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, NewTaskError(ErrTaskScopeDenied, "远端任务执行元数据或检查点无效")
+		}
+		dispatch.TargetDefinitionPin, err = json.Marshal(request.TargetDefinitionPin)
+		if err != nil {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "target definition invalid")
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, err
+		}
+		if request.Run.ScopeSnapshotID == "" || target.SpaceID.String() != scope.SpaceID || target.DeviceID.String() != scope.TargetDeviceID {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "task authority mismatch")
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, NewTaskError(ErrTaskScopeDenied, "远端任务目标与设备授权不一致")
+		}
+		encoded, err := json.Marshal(scope)
+		if err != nil || len(encoded) > 64<<10 {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "task authority invalid")
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, NewTaskError(ErrTaskScopeDenied, "远端任务授权范围无效")
+		}
+		id, confirm, err := coordination.TrackCurrentRemoteAuthority(ctx, scope.SpaceID, scope.TargetDeviceID, sessionID.String(), generation)
+		if err != nil {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "task authority unavailable")
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, err
+		}
+		if err := e.PendingTasks.BindAuthority(request.Run.TaskRunID, request.AttemptID.String(), sessionID.String(), generation, confirm, id); err != nil {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "task authority binding failed")
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, err
+		}
+		dispatch.AuthorityCallID, dispatch.OwnedExecutionScope = id, encoded
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		e.PendingTasks.Cancel(request.Run.TaskRunID, "task authority expired")
+		return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, err
 	}
 
 	if !e.hub.SendEnvelope(sessionID, generation, protocol.MessageTypeTaskDispatch, dispatch) {

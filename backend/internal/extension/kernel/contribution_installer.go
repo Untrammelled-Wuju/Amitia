@@ -260,7 +260,7 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 	case domain.ContributionKindWorkflow:
 		return i.buildWorkflowOp(ctx, contrib, defData)
 	case domain.ContributionKindBackgroundTask:
-		return i.buildTaskDefinitionOp(ctx, contrib, defData)
+		return i.buildTaskDefinitionOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindMCPServer:
 		return i.buildMCPServerOp(ctx, contrib, defData)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
@@ -507,6 +507,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	}
 
 	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
+	runtimeBinding = i.enrichToolPlacement(ctx, contrib, runtimeBinding)
 	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && toolSource == capability.ToolSourcePlugin {
 		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
 		if def.CapabilityID == "" {
@@ -798,7 +799,7 @@ func (i *TypedContributionInstaller) buildWorkflowOp(ctx context.Context, contri
 	}, nil
 }
 
-func (i *TypedContributionInstaller) buildTaskDefinitionOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) (installOp, error) {
+func (i *TypedContributionInstaller) buildTaskDefinitionOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
 	if i.container.TaskRuntimeService == nil {
 		return installOp{}, fmt.Errorf("task runtime service not configured")
 	}
@@ -818,9 +819,19 @@ func (i *TypedContributionInstaller) buildTaskDefinitionOp(ctx context.Context, 
 	if def.ContributionID == "" {
 		def.ContributionID = string(contrib.ID)
 	}
+	if def.ExtensionID != string(contrib.ExtensionID) || def.ModuleID != string(contrib.ModuleID) || def.ContributionID != string(contrib.ID) || generation < 0 {
+		return installOp{}, fmt.Errorf("任务定义与安装贡献身份不一致")
+	}
+	def.InstalledGeneration = generation
+	if def.Version == "" {
+		def.Version = contrib.Version
+	}
 	return installOp{
 		kind: domain.ContributionKindBackgroundTask,
 		doInstall: func(ctx context.Context) error {
+			if err := task_runtime.PinTaskEntry(ctx, resolveExtensionBundlePath(i.container.ExtRoot, def.ExtensionID), &def); err != nil {
+				return fmt.Errorf("pin installed task entry: %w", err)
+			}
 			if err := i.container.TaskRuntimeService.PutTaskDefinition(ctx, &def); err != nil {
 				return fmt.Errorf("put task definition: %w", err)
 			}
@@ -1211,6 +1222,21 @@ func (i *TypedContributionInstaller) buildRuntimeBindingFromValues(contrib domai
 	return rb
 }
 
+func (i *TypedContributionInstaller) enrichToolPlacement(ctx context.Context, contrib domain.ContributionDefinition, binding capability.RuntimeBinding) capability.RuntimeBinding {
+	if i.container == nil || i.container.ModuleRepository == nil {
+		return binding
+	}
+	module, err := i.container.ModuleRepository.GetModule(ctx, contrib.ExtensionID, contrib.ModuleID)
+	if err != nil {
+		return binding
+	}
+	if binding.Metadata == nil {
+		binding.Metadata = make(map[string]any)
+	}
+	binding.Metadata["modulePlacement"] = string(module.Placement)
+	return binding
+}
+
 func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, extID domain.ExtensionID) error {
 	if i.container == nil {
 		return fmt.Errorf("contribution-installer: container not attached")
@@ -1446,6 +1472,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	}
 
 	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
+	runtimeBinding = i.enrichToolPlacement(ctx, contrib, runtimeBinding)
 	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && toolSource == capability.ToolSourcePlugin {
 		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
 		if def.CapabilityID == "" {

@@ -20,6 +20,7 @@ const (
 	MessageTypeTaskDispatch   MessageType = "task_dispatch"
 	MessageTypeTaskCancel     MessageType = "task_cancel"
 	MessageTypeTaskClaim      MessageType = "task_claim"
+	MessageTypeTaskLeaseAck   MessageType = "task_lease_ack"
 	MessageTypeTaskComplete   MessageType = "task_complete"
 	MessageTypeTaskProgress   MessageType = "task_progress"
 	MessageTypeTaskCheckpoint MessageType = "task_checkpoint"
@@ -40,7 +41,7 @@ func (t MessageType) IsValid() bool {
 		MessageTypeRuntimeEvent, MessageTypeStateSnapshot,
 		MessageTypeError, MessageTypePing, MessageTypePong,
 		MessageTypeTaskDispatch, MessageTypeTaskCancel,
-		MessageTypeTaskClaim, MessageTypeTaskComplete, MessageTypeTaskProgress, MessageTypeTaskCheckpoint,
+		MessageTypeTaskClaim, MessageTypeTaskLeaseAck, MessageTypeTaskComplete, MessageTypeTaskProgress, MessageTypeTaskCheckpoint,
 		MessageTypeTaskHeartbeat, MessageTypeTaskPause, MessageTypeTaskResume:
 		return true
 	}

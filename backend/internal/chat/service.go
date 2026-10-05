@@ -156,6 +156,8 @@ type service struct {
 	outboxStore         OutboxStore
 	deliveryStore       DeliveryStore
 	toolRuntime         ModelToolRuntime
+	ownedToolRuntime    OwnedToolRuntime
+	inferenceAuthority  InferenceAuthority
 	hookInvoker         HookInvoker
 	desktopPetLifecycle DesktopPetLifecycleObserver
 	actionMaterializer  *interaction.ActionMaterializer

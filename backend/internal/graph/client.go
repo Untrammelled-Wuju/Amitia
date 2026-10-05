@@ -54,6 +54,8 @@ func (c *Client) initSchema() error {
 	ctx := context.Background()
 
 	queries := []string{
+		"DEFINE TABLE IF NOT EXISTS amitia_owned_graph_v1 SCHEMALESS",
+		"DEFINE INDEX IF NOT EXISTS idx_owned_graph_source ON amitia_owned_graph_v1 FIELDS ownerId,roleId,sourceId",
 		"DEFINE TABLE entity_node SCHEMALESS",
 		"DEFINE FIELD entity_type ON entity_node TYPE string",
 		"DEFINE FIELD label ON entity_node TYPE string",

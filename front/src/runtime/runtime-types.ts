@@ -161,10 +161,10 @@ export interface AmitiaDesktopAPI {
   closeRealtimeCallWindow(): Promise<void>;
   onRealtimeCallWindowClosed(callback: () => void): () => void;
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null>;
-  getMeshStatus(): Promise<{ state: string; cloudBaseUrl: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null>;
+  getMeshStatus(): Promise<{ state: string; cloudBaseUrl: string; deviceId: string; runtimeId: string; runtimeSessionId: string; fingerprint?: string; coreId?: string; providerChangePending?: boolean; successorCoreId?: string; previousCoreId?: string; providerChangeId?: string } | null>;
   getMeshPairingStatus(cloudBaseUrl: string): Promise<{ spaceId: string; trustedDeviceCount: number; firstDeviceSetupRequired: boolean }>;
   createMeshPairingOffer(cloudBaseUrl: string, ttlSeconds?: number): Promise<{ offerId: string; offerToken: string; qrPayload: string; expiresAt: string }>;
-  provisionMesh(cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string }): Promise<{ ok: boolean }>;
+  provisionMesh(cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string; fingerprint?: string; coreId?: string }): Promise<{ ok: boolean }>;
   deprovisionMesh(): Promise<{ ok: boolean }>;
   onUINavigate(callback: (target: string) => void): () => void;
 }

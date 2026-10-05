@@ -209,8 +209,11 @@ func (LocalTaskPlacementResolver) ResolveTaskPlacement(
 }
 
 type TaskExecutionRequest struct {
-	Run        *TaskRun
-	Definition *TaskDefinition
+	Run                 *TaskRun
+	Definition          *TaskDefinition
+	TargetDefinitionPin *TargetTaskDefinitionPin
+	ResumeCheckpoint    *TaskCheckpoint
+	ProgressBase        int64
 
 	AttemptID TaskExecutionAttemptID
 

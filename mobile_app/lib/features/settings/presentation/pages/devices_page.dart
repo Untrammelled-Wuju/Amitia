@@ -11,10 +11,14 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import 'device_core_call_page.dart';
+import 'device_capability_grants_page.dart';
 
 final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   return ref.read(deviceMeshServiceProvider).devices();
 });
+
+final _deviceAuthorityProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) => ref.read(deviceMeshServiceProvider).coordination());
 
 class DevicesPage extends ConsumerWidget {
   const DevicesPage({super.key});
@@ -22,6 +26,7 @@ class DevicesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(_devicesProvider);
+    final authority = ref.watch(_deviceAuthorityProvider).value;
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -126,6 +131,8 @@ class DevicesPage extends ConsumerWidget {
                         _DeviceTile(
                           item: items[i],
                           onRevoke: () => _confirmRevoke(context, ref, items[i]),
+                          onCall: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeviceCoreCallPage(deviceId: items[i].deviceId, label: items[i].name))),
+                          onGrants: authority?['canAdminister'] == true || authority?['policy']?['deviceId'] == items[i].deviceId ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeviceCapabilityGrantsPage(deviceId: items[i].deviceId, label: items[i].name, devices: devices))) : null,
                           onLoadSync: () => ref.read(deviceMeshServiceProvider).syncStatus(items[i].deviceId),
                           onProbe: (runtimeId) async {
                             final result = await ref.read(deviceMeshServiceProvider).probeRuntime(items[i].deviceId, runtimeId);
@@ -237,12 +244,16 @@ class _DeviceItem {
 class _DeviceTile extends StatefulWidget {
   final _DeviceItem item;
   final VoidCallback onRevoke;
+  final VoidCallback onCall;
+  final VoidCallback? onGrants;
   final Future<Map<String, dynamic>?> Function() onLoadSync;
   final Future<void> Function(String runtimeId) onProbe;
 
   const _DeviceTile({
     required this.item,
     required this.onRevoke,
+    required this.onCall,
+    this.onGrants,
     required this.onLoadSync,
     required this.onProbe,
   });
@@ -357,8 +368,23 @@ class _DeviceTileState extends State<_DeviceTile> {
                   ],
                 ),
               ),
-              IconButton(tooltip: '刷新同步状态', onPressed: _syncLoading ? null : _loadSync, icon: _syncLoading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync, size: 18)),
-              IconButton(tooltip: '移除设备', icon: Icon(Icons.logout, size: 18, color: context.textTertiary), onPressed: widget.onRevoke, visualDensity: VisualDensity.compact),
+              PopupMenuButton<String>(
+                tooltip: '设备操作',
+                onSelected: (action) {
+                  switch (action) {
+                    case 'sync': _loadSync();
+                    case 'call': widget.onCall();
+                    case 'grants': widget.onGrants?.call();
+                    case 'revoke': widget.onRevoke();
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'sync', enabled: !_syncLoading, child: const Text('刷新同步状态')),
+                  PopupMenuItem(value: 'call', enabled: item.trustState == 'trusted', child: const Text('通过 Core 调用')),
+                  if (widget.onGrants != null) const PopupMenuItem(value: 'grants', child: Text('能力授权')),
+                  const PopupMenuItem(value: 'revoke', child: Text('移除设备')),
+                ],
+              ),
             ],
           ),
           if (item.runtimes.isNotEmpty) ...[

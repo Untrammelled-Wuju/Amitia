@@ -203,6 +203,7 @@ const props = defineProps<{
   pullText: string;
   characters?: any[];
   modelError?: string;
+  deviceOwned?: boolean;
   extensionContext?: Record<string, unknown>;
   providerActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
 }>();
@@ -384,7 +385,7 @@ const flowItems = computed<FlowItem[]>(() => {
 
 function resolveCharacter(characterId: unknown) {
   const id = String(characterId || "").trim();
-  if (!id) {
+  if (!id || props.deviceOwned) {
     return {
       id: props.characterId,
       name: props.charName || "未知角色",
@@ -534,7 +535,7 @@ let clientRuntimeSessionGeneration = 0;
 async function loadClientRuntimeSession(id: string) {
   const generation = ++clientRuntimeSessionGeneration;
   const scopeGeneration = await browserClientPluginRuntime.activateConversationScope(id);
-  if (!id) return;
+  if (!id || props.deviceOwned) return;
   try {
     const state = await fetchClientRuntimeSessionState(id);
     if (generation !== clientRuntimeSessionGeneration || id !== conversationId.value) return;

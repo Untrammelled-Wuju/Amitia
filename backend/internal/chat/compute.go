@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
@@ -52,6 +53,16 @@ type ComputeResult struct {
 }
 
 func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageRequest) (*ComputeResult, error) {
+	ctx, finish, authorityErr := s.beginInference(ctx)
+	if authorityErr != nil {
+		return nil, authorityErr
+	}
+	defer finish()
+	if actor, ok := auth.FromContext(ctx); ok && actor != nil && !actor.IsLocalTrusted && !actor.HasPermission(auth.PermSystemAdmin) {
+		req.ModelConfigID = 0
+		req.ReasoningEnabled = nil
+		req.ReasoningEffort = ""
+	}
 	requestID := strings.TrimSpace(req.RequestID)
 	if requestID == "" {
 		requestID = uuid.New().String()

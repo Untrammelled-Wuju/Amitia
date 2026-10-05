@@ -70,6 +70,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
 	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/episodic"
@@ -107,6 +108,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
+	"github.com/u-ai/backend/internal/spaceidentity"
 	syncpkg "github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
@@ -125,6 +127,7 @@ type AppServices struct {
 	RuntimePolicy                runtimeprofile.Policy
 	DB                           *gorm.DB
 	DeviceMesh                   *devicemesh.Runtime
+	OwnedBusiness                *business.Engine
 	ClosureGate                  *Stage2ClosureGateAdapter
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
@@ -396,7 +399,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("scope relation database unavailable: %w", err)
 	}
 
+	taskOwnershipBinding := &task_runtime.OwnedRuntimeBinding{}
 	kernelBuilder := kernel.NewContainerBuilder().
+		WithTaskOwnershipBinding(taskOwnershipBinding).
 		WithWorkshopModelGenerator(chatSvc).
 		WithDBPath(kernelDBPath).
 		WithScopeRelationDB(scopeRelationDB).
@@ -1230,45 +1235,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
 	}
 	dispatcher := devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry)
-	if runtimeProfile.IsDeviceAgent() {
-		if kernelContainer.TaskRuntimeService == nil {
-			return nil, fmt.Errorf("device-agent task runtime service is required")
-		}
-		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
-		extension.RegisterDeviceWorkflowMeshHandlers(localRuntimeDispatcher, services.Extension)
-		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshResolveHandler, newDesktopPetBehaviorMeshResolveHandler(services))
-		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshHandler, newDesktopPetBehaviorMeshInvokeHandler(services))
-		if kernelContainer.GameHost != nil {
-			localRuntimeDispatcher.RegisterCancellable(gameHostManagementInvokeHandler, newGameHostManagementInvokeHandler(services))
-		}
-		deviceDispatcher := devicemeshagent.NewChainedRuntimeDispatcher(localRuntimeDispatcher, dispatcher)
-		deviceMeshRuntime, meshErr := devicemesh.NewDeviceAgentRuntime(
-			mcpDataDirectory(ctx),
-			platformFromGOOS(goruntime.GOOS),
-			NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService),
-			deviceDispatcher,
-		)
-		if meshErr != nil {
-			return nil, fmt.Errorf("failed to construct device-agent mesh runtime: %w", meshErr)
-		}
-		services.DeviceMesh = deviceMeshRuntime
-		if deviceMeshRuntime.LocalHandler == nil {
-			return nil, fmt.Errorf("device-agent local mesh handler is required for desktop pet owner mapping")
-		}
-		deviceMeshRuntime.LocalHandler.SetCredentialObserver(func(cred *devicemeshagent.StoredCredential) error {
-			if cred == nil {
-				return nil
-			}
-			return bindDesktopPetOwnerFromCredential(context.Background(), services, cred.SpaceID.String(), cred.DeviceID.String())
-		})
-		if cred, loadErr := deviceMeshRuntime.LocalHandler.LoadCredential(); loadErr != nil {
-			return nil, fmt.Errorf("load device-agent credential for desktop pet owner mapping: %w", loadErr)
-		} else if cred != nil {
-			if bindErr := bindDesktopPetOwnerFromCredential(context.Background(), services, cred.SpaceID.String(), cred.DeviceID.String()); bindErr != nil {
-				return nil, fmt.Errorf("restore desktop pet owner mapping: %w", bindErr)
-			}
-		}
-	} else {
+	{
 		sqlDB, dbErr := ctx.DB.DB()
 		if dbErr != nil {
 			return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", dbErr)
@@ -1297,8 +1264,75 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		services.DeviceMesh = deviceMeshRuntime
 		services.Extension.AttachWorkflowDeviceControl(newWorkflowDeviceControlPlane(deviceMeshRuntime))
+		localSpace, spaceErr := spaceidentity.Open(mcpDataDirectory(ctx))
+		if spaceErr != nil {
+			return nil, spaceErr
+		}
+		coreData, coreDataErr := newMeshLocalDataPort(services, mcpDataDirectory(ctx), localSpace.SpaceID())
+		if coreDataErr != nil {
+			return nil, coreDataErr
+		}
+		deviceMeshRuntime.CoreDataPort = coreData
+		physicalIdentity, physicalErr := devicemeshagent.NewIdentityStore(mcpDataDirectory(ctx)).Load()
+		if physicalErr != nil {
+			return nil, physicalErr
+		}
+		deviceData, deviceDataErr := newMeshLocalDataPort(services, mcpDataDirectory(ctx), physicalIdentity.DeviceID.String())
+		if deviceDataErr != nil {
+			return nil, deviceDataErr
+		}
+		deviceMeshRuntime.LocalDeviceID = physicalIdentity.DeviceID.String()
+		deviceMeshRuntime.LocalDeviceDataPort = deviceData
+		if err := bindCoreOwnedTaskRuntime(taskOwnershipBinding, deviceMeshRuntime, localSpace.SpaceID()); err != nil {
+			return nil, fmt.Errorf("initialize owned task runtime: %w", err)
+		}
+		ownedModel, modelReady := services.Chat.(business.Model)
+		if !modelReady {
+			return nil, fmt.Errorf("Core 缺少设备归属计算端口")
+		}
+		services.OwnedBusiness = business.NewEngine(deviceMeshRuntime.Coordination, deviceMeshRuntime, ownedModel)
+		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
+			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services})
+		}
+		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
+		ownedDataHandler, ownedDataErr := newDeviceOwnedDataHandler(services, mcpDataDirectory(ctx))
+		if ownedDataErr != nil {
+			return nil, ownedDataErr
+		}
+		localRuntimeDispatcher.RegisterCancellable("coordination.data", ownedDataHandler)
+		extension.RegisterDeviceWorkflowMeshHandlers(localRuntimeDispatcher, services.Extension)
+		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshResolveHandler, newDesktopPetBehaviorMeshResolveHandler(services))
+		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshHandler, newDesktopPetBehaviorMeshInvokeHandler(services))
+		if kernelContainer.GameHost != nil {
+			localRuntimeDispatcher.RegisterCancellable(gameHostManagementInvokeHandler, newGameHostManagementInvokeHandler(services))
+		}
+		deviceDispatcher := devicemeshagent.NewChainedRuntimeDispatcher(localRuntimeDispatcher, dispatcher)
+		if err := deviceMeshRuntime.AttachDeviceAgent(mcpDataDirectory(ctx), platformFromGOOS(goruntime.GOOS), deviceDispatcher, func(cred *devicemeshagent.StoredCredential) error {
+			if cred == nil {
+				_, _, err := deviceMeshRuntime.Coordination.BindProvider(context.Background(), localSpace.SpaceID())
+				return err
+			}
+			if _, _, err := deviceMeshRuntime.Coordination.BindProvider(context.Background(), cred.SpaceID.String()); err != nil {
+				return err
+			}
+			return bindDesktopPetOwnerFromCredential(context.Background(), services, cred.SpaceID.String(), cred.DeviceID.String())
+		}); err != nil {
+			return nil, fmt.Errorf("initialize hybrid device Agent: %w", err)
+		}
+		deviceMeshRuntime.LocalHandler.SetLocalCoreID(localSpace.SpaceID())
+		if setter, ok := services.Chat.(interface{ SetInferenceAuthority(chat.InferenceAuthority) }); ok {
+			setter.SetInferenceAuthority(deviceMeshRuntime.LocalHandler.LocalInferenceContext)
+		}
+		if err := embedding.SetInferenceAuthority(services.DB, deviceMeshRuntime.LocalHandler.LocalInferenceContext); err != nil {
+			return nil, err
+		}
 		if deviceMeshRuntime.Handler != nil && kernelContainer != nil && kernelContainer.WorkflowExecutor != nil {
 			deviceMeshRuntime.Handler.SetOnReady(func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
+				go func() {
+					if err := deviceMeshRuntime.ResumeDeviceData(context.Background(), deviceID.String()); err != nil {
+						log.Warn(fmt.Sprintf("device data pending delivery: %v", err))
+					}
+				}()
 				go func() {
 					if _, resumeErr := kernelContainer.WorkflowExecutor.ResumeWaitingDevice(context.Background(), spaceID.String(), deviceID.String()); resumeErr != nil {
 						log.Warn(fmt.Sprintf("workflow waiting-device resume failed: spaceId=%s deviceId=%s err=%v", spaceID, deviceID, resumeErr))

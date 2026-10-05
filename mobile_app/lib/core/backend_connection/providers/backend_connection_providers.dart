@@ -130,6 +130,7 @@ class DefaultBackendConnectionRepository implements BackendConnectionRepository 
       config.endpoint.port,
       config.endpoint.httpScheme,
       config.endpoint.webSocketScheme,
+      config.endpoint.pathPrefix,
       config.endpoint.livenessPath,
       config.endpoint.readinessPath,
       config.authStrategy.name,
@@ -266,6 +267,20 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
             'DeviceCredential identity is incomplete',
           ),
         );
+      }
+
+      if ((auth['cloudBaseUrl'] ?? '').toString().isNotEmpty) {
+        return BackendConnectionAvailable(BackendConnectionConfig(
+          schemaVersion: 1, generation: 1,
+          endpoint: BackendConnectionEndpoint(
+            host: local.endpoint.host, port: local.endpoint.port,
+            httpScheme: local.endpoint.httpScheme, webSocketScheme: local.endpoint.webSocketScheme,
+            pathPrefix: '/internal/device-mesh/provider',
+            livenessPath: '/api/public/health', readinessPath: '/api/public/health',
+          ),
+          authStrategy: BackendAuthStrategy.localToken, credential: local.credential,
+          spaceId: spaceId, deviceId: deviceId, runtimeId: runtimeId,
+        ));
       }
 
       final scheme = parsed.scheme.toLowerCase();

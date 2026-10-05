@@ -131,8 +131,8 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			 attempt, max_attempts, created_at, queued_at, started_at,
 			 updated_at, finished_at, deadline_at, cancel_requested_at,
 			 pause_reason, pause_requested_at, paused_at, resumed_at,
-			 error_code, error_message, generation, revision)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			 error_code, error_message, generation, revision, definition_fingerprint, lease_id, lease_expires_at, last_heartbeat_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(task_run_id) DO UPDATE SET
 			status = excluded.status, priority = excluded.priority,
 			input_json = excluded.input_json, input_hash = excluded.input_hash,
@@ -156,8 +156,9 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			resumed_at = excluded.resumed_at,
 			error_code = excluded.error_code, error_message = excluded.error_message,
 			generation = excluded.generation,
-			revision = excluded.revision
-		WHERE excluded.revision = extension_task_runs.revision + 1
+			revision = excluded.revision,
+			lease_id = excluded.lease_id, lease_expires_at = excluded.lease_expires_at, last_heartbeat_at = excluded.last_heartbeat_at
+		WHERE excluded.revision = extension_task_runs.revision + 1 AND excluded.definition_fingerprint = extension_task_runs.definition_fingerprint
 	`,
 		run.TaskRunID, run.OperationID, run.InvocationID, run.TaskDefinitionID,
 		run.ExtensionID, run.ModuleID, string(run.Status), run.Priority,
@@ -178,7 +179,8 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 		nullableTime(run.PausedAt),
 		nullableTime(run.ResumedAt),
 		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
-		run.Generation, run.Revision,
+		run.Generation, run.Revision, run.DefinitionFingerprint,
+		run.LeaseID, nullableTime(run.LeaseExpiresAt), nullableTime(run.LastHeartbeatAt),
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: upsert task run: %w", err)
@@ -204,8 +206,10 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 		    pause_reason = ?, pause_requested_at = ?, paused_at = ?, resumed_at = ?,
 		    error_code = ?, error_message = ?,
 		    generation = ?,
-		    revision = ?
-		WHERE task_run_id = ? AND status = ? AND generation = ? AND revision = ?
+		    revision = ?,
+		    execution_placement = ?, execution_target_json = ?, execution_attempt_id = ?, execution_resolved_at = ?, execution_resolved_by = ?,
+		    lease_id = ?, lease_expires_at = ?, last_heartbeat_at = ?, updated_at = ?
+		WHERE task_run_id = ? AND status = ? AND generation = ? AND revision = ? AND definition_fingerprint = ?
 `,
 		string(run.Status), run.Priority,
 		string(run.Input), run.InputHash,
@@ -218,7 +222,9 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
 		run.Generation,
 		run.Revision,
-		run.TaskRunID, string(expectedStatus), expectedGeneration, expectedRevision,
+		string(run.ExecutionPlacement), serializeExecutionTarget(run.ExecutionTarget), string(run.ExecutionAttemptID), nullableTime(run.ExecutionResolvedAt), run.ExecutionResolvedBy,
+		run.LeaseID, nullableTime(run.LeaseExpiresAt), nullableTime(run.LastHeartbeatAt), time.Now().UTC(),
+		run.TaskRunID, string(expectedStatus), expectedGeneration, expectedRevision, run.DefinitionFingerprint,
 	)
 	if err != nil {
 		return false, fmt.Errorf("sqlite: cas update task run: %w", err)
@@ -243,7 +249,7 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		       attempt, max_attempts, created_at, queued_at, started_at,
 		       updated_at, finished_at, deadline_at, cancel_requested_at,
 		       pause_reason, pause_requested_at, paused_at, resumed_at,
-		       error_code, error_message, generation, revision
+		       error_code, error_message, generation, revision, definition_fingerprint, lease_id, lease_expires_at, last_heartbeat_at
 		FROM extension_task_runs WHERE task_run_id = ?
 	`, runID)
 	run, err := scanTaskRun(row)
@@ -270,6 +276,7 @@ func scanTaskRun(scanner interface {
 	var pauseRequestedAt, pausedAt, resumedAt sql.NullTime
 	var errorCode, errorMessage sql.NullString
 	var invocationID, executionPlacement, executionAttemptID, executionResolvedBy sql.NullString
+	var leaseExpiresAt, lastHeartbeatAt sql.NullTime
 
 	err := scanner.Scan(
 		&run.TaskRunID, &run.OperationID, &invocationID, &run.TaskDefinitionID,
@@ -283,7 +290,8 @@ func scanTaskRun(scanner interface {
 		&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
 		&queuedAt, &startedAt, &updatedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
 		&pauseReason, &pauseRequestedAt, &pausedAt, &resumedAt,
-		&errorCode, &errorMessage, &run.Generation, &run.Revision,
+		&errorCode, &errorMessage, &run.Generation, &run.Revision, &run.DefinitionFingerprint,
+		&run.LeaseID, &leaseExpiresAt, &lastHeartbeatAt,
 	)
 	if err != nil {
 		return nil, err
@@ -308,6 +316,7 @@ func scanTaskRun(scanner interface {
 	run.PauseRequestedAt = timePtr(pauseRequestedAt)
 	run.PausedAt = timePtr(pausedAt)
 	run.ResumedAt = timePtr(resumedAt)
+	run.LeaseExpiresAt, run.LastHeartbeatAt = timePtr(leaseExpiresAt), timePtr(lastHeartbeatAt)
 	run.ErrorCode = stringPtr(errorCode)
 	run.ErrorMessage = stringPtr(errorMessage)
 	return &run, nil
@@ -325,7 +334,7 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 		       attempt, max_attempts, created_at, queued_at, started_at,
 		       updated_at, finished_at, deadline_at, cancel_requested_at,
 		       pause_reason, pause_requested_at, paused_at, resumed_at,
-		       error_code, error_message, generation, revision
+		       error_code, error_message, generation, revision, definition_fingerprint, lease_id, lease_expires_at, last_heartbeat_at
 		FROM extension_task_runs`
 	var args []interface{}
 	where := ""
@@ -534,6 +543,7 @@ func (r *TaskRepository) PutProgress(ctx context.Context, taskRunID string, seq 
 		VALUES (?, ?, ?, ?)
 		ON CONFLICT(task_run_id) DO UPDATE SET
 			sequence = excluded.sequence, progress_json = excluded.progress_json, updated_at = excluded.updated_at
+		WHERE excluded.sequence > extension_task_progress.sequence
 	`, taskRunID, seq, string(progressJSON), now)
 	if err != nil {
 		return fmt.Errorf("sqlite: put progress: %w", err)

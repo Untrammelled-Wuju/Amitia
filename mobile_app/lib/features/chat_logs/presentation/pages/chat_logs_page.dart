@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -32,6 +33,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   String _projectFilter = '';
   final _searchController = TextEditingController();
   Timer? _searchTimer;
+  int _loadRequest = 0;
 
   @override
   void initState() {
@@ -117,6 +119,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   }
 
   Future<void> _load() async {
+    final ticket = ++_loadRequest;
+    final projectId = _projectFilter;
+    final keyword = _searchController.text;
     setState(() {
       _loading = true;
       _error = '';
@@ -124,17 +129,14 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     try {
       final conversations = await ref
           .read(chatServiceProvider)
-          .archivedConversations(
-            projectId: _projectFilter,
-            keyword: _searchController.text,
-          );
-      if (!mounted) return;
+          .archivedConversations(projectId: projectId, keyword: keyword);
+      if (!mounted || ticket != _loadRequest) return;
       setState(() => _conversations = conversations);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || ticket != _loadRequest) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && ticket == _loadRequest) setState(() => _loading = false);
     }
   }
 
@@ -314,6 +316,57 @@ class _ArchivedConversationDetailPageState
   List<MessageDto> _messages = const [];
   bool _loading = true;
   String _error = '';
+  bool _processing = false;
+
+  Future<void> _processAction(String action) async {
+    if (_processing || _loading) return;
+    final service = ref.read(chatServiceProvider);
+    final revision = service.owned.revision;
+    setState(() => _processing = true);
+    try {
+      if (action == 'summary') {
+        final result = await service.generateConversationSummary(
+          widget.conversation.id,
+          characterId: widget.conversation.characterId,
+        );
+        if (!mounted || revision != service.owned.revision) return;
+        final text = result?['summaryText']?.toString() ?? '';
+        if (text.trim().isEmpty) throw StateError('摘要结果为空');
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('对话摘要'),
+            content: SingleChildScrollView(child: SelectableText(text)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('关闭'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        final text = await service.exportConversation(
+          widget.conversation.id,
+          format: action,
+          characterId: widget.conversation.characterId,
+        );
+        if (!mounted || revision != service.owned.revision) return;
+        await Clipboard.setData(ClipboardData(text: text));
+        if (!mounted || revision != service.owned.revision) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('对话已复制到剪贴板')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('操作失败：$error'), backgroundColor: context.error),
+      );
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
+  }
 
   @override
   void initState() {
@@ -329,7 +382,10 @@ class _ArchivedConversationDetailPageState
     try {
       final messages = await ref
           .read(chatServiceProvider)
-          .getMessages(widget.conversation.id);
+          .getMessages(
+            widget.conversation.id,
+            characterId: widget.conversation.characterId,
+          );
       if (!mounted) return;
       setState(() => _messages = messages);
     } catch (error) {
@@ -352,6 +408,28 @@ class _ArchivedConversationDetailPageState
                   : widget.conversation.title)
             : '${widget.projectName} - ${widget.conversation.title.trim().isEmpty ? '新对话' : widget.conversation.title}',
         showBackButton: true,
+        actions: [
+          if (_processing)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            PopupMenuButton<String>(
+              tooltip: '对话操作',
+              enabled: !_loading && _error.isEmpty,
+              onSelected: _processAction,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'summary', child: Text('生成摘要')),
+                PopupMenuItem(value: 'json', child: Text('复制 JSON')),
+                PopupMenuItem(value: 'markdown', child: Text('复制 Markdown')),
+              ],
+            ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

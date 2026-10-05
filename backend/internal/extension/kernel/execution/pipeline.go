@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -292,6 +293,13 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		}
 		identity := BuildIdempotencyIdentity(toolID, inv, inv.IdempotencyKey)
 		fingerprint := BuildRequestFingerprintSHA(request.Input, tool.ToolVersion, inv.Generation)
+		if ownedScope, owned := coordination.FromContext(timeoutCtx); owned {
+			encoded, _ := json.Marshal(struct {
+				Input json.RawMessage             `json:"input"`
+				Scope coordination.ExecutionScope `json:"scope"`
+			}{request.Input, ownedScope})
+			fingerprint = BuildRequestFingerprintSHA(encoded, tool.ToolVersion, inv.Generation)
+		}
 		res, hit, err := p.IdempotencyGuard.Begin(timeoutCtx, identity, fingerprint)
 		idempotencyReservation = res
 		if err != nil {
@@ -523,7 +531,11 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		case capability.ToolResultStatusCancelled, capability.ToolResultStatusTimedOut:
 			_, _ = p.IdempotencyGuard.MarkIndeterminate(timeoutCtx, idempotencyReservation.IdempotencyKey)
 		case capability.ToolResultStatusSuccess, capability.ToolResultStatusFailed:
-			_ = p.IdempotencyGuard.Complete(timeoutCtx, idempotencyReservation, &result)
+			if err := p.IdempotencyGuard.Complete(timeoutCtx, idempotencyReservation, &result); err != nil {
+				if _, owned := coordination.FromContext(timeoutCtx); owned {
+					result = capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{Code: "device_result_unconfirmed", Message: "工具已发起，但结果尚未获得所有者保存确认，禁止自动重新执行", Retryable: false})
+				}
+			}
 		}
 	}
 
@@ -885,6 +897,13 @@ func (p *ExecutionPipeline) createAndStoreScopeSnapshot(ctx context.Context, man
 
 	if snapshot.SnapshotID == "" {
 		return scope.ScopeSnapshot{}, fmt.Errorf("scopeSnapshot missing ID")
+	}
+	if owned, ok := coordination.FromContext(ctx); ok {
+		encoded, err := json.Marshal(owned)
+		if err != nil {
+			return scope.ScopeSnapshot{}, err
+		}
+		snapshot.OwnedExecutionScope = encoded
 	}
 
 	if p.ScopeStore != nil {

@@ -6,6 +6,7 @@ import { processResult } from "./result.js";
 import { gracefulShutdown } from "./shutdown.js";
 
 export interface RuntimeConfig {
+  generation: number;
   instanceId: string;
   extensionId: string;
   moduleId: string;
@@ -14,6 +15,7 @@ export interface RuntimeConfig {
   definitionHash: string;
   taskRunId: string;
   taskEntry: string;
+  entryHash: string;
   taskInput: TaskInput;
   taskDeadline: number;
   taskAttempt: number;
@@ -40,6 +42,10 @@ interface TaskExecuteParams {
 }
 
 export function readRuntimeConfig(): RuntimeConfig {
+  const generation = Number(process.env.AMITIA_GENERATION ?? "1");
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    throw new Error("任务运行代次无效");
+  }
   const instanceId = process.env.AMITIA_INSTANCE_ID ?? "";
   const extensionId = process.env.AMITIA_EXTENSION_ID ?? "";
   const moduleId = process.env.AMITIA_MODULE_ID ?? "";
@@ -48,6 +54,7 @@ export function readRuntimeConfig(): RuntimeConfig {
   const definitionHash = process.env.AMITIA_DEFINITION_HASH ?? "";
   const taskRunId = process.env.AMITIA_TASK_RUN_ID ?? "";
   const taskEntry = process.env.AMITIA_TASK_ENTRY ?? "";
+  const entryHash = process.env.AMITIA_ENTRY_HASH ?? "";
   const taskInputRaw = process.env.AMITIA_TASK_INPUT ?? "{}";
   const taskDeadlineStr = process.env.AMITIA_TASK_DEADLINE ?? "0";
   const taskAttemptStr = process.env.AMITIA_TASK_ATTEMPT ?? "1";
@@ -76,6 +83,7 @@ export function readRuntimeConfig(): RuntimeConfig {
   }
 
   return {
+    generation,
     instanceId,
     extensionId,
     moduleId,
@@ -84,6 +92,7 @@ export function readRuntimeConfig(): RuntimeConfig {
     definitionHash,
     taskRunId,
     taskEntry,
+    entryHash,
     taskInput,
     taskDeadline,
     taskAttempt,
@@ -102,6 +111,7 @@ export async function bootstrap(): Promise<void> {
 
   const abortController = new AbortController();
   let shuttingDown = false;
+  let pausing = false;
   let contextBundle: TaskContextBundle | null = null;
 
   const initiateShutdown = async (reason: string) => {
@@ -132,11 +142,12 @@ export async function bootstrap(): Promise<void> {
   });
 
   rpc.onNotification("task.pause", (params) => {
-    if (shuttingDown) return;
+    if (shuttingDown || pausing) return;
     if (!contextBundle) return;
     const p = params as { task_run_id?: string; timeout_ms?: number };
     const timeoutMs = typeof p.timeout_ms === "number" ? p.timeout_ms : 30000;
-    void handlePause(rpc, contextBundle, p.task_run_id ?? config.taskRunId, timeoutMs, initiateShutdown);
+    pausing = true;
+    void handlePause(rpc, contextBundle, p.task_run_id ?? config.taskRunId, timeoutMs, initiateShutdown).finally(() => { pausing = false; });
   });
 
   transport.onClose(() => {
@@ -147,10 +158,10 @@ export async function bootstrap(): Promise<void> {
     protocol_version: "2.0",
     runtime_type: "task",
     instance_id: config.instanceId,
-    generation: 1,
+    generation: config.generation,
     definition_hash: config.definitionHash,
     nonce: config.nonce,
-    features: ["checkpoint", "cancellation", "streaming", "cooperative_pause"],
+    features: ["checkpoint", "cancellation", "streaming", "cooperative_pause", "entry_pin", "checkpoint_ack"],
   });
 
   const welcomeRaw = await rpc.onceNotification("host.welcome", 30000);
@@ -196,7 +207,7 @@ export async function bootstrap(): Promise<void> {
   let result: TaskResult;
 
   try {
-    const handler = await loadTaskHandler(entry);
+    const handler = await loadTaskHandler(entry, config.entryHash);
     result = await handler(input, contextBundle.context);
   } catch (error: unknown) {
     if (abortController.signal.aborted) {
@@ -221,6 +232,8 @@ export async function bootstrap(): Promise<void> {
   if (deadlineTimer !== null) {
     clearTimeout(deadlineTimer);
   }
+
+  if (shuttingDown) return;
 
   contextBundle.progress.flush();
 
@@ -263,7 +276,9 @@ async function handlePause(
     return;
   }
 
+  let expired = false;
   const timer = setTimeout(() => {
+    expired = true;
     rpc.notify("task.pause_ack", {
       task_run_id: taskRunId,
       checkpoint_version: 0,
@@ -273,6 +288,7 @@ async function handlePause(
   }, timeoutMs);
 
   try {
+    await cpClient.waitForConfirmation();
     const current = cpClient.getCurrent();
     if (current) {
       await cpClient.save({
@@ -282,6 +298,7 @@ async function handlePause(
     }
 
     clearTimeout(timer);
+    if (expired) return;
 
     const finalCp = cpClient.getCurrent();
     const version = (finalCp?.cursor as number) ?? 0;
@@ -296,6 +313,7 @@ async function handlePause(
     await initiateShutdown("paused");
   } catch {
     clearTimeout(timer);
+    if (expired) return;
     rpc.notify("task.pause_ack", {
       task_run_id: taskRunId,
       checkpoint_version: 0,

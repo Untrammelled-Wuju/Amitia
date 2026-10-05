@@ -3,22 +3,30 @@ package server
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/skip2/go-qrcode"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
+	"github.com/u-ai/backend/internal/devicemesh/lan"
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
+	"github.com/u-ai/backend/internal/devicemesh/proof"
 	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -45,7 +53,7 @@ type TaskClaimPayloadAdapter func(claim protocol.TaskClaimPayload) bool
 type TaskCompletePayloadAdapter func(complete protocol.TaskCompletePayload)
 type TaskProgressPayloadAdapter func(progress protocol.TaskProgressPayload)
 type TaskCheckpointPayloadAdapter func(checkpoint protocol.TaskCheckpointPayload)
-type TaskHeartbeatPayloadAdapter func(heartbeat protocol.TaskHeartbeatPayload)
+type TaskHeartbeatPayloadAdapter func(heartbeat protocol.TaskHeartbeatPayload) bool
 
 type RouterDeps struct {
 	DB                           *sql.DB
@@ -57,6 +65,11 @@ type RouterDeps struct {
 	Probe                        *ProbeService
 	DeviceReg                    *host_registry.Registry
 	PairingSvc                   *pairing.Service
+	Coordination                 *coordination.Service
+	BusinessCoordinationReady    bool
+	LANEndpoints                 func() []lan.Endpoint
+	ProviderPath                 func() ([]string, error)
+	Successor                    func(context.Context, string) (any, error)
 	GetSpaceID                   func(c *gin.Context) (runtimeidentity.SpaceID, bool)
 	GetDeviceID                  func(c *gin.Context) (runtimeidentity.DeviceID, bool)
 	InvocationResultHandler      InvocationResultHandler
@@ -137,9 +150,61 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 		authorized.Use(webAccessMW)
 	}
 	authorized.POST("/pairing/offers", makePairingOfferHandler(deps))
+	authorized.GET("/provider/successor", func(c *gin.Context) {
+		device, ok := deps.GetDeviceID(c)
+		if !ok || device == "" {
+			c.AbortWithStatus(401)
+			return
+		}
+		if deps.Successor == nil {
+			c.Status(http.StatusNoContent)
+			return
+		}
+		result, err := deps.Successor(c.Request.Context(), device.String())
+		if err != nil {
+			c.JSON(503, gin.H{"message": err.Error()})
+			return
+		}
+		if result == nil {
+			c.Status(http.StatusNoContent)
+			return
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, result)
+	})
+	authorized.POST("/pairing/successor-offers", func(c *gin.Context) {
+		creator, ok := deps.GetDeviceID(c)
+		if !ok || creator == "" {
+			c.AbortWithStatus(401)
+			return
+		}
+		var request struct {
+			DeviceID    string `json:"deviceId"`
+			Coordinated bool   `json:"coordinated"`
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<10)
+		if c.ShouldBindJSON(&request) != nil {
+			c.JSON(400, gin.H{"message": "服务切换配对参数无效"})
+			return
+		}
+		offer, token, err := deps.PairingSvc.CreateSuccessorOffer(c.Request.Context(), creator, runtimeidentity.ParseDeviceID(request.DeviceID), request.Coordinated)
+		if err != nil {
+			c.JSON(409, gin.H{"message": err.Error()})
+			return
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(200, gin.H{"offerToken": token, "expiresAt": offer.ExpiresAt.UTC().Format(time.RFC3339Nano), "approvalRequired": true, "deviceId": request.DeviceID})
+	})
+	authorized.GET("/pairing/approvals", makeApprovalListHandler(deps))
+	authorized.PUT("/pairing/approvals/:requestId", makeApprovalDecisionHandler(deps))
 	authorized.GET("/devices", makeListDevicesHandler(deps))
 	authorized.DELETE("/devices/:deviceId", makeRevokeDeviceHandler(deps))
 	authorized.POST("/devices/:deviceId/runtimes/:runtimeId/probe", makeProbeHandler(deps))
+	if deps.Coordination != nil {
+		authorized.GET("/coordination/me", makePolicyHandler(deps))
+		authorized.PUT("/coordination/me", makeModeHandler(deps))
+		authorized.PUT("/devices/:deviceId/administrator", makeAdministratorHandler(deps))
+	}
 
 	bootstrapHandlers := []gin.HandlerFunc{}
 	if publicWebAccessMW != nil {
@@ -152,12 +217,59 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 }
 
 type pairingClaimRequest struct {
-	OfferToken string `json:"offerToken"`
-	SetupCode  string `json:"setupCode"`
-	DeviceID   string `json:"deviceId" binding:"required"`
-	RuntimeID  string `json:"runtimeId" binding:"required"`
-	Platform   string `json:"platform" binding:"required"`
-	Label      string `json:"label"`
+	OfferToken string       `json:"offerToken"`
+	SetupCode  string       `json:"setupCode"`
+	DeviceID   string       `json:"deviceId" binding:"required"`
+	RuntimeID  string       `json:"runtimeId" binding:"required"`
+	Platform   string       `json:"platform" binding:"required"`
+	Label      string       `json:"label"`
+	Proof      *proof.Proof `json:"proof,omitempty"`
+}
+
+func requirePairingAdministrator(c *gin.Context) bool {
+	actor := security.GetActor(c)
+	if actor == nil || !actor.HasPermission(auth.PermSystemAdmin) {
+		c.AbortWithStatusJSON(403, gin.H{"message": "配对请求必须由服务提供设备或其管理员批准"})
+		return false
+	}
+	return true
+}
+
+func makeApprovalListHandler(deps *RouterDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requirePairingAdministrator(c) {
+			return
+		}
+		requests, err := deps.PairingSvc.PendingApprovals(c.Request.Context())
+		if err != nil {
+			c.JSON(503, gin.H{"message": "无法读取配对请求"})
+			return
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(200, gin.H{"requests": requests})
+	}
+}
+
+func makeApprovalDecisionHandler(deps *RouterDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !requirePairingAdministrator(c) {
+			return
+		}
+		var request struct {
+			Allow            bool  `json:"allow"`
+			ExpectedRevision int64 `json:"expectedRevision" binding:"required"`
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(400, gin.H{"message": "配对审批参数无效"})
+			return
+		}
+		if err := deps.PairingSvc.DecideApproval(c.Request.Context(), c.Param("requestId"), request.ExpectedRevision, request.Allow); err != nil {
+			c.JSON(409, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"saved": true})
+	}
 }
 
 func makePairingStatusHandler(deps *RouterDeps) gin.HandlerFunc {
@@ -167,7 +279,15 @@ func makePairingStatusHandler(deps *RouterDeps) gin.HandlerFunc {
 			c.JSON(500, gin.H{"code": "mesh.pairing_status_failed", "message": err.Error()})
 			return
 		}
-		c.JSON(200, gin.H{"spaceId": deps.PairingSvc.SpaceID().String(), "trustedDeviceCount": trusted, "firstDeviceSetupRequired": first})
+		path := []string{deps.PairingSvc.SpaceID().String()}
+		if deps.ProviderPath != nil {
+			path, err = deps.ProviderPath()
+			if err != nil {
+				c.JSON(503, gin.H{"message": "服务提供者拓扑暂不可用"})
+				return
+			}
+		}
+		c.JSON(200, gin.H{"spaceId": deps.PairingSvc.SpaceID().String(), "trustedDeviceCount": trusted, "firstDeviceSetupRequired": first, "providerPath": path})
 	}
 }
 
@@ -179,22 +299,61 @@ func makePairingOfferHandler(deps *RouterDeps) gin.HandlerFunc {
 			return
 		}
 		var req struct {
-			TTLSeconds int `json:"ttlSeconds"`
+			TTLSeconds int    `json:"ttlSeconds"`
+			Endpoint   string `json:"endpoint"`
 		}
-		_ = c.ShouldBindJSON(&req)
+		if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": "配对参数无效"})
+			return
+		}
+		endpoint := strings.TrimSpace(req.Endpoint)
+		if endpoint == "" {
+			scheme := "http"
+			if c.Request.TLS != nil {
+				scheme = "https"
+			}
+			endpoint = scheme + "://" + c.Request.Host
+		}
+		parsedEndpoint, endpointErr := url.Parse(endpoint)
+		if endpointErr != nil || parsedEndpoint.Host == "" || parsedEndpoint.User != nil || (parsedEndpoint.Scheme != "http" && parsedEndpoint.Scheme != "https") || parsedEndpoint.RawQuery != "" || parsedEndpoint.Fragment != "" || (parsedEndpoint.Path != "" && parsedEndpoint.Path != "/") {
+			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": "服务提供者地址无效"})
+			return
+		}
+		endpoint = parsedEndpoint.Scheme + "://" + parsedEndpoint.Host
+		fingerprint := ""
+		if deps.LANEndpoints != nil {
+			for _, candidate := range deps.LANEndpoints() {
+				if candidate.URL == endpoint && candidate.CoreID == deps.PairingSvc.SpaceID().String() {
+					fingerprint = candidate.Fingerprint
+					break
+				}
+			}
+		}
 		ttl := pairing.DefaultOfferTTL
 		if req.TTLSeconds > 0 {
 			ttl = time.Duration(req.TTLSeconds) * time.Second
 		}
-		offer, raw, err := deps.PairingSvc.CreateOffer(c.Request.Context(), deviceID, ttl)
+		offer, raw, err := deps.PairingSvc.CreateOffer(c.Request.Context(), deviceID, ttl, true)
 		if err != nil {
 			c.JSON(400, gin.H{"code": "mesh.pairing_offer_failed", "message": err.Error()})
 			return
 		}
+		payload := "amitia://pair?endpoint=" + url.QueryEscape(endpoint) + "&offer=" + url.QueryEscape(raw)
+		if fingerprint != "" {
+			payload += "&fingerprint=" + url.QueryEscape(fingerprint) + "&core=" + url.QueryEscape(deps.PairingSvc.SpaceID().String())
+		}
+		png, err := qrcode.Encode(payload, qrcode.Medium, 320)
+		if err != nil {
+			c.JSON(500, gin.H{"code": "mesh.qr_failed", "message": "二维码生成失败"})
+			return
+		}
+		c.Header("Cache-Control", "no-store")
 		c.JSON(200, gin.H{
 			"offerId": offer.OfferID, "offerToken": raw,
-			"qrPayload": "amitia://pair?offer=" + url.QueryEscape(raw),
-			"expiresAt": offer.ExpiresAt.UTC().Format(time.RFC3339Nano),
+			"qrPayload":        payload,
+			"qrImage":          "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
+			"expiresAt":        offer.ExpiresAt.UTC().Format(time.RFC3339Nano),
+			"approvalRequired": true,
 		})
 	}
 }
@@ -202,8 +361,13 @@ func makePairingOfferHandler(deps *RouterDeps) gin.HandlerFunc {
 func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req pairingClaimRequest
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32<<10)
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"code": "mesh.pairing_invalid", "message": err.Error()})
+			return
+		}
+		if c.Request.TLS != nil && req.Proof == nil {
+			c.JSON(403, gin.H{"code": "pairing.identity_proof_required", "message": "局域网配对必须验证设备身份"})
 			return
 		}
 		platform, err := runtimeidentity.ParsePlatform(req.Platform)
@@ -214,7 +378,7 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 		result, err := deps.PairingSvc.Claim(c.Request.Context(), pairing.ClaimRequest{
 			OfferToken: strings.TrimSpace(req.OfferToken), SetupCode: strings.TrimSpace(req.SetupCode),
 			DeviceID: runtimeidentity.ParseDeviceID(req.DeviceID), RuntimeID: runtimeidentity.ParseRuntimeID(req.RuntimeID),
-			Platform: platform, Label: strings.TrimSpace(req.Label),
+			Platform: platform, Label: strings.TrimSpace(req.Label), Proof: req.Proof,
 		})
 		if err != nil {
 			if status, code := pairingErrorResponse(err); code != "" {
@@ -222,6 +386,10 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 				return
 			}
 			c.JSON(400, gin.H{"code": "mesh.pairing_claim_failed", "message": err.Error()})
+			return
+		}
+		if result.Pending != nil {
+			c.JSON(202, gin.H{"pending": true, "requestId": result.Pending.RequestID, "message": "等待服务提供设备批准配对"})
 			return
 		}
 		c.JSON(200, gin.H{
@@ -235,6 +403,14 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 
 func pairingErrorResponse(err error) (int, string) {
 	switch {
+	case errors.Is(err, pairing.ErrApprovalDenied):
+		return http.StatusForbidden, "pairing.approval_denied"
+	case errors.Is(err, pairing.ErrApprovalConflict):
+		return http.StatusConflict, "pairing.approval_conflict"
+	case errors.Is(err, proof.ErrProof):
+		return http.StatusForbidden, "pairing.identity_proof_invalid"
+	case errors.Is(err, proof.ErrIdentityCopy):
+		return http.StatusForbidden, "pairing.identity_key_conflict"
 	case errors.Is(err, pairing.ErrSelfPairing):
 		return http.StatusConflict, "pairing.self"
 	case errors.Is(err, pairing.ErrAlreadyPaired):
@@ -344,6 +520,14 @@ func makeListDevicesHandler(deps *RouterDeps) gin.HandlerFunc {
 				"label":      d.Label,
 				"trustState": string(d.TrustState),
 			}
+			if deps.Coordination != nil {
+				policy, policyErr := deps.Coordination.Get(c.Request.Context(), spaceID.String(), d.DeviceID.String())
+				if policyErr != nil {
+					c.JSON(503, gin.H{"code": "mesh.policy_unavailable", "message": policyErr.Error()})
+					return
+				}
+				dev["coordination"] = policy
+			}
 
 			presence, err := deps.DeviceReg.GetDevicePresence(c.Request.Context(), spaceID, d.DeviceID)
 			if err == nil {
@@ -382,6 +566,9 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 
 		deviceID := runtimeidentity.ParseDeviceID(c.Param("deviceId"))
+		if !canManageDevice(c, deviceID.String()) {
+			return
+		}
 
 		if err := deps.DeviceReg.RequireDeviceOwnedBy(c.Request.Context(), spaceID, deviceID); err != nil {
 			if err == host_registry.ErrDeviceNotFound {
@@ -396,29 +583,36 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 			return
 		}
 
-		tx, err := deps.DB.BeginTx(c.Request.Context(), nil)
+		revoke := func(tx *sql.Tx) error {
+			if err := deps.DeviceReg.RevokeDeviceTx(c.Request.Context(), tx, deviceID); err != nil {
+				return err
+			}
+			if err := deps.CredentialSvc.RevokeAllForDeviceTx(c.Request.Context(), tx, spaceID, deviceID); err != nil {
+				return err
+			}
+			return deps.PairingSvc.RevokeDevicePairingTx(c.Request.Context(), tx, deviceID)
+		}
+		var err error
+		if deps.Coordination != nil {
+			err = deps.Coordination.RevokeDevice(c.Request.Context(), spaceID.String(), deviceID.String(), revoke)
+		} else {
+			var tx *sql.Tx
+			tx, err = deps.DB.BeginTx(c.Request.Context(), nil)
+			if err == nil {
+				defer tx.Rollback()
+				err = revoke(tx)
+				if err == nil {
+					err = tx.Commit()
+				}
+			}
+		}
 		if err != nil {
 			c.JSON(500, gin.H{"code": "mesh.revoke_failed", "message": err.Error()})
 			return
 		}
-		defer tx.Rollback()
-		if err := deps.DeviceReg.RevokeDeviceTx(c.Request.Context(), tx, deviceID); err != nil {
-			c.JSON(500, gin.H{"code": "mesh.revoke_failed", "message": err.Error()})
-			return
+		if deps.Hub != nil {
+			deps.Hub.CloseDevice(spaceID, deviceID)
 		}
-		if err := deps.CredentialSvc.RevokeAllForDeviceTx(c.Request.Context(), tx, spaceID, deviceID); err != nil {
-			c.JSON(500, gin.H{"code": "mesh.revoke_failed", "message": err.Error()})
-			return
-		}
-		if err := deps.PairingSvc.RevokeDevicePairingTx(c.Request.Context(), tx, deviceID); err != nil {
-			c.JSON(500, gin.H{"code": "mesh.revoke_failed", "message": err.Error()})
-			return
-		}
-		if err := tx.Commit(); err != nil {
-			c.JSON(500, gin.H{"code": "mesh.revoke_failed", "message": err.Error()})
-			return
-		}
-
 		c.JSON(200, gin.H{"ok": true, "deviceId": deviceID.String()})
 	}
 }

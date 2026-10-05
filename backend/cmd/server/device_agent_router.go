@@ -1,15 +1,16 @@
 package main
 
 import (
-	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/device"
@@ -81,9 +82,6 @@ func setupDeviceAgentRouter(ctx *app.AppContext, services *AppServices) (*gin.En
 	}
 
 	localAuth := security.LocalRuntimeControlMiddleware(localStore, config.AppCfg.Server.Host)
-	if localMeshHandler != nil {
-		localMeshHandler.RegisterRoutes(r, localAuth)
-	}
 
 	if services != nil && services.NativeBridgeRelay != nil {
 		localNativeBridge := r.Group("/api")
@@ -137,6 +135,13 @@ func registerDeviceAgentDesktopPetRoutes(
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 		SessionService:   sessionSvc,
 	}
+	if localMeshHandler != nil {
+		localMeshHandler.RegisterRoutes(r, security.LocalRuntimeControlMiddleware(localStore, config.AppCfg.Server.Host), security.AuthenticationMiddleware(authConfig))
+	}
+	deviceRoles := r.Group("/api")
+	deviceRoles.Use(security.AuthenticationMiddleware(authConfig))
+	deviceRoles.Use(security.RequireAuthMethod(security.AuthMethodDesktopSession, security.AuthMethodLocalToken))
+	character.RegisterCharacterRouter(deviceRoles, ctx, nil)
 
 	// Bootstrap a short-lived renderer/main-process Desktop Session from the
 	// root local token. This is the same trust boundary used by local profile.

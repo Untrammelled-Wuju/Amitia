@@ -1,4 +1,8 @@
 class ConversationDto {
+  final String characterId;
+  final String sourceOwnerId;
+  final String sourceResourceId;
+  final Map<String, dynamic>? conversationOrigin;
   final String id;
   final String projectId;
   final String title;
@@ -15,6 +19,10 @@ class ConversationDto {
   final String permissionMode;
 
   ConversationDto({
+    this.characterId = '',
+    this.sourceOwnerId = '',
+    this.sourceResourceId = '',
+    this.conversationOrigin,
     required this.id,
     this.projectId = '',
     this.title = '',
@@ -33,6 +41,14 @@ class ConversationDto {
 
   factory ConversationDto.fromJson(Map<String, dynamic> json) {
     return ConversationDto(
+      characterId: (json['characterId'] ?? json['roleId'] ?? '').toString(),
+      sourceOwnerId: (json['ownerId'] ?? '').toString(),
+      sourceResourceId: (json['resourceId'] ?? json['id'] ?? '').toString(),
+      conversationOrigin: json['conversationOrigin'] is Map
+          ? Map<String, dynamic>.unmodifiable(
+              Map<String, dynamic>.from(json['conversationOrigin'] as Map),
+            )
+          : null,
       id: (json['id'] ?? '').toString(),
       projectId: (json['projectId'] ?? '').toString(),
       title: json['title'] as String? ?? '',
@@ -53,6 +69,9 @@ class ConversationDto {
 
 class MessageDto {
   final String id;
+  final String sourceOwnerId;
+  final Map<String, dynamic>? sourceScope;
+  final int? sourceRevision;
   final String conversationId;
   final String characterId;
   final String role;
@@ -79,6 +98,9 @@ class MessageDto {
 
   MessageDto({
     required this.id,
+    this.sourceOwnerId = '',
+    this.sourceScope,
+    this.sourceRevision,
     required this.conversationId,
     this.characterId = '',
     required this.role,
@@ -107,6 +129,13 @@ class MessageDto {
   factory MessageDto.fromJson(Map<String, dynamic> json) {
     return MessageDto(
       id: (json['id'] ?? '').toString(),
+      sourceOwnerId: (json['sourceOwnerId'] ?? '').toString(),
+      sourceScope: json['sourceScope'] is Map
+          ? Map<String, dynamic>.unmodifiable(
+              Map<String, dynamic>.from(json['sourceScope'] as Map),
+            )
+          : null,
+      sourceRevision: (json['sourceRevision'] as num?)?.toInt(),
       conversationId: (json['conversationId'] ?? '').toString(),
       characterId: (json['characterId'] ?? '').toString(),
       role: json['role'] as String? ?? '',

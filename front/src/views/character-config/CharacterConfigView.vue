@@ -11,7 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       parent-path="/creative-workshop"
     >
       <template #actions>
-        <el-button @click="showImportDialog = true">导入角色卡</el-button>
+        <el-button :disabled="readOnly" @click="showImportDialog = true">导入角色卡</el-button>
         <el-button
           :loading="exportingPack"
           :disabled="!selected"
@@ -21,6 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-button>
       </template>
     </ExtensionPageHeader>
+    <el-alert v-if="readOnly" title="当前使用 Core 角色，只有 Core 管理员可以修改。" type="info" :closable="false" />
     <div class="char-layout">
       <div class="char-sidebar-stack">
         <CharacterSidebar
@@ -190,6 +191,7 @@ const {
   selectedId,
   activeTab,
   saving,
+  readOnly,
   showFullPrompt,
   showFullBounds,
   form,

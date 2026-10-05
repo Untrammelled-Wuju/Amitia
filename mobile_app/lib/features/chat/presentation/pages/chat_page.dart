@@ -29,6 +29,7 @@ import '../../../../core/backend_connection/providers/backend_connection_provide
 import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/chat_service.dart';
+import '../../../../core/services/device_owned_attachments.dart';
 import '../../../../core/services/workspace_service.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
@@ -89,6 +90,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   bool _workspaceBusy = false;
   final RealtimeAudioBridge _realtimeAudio = RealtimeAudioBridge();
   final BytesBuilder _voicePcm = BytesBuilder(copy: false);
+  int _voicePcmLimit = 1048576 - 44;
+  bool _voicePcmOverflow = false;
   StreamSubscription<Uint8List>? _voiceInputSubscription;
   bool _voiceRecording = false;
   String _routeSyncedConversationId = '';
@@ -335,6 +338,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       bool same = true;
       for (int i = 0; i < currentMessages.length; i++) {
         if (_cachedMessagesForContext![i].id != currentMessages[i].id ||
+            _cachedMessagesForContext![i].sourceOwnerId !=
+                currentMessages[i].sourceOwnerId ||
+            _cachedMessagesForContext![i].sourceRevision !=
+                currentMessages[i].sourceRevision ||
+            !mapEquals(
+              _cachedMessagesForContext![i].sourceScope,
+              currentMessages[i].sourceScope,
+            ) ||
             _cachedMessagesForContext![i].renderId !=
                 currentMessages[i].renderId ||
             _cachedMessagesForContext![i].type != currentMessages[i].type ||
@@ -927,8 +938,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (_voiceRecording) return;
     await _voiceInputSubscription?.cancel();
     _voicePcm.clear();
-    _voiceInputSubscription = _realtimeAudio.inputPcm.listen(_voicePcm.add);
+    _voicePcmOverflow = false;
     try {
+      final owned = await ref.read(chatServiceProvider).owned.refresh();
+      if (!mounted) return;
+      _voicePcmLimit = owned ? 1048576 - 44 : 32 * 1024 * 1024 - 44;
+      _voiceInputSubscription = _realtimeAudio.inputPcm.listen((chunk) {
+        if (_voicePcmOverflow) return;
+        if (chunk.length > _voicePcmLimit - _voicePcm.length) {
+          _voicePcmOverflow = true;
+          _voicePcm.clear();
+          unawaited(
+            _realtimeAudio.stopCapture().catchError((Object error) {
+              if (mounted) amitiaSnackBar(context, '停止录音失败：$error');
+            }),
+          );
+          if (mounted) {
+            amitiaSnackBar(context, '录音超过大小上限，请结束录音后重新录制');
+          }
+          return;
+        }
+        _voicePcm.add(chunk);
+      });
       await _realtimeAudio.startCapture();
       _voiceRecording = true;
     } catch (error) {
@@ -948,6 +979,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _voiceInputSubscription = null;
     }
     final pcm = _voicePcm.takeBytes();
+    if (_voicePcmOverflow) {
+      if (mounted) amitiaSnackBar(context, '录音超过大小上限，未发送截断音频');
+      return null;
+    }
     if (pcm.isEmpty) return null;
     return _encodeWavPcm16(pcm);
   }
@@ -970,6 +1005,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _sendRecordedVoice(Uint8List wav) async {
     try {
+      if (await ref.read(chatServiceProvider).owned.refresh()) {
+        if (wav.isEmpty || wav.length > 1048576) {
+          throw StateError('语音超过 1 MiB，请缩短录音');
+        }
+        final uri = 'data:audio/wav;base64,${base64Encode(wav)}';
+        ownedAudioAttachment(uri, name: 'voice.wav');
+        if (!mounted) return;
+        _autoFollowOutput = true;
+        await _runtime.sendVoice(
+          resourceUri: uri,
+          displayUrl: uri,
+          fileName: 'voice.wav',
+          mimeType: 'audio/wav',
+          durationMs: _pcmDurationMs(wav),
+        );
+        return;
+      }
       final service = await ref.read(artifactServiceProvider.future);
       final artifact = await service.uploadBytes(
         bytes: wav,
@@ -1127,6 +1179,43 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendFile() async {
     await _withArtifactUpload((service) async {
+      if (await ref.read(chatServiceProvider).owned.refresh()) {
+        final selection = await FilePicker.platform.pickFiles(
+          withReadStream: true,
+          allowMultiple: false,
+        );
+        if (selection == null || selection.files.isEmpty) return;
+        final picked = selection.files.single;
+        final mime = switch ((picked.extension ?? '').toLowerCase()) {
+          'png' => 'image/png',
+          'jpg' || 'jpeg' => 'image/jpeg',
+          'gif' => 'image/gif',
+          _ => '',
+        };
+        if (mime.isEmpty) throw StateError('当前附件通道尚未适配此文件类型，文件未上传');
+        if (picked.size > 1048576) throw StateError('图片单张不超过 1 MiB');
+        final content = BytesBuilder(copy: false);
+        if (picked.readStream != null) {
+          await for (final chunk in picked.readStream!) {
+            if (content.length + chunk.length > 1048576)
+              throw StateError('图片单张不超过 1 MiB');
+            content.add(chunk);
+          }
+        } else if (picked.bytes != null && picked.bytes!.length <= 1048576) {
+          content.add(picked.bytes!);
+        } else {
+          throw StateError('无法读取所选图片');
+        }
+        final uri = 'data:$mime;base64,${base64Encode(content.takeBytes())}';
+        ownedImageAttachment(uri, name: picked.name);
+        await _runtime.sendImage(
+          resourceUri: uri,
+          displayUrl: uri,
+          fileName: picked.name,
+          mimeType: mime,
+        );
+        return;
+      }
       final artifact = await service.pickAndUploadFile();
       switch (artifact.kind) {
         case ArtifactKind.image:
@@ -1152,6 +1241,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendImage(bool camera) async {
     await _withArtifactUpload((service) async {
+      if (await ref.read(chatServiceProvider).owned.refresh()) {
+        final picked = await ImagePicker().pickImage(
+          source: camera ? ImageSource.camera : ImageSource.gallery,
+        );
+        if (picked == null) return;
+        if (await picked.length() > 1048576) throw StateError('图片单张不超过 1 MiB');
+        final bytes = await picked.readAsBytes();
+        final extension = picked.name.split('.').last.toLowerCase();
+        final mime =
+            picked.mimeType ??
+            switch (extension) {
+              'png' => 'image/png',
+              'jpg' || 'jpeg' => 'image/jpeg',
+              'gif' => 'image/gif',
+              _ => '',
+            };
+        final uri = 'data:$mime;base64,${base64Encode(bytes)}';
+        ownedImageAttachment(uri, name: picked.name);
+        await _runtime.sendImage(
+          resourceUri: uri,
+          displayUrl: uri,
+          fileName: picked.name,
+          mimeType: mime,
+        );
+        return;
+      }
       final artifact = await service.pickAndUploadImage(
         source: camera ? ImageSource.camera : ImageSource.gallery,
       );
@@ -1161,6 +1276,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendVideo(bool camera) async {
     await _withArtifactUpload((service) async {
+      if (await ref.read(chatServiceProvider).owned.refresh())
+        throw StateError('当前视频附件通道尚未适配数据归属，视频未上传');
       final artifact = await service.pickAndUploadVideo(
         source: camera ? ImageSource.camera : ImageSource.gallery,
       );
@@ -1170,6 +1287,42 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendAudio() async {
     await _withArtifactUpload((service) async {
+      if (await ref.read(chatServiceProvider).owned.refresh()) {
+        final selection = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['wav', 'webm'],
+          withReadStream: true,
+        );
+        if (selection == null || !mounted) return;
+        final file = selection.files.single;
+        if (file.size > 1048576) throw StateError('音频单段不超过 1 MiB');
+        final data = BytesBuilder(copy: false);
+        if (file.readStream != null) {
+          await for (final chunk in file.readStream!) {
+            if (data.length + chunk.length > 1048576)
+              throw StateError('音频单段不超过 1 MiB');
+            data.add(chunk);
+          }
+        } else if (file.bytes != null && file.bytes!.length <= 1048576) {
+          data.add(file.bytes!);
+        } else {
+          throw StateError('无法读取所选音频');
+        }
+        final mime = file.extension?.toLowerCase() == 'wav'
+            ? 'audio/wav'
+            : 'audio/webm';
+        final uri = 'data:$mime;base64,${base64Encode(data.takeBytes())}';
+        ownedAudioAttachment(uri, name: file.name);
+        if (!mounted) return;
+        _autoFollowOutput = true;
+        await _runtime.sendVoice(
+          resourceUri: uri,
+          displayUrl: uri,
+          fileName: file.name,
+          mimeType: mime,
+        );
+        return;
+      }
       final artifact = await service.pickAndUploadAudio();
       await _sendAudioArtifact(service, artifact);
     });
@@ -1682,7 +1835,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return;
     }
     try {
-      await _runtime.editMessage(message.id, content);
+      await _runtime.editMessage(
+        message.id,
+        content,
+        sourceOwnerId: message.sourceOwnerId,
+      );
       if (mounted) amitiaSnackBar(context, '消息已修改');
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '修改失败：$error');
@@ -1712,12 +1869,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return;
     }
     try {
-      final url = await ref
-          .read(chatServiceProvider)
-          .exportConversation(conversationId, format: format);
-      if (url.isNotEmpty) {
-        await Clipboard.setData(ClipboardData(text: url));
-        if (mounted) amitiaSnackBar(context, '导出完成，资源地址已复制');
+      final service = ref.read(chatServiceProvider);
+      final value = await service.exportConversation(
+        conversationId,
+        format: format,
+      );
+      if (!mounted || _runtime.conversationId != conversationId) return;
+      if (value.isNotEmpty) {
+        await Clipboard.setData(ClipboardData(text: value));
+        if (mounted)
+          amitiaSnackBar(
+            context,
+            service.owned.enabled ? '导出完成，内容已复制' : '导出完成，资源地址已复制',
+          );
       } else if (mounted) {
         amitiaSnackBar(context, '导出完成');
       }
@@ -1977,7 +2141,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             final id = input is Map
                 ? input['messageId']?.toString()
                 : input?.toString();
-            if (id != null && id.isNotEmpty) await _runtime.deleteMessage(id);
+            if (id != null && id.isNotEmpty)
+              await _runtime.deleteMessage(
+                id,
+                sourceOwnerId: input is Map
+                    ? input['sourceOwnerId']?.toString()
+                    : null,
+              );
             return null;
           },
           ConversationUIAction.newConversation: (_) async {
@@ -2710,6 +2880,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                   <String, dynamic>{
                                                     ...providerContext,
                                                     'messageId': message.id,
+                                                    'sourceOwnerId':
+                                                        message.sourceOwnerId,
                                                     'messageType':
                                                         message.type.name,
                                                     'message': _providerMessage(
@@ -3526,7 +3698,8 @@ class _MobileChatFlowItem {
     required int messageIndex,
     required DateTime timestamp,
   }) => _MobileChatFlowItem._(
-    key: 'message:${message.role.name}:${message.renderId}',
+    key:
+        'message:${message.sourceOwnerId}:${message.role.name}:${message.renderId}',
     timestamp: timestamp,
     sequence: message.sequence,
     message: message,

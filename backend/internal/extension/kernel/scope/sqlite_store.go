@@ -164,6 +164,12 @@ func (s *SQLiteScopeStore) ListBindings(ctx context.Context, filter ScopeBinding
 
 func (s *SQLiteScopeStore) SaveSnapshot(ctx context.Context, snapshot ScopeSnapshot) error {
 	raw, err := json.Marshal(snapshot.ResolvedScopes)
+	if len(snapshot.OwnedExecutionScope) > 0 {
+		if !json.Valid(snapshot.OwnedExecutionScope) || len(snapshot.OwnedExecutionScope) > 64<<10 {
+			return fmt.Errorf("设备执行授权快照无效或超过上限")
+		}
+		raw, err = json.Marshal(storedScopeAuthority{Version: 1, Snapshot: snapshot})
+	}
 	if err != nil {
 		return fmt.Errorf("scope: marshal resolved scopes: %w", err)
 	}
@@ -171,7 +177,7 @@ func (s *SQLiteScopeStore) SaveSnapshot(ctx context.Context, snapshot ScopeSnaps
 	if snapshot.ExpiresAt != nil {
 		expiresAt = *snapshot.ExpiresAt
 	}
-	_, err = s.db.ExecContext(ctx, `
+	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO kernel_scope_snapshots
 		(snapshot_id, invocation_id, resolved_scopes,
 		 character_id, conversation_id, extension_id, module_id,
@@ -187,11 +193,21 @@ func (s *SQLiteScopeStore) SaveSnapshot(ctx context.Context, snapshot ScopeSnaps
 		 generation = excluded.generation,
 		 created_at = excluded.created_at,
 		 expires_at = excluded.expires_at
+		WHERE json_type(kernel_scope_snapshots.resolved_scopes) != 'object'
+		 OR (kernel_scope_snapshots.resolved_scopes = excluded.resolved_scopes
+		 AND kernel_scope_snapshots.invocation_id = excluded.invocation_id)
 	`,
 		snapshot.SnapshotID, snapshot.InvocationID, string(raw),
 		snapshot.CharacterID, snapshot.ConversationID, snapshot.ExtensionID, snapshot.ModuleID,
 		snapshot.Generation, snapshot.CreatedAt, expiresAt,
 	)
+	if err == nil {
+		if affected, countErr := result.RowsAffected(); countErr != nil {
+			return countErr
+		} else if affected == 0 {
+			return fmt.Errorf("已保存的设备执行授权快照不能修改或降级")
+		}
+	}
 	return err
 }
 
@@ -214,14 +230,25 @@ func (s *SQLiteScopeStore) GetSnapshot(ctx context.Context, snapshotID string) (
 	if err != nil {
 		return snap, fmt.Errorf("%w: %v", ErrSnapshotNotFound, err)
 	}
-	if err := json.Unmarshal([]byte(resolvedScopes), &snap.ResolvedScopes); err != nil {
+	var document storedScopeAuthority
+	if len(resolvedScopes) > 0 && resolvedScopes[0] == '{' {
+		if err := json.Unmarshal([]byte(resolvedScopes), &document); err != nil || document.Version != 1 || !json.Valid(document.Snapshot.OwnedExecutionScope) || document.Snapshot.SnapshotID != snap.SnapshotID || document.Snapshot.InvocationID != snap.InvocationID {
+			return snap, fmt.Errorf("设备执行授权快照不可读取")
+		}
+		snap = document.Snapshot
+	} else if err := json.Unmarshal([]byte(resolvedScopes), &snap.ResolvedScopes); err != nil {
 		return snap, fmt.Errorf("scope: unmarshal resolved scopes: %w", err)
 	}
-	if expiresAt.Valid {
+	if expiresAt.Valid && len(snap.OwnedExecutionScope) == 0 {
 		t := expiresAt.Time
 		snap.ExpiresAt = &t
 	}
 	return snap, nil
+}
+
+type storedScopeAuthority struct {
+	Version  int           `json:"version"`
+	Snapshot ScopeSnapshot `json:"snapshot"`
 }
 
 func (s *SQLiteScopeStore) DeleteSnapshot(ctx context.Context, snapshotID string) error {

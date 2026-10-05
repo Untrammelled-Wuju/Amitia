@@ -14,6 +14,14 @@ func (s *TaskRuntimeService) HandleExternalFinish(ctx context.Context, taskRunID
 	if err != nil {
 		return err
 	}
+	guarded, finish, owned, err := s.callbackAuthority(ctx, current, attemptID, generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		return s.handleFinished(guarded, current, status, result, artifactID, errCode, errMsg)
+	}
 	if current.Status.IsTerminal() {
 		return nil
 	}
@@ -85,6 +93,19 @@ func (s *TaskRuntimeService) HandleExternalFinish(ctx context.Context, taskRunID
 }
 
 func (s *TaskRuntimeService) HandleExternalProgress(ctx context.Context, taskRunID string, completedUnits, totalUnits int64, phase string, attemptID string, generation int64) error {
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return err
+	}
+	guarded, finish, owned, err := s.callbackAuthority(ctx, run, attemptID, generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		completed, total := float64(completedUnits), float64(totalUnits)
+		return s.handleProgress(guarded, taskRunID, time.Now().UnixNano(), &completed, &total, nil, phase, phase, run)
+	}
 	s.progressMu.Lock()
 	last, ok := s.progressLast[taskRunID]
 	now := time.Now()
@@ -126,6 +147,26 @@ func (s *TaskRuntimeService) HandleExternalCheckpoint(ctx context.Context, taskR
 	if err != nil {
 		return err
 	}
+	guarded, finish, owned, err := s.callbackAuthority(ctx, current, attemptID, generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		def, err := s.store.GetTaskDefinition(guarded, current.TaskDefinitionID)
+		if err != nil {
+			return err
+		}
+		previous, err := s.store.GetLatestCheckpoint(guarded, taskRunID)
+		if err != nil {
+			return err
+		}
+		version := int64(1)
+		if previous != nil {
+			version = previous.Version + 1
+		}
+		return s.handleCheckpoint(guarded, current, def, payload, "", version)
+	}
 	if current.Status.IsTerminal() {
 		return nil
 	}
@@ -159,6 +200,22 @@ func (s *TaskRuntimeService) HandleExternalCheckpoint(ctx context.Context, taskR
 }
 
 func (s *TaskRuntimeService) ClearLatestCheckpoint(ctx context.Context, taskRunID string) error {
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return NewTaskError(ErrTaskNotFound, "任务不存在")
+	}
+	guarded, finish, owned, err := s.callbackAuthority(ctx, run, run.ExecutionAttemptID.String(), run.Generation)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if owned {
+		return NewTaskError(ErrTaskScopeDenied, "设备任务检查点必须经数据所有者确认删除")
+	}
+	ctx = guarded
 	cp, err := s.store.GetLatestCheckpoint(ctx, taskRunID)
 	if err != nil {
 		return err

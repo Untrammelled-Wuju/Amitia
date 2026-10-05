@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'owned_memory_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
@@ -27,6 +28,8 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
 
   @override
   Widget build(BuildContext context) {
+    final ownedPage = ownedMemoryGate(ref, kind: 'graph');
+    if (ownedPage != null) return ownedPage;
     final graph = ref.watch(_graphProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -61,24 +64,29 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
   }
 
   Widget _buildContent(BuildContext context, _GraphData data) {
-    final types = data.nodes
-        .map((node) => _string(node, const ['entity_type', 'entityType']))
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    final filtered = data.nodes.where((node) {
-      final type = _string(node, const ['entity_type', 'entityType']);
-      final label = _nodeLabel(node).toLowerCase();
-      final properties = (node['properties'] ?? '').toString().toLowerCase();
-      if (_type.isNotEmpty && type != _type) return false;
-      if (_query.isNotEmpty &&
-          !label.contains(_query.toLowerCase()) &&
-          !properties.contains(_query.toLowerCase())) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    final types =
+        data.nodes
+            .map((node) => _string(node, const ['entity_type', 'entityType']))
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final filtered = data.nodes
+        .where((node) {
+          final type = _string(node, const ['entity_type', 'entityType']);
+          final label = _nodeLabel(node).toLowerCase();
+          final properties = (node['properties'] ?? '')
+              .toString()
+              .toLowerCase();
+          if (_type.isNotEmpty && type != _type) return false;
+          if (_query.isNotEmpty &&
+              !label.contains(_query.toLowerCase()) &&
+              !properties.contains(_query.toLowerCase())) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
 
     return Column(
       children: [
@@ -97,7 +105,8 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                     child: AmitiaTextField(
                       hintText: '搜索节点标签或属性',
                       prefixIcon: const Icon(Icons.search),
-                      onChanged: (value) => setState(() => _query = value.trim()),
+                      onChanged: (value) =>
+                          setState(() => _query = value.trim()),
                     ),
                   ),
                   SizedBox(width: AppSpacing.sm),
@@ -107,10 +116,7 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: '', child: Text('全部类型')),
                       ...types.map(
-                        (type) => PopupMenuItem(
-                          value: type,
-                          child: Text(type),
-                        ),
+                        (type) => PopupMenuItem(value: type, child: Text(type)),
                       ),
                     ],
                     child: Container(
@@ -144,8 +150,8 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                   subtitle: '记忆写入并完成图谱同步后会显示在这里',
                 )
               : _showCanvas
-                  ? _buildCanvas(context, filtered, data.edges)
-                  : _buildList(context, filtered, data.edges),
+              ? _buildCanvas(context, filtered, data.edges)
+              : _buildList(context, filtered, data.edges),
         ),
       ],
     );
@@ -176,10 +182,12 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
   ) {
     final visibleNodes = nodes.take(80).toList(growable: false);
     final visibleIds = visibleNodes.map(_nodeId).toSet();
-    final visibleEdges = edges.where((edge) {
-      return visibleIds.contains(_recordId(edge['in'])) &&
-          visibleIds.contains(_recordId(edge['out']));
-    }).toList(growable: false);
+    final visibleEdges = edges
+        .where((edge) {
+          return visibleIds.contains(_recordId(edge['in'])) &&
+              visibleIds.contains(_recordId(edge['out']));
+        })
+        .toList(growable: false);
 
     return Padding(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -265,9 +273,9 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                     type,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption(context).copyWith(
-                      color: _typeColor(context, type),
-                    ),
+                    style: AppTypography.caption(
+                      context,
+                    ).copyWith(color: _typeColor(context, type)),
                   ),
               ],
             ),
@@ -315,13 +323,19 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_nodeLabel(node), style: AppTypography.cardTitle(context)),
+                    Text(
+                      _nodeLabel(node),
+                      style: AppTypography.cardTitle(context),
+                    ),
                     const SizedBox(height: 2),
                     Text(id, style: AppTypography.caption(context)),
                   ],
                 ),
               ),
-              AmitiaStatusBadge(label: type.isEmpty ? 'node' : type, type: BadgeType.info),
+              AmitiaStatusBadge(
+                label: type.isEmpty ? 'node' : type,
+                type: BadgeType.info,
+              ),
               SizedBox(width: AppSpacing.sm),
               Text('$relationCount 关系', style: AppTypography.label(context)),
             ],
@@ -352,7 +366,12 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
         maxChildSize: 0.92,
         builder: (context, controller) => ListView(
           controller: controller,
-          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            0,
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+          ),
           children: [
             Text(_nodeLabel(node), style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.xs),
@@ -361,7 +380,10 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
             Wrap(
               spacing: AppSpacing.sm,
               children: [
-                AmitiaStatusBadge(label: type.isEmpty ? 'node' : type, type: BadgeType.info),
+                AmitiaStatusBadge(
+                  label: type.isEmpty ? 'node' : type,
+                  type: BadgeType.info,
+                ),
               ],
             ),
             SizedBox(height: AppSpacing.lg),
@@ -378,7 +400,10 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                     children: [
                       SizedBox(
                         width: 120,
-                        child: Text(entry.key, style: AppTypography.label(context)),
+                        child: Text(
+                          entry.key,
+                          style: AppTypography.label(context),
+                        ),
                       ),
                       Expanded(
                         child: Text(
@@ -424,9 +449,9 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                   );
                 } catch (e) {
                   if (sheetContext.mounted) {
-                    ScaffoldMessenger.of(sheetContext).showSnackBar(
-                      SnackBar(content: Text('查询邻居失败: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      sheetContext,
+                    ).showSnackBar(SnackBar(content: Text('查询邻居失败: $e')));
                   }
                 }
               },
@@ -470,10 +495,12 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
     if (value is Map) {
       final table = value['tb'] ?? value['table'];
       final id = value['id'];
-      if (table != null && id != null) return '$table:$id'.replaceFirst('entity_node:', '');
+      if (table != null && id != null)
+        return '$table:$id'.replaceFirst('entity_node:', '');
       if (id != null) return id.toString();
     }
-    return value.toString()
+    return value
+        .toString()
         .replaceFirst('entity_node:', '')
         .replaceAll('`', '');
   }
@@ -486,7 +513,8 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
   String _string(Map<String, dynamic> value, List<String> keys) {
     for (final key in keys) {
       final raw = value[key];
-      if (raw != null && raw.toString().trim().isNotEmpty) return raw.toString();
+      if (raw != null && raw.toString().trim().isNotEmpty)
+        return raw.toString();
     }
     return '';
   }
@@ -541,9 +569,9 @@ class _Stat extends StatelessWidget {
         const SizedBox(width: 5),
         Text(
           value,
-          style: AppTypography.cardTitle(context).copyWith(
-            color: context.accentPrimary,
-          ),
+          style: AppTypography.cardTitle(
+            context,
+          ).copyWith(color: context.accentPrimary),
         ),
       ],
     );

@@ -2,14 +2,22 @@ package devicemesh
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
+	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
+	"github.com/u-ai/backend/internal/devicemesh/lan"
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -23,19 +31,28 @@ type dispatcherResolveAdapter interface {
 }
 
 type Runtime struct {
-	DB                 *sql.DB
-	BootstrapSvc       *bootstrap.Service
-	CredentialSvc      *credential.Service
-	Hub                *server.ConnectionHub
-	Handler            *server.Handler
-	Probe              *server.ProbeService
-	DeviceReg          *host_registry.Registry
-	LocalHandler       *agent.LocalHandler
-	PendingInvocations *capability.PendingInvocationManager
-	PendingTasks       *task_runtime.PendingTaskManager
-	sessions           *deviceruntime.Service
-	dispatcher         dispatcherResolveAdapter
-	taskRuntime        agent.TaskRuntimeExecutor
+	DB                        *sql.DB
+	BootstrapSvc              *bootstrap.Service
+	CredentialSvc             *credential.Service
+	Coordination              *coordination.Service
+	BusinessCoordinationReady bool
+	CoreDataPort              coordination.DataPort
+	LocalDeviceDataPort       coordination.DataPort
+	LocalDeviceID             string
+	Hub                       *server.ConnectionHub
+	Handler                   *server.Handler
+	Probe                     *server.ProbeService
+	DeviceReg                 *host_registry.Registry
+	LocalHandler              *agent.LocalHandler
+	PendingInvocations        *capability.PendingInvocationManager
+	PendingTasks              *task_runtime.PendingTaskManager
+	sessions                  *deviceruntime.Service
+	dispatcher                dispatcherResolveAdapter
+	deviceDispatcher          dispatcherResolveAdapter
+	taskRuntime               agent.TaskRuntimeExecutor
+	deliveryMu                sync.Mutex
+	deliveryCancel            context.CancelFunc
+	deliveryDone              chan struct{}
 }
 
 func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, error) {
@@ -69,6 +86,7 @@ func NewCloudRuntimeWithHubAndSessions(
 	bootstrapRepo := bootstrap.NewRepository(db)
 	credRepo := credential.NewRepository(db)
 	credSvc := credential.NewService(credRepo, DeviceCredentialTTL)
+	credSvc.EnableRequestProof()
 
 	exchangeFn := func(ctx context.Context, tx *sql.Tx, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, expires time.Time) (string, string, error) {
 		rawCred, err := credential.GenerateRawCredential()
@@ -118,6 +136,7 @@ func NewCloudRuntimeWithHubAndSessions(
 		DB:            db,
 		BootstrapSvc:  bootstrapSvc,
 		CredentialSvc: credSvc,
+		Coordination:  coordination.NewService(db),
 		Hub:           hub,
 		Probe:         probe,
 		DeviceReg:     deviceReg,
@@ -125,6 +144,16 @@ func NewCloudRuntimeWithHubAndSessions(
 	}
 
 	rt.Handler = server.NewHandler(sessions, hub)
+	rt.Coordination.SetAuthorityBarrier(rt.fenceRemoteAuthority)
+	rt.Handler.AddOnReady(func(space runtimeidentity.SpaceID, device runtimeidentity.DeviceID) {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			if err := rt.ReconcileRemoteDevice(ctx, space.String(), device.String()); err != nil {
+				log.Printf("devicemesh: remote authority reconciliation failed: %v", err)
+			}
+		}()
+	})
 
 	return rt, nil
 }
@@ -168,23 +197,42 @@ func (rt *Runtime) GetTaskRuntime() agent.TaskRuntimeExecutor {
 }
 
 func (rt *Runtime) Start() error {
+	rt.deliveryMu.Lock()
+	defer rt.deliveryMu.Unlock()
 	if rt.Hub == nil {
 		rt.Hub = server.NewConnectionHub()
 	}
 	if rt.Probe == nil && rt.Hub != nil {
 		rt.Probe = server.NewProbeService(rt.Hub)
 	}
-	return nil
-}
-
-func (rt *Runtime) Stop() error {
-	if rt.Hub != nil {
-		rt.Hub.CloseAll()
+	if rt.Coordination != nil && rt.deliveryCancel == nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		rt.deliveryCancel = cancel
+		rt.deliveryDone = make(chan struct{})
+		go rt.runDeviceDataDelivery(ctx, rt.deliveryDone)
 	}
 	return nil
 }
 
-func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, taskRuntime agent.TaskRuntimeExecutor, dispatcher dispatcherResolveAdapter) (*Runtime, error) {
+func (rt *Runtime) Stop() error {
+	rt.deliveryMu.Lock()
+	defer rt.deliveryMu.Unlock()
+	if rt.deliveryCancel != nil {
+		rt.deliveryCancel()
+		<-rt.deliveryDone
+		rt.deliveryCancel = nil
+		rt.deliveryDone = nil
+	}
+	if rt.Hub != nil {
+		rt.Hub.CloseAll()
+	}
+	if rt.LocalHandler != nil {
+		rt.LocalHandler.Stop()
+	}
+	return nil
+}
+
+func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, taskRuntime agent.TaskRuntimeExecutor, dispatcher dispatcherResolveAdapter, databases ...*sql.DB) (*Runtime, error) {
 	if dispatcher == nil {
 		return nil, fmt.Errorf("devicemesh: device-agent runtime dispatcher is required")
 	}
@@ -194,11 +242,19 @@ func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, ta
 	localHandler := agent.NewLocalHandler(dataDir, platform)
 	localHandler.SetDispatcher(dispatcher)
 	localHandler.SetTaskRuntime(taskRuntime)
+	if len(databases) > 0 && databases[0] != nil {
+		localHandler.SetExecutionJournal(executionjournal.NewStore(databases[0]))
+		localHandler.SetExecutionGuard(agent.NewOwnedToolGuard(databases[0], dataDir))
+	}
 
 	rt := &Runtime{
 		LocalHandler: localHandler,
 		taskRuntime:  taskRuntime,
 		dispatcher:   dispatcher,
+	}
+	if len(databases) > 0 && databases[0] != nil {
+		rt.DB = databases[0]
+		rt.Coordination = coordination.NewService(databases[0])
 	}
 
 	rt.autoRecoverCredential(localHandler)
@@ -222,8 +278,18 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 	}
 
 	cursor, _ := handler.LoadCursor()
+	var tlsConfig *tls.Config
+	if cred.Fingerprint != "" {
+		tlsConfig, err = lan.PinnedTLS(lan.Endpoint{URL: cred.CloudBaseUrl, Fingerprint: cred.Fingerprint, CoreID: cred.SpaceID.String()})
+		if err != nil {
+			return
+		}
+	}
 
 	dispatcher := rt.dispatcher
+	if rt.deviceDispatcher != nil {
+		dispatcher = rt.deviceDispatcher
+	}
 
 	meshClient := agent.NewMeshClient(agent.MeshClientConfig{
 		CloudBaseURL:      cred.CloudBaseUrl,
@@ -232,6 +298,9 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 		Identity:          identity,
 		Cursor:            cursor,
 		RuntimeDispatcher: dispatcher,
+		TLSConfig:         tlsConfig,
+		SignRequest:       handler.SignRequest,
+		ExecutionJournal:  handler.ExecutionJournal(),
 	})
 	taskWorker := agent.NewTaskWorker(meshClient)
 	if rt.taskRuntime != nil {
@@ -241,6 +310,37 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 	meshClient.SetCredentialStore(handler.CredentialStore())
 	handler.SetMeshClient(meshClient)
 	meshClient.Start()
+}
+
+func (rt *Runtime) AttachDeviceAgent(dataDir string, platform runtimeidentity.Platform, dispatcher dispatcherResolveAdapter, observer func(*agent.StoredCredential) error) error {
+	if rt.LocalHandler != nil || dispatcher == nil {
+		return fmt.Errorf("设备 Agent 已存在或缺少能力路由")
+	}
+	handler := agent.NewLocalHandler(dataDir, platform)
+	handler.SetDispatcher(dispatcher)
+	handler.SetTaskRuntime(rt.taskRuntime)
+	if rt.DB != nil {
+		handler.SetExecutionJournal(executionjournal.NewStore(rt.DB))
+		roleGuard, _ := rt.LocalDeviceDataPort.(coordination.SourceRoleExecutionGuard)
+		handler.SetExecutionGuard(agent.NewOwnedToolGuard(rt.DB, dataDir, roleGuard))
+	}
+	handler.SetCredentialObserver(observer)
+	if err := handler.RecoverUnpair(); err != nil {
+		return err
+	}
+	cred, err := handler.LoadCredential()
+	if err != nil {
+		return err
+	}
+	if cred != nil && observer != nil {
+		if err := observer(cred); err != nil {
+			return err
+		}
+	}
+	rt.LocalHandler = handler
+	rt.deviceDispatcher = dispatcher
+	rt.autoRecoverCredential(handler)
+	return nil
 }
 
 // InvokeDeviceHandler sends a bounded management invocation to the active
@@ -280,7 +380,39 @@ func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
 	if deadline <= 0 {
 		deadline = 30 * time.Second
 	}
+	var authorityCall string
+	if handlerName == "coordination.data" {
+		var envelope struct {
+			Operation   string                        `json:"operation"`
+			Scope       coordination.ExecutionScope   `json:"scope"`
+			Commit      coordination.Commit           `json:"commit"`
+			Interrupted coordination.InterruptedReply `json:"interrupted"`
+		}
+		if err := json.Unmarshal(input, &envelope); err != nil {
+			return capability.UnifiedToolResult{}, err
+		}
+		if envelope.Operation != "authority-fence" && envelope.Operation != "authority-reconcile" {
+			scope := envelope.Scope
+			if envelope.Operation == "apply" {
+				scope = envelope.Commit.Scope
+			}
+			if envelope.Operation == "interrupted" {
+				scope = envelope.Interrupted.Scope
+			}
+			if scope.SpaceID != spaceID.String() || scope.TargetDeviceID != targetDeviceID.String() || rt.Coordination == nil {
+				return capability.UnifiedToolResult{}, coordination.ErrWrongOwner
+			}
+			var err error
+			authorityCall, err = rt.Coordination.TrackRemoteAuthority(ctx, scope, conn.SessionID.String(), conn.Generation)
+			if err != nil {
+				return capability.UnifiedToolResult{}, err
+			}
+		}
+	}
 	invocationID := uuid.NewString()
+	if authorityCall != "" {
+		invocationID = authorityCall
+	}
 	port := capability.NewMeshDeviceRuntimeInvocationPort(&capability.MeshRuntimePorts{
 		Hub:                rt.Hub,
 		PendingInvocations: rt.PendingInvocations,
@@ -309,9 +441,28 @@ func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
 	result := port.Execute(ctx, request)
 	if result.Status != capability.ToolResultStatusSuccess {
 		if result.Error != nil {
+			if rejected := coordination.ErrorFromProtocol(result.Error.Code); rejected != nil {
+				if authorityCall != "" {
+					confirmation, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					confirmErr := rt.Coordination.ConfirmRemoteAuthority(confirmation, authorityCall)
+					cancel()
+					if confirmErr != nil {
+						return result, errors.Join(rejected, result.Error, confirmErr)
+					}
+				}
+				return result, errors.Join(rejected, result.Error)
+			}
 			return result, result.Error
 		}
 		return result, fmt.Errorf("devicemesh: device invocation failed with status %s", result.Status)
+	}
+	if authorityCall != "" {
+		confirmation, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := rt.Coordination.ConfirmRemoteAuthority(confirmation, authorityCall)
+		cancel()
+		if err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }

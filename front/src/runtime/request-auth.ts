@@ -4,7 +4,12 @@ import {
   getBackendAuthHeaders,
   getDeploymentConfig,
   isDeviceLocalApiPath,
+  isDeviceRoleManagementPath,
+  getApiBaseURLForPath,
+  LOCAL_DEVICE_RUNTIME_BASE_URL,
+  getApiBaseURL,
 } from "./runtime-adapter";
+import { signWebAuthenticatedFetch } from "./web-device-mesh";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 
@@ -24,7 +29,7 @@ export async function createAuthenticatedFetchInit(
   const deviceLocal =
     typeof window !== "undefined" &&
     Boolean(window.amitiaDesktop) &&
-    isDeviceLocalApiPath(path);
+    (isDeviceLocalApiPath(path) || (isDeviceRoleManagementPath(path) && await getApiBaseURLForPath(path) === LOCAL_DEVICE_RUNTIME_BASE_URL));
   const isPublic = String(path || "").split("?", 1)[0].startsWith("/api/public/");
   const headers = new Headers(init.headers ?? undefined);
 
@@ -56,5 +61,10 @@ export async function createAuthenticatedFetchInit(
   const credentials = typeof window !== "undefined" && !window.amitiaDesktop
     ? "include"
     : init.credentials;
-  return { ...init, headers, credentials };
+  const result = { ...init, headers, credentials };
+  if (typeof window !== "undefined" && !window.amitiaDesktop && !isPublic) {
+    const base = await getApiBaseURL();
+    return signWebAuthenticatedFetch(base, base + path, result);
+  }
+  return result;
 }

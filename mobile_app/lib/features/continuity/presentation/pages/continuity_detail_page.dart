@@ -119,6 +119,34 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     }
   }
 
+  Future<void> _confirmExecution(String outcome) async {
+    final detail = _detail;
+    if (detail == null || detail.leaseState != 'unknown') return;
+    final confirmed = await showAmitiaConfirmDialog(
+      context,
+      title: outcome == 'completed' ? '确认执行已完成' : '放弃本次执行',
+      message: '请先核实原设备的执行结果。确认后事项保持暂停，不会重复执行本次等待，已发生的操作仍然保留。',
+      confirmLabel: '确认',
+    );
+    if (confirmed != true) return;
+    _saving = true;
+    try {
+      await ref
+          .read(continuityServiceProvider)
+          .confirmExecution(
+            detail.thread.id,
+            detail.leaseId,
+            outcome,
+            result: outcome == 'completed' ? detail.thread.summary : '',
+          );
+      await _load(showLoading: false);
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, error.toString());
+    } finally {
+      _saving = false;
+    }
+  }
+
   Future<void> _addWait() async {
     final thread = _detail?.thread;
     if (thread == null) return;
@@ -206,6 +234,13 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     AppSpacing.xxl,
                   ),
                   children: [
+                    if (detail.pausedReason.isNotEmpty)
+                      AmitiaCard(
+                        child: Text(
+                          detail.pausedReason,
+                          style: AppTypography.body(context),
+                        ),
+                      ),
                     _buildSummary(detail.thread),
                     SizedBox(height: AppSpacing.lg),
                     _buildWaits(detail),
@@ -219,6 +254,7 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
   }
 
   Widget _buildSummary(ContinuityThreadDto thread) {
+    final detail = _detail!;
     final status = _statusMeta(thread.status);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -259,7 +295,7 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     : Icons.pause_outlined,
                 isSecondary: true,
                 outlined: true,
-                onPressed: _saving
+                onPressed: _saving || detail.leaseState == 'unknown'
                     ? null
                     : () => _setStatus(thread.paused ? 'active' : 'paused'),
               ),
@@ -278,6 +314,24 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
               outlined: true,
               onPressed: _saving ? null : _edit,
             ),
+            if (detail.leaseState == 'unknown')
+              AmitiaButton(
+                label: '确认执行已完成',
+                isSecondary: true,
+                outlined: true,
+                onPressed: _saving
+                    ? null
+                    : () => _confirmExecution('completed'),
+              ),
+            if (detail.leaseState == 'unknown')
+              AmitiaButton(
+                label: '放弃本次执行',
+                isSecondary: true,
+                outlined: true,
+                onPressed: _saving
+                    ? null
+                    : () => _confirmExecution('abandoned'),
+              ),
           ],
         ),
       ],

@@ -9,12 +9,14 @@ import {
   getRuntimeConnection,
   getDeploymentConfig,
   getBackendAuthHeaders,
+  getApiBaseURLForPath,
   isDeviceLocalApiPath,
   LOCAL_DEVICE_RUNTIME_BASE_URL,
 } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 import { classifyError, displayError } from "./request";
+import { signWebAuthenticatedFetch } from "@/runtime/web-device-mesh";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 
@@ -42,6 +44,18 @@ export const apiClient: AxiosInstance = axios.create({
   timeout: 30000,
 });
 
+const requestAdapter = axios.getAdapter(apiClient.defaults.adapter);
+apiClient.defaults.adapter = async (config) => {
+  if (!window.amitiaDesktop && String(config.headers.Authorization || "").startsWith("AmitiaDevice ")) {
+    const signed = await signWebAuthenticatedFetch(config.baseURL || window.location.origin, axios.getUri(config), {
+      method: (config.method || "GET").toUpperCase(), headers: config.headers.toJSON() as Record<string, string>, body: config.data,
+    });
+    new Headers(signed.headers).forEach((value, key) => config.headers.set(key, value));
+    config.data = signed.body;
+  }
+  return requestAdapter(config);
+};
+
 apiClient.interceptors.request.use(async (config) => {
   const runtime = await getRuntimeConnection();
   const deployment = await getDeploymentConfig();
@@ -60,8 +74,9 @@ apiClient.interceptors.request.use(async (config) => {
       requestPath.startsWith("/api/extensions/packages/") ||
       requestPath === "/api/extensions/kernel/extensions/uninstall" ||
       requestPath.startsWith("/api/extensions/kernel/extensions/uninstall/"));
-  const deviceLocal =
+  let deviceLocal =
     Boolean(window.amitiaDesktop) && (isDeviceLocalApiPath(requestPath) || gamePackageLocal);
+	if (window.amitiaDesktop && !deviceLocal) deviceLocal = await getApiBaseURLForPath(requestPath) === LOCAL_DEVICE_RUNTIME_BASE_URL && deployment.mode === "cloud";
   config.baseURL = deviceLocal ? LOCAL_DEVICE_RUNTIME_BASE_URL : runtime.apiBaseURL;
   config.timeout = operationRequestTimeout(config.baseURL || "");
   delete (config.headers as any)["X-Amitia-Management-Target"];
@@ -72,6 +87,9 @@ apiClient.interceptors.request.use(async (config) => {
     delete config.headers["X-Amitia-Desktop-Session"];
     delete config.headers["X-Amitia-Desktop-Instance"];
     config.headers["X-Amitia-Client-Type"] = window.amitiaDesktop ? "desktop" : "web";
+    if (window.amitiaDesktop && runtime.apiBaseURL.endsWith("/internal/device-mesh/provider")) {
+      Object.assign(config.headers, await getBackendAuthHeaders("local"));
+    }
     (config as AxiosRequestConfig & { __amitiaPublic?: boolean; __amitiaDeviceLocal?: boolean }).__amitiaPublic = true;
     return config;
   }

@@ -4,9 +4,30 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/pairing"
+	"github.com/u-ai/backend/internal/devicemesh/proof"
 )
 
 var schemaStmts = []string{
+	coordination.PolicySchema,
+	coordination.ResourceSchema,
+	coordination.InboxSchema,
+	coordination.OutboxSchema,
+	coordination.ProviderSchema,
+	coordination.RequestRegistrySchema,
+	coordination.CapabilityGrantsSchema,
+	coordination.MemoryJobsSchema,
+	coordination.ContinuityJobsSchema,
+	coordination.RemoteAuthoritySchema,
+	coordination.SourceAuthoritySchema,
+	coordination.CancelledAuthoritySchema,
+	coordination.DeliveryFailuresSchema,
+	proof.IdentitySchema,
+	proof.NonceSchema,
+	pairing.ApprovalPolicySchema,
+	pairing.ApprovalSchema,
 	`CREATE TABLE IF NOT EXISTS kernel_devices (
 		device_id TEXT PRIMARY KEY,
 		space_id TEXT NOT NULL,

@@ -26,6 +26,8 @@ type PendingTask struct {
 	CancelAckCh      chan struct{}
 	LastHeartbeatSeq int64
 	LeaseExpiresAt   time.Time
+	ConfirmAuthority func(context.Context) error
+	AuthorityCallID  string
 }
 
 type TaskClaimResult struct {
@@ -39,12 +41,14 @@ type TaskClaimResult struct {
 type PendingTaskManager struct {
 	mu         sync.RWMutex
 	pending    map[string]*PendingTask
+	confirmed  map[string]time.Time
 	defaultTTL time.Duration
 }
 
 func NewPendingTaskManager() *PendingTaskManager {
 	return &PendingTaskManager{
 		pending:    make(map[string]*PendingTask),
+		confirmed:  make(map[string]time.Time),
 		defaultTTL: 60 * time.Second,
 	}
 }
@@ -79,6 +83,7 @@ func (m *PendingTaskManager) Register(request TaskExecutionRequest, sessionID st
 		return nil, fmt.Errorf("task already pending: %s", taskRunID)
 	}
 	m.pending[taskRunID] = pt
+	delete(m.confirmed, taskRunID)
 	m.mu.Unlock()
 	go m.watchDeadline(deadlineCtx, taskRunID)
 	return pt, nil
@@ -105,10 +110,6 @@ func (m *PendingTaskManager) watchDeadline(ctx context.Context, taskRunID string
 				current.CancelFunc()
 				select {
 				case current.ClaimCh <- TaskClaimResult{Success: false, Error: "task lease/deadline expired"}:
-				default:
-				}
-				select {
-				case current.CancelAckCh <- struct{}{}:
 				default:
 				}
 			}
@@ -218,13 +219,51 @@ func (m *PendingTaskManager) Complete(taskRunID string, success bool, errMsg str
 }
 
 func (m *PendingTaskManager) CompleteBound(taskRunID, attemptID, leaseID, sessionID string, generation int64, success bool, errMsg string) bool {
+	if attemptID == "" || leaseID == "" || sessionID == "" || generation < 1 {
+		return false
+	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	pt, ok := m.pending[taskRunID]
 	if !ok || !pendingTaskBindingMatches(pt, attemptID, leaseID, sessionID, generation) {
+		m.mu.Unlock()
+		return false
+	}
+	confirm := pt.ConfirmAuthority
+	m.mu.Unlock()
+	if confirm != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := confirm(ctx)
+		cancel()
+		if err != nil {
+			return false
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if current, exists := m.pending[taskRunID]; !exists || current != pt {
 		return false
 	}
 	delete(m.pending, taskRunID)
+	if m.confirmed == nil {
+		m.confirmed = make(map[string]time.Time)
+	}
+	now := time.Now()
+	for id, confirmedAt := range m.confirmed {
+		if now.Sub(confirmedAt) > 10*time.Minute {
+			delete(m.confirmed, id)
+		}
+	}
+	if len(m.confirmed) >= 256 {
+		oldestID := ""
+		var oldest time.Time
+		for id, confirmedAt := range m.confirmed {
+			if oldestID == "" || confirmedAt.Before(oldest) {
+				oldestID, oldest = id, confirmedAt
+			}
+		}
+		delete(m.confirmed, oldestID)
+	}
+	m.confirmed[taskRunID] = now
 	pt.CancelFunc()
 	result := TaskClaimResult{Success: success, Error: errMsg}
 	select {
@@ -236,6 +275,30 @@ func (m *PendingTaskManager) CompleteBound(taskRunID, attemptID, leaseID, sessio
 	default:
 	}
 	return true
+}
+
+func (m *PendingTaskManager) BindAuthority(taskRunID, attemptID, sessionID string, generation int64, confirm func(context.Context) error, callIDs ...string) error {
+	if len(callIDs) > 0 && (len(callIDs) != 1 || callIDs[0] == "" || len(callIDs[0]) > 512) {
+		return fmt.Errorf("任务授权调用编号无效")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pt, ok := m.pending[taskRunID]
+	if !ok || pt.AttemptID != attemptID || pt.SessionID != sessionID || pt.Generation != generation || confirm == nil || pt.ConfirmAuthority != nil {
+		return NewTaskError(ErrTaskScopeDenied, "远端任务授权与等待执行身份不一致")
+	}
+	pt.ConfirmAuthority = confirm
+	if len(callIDs) > 0 {
+		pt.AuthorityCallID = callIDs[0]
+	}
+	return nil
+}
+
+func (m *PendingTaskManager) ValidateOwnerBound(taskRunID, attemptID, leaseID, sessionID string, generation int64, callID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	pt, ok := m.pending[taskRunID]
+	return ok && attemptID != "" && leaseID != "" && sessionID != "" && generation > 0 && pt.AttemptID == attemptID && pt.LeaseID == leaseID && pt.SessionID == sessionID && pt.Generation == generation && callID != "" && pt.AuthorityCallID == callID && pt.ConfirmAuthority != nil && pt.LeaseExpiresAt.After(time.Now())
 }
 
 func (m *PendingTaskManager) Get(taskRunID string) (*PendingTask, bool) {
@@ -280,10 +343,6 @@ func (m *PendingTaskManager) CancelAll(sessionID string, reason string) {
 			case pt.ClaimCh <- result:
 			default:
 			}
-			select {
-			case pt.CancelAckCh <- struct{}{}:
-			default:
-			}
 		}
 	}
 }
@@ -306,9 +365,10 @@ func (m *PendingTaskManager) WaitForClaim(ctx context.Context, taskRunID string)
 func (m *PendingTaskManager) WaitForCancelAck(ctx context.Context, taskRunID string) bool {
 	m.mu.RLock()
 	pt, ok := m.pending[taskRunID]
+	confirmedAt, confirmed := m.confirmed[taskRunID]
 	m.mu.RUnlock()
 	if !ok {
-		return true
+		return confirmed && time.Since(confirmedAt) <= 10*time.Minute
 	}
 	select {
 	case <-pt.CancelAckCh:

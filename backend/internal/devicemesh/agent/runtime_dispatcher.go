@@ -59,6 +59,9 @@ type defaultRuntimeDispatcher struct {
 	inflight            map[string]*runtimeInvokeFlight
 	fencing             map[string]int64
 	fenceOwners         map[string]runtimeFenceOwner
+	cancelled           map[string]time.Time
+	cancelGeneration    uint64
+	blockedUntil        time.Time
 }
 
 func NewRuntimeDispatcher() *defaultRuntimeDispatcher {
@@ -70,6 +73,7 @@ func NewRuntimeDispatcher() *defaultRuntimeDispatcher {
 		inflight:            make(map[string]*runtimeInvokeFlight),
 		fencing:             make(map[string]int64),
 		fenceOwners:         make(map[string]runtimeFenceOwner),
+		cancelled:           make(map[string]time.Time),
 	}
 }
 
@@ -91,6 +95,9 @@ func (d *defaultRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHand
 	if d == nil {
 		return nil
 	}
+	d.mu.Lock()
+	generation := d.cancelGeneration
+	d.mu.Unlock()
 	var base RuntimeInvokeHandler
 	if handler := d.cancellableHandlers[handlerName]; handler != nil {
 		base = func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
@@ -102,6 +109,11 @@ func (d *defaultRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHand
 				ctx, cancel = context.WithCancel(ctx)
 			}
 			d.mu.Lock()
+			if d.cancelGeneration != generation || d.invocationCancelledLocked(invoke.InvocationID) {
+				d.mu.Unlock()
+				cancel()
+				return nil, context.Canceled
+			}
 			d.cancels[invoke.InvocationID] = cancel
 			d.mu.Unlock()
 			defer func() {
@@ -118,7 +130,35 @@ func (d *defaultRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHand
 	if base == nil {
 		return nil
 	}
-	return d.withReliability(base)
+	reliable := base
+	if handlerName != "coordination.data" {
+		reliable = d.withReliability(base)
+	}
+	return func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+		d.mu.Lock()
+		cancelled := generation != d.cancelGeneration || d.invocationCancelledLocked(invoke.InvocationID)
+		d.mu.Unlock()
+		if cancelled {
+			return nil, context.Canceled
+		}
+		if len(invoke.OwnedExecutionScope) > 0 {
+			return base(invoke)
+		}
+		return reliable(invoke)
+	}
+}
+
+func (d *defaultRuntimeDispatcher) invocationCancelledLocked(id string) bool {
+	now := time.Now()
+	if now.Before(d.blockedUntil) {
+		return true
+	}
+	expires, found := d.cancelled[id]
+	if found && !now.Before(expires) {
+		delete(d.cancelled, id)
+		return false
+	}
+	return found
 }
 
 func (d *defaultRuntimeDispatcher) withReliability(handler RuntimeInvokeHandler) RuntimeInvokeHandler {
@@ -213,10 +253,21 @@ func (d *defaultRuntimeDispatcher) withReliability(handler RuntimeInvokeHandler)
 }
 
 func (d *defaultRuntimeDispatcher) CancelInvocation(invocationID string) bool {
-	if d == nil || invocationID == "" {
+	if d == nil || invocationID == "" || len(invocationID) > 512 {
 		return false
 	}
 	d.mu.Lock()
+	now := time.Now()
+	for id, expires := range d.cancelled {
+		if !now.Before(expires) {
+			delete(d.cancelled, id)
+		}
+	}
+	if len(d.cancelled) >= 4096 {
+		d.blockedUntil = now.Add(10 * time.Minute)
+	} else {
+		d.cancelled[invocationID] = now.Add(10 * time.Minute)
+	}
 	cancel, ok := d.cancels[invocationID]
 	d.mu.Unlock()
 	if !ok || cancel == nil {
@@ -231,6 +282,7 @@ func (d *defaultRuntimeDispatcher) CancelAllInvocations(_ string) int {
 		return 0
 	}
 	d.mu.Lock()
+	d.cancelGeneration++
 	cancels := make([]context.CancelFunc, 0, len(d.cancels))
 	for _, cancel := range d.cancels {
 		if cancel != nil {

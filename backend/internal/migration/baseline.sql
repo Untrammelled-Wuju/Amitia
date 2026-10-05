@@ -3605,6 +3605,7 @@ created_at TEXT NOT NULL DEFAULT ''
 -- 来源: qdrant_collections.go
 CREATE TABLE IF NOT EXISTS qdrant_collection_versions (
 				collection_name TEXT PRIMARY KEY,
+				schema_version TEXT NOT NULL DEFAULT '',
 				vector_dim INTEGER NOT NULL,
 				distance TEXT NOT NULL DEFAULT 'Cosine',
     created_at TEXT DEFAULT ''
@@ -3625,6 +3626,7 @@ CREATE TABLE IF NOT EXISTS runtime_queue (
 
 -- 来源: surreal_schema.go
 CREATE TABLE IF NOT EXISTS surreal_schema_versions (
+	projection_contract TEXT NOT NULL DEFAULT '',
 				schema_version TEXT PRIMARY KEY,
 				entity_types TEXT NOT NULL DEFAULT '',
 				edge_types TEXT NOT NULL DEFAULT '',

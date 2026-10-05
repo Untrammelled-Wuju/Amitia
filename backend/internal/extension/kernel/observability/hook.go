@@ -2,9 +2,12 @@ package observability
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
@@ -284,6 +287,12 @@ func (h *ExecutionHook) WriteAuditForScopeBind(ctx context.Context, binding scop
 // ==================== ExecutionRecorder interface implementation ====================
 
 func (h *ExecutionHook) BeginInvocation(ctx context.Context, inv capability.ToolInvocationContext, toolID string, rawInput []byte, startedAt time.Time) error {
+	metadata := cloneMap(inv.Metadata)
+	ownedScope, owned := coordination.FromContext(ctx)
+	deviceOwned := owned && !ownedScope.Coordinated
+	if deviceOwned {
+		metadata = map[string]any{"deviceMeshScope": ownedScope}
+	}
 	traceID := inv.TraceID
 	if traceID == "" {
 		traceID = NewTraceID()
@@ -298,7 +307,7 @@ func (h *ExecutionHook) BeginInvocation(ctx context.Context, inv capability.Tool
 		TraceID:   traceID,
 		RootOpID:  opID,
 		CreatedAt: startedAt,
-		Metadata:  cloneMap(inv.Metadata),
+		Metadata:  metadata,
 	})
 
 	_ = h.writer.WriteOperation(ctx, OperationRecord{
@@ -332,10 +341,14 @@ func (h *ExecutionHook) BeginInvocation(ctx context.Context, inv capability.Tool
 		ScopeSnapshotID:      inv.ScopeSnapshotID,
 		PermissionSnapshotID: inv.PermissionSnapshotID,
 		CreatedAt:            startedAt,
-		Metadata:             cloneMap(inv.Metadata),
+		Metadata:             metadata,
 	}
 
-	if h.sanitizer != nil {
+	if deviceOwned {
+		digest := sha256.Sum256(rawInput)
+		rec.InputHash = hex.EncodeToString(digest[:])
+		rec.InputSummary = "输入正文由设备管理"
+	} else if h.sanitizer != nil {
 		h.sanitizer.SanitizeInvocationInput(&rec, string(rawInput))
 	}
 
@@ -400,6 +413,7 @@ func (h *ExecutionHook) BeginAttempt(ctx context.Context, inv capability.ToolInv
 }
 
 func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, result capability.UnifiedToolResult, finishedAt time.Time, backoff time.Duration) error {
+	result = deviceOwnedAuditResult(ctx, result)
 	status := StatusForUnifiedResult(result)
 	var errCode string
 	var errMsg string
@@ -458,6 +472,9 @@ func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, res
 }
 
 func (h *ExecutionHook) FinishInvocation(ctx context.Context, inv capability.ToolInvocationContext, result capability.UnifiedToolResult, finishedAt time.Time) error {
+	ownedScope, owned := coordination.FromContext(ctx)
+	deviceOwned := owned && !ownedScope.Coordinated
+	result = deviceOwnedAuditResult(ctx, result)
 	status := StatusForUnifiedResult(result)
 	var errCode string
 	var errMsg string
@@ -481,7 +498,11 @@ func (h *ExecutionHook) FinishInvocation(ctx context.Context, inv capability.Too
 		outputStr = string(result.Structured)
 	}
 
-	if h.sanitizer != nil {
+	if deviceOwned {
+		digest := sha256.Sum256(result.Structured)
+		rec.OutputHash = hex.EncodeToString(digest[:])
+		rec.OutputSummary = "结果正文由设备管理"
+	} else if h.sanitizer != nil {
 		h.sanitizer.SanitizeInvocationOutput(&rec, outputStr)
 	}
 
@@ -506,6 +527,7 @@ func (h *ExecutionHook) FinishInvocation(ctx context.Context, inv capability.Too
 }
 
 func (h *ExecutionHook) OnRetryScheduled(ctx context.Context, invocationID string, previousAttempt int, nextAttempt int, retryCount int, delayMs int64, reason string) error {
+	reason = deviceOwnedAuditReason(ctx, reason)
 	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
 		InvocationID: invocationID,
 		Status:       StatusRetrying,
@@ -547,6 +569,7 @@ func (h *ExecutionHook) OnTimeoutTriggered(ctx context.Context, invocationID str
 }
 
 func (h *ExecutionHook) OnCancelled(ctx context.Context, invocationID string, reason string) error {
+	reason = deviceOwnedAuditReason(ctx, reason)
 	now := time.Now()
 
 	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
@@ -568,6 +591,7 @@ func (h *ExecutionHook) OnCancelled(ctx context.Context, invocationID string, re
 }
 
 func (h *ExecutionHook) OnPermissionDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error {
+	reason = deviceOwnedAuditReason(ctx, reason)
 	now := time.Now()
 
 	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
@@ -610,6 +634,7 @@ func (h *ExecutionHook) OnPermissionDenied(ctx context.Context, inv capability.T
 }
 
 func (h *ExecutionHook) OnScopeDenied(ctx context.Context, inv capability.ToolInvocationContext, toolID string, reason string) error {
+	reason = deviceOwnedAuditReason(ctx, reason)
 	now := time.Now()
 
 	_ = h.writer.WriteInvocation(ctx, InvocationRecord{
@@ -654,6 +679,9 @@ func (h *ExecutionHook) OnScopeDenied(ctx context.Context, inv capability.ToolIn
 func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID string, effects []capability.RecordedSideEffect) error {
 	now := time.Now()
 	for _, effect := range effects {
+		if scope, owned := coordination.FromContext(ctx); owned && !scope.Coordinated {
+			effect.Target, effect.Description = "", "设备管理的动作"
+		}
 		_ = h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
 			EventID:      NewEventID(),
 			InvocationID: invocationID,
@@ -673,6 +701,22 @@ func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID s
 		InvocationID:    invocationID,
 		SideEffectCount: len(effects),
 	})
+}
+
+func deviceOwnedAuditResult(ctx context.Context, result capability.UnifiedToolResult) capability.UnifiedToolResult {
+	if scope, owned := coordination.FromContext(ctx); owned && !scope.Coordinated && result.Error != nil {
+		copyError := *result.Error
+		copyError.Message = "设备工具执行失败，详细结果由设备管理"
+		result.Error = &copyError
+	}
+	return result
+}
+
+func deviceOwnedAuditReason(ctx context.Context, reason string) string {
+	if scope, owned := coordination.FromContext(ctx); owned && !scope.Coordinated {
+		return "详细信息由设备管理"
+	}
+	return reason
 }
 
 func (h *ExecutionHook) OnCircuitStateChange(ctx context.Context, circuitKey string, fromState string, toState string, reason string, failureCount int, resultingState string) error {

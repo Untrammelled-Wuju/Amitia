@@ -1,6 +1,9 @@
 package scope
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type ScopeType string
 
@@ -78,17 +81,18 @@ type ScopeBinding struct {
 }
 
 type ScopeSnapshot struct {
-	SnapshotID     string     `json:"snapshotId"`
-	SpaceID        string     `json:"spaceId,omitempty"`
-	InvocationID   string     `json:"invocationId"`
-	ResolvedScopes []ScopeRef `json:"resolvedScopes"`
-	CharacterID    string     `json:"characterId"`
-	ConversationID string     `json:"conversationId"`
-	ExtensionID    string     `json:"extensionId"`
-	ModuleID       string     `json:"moduleId"`
-	Generation     int64      `json:"generation"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
+	OwnedExecutionScope json.RawMessage `json:"ownedExecutionScope,omitempty"`
+	SnapshotID          string          `json:"snapshotId"`
+	SpaceID             string          `json:"spaceId,omitempty"`
+	InvocationID        string          `json:"invocationId"`
+	ResolvedScopes      []ScopeRef      `json:"resolvedScopes"`
+	CharacterID         string          `json:"characterId"`
+	ConversationID      string          `json:"conversationId"`
+	ExtensionID         string          `json:"extensionId"`
+	ModuleID            string          `json:"moduleId"`
+	Generation          int64           `json:"generation"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	ExpiresAt           *time.Time      `json:"expiresAt,omitempty"`
 }
 
 type ScopeDecision struct {

@@ -4,6 +4,7 @@ import { ref, type Ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "./useApi";
 import { useCachedApi } from "./useCachedApi";
+import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 
 export function useWebChatConversation(
   messages: Ref<any[]>,
@@ -18,6 +19,7 @@ export function useWebChatConversation(
   connectSSE: () => void,
 ) {
   const { get, del } = useApi();
+  const owned = useDeviceOwnedConversation();
   const { saveCache } = useCachedApi();
 
   const characters = ref<any[]>([]);
@@ -34,13 +36,13 @@ export function useWebChatConversation(
     charName.value = c.name;
     charIdentity.value = c.identity || c.personality || "";
     charAvatar.value = c.avatar || "";
-    localStorage.setItem("webchat-char-id", c.id);
+    localStorage.setItem(owned.enabled.value ? `webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}` : "webchat-char-id", c.id);
   }
 
   async function handleSwitchChar(c: any) {
     try {
       await ElMessageBox.confirm(
-        "切换后，当前对话的后续消息将使用新角色，历史消息保持不变。",
+        owned.enabled.value ? "切换角色后将打开新对话，已有对话保持原记录。" : "切换后，当前对话的后续消息将使用新角色，历史消息保持不变。",
         "选择角色",
         {
           confirmButtonText: "确认切换",
@@ -52,6 +54,7 @@ export function useWebChatConversation(
       return;
     }
     selectCharacter(c);
+    if (owned.enabled.value) { disconnectSSE(); convId.value = ""; messages.value = []; convTitle.value = ""; }
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
     await fetchConversations();
@@ -69,11 +72,29 @@ export function useWebChatConversation(
     if (!convTitle.value) convTitle.value = "新对话";
     messages.value = [];
     hasMoreHistory.value = true;
+    if (owned.enabled.value) {
+      const selectedRole = characterId.value;
+      const result = await owned.query(conversationID, selectedRole);
+      if (convId.value !== conversationID || characterId.value !== selectedRole) return;
+      messages.value = owned.messages(result);
+      const conversation = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body;
+      convTitle.value = conversation?.title || "历史对话";
+      hasMoreHistory.value = owned.hasMore(conversationID, characterId.value);
+      return;
+    }
     connectSSE();
   }
 
   async function fetchConversations() {
     try {
+      if (owned.enabled.value) {
+        if (!characterId.value) { conversations.value = []; return; }
+        const selectedRole = characterId.value;
+        const rows = await owned.conversations(selectedRole);
+        if (characterId.value !== selectedRole) return;
+        conversations.value = rows;
+        return;
+      }
       const r = await get<any>("/api/web-chat/conversations", {
         pageSize: 100,
       });
@@ -89,12 +110,16 @@ export function useWebChatConversation(
   async function handleViewMemories() {
     showMemories.value = true;
     try {
+      if (owned.enabled.value) {
+        return;
+      }
       const r = await get<any>("/api/memories", { page: 1, pageSize: 10 });
       memories.value = r?.items || [];
     } catch {}
   }
 
   async function fetchWebMsgCount() {
+    if (owned.enabled.value) return;
     if (!convId.value) return;
     try {
       const convs = await get<any>("/api/web-chat/conversations", {
@@ -108,6 +133,11 @@ export function useWebChatConversation(
 
   async function refreshCharacters() {
     try {
+      if (owned.enabled.value) {
+        await owned.refresh();
+        characters.value = owned.roles.value;
+        return;
+      }
       const chars = await get<any[]>("/api/characters");
       if (Array.isArray(chars)) {
         characters.value = chars;
@@ -124,6 +154,11 @@ export function useWebChatConversation(
     const id = String(conversationID || "").trim();
     if (!id) return "";
     try {
+      if (owned.enabled.value) {
+        const result = await owned.query(id, characterId.value);
+        const content = result.snapshot.resources.find((resource) => resource.kind === "summary")?.body?.content;
+        return String(content?.summary || content?.text || (typeof content === "string" ? content : result.snapshot.legacySummary?.summaryText || result.snapshot.legacySummary?.summary_text || "")).trim();
+      }
       const response = await get<any>(
         `/api/chats/conversations/${encodeURIComponent(id)}/summary`,
       );
