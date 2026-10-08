@@ -249,6 +249,7 @@ object NotificationRenderer {
         if (body.isBlank()) return
         val deepLink = data["deepLink"].orEmpty().ifBlank { "amitia://chat/$conversationId" }
         val previewMode = data["previewMode"].orEmpty().trim().lowercase().ifBlank { "full" }
+        val visibleBody = if (previewMode == "full") body else if (previewMode == "hidden") "????????" else "????"
         val sender = Person.Builder()
             .setName(title)
             .setKey(characterId.ifBlank { title })
@@ -265,7 +266,7 @@ object NotificationRenderer {
             clearMessageHistory(context, conversationId)
         }
         val now = System.currentTimeMillis()
-        style.addMessage(body, now, sender)
+        style.addMessage(visibleBody, now, sender)
         if (previewMode == "full") {
             appendMessageHistory(context, conversationId, now, body)
         }
@@ -290,7 +291,7 @@ object NotificationRenderer {
         val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(body)
+            .setContentText(visibleBody)
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -306,7 +307,7 @@ object NotificationRenderer {
                 .setData(Uri.parse("amitia://bubble/$conversationId"))
                 .putExtra("conversationId", conversationId)
                 .putExtra("title", title)
-                .putExtra("body", body)
+                .putExtra("body", visibleBody)
                 .putExtra("deepLink", deepLink)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
             val shortcut = ShortcutInfo.Builder(context, shortcutId)

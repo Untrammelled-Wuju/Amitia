@@ -196,6 +196,7 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
                 )
                 val data = when (scenario) {
                     "message" -> common + mapOf(
+                        "deepLink" to "amitia://chat/local-scenario",
                         "type" to "message.received",
                         "conversationId" to "local-scenario",
                         "characterId" to "amitia-scenario",

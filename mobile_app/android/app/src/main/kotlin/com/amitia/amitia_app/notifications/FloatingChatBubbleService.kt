@@ -241,7 +241,9 @@ class FloatingChatBubbleService : Service() {
         val view = bubble ?: return
         val power = getSystemService(POWER_SERVICE) as android.os.PowerManager
         val user = getSystemService(USER_SERVICE) as UserManager
+        val keyguard = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
         val canShow = !appForeground && power.isInteractive && user.isUserUnlocked &&
+            !keyguard.isKeyguardLocked &&
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
         view.visibility = if (canShow) View.VISIBLE else View.GONE
     }

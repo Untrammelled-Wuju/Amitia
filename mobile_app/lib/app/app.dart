@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_update/app_update_providers.dart';
@@ -52,7 +53,9 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
   Future<void> _initializeBootstrap() async {
     await ref.read(appearancePreferencesProvider.notifier).init();
-    try { await ref.read(backgroundPreferencesProvider.notifier).init(); } catch (_) {}
+    try {
+      await ref.read(backgroundPreferencesProvider.notifier).init();
+    } catch (_) {}
     await ref.read(chatPermissionPreferencesProvider.notifier).init();
     final deploymentNotifier = ref.read(
       mobileDeploymentConfigProvider.notifier,
@@ -164,7 +167,7 @@ class _BootstrapInitializingWidget extends StatelessWidget {
       home: Stack(
         children: [
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-          const DebugLogOverlay(),
+          if (kDebugMode) const DebugLogOverlay(),
         ],
       ),
     );
@@ -260,7 +263,7 @@ class _BootstrapInstallRequiredWidgetState
               ),
             ),
           ),
-          const DebugLogOverlay(),
+          if (kDebugMode) const DebugLogOverlay(),
         ],
       ),
     );
@@ -296,7 +299,7 @@ class _BootstrapFailedWidget extends StatelessWidget {
               ),
             ),
           ),
-          const DebugLogOverlay(),
+          if (kDebugMode) const DebugLogOverlay(),
         ],
       ),
     );
@@ -313,7 +316,7 @@ class _BootstrapUnavailableWidget extends StatelessWidget {
       home: Stack(
         children: [
           const Scaffold(body: Center(child: Text('Runtime unavailable'))),
-          const DebugLogOverlay(),
+          if (kDebugMode) const DebugLogOverlay(),
         ],
       ),
     );
@@ -332,7 +335,7 @@ class _BootstrapErrorWidget extends StatelessWidget {
           const Scaffold(
             body: Center(child: Text('Failed to initialize runtime')),
           ),
-          const DebugLogOverlay(),
+          if (kDebugMode) const DebugLogOverlay(),
         ],
       ),
     );
@@ -380,7 +383,11 @@ class AmitiaApp extends ConsumerWidget {
           theme.extension<AmitiaLayoutTokens>() ?? const AmitiaLayoutTokens();
       if (colors == null) return theme;
 
-      final userColors = resolveAppearanceColors(colors, theme.brightness, appearance);
+      final userColors = resolveAppearanceColors(
+        colors,
+        theme.brightness,
+        appearance,
+      );
       final accent = userColors.accentPrimary;
       final accentSoft = userColors.accentSoft;
 
@@ -421,16 +428,36 @@ class AmitiaApp extends ConsumerWidget {
         colorScheme: theme.colorScheme.copyWith(
           primary: accent,
           primaryContainer: accentSoft,
-          onPrimary: appearance.customPalette.enabled ? readableForeground(accent) : theme.colorScheme.onPrimary,
+          onPrimary: appearance.customPalette.enabled
+              ? readableForeground(accent)
+              : theme.colorScheme.onPrimary,
           secondary: userColors.accentSecondary,
           onSecondary: readableForeground(userColors.accentSecondary),
-          secondaryContainer: Color.alphaBlend(userColors.accentSecondary.withValues(alpha: 0.14), colors.surfacePrimary),
+          secondaryContainer: Color.alphaBlend(
+            userColors.accentSecondary.withValues(alpha: 0.14),
+            colors.surfacePrimary,
+          ),
           onSurface: userColors.textPrimary,
           onSurfaceVariant: userColors.textSecondary,
         ),
-        textTheme: appearance.customPalette.enabled ? theme.textTheme.apply(bodyColor: userColors.textPrimary, displayColor: userColors.textPrimary) : theme.textTheme,
-        appBarTheme: appearance.customPalette.enabled ? theme.appBarTheme.copyWith(foregroundColor: userColors.textPrimary) : theme.appBarTheme,
-        inputDecorationTheme: appearance.customPalette.enabled ? theme.inputDecorationTheme.copyWith(hintStyle: theme.inputDecorationTheme.hintStyle?.copyWith(color: userColors.textTertiary)) : theme.inputDecorationTheme,
+        textTheme: appearance.customPalette.enabled
+            ? theme.textTheme.apply(
+                bodyColor: userColors.textPrimary,
+                displayColor: userColors.textPrimary,
+              )
+            : theme.textTheme,
+        appBarTheme: appearance.customPalette.enabled
+            ? theme.appBarTheme.copyWith(
+                foregroundColor: userColors.textPrimary,
+              )
+            : theme.appBarTheme,
+        inputDecorationTheme: appearance.customPalette.enabled
+            ? theme.inputDecorationTheme.copyWith(
+                hintStyle: theme.inputDecorationTheme.hintStyle?.copyWith(
+                  color: userColors.textTertiary,
+                ),
+              )
+            : theme.inputDecorationTheme,
         extensions: extensions,
       );
     }
@@ -472,7 +499,7 @@ class AmitiaApp extends ConsumerWidget {
               children: [
                 if (child case final Widget currentChild) currentChild,
                 const McpInteractionGuard(),
-                const DebugLogOverlay(),
+                if (kDebugMode) const DebugLogOverlay(),
               ],
             ),
           ),
