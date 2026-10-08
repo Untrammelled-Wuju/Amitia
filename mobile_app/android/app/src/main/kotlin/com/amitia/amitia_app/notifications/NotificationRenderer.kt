@@ -3,6 +3,9 @@ package com.amitia.amitia_app.notifications
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -14,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
+import androidx.core.graphics.drawable.IconCompat
 import com.amitia.amitia_app.MainActivity
 import com.amitia.amitia_app.R
 import org.json.JSONArray
@@ -295,6 +299,41 @@ object NotificationRenderer {
             .setGroup("amitia:conversation:$conversationId")
             .setContentIntent(contentIntent(context, deepLink, conversationId))
             .addAction(replyAction)
+        if (conversationId.isNotBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val shortcutId = "amitia-chat-" + stableId(conversationId)
+            val shortcutIntent = Intent(context, ConversationBubbleActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .setData(Uri.parse("amitia://bubble/$conversationId"))
+                .putExtra("conversationId", conversationId)
+                .putExtra("title", title)
+                .putExtra("body", body)
+                .putExtra("deepLink", deepLink)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            val shortcut = ShortcutInfo.Builder(context, shortcutId)
+                .setShortLabel(title.take(32))
+                .setLongLived(true)
+                .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
+                .setIntent(shortcutIntent)
+                .setPersons(arrayOf(android.app.Person.Builder().setName(title).setKey(characterId.ifBlank { conversationId }).build()))
+                .build()
+            val shortcuts = context.getSystemService(Context.SHORTCUT_SERVICE) as ShortcutManager
+            runCatching { shortcuts.pushDynamicShortcut(shortcut) }
+            val bubble = PendingIntent.getActivity(
+                context,
+                stableId("bubble:$conversationId"),
+                shortcutIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+            )
+            val metadata = NotificationCompat.BubbleMetadata.Builder(
+                bubble,
+                IconCompat.createWithResource(context, R.mipmap.ic_launcher),
+            ).setDesiredHeight((520 * context.resources.displayMetrics.density).toInt())
+                .setAutoExpandBubble(false)
+                .setSuppressNotification(false)
+                .build()
+            builder.setShortcutId(shortcutId)
+            builder.setBubbleMetadata(metadata)
+        }
         if (data["sound"] == "false") {
             builder.setSilent(true)
         }

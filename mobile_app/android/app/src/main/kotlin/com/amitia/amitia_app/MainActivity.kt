@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import com.amitia.amitia_app.nativeprovider.AndroidNativeBridgePlugin
 import com.amitia.amitia_app.nativeprovider.AndroidNativeCompositionRoot
 import com.amitia.amitia_app.notifications.NotificationPlatformPlugin
+import com.amitia.amitia_app.notifications.FloatingChatBubbleService
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgePlugin
 import com.amitia.amitia_app.realtime.RealtimeAudioPlugin
 import com.amitia.amitia_app.realtime.RealtimeVisualPlugin
@@ -151,11 +152,14 @@ class MainActivity : FlutterActivity() {
         com.amitia.amitia_app.nativeprovider.notification.ReplyNotificationSound.stop()
         com.amitia.amitia_app.nativeprovider.notification.ReplyNotificationVibration.stop()
         activeActivity = WeakReference(this)
+        FloatingChatBubbleService.setAppForeground(true)
+        FloatingChatBubbleService.restore(applicationContext)
         com.amitia.amitia_app.runtime.service.BackgroundKeepAlive.restore(applicationContext)
         com.amitia.amitia_app.nativeprovider.display.ScreenAwakeController.apply(this, true)
     }
 
     override fun onPause() {
+        FloatingChatBubbleService.setAppForeground(false)
         com.amitia.amitia_app.nativeprovider.display.ScreenAwakeController.apply(this, false)
         if (activeActivity?.get() === this) activeActivity = null
         super.onPause()

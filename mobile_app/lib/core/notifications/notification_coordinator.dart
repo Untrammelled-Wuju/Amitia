@@ -104,6 +104,21 @@ class NotificationCoordinator with WidgetsBindingObserver {
 
   Future<void> openSystemSettings() => _platform.openSettings();
 
+  Future<Map<String, dynamic>> floatingBubbleStatus() =>
+      _platform.floatingBubbleStatus();
+
+  Future<Map<String, dynamic>> enableFloatingBubble() =>
+      _platform.enableFloatingBubble();
+
+  Future<Map<String, dynamic>> disableFloatingBubble() =>
+      _platform.disableFloatingBubble();
+
+  Future<void> openFloatingBubblePermission() =>
+      _platform.openFloatingBubblePermission();
+
+  Future<void> sendLocalNotificationScenario(String scenario) =>
+      _platform.sendLocalNotificationScenario(scenario);
+
   Future<void> refreshRegistration() async {
     if (_disposed || _suppressRegistration) return;
     if (_refreshing) {
@@ -594,6 +609,12 @@ class NotificationCoordinator with WidgetsBindingObserver {
             },
           ).toString(),
         );
+      case 'settings':
+        if (uri.pathSegments.join('/') == 'notifications') {
+          _router.go('/settings/notifications');
+        } else {
+          _router.go('/settings');
+        }
       case 'reminder':
         _router.go('/reminders');
       case 'call':

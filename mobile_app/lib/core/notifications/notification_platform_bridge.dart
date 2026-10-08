@@ -189,6 +189,41 @@ class NotificationPlatformBridge {
 
   Future<void> openSettings() => _channel.invokeMethod<void>('openSettings');
 
+  Future<Map<String, dynamic>> floatingBubbleStatus() async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMethod<Map<Object?, Object?>>(
+              'floatingBubbleStatus',
+            ) ??
+            {},
+      );
+
+  Future<Map<String, dynamic>> enableFloatingBubble() async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMethod<Map<Object?, Object?>>(
+              'floatingBubbleEnable',
+            ) ??
+            {},
+      );
+
+  Future<Map<String, dynamic>> disableFloatingBubble() async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMethod<Map<Object?, Object?>>(
+              'floatingBubbleDisable',
+            ) ??
+            {},
+      );
+
+  Future<void> openFloatingBubblePermission() async {
+    await _channel.invokeMethod<bool>('floatingBubblePermission');
+  }
+
+  Future<void> sendLocalNotificationScenario(String scenario) async {
+    await _channel.invokeMethod<bool>(
+      'sendLocalNotificationScenario',
+      <String, String>{'scenario': scenario},
+    );
+  }
+
   Future<void> clearExecutionNotifications() =>
       _channel.invokeMethod<void>('clearExecutionNotifications');
 

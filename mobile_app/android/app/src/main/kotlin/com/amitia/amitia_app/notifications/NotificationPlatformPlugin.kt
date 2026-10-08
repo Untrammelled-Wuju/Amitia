@@ -2,6 +2,7 @@ package com.amitia.amitia_app.notifications
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
@@ -164,6 +165,65 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             "clearReminderNotifications" -> {
                 NotificationRenderer.clearAllReminders(appContext)
                 result.success(true)
+            }
+            "floatingBubbleStatus" -> result.success(FloatingChatBubbleService.status(appContext))
+            "floatingBubbleEnable" -> {
+                try {
+                    val started = FloatingChatBubbleService.enable(appContext)
+                    result.success(FloatingChatBubbleService.status(appContext) + mapOf("started" to started))
+                } catch (error: Exception) {
+                    result.error("FLOATING_BUBBLE_START_FAILED", error.message, null)
+                }
+            }
+            "floatingBubbleDisable" -> {
+                FloatingChatBubbleService.disable(appContext)
+                result.success(FloatingChatBubbleService.status(appContext))
+            }
+            "floatingBubblePermission" -> {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${appContext.packageName}"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                appContext.startActivity(intent)
+                result.success(true)
+            }
+            "sendLocalNotificationScenario" -> {
+                val scenario = call.argument<String>("scenario").orEmpty()
+                val now = System.currentTimeMillis().toString()
+                val common = mapOf(
+                    "sound" to "true",
+                    "deepLink" to "amitia://settings/notifications",
+                )
+                val data = when (scenario) {
+                    "message" -> common + mapOf(
+                        "type" to "message.received",
+                        "conversationId" to "local-scenario",
+                        "characterId" to "amitia-scenario",
+                        "title" to "Amitia Test",
+                        "body" to "Local notification scenario: a new message arrived.",
+                    )
+                    "reminder" -> common + mapOf(
+                        "type" to "reminder.triggered",
+                        "messageId" to now,
+                        "title" to "Amitia reminder test",
+                        "body" to "Local reminder notification, independent of cloud push.",
+                    )
+                    "task" -> common + mapOf(
+                        "type" to "run.started",
+                        "runId" to "local-scenario",
+                        "revision" to now,
+                        "title" to "Amitia task test",
+                        "summary" to "Task running in the background",
+                        "progress" to "0.4",
+                    )
+                    else -> null
+                }
+                if (data == null) {
+                    result.error("UNKNOWN_SCENARIO", "Unsupported local scenario", null)
+                } else {
+                    NotificationRenderer.handleRemoteMessage(appContext, data)
+                    result.success(true)
+                }
             }
             "openSettings" -> {
                 val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)

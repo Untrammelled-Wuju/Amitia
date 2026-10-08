@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,9 +21,14 @@ class NotificationSettingsPage extends ConsumerStatefulWidget {
 }
 
 class _NotificationSettingsPageState
-    extends ConsumerState<NotificationSettingsPage> {
+    extends ConsumerState<NotificationSettingsPage>
+    with WidgetsBindingObserver {
   bool _loading = true;
   bool _updating = false;
+  bool _floatingPermission = false;
+  bool _floatingEnabled = false;
+  bool _floatingBusy = false;
+  bool _pendingFloatingEnable = false;
   String? _error;
   String? _deviceId;
   String? _provider;
@@ -39,7 +46,91 @@ class _NotificationSettingsPageState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadFloatingBubble();
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !Platform.isAndroid) return;
+    if (_pendingFloatingEnable) {
+      _pendingFloatingEnable = false;
+      _toggleFloatingBubble(true);
+    } else {
+      _loadFloatingBubble();
+    }
+  }
+
+  Future<void> _loadFloatingBubble() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await ref
+          .read(notificationCoordinatorProvider)
+          .floatingBubbleStatus();
+      if (!mounted) return;
+      setState(() {
+        _floatingPermission = status['permissionGranted'] == true;
+        _floatingEnabled = status['enabled'] == true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _floatingEnabled = false);
+    }
+  }
+
+  Future<void> _toggleFloatingBubble(bool enable) async {
+    if (_floatingBusy) return;
+    setState(() => _floatingBusy = true);
+    try {
+      final coordinator = ref.read(notificationCoordinatorProvider);
+      if (enable) {
+        final status = await coordinator.floatingBubbleStatus();
+        if (status['permissionGranted'] != true) {
+          _pendingFloatingEnable = true;
+          await coordinator.openFloatingBubblePermission();
+          return;
+        }
+        final result = await coordinator.enableFloatingBubble();
+        if (result['enabled'] != true || result['started'] != true) {
+          throw StateError('无法启动悬浮球服务');
+        }
+      } else {
+        _pendingFloatingEnable = false;
+        await coordinator.disableFloatingBubble();
+      }
+      await _loadFloatingBubble();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('悬浮球设置失败：$error')));
+    } finally {
+      if (mounted) setState(() => _floatingBusy = false);
+    }
+  }
+
+  Future<void> _sendLocalScenario(String scenario) async {
+    try {
+      await ref
+          .read(notificationCoordinatorProvider)
+          .sendLocalNotificationScenario(scenario);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('本机模拟通知已发送，请到桌面或锁屏检查')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('本机模拟通知失败：$error')));
+    }
   }
 
   Future<void> _load() async {
@@ -189,6 +280,54 @@ class _NotificationSettingsPageState
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
+            if (Platform.isAndroid)
+              SettingsSection(
+                title: '桌面聊天气泡',
+                children: [
+                  AmitiaSwitchTile(
+                    title: '启用可拖动悬浮球',
+                    subtitle: _floatingEnabled
+                        ? '应用退到桌面后显示；点击返回，长按关闭'
+                        : _floatingPermission
+                        ? '已授权，开启后可在其他应用和桌面上显示'
+                        : '需要先授权 Android 悬浮窗权限',
+                    value: _floatingEnabled,
+                    onChanged: _floatingBusy
+                        ? null
+                        : (value) => _toggleFloatingBubble(value),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.security_outlined),
+                    title: const Text('系统悬浮窗权限'),
+                    subtitle: Text(
+                      _floatingPermission ? '已允许' : '未允许，点击打开系统授权页',
+                    ),
+                    onTap: () async {
+                      await ref
+                          .read(notificationCoordinatorProvider)
+                          .openFloatingBubblePermission();
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.forum_outlined),
+                    title: const Text('模拟收到聊天消息'),
+                    subtitle: const Text('通过本机通知链路，验证桌面和锁屏展示'),
+                    onTap: () => _sendLocalScenario('message'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.notifications_outlined),
+                    title: const Text('模拟收到提醒'),
+                    subtitle: const Text('验证提醒通知在锁屏和通知栏的表现'),
+                    onTap: () => _sendLocalScenario('reminder'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.pending_actions_outlined),
+                    title: const Text('模拟后台任务进度'),
+                    subtitle: const Text('验证进度通知和后台状态'),
+                    onTap: () => _sendLocalScenario('task'),
+                  ),
+                ],
+              ),
             SettingsSection(
               title: '移动端 Push',
               children: [
