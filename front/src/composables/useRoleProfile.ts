@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref } from "vue";
 import { useApi } from "./useApi";
+import { roleAuthorityConfig } from "../runtime/role-authority";
 
 // ============================================================
 // Types (camelCase, 前端友好)
 // ============================================================
 
 export interface RoleProfile {
+  roleAuthority?: string;
   id: string;
   roleName: string;
   gender: "MALE" | "FEMALE" | "NON_BINARY" | "CUSTOM" | "UNSPECIFIED";
@@ -87,6 +89,7 @@ export function useRoleProfile() {
   async function updateRoleProfile(
     input: RoleProfileUpdateInput,
     characterId?: string,
+    roleAuthority?: string,
   ): Promise<RoleProfile> {
     loading.value = true;
     try {
@@ -94,7 +97,7 @@ export function useRoleProfile() {
         ? "/api/companion/role-profile?characterId=" +
           encodeURIComponent(characterId)
         : "/api/companion/role-profile";
-      const data = await put<RoleProfile>(url, input);
+      const data = await put<RoleProfile>(url, input, roleAuthorityConfig(roleAuthority));
       return data;
     } finally {
       loading.value = false;

@@ -30,6 +30,28 @@ func (v *searchCredentialVault) Store(ctx context.Context, namespace string, val
 	return ref.String(), nil
 }
 
+func (v *searchCredentialVault) ReserveReference(ctx context.Context, namespace string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if v == nil || v.broker == nil {
+		return "", secret.ErrSecretStoreUnavailable
+	}
+	ref, err := v.broker.ReserveReference(namespace)
+	return ref.String(), err
+}
+
+func (v *searchCredentialVault) StoreReference(ctx context.Context, rawRef string, value []byte) error {
+	if v == nil || v.broker == nil {
+		return secret.ErrSecretStoreUnavailable
+	}
+	ref, err := secret.ParseRef(rawRef)
+	if err != nil {
+		return err
+	}
+	return v.broker.StoreReference(ctx, ref, value)
+}
+
 func (v *searchCredentialVault) Resolve(ctx context.Context, rawRef string) ([]byte, error) {
 	if v == nil || v.broker == nil {
 		return nil, fmt.Errorf("search secret broker is unavailable")

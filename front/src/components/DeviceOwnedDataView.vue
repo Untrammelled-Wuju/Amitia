@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import DeviceOwnedMemoryPanel from "./DeviceOwnedMemoryPanel.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { getDeploymentConfig } from "@/runtime/runtime-adapter";
@@ -23,21 +23,35 @@ const owned = useDeviceOwnedConversation();
 const loading = ref(true);
 const error = ref("");
 const role = ref("");
+let generation = 0;
+let providerTimer: ReturnType<typeof setInterval> | undefined;
 
 async function initialize() {
+  const ticket = ++generation;
   loading.value = true;
   error.value = "";
   try {
     const enabled = await owned.refresh();
     const deployment = await getDeploymentConfig();
+    if (ticket !== generation) return;
     if (!enabled && deployment.mode === "cloud") throw new Error("当前 Core 的设备数据服务尚未就绪，请恢复服务后重试");
     if (enabled) role.value = owned.selectInitialRole(role.value);
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : "无法读取数据归属";
-  } finally { loading.value = false; }
+    if (ticket === generation) error.value = cause instanceof Error ? cause.message : "无法读取数据归属";
+  } finally { if (ticket === generation) loading.value = false; }
 }
 
-onMounted(initialize);
+watch(owned.roles, () => { if (owned.enabled.value) role.value = owned.selectInitialRole(role.value); });
+onMounted(() => {
+  void initialize();
+  window.addEventListener("amitia:runtime-connection-changed", initialize);
+  providerTimer = setInterval(() => { void owned.refresh().catch(() => { loading.value = false; error.value = "当前 Core 的数据服务暂不可用，请恢复服务后重试"; }); }, 3000);
+});
+onUnmounted(() => {
+  generation++;
+  if (providerTimer) clearInterval(providerTimer);
+  window.removeEventListener("amitia:runtime-connection-changed", initialize);
+});
 </script>
 
 <style scoped>

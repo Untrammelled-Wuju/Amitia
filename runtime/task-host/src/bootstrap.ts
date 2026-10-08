@@ -16,6 +16,8 @@ export interface RuntimeConfig {
   taskRunId: string;
   taskEntry: string;
   entryHash: string;
+  bundleRoot: string;
+  bundleHash: string;
   taskInput: TaskInput;
   taskDeadline: number;
   taskAttempt: number;
@@ -55,6 +57,8 @@ export function readRuntimeConfig(): RuntimeConfig {
   const taskRunId = process.env.AMITIA_TASK_RUN_ID ?? "";
   const taskEntry = process.env.AMITIA_TASK_ENTRY ?? "";
   const entryHash = process.env.AMITIA_ENTRY_HASH ?? "";
+  const bundleRoot = process.env.AMITIA_BUNDLE_ROOT ?? "";
+  const bundleHash = process.env.AMITIA_BUNDLE_HASH ?? "";
   const taskInputRaw = process.env.AMITIA_TASK_INPUT ?? "{}";
   const taskDeadlineStr = process.env.AMITIA_TASK_DEADLINE ?? "0";
   const taskAttemptStr = process.env.AMITIA_TASK_ATTEMPT ?? "1";
@@ -93,6 +97,8 @@ export function readRuntimeConfig(): RuntimeConfig {
     taskRunId,
     taskEntry,
     entryHash,
+    bundleRoot,
+    bundleHash,
     taskInput,
     taskDeadline,
     taskAttempt,
@@ -161,7 +167,7 @@ export async function bootstrap(): Promise<void> {
     generation: config.generation,
     definition_hash: config.definitionHash,
     nonce: config.nonce,
-    features: ["checkpoint", "cancellation", "streaming", "cooperative_pause", "entry_pin", "checkpoint_ack"],
+    features: ["checkpoint", "cancellation", "streaming", "cooperative_pause", "entry_pin", "checkpoint_ack", "bundle_pin"],
   });
 
   const welcomeRaw = await rpc.onceNotification("host.welcome", 30000);
@@ -207,7 +213,7 @@ export async function bootstrap(): Promise<void> {
   let result: TaskResult;
 
   try {
-    const handler = await loadTaskHandler(entry, config.entryHash);
+    const handler = await loadTaskHandler(entry, config.entryHash, config.bundleRoot, config.bundleHash);
     result = await handler(input, contextBundle.context);
   } catch (error: unknown) {
     if (abortController.signal.aborted) {

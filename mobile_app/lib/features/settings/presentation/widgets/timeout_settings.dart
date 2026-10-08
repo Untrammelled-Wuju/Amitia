@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/core_configuration_guard.dart';
+import '../../../../core/services/core_configuration_session.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 
 class TimeoutSettings extends ConsumerStatefulWidget {
   const TimeoutSettings({super.key});
@@ -16,10 +19,23 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  late final CoreConfigurationSession _configuration;
+  int _loadEpoch = 0;
 
   @override
   void initState() {
     super.initState();
+    _configuration = CoreConfigurationSession(
+      coreConfigurationGuardFor(ref),
+      onInvalidated: (reason) {
+        if (!mounted) return;
+        _loadEpoch++;
+        setState(() {
+          _error = reason.toString();
+          _loading = false;
+        });
+      },
+    );
     _load();
   }
 
@@ -32,36 +48,46 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
   }
 
   Future<void> _load() async {
+    final epoch = ++_loadEpoch;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final value = await ref
-          .read(backendServiceProvider)
-          .get<Map<String, dynamic>>('/api/runtime/timeout/config');
+      final value = await _configuration.load(
+        () => ref
+            .read(backendServiceProvider)
+            .get<Map<String, dynamic>>('/api/runtime/timeout/config'),
+      );
       if (value == null) throw StateError('无法加载超时设置');
-      if (!mounted) return;
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _disabled = value['disabled'] == true;
         _seconds = (value['seconds'] as num).toInt();
       });
     } catch (_) {
-      if (mounted) setState(() => _error = '无法加载超时设置，请重试');
+      if (mounted && epoch == _loadEpoch)
+        setState(() => _error = '无法加载当前 Core 超时设置，普通绑定设备需要由云端管理员配置');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && epoch == _loadEpoch) setState(() => _loading = false);
     }
   }
 
   Future<void> _save() async {
+    final intent = _configuration.intent;
+    final disabled = _disabled;
+    final seconds = _seconds;
     setState(() => _saving = true);
     try {
-      await ref
-          .read(backendServiceProvider)
-          .put<Map<String, dynamic>>(
-            '/api/runtime/timeout/config',
-            data: {'disabled': _disabled, 'seconds': _seconds},
-          );
+      await _configuration.write(
+        intent,
+        () => ref
+            .read(backendServiceProvider)
+            .put<Map<String, dynamic>>(
+              '/api/runtime/timeout/config',
+              data: {'disabled': disabled, 'seconds': seconds},
+            ),
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -78,7 +104,22 @@ class _TimeoutSettingsState extends ConsumerState<TimeoutSettings> {
   }
 
   @override
+  void dispose() {
+    _loadEpoch++;
+    _configuration.close();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen(
+      rawBackendServiceApiProvider,
+      (_, __) => _configuration.invalidate(StateError('Core 连接已变化，请重新加载超时配置')),
+    );
+    ref.listen(
+      mobileDeploymentConfigProvider,
+      (_, __) => _configuration.invalidate(StateError('设备模式已变化，请重新加载超时配置')),
+    );
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.all(24),

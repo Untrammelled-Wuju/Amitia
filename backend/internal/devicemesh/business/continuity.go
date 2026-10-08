@@ -15,18 +15,19 @@ import (
 )
 
 type OwnedContinuity struct {
-	PausedReason       string                      `json:"pausedReason,omitempty"`
-	Scope              coordination.ExecutionScope `json:"executionScope"`
-	Thread             continuity.Thread           `json:"thread"`
-	Waits              []continuity.Wait           `json:"waits"`
-	Events             []continuity.ThreadEvent    `json:"events"`
-	CoreID             string                      `json:"coreId"`
-	OwnerID            string                      `json:"ownerId"`
-	ProviderEpoch      int64                       `json:"providerEpoch"`
-	ModeRevision       int64                       `json:"modeRevision"`
-	PermissionRevision int64                       `json:"permissionRevision"`
-	RoleRevision       int64                       `json:"roleRevision"`
-	Lease              *ContinuityLease            `json:"lease,omitempty"`
+	ManagementScope    *coordination.ExecutionScope `json:"managementExecutionScope,omitempty"`
+	PausedReason       string                       `json:"pausedReason,omitempty"`
+	Scope              coordination.ExecutionScope  `json:"executionScope"`
+	Thread             continuity.Thread            `json:"thread"`
+	Waits              []continuity.Wait            `json:"waits"`
+	Events             []continuity.ThreadEvent     `json:"events"`
+	CoreID             string                       `json:"coreId"`
+	OwnerID            string                       `json:"ownerId"`
+	ProviderEpoch      int64                        `json:"providerEpoch"`
+	ModeRevision       int64                        `json:"modeRevision"`
+	PermissionRevision int64                        `json:"permissionRevision"`
+	RoleRevision       int64                        `json:"roleRevision"`
+	Lease              *ContinuityLease             `json:"lease,omitempty"`
 }
 
 type ContinuityLease struct {
@@ -39,25 +40,26 @@ type ContinuityLease struct {
 
 type ContinuityMutation struct {
 	rawRead              bool
-	ExpectedCoreID       string                  `json:"expectedCoreId,omitempty"`
-	ExpectedOwnerID      string                  `json:"expectedOwnerId,omitempty"`
-	ExpectedModeRevision int64                   `json:"expectedModeRevision,omitempty"`
-	ID                   string                  `json:"id,omitempty"`
-	ExpectedRevision     int64                   `json:"expectedRevision"`
-	Action               string                  `json:"action"`
-	Title                string                  `json:"title,omitempty"`
-	Goal                 string                  `json:"goal,omitempty"`
-	NextAction           string                  `json:"nextAction,omitempty"`
-	UpdateGoal           bool                    `json:"updateGoal,omitempty"`
-	Resume               bool                    `json:"resume,omitempty"`
-	Status               continuity.ThreadStatus `json:"status,omitempty"`
-	Wait                 *continuity.Wait        `json:"wait,omitempty"`
-	WaitID               string                  `json:"waitId,omitempty"`
-	LeaseID              string                  `json:"leaseId,omitempty"`
-	Result               string                  `json:"result,omitempty"`
-	Outcome              string                  `json:"outcome,omitempty"`
-	SignalHash           string                  `json:"signalHash,omitempty"`
-	UpdateNextAction     bool                    `json:"updateNextAction,omitempty"`
+	ExpectedScope        *coordination.ExecutionScope `json:"expectedExecutionScope,omitempty"`
+	ExpectedCoreID       string                       `json:"expectedCoreId,omitempty"`
+	ExpectedOwnerID      string                       `json:"expectedOwnerId,omitempty"`
+	ExpectedModeRevision int64                        `json:"expectedModeRevision,omitempty"`
+	ID                   string                       `json:"id,omitempty"`
+	ExpectedRevision     int64                        `json:"expectedRevision"`
+	Action               string                       `json:"action"`
+	Title                string                       `json:"title,omitempty"`
+	Goal                 string                       `json:"goal,omitempty"`
+	NextAction           string                       `json:"nextAction,omitempty"`
+	UpdateGoal           bool                         `json:"updateGoal,omitempty"`
+	Resume               bool                         `json:"resume,omitempty"`
+	Status               continuity.ThreadStatus      `json:"status,omitempty"`
+	Wait                 *continuity.Wait             `json:"wait,omitempty"`
+	WaitID               string                       `json:"waitId,omitempty"`
+	LeaseID              string                       `json:"leaseId,omitempty"`
+	Result               string                       `json:"result,omitempty"`
+	Outcome              string                       `json:"outcome,omitempty"`
+	SignalHash           string                       `json:"signalHash,omitempty"`
+	UpdateNextAction     bool                         `json:"updateNextAction,omitempty"`
 }
 
 func (e *Engine) continuityAuthority(ctx context.Context, request Request) (context.Context, coordination.ExecutionScope, func(), error) {
@@ -101,6 +103,9 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 		return OwnedContinuity{}, coordination.Acknowledgement{}, err
 	}
 	defer finish()
+	if mutation.ExpectedScope != nil && summaryAuthority(*mutation.ExpectedScope) != summaryAuthority(scope) {
+		return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired
+	}
 	if mutation.ExpectedCoreID != "" && mutation.ExpectedCoreID != scope.CoreID || mutation.ExpectedOwnerID != "" && mutation.ExpectedOwnerID != scope.ResourceOwnerID || mutation.ExpectedModeRevision > 0 && mutation.ExpectedModeRevision != scope.ModeRevision {
 		return OwnedContinuity{}, coordination.Acknowledgement{}, coordination.ErrScopeExpired
 	}
@@ -408,6 +413,8 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 }
 
 func PresentContinuity(document OwnedContinuity, scope coordination.ExecutionScope, now time.Time) OwnedContinuity {
+	current := scope
+	document.ManagementScope = &current
 	if document.Thread.Status.IsTerminal() {
 		return document
 	}

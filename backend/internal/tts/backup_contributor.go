@@ -5,12 +5,17 @@ package tts
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 	"io"
+	"strings"
 )
 
 type VoiceBackupContributor struct {
@@ -358,25 +363,47 @@ func (c *VoiceBackupContributor) Import(ctx context.Context, req dataportability
 }
 
 func (c *VoiceBackupContributor) RestoreVoices(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
-	ttsRC, err := in.ReadComponent("voice.tts.v1")
-	if err == nil {
-		c.restoreTTS(ctx, ttsRC, opts)
+	components := make(map[string][]byte)
+	for _, id := range []string{"voice.tts.v1", "voice.asr.v1", "voice.clones.v1"} {
+		if err := coordination.ValidateCurrent(ctx); err != nil {
+			return err
+		}
+		rc, err := in.ReadComponent(id)
+		if errors.Is(err, dataportability.ErrBackupComponentFailed) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		data, readErr := io.ReadAll(rc)
+		closeErr := rc.Close()
+		if readErr != nil {
+			return readErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		components[id] = data
 	}
-
-	asrRC, err := in.ReadComponent("voice.asr.v1")
-	if err == nil {
-		c.restoreASR(ctx, asrRC, opts)
-	}
-
-	cloneRC, err := in.ReadComponent("voice.clones.v1")
-	if err == nil {
-		c.restoreClonedVoices(ctx, cloneRC, opts)
-	}
-
-	return nil
+	return configwrite.Transaction(c.DB.WithContext(ctx), func(tx *gorm.DB) error {
+		scoped := &VoiceBackupContributor{DB: tx}
+		for _, component := range []struct {
+			id      string
+			restore func(context.Context, io.ReadCloser, dataportability.RestoreOptions) error
+		}{
+			{"voice.tts.v1", scoped.restoreTTS}, {"voice.asr.v1", scoped.restoreASR}, {"voice.clones.v1", scoped.restoreClonedVoices},
+		} {
+			if data, exists := components[component.id]; exists {
+				if err := component.restore(ctx, io.NopCloser(bytes.NewReader(data)), opts); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
-func (c *VoiceBackupContributor) restoreTTS(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) {
+func (c *VoiceBackupContributor) restoreTTS(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) error {
 	defer rc.Close()
 
 	scanner := bufio.NewScanner(rc)
@@ -387,14 +414,16 @@ func (c *VoiceBackupContributor) restoreTTS(ctx context.Context, rc io.ReadClose
 		}
 		var rec ttsExportRecord
 		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
+			return fmt.Errorf("TTS配置备份记录无效: %w", err)
 		}
 
 		var existing struct {
 			ID   int
 			Name string
 		}
-		c.DB.WithContext(ctx).Table("tts_configs").Select("id, name").Where("name = ?", rec.Name).Scan(&existing)
+		if err := c.DB.WithContext(ctx).Table("tts_configs").Select("id, name").Where("name = ?", rec.Name).Scan(&existing).Error; err != nil {
+			return err
+		}
 
 		newID := 0
 		if existing.ID != 0 {
@@ -420,7 +449,9 @@ func (c *VoiceBackupContributor) restoreTTS(ctx context.Context, rc io.ReadClose
 					"realtime_secret_key":   "",
 					"updated_at":            rec.UpdatedAt,
 				}
-				c.DB.WithContext(ctx).Table("tts_configs").Where("id = ?", existing.ID).Updates(updates)
+				if err := c.DB.WithContext(ctx).Table("tts_configs").Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
+					return err
+				}
 				continue
 			default:
 			}
@@ -451,12 +482,15 @@ func (c *VoiceBackupContributor) restoreTTS(ctx context.Context, rc io.ReadClose
 				"created_at":            now,
 				"updated_at":            now,
 			})
-			_ = result
+			if result.Error != nil {
+				return result.Error
+			}
 		}
 	}
+	return scanner.Err()
 }
 
-func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) {
+func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) error {
 	defer rc.Close()
 
 	scanner := bufio.NewScanner(rc)
@@ -467,14 +501,16 @@ func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadClose
 		}
 		var rec asrExportRecord
 		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
+			return fmt.Errorf("ASR配置备份记录无效: %w", err)
 		}
 
 		var existing struct {
 			ID   int
 			Name string
 		}
-		c.DB.WithContext(ctx).Table("asr_configs").Select("id, name").Where("name = ?", rec.Name).Scan(&existing)
+		if err := c.DB.WithContext(ctx).Table("asr_configs").Select("id, name").Where("name = ?", rec.Name).Scan(&existing).Error; err != nil {
+			return err
+		}
 
 		if existing.ID != 0 {
 			switch opts.CharacterPolicy {
@@ -488,7 +524,9 @@ func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadClose
 					"is_active":   0,
 					"updated_at":  rec.UpdatedAt,
 				}
-				c.DB.WithContext(ctx).Table("asr_configs").Where("id = ?", existing.ID).Updates(updates)
+				if err := c.DB.WithContext(ctx).Table("asr_configs").Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
+					return err
+				}
 				continue
 			default:
 			}
@@ -498,7 +536,7 @@ func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadClose
 		if now == "" {
 			now = "2025-01-01 00:00:00"
 		}
-		c.DB.WithContext(ctx).Table("asr_configs").Create(map[string]interface{}{
+		if err := c.DB.WithContext(ctx).Table("asr_configs").Create(map[string]interface{}{
 			"name":        rec.Name,
 			"api_type":    rec.ApiType,
 			"base_url":    rec.BaseURL,
@@ -506,11 +544,14 @@ func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadClose
 			"is_active":   0,
 			"created_at":  now,
 			"updated_at":  now,
-		})
+		}).Error; err != nil {
+			return err
+		}
 	}
+	return scanner.Err()
 }
 
-func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) {
+func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) error {
 	defer rc.Close()
 
 	scanner := bufio.NewScanner(rc)
@@ -520,20 +561,28 @@ func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.
 			continue
 		}
 		var rec clonedVoiceExportRecord
-		if err := json.Unmarshal(line, &rec); err != nil || rec.SpeakerID == "" {
-			continue
+		if err := json.Unmarshal(line, &rec); err != nil {
+			return fmt.Errorf("复刻音色备份记录无效: %w", err)
+		}
+		if strings.TrimSpace(rec.SpeakerID) == "" {
+			return fmt.Errorf("复刻音色备份缺少服务音色标识")
 		}
 
 		spaceID := rec.SpaceID
 		if spaceID == "" {
 			spaceID = "local_user"
 		}
-		ttsConfigID := c.resolveRestoredCloneTTSConfigID(ctx, rec)
+		ttsConfigID, err := c.resolveRestoredCloneTTSConfigID(ctx, rec)
+		if err != nil {
+			return err
+		}
 		var existing struct {
 			SpaceID   string
 			SpeakerID string
 		}
-		c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("space_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing)
+		if err := c.DB.WithContext(ctx).Table("tts_cloned_voices").Select("space_id, speaker_id").Where("speaker_id = ?", rec.SpeakerID).Scan(&existing).Error; err != nil {
+			return err
+		}
 		if existing.SpeakerID != "" {
 			// Provider speaker IDs are globally unique within the provider account.
 			// Never transfer an existing provider identity to another user during restore.
@@ -544,9 +593,11 @@ func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
-				c.DB.WithContext(ctx).Table("tts_cloned_voices").Where("space_id = ? AND speaker_id = ?", spaceID, rec.SpeakerID).Updates(map[string]interface{}{
+				if err := c.DB.WithContext(ctx).Table("tts_cloned_voices").Where("space_id = ? AND speaker_id = ?", spaceID, rec.SpeakerID).Updates(map[string]interface{}{
 					"name": rec.Name, "tts_config_id": ttsConfigID, "language": rec.Language, "status": rec.Status, "updated_at": rec.UpdatedAt,
-				})
+				}).Error; err != nil {
+					return err
+				}
 				continue
 			default:
 				// A cloned voice is keyed by the provider-issued speaker ID and cannot
@@ -568,43 +619,50 @@ func (c *VoiceBackupContributor) restoreClonedVoices(ctx context.Context, rc io.
 		if status == "" {
 			status = "ready"
 		}
-		c.DB.WithContext(ctx).Table("tts_cloned_voices").Create(map[string]interface{}{
+		if err := c.DB.WithContext(ctx).Table("tts_cloned_voices").Create(map[string]interface{}{
 			"space_id": spaceID, "speaker_id": rec.SpeakerID, "name": rec.Name, "tts_config_id": ttsConfigID, "language": rec.Language, "status": status,
 			"created_at": createdAt, "updated_at": updatedAt,
-		})
+		}).Error; err != nil {
+			return err
+		}
 	}
+	return scanner.Err()
 }
 
-func (c *VoiceBackupContributor) resolveRestoredCloneTTSConfigID(ctx context.Context, rec clonedVoiceExportRecord) int {
+func (c *VoiceBackupContributor) resolveRestoredCloneTTSConfigID(ctx context.Context, rec clonedVoiceExportRecord) (int, error) {
 	if rec.TtsConfigName != "" {
 		var target struct{ ID int }
-		c.DB.WithContext(ctx).Table("tts_configs").Select("id").Where("name = ?", rec.TtsConfigName).Limit(1).Scan(&target)
+		if err := c.DB.WithContext(ctx).Table("tts_configs").Select("id").Where("name = ?", rec.TtsConfigName).Limit(1).Scan(&target).Error; err != nil {
+			return 0, err
+		}
 		if target.ID > 0 {
-			return target.ID
+			return target.ID, nil
 		}
 	}
 	if rec.TtsConfigID > 0 {
 		var target struct{ ID int }
-		c.DB.WithContext(ctx).Table("tts_configs").Select("id").Where("id = ?", rec.TtsConfigID).Limit(1).Scan(&target)
+		if err := c.DB.WithContext(ctx).Table("tts_configs").Select("id").Where("id = ?", rec.TtsConfigID).Limit(1).Scan(&target).Error; err != nil {
+			return 0, err
+		}
 		if target.ID > 0 {
-			return target.ID
+			return target.ID, nil
 		}
 	}
-	return 0
+	return 0, nil
 }
 
-func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) {
+func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) error {
 	opts := dataportability.RestoreOptions{
 		CharacterPolicy: req.CharacterPolicy,
 	}
-	c.restoreTTS(ctx, rc, opts)
+	return configwrite.Transaction(c.DB.WithContext(ctx), func(tx *gorm.DB) error { return (&VoiceBackupContributor{DB: tx}).restoreTTS(ctx, rc, opts) })
 }
 
-func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) {
+func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) error {
 	opts := dataportability.RestoreOptions{
 		CharacterPolicy: req.CharacterPolicy,
 	}
-	c.restoreASR(ctx, rc, opts)
+	return configwrite.Transaction(c.DB.WithContext(ctx), func(tx *gorm.DB) error { return (&VoiceBackupContributor{DB: tx}).restoreASR(ctx, rc, opts) })
 }
 
 var _ dataportability.VoiceRestorePort = (*VoiceBackupContributor)(nil)

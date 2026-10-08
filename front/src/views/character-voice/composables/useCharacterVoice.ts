@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref, reactive, inject, onMounted, computed, type Ref } from "vue";
+import { ref, reactive, inject, onMounted, computed, watch, type Ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { apiClient } from "../../../ui-index";
 import { normalizeVoicePitchRatio } from "@/utils/voicePitch";
+import { roleAuthorityConfig } from "@/runtime/role-authority";
+import { useOwnedSpeech } from "@/composables/useOwnedSpeech";
 
 interface VoicePreset {
   name: string;
@@ -47,9 +49,13 @@ export function useCharacterVoice() {
     { value: "neutral", label: "中性" },
   ];
   const saving = ref(false);
+  const loadedCharacterId = ref("");
+  const roleAuthority = ref("");
+  let voiceLoadGeneration = 0;
   const previewLoading = ref(false);
   const previewText = ref("你好，我是你的专属角色");
   const previewAudio = ref("");
+  const speech = useOwnedSpeech(() => { previewAudio.value = ""; });
   const voiceMode = ref<"preset" | "clone">("preset");
 
   const form = reactive({
@@ -142,11 +148,18 @@ export function useCharacterVoice() {
 
   async function loadCharacterVoice() {
     const cid = injectedCharacterId.value;
+    const generation = ++voiceLoadGeneration;
+    loadedCharacterId.value = "";
+    roleAuthority.value = "";
     if (!cid) return;
     try {
       const r = await apiClient.get(`/api/characters/${cid}`);
       const data = r.data?.data || r.data;
+      if (generation !== voiceLoadGeneration || cid !== injectedCharacterId.value) return;
       if (data) {
+        roleAuthorityConfig(data.roleAuthority);
+        loadedCharacterId.value = cid;
+        roleAuthority.value = data.roleAuthority;
         form.voiceType = data.voiceType || "zh_female_vv_uranus_bigtts";
         form.voiceSpeed = data.voiceSpeed ?? 1.0;
         form.voicePitch = normalizeVoicePitchRatio(data.voicePitch);
@@ -172,6 +185,7 @@ export function useCharacterVoice() {
         Object.assign(originalForm, { ...form, _mode: voiceMode.value });
       }
     } catch (err: any) {
+      if (generation !== voiceLoadGeneration) return;
       ElMessage.error(err?.message || "加载角色音色配置失败");
     }
   }
@@ -217,7 +231,8 @@ export function useCharacterVoice() {
   async function previewClone(speakerId: string) {
     previewCloneId.value = speakerId;
     try {
-      const res: any = await apiClient.post("/api/tts/synthesize", {
+      const ownedUrl = await speech.synthesizeIfBound("测试", injectedCharacterId.value || undefined);
+      const res: any = ownedUrl ? { data: { audioUrl: ownedUrl } } : await apiClient.post("/api/tts/synthesize", {
         speakerId,
         text: "测试",
       });
@@ -261,7 +276,8 @@ export function useCharacterVoice() {
     previewLoading.value = true;
     previewAudio.value = "";
     try {
-      const res = await apiClient.post("/api/tts/synthesize", {
+      const ownedUrl = await speech.synthesizeIfBound(previewText.value, injectedCharacterId.value || undefined);
+      const res = ownedUrl ? { data: { audioUrl: ownedUrl } } : await apiClient.post("/api/tts/synthesize", {
         characterId: injectedCharacterId.value,
         text: previewText.value,
       });
@@ -279,9 +295,10 @@ export function useCharacterVoice() {
   }
 
   async function saveVoice() {
+    if (saving.value) return;
     const cid = injectedCharacterId.value;
-    if (!cid) {
-      ElMessage.warning("未找到角色 ID");
+    if (!cid || cid !== loadedCharacterId.value) {
+      ElMessage.warning("角色数据尚未加载，请重新加载后保存");
       return;
     }
     if (voiceMode.value === "clone" && !form.customVoiceId.trim()) {
@@ -290,7 +307,8 @@ export function useCharacterVoice() {
     }
     saving.value = true;
     try {
-      await apiClient.put(`/api/characters/${cid}`, {
+      const intent = roleAuthorityConfig(roleAuthority.value);
+      const payload = {
         voiceType: form.voiceType,
         voiceSpeed: form.voiceSpeed,
         voicePitch: normalizeVoicePitchRatio(form.voicePitch),
@@ -301,9 +319,13 @@ export function useCharacterVoice() {
         emotion: form.emotion || "",
         emotionScale: form.emotionScale || 0,
         silenceDuration: form.silenceDuration || 0,
-      });
+      };
+      const snapshot = { ...form, _mode: voiceMode.value };
+      await apiClient.put(`/api/characters/${cid}`, payload, intent);
       ElMessage.success("音色配置已保存");
-      Object.assign(originalForm, { ...form, _mode: voiceMode.value });
+      if (cid === loadedCharacterId.value && intent.headers["X-Amitia-Role-Authority"] === roleAuthority.value) {
+        Object.assign(originalForm, snapshot);
+      }
     } catch (e: any) {
       ElMessage.error(e?.message || "保存失败");
     } finally {
@@ -335,6 +357,8 @@ export function useCharacterVoice() {
       loadCharacterVoice(),
     ]);
   });
+
+  watch(injectedCharacterId, () => { void loadCharacterVoice(); }, { flush: "sync" });
 
   return {
     voicePresets,

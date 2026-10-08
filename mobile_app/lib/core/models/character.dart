@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 class CharacterDto {
+  final String roleAuthority;
   final String id;
   final String name;
   final String avatar;
@@ -32,6 +33,7 @@ class CharacterDto {
   final Map<String, dynamic> sceneRules;
 
   CharacterDto({
+    this.roleAuthority = '',
     required this.id,
     required this.name,
     this.avatar = '',
@@ -65,6 +67,7 @@ class CharacterDto {
 
   factory CharacterDto.fromJson(Map<String, dynamic> json) {
     return CharacterDto(
+      roleAuthority: (json['roleAuthority'] ?? '').toString(),
       id: (json['id'] ?? '').toString(),
       name: json['name'] as String? ?? '',
       avatar: json['avatar'] as String? ?? '',

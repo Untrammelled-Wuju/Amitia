@@ -19,6 +19,7 @@ var ErrUncertainExecution = errors.New("上次执行的结果尚未确认，请�
 var ErrInterrupted = errors.New("当前回复已主动停止")
 
 type Request struct {
+	Quote              *QuoteReference              `json:"quote,omitempty"`
 	ConversationOrigin *ConversationOrigin          `json:"conversationOrigin,omitempty"`
 	Attachments        []Attachment                 `json:"attachments,omitempty"`
 	ExpectedScope      *coordination.ExecutionScope `json:"expectedExecutionScope,omitempty"`
@@ -84,6 +85,7 @@ type Event struct {
 }
 
 type Inference struct {
+	Quote              *ReviewedQuote
 	Attachments        []Attachment
 	Context            *ForwardedContext
 	Scope              coordination.ExecutionScope
@@ -303,6 +305,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if err != nil {
 		return Response{}, err
 	}
+	quoteRequest := request
 	request.ConversationID = conversationRoute.CurrentID
 	dataQuery := coordination.DataQuery{RequestID: request.RequestID, ConversationID: request.ConversationID, Query: request.Message, Limit: 128}
 	previousCheckpoint := false
@@ -313,7 +316,11 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		}
 		previousCheckpoint = resource != nil
 	}
-	if model, ok := e.model.(SemanticModel); ok && !previousCheckpoint && !(len(request.Attachments) == 1 && request.Attachments[0].Kind == "audio") {
+	hasAudio := false
+	for _, attachment := range request.Attachments {
+		hasAudio = hasAudio || attachment.Kind == "audio"
+	}
+	if model, ok := e.model.(SemanticModel); ok && !previousCheckpoint && !hasAudio {
 		dataQuery.Vector, dataQuery.VectorModel, err = model.OwnedQueryVector(ctx, request.Message)
 		if err != nil {
 			return Response{}, err
@@ -340,6 +347,9 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		return Response{}, err
 	}
 	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context}
+	if request.Quote != nil {
+		fingerprintData["quote"] = request.Quote
+	}
 	if conversationRoute.Origin != nil {
 		fingerprintData["conversationOrigin"] = conversationRoute.Origin
 	}
@@ -383,6 +393,10 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if !firstRequest {
 		return Response{}, ErrUncertainExecution
 	}
+	quote, quoteDependencies, err := e.reviewQuote(ctx, scope, quoteRequest, request.Quote)
+	if err != nil {
+		return Response{}, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	conversation := map[string]any{"id": request.ConversationID, "conversationId": request.ConversationID, "title": request.Message, "characterId": role.ID, "createdAt": now, "ownerId": scope.ResourceOwnerID, "coreId": scope.CoreID}
 	if conversationRoute.Origin != nil {
@@ -399,10 +413,10 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	conversation["updatedAt"] = now
 	input := []coordination.Mutation{
 		{Kind: "conversation", ID: request.ConversationID, RoleID: role.ID, ExpectedRevision: version(snapshot, "conversation", request.ConversationID), Body: body(conversation)},
-		{Kind: "message", ID: request.RequestID + "/user", RoleID: role.ID, Body: body(map[string]any{"id": request.RequestID + "/user", "conversationId": request.ConversationID, "characterId": role.ID, "role": "user", "content": request.Message, "requestId": request.RequestID, "createdAt": now, "executionScope": scope, "attachments": request.Attachments})},
+		{Kind: "message", ID: request.RequestID + "/user", RoleID: role.ID, Body: body(map[string]any{"id": request.RequestID + "/user", "conversationId": request.ConversationID, "characterId": role.ID, "role": "user", "content": request.Message, "requestId": request.RequestID, "createdAt": now, "executionScope": scope, "attachments": request.Attachments, "quote": quote})},
 		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, Body: body(checkpoint{Hash: fingerprint, Status: "running", ConversationID: request.ConversationID, Scope: &scope, Context: request.Context})},
 	}
-	if err := e.submit(ctx, scope, "input", input); err != nil {
+	if err := e.submit(ctx, scope, "input", input, quoteDependencies...); err != nil {
 		return Response{}, fmt.Errorf("输入尚未确认保存: %w", err)
 	}
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -444,7 +458,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		}
 		return nil
 	}
-	inference := Inference{Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, Message: request.Message, Emit: emitCurrent}
+	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, Message: request.Message, Emit: emitCurrent}
 	if err := emitCurrent(Event{Type: "started"}); err != nil {
 		cancel(err)
 	}
@@ -459,7 +473,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 			if generation.Partial {
 				response.Generation = generation
 			}
-			if port, ok := e.data.(coordination.InterruptionPort); ok {
+			if port, ok := e.data.(coordination.InterruptionPort); ok && ctx.Value(realtimeContextKey{}) != true {
 				saveContext, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				saveErr := port.SaveInterrupted(saveContext, coordination.InterruptedReply{Scope: scope, ConversationID: request.ConversationID, Text: response.Text, Reasoning: response.Reasoning, Reason: context.Cause(ctx).Error()})
 				saveCancel()

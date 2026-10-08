@@ -19,7 +19,7 @@ func TestTaskExecutionBindingAndLeaseSurviveCASReloadAndRestart(t *testing.T) {
 	next.Status, next.Revision = task_runtime.RunStatusRunning, 2
 	next.ExecutionPlacement = task_runtime.TaskExecutionPlacementDevice
 	next.ExecutionAttemptID = "attempt"
-	next.ExecutionTarget = task_runtime.TaskExecutionTarget{SpaceID: "core", DeviceID: "device", RuntimeID: "runtime", RuntimeSessionID: "session", ConnectionGeneration: 9}
+	next.ExecutionTarget = task_runtime.TaskExecutionTarget{SourceTaskDefinitionID: "original-device-task", SpaceID: "core", DeviceID: "device", RuntimeID: "runtime", RuntimeSessionID: "session", ConnectionGeneration: 9}
 	next.ExecutionResolvedAt, next.ExecutionResolvedBy = &created, "core-router"
 	expires := created.Add(time.Minute)
 	next.LeaseID, next.LeaseExpiresAt, next.LastHeartbeatAt = "lease", &expires, &created
@@ -46,6 +46,9 @@ func TestTaskExecutionBindingAndLeaseSurviveCASReloadAndRestart(t *testing.T) {
 		t.Fatalf("restart migration failed: %v", err)
 	}
 	next.Revision++
+	next.Status, next.PausedAt, next.PauseRequestedAt = task_runtime.RunStatusPaused, &created, &created
+	checkpointID := "owner-confirmed-checkpoint"
+	next.CheckpointID = &checkpointID
 	if err := repo.PutTaskRun(t.Context(), next); err != nil {
 		t.Fatal(err)
 	}
@@ -54,6 +57,9 @@ func TestTaskExecutionBindingAndLeaseSurviveCASReloadAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(actual)
+	if actual.Status != task_runtime.RunStatusPaused || actual.PausedAt == nil || !actual.PausedAt.Equal(created) || actual.PauseRequestedAt == nil || !actual.PauseRequestedAt.Equal(created) || actual.CheckpointID == nil || *actual.CheckpointID != checkpointID {
+		t.Fatalf("restart lost the confirmed stop receipt: %+v", actual)
+	}
 	stale := task_runtime.CloneTaskRun(next)
 	stale.Revision++
 	stale.LeaseID = "forged"

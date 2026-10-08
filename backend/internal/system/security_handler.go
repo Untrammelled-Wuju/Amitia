@@ -12,9 +12,7 @@ func (h *Handler) SecurityAccessConfig(c *gin.Context) {
 }
 
 func (h *Handler) UpdateSecurityAccessConfig(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.UpdateSecurityAccessConfig(body))
+	h.updateAdministratorSettings(c, "security", true)
 }
 
 func (h *Handler) SecurityAccessStatus(c *gin.Context) {

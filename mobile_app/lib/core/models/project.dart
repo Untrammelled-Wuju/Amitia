@@ -13,6 +13,12 @@ class ProjectDto {
   final int conversationCount;
   final List<ConversationDto> conversations;
   final String pinnedAt;
+  final String ownerId;
+  final String roleId;
+  final int revision;
+  final bool readOnly;
+  final bool logical;
+  final Map<String, dynamic>? executionScope;
 
   const ProjectDto({
     required this.id,
@@ -27,12 +33,18 @@ class ProjectDto {
     this.conversationCount = 0,
     this.conversations = const <ConversationDto>[],
     this.pinnedAt = '',
+    this.ownerId = '',
+    this.roleId = '',
+    this.revision = 0,
+    this.readOnly = false,
+    this.logical = false,
+    this.executionScope,
   });
 
   factory ProjectDto.fromJson(Map<String, dynamic> json) {
     return ProjectDto(
       id: (json['id'] ?? '').toString(),
-      name: (json['name'] ?? '').toString(),
+      name: (json['name'] ?? json['title'] ?? '').toString(),
       workspaceId: (json['workspaceId'] ?? '').toString(),
       deviceId: (json['deviceId'] ?? '').toString(),
       rootUri: (json['rootUri'] ?? '').toString(),
@@ -42,6 +54,16 @@ class ProjectDto {
       statusReason: (json['statusReason'] ?? '').toString(),
       conversationCount: (json['conversationCount'] as num?)?.toInt() ?? 0,
       pinnedAt: (json['pinnedAt'] ?? '').toString(),
+      ownerId: (json['ownerId'] ?? '').toString(),
+      roleId: (json['roleId'] ?? '').toString(),
+      revision: (json['revision'] as num?)?.toInt() ?? 0,
+      readOnly: json['readOnly'] == true,
+      logical: json['logical'] == true,
+      executionScope: json['executionScope'] is Map
+          ? Map<String, dynamic>.unmodifiable(
+              Map<String, dynamic>.from(json['executionScope'] as Map),
+            )
+          : null,
       conversations: ((json['conversations'] as List<dynamic>?) ?? const [])
           .whereType<Map>()
           .map(

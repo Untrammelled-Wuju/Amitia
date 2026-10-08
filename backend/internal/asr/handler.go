@@ -48,7 +48,7 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	cfg, err := h.service.Create(&req)
+	cfg, err := h.configurationService(c.Request.Context()).Create(&req)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -63,7 +63,7 @@ func (h *Handler) Update(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	cfg, err := h.service.Update(id, updates)
+	cfg, err := h.configurationService(c.Request.Context()).Update(id, updates)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -73,7 +73,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	if err := h.service.Delete(id); err != nil {
+	if err := h.configurationService(c.Request.Context()).Delete(id); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -82,7 +82,7 @@ func (h *Handler) Delete(c *gin.Context) {
 
 func (h *Handler) Activate(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	cfg, err := h.service.Activate(id)
+	cfg, err := h.configurationService(c.Request.Context()).Activate(id)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return

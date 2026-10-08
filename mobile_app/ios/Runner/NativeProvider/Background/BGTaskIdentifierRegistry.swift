@@ -47,12 +47,39 @@ public actor BGTaskIdentifierRegistry {
 
     private func loadPersistedMappings() {
         guard let data = UserDefaults.standard.data(forKey: persistenceKey) else { return }
-        if let decoded = try? JSONDecoder().decode([String: TaskRunMapping].self, from: data) {
-            taskRunMappings = decoded
-            identifierToTaskRun.removeAll()
-            for (taskRunId, mapping) in taskRunMappings {
-                identifierToTaskRun[mapping.identifier] = taskRunId
+        guard let decoded = try? JSONDecoder().decode([String: TaskRunMapping].self, from: data) else {
+            return
+        }
+        var normalized: [String: TaskRunMapping] = [:]
+        var migrated = false
+        for (taskRunId, mapping) in decoded {
+            let canonicalIdentifier: String
+            switch mapping.identifier {
+            case "com.amitia.background.refresh":
+                canonicalIdentifier = "com.amitia.app.refresh"
+            case "com.amitia.background.processing":
+                canonicalIdentifier = "com.amitia.app.processing"
+            default:
+                canonicalIdentifier = mapping.identifier
             }
+            if canonicalIdentifier != mapping.identifier {
+                migrated = true
+            }
+            normalized[taskRunId] = TaskRunMapping(
+                taskRunId: mapping.taskRunId,
+                systemClass: mapping.systemClass,
+                identifier: canonicalIdentifier,
+                submittedAt: mapping.submittedAt,
+                generation: mapping.generation
+            )
+        }
+        taskRunMappings = normalized
+        identifierToTaskRun.removeAll()
+        for (taskRunId, mapping) in taskRunMappings {
+            identifierToTaskRun[mapping.identifier] = taskRunId
+        }
+        if migrated {
+            persistMappings()
         }
     }
 
@@ -64,24 +91,28 @@ public actor BGTaskIdentifierRegistry {
     private func registerDefaultCatalog() {
         catalog["app_refresh"] = BGCatalogEntry(
             systemClass: "app_refresh",
-            identifier: "com.amitia.background.refresh",
+            identifier: "com.amitia.app.refresh",
             requiresNetwork: true,
             requiresExternalPower: false
         )
         catalog["processing"] = BGCatalogEntry(
             systemClass: "processing",
-            identifier: "com.amitia.background.processing",
+            identifier: "com.amitia.app.processing",
             requiresNetwork: true,
             requiresExternalPower: true
         )
-    }
-
-    public func register(systemClass: String, identifier: String, requiresNetwork: Bool = true, requiresExternalPower: Bool = false) {
-        catalog[systemClass] = BGCatalogEntry(
-            systemClass: systemClass,
-            identifier: identifier,
-            requiresNetwork: requiresNetwork,
-            requiresExternalPower: requiresExternalPower
+        catalog["cleanup"] = BGCatalogEntry(
+            systemClass: "cleanup",
+            identifier: "com.amitia.app.cleanup",
+            requiresNetwork: false,
+            requiresExternalPower: true
+        )
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.amitia.amitiaApp"
+        catalog["continued"] = BGCatalogEntry(
+            systemClass: "continued",
+            identifier: bundleID + ".continued.*",
+            requiresNetwork: true,
+            requiresExternalPower: false
         )
     }
 
@@ -149,6 +180,28 @@ public actor BGTaskIdentifierRegistry {
             taskRunMappings.removeValue(forKey: taskRunId)
         }
         identifierToTaskRun.removeValue(forKey: identifier)
+        persistMappings()
+    }
+
+    public func mappings(systemClass: String) -> [TaskRunMapping] {
+        return taskRunMappings.values.filter { $0.systemClass == systemClass }
+    }
+
+    public func removeMappings(systemClass: String) {
+        let ids = taskRunMappings
+            .filter { $0.value.systemClass == systemClass }
+            .map(\.key)
+        for taskRunId in ids {
+            if let mapping = taskRunMappings.removeValue(forKey: taskRunId) {
+                identifierToTaskRun.removeValue(forKey: mapping.identifier)
+            }
+        }
+        persistMappings()
+    }
+
+    public func removeAllMappings() {
+        taskRunMappings.removeAll()
+        identifierToTaskRun.removeAll()
         persistMappings()
     }
 

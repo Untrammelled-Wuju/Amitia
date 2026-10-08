@@ -45,6 +45,9 @@ func TestCorsMiddleware_AllowsDesktopDevelopmentUploadPreflight(t *testing.T) {
 		"x-amitia-device-id",
 		"x-amitia-client-type",
 		"x-amitia-management-target",
+		"x-amitia-role-authority",
+		"x-amitia-expected-core-id",
+		"x-amitia-expected-configuration-policy",
 		"idempotency-key",
 	} {
 		if !strings.Contains(allowed, header) {

@@ -3,6 +3,7 @@
 package system
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -66,8 +67,11 @@ func (h *Handler) StorageExportAmitia(c *gin.Context) {
 
 func (h *Handler) StorageImportUserData(c *gin.Context) {
 	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.StorageImportUserData(body))
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, 400, err.Error(), nil)
+		return
+	}
+	h.respondStorageImport(c, h.storageImport(c.Request.Context(), body))
 }
 
 func (h *Handler) StorageImportAmitia(c *gin.Context) {
@@ -99,7 +103,25 @@ func (h *Handler) StorageImportAmitia(c *gin.Context) {
 	}
 	out.Close()
 
-	result := h.service.StorageImportUserData(map[string]interface{}{"fileName": header.Filename})
+	result := h.storageImport(c.Request.Context(), map[string]interface{}{"fileName": filepath.Base(header.Filename)})
+	h.respondStorageImport(c, result)
+}
+
+func (h *Handler) storageImport(ctx context.Context, body map[string]interface{}) map[string]interface{} {
+	if scoped, ok := h.service.(interface {
+		StorageImportUserDataContext(context.Context, map[string]interface{}) map[string]interface{}
+	}); ok {
+		return scoped.StorageImportUserDataContext(ctx, body)
+	}
+	return map[string]interface{}{"imported": false, "error": "当前存储服务不支持可撤销的配置导入"}
+}
+
+func (h *Handler) respondStorageImport(c *gin.Context, result map[string]interface{}) {
+	if imported, _ := result["imported"].(bool); !imported {
+		message, _ := result["error"].(string)
+		util.ErrorResponse(c, 409, message, result)
+		return
+	}
 	util.SuccessResponse(c, result)
 }
 

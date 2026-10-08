@@ -2,6 +2,7 @@ package tts
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,10 @@ const volcanoV1CloneUri = "https://openspeech.bytedance.com/api/v1/mega_tts/audi
 const volcanoV1StatusUri = "https://openspeech.bytedance.com/api/v1/mega_tts/status"
 
 func CloneVoice(apiKey string, appKey string, accessKey string, audioData []byte, audioFormat string, customName string, language int, refText string) (*VoiceCloneResponse, error) {
+	return CloneVoiceWithContext(context.Background(), apiKey, appKey, accessKey, audioData, audioFormat, customName, language, refText)
+}
+
+func CloneVoiceWithContext(ctx context.Context, apiKey string, appKey string, accessKey string, audioData []byte, audioFormat string, customName string, language int, refText string) (*VoiceCloneResponse, error) {
 	if apiKey == "" && (appKey == "" || accessKey == "") {
 		return nil, fmt.Errorf("API Key 未配置")
 	}
@@ -47,7 +52,7 @@ func CloneVoice(apiKey string, appKey string, accessKey string, audioData []byte
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", volcanoCloneUri, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", volcanoCloneUri, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -65,6 +70,7 @@ func CloneVoice(apiKey string, appKey string, accessKey string, audioData []byte
 	if err != nil {
 		return nil, fmt.Errorf("音色复刻请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 64 << 10}
 	defer resp.Body.Close()
 
 	rawBody, _ := io.ReadAll(resp.Body)
@@ -86,6 +92,10 @@ func CloneVoice(apiKey string, appKey string, accessKey string, audioData []byte
 }
 
 func DeleteClonedVoice(apiKey string, appKey string, accessKey string, speakerID string) error {
+	return DeleteClonedVoiceWithContext(context.Background(), apiKey, appKey, accessKey, speakerID)
+}
+
+func DeleteClonedVoiceWithContext(ctx context.Context, apiKey string, appKey string, accessKey string, speakerID string) error {
 	if (apiKey == "" && (appKey == "" || accessKey == "")) || speakerID == "" {
 		return fmt.Errorf("参数不全")
 	}
@@ -94,7 +104,10 @@ func DeleteClonedVoice(apiKey string, appKey string, accessKey string, speakerID
 	}
 	jsonBody, _ := json.Marshal(deleteBody)
 
-	req, _ := http.NewRequest("POST", "https://openspeech.bytedance.com/api/v3/tts/voice_clone/delete", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://openspeech.bytedance.com/api/v3/tts/voice_clone/delete", bytes.NewReader(jsonBody))
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
 		req.Header.Set("X-Api-Key", apiKey)
@@ -109,6 +122,7 @@ func DeleteClonedVoice(apiKey string, appKey string, accessKey string, speakerID
 	if err != nil {
 		return fmt.Errorf("删除请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 64 << 10}
 	defer resp.Body.Close()
 	rawBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
@@ -118,6 +132,10 @@ func DeleteClonedVoice(apiKey string, appKey string, accessKey string, speakerID
 }
 
 func CloneVoiceV1(accessToken string, appId string, speakerId string, audioData []byte, audioFormat string, language int, modelType int) (*VoiceCloneResponse, error) {
+	return CloneVoiceV1WithContext(context.Background(), accessToken, appId, speakerId, audioData, audioFormat, language, modelType)
+}
+
+func CloneVoiceV1WithContext(ctx context.Context, accessToken string, appId string, speakerId string, audioData []byte, audioFormat string, language int, modelType int) (*VoiceCloneResponse, error) {
 	if accessToken == "" || appId == "" {
 		return nil, fmt.Errorf("Access Token 或 APP ID 未配置")
 	}
@@ -150,7 +168,7 @@ func CloneVoiceV1(accessToken string, appId string, speakerId string, audioData 
 	}
 	jsonBody, _ := json.Marshal(body)
 
-	req, err := http.NewRequest("POST", volcanoV1CloneUri, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", volcanoV1CloneUri, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -163,6 +181,7 @@ func CloneVoiceV1(accessToken string, appId string, speakerId string, audioData 
 	if err != nil {
 		return nil, fmt.Errorf("V1 复刻请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 64 << 10}
 	defer resp.Body.Close()
 
 	rawBody, _ := io.ReadAll(resp.Body)

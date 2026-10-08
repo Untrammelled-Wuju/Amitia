@@ -63,6 +63,19 @@ func (g *bindingGate) CancelTask(ctx context.Context, runID, attemptID, leaseID 
 	return g.worker.CancelTask(ctx, runID, attemptID, leaseID)
 }
 
+func (g *bindingGate) PauseTask(ctx context.Context, request protocol.TaskPausePayload) error {
+	if !g.active.Load() || g.worker == nil {
+		return errors.New("服务提供者切换尚未完成，暂停结果不能确认")
+	}
+	worker, supported := g.worker.(interface {
+		PauseTask(context.Context, protocol.TaskPausePayload) error
+	})
+	if !supported {
+		return errors.New("设备任务执行器不支持暂停")
+	}
+	return worker.PauseTask(ctx, request)
+}
+
 func (g *bindingGate) CancelAllTasks() {
 	if worker, ok := g.worker.(interface{ CancelAllTasks() }); ok {
 		worker.CancelAllTasks()

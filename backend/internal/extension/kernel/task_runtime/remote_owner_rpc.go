@@ -2,8 +2,10 @@ package task_runtime
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"strings"
+	"sync"
 
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -11,6 +13,18 @@ import (
 )
 
 type RemoteTaskOwnerRequest = protocol.TaskOwnerRPCRequest
+
+func taskOwnerExecutionActive(status TaskRunStatus) bool {
+	return status == RunStatusRunning || status == RunStatusCheckpointing || status == RunStatusPausing
+}
+
+func (s *TaskRuntimeService) lockTaskOwner(taskID string) func() {
+	hash := sha256.Sum256([]byte(taskID))
+	lock := &s.ownerLocks[int(hash[0])%len(s.ownerLocks)]
+	lock.Lock()
+	var once sync.Once
+	return func() { once.Do(lock.Unlock) }
+}
 
 func (s *TaskRuntimeService) CallRemoteOwner(ctx context.Context, taskID string, request RemoteTaskOwnerRequest, checkBinding func() error) (json.RawMessage, error) {
 	actor, ok := auth.FromContext(ctx)
@@ -20,11 +34,13 @@ func (s *TaskRuntimeService) CallRemoteOwner(ctx context.Context, taskID string,
 	if err := checkBinding(); err != nil {
 		return nil, err
 	}
+	unlock := s.lockTaskOwner(taskID)
+	defer unlock()
 	run, err := s.store.GetTaskRun(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
-	if run == nil || run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice || run.Generation != request.TaskGeneration || run.ExecutionAttemptID.String() != request.AttemptID || request.LeaseID == "" || run.ExecutionTarget.SpaceID != actor.SpaceID || run.ExecutionTarget.DeviceID != actor.DeviceID || run.ExecutionTarget.RuntimeID != actor.RuntimeID || run.ExecutionTarget.RuntimeSessionID.String() != request.SessionID || run.ExecutionTarget.ConnectionGeneration != request.ConnectionGeneration || run.Status != RunStatusRunning && run.Status != RunStatusCheckpointing && !(run.Status == RunStatusPausing && request.Method == "task.checkpoint.save") {
+	if run == nil || run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice || run.Generation != request.TaskGeneration || run.ExecutionAttemptID.String() != request.AttemptID || request.LeaseID == "" || run.ExecutionTarget.SpaceID != actor.SpaceID || run.ExecutionTarget.DeviceID != actor.DeviceID || run.ExecutionTarget.RuntimeID != actor.RuntimeID || run.ExecutionTarget.RuntimeSessionID.String() != request.SessionID || run.ExecutionTarget.ConnectionGeneration != request.ConnectionGeneration || !taskOwnerExecutionActive(run.Status) {
 		return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "任务所有者接口的执行设备、租约或连接已失效")
 	}
 	guarded, finish, owned, err := s.callbackAuthority(ctx, run, request.AttemptID, request.TaskGeneration)
@@ -46,6 +62,19 @@ func (s *TaskRuntimeService) CallRemoteOwner(ctx context.Context, taskID string,
 	}
 	var result json.RawMessage
 	switch {
+	case request.Method == "task.host.executeTool" || request.Method == "task.host.emitEvent":
+		if s.config.OwnedHost == nil {
+			return nil, NewTaskError(ErrTaskDependencyUnavailable, "任务Native所有者授信端口未就绪")
+		}
+		definition, readErr := s.store.GetTaskDefinition(guarded, run.TaskDefinitionID)
+		if readErr != nil {
+			return nil, readErr
+		}
+		fingerprint, readErr := taskDefinitionFingerprint(definition)
+		if readErr != nil || fingerprint != run.DefinitionFingerprint {
+			return nil, NewTaskError(ErrTaskDefinitionInvalid, "Native调用与原任务定义指纹不一致")
+		}
+		result, err = s.config.OwnedHost.Call(guarded, run, definition, request.RequestID, request.Method, request.Params)
 	case request.Method == "task.progress.save":
 		var input struct {
 			TaskRunID  string   `json:"task_run_id"`

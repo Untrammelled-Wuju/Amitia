@@ -99,6 +99,7 @@ import {
 import { ElMessage } from "element-plus";
 import { publishLocalVoiceASRFinal } from "../runtime/runtime-adapter";
 import { notifyDesktopPetChatState } from "../runtime/desktop-pet-chat-state";
+import type { OwnedChatResponse, OwnedExecutionScope } from "../runtime/device-owned-chat";
 import {
   RealtimeCallController,
   type RealtimeCallState,
@@ -112,6 +113,11 @@ const props = defineProps<{
   voiceType: string;
   resourceId: string;
   conversationId: string;
+  characterId?: string;
+  expectedExecutionScope?: OwnedExecutionScope;
+  acceptedTicket?: Record<string, any>;
+  conversationOrigin?: { ownerId: string; id: string };
+  historicalRoleId?: string;
   charName?: string;
   charAvatar?: string;
 }>();
@@ -119,6 +125,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   stateChange: [state: string];
+  conversationSaved: [response: OwnedChatResponse];
 }>();
 
 const callState = ref<RealtimeCallState>("idle");
@@ -175,6 +182,12 @@ onUnmounted(() => {
 function createController(): RealtimeCallController {
   return new RealtimeCallController({
     conversationId: props.conversationId,
+    characterId: props.characterId,
+    expectedExecutionScope: props.expectedExecutionScope,
+    acceptedTicket: props.acceptedTicket,
+    conversationOrigin: props.conversationOrigin,
+    historicalRoleId: props.historicalRoleId,
+    onOwnedCompleted: (result) => emit("conversationSaved", result),
     voiceType: props.voiceType,
     resourceId: props.resourceId,
     onState: (state, error) => {
@@ -202,7 +215,7 @@ function createController(): RealtimeCallController {
         notifyDesktopPetChatState("assistant_listening", props.conversationId || undefined);
       }
     },
-    onASRFinal: (data) => void forwardASRFinalToLocalWorkflow(data),
+    onASRFinal: (data) => { if (!props.expectedExecutionScope) void forwardASRFinalToLocalWorkflow(data); },
     onVision: (data) => {
       const context = typeof data.context === "string" ? data.context.trim() : "";
       if (context) visionStatus.value = "视觉已更新";

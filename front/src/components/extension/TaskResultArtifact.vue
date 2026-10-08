@@ -61,12 +61,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Document, Download } from "@element-plus/icons-vue";
-import { apiClient } from "@/composables/useApi";
+import { ElMessage } from "element-plus";
+import { downloadTaskArtifact } from "@/views/kernel/tasks/api";
+import type { TaskRun } from "@/views/kernel/tasks/types";
 import type { TaskResult } from "@/views/extensions/types";
 
 const props = defineProps<{
   result?: TaskResult | null;
   taskRunId?: string;
+  originalTask?: TaskRun;
 }>();
 
 const prettyJson = computed(() => {
@@ -116,12 +119,21 @@ function shortHash(hash?: string) {
 async function download() {
   const url = downloadUrl.value;
   if (!url) return;
-  const response = await apiClient.get(url, { responseType: "blob" });
-  const blob = response.data as Blob;
+  const original = props.originalTask;
+  const name = artifactName.value;
+  let blob: Blob;
+  try {
+    if (!original) throw new Error("请从原任务记录下载产物");
+    blob = await downloadTaskArtifact(original, props.result?.artifactId, props.result?.resultHash);
+    if (props.originalTask !== original) throw new Error("当前任务已变化，迟到产物已丢弃");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error));
+    return;
+  }
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
-  anchor.download = artifactName.value || "task-result";
+  anchor.download = name || "task-result";
   anchor.click();
   URL.revokeObjectURL(objectUrl);
 }

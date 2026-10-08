@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,11 +95,23 @@ func (s *Service) PendingApprovals(ctx context.Context) ([]Approval, error) {
 }
 
 func (s *Service) DecideApproval(ctx context.Context, requestID string, expectedRevision int64, allow bool) error {
+	return coordination.CommitRequestCurrent(ctx, func() error { return s.decideApproval(ctx, requestID, expectedRevision, allow) })
+}
+
+func (s *Service) decideApproval(ctx context.Context, requestID string, expectedRevision int64, allow bool) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := coordination.ValidateRequestAuthorityTx(ctx, tx); err != nil {
+		return err
+	}
 	state := "rejected"
 	if allow {
 		state = "approved"
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE kernel_device_pairing_approvals SET state=?,revision=revision+1,decided_at=? WHERE request_id=? AND space_id=? AND state='pending' AND revision=? AND offer_id IN (SELECT offer_id FROM kernel_device_pairing_offers WHERE status='active' AND julianday(expires_at)>julianday(?))`, state, time.Now().UTC().Format(time.RFC3339Nano), requestID, s.spaceID.String(), expectedRevision, time.Now().UTC().Format(time.RFC3339Nano))
+	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_pairing_approvals SET state=?,revision=revision+1,decided_at=? WHERE request_id=? AND space_id=? AND state='pending' AND revision=? AND offer_id IN (SELECT offer_id FROM kernel_device_pairing_offers WHERE status='active' AND julianday(expires_at)>julianday(?))`, state, time.Now().UTC().Format(time.RFC3339Nano), requestID, s.spaceID.String(), expectedRevision, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
@@ -108,5 +122,16 @@ func (s *Service) DecideApproval(ctx context.Context, requestID string, expected
 	if count != 1 {
 		return ErrApprovalConflict
 	}
-	return nil
+	var device string
+	if err := tx.QueryRowContext(ctx, `SELECT device_id FROM kernel_device_pairing_approvals WHERE request_id=? AND space_id=?`, requestID, s.spaceID.String()).Scan(&device); err != nil {
+		return err
+	}
+	eventType := "device_mesh.pairing_approved"
+	if !allow {
+		eventType = "device_mesh.pairing_rejected"
+	}
+	if err := meshaudit.QueueTx(ctx, tx, s.spaceID.String(), device, eventType, meshaudit.Details{ApprovalID: requestID}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

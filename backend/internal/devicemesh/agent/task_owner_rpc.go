@@ -42,7 +42,7 @@ func (c *MeshClient) callTaskOwner(ctx context.Context, dispatch protocol.TaskDi
 		return nil, fmt.Errorf("任务所有者调用缺少一致的数据归属授权或执行身份")
 	}
 	switch method {
-	case "task.storage.get", "task.storage.set", "task.storage.delete", "task.artifact.saveData", "task.artifact.saveFile", "task.artifact.list", "task.checkpoint.save", "task.progress.save":
+	case "task.storage.get", "task.storage.set", "task.storage.delete", "task.artifact.saveData", "task.artifact.saveFile", "task.artifact.list", "task.checkpoint.save", "task.progress.save", "task.host.executeTool", "task.host.emitEvent":
 	default:
 		return nil, fmt.Errorf("任务所有者操作未获授权")
 	}
@@ -75,7 +75,7 @@ func (c *MeshClient) callTaskOwner(ctx context.Context, dispatch protocol.TaskDi
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Core 任务所有者操作 %s 未确认: %w", method, err)
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, (512<<10)+4097))

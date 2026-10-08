@@ -5,6 +5,95 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun amitiaConfigValue(name: String): String =
+    providers.gradleProperty(name)
+        .orElse(providers.environmentVariable(name))
+        .orElse("")
+        .get()
+
+fun quotedBuildConfig(value: String): String =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val vendorPushLibDir = file("libs")
+val vendorPushArchives =
+    vendorPushLibDir.listFiles()
+        ?.filter { it.isFile && (it.extension.equals("aar", true) || it.extension.equals("jar", true)) }
+        ?.map { it.name.lowercase() }
+        .orEmpty()
+
+fun hasVendorPushArchive(vararg hints: String): Boolean =
+    vendorPushArchives.any { name -> hints.all { hint -> name.contains(hint.lowercase()) } }
+
+fun amitiaEnabled(name: String): Boolean =
+    amitiaConfigValue(name).trim().lowercase() in setOf("1", "true", "yes", "on")
+
+val huaweiPushDependency = amitiaConfigValue("AMITIA_HUAWEI_PUSH_DEPENDENCY").trim()
+val honorPushDependency = amitiaConfigValue("AMITIA_HONOR_PUSH_DEPENDENCY").trim()
+val oppoPushDependency = amitiaConfigValue("AMITIA_OPPO_PUSH_DEPENDENCY").trim()
+val vivoPushDependency = amitiaConfigValue("AMITIA_VIVO_PUSH_DEPENDENCY").trim()
+val honorSdkPackage = amitiaConfigValue("AMITIA_HONOR_SDK_PACKAGE")
+    .trim()
+    .lowercase()
+    .ifEmpty { "hihonor" }
+val honorLegacyPackage = honorSdkPackage == "honor"
+val xiaomiNativeDataEnabled =
+    amitiaEnabled("AMITIA_XIAOMI_NATIVE_DATA") || hasVendorPushArchive("mipush")
+val huaweiNativeDataEnabled =
+    amitiaEnabled("AMITIA_HUAWEI_NATIVE_DATA") ||
+        huaweiPushDependency.isNotEmpty() ||
+        hasVendorPushArchive("huawei", "push") ||
+        hasVendorPushArchive("hms", "push")
+val honorNativeDataEnabled =
+    amitiaEnabled("AMITIA_HONOR_NATIVE_DATA") ||
+        honorPushDependency.isNotEmpty() ||
+        hasVendorPushArchive("honor", "push")
+val oppoPushSdkLinked =
+    oppoPushDependency.isNotEmpty() ||
+        hasVendorPushArchive("heytap", "push") ||
+        hasVendorPushArchive("oppo", "push") ||
+        hasVendorPushArchive("mcs")
+val vivoPushSdkLinked =
+    vivoPushDependency.isNotEmpty() ||
+        hasVendorPushArchive("vivo", "push")
+val oppoNativeDataEnabled =
+    amitiaEnabled("AMITIA_OPPO_NATIVE_DATA") && oppoPushSdkLinked
+val vivoNativeDataEnabled =
+    amitiaEnabled("AMITIA_VIVO_NATIVE_DATA") && vivoPushSdkLinked
+
+// Android's native aidl.exe writes dependency files containing absolute input
+// paths. On Windows, non-ASCII repository paths may be emitted in the active
+// code page while AGP reads them as UTF-8. The regular build directory is on C:
+// in this project while the checkout may be on another drive, and AGP's
+// SourceDirectorySet cannot relativize cross-drive roots. Stage AIDL on the
+// checkout drive itself, under an ASCII-only root-level cache directory.
+// A path fingerprint keeps parallel checkouts isolated.
+val isWindowsHost = System.getProperty("os.name").lowercase().contains("windows")
+val aidlProjectFingerprint =
+    Integer.toUnsignedString(layout.projectDirectory.asFile.absolutePath.hashCode(), 16)
+val stagedAppAidlRoot =
+    if (isWindowsHost) {
+        File(
+            layout.projectDirectory.asFile.toPath().root.toFile(),
+            "amitia-aidl-stage/$aidlProjectFingerprint",
+        )
+    } else {
+        layout.buildDirectory.dir("generated/amitia-aidl").get().asFile
+    }
+val stagedAppAidlDir = File(stagedAppAidlRoot, "main")
+fun stagedVariantAidlDir(name: String) = File(stagedAppAidlRoot, name)
+val stageAppAidlSources by tasks.registering(org.gradle.api.tasks.Sync::class) {
+    from(layout.projectDirectory.dir("src/main/aidl"))
+    into(stagedAppAidlDir)
+    doLast {
+        // AGP adds build-type AIDL include roots even when the checkout has no
+        // matching directory. Keep those implicit roots ASCII-only as well so
+        // aidl.exe never emits the non-UTF-8 checkout path into generated Java.
+        listOf("debug", "profile", "release").forEach { name ->
+            stagedVariantAidlDir(name).mkdirs()
+        }
+    }
+}
+
 android {
     namespace = "com.amitia.amitia_app"
     compileSdk = flutter.compileSdkVersion
@@ -34,6 +123,29 @@ android {
             abiFilters.clear()
             abiFilters.add("arm64-v8a")
         }
+        buildConfigField("String", "AMITIA_FCM_APPLICATION_ID", quotedBuildConfig(amitiaConfigValue("AMITIA_FCM_APPLICATION_ID")))
+        buildConfigField("String", "AMITIA_FCM_API_KEY", quotedBuildConfig(amitiaConfigValue("AMITIA_FCM_API_KEY")))
+        buildConfigField("String", "AMITIA_FCM_PROJECT_ID", quotedBuildConfig(amitiaConfigValue("AMITIA_FCM_PROJECT_ID")))
+        buildConfigField("String", "AMITIA_FCM_SENDER_ID", quotedBuildConfig(amitiaConfigValue("AMITIA_FCM_SENDER_ID")))
+        buildConfigField("String", "AMITIA_XIAOMI_APP_ID", quotedBuildConfig(amitiaConfigValue("AMITIA_XIAOMI_APP_ID")))
+        buildConfigField("String", "AMITIA_XIAOMI_APP_KEY", quotedBuildConfig(amitiaConfigValue("AMITIA_XIAOMI_APP_KEY")))
+        buildConfigField("String", "AMITIA_HUAWEI_APP_ID", quotedBuildConfig(amitiaConfigValue("AMITIA_HUAWEI_APP_ID")))
+        buildConfigField("String", "AMITIA_HONOR_APP_ID", quotedBuildConfig(amitiaConfigValue("AMITIA_HONOR_APP_ID")))
+        buildConfigField("String", "AMITIA_OPPO_APP_KEY", quotedBuildConfig(amitiaConfigValue("AMITIA_OPPO_APP_KEY")))
+        buildConfigField("String", "AMITIA_OPPO_APP_SECRET", quotedBuildConfig(amitiaConfigValue("AMITIA_OPPO_APP_SECRET")))
+        buildConfigField("String", "AMITIA_VIVO_APP_ID", quotedBuildConfig(amitiaConfigValue("AMITIA_VIVO_APP_ID")))
+        buildConfigField("String", "AMITIA_VIVO_API_KEY", quotedBuildConfig(amitiaConfigValue("AMITIA_VIVO_API_KEY")))
+        manifestPlaceholders["VIVO_APP_ID"] = amitiaConfigValue("AMITIA_VIVO_APP_ID")
+        manifestPlaceholders["VIVO_API_KEY"] = amitiaConfigValue("AMITIA_VIVO_API_KEY")
+        manifestPlaceholders["HUAWEI_APP_ID"] = amitiaConfigValue("AMITIA_HUAWEI_APP_ID")
+        manifestPlaceholders["HONOR_APP_ID"] = amitiaConfigValue("AMITIA_HONOR_APP_ID")
+        manifestPlaceholders["AMITIA_XIAOMI_NATIVE_DATA_ENABLED"] = xiaomiNativeDataEnabled.toString()
+        manifestPlaceholders["AMITIA_HUAWEI_NATIVE_DATA_ENABLED"] = huaweiNativeDataEnabled.toString()
+        manifestPlaceholders["AMITIA_HONOR_NATIVE_DATA_ENABLED"] = honorNativeDataEnabled.toString()
+        manifestPlaceholders["AMITIA_OPPO_NATIVE_DATA_ENABLED"] = oppoNativeDataEnabled.toString()
+        manifestPlaceholders["AMITIA_VIVO_NATIVE_DATA_ENABLED"] = vivoNativeDataEnabled.toString()
+        buildConfigField("boolean", "AMITIA_OPPO_NATIVE_DATA_ENABLED", oppoNativeDataEnabled.toString())
+        buildConfigField("boolean", "AMITIA_VIVO_NATIVE_DATA_ENABLED", vivoNativeDataEnabled.toString())
     }
 
     val keystorePath: String? = System.getenv("AMITIA_KEYSTORE_PATH")?.trim()?.takeIf { it.isNotEmpty() }
@@ -78,6 +190,7 @@ android {
 
     buildFeatures {
         aidl = true
+        buildConfig = true
     }
 
     packaging {
@@ -94,8 +207,38 @@ android {
 
     sourceSets {
         getByName("main") {
-            aidl.srcDirs("src/main/aidl")
+            aidl.setSrcDirs(listOf(stagedAppAidlDir))
             assets.srcDir(layout.buildDirectory.dir("generated/accessibility-provider/assets"))
+            if (xiaomiNativeDataEnabled) {
+                java.srcDir("src/vendorXiaomi/java")
+            }
+            if (huaweiNativeDataEnabled) {
+                java.srcDir("src/vendorHuawei/java")
+            }
+            if (honorNativeDataEnabled) {
+                java.srcDir(
+                    if (honorLegacyPackage) {
+                        "src/vendorHonorLegacy/java"
+                    } else {
+                        "src/vendorHonorHiHonor/java"
+                    }
+                )
+            }
+            if (oppoNativeDataEnabled) {
+                java.srcDir("src/vendorOppo/java")
+            }
+            if (vivoNativeDataEnabled) {
+                java.srcDir("src/vendorVivo/java")
+            }
+        }
+        getByName("debug") {
+            aidl.setSrcDirs(listOf(stagedVariantAidlDir("debug")))
+        }
+        getByName("profile") {
+            aidl.setSrcDirs(listOf(stagedVariantAidlDir("profile")))
+        }
+        getByName("release") {
+            aidl.setSrcDirs(listOf(stagedVariantAidlDir("release")))
         }
     }
 }
@@ -134,6 +277,12 @@ val validateReleaseSigning by tasks.registering {
 
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     dependsOn(validateReleaseSigning)
+}
+
+tasks.configureEach {
+    if (name.endsWith("Aidl")) {
+        dependsOn(stageAppAidlSources)
+    }
 }
 
 val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
@@ -275,7 +424,25 @@ flutter {
 }
 
 dependencies {
+    // Optional vendor push SDKs (for example Xiaomi's official AAR) can be
+    // dropped into app/libs without making the default open build depend on
+    // proprietary artifacts. Runtime integration is reflection-based.
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
+    if (huaweiPushDependency.isNotEmpty()) {
+        implementation(huaweiPushDependency)
+    }
+    if (honorPushDependency.isNotEmpty()) {
+        implementation(honorPushDependency)
+    }
+    if (oppoPushDependency.isNotEmpty()) {
+        implementation(oppoPushDependency)
+    }
+    if (vivoPushDependency.isNotEmpty()) {
+        implementation(vivoPushDependency)
+    }
     implementation(project(":amitia-runtime"))
+    implementation("androidx.core:core-ktx:1.17.0")
+    implementation("com.google.firebase:firebase-messaging:25.1.3")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 }

@@ -4,7 +4,7 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-form label-position="top">
       <el-form-item label="调用设备"><el-select v-model="caller" placeholder="选择调用设备"><el-option v-for="device in devices.filter(item => item.deviceId !== deviceId && item.trustState === 'trusted')" :key="device.deviceId" :label="device.label || device.deviceId" :value="device.deviceId" /></el-select></el-form-item>
-      <el-form-item label="能力标识"><el-input v-model="capability" placeholder="ai.chat 或准确的设备能力标识" :maxlength="128" /></el-form-item>
+      <el-form-item label="能力标识"><el-select v-model="capability" filterable allow-create default-first-option placeholder="选择能力或输入其他能力标识"><el-option label="AI 对话" value="ai.chat" /><el-option label="设备任务" value="task.execute" /></el-select></el-form-item>
       <el-button type="primary" :disabled="!caller || !capability.trim()" :loading="busy" @click="save(true)">允许调用</el-button>
     </el-form>
     <div v-loading="loading">

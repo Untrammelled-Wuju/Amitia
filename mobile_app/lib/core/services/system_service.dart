@@ -39,66 +39,26 @@ class SystemService {
     return resp;
   }
 
-  Future<Map<String, dynamic>?> notificationSettings({String deviceId = ''}) async {
-    return _api.get<Map<String, dynamic>>(
-      '/api/notifications/settings',
-      queryParameters: deviceId.trim().isEmpty
-          ? null
-          : <String, dynamic>{'deviceId': deviceId.trim()},
-    );
-  }
-
-  Future<Map<String, dynamic>?> updateNotificationSettings(
-    bool enabled, {
+  Future<Map<String, dynamic>?> notificationDevice({
     String deviceId = '',
   }) async {
-    return _api.put<Map<String, dynamic>>(
-      '/api/notifications/settings',
-      data: <String, dynamic>{
-        'enabled': enabled,
-        if (deviceId.trim().isNotEmpty) 'deviceId': deviceId.trim(),
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> notificationStatus({String deviceId = ''}) async {
-    return _api.get<Map<String, dynamic>>(
-      '/api/notifications/status',
-      queryParameters: deviceId.trim().isEmpty
-          ? null
-          : <String, dynamic>{'deviceId': deviceId.trim()},
-    );
-  }
-
-  Future<Map<String, dynamic>?> subscribeNotifications({
-    Map<String, dynamic>? subscription,
-    String deviceId = '',
-  }) async {
-    return _api.post<Map<String, dynamic>>(
-      '/api/notifications/subscribe',
-      data: <String, dynamic>{
-        ...?subscription,
-        if (deviceId.trim().isNotEmpty) 'deviceId': deviceId.trim(),
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> unsubscribeNotifications({String deviceId = ''}) async {
-    return _api.post<Map<String, dynamic>>(
-      '/api/notifications/unsubscribe',
-      data: deviceId.trim().isEmpty
-          ? const <String, dynamic>{}
-          : <String, dynamic>{'deviceId': deviceId.trim()},
-    );
-  }
-
-  Future<Map<String, dynamic>?> testNotification({String deviceId = ''}) async {
-    return _api.post<Map<String, dynamic>>(
-      '/api/notifications/test',
-      data: deviceId.trim().isEmpty
-          ? const <String, dynamic>{}
-          : <String, dynamic>{'deviceId': deviceId.trim()},
-    );
+    final response = await _api.get<dynamic>('/api/notifications/devices');
+    final source = response is List
+        ? response
+        : response is Map && response['items'] is List
+        ? response['items'] as List
+        : const <dynamic>[];
+    final requested = deviceId.trim();
+    Map<String, dynamic>? first;
+    for (final raw in source.whereType<Map>()) {
+      final row = Map<String, dynamic>.from(raw);
+      first ??= row;
+      if (requested.isNotEmpty &&
+          (row['deviceId'] ?? '').toString().trim() == requested) {
+        return row;
+      }
+    }
+    return requested.isEmpty ? first : null;
   }
 
   Future<Map<String, dynamic>?> setupStatus() async {
@@ -137,7 +97,10 @@ class SystemService {
   }
 
   Future<Map<String, dynamic>?> toolRoute(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/tools/route', data: data);
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/tools/route',
+      data: data,
+    );
     return resp;
   }
 
@@ -147,17 +110,29 @@ class SystemService {
   }
 
   Future<Map<String, dynamic>?> chatCompressionStatus(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/chats/conversations/$id/compression-status');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/chats/conversations/$id/compression-status',
+    );
     return resp;
   }
 
-  Future<Map<String, dynamic>?> cleanupPreview([Map<String, dynamic>? data]) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/chats/cleanup/preview', data: data ?? const <String, dynamic>{});
+  Future<Map<String, dynamic>?> cleanupPreview([
+    Map<String, dynamic>? data,
+  ]) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/chats/cleanup/preview',
+      data: data ?? const <String, dynamic>{},
+    );
     return resp;
   }
 
-  Future<Map<String, dynamic>?> cleanupConfirm(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/chats/cleanup/confirm', data: data);
+  Future<Map<String, dynamic>?> cleanupConfirm(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/chats/cleanup/confirm',
+      data: data,
+    );
     return resp;
   }
 
@@ -167,17 +142,24 @@ class SystemService {
   }
 
   Future<Map<String, dynamic>?> export(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/chats/export', data: data);
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/chats/export',
+      data: data,
+    );
     return resp;
   }
 
   Future<Map<String, dynamic>?> pipelineStatus() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/memory/pipeline/status');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/memory/pipeline/status',
+    );
     return resp;
   }
 
   Future<Map<String, dynamic>?> memoryStats() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/memory/retrieval/stats');
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/memory/retrieval/stats',
+    );
     return resp;
   }
 
@@ -195,7 +177,10 @@ class SystemService {
   Future<List<Map<String, dynamic>>> graphEdges() async {
     final resp = await _api.get<List<dynamic>>('/api/graph/edges');
     if (resp == null) return [];
-    return resp.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return resp
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
   Future<Map<String, dynamic>?> graphNeighbors(
@@ -253,7 +238,10 @@ class SafetyService {
     return true;
   }
 
-  Future<Map<String, dynamic>> safetyEvents({int page = 1, int pageSize = 20}) async {
+  Future<Map<String, dynamic>> safetyEvents({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/safety/events',
       queryParameters: <String, dynamic>{'page': page, 'pageSize': pageSize},
@@ -272,12 +260,18 @@ class SafetyService {
   }
 
   Future<bool> checkInput(String text) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/safety/check-input', data: {'text': text});
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/safety/check-input',
+      data: {'text': text},
+    );
     return resp?['safe'] == true;
   }
 
   Future<bool> checkOutput(String text) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/safety/check-output', data: {'text': text});
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/safety/check-output',
+      data: {'text': text},
+    );
     return resp?['safe'] == true;
   }
 }

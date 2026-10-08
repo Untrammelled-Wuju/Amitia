@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 )
 
 const ProviderSchema = `CREATE TABLE IF NOT EXISTS kernel_device_provider_binding (
@@ -70,6 +71,13 @@ func (s *Service) BindProvider(ctx context.Context, coreID string) (int64, bool,
 		return 0, false, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET administrator=0,permission_revision=permission_revision+1,provider_epoch=provider_epoch+1`); err != nil {
+		return 0, false, err
+	}
+	space, device := coreID, ""
+	if actor, ok := meshaudit.ActorFromContext(ctx); ok {
+		space, device = actor.SpaceID, actor.DeviceID
+	}
+	if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.provider_changed", meshaudit.Details{PreviousCoreID: previous, CoreID: coreID, ProviderEpoch: epoch + 1}); err != nil {
 		return 0, false, err
 	}
 	if err := tx.Commit(); err != nil {

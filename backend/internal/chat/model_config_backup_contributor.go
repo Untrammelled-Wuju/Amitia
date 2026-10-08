@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 	"io"
@@ -162,6 +164,9 @@ func (c *ModelConfigBackupContributor) Import(ctx context.Context, req dataporta
 }
 
 func (c *ModelConfigBackupContributor) RestoreModelConfigs(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
 	rc, err := in.ReadComponent(ComponentIDModelConfigs)
 	if err != nil {
 		return err
@@ -174,17 +179,26 @@ func (c *ModelConfigBackupContributor) RestoreModelConfigs(ctx context.Context, 
 	}
 
 	lines := splitModelConfigLines(data)
+	return configwrite.Transaction(c.DB.WithContext(ctx), func(tx *gorm.DB) error {
+		scoped := &ModelConfigBackupContributor{DB: tx}
+		return scoped.restoreModelConfigLines(ctx, lines, opts)
+	})
+}
+
+func (c *ModelConfigBackupContributor) restoreModelConfigLines(ctx context.Context, lines [][]byte, opts dataportability.RestoreOptions) error {
 	for _, line := range lines {
 		if len(line) == 0 {
 			continue
 		}
 		var rec modelConfigExportRecord
 		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
+			return fmt.Errorf("模型配置备份记录无效: %w", err)
 		}
 
 		var existing struct{ ID int }
-		c.DB.WithContext(ctx).Table("model_configs").Select("id").Where("id = ?", rec.ID).Scan(&existing)
+		if err := c.DB.WithContext(ctx).Table("model_configs").Select("id").Where("id = ?", rec.ID).Scan(&existing).Error; err != nil {
+			return err
+		}
 
 		newID := rec.ID
 		if existing.ID != 0 {
@@ -220,10 +234,14 @@ func (c *ModelConfigBackupContributor) RestoreModelConfigs(ctx context.Context, 
 		}
 
 		if newID == rec.ID && existing.ID != 0 {
-			c.DB.WithContext(ctx).Table("model_configs").Where("id = ?", rec.ID).Updates(updates)
+			if err := c.DB.WithContext(ctx).Table("model_configs").Where("id = ?", rec.ID).Updates(updates).Error; err != nil {
+				return err
+			}
 		} else {
 			updates["id"] = newID
-			c.DB.WithContext(ctx).Table("model_configs").Create(updates)
+			if err := c.DB.WithContext(ctx).Table("model_configs").Create(updates).Error; err != nil {
+				return err
+			}
 		}
 	}
 

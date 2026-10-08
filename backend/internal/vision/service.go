@@ -116,7 +116,10 @@ func (s *service) Update(id int, updates map[string]interface{}) (*VisionConfig,
 	if err := s.repo.Update(id, normalizeConfigUpdates(updates)); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
-	cfg, _ := s.repo.GetByID(id)
+	cfg, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
 	if cfg != nil {
 		redactConfigForResponse(cfg)
 	}
@@ -137,7 +140,10 @@ func (s *service) Activate(id int) (*VisionConfig, error) {
 	if err := s.repo.Activate(id); err != nil {
 		return nil, fmt.Errorf("激活失败: %w", err)
 	}
-	cfg, _ := s.repo.GetByID(id)
+	cfg, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
 	if cfg != nil {
 		redactConfigForResponse(cfg)
 	}

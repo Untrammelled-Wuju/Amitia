@@ -165,10 +165,16 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
   }
 
   Future<void> _create() async {
-    final input = await showContinuityThreadEditor(context);
-    if (input == null) return;
     try {
-      final created = await ref.read(continuityServiceProvider).create(input);
+      final service = ref.read(continuityServiceProvider);
+      final expectedDocument = await service.prepareCreate();
+      if (!mounted) return;
+      final input = await showContinuityThreadEditor(context);
+      if (input == null) return;
+      final created = await service.create(
+        input,
+        expectedDocument: expectedDocument,
+      );
       if (!mounted) return;
       await _load(showLoading: false);
       if (!mounted) return;
@@ -372,7 +378,10 @@ class _ContinuityCard extends StatelessWidget {
         ? item.summary
         : item.goal;
     return AmitiaCard(
-      onTap: () => context.push(AppRoutes.continuityDetail(item.id)),
+      onTap: () => context.push(
+        AppRoutes.continuityDetail(item.id),
+        extra: item.sourceDocument,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -25,6 +25,7 @@ class ContinuityThreadDto {
     required this.updatedAt,
     required this.lastActiveAt,
     required this.completedAt,
+    this.sourceDocument,
   });
 
   factory ContinuityThreadDto.fromJson(Map<String, dynamic> json) {
@@ -46,6 +47,11 @@ class ContinuityThreadDto {
       updatedAt: _dateTimeValue(json['updatedAt']),
       lastActiveAt: _dateTimeValue(json['lastActiveAt']),
       completedAt: _dateTimeValue(json['completedAt']),
+      sourceDocument: json['sourceDocument'] is Map
+          ? Map<String, dynamic>.unmodifiable(
+              Map<String, dynamic>.from(json['sourceDocument'] as Map),
+            )
+          : null,
     );
   }
 
@@ -66,6 +72,7 @@ class ContinuityThreadDto {
   final DateTime? updatedAt;
   final DateTime? lastActiveAt;
   final DateTime? completedAt;
+  final Map<String, dynamic>? sourceDocument;
 
   bool get terminal => status == 'completed' || status == 'cancelled';
   bool get waiting => status == 'waiting';
@@ -181,9 +188,10 @@ class ContinuityDetailDto {
       leaseState: json['lease'] is Map
           ? _stringValue(json['lease']['state'])
           : '',
-      thread: ContinuityThreadDto.fromJson(
-        Map<String, dynamic>.from((json['thread'] as Map?) ?? const {}),
-      ),
+      thread: ContinuityThreadDto.fromJson({
+        ...Map<String, dynamic>.from((json['thread'] as Map?) ?? const {}),
+        if (json['executionScope'] is Map) 'sourceDocument': json,
+      }),
       waits: waits
           .whereType<Map>()
           .map(

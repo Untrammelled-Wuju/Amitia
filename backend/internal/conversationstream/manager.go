@@ -75,6 +75,10 @@ type DurableStore interface {
 	LatestSequence(context.Context, string) (int64, error)
 }
 
+type EventObserver interface {
+	ObserveAgentUIEvent(context.Context, AgentUIEvent)
+}
+
 type executionState struct {
 	turnID         string
 	ctx            context.Context
@@ -100,16 +104,47 @@ type Manager struct {
 	ringSize       int
 	durable        DurableStore
 	executionSlots chan struct{}
+	observers      map[string]EventObserver
 }
 
 var defaultManager = NewManager()
 
 func NewManager() *Manager {
-	return &Manager{states: map[string]*conversationState{}, ringSize: 4096, executionSlots: make(chan struct{}, 16)}
+	return &Manager{states: map[string]*conversationState{}, ringSize: 4096, executionSlots: make(chan struct{}, 16), observers: map[string]EventObserver{}}
 }
 
 func DefaultManager() *Manager {
 	return defaultManager
+}
+
+func (m *Manager) RegisterObserver(id string, observer EventObserver) func() {
+	id = strings.TrimSpace(id)
+	if id == "" || observer == nil {
+		return func() {}
+	}
+	m.mu.Lock()
+	m.observers[id] = observer
+	m.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.mu.Lock()
+			delete(m.observers, id)
+			m.mu.Unlock()
+		})
+	}
+}
+
+func (m *Manager) notifyObservers(ctx context.Context, event AgentUIEvent) {
+	m.mu.RLock()
+	observers := make([]EventObserver, 0, len(m.observers))
+	for _, observer := range m.observers {
+		observers = append(observers, observer)
+	}
+	m.mu.RUnlock()
+	for _, observer := range observers {
+		observer.ObserveAgentUIEvent(ctx, cloneEvent(event))
+	}
 }
 
 func (m *Manager) SetRingSize(size int) {
@@ -192,6 +227,7 @@ func (m *Manager) Publish(ctx context.Context, event AgentUIEvent, durable bool)
 		default:
 		}
 	}
+	m.notifyObservers(ctx, event)
 	return event, nil
 }
 

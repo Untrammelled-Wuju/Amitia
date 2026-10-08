@@ -5,10 +5,14 @@ package embedding_config
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 
+	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
@@ -158,13 +162,27 @@ func (c *EmbeddingBackupContributor) Import(ctx context.Context, req dataportabi
 }
 
 func (c *EmbeddingBackupContributor) RestoreEmbeddings(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
 	rc, err := in.ReadComponent(ComponentIDEmbeddingConfigs + ".v1")
 	if err != nil {
 		return fmt.Errorf("restore: embedding.configs component missing: %w", err)
 	}
 	defer rc.Close()
 
-	scanner := bufio.NewScanner(rc)
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return err
+	}
+	return configwrite.Transaction(c.DB.WithContext(ctx), func(tx *gorm.DB) error {
+		scoped := &EmbeddingBackupContributor{DB: tx}
+		return scoped.restoreEmbeddingRecords(ctx, data, opts)
+	})
+}
+
+func (c *EmbeddingBackupContributor) restoreEmbeddingRecords(ctx context.Context, data []byte, opts dataportability.RestoreOptions) error {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -173,12 +191,14 @@ func (c *EmbeddingBackupContributor) RestoreEmbeddings(ctx context.Context, in d
 
 		var rec embeddingConfigV1
 		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
+			return fmt.Errorf("向量模型配置备份记录无效: %w", err)
 		}
 
 		exists := false
 		var existing struct{ ID int }
-		c.DB.WithContext(ctx).Model(&EmbeddingConfig{}).Select("id").Where("id = ?", rec.ID).Scan(&existing)
+		if err := c.DB.WithContext(ctx).Model(&EmbeddingConfig{}).Select("id").Where("id = ?", rec.ID).Scan(&existing).Error; err != nil {
+			return err
+		}
 		if existing.ID != 0 {
 			exists = true
 		}
@@ -197,29 +217,46 @@ func (c *EmbeddingBackupContributor) RestoreEmbeddings(ctx context.Context, in d
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
-				c.DB.WithContext(ctx).Model(&EmbeddingConfig{}).Where("id = ?", rec.ID).Updates(map[string]interface{}{
+				if entity.IsActive == 1 {
+					if err := c.DB.Model(&EmbeddingConfig{}).Where("is_active=1 AND id<>?", rec.ID).Update("is_active", 0).Error; err != nil {
+						return err
+					}
+				}
+				if err := c.DB.WithContext(ctx).Model(&EmbeddingConfig{}).Where("id = ?", rec.ID).Updates(map[string]interface{}{
 					"name":                 rec.Name,
 					"api_type":             rec.ApiType,
 					"model_name":           rec.ModelName,
 					"base_url":             rec.BaseUrl,
 					"is_active":            rec.IsActive,
 					"provider_config_json": rec.ProviderConfigJSON,
-				})
+				}).Error; err != nil {
+					return err
+				}
 				continue
 			default:
+				if entity.IsActive == 1 {
+					if err := c.DB.Model(&EmbeddingConfig{}).Where("is_active=1").Update("is_active", 0).Error; err != nil {
+						return err
+					}
+				}
 				if err := c.DB.WithContext(ctx).Create(&entity).Error; err != nil {
-					continue
+					return err
 				}
 				continue
 			}
 		}
 
+		if entity.IsActive == 1 {
+			if err := c.DB.Model(&EmbeddingConfig{}).Where("is_active=1").Update("is_active", 0).Error; err != nil {
+				return err
+			}
+		}
 		if err := c.DB.WithContext(ctx).Create(&entity).Error; err != nil {
-			continue
+			return err
 		}
 	}
 
-	return nil
+	return scanner.Err()
 }
 
 var _ dataportability.EmbeddingRestorePort = (*EmbeddingBackupContributor)(nil)

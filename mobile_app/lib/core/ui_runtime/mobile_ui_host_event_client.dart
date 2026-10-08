@@ -428,11 +428,12 @@ class MobileUIHostEventClient {
       return _notificationsEnabled;
     }
     try {
-      final settings = await _systemService.notificationSettings(
+      final device = await _systemService.notificationDevice(
         deviceId: _deviceId,
       );
       _notificationsEnabled =
-          settings?['enabled'] == true && settings?['subscribed'] == true;
+          device?['pushEnabled'] == true &&
+          device?['reminderPushEnabled'] == true;
     } catch (_) {
       _notificationsEnabled = false;
     }

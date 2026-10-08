@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -114,6 +115,9 @@ func ValidateCurrent(ctx context.Context) error {
 }
 
 func CommitCurrent(ctx context.Context, commit func() error) error {
+	if _, _, readOnly := TaskReadAuthority(ctx); readOnly {
+		return ErrWrongOwner
+	}
 	if guard, ok := ctx.Value(additionalGuardKey{}).(func(context.Context) error); ok {
 		if err := guard(ctx); err != nil {
 			return err
@@ -144,8 +148,26 @@ func (s *Service) InitializeCoreConsole(ctx context.Context, space, device strin
 	if space == "" || device == "" {
 		return ErrWrongOwner
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated,administrator) VALUES(?,?,1,1) ON CONFLICT DO NOTHING`, space, device)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated,administrator) VALUES(?,?,1,1) ON CONFLICT DO NOTHING`, space, device)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		granted := true
+		if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.core_console_initialized", meshaudit.Details{Coordinated: &granted, Administrator: &granted, ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Service) Get(ctx context.Context, space, device string) (Policy, error) {
@@ -160,6 +182,9 @@ func (s *Service) Get(ctx context.Context, space, device string) (Policy, error)
 func (s *Service) ChangeMode(ctx context.Context, space, device string, expected int64, coordinated bool, role string) (Policy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateRequestAuthorities(ctx); err != nil {
+		return Policy{}, err
+	}
 	previous, err := s.Get(ctx, space, device)
 	if err != nil {
 		return Policy{}, err
@@ -178,12 +203,19 @@ func (s *Service) ChangeMode(ctx context.Context, space, device string, expected
 	if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id) VALUES(?,?) ON CONFLICT DO NOTHING`, space, device); err != nil {
 		return Policy{}, err
 	}
+	if err := ValidateRequestAuthorityTx(ctx, tx); err != nil {
+		return Policy{}, err
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=?, selected_role=?, mode_revision=mode_revision+1, administrator=CASE WHEN ? THEN administrator ELSE 0 END, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=?`, coordinated, role, coordinated, space, device, expected)
 	if err != nil {
 		return Policy{}, err
 	}
 	if n, _ := result.RowsAffected(); n != 1 {
 		return Policy{}, ErrRevision
+	}
+	administrator := previous.Administrator && coordinated
+	if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.mode_changed", meshaudit.Details{ModeRevision: expected + 1, PermissionRevision: previous.PermissionRevision + 1, ProviderEpoch: previous.ProviderEpoch, Coordinated: &coordinated, Administrator: &administrator}); err != nil {
+		return Policy{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return Policy{}, err
@@ -195,6 +227,9 @@ func (s *Service) ChangeMode(ctx context.Context, space, device string, expected
 func (s *Service) GrantAdministrator(ctx context.Context, space, device string, expected int64, grant bool) (Policy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateRequestAuthorities(ctx); err != nil {
+		return Policy{}, err
+	}
 	p, err := s.Get(ctx, space, device)
 	if err != nil {
 		return p, err
@@ -208,12 +243,26 @@ func (s *Service) GrantAdministrator(ctx context.Context, space, device string, 
 	if err := s.fenceAuthorityLocked(ctx, space, device, p.PermissionRevision); err != nil {
 		return p, err
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE kernel_device_coordination SET administrator=?, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND permission_revision=?`, grant, space, device, expected)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return p, err
+	}
+	defer tx.Rollback()
+	if err := ValidateRequestAuthorityTx(ctx, tx); err != nil {
+		return p, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET administrator=?, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND permission_revision=?`, grant, space, device, expected)
 	if err != nil {
 		return p, err
 	}
 	if n, _ := result.RowsAffected(); n != 1 {
 		return p, ErrRevision
+	}
+	if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.administrator_changed", meshaudit.Details{PermissionRevision: expected + 1, ModeRevision: p.ModeRevision, ProviderEpoch: p.ProviderEpoch, Administrator: &grant, Coordinated: &p.Coordinated}); err != nil {
+		return p, err
+	}
+	if err := tx.Commit(); err != nil {
+		return p, err
 	}
 	s.cancelLocked(space, device)
 	return s.Get(ctx, space, device)
@@ -230,6 +279,9 @@ func (s *Service) ResetTx(ctx context.Context, tx *sql.Tx, space, device string)
 func (s *Service) RevokeDevice(ctx context.Context, space, device string, revoke func(*sql.Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateRequestAuthorities(ctx); err != nil {
+		return err
+	}
 	policy, err := s.Get(ctx, space, device)
 	if err != nil {
 		return err
@@ -242,10 +294,16 @@ func (s *Service) RevokeDevice(ctx context.Context, space, device string, revoke
 		return err
 	}
 	defer tx.Rollback()
+	if err := ValidateRequestAuthorityTx(ctx, tx); err != nil {
+		return err
+	}
 	if err := revoke(tx); err != nil {
 		return err
 	}
 	if err := s.ResetTx(ctx, tx, space, device); err != nil {
+		return err
+	}
+	if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.device_revoked", meshaudit.Details{PermissionRevision: policy.PermissionRevision + 1, ProviderEpoch: policy.ProviderEpoch + 1}); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -314,6 +372,9 @@ func (s *Service) Begin(ctx context.Context, space, device, target, core, role, 
 	guarded = context.WithValue(guarded, commitKey{}, func(current context.Context, commit func() error) error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if err := s.validateRequestAuthorities(current); err != nil {
+			return err
+		}
 		if err := s.Validate(current, scope); err != nil {
 			return err
 		}

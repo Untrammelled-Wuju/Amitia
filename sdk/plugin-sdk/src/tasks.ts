@@ -86,6 +86,7 @@ export interface TaskStorageClient {
 }
 
 export interface TaskHostClient {
+	readonly capabilities?: Readonly<{ executeTool: boolean; emitEvent: boolean }>;
   executeTool(toolId: string, input: unknown, timeoutMs?: number): Promise<unknown>;
   emitEvent(type: string, payload: unknown): Promise<void>;
 }

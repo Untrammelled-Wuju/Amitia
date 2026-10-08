@@ -13,6 +13,9 @@ import (
 )
 
 func (rt *Runtime) validateDataRoute(ctx context.Context, scope coordination.ExecutionScope) error {
+	if current, _, historical := coordination.TaskReadAuthority(ctx); historical && scope != current {
+		return coordination.ErrWrongOwner
+	}
 	if rt.Coordination == nil || scope.CoreID == "" || scope.CoreID != scope.SpaceID || scope.AuthorizationRealm != scope.CoreID {
 		return coordination.ErrWrongOwner
 	}
@@ -20,7 +23,7 @@ func (rt *Runtime) validateDataRoute(ctx context.Context, scope coordination.Exe
 }
 
 func (rt *Runtime) callOwnedData(ctx context.Context, scope coordination.ExecutionScope, operation string, query coordination.DataQuery, result any) error {
-	if operation == "task-definition" {
+	if operation == "task-definition" || operation == "task-catalog-entry" {
 		owner := scope.TargetDeviceID
 		if scope.Coordinated {
 			owner = scope.CoreID
@@ -180,6 +183,9 @@ func (rt *Runtime) Commit(ctx context.Context, commit coordination.Commit) (coor
 	if err := rt.validateDataRoute(ctx, commit.Scope); err != nil {
 		return coordination.Acknowledgement{}, err
 	}
+	if err := rt.Coordination.ValidateCommitAuthorities(ctx, commit); err != nil {
+		return coordination.Acknowledgement{}, err
+	}
 	if err := coordination.ValidateRoleRevision(ctx, rt, commit.Scope); err != nil {
 		return coordination.Acknowledgement{}, err
 	}
@@ -198,6 +204,12 @@ func (rt *Runtime) Commit(ctx context.Context, commit coordination.Commit) (coor
 var _ coordination.DataPort = (*Runtime)(nil)
 
 func (rt *Runtime) Resource(ctx context.Context, scope coordination.ExecutionScope, kind, id string) (*coordination.Resource, error) {
+	if current, proof, historical := coordination.TaskReadAuthority(ctx); historical {
+		if scope != proof.Scope {
+			return nil, coordination.ErrWrongOwner
+		}
+		return rt.readTaskResource(ctx, current, proof, kind, id)
+	}
 	if err := rt.validateDataRoute(ctx, scope); err != nil {
 		return nil, err
 	}

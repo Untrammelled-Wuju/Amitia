@@ -1,11 +1,44 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 )
+
+type pausingGateWorker struct {
+	calls   int
+	request protocol.TaskPausePayload
+}
+
+func (w *pausingGateWorker) ExecuteTask(context.Context, protocol.TaskDispatchPayload) error {
+	return nil
+}
+func (w *pausingGateWorker) CancelTask(context.Context, string, string, string) error { return nil }
+func (w *pausingGateWorker) PauseTask(_ context.Context, request protocol.TaskPausePayload) error {
+	w.calls++
+	w.request = request
+	return nil
+}
+
+func TestBindingGateBlocksCandidateTaskPauseAndPreservesExecutionBinding(t *testing.T) {
+	worker := &pausingGateWorker{}
+	gate := &bindingGate{worker: worker}
+	request := protocol.TaskPausePayload{TaskRunID: "run", AttemptID: "attempt", LeaseID: "lease", RuntimeSessionID: "session", ConnectionGeneration: 7}
+	if err := gate.PauseTask(t.Context(), request); err == nil || worker.calls != 0 {
+		t.Fatal("candidate provider paused an active task")
+	}
+	gate.active.Store(true)
+	if err := gate.PauseTask(t.Context(), request); err != nil || worker.calls != 1 || worker.request != request {
+		t.Fatalf("active pause lost the execution identity: %v", err)
+	}
+	gate.active.Store(false)
+	if err := gate.PauseTask(t.Context(), request); err == nil || worker.calls != 1 {
+		t.Fatal("retired provider reached the task worker")
+	}
+}
 
 func TestCandidateGateAllowsOnlyRolePreflight(t *testing.T) {
 	dispatcher := NewRuntimeDispatcher()

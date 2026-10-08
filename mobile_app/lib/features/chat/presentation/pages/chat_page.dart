@@ -39,6 +39,7 @@ import '../../../../core/models/conversation.dart';
 import '../../../../core/models/memory.dart';
 import '../../../../core/models/model_config.dart';
 import '../../../../core/models/profile.dart';
+import '../../../../core/models/project.dart';
 import '../../../../core/artifact/artifact_model.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/artifact/artifact_service.dart';
@@ -87,6 +88,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Timer? _conversationEventRefreshTimer;
   ChatMessage? _replyTarget;
   List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
+  Map<String, ProjectDto> _logicalProjects = const {};
   bool _workspaceBusy = false;
   final RealtimeAudioBridge _realtimeAudio = RealtimeAudioBridge();
   final BytesBuilder _voicePcm = BytesBuilder(copy: false);
@@ -272,19 +274,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           .firstOrNull;
       if (!mounted) return;
       _runtime.setWorkspace(
-        project == null
+        project == null || project.readOnly
             ? null
             : ConversationWorkspaceDto(
                 projectId: project.id,
                 workspaceId: project.workspaceId,
                 deviceId: project.deviceId,
                 workspaceName: project.name,
-                workspaceKind: project.workspaceKind.trim().isEmpty
+                workspaceKind: project.logical
+                    ? 'logical'
+                    : project.workspaceKind.trim().isEmpty
                     ? (project.rootUri.startsWith('content://')
                           ? 'saf'
                           : 'local')
                     : project.workspaceKind,
                 rootUri: project.rootUri,
+                logicalProject: project.logical ? project : null,
               ),
       );
     } catch (_) {
@@ -530,27 +535,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _refreshRecentWorkspaces() async {
     try {
-      try {
-        await ref.read(workspaceServiceProvider).listLocal();
-      } catch (_) {}
+      final service = ref.read(chatServiceProvider);
+      final owned = await service.owned.refresh();
+      if (!owned)
+        try {
+          await ref.read(workspaceServiceProvider).listLocal();
+        } catch (_) {}
       ref.invalidate(conversationSidebarProvider);
       final sidebar = await ref.read(conversationSidebarProvider.future);
       if (!mounted) return;
       _cachedProviderContext = null;
       setState(() {
+        _logicalProjects = {
+          for (final project in sidebar.projects.where(
+            (project) => project.logical && !project.readOnly,
+          ))
+            project.id: project,
+        };
         _recentWorkspaces = sidebar.projects
             .map(
               (project) => WorkspaceMountDto(
-                id: project.workspaceId,
+                id: project.logical ? project.id : project.workspaceId,
                 projectId: project.id,
                 name: project.name,
-                kind: project.workspaceKind.trim().isEmpty
+                kind: project.logical
+                    ? 'logical'
+                    : project.workspaceKind.trim().isEmpty
                     ? (project.rootUri.startsWith('content://')
                           ? 'saf'
                           : 'local')
                     : project.workspaceKind,
                 rootUri: project.rootUri,
-                readOnly: project.status == 'read_only',
+                readOnly: project.readOnly || project.status == 'read_only',
                 available: project.available,
                 status: project.status,
                 statusReason: project.statusReason,
@@ -569,6 +585,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<ConversationWorkspaceDto> _workspaceBindingForMount(
     WorkspaceMountDto mount,
   ) async {
+    if (mount.kind == 'logical') {
+      if (mount.readOnly) throw StateError('原设备历史项目只读');
+      return ConversationWorkspaceDto(
+        projectId: mount.projectId,
+        workspaceId: '',
+        workspaceName: mount.name,
+        workspaceKind: 'logical',
+        rootUri: '',
+        logicalProject: _logicalProjects[mount.projectId],
+      );
+    }
     var deviceId = '';
     final deployment = ref.read(mobileDeploymentConfigProvider);
     if (deployment.mode == MobileDeploymentMode.cloud) {
@@ -613,12 +640,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (conversationId.isNotEmpty && mount.projectId.isNotEmpty) {
         await ref
             .read(chatServiceProvider)
-            .moveConversationToProject(conversationId, mount.projectId);
+            .moveConversationToProject(
+              conversationId,
+              mount.projectId,
+              project: mount.kind == 'logical'
+                  ? _logicalProjects[mount.projectId]
+                  : null,
+            );
       }
       _runtime.setWorkspace(binding);
-      try {
-        await ref.read(workspaceServiceProvider).touchLocal(mount.id);
-      } catch (_) {}
+      if (mount.kind != 'logical')
+        try {
+          await ref.read(workspaceServiceProvider).touchLocal(mount.id);
+        } catch (_) {}
       await _refreshRecentWorkspaces();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '切换工作目录失败：$error');
@@ -681,6 +715,67 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (_workspaceBusy) return;
     setState(() => _workspaceBusy = true);
     try {
+      final service = ref.read(chatServiceProvider);
+      if (await service.owned.refresh()) {
+        final initial = await service.owned.data(
+          'memory',
+          characterId: service.owned.selectRole(null),
+        );
+        final expectedScope = Map<String, dynamic>.from(
+          initial['executionScope'] as Map,
+        );
+        if (!mounted) return;
+        final controller = TextEditingController();
+        final title = await showDialog<String>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('新建对话分组'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: '项目名称'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (controller.text.trim().isNotEmpty)
+                    Navigator.pop(dialogContext, controller.text.trim());
+                },
+                child: const Text('创建'),
+              ),
+            ],
+          ),
+        );
+        controller.dispose();
+        if (title == null) return;
+        final project = await service.createProject(
+          name: title,
+          expectedScope: expectedScope,
+        );
+        final conversationId = _runtime.conversationId?.trim() ?? '';
+        if (conversationId.isNotEmpty)
+          await service.moveConversationToProject(
+            conversationId,
+            project.id,
+            project: project,
+          );
+        _runtime.setWorkspace(
+          ConversationWorkspaceDto(
+            projectId: project.id,
+            workspaceId: '',
+            workspaceName: project.name,
+            workspaceKind: 'logical',
+            rootUri: '',
+            logicalProject: project,
+          ),
+        );
+        await _refreshRecentWorkspaces();
+        return;
+      }
       final mount = await _pickWorkspaceMount();
       if (mount == null) return;
       final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
@@ -744,6 +839,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _showWorkspacePicker() async {
     await _refreshRecentWorkspaces();
     if (!mounted) return;
+    final logical = ref.read(chatServiceProvider).owned.enabled;
     final selectedId = _runtime.workspace?.workspaceId ?? '';
     await showModalBottomSheet<void>(
       context: context,
@@ -784,14 +880,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         ),
                         subtitle: Text(
                           mount.available
-                              ? (mount.kind == 'saf' ? '系统授权目录' : '本机目录')
+                              ? (mount.kind == 'logical'
+                                    ? (mount.readOnly
+                                          ? '原设备历史分组 · 只读'
+                                          : '对话分组 · 不授予目录权限')
+                                    : mount.kind == 'saf'
+                                    ? '系统授权目录'
+                                    : '本机目录')
                               : (mount.statusReason.isNotEmpty
                                     ? mount.statusReason
                                     : '目录不可用'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        enabled: mount.available && !_workspaceBusy,
+                        enabled:
+                            mount.available &&
+                            !mount.readOnly &&
+                            !_workspaceBusy,
                         trailing: mount.id == selectedId
                             ? const Icon(Icons.check_rounded)
                             : null,
@@ -806,7 +911,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.create_new_folder_outlined),
-                title: const Text('添加文件夹为项目…'),
+                title: Text(logical ? '新建对话分组…' : '添加文件夹为项目…'),
                 enabled: !_workspaceBusy,
                 onTap: () {
                   Navigator.of(sheetContext).pop();
@@ -883,6 +988,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _runtime.sendText(
       text,
       replyToMessageId: reply?.id,
+      quotedMessage: reply,
       replyToExcerpt: reply == null ? null : _replyExcerpt(reply),
     );
   }
@@ -1190,10 +1296,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           'png' => 'image/png',
           'jpg' || 'jpeg' => 'image/jpeg',
           'gif' => 'image/gif',
-          _ => '',
+          _ =>
+            ownedFileMimes[(picked.extension ?? '').toLowerCase()] ??
+                ownedVideoMimes[(picked.extension ?? '').toLowerCase()] ??
+                '',
         };
-        if (mime.isEmpty) throw StateError('当前附件通道尚未适配此文件类型，文件未上传');
-        if (picked.size > 1048576) throw StateError('图片单张不超过 1 MiB');
+        if (mime.isEmpty)
+          throw StateError('请选择图片、文本、PDF、DOCX 或 MP4、WebM、MOV 视频');
+        if (picked.size > 1048576) throw StateError('附件单件不超过 1 MiB');
         final content = BytesBuilder(copy: false);
         if (picked.readStream != null) {
           await for (final chunk in picked.readStream!) {
@@ -1206,7 +1316,33 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         } else {
           throw StateError('无法读取所选图片');
         }
-        final uri = 'data:$mime;base64,${base64Encode(content.takeBytes())}';
+        final bytes = content.takeBytes();
+        final uri = 'data:$mime;base64,${base64Encode(bytes)}';
+        if (!mounted) return;
+        if (!mime.startsWith('image/')) {
+          final video = mime.startsWith('video/');
+          ownedFileAttachment(
+            uri,
+            name: picked.name,
+            kind: video ? 'video' : 'file',
+          );
+          if (video) {
+            await _runtime.sendVideo(
+              resourceUri: uri,
+              displayUrl: uri,
+              fileName: picked.name,
+              mimeType: mime,
+            );
+          } else {
+            await _runtime.sendFile(
+              resourceUri: uri,
+              fileName: picked.name,
+              sizeBytes: bytes.length,
+              mimeType: mime,
+            );
+          }
+          return;
+        }
         ownedImageAttachment(uri, name: picked.name);
         await _runtime.sendImage(
           resourceUri: uri,
@@ -1276,8 +1412,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _pickAndSendVideo(bool camera) async {
     await _withArtifactUpload((service) async {
-      if (await ref.read(chatServiceProvider).owned.refresh())
-        throw StateError('当前视频附件通道尚未适配数据归属，视频未上传');
+      if (await ref.read(chatServiceProvider).owned.refresh()) {
+        final picked = await ImagePicker().pickVideo(
+          source: camera ? ImageSource.camera : ImageSource.gallery,
+        );
+        if (picked == null) return;
+        if (await picked.length() > 1048576) throw StateError('视频单段不超过 1 MiB');
+        final bytes = await picked.readAsBytes();
+        final extension = picked.name.split('.').last.toLowerCase();
+        final mime = ownedVideoMimes[extension] ?? picked.mimeType ?? '';
+        final uri = 'data:$mime;base64,${base64Encode(bytes)}';
+        ownedFileAttachment(uri, name: picked.name, kind: 'video');
+        if (!mounted) return;
+        await _runtime.sendVideo(
+          resourceUri: uri,
+          displayUrl: uri,
+          fileName: picked.name,
+          mimeType: mime,
+        );
+        return;
+      }
       final artifact = await service.pickAndUploadVideo(
         source: camera ? ImageSource.camera : ImageSource.gallery,
       );
@@ -1764,17 +1918,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
     if (!mounted || conversationId == null || conversationId.isEmpty) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
+    final savedConversation = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
         fullscreenDialog: true,
         builder: (_) => RealtimeCallPage(
           conversationId: conversationId!,
+          characterId: characterId,
+          executionScope: _runtime.realtimeScope,
+          historicalRoleId:
+              _runtime.messages
+                  .where((message) => message.characterId.isNotEmpty)
+                  .map((message) => message.characterId)
+                  .firstOrNull ??
+              '',
           characterName: characterName,
           characterAvatar: characterAvatar,
           initialMode: mode,
         ),
       ),
     );
+    if (mounted && savedConversation != null)
+      await _runtime.openConversation(
+        savedConversation,
+        characterId: characterId,
+      );
   }
 
   Future<void> _copyMessage(ChatMessage message) async {

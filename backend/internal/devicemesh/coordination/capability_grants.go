@@ -35,6 +35,9 @@ func (s *Service) SetCapabilityGrant(ctx context.Context, space, caller, target,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.validateRequestAuthorities(ctx); err != nil {
+		return CapabilityGrant{}, err
+	}
 	callerPolicy, err := s.Get(ctx, space, caller)
 	if err != nil {
 		return CapabilityGrant{}, err
@@ -65,6 +68,9 @@ func (s *Service) SetCapabilityGrant(ctx context.Context, space, caller, target,
 		return CapabilityGrant{}, err
 	}
 	defer tx.Rollback()
+	if err := ValidateRequestAuthorityTx(ctx, tx); err != nil {
+		return CapabilityGrant{}, err
+	}
 	for _, device := range []string{caller, target} {
 		var trust string
 		if err := tx.QueryRowContext(ctx, `SELECT trust_state FROM kernel_devices WHERE space_id=? AND device_id=?`, space, device).Scan(&trust); err != nil || trust != "trusted" {

@@ -1,0 +1,46 @@
+# Amitia Android optional vendor Push client configuration
+#
+# These are client/channel identifiers and build switches. Never put Cloud
+# provider server secrets (MiPush AppSecret, HMS ClientSecret, etc.) here.
+#
+# Values can be supplied as Gradle properties (-PKEY=value) or environment
+# variables with the same names.
+
+AMITIA_FCM_APPLICATION_ID=
+AMITIA_FCM_API_KEY=
+AMITIA_FCM_PROJECT_ID=
+AMITIA_FCM_SENDER_ID=
+
+AMITIA_XIAOMI_APP_ID=
+AMITIA_XIAOMI_APP_KEY=
+# 1 only when the official MiPush SDK/AAR is linked.
+AMITIA_XIAOMI_NATIVE_DATA=0
+
+AMITIA_HUAWEI_APP_ID=
+# Optional official Maven coordinate. Local AAR in app/libs is also supported.
+AMITIA_HUAWEI_PUSH_DEPENDENCY=
+AMITIA_HUAWEI_NATIVE_DATA=0
+
+AMITIA_HONOR_APP_ID=
+# Current HONOR Maven packages use com.hihonor.push.sdk. Set "honor" only for
+# legacy SDKs that still expose com.honor.push.sdk.
+AMITIA_HONOR_SDK_PACKAGE=hihonor
+# Optional official Maven coordinate, e.g. com.hihonor.mcs:push:10.0.31.302.
+AMITIA_HONOR_PUSH_DEPENDENCY=
+AMITIA_HONOR_NATIVE_DATA=0
+
+AMITIA_OPPO_APP_KEY=
+AMITIA_OPPO_APP_SECRET=
+# Optional official SDK coordinate, or place the HeyTap Push AAR in app/libs.
+AMITIA_OPPO_PUSH_DEPENDENCY=
+# Fail-closed: enable only after the app has OPPO pass-through entitlement and
+# the linked SDK exposes DataMessageCallbackService callbacks.
+AMITIA_OPPO_NATIVE_DATA=0
+
+AMITIA_VIVO_APP_ID=
+AMITIA_VIVO_API_KEY=
+# Optional official SDK coordinate, or place the vivo Push AAR in app/libs.
+AMITIA_VIVO_PUSH_DEPENDENCY=
+# Fail-closed: enable only when the linked vivo SDK exposes
+# OpenClientPushMessageReceiver/onTransmissionMessage for this application.
+AMITIA_VIVO_NATIVE_DATA=0

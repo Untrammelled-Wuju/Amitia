@@ -8,6 +8,10 @@ func (b *runtimeBootstrap) buildIOSNativeBridge() nativebridge.Bridge {
 	return nil
 }
 
+func (b *runtimeBootstrap) IOSNativeBridge() nativebridge.Bridge {
+	return nil
+}
+
 func (b *runtimeBootstrap) buildPlatformProvidersIOS() error {
 	return nil
 }

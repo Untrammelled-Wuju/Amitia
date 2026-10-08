@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref } from "vue";
+import { ref, onUnmounted } from "vue";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
+import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
+import { ownedFileAttachment, ownedAttachmentURL } from "@/runtime/device-owned-attachments";
 
 const VISION_IMAGE_TYPES = new Set([
   "image/png",
@@ -81,6 +83,7 @@ export function useMediaUpload(
   onRemoveImage: () => void,
   onRemoveVideo: () => void,
 ) {
+  const owned = useDeviceOwnedConversation();
   const attachedImage = ref<File | null>(null);
   const attachedImagePreview = ref<string | null>(null);
   const fileInputRef = ref<HTMLInputElement>();
@@ -88,6 +91,9 @@ export function useMediaUpload(
   const attachedVideo = ref<File | null>(null);
   const attachedVideoUrl = ref<string | null>(null);
   const uploadingVideo = ref(false);
+  let videoGeneration = 0;
+  window.addEventListener("amitia:execution-scope-changed", clearVideo);
+  onUnmounted(() => { window.removeEventListener("amitia:execution-scope-changed", clearVideo); videoGeneration++; });
   const videoUploadError = ref<string | null>(null);
   const processingImage = ref(false);
   let imageSelectionVersion = 0;
@@ -148,6 +154,7 @@ export function useMediaUpload(
   }
 
   function handleVideoSelect(e: Event) {
+    const generation = ++videoGeneration;
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -159,11 +166,10 @@ export function useMediaUpload(
     onRemoveVideo();
     const formData = new FormData();
     formData.append("video", file);
-    Promise.all([
-      resolveApiUrl("/api/video/upload"),
-      createAuthenticatedFetchInit("/api/video/upload", { method: "POST", body: formData }),
-    ])
-      .then(([url, init]) => fetch(url, init))
+    owned.refresh().then(async (bound) => {
+      if (bound) { const attachment = await ownedFileAttachment(file, file.name, "video"); return { ok: true, status: 200, json: async () => ({ data: { videoUrl: ownedAttachmentURL(attachment) } }) }; }
+      const [url, init] = await Promise.all([resolveApiUrl("/api/video/upload"), createAuthenticatedFetchInit("/api/video/upload", { method: "POST", body: formData })]); return fetch(url, init);
+    })
       .then(async (res) => {
         const data = await res.json().catch(() => null);
         if (!res.ok) {
@@ -172,6 +178,7 @@ export function useMediaUpload(
         return data;
       })
       .then((data) => {
+        if (generation !== videoGeneration) return;
         const videoUrl = data?.data?.videoUrl || data?.videoUrl || "";
         if (!videoUrl) throw new Error("视频上传成功但服务端未返回 videoUrl");
         attachedVideoUrl.value = videoUrl;
@@ -179,18 +186,20 @@ export function useMediaUpload(
         onVideo(file, videoUrl);
       })
       .catch((error: unknown) => {
+        if (generation !== videoGeneration) return;
         attachedVideoUrl.value = null;
         videoUploadError.value =
           error instanceof Error && error.message ? error.message : "视频上传失败，请重新选择";
         onRemoveVideo();
       })
       .finally(() => {
-        uploadingVideo.value = false;
+        if (generation === videoGeneration) uploadingVideo.value = false;
       });
     input.value = "";
   }
 
   function clearVideo() {
+    videoGeneration++;
     attachedVideo.value = null;
     attachedVideoUrl.value = null;
     uploadingVideo.value = false;

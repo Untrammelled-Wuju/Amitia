@@ -6,6 +6,11 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/core_configuration_guard.dart';
+import '../../../../core/services/core_configuration_session.dart';
+import '../../../../core/backend_transport/core_configuration_intent.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../widgets/timeout_settings.dart';
@@ -25,6 +30,8 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   Map<String, dynamic> _healthData = const {};
   String? _error;
   bool _loading = true;
+  late final CoreConfigurationSession _configuration;
+  int _loadEpoch = 0;
   static const _languages = ['简体中文', 'English', '日本語'];
   static const _languageCodes = {
     '简体中文': 'zh-CN',
@@ -35,18 +42,32 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   @override
   void initState() {
     super.initState();
+    _configuration = CoreConfigurationSession(
+      coreConfigurationGuardFor(ref),
+      onInvalidated: (reason) {
+        if (!mounted) return;
+        _loadEpoch++;
+        setState(() {
+          _error = reason.toString();
+          _loading = false;
+        });
+      },
+    );
     _loadSettings();
     _loadHealth();
   }
 
   Future<void> _loadSettings() async {
+    final epoch = ++_loadEpoch;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final config = await ref.read(systemServiceProvider).config();
-      if (!mounted) return;
+      final config = await _configuration.load(
+        () => ref.read(systemServiceProvider).config(),
+      );
+      if (!mounted || epoch != _loadEpoch) return;
       final code = (config?['language'] ?? 'zh-CN').toString();
       setState(() {
         _language =
@@ -58,7 +79,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
         _loading = false;
       });
     } catch (error) {
-      if (mounted) {
+      if (mounted && epoch == _loadEpoch) {
         setState(() {
           _error = error.toString();
           _loading = false;
@@ -74,11 +95,17 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     } catch (_) {}
   }
 
-  Future<void> _setLanguage(String language) async {
+  Future<void> _setLanguage(
+    String language,
+    CoreConfigurationIntent? intent,
+  ) async {
     final code = _languageCodes[language];
     if (code == null) return;
     try {
-      await ref.read(systemServiceProvider).updateConfig({'language': code});
+      await _configuration.write(
+        intent,
+        () => ref.read(systemServiceProvider).updateConfig({'language': code}),
+      );
       if (mounted) setState(() => _language = language);
     } catch (e) {
       if (mounted) {
@@ -90,7 +117,27 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   }
 
   @override
+  void dispose() {
+    _loadEpoch++;
+    _configuration.close();
+    super.dispose();
+  }
+
+  ValueChanged<String> _languageChange() {
+    final intent = _configuration.intent;
+    return (language) => _setLanguage(language, intent);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen(
+      rawBackendServiceApiProvider,
+      (_, __) => _configuration.invalidate(StateError('Core 连接已变化，请重新加载系统配置')),
+    );
+    ref.listen(
+      mobileDeploymentConfigProvider,
+      (_, __) => _configuration.invalidate(StateError('设备模式已变化，请重新加载系统配置')),
+    );
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '通用',
@@ -127,7 +174,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
                   title: '语言选择',
                   value: _language,
                   options: _languages,
-                  onChanged: _setLanguage,
+                  onChanged: _languageChange(),
                 ),
             ],
           ),

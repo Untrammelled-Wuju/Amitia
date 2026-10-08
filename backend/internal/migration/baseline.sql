@@ -293,6 +293,9 @@ CREATE TABLE IF NOT EXISTS assistant_turn_items (
 
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_conversation ON assistant_turns(conversation_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_assistant_turns_request ON assistant_turns(request_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_turns_conv_request_unique
+    ON assistant_turns(conversation_id, request_id)
+    WHERE request_id <> '';
 CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_turn ON assistant_turn_items(turn_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_assistant_turn_items_call ON assistant_turn_items(turn_id, call_id);
 
@@ -5909,4 +5912,12 @@ CREATE TABLE IF NOT EXISTS search_api_keys (
     engine_id TEXT PRIMARY KEY,
     api_key TEXT NOT NULL DEFAULT '',
     updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS search_credential_cleanup (
+    secret_ref TEXT PRIMARY KEY,
+    engine_id TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
 );

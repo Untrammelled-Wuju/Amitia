@@ -395,6 +395,11 @@ func (c *Container) Recover(ctx context.Context) error {
 				c.markRequiresRecovery(ctx, inst)
 				continue
 			}
+			if err := c.registerServiceModuleDefinitions(ctx, inst.ExtensionID, inst.InstalledVersion, modules); err != nil {
+				recoverErrs = append(recoverErrs, fmt.Errorf("kernel: restore service definitions for %s: %w", inst.ExtensionID, err))
+				c.markRequiresRecovery(ctx, inst)
+				continue
+			}
 			for _, mod := range modules {
 				modSubject := enablement.StateSubject{
 					Kind:     enablement.SubjectModule,

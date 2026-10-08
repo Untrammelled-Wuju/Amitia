@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package imagegen
 
-import "gorm.io/gorm"
+import (
+	"github.com/u-ai/backend/internal/configwrite"
+	"gorm.io/gorm"
+)
 
 type Repository interface {
 	List() ([]ImageGenConfig, error)
@@ -34,19 +37,20 @@ func (r *repository) GetByID(id int) (*ImageGenConfig, error) {
 	return &cfg, err
 }
 
-func (r *repository) Create(cfg *ImageGenConfig) error { return r.db.Create(cfg).Error }
+func (r *repository) Create(cfg *ImageGenConfig) error {
+	return configwrite.Create(r.db, cfg, cfg.IsActive == 1)
+}
 
 func (r *repository) Update(id int, updates map[string]interface{}) error {
-	return r.db.Model(&ImageGenConfig{}).Where("id = ?", id).Updates(updates).Error
+	return configwrite.Update[ImageGenConfig](r.db, id, updates)
 }
 
 func (r *repository) Delete(id int) error {
-	return r.db.Where("id = ?", id).Delete(&ImageGenConfig{}).Error
+	return configwrite.Delete[ImageGenConfig](r.db, id)
 }
 
 func (r *repository) Activate(id int) error {
-	r.db.Model(&ImageGenConfig{}).Where("is_active = 1").Update("is_active", 0)
-	return r.db.Model(&ImageGenConfig{}).Where("id = ?", id).Update("is_active", 1).Error
+	return configwrite.Activate[ImageGenConfig](r.db, id)
 }
 
 func (r *repository) GetActive() (*ImageGenConfig, error) {

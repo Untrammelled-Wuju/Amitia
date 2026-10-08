@@ -39,6 +39,8 @@ type LocalHandler struct {
 	executionGuard     RuntimeExecutionGuard
 	localCoreID        string
 	successorMu        sync.Mutex
+	followMu           sync.Mutex
+	followOperation    *providerFollowOperation
 	followOnce         sync.Once
 	followCancel       context.CancelFunc
 	pendingCore        string
@@ -325,13 +327,16 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 func (h *LocalHandler) BindProvider(ctx context.Context, req BindingRequest) (gin.H, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if req.expectedBindingVersion != nil && *req.expectedBindingVersion != h.bindingVersion {
+		return nil, bindingFailure(409, gin.H{"code": "binding_changed", "message": "设备绑定已变化，旧服务切换请求已拦截"})
+	}
+	if h.credStore == nil || h.identity == nil {
+		return nil, bindingFailure(503, gin.H{"code": "binding_unavailable", "message": "设备身份或配对凭证存储尚未就绪"})
+	}
 	if pending, err := h.credStore.pendingUnpair(); err != nil {
 		return nil, err
 	} else if pending {
 		return nil, bindingFailure(409, gin.H{"code": "unpair_incomplete", "message": "解绑尚未完成，请先重试解绑，再添加设备"})
-	}
-	if req.expectedBindingVersion != nil && *req.expectedBindingVersion != h.bindingVersion {
-		return nil, bindingFailure(409, gin.H{"code": "binding_changed", "message": "设备绑定已变化，旧服务切换请求已拦截"})
 	}
 	h.bindingVersion++
 	if candidate, err := h.credStore.LoadCandidate(); err != nil {

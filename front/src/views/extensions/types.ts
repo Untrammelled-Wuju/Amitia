@@ -1,3 +1,5 @@
+import type { TaskAuthority } from "../kernel/tasks/authority";
+
 export interface LocalExtensionPackage {
   id: string;
   name: string;
@@ -364,7 +366,7 @@ export interface TaskResult {
   artifactMime?: string;
 }
 
-export interface TaskRun {
+export interface TaskRun extends TaskAuthority {
   taskRunId: string;
   operationId?: string;
   invocationId?: string;

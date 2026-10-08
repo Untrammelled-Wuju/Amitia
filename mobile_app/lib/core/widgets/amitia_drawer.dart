@@ -201,6 +201,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             .where((item) => item.id == id)
             .firstOrNull;
         if (project == null) throw StateError('项目不存在');
+        if (project.readOnly) throw StateError('历史项目只读，可以继续打开已有对话');
         if (!project.available) {
           throw StateError(
             project.statusReason.trim().isEmpty
@@ -213,10 +214,13 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
           workspaceId: project.workspaceId,
           deviceId: project.deviceId,
           workspaceName: project.name,
-          workspaceKind: project.workspaceKind.trim().isEmpty
+          workspaceKind: project.logical
+              ? 'logical'
+              : project.workspaceKind.trim().isEmpty
               ? (project.rootUri.startsWith('content://') ? 'saf' : 'local')
               : project.workspaceKind,
           rootUri: project.rootUri,
+          logicalProject: project.logical ? project : null,
         );
       } catch (error) {
         if (mounted) amitiaSnackBar(context, '新建项目对话失败：$error');
@@ -287,6 +291,47 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
 
   Future<void> _addProject() async {
     try {
+      final service = ref.read(chatServiceProvider);
+      if (await service.owned.refresh()) {
+        final initial = await service.owned.data(
+          'memory',
+          characterId: service.owned.selectRole(null),
+        );
+        final expectedScope = Map<String, dynamic>.from(
+          initial['executionScope'] as Map,
+        );
+        if (!mounted) return;
+        final controller = TextEditingController();
+        final name = await showDialog<String>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('新建对话分组'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: '项目名称'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () {
+                  if (controller.text.trim().isNotEmpty)
+                    Navigator.pop(dialogContext, controller.text.trim());
+                },
+                child: const Text('创建'),
+              ),
+            ],
+          ),
+        );
+        controller.dispose();
+        if (name == null) return;
+        await service.createProject(name: name, expectedScope: expectedScope);
+        await _refreshConversationSidebar();
+        return;
+      }
       final mount = await _pickWorkspaceMount();
       if (mount == null || !mounted) return;
       final sidebar = await _loadConversationSidebar();
@@ -316,7 +361,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(chatServiceProvider).deleteProject(project.id);
+      await ref
+          .read(chatServiceProvider)
+          .deleteProject(project.id, project: project);
       final runtime = ref.read(conversationRuntimeControllerProvider);
       if (runtime.workspace?.projectId == project.id) {
         runtime.setWorkspace(null);
@@ -332,7 +379,11 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     try {
       await ref
           .read(chatServiceProvider)
-          .updateProject(project.id, pinned: project.pinnedAt.isEmpty);
+          .updateProject(
+            project.id,
+            pinned: project.pinnedAt.isEmpty,
+            project: project,
+          );
       await _refreshConversationSidebar();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '更新项目置顶失败：$error');
@@ -405,7 +456,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     controller.dispose();
     if (name == null || name == project.name) return;
     try {
-      await ref.read(chatServiceProvider).updateProject(project.id, name: name);
+      await ref
+          .read(chatServiceProvider)
+          .updateProject(project.id, name: name, project: project);
       _replaceActiveProjectWorkspace(project, name: name);
       await _refreshConversationSidebar();
     } catch (error) {
@@ -1202,28 +1255,31 @@ class _ProjectTile extends StatelessWidget {
             itemBuilder: (context) => [
               PopupMenuItem(
                 value: _ProjectAction.newChat,
-                enabled: project.available,
+                enabled: project.available && !project.readOnly,
                 child: const _ProjectMenuItem(
                   icon: Icons.add_comment_outlined,
                   label: '新建对话',
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: _ProjectAction.rename,
-                child: _ProjectMenuItem(
+                enabled: !project.readOnly,
+                child: const _ProjectMenuItem(
                   icon: Icons.drive_file_rename_outline,
                   label: '重命名项目',
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: _ProjectAction.changeRoot,
-                child: _ProjectMenuItem(
+                enabled: !project.logical && !project.readOnly,
+                child: const _ProjectMenuItem(
                   icon: Icons.drive_file_move_outline,
                   label: '更换根目录',
                 ),
               ),
               PopupMenuItem(
                 value: _ProjectAction.pin,
+                enabled: !project.readOnly,
                 child: _ProjectMenuItem(
                   icon: project.pinnedAt.isEmpty
                       ? Icons.push_pin_outlined
@@ -1233,7 +1289,7 @@ class _ProjectTile extends StatelessWidget {
               ),
               PopupMenuItem(
                 value: _ProjectAction.open,
-                enabled: project.available,
+                enabled: project.available && !project.logical,
                 child: const _ProjectMenuItem(
                   icon: Icons.folder_open_outlined,
                   label: '在资源管理器中打开',
@@ -1241,6 +1297,7 @@ class _ProjectTile extends StatelessWidget {
               ),
               PopupMenuItem(
                 value: _ProjectAction.remove,
+                enabled: !project.readOnly,
                 child: _ProjectMenuItem(
                   icon: Icons.remove_circle_outline,
                   label: '移除项目',
@@ -1251,7 +1308,9 @@ class _ProjectTile extends StatelessWidget {
           ),
         ],
       ),
-      subtitle: project.available
+      subtitle: project.logical
+          ? Text(project.readOnly ? '原设备历史分组 · 只读' : '对话分组 · 不授予目录权限')
+          : project.available
           ? null
           : Text(project.statusReason.isEmpty ? '目录不可用' : project.statusReason),
       children: [
@@ -1972,7 +2031,6 @@ class AmitiaCharacterCard extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class AmitiaExtensionCard extends StatelessWidget {

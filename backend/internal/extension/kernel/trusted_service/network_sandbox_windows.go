@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/u-ai/backend/internal/platform/process"
 )
 
 type windowsSandboxConfig struct {
@@ -21,6 +23,7 @@ type windowsSandboxConfig struct {
 	WorkingDir   string   `json:"workingDir"`
 	Writable     []string `json:"writable"`
 	ReadOnly     []string `json:"readOnly"`
+	Traversal    []string `json:"traversal"`
 	Capabilities []string `json:"capabilities"`
 	Loopback     bool     `json:"loopback"`
 	BlockInbound bool     `json:"blockInbound"`
@@ -28,6 +31,10 @@ type windowsSandboxConfig struct {
 	Icacls       string   `json:"icacls"`
 	CheckNet     string   `json:"checkNet"`
 	StateFile    string   `json:"stateFile"`
+	MemoryBytes  uint64   `json:"memoryBytes"`
+	CPUPercent   uint32   `json:"cpuPercent"`
+	ProcessLimit uint32   `json:"processLimit"`
+	TemporaryDir string   `json:"temporaryDir"`
 }
 
 // prepareWindowsAppContainerLaunch creates an actual AppContainer boundary for
@@ -38,6 +45,14 @@ type windowsSandboxConfig struct {
 // scoped to a deterministic per-service-instance SID and removed when the child exits.
 // Durable state lets the next host start recover resources after forced termination.
 func prepareWindowsAppContainerLaunch(mode, executable string, args []string, workingDir, tempDir, stateRoot string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
+	return prepareWindowsContainerWithLimits(mode, executable, args, workingDir, tempDir, stateRoot, process.ResourceLimits{}, readOnlyRoots...)
+}
+
+func prepareWindowsTaskContainerLaunch(executable string, args []string, workingDir, tempDir string, limits process.ResourceLimits, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
+	return prepareWindowsContainerWithLimits("none", executable, args, workingDir, tempDir, "", limits, readOnlyRoots...)
+}
+
+func prepareWindowsContainerWithLimits(mode, executable string, args []string, workingDir, tempDir, stateRoot string, limits process.ResourceLimits, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if mode != "none" && mode != "loopback" && mode != "restricted" && mode != "unrestricted" {
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: unsupported windows sandbox mode %q", ErrUnauthorizedNetwork, mode)
@@ -138,6 +153,7 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 		blockInbound = true
 	}
 
+	traversal := []string(nil)
 	cfg := windowsSandboxConfig{
 		ProfileName:  profileName,
 		Executable:   exe,
@@ -145,6 +161,7 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 		WorkingDir:   work,
 		Writable:     writable,
 		ReadOnly:     readOnly,
+		Traversal:    traversal,
 		Capabilities: capabilities,
 		Loopback:     needsLoopbackExemption,
 		BlockInbound: blockInbound,
@@ -152,6 +169,10 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 		Icacls:       icacls,
 		CheckNet:     checkNet,
 		StateFile:    stateFile,
+		MemoryBytes:  limits.MaxMemoryBytes,
+		CPUPercent:   limits.MaxCPUPercent,
+		ProcessLimit: limits.MaxProcesses,
+		TemporaryDir: tmp,
 	}
 	payload, err := json.Marshal(cfg)
 	if err != nil {
@@ -395,6 +416,54 @@ func windowsQuoteArg(arg string) string {
 	return b.String()
 }
 
+const windowsTraversalNative = `
+public static class AmitiaTraversalAcl {
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    static extern System.IntPtr CreateFileW(string path, uint access, uint sharing, System.IntPtr security, uint creation, uint flags, System.IntPtr template);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    static extern bool CloseHandle(System.IntPtr handle);
+    [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool GetKernelObjectSecurity(System.IntPtr handle, uint information, byte[] descriptor, uint length, out uint needed);
+    [System.Runtime.InteropServices.DllImport("ntdll.dll")]
+    static extern int NtSetSecurityObject(System.IntPtr handle, uint information, byte[] descriptor);
+    [System.Runtime.InteropServices.DllImport("ntdll.dll")]
+    static extern uint RtlNtStatusToDosError(int status);
+    public static void Update(string path, string sidText, bool grant) {
+        System.IntPtr handle = CreateFileW(path, 0x20000, 7, System.IntPtr.Zero, 3, 0x2200000, System.IntPtr.Zero);
+        if (handle == new System.IntPtr(-1)) throw new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+        try {
+            uint needed;
+            GetKernelObjectSecurity(handle, 4, null, 0, out needed);
+            if (needed == 0) throw new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+            byte[] original = new byte[needed];
+            if (!GetKernelObjectSecurity(handle, 4, original, needed, out needed)) throw new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+            var descriptor = new System.Security.AccessControl.RawSecurityDescriptor(original, 0);
+            if (descriptor.DiscretionaryAcl == null) throw new System.InvalidOperationException("parent directory has no explicit DACL");
+            var sid = new System.Security.Principal.SecurityIdentifier(sidText);
+            var acl = descriptor.DiscretionaryAcl;
+            bool changed = grant;
+            for (int i = acl.Count - 1; i >= 0; i--) {
+                var ace = acl[i] as System.Security.AccessControl.CommonAce;
+                if (ace != null && ace.SecurityIdentifier.Equals(sid) && ace.AceFlags == System.Security.AccessControl.AceFlags.None && ace.AccessMask == 0xA0 && ace.AceQualifier == System.Security.AccessControl.AceQualifier.AccessAllowed) { acl.RemoveAce(i); changed = true; }
+            }
+            if (!changed) return;
+            if (grant) {
+                int index = 0;
+                while (index < acl.Count && (acl[index].AceFlags & System.Security.AccessControl.AceFlags.Inherited) == 0) index++;
+                acl.InsertAce(index, new System.Security.AccessControl.CommonAce(System.Security.AccessControl.AceFlags.None, System.Security.AccessControl.AceQualifier.AccessAllowed, 0xA0, sid, false, null));
+            }
+            byte[] updated = new byte[descriptor.BinaryLength];
+            descriptor.GetBinaryForm(updated, 0);
+            CloseHandle(handle);
+            handle = CreateFileW(path, 0x60000, 7, System.IntPtr.Zero, 3, 0x2200000, System.IntPtr.Zero);
+            if (handle == new System.IntPtr(-1)) throw new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+            int status = NtSetSecurityObject(handle, 4, updated);
+            if (status < 0) throw new System.ComponentModel.Win32Exception((int)RtlNtStatusToDosError(status));
+        } finally { CloseHandle(handle); }
+    }
+}
+`
+
 const windowsAppContainerPowerShell = `$ErrorActionPreference = 'Stop'
 $cfg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__AMITIA_CONFIG__')) | ConvertFrom-Json
 $self = $MyInvocation.MyCommand.Path
@@ -407,6 +476,7 @@ function ConvertTo-AmitiaExtendedPath([string]$path) {
 $native = @'
 using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -416,6 +486,7 @@ public static class AmitiaAppContainer {
     const uint EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
     const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
     const uint CREATE_NO_WINDOW = 0x08000000;
+    const uint CREATE_SUSPENDED = 0x00000004;
     const int STARTF_USESTDHANDLES = 0x00000100;
     const int STD_INPUT_HANDLE = -10;
     const int STD_OUTPUT_HANDLE = -11;
@@ -441,6 +512,25 @@ public static class AmitiaAppContainer {
     struct SID_AND_ATTRIBUTES { public IntPtr Sid; public uint Attributes; }
     [StructLayout(LayoutKind.Sequential)]
     struct SECURITY_CAPABILITIES { public IntPtr AppContainerSid; public IntPtr Capabilities; public uint CapabilityCount; public uint Reserved; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct BASIC_LIMITS {
+        public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass, SchedulingClass;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct IO_COUNTERS { public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct EXTENDED_LIMITS {
+        public BASIC_LIMITS BasicLimitInformation;
+        public IO_COUNTERS IoInfo;
+        public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    struct CPU_LIMITS { public uint ControlFlags, CPURate; }
 
     [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
     static extern int CreateAppContainerProfile(string name, string displayName, string description, IntPtr capabilities, uint capabilityCount, out IntPtr appContainerSid);
@@ -476,6 +566,42 @@ public static class AmitiaAppContainer {
     static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
     [DllImport("kernel32.dll")]
     static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetInformationJobObject(IntPtr job, int informationClass, IntPtr information, uint size);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern uint ResumeThread(IntPtr thread);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
+    static void SetJobInfo(IntPtr job, int kind, object value) {
+        int size = Marshal.SizeOf(value);
+        IntPtr buffer = Marshal.AllocHGlobal(size);
+        try {
+            Marshal.StructureToPtr(value, buffer, false);
+            if (!SetInformationJobObject(job, kind, buffer, (uint)size)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        } finally { Marshal.FreeHGlobal(buffer); }
+    }
+
+    static IntPtr CreateTaskJob(ulong memoryBytes, uint cpuPercent, uint processLimit) {
+        if (memoryBytes == 0 && cpuPercent == 0 && processLimit == 0) return IntPtr.Zero;
+        if (memoryBytes == 0 || memoryBytes > 536870912UL || cpuPercent == 0 || cpuPercent > 50 || processLimit != 1)
+            throw new InvalidOperationException("invalid task resource budget");
+        IntPtr job = CreateJobObjectW(IntPtr.Zero, null);
+        if (job == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+        try {
+            EXTENDED_LIMITS limits = new EXTENDED_LIMITS();
+            limits.BasicLimitInformation.LimitFlags = 0x00002000 | 0x00000400 | 0x00000200 | 0x00000008;
+            limits.BasicLimitInformation.ActiveProcessLimit = processLimit;
+            limits.JobMemoryLimit = new UIntPtr(memoryBytes);
+            SetJobInfo(job, 9, limits);
+            SetJobInfo(job, 15, new CPU_LIMITS { ControlFlags = 5, CPURate = cpuPercent * 100 });
+            return job;
+        } catch { CloseHandle(job); throw; }
+    }
 
     sealed class CapabilityAllocation : IDisposable {
         public readonly List<IntPtr> SidPointers = new List<IntPtr>();
@@ -564,8 +690,10 @@ public static class AmitiaAppContainer {
         return handles.ToArray();
     }
 
-    public static int Run(string profileName, string application, string commandLine, string currentDirectory, string[] capabilityNames) {
+    public static int Run(string profileName, string application, string commandLine, string currentDirectory, string[] capabilityNames, ulong memoryBytes, uint cpuPercent, uint processLimit, string temporaryDir) {
         IntPtr sid = IntPtr.Zero, attrs = IntPtr.Zero, securityPtr = IntPtr.Zero, handleBuffer = IntPtr.Zero;
+        IntPtr environmentPtr = IntPtr.Zero;
+        IntPtr job = IntPtr.Zero;
         PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
         CapabilityAllocation capabilityAllocation = null;
         IntPtr[] inheritedHandles = null;
@@ -608,15 +736,35 @@ public static class AmitiaAppContainer {
                 throw new Win32Exception(Marshal.GetLastWin32Error());
 
             si.lpAttributeList = attrs;
+            if (processLimit != 0) {
+                SortedDictionary<string,string> env = new SortedDictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+                foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables()) env[(string)entry.Key] = (string)entry.Value;
+                env["TEMP"] = temporaryDir;
+                env["TMP"] = temporaryDir;
+                env["HOME"] = currentDirectory;
+                env["USERPROFILE"] = currentDirectory;
+                env["LOCALAPPDATA"] = temporaryDir;
+                env["APPDATA"] = temporaryDir;
+                env["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                StringBuilder block = new StringBuilder();
+                foreach (KeyValuePair<string,string> entry in env) block.Append(entry.Key).Append('=').Append(entry.Value).Append('\0');
+                block.Append('\0');
+                environmentPtr = Marshal.StringToHGlobalUni(block.ToString());
+            }
             bool ok = CreateProcessW(application, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, true,
-                EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
-                IntPtr.Zero, currentDirectory, ref si, out pi);
+                EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | CREATE_SUSPENDED,
+                environmentPtr, currentDirectory, ref si, out pi);
             if (!ok) throw new Win32Exception(Marshal.GetLastWin32Error());
+            job = CreateTaskJob(memoryBytes, cpuPercent, processLimit);
+            if (job != IntPtr.Zero && !AssignProcessToJobObject(job, pi.hProcess)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (ResumeThread(pi.hThread) == 0xFFFFFFFF) throw new Win32Exception(Marshal.GetLastWin32Error());
             WaitForSingleObject(pi.hProcess, 0xFFFFFFFF);
             uint exitCode;
             if (!GetExitCodeProcess(pi.hProcess, out exitCode)) throw new Win32Exception(Marshal.GetLastWin32Error());
             return unchecked((int)exitCode);
         } finally {
+            if (job != IntPtr.Zero) CloseHandle(job);
+            if (pi.hProcess != IntPtr.Zero) TerminateProcess(pi.hProcess, 125);
             if (inheritedHandles != null && oldHandleFlags != null) {
                 for (int i = 0; i < inheritedHandles.Length; i++) {
                     try { SetHandleInformation(inheritedHandles[i], HANDLE_FLAG_INHERIT, oldHandleFlags[i] & HANDLE_FLAG_INHERIT); } catch { }
@@ -627,13 +775,16 @@ public static class AmitiaAppContainer {
             if (attrs != IntPtr.Zero) { DeleteProcThreadAttributeList(attrs); Marshal.FreeHGlobal(attrs); }
             if (handleBuffer != IntPtr.Zero) Marshal.FreeHGlobal(handleBuffer);
             if (securityPtr != IntPtr.Zero) Marshal.FreeHGlobal(securityPtr);
+            if (environmentPtr != IntPtr.Zero) Marshal.FreeHGlobal(environmentPtr);
             if (capabilityAllocation != null) capabilityAllocation.Dispose();
             if (sid != IntPtr.Zero) FreeSid(sid);
         }
     }
 }
 '@
-Add-Type -TypeDefinition $native -Language CSharp
+Add-Type -TypeDefinition ($native + @'
+` + windowsTraversalNative + `
+'@) -Language CSharp
 $created = $false
 $loopback = $false
 $firewall = $false
@@ -643,21 +794,26 @@ $cleanupOk = $true
 try {
     $sid = [AmitiaAppContainer]::EnsureProfile([string]$cfg.profileName)
     $created = $true
+    foreach ($path in @($cfg.traversal)) {
+        if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
+        $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
+        [AmitiaTraversalAcl]::Update($aclPath, [string]$sid, $true)
+    }
     foreach ($path in @($cfg.readOnly)) {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
         $item = Get-Item -LiteralPath ([string]$path) -Force
         $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
         if ($item.PSIsContainer) {
-            & $cfg.icacls $aclPath /grant "*$($sid):(OI)(CI)RX" /T /C /Q | Out-Null
+            & $cfg.icacls $aclPath /grant "*$($sid):(OI)(CI)RX" /T /C /Q /L | Out-Null
         } else {
-            & $cfg.icacls $aclPath /grant "*$($sid):RX" /C /Q | Out-Null
+            & $cfg.icacls $aclPath /grant "*$($sid):RX" /C /Q /L | Out-Null
         }
         if ($LASTEXITCODE -ne 0) { throw "icacls read grant failed for $path (exit $LASTEXITCODE)" }
     }
     foreach ($path in @($cfg.writable)) {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
         $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
-        & $cfg.icacls $aclPath /grant "*$($sid):(OI)(CI)M" /T /C /Q | Out-Null
+        & $cfg.icacls $aclPath /grant "*$($sid):(OI)(CI)M" /T /C /Q /L | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "icacls write grant failed for $path (exit $LASTEXITCODE)" }
     }
     if ([bool]$cfg.loopback) {
@@ -670,7 +826,7 @@ try {
         $firewall = $true
     }
     $caps = @($cfg.capabilities | ForEach-Object { [string]$_ })
-    $code = [AmitiaAppContainer]::Run([string]$cfg.profileName, [string]$cfg.executable, [string]$cfg.commandLine, [string]$cfg.workingDir, $caps)
+    $code = [AmitiaAppContainer]::Run([string]$cfg.profileName, [string]$cfg.executable, [string]$cfg.commandLine, [string]$cfg.workingDir, $caps, [uint64]$cfg.memoryBytes, [uint32]$cfg.cpuPercent, [uint32]$cfg.processLimit, [string]$cfg.temporaryDir)
 } finally {
     if ($firewall) {
         try { Remove-NetFirewallRule -DisplayName ([string]$cfg.firewallRule) -ErrorAction Stop } catch { $cleanupOk = $false }
@@ -680,13 +836,18 @@ try {
         if ($LASTEXITCODE -ne 0) { $cleanupOk = $false }
     }
     if ($sid) {
+        foreach ($path in @($cfg.traversal)) {
+            if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
+            $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
+            try { [AmitiaTraversalAcl]::Update($aclPath, [string]$sid, $false) } catch { $cleanupOk = $false }
+        }
         foreach ($path in @($cfg.writable) + @($cfg.readOnly)) {
             if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
             $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
             if (-not $item) { continue }
             $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
             if ($item.PSIsContainer) {
-                & $cfg.icacls $aclPath /remove:g "*$sid" /T /C /Q | Out-Null
+                & $cfg.icacls $aclPath /remove:g "*$sid" /T /C /Q /L | Out-Null
             } else {
                 & $cfg.icacls $aclPath /remove:g "*$sid" /C /Q | Out-Null
             }
@@ -743,7 +904,9 @@ public static class AmitiaAppContainerRecovery {
     }
 }
 '@
-Add-Type -TypeDefinition $native -Language CSharp
+Add-Type -TypeDefinition ($native + @'
+` + windowsTraversalNative + `
+'@) -Language CSharp
 $cleanupOk = $true
 $sid = [AmitiaAppContainerRecovery]::TrySid([string]$cfg.profileName)
 try { Remove-NetFirewallRule -DisplayName ([string]$cfg.firewallRule) -ErrorAction SilentlyContinue } catch { $cleanupOk = $false }
@@ -751,13 +914,18 @@ if ([bool]$cfg.loopback -and (Test-Path -LiteralPath ([string]$cfg.checkNet))) {
     & $cfg.checkNet LoopbackExempt -d "-n=$($cfg.profileName)" | Out-Null
 }
 if ($sid) {
+    foreach ($path in @($cfg.traversal)) {
+        if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
+        $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
+        try { [AmitiaTraversalAcl]::Update($aclPath, [string]$sid, $false) } catch { $cleanupOk = $false }
+    }
     foreach ($path in @($cfg.writable) + @($cfg.readOnly)) {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
             $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
             if (-not $item) { continue }
             $aclPath = ConvertTo-AmitiaExtendedPath ([string]$path)
             if ($item.PSIsContainer) {
-                & $cfg.icacls $aclPath /remove:g "*$sid" /T /C /Q | Out-Null
+                & $cfg.icacls $aclPath /remove:g "*$sid" /T /C /Q /L | Out-Null
             } else {
                 & $cfg.icacls $aclPath /remove:g "*$sid" /C /Q | Out-Null
             }

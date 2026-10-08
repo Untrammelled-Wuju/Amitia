@@ -38,9 +38,9 @@ func (h *Handler) SafetyEvents(c *gin.Context) {
 }
 
 func (h *Handler) DeleteSafetyEvents(c *gin.Context) {
-	util.SuccessResponse(c, h.service.DeleteSafetyEvents())
+	h.administratorAction(c, "safety-clear", "")
 }
 
 func (h *Handler) HandleSafetyEvent(c *gin.Context) {
-	util.SuccessResponse(c, h.service.HandleSafetyEvent(c.Param("id")))
+	h.administratorAction(c, "safety-handle", c.Param("id"))
 }

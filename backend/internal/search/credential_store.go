@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,11 +17,12 @@ type CredentialDefinition struct {
 }
 
 type CredentialStatus struct {
-	EngineID   string `json:"engineId"`
-	Name       string `json:"name"`
-	KeyURL     string `json:"keyUrl"`
-	Configured bool   `json:"configured"`
-	UpdatedAt  string `json:"updatedAt,omitempty"`
+	EngineID       string `json:"engineId"`
+	Name           string `json:"name"`
+	KeyURL         string `json:"keyUrl"`
+	Configured     bool   `json:"configured"`
+	UpdatedAt      string `json:"updatedAt,omitempty"`
+	CleanupPending bool   `json:"cleanupPending,omitempty"`
 }
 
 type credentialRecord struct {
@@ -38,8 +40,9 @@ type CredentialVault interface {
 }
 
 type CredentialStore struct {
-	db    *sql.DB
-	vault CredentialVault
+	db      *sql.DB
+	vault   CredentialVault
+	writeMu sync.Mutex
 }
 
 var credentialDefinitions = []CredentialDefinition{
@@ -117,30 +120,7 @@ func (s *CredentialStore) Set(ctx context.Context, engineID, value string) (Cred
 		return CredentialStatus{}, fmt.Errorf("credential value is too long")
 	}
 
-	storedValue := value
-	if s.vault != nil {
-		ref, err := s.vault.Store(ctx, "search/"+definition.EngineID, []byte(value))
-		if err != nil {
-			return CredentialStatus{}, err
-		}
-		storedValue = ref
-	}
-	oldValue, _ := s.rawValue(ctx, definition.EngineID)
-	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO search_api_keys (engine_id, api_key, updated_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(engine_id) DO UPDATE SET api_key = excluded.api_key, updated_at = excluded.updated_at`,
-		definition.EngineID, storedValue, now)
-	if err != nil {
-		if s.vault != nil && isSecretReference(storedValue) {
-			_ = s.vault.Delete(ctx, storedValue)
-		}
-		return CredentialStatus{}, err
-	}
-	if s.vault != nil && isSecretReference(oldValue) && oldValue != storedValue {
-		_ = s.vault.Delete(ctx, oldValue)
-	}
-	return CredentialStatus{EngineID: definition.EngineID, Name: definition.Name, KeyURL: definition.KeyURL, Configured: true, UpdatedAt: now.Format(time.RFC3339)}, nil
+	return s.setGuardedCredential(ctx, definition, value)
 }
 
 func (s *CredentialStore) Delete(ctx context.Context, engineID string) error {
@@ -150,14 +130,7 @@ func (s *CredentialStore) Delete(ctx context.Context, engineID string) error {
 	if _, ok := credentialDefinitionByID(engineID); !ok {
 		return fmt.Errorf("unsupported search engine")
 	}
-	oldValue, _ := s.rawValue(ctx, engineID)
-	if _, err := s.db.ExecContext(ctx, "DELETE FROM search_api_keys WHERE engine_id = ?", engineID); err != nil {
-		return err
-	}
-	if s.vault != nil && isSecretReference(oldValue) {
-		return s.vault.Delete(ctx, oldValue)
-	}
-	return nil
+	return s.deleteGuardedCredential(ctx, engineID)
 }
 
 // MigrateLegacyCredentials moves plaintext values from the legacy SQLite table
@@ -188,18 +161,8 @@ func (s *CredentialStore) MigrateLegacyCredentials(ctx context.Context) error {
 	}
 	rows.Close()
 	for _, record := range records {
-		ref, err := s.vault.Store(ctx, "search/"+normalizeEngineCredentialID(record.EngineID), []byte(record.Value))
-		if err != nil {
+		if _, err := s.setGuardedCredentialIfCurrent(ctx, CredentialDefinition{EngineID: record.EngineID}, record.Value, &record.Value); err != nil {
 			return err
-		}
-		result, err := s.db.ExecContext(ctx, "UPDATE search_api_keys SET api_key = ?, updated_at = ? WHERE engine_id = ? AND api_key = ?", ref, time.Now().UTC(), record.EngineID, record.Value)
-		if err != nil {
-			_ = s.vault.Delete(ctx, ref)
-			return err
-		}
-		affected, _ := result.RowsAffected()
-		if affected == 0 {
-			_ = s.vault.Delete(ctx, ref)
 		}
 	}
 	return nil

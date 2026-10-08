@@ -8,21 +8,19 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/auth"
 )
 
 func setupShadowTestRouter() *gin.Engine {
-	originalCfg := config.AppCfg
-	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "local_single_user"}}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("actorContext", &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, Permissions: []string{auth.PermSystemAdmin}, IsLocalTrusted: true})
+		c.Next()
+	})
 	handler := &Handler{}
 	shadowGroup := r.Group("/api")
 	RegisterShadowRouter(shadowGroup, handler)
-	r.Use(func(c *gin.Context) {
-		config.AppCfg = originalCfg
-		c.Next()
-	})
 	return r
 }
 

@@ -57,4 +57,4 @@ func (h *Handler) Health(c *gin.Context) {
 
 func (h *Handler) Diagnostics(c *gin.Context) { util.SuccessResponse(c, h.service.Diagnostics()) }
 
-func (h *Handler) RunDiagnostics(c *gin.Context) { util.SuccessResponse(c, h.service.RunDiagnostics()) }
+func (h *Handler) RunDiagnostics(c *gin.Context) { h.administratorAction(c, "diagnostics-run", "") }

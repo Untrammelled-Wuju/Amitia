@@ -12,13 +12,13 @@ func (h *Handler) MaintenanceStatus(c *gin.Context) {
 }
 
 func (h *Handler) MaintenanceDiagnose(c *gin.Context) {
-	util.SuccessResponse(c, h.service.MaintenanceDiagnose())
+	h.administratorAction(c, "diagnose", "")
 }
 
 func (h *Handler) MaintenanceExportDiagnostic(c *gin.Context) {
-	util.SuccessResponse(c, h.service.MaintenanceExportDiagnostic())
+	h.administratorAction(c, "diagnostic-export", "")
 }
 
 func (h *Handler) MaintenanceReloadConfig(c *gin.Context) {
-	util.SuccessResponse(c, h.service.MaintenanceReloadConfig())
+	h.updateAdministratorSettings(c, "reload", false)
 }

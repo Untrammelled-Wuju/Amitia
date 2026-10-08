@@ -141,6 +141,7 @@ class ConversationMessageLedger {
         a.durationMs == b.durationMs &&
         a.toolName == b.toolName &&
         a.toolResult == b.toolResult &&
+        a.sourceConversationId == b.sourceConversationId &&
         a.replyToMessageId == b.replyToMessageId &&
         a.replyToExcerpt == b.replyToExcerpt &&
         a.assistantTurn == b.assistantTurn;

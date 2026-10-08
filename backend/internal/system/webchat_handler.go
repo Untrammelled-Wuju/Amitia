@@ -663,6 +663,34 @@ func (h *Handler) persistQueuedWebChatMessage(body webChatSendRequest, convID, c
 		return nil
 	})
 	if err != nil {
+		// In a multi-replica Cloud Core another replica may win the
+		// (conversation_id, request_id) unique Turn race after this replica's
+		// initial lookup. The losing transaction rolls back atomically,
+		// including its tentative user message. Resolve the committed winner
+		// immediately so the same idempotent client request still returns
+		// success instead of surfacing a transient duplicate-key failure.
+		var existingTurn chat.AssistantTurn
+		turnLookup := h.db.
+			Where("conversation_id = ? AND request_id = ?", convID, requestID).
+			Order("sequence ASC").
+			Limit(1).
+			Find(&existingTurn)
+		if turnLookup.Error == nil && turnLookup.RowsAffected > 0 {
+			var existingMessage chat.Message
+			messageLookup := h.db.
+				Where(
+					"conversation_id = ? AND request_id = ? AND role = ?",
+					convID,
+					requestID,
+					"user",
+				).
+				Order("sequence ASC").
+				Limit(1).
+				Find(&existingMessage)
+			if messageLookup.Error == nil && messageLookup.RowsAffected > 0 {
+				return &existingMessage, &existingTurn, false, nil
+			}
+		}
 		return nil, nil, false, err
 	}
 	return msg, turn, createdTurn, nil

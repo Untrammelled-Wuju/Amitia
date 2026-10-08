@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
@@ -2566,6 +2567,7 @@ var schemaMigrations = []string{
 	coordination.SourceAuthoritySchema,
 	coordination.CancelledAuthoritySchema,
 	coordination.DeliveryFailuresSchema,
+	meshaudit.Schema,
 }
 
 type dbExecutor interface {

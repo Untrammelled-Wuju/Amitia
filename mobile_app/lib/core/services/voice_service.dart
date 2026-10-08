@@ -3,29 +3,49 @@ import '../models/voice.dart';
 
 class TTSService {
   final BackendServiceApi _api;
+  final bool Function()? _isBound;
 
-  TTSService(this._api);
+  TTSService(this._api, {bool Function()? isBound}) : _isBound = isBound;
+
+  void _requireLocalSpeech() {
+    if (_isBound?.call() == true) {
+      throw StateError('绑定设备朗读必须使用当前角色和数据归属的云端语音服务');
+    }
+  }
 
   Future<List<VoiceConfigDto>> listConfigs() async {
     final resp = await _api.get<List<dynamic>>('/api/tts/configs');
     if (resp == null) return [];
-    return resp.map((e) => VoiceConfigDto.fromJson(e as Map<String, dynamic>)).toList();
+    return resp
+        .map((e) => VoiceConfigDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<VoiceConfigDto>> listConfigSummaries() async {
     final resp = await _api.get<List<dynamic>>('/api/tts/config-summaries');
     if (resp == null) return [];
-    return resp.map((e) => VoiceConfigDto.fromJson(e as Map<String, dynamic>)).toList();
+    return resp
+        .map((e) => VoiceConfigDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<VoiceConfigDto?> createConfig(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/tts/configs', data: data);
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/tts/configs',
+      data: data,
+    );
     if (resp == null) return null;
     return VoiceConfigDto.fromJson(resp);
   }
 
-  Future<VoiceConfigDto?> updateConfig(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/tts/configs/$id', data: data);
+  Future<VoiceConfigDto?> updateConfig(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/tts/configs/$id',
+      data: data,
+    );
     if (resp == null) return null;
     return VoiceConfigDto.fromJson(resp);
   }
@@ -41,12 +61,19 @@ class TTSService {
   }
 
   Future<Map<String, dynamic>?> test(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/tts/configs/$id/test');
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/tts/configs/$id/test',
+    );
     return resp;
   }
 
-  Future<Map<String, dynamic>?> testConnection(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/tts/test-connection', data: data);
+  Future<Map<String, dynamic>?> testConnection(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/tts/test-connection',
+      data: data,
+    );
     return resp;
   }
 
@@ -68,7 +95,11 @@ class TTSService {
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
-  Future<Map<String, dynamic>?> synthesize(String text, {String? voiceId}) async {
+  Future<Map<String, dynamic>?> synthesize(
+    String text, {
+    String? voiceId,
+  }) async {
+    _requireLocalSpeech();
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/tts/synthesize',
       data: {
@@ -79,7 +110,11 @@ class TTSService {
     return resp;
   }
 
-  Future<Map<String, dynamic>?> synthesizeForCharacter(String characterId, String text) async {
+  Future<Map<String, dynamic>?> synthesizeForCharacter(
+    String characterId,
+    String text,
+  ) async {
+    _requireLocalSpeech();
     return _api.post<Map<String, dynamic>>(
       '/api/tts/synthesize',
       data: {'characterId': characterId, 'text': text},
@@ -108,7 +143,8 @@ class TTSService {
       fields: <String, String>{
         'name': name,
         if (speakerId.trim().isNotEmpty) 'speakerId': speakerId.trim(),
-        if (voiceConfigId.trim().isNotEmpty) 'voiceConfigId': voiceConfigId.trim(),
+        if (voiceConfigId.trim().isNotEmpty)
+          'voiceConfigId': voiceConfigId.trim(),
         'language': language,
         if (refText.trim().isNotEmpty) 'refText': refText.trim(),
       },
@@ -125,7 +161,11 @@ class TTSService {
     );
   }
 
-  Future<Map<String, dynamic>?> synthesizeWithSpeaker(String speakerId, String text) {
+  Future<Map<String, dynamic>?> synthesizeWithSpeaker(
+    String speakerId,
+    String text,
+  ) {
+    _requireLocalSpeech();
     return _api.post<Map<String, dynamic>>(
       '/api/tts/synthesize',
       data: <String, dynamic>{'speakerId': speakerId, 'text': text},
@@ -145,12 +185,21 @@ class ASRService {
   }
 
   Future<Map<String, dynamic>?> createConfig(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/asr/configs', data: data);
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/asr/configs',
+      data: data,
+    );
     return resp;
   }
 
-  Future<Map<String, dynamic>?> updateConfig(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/asr/configs/$id', data: data);
+  Future<Map<String, dynamic>?> updateConfig(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/asr/configs/$id',
+      data: data,
+    );
     return resp;
   }
 
@@ -165,7 +214,9 @@ class ASRService {
   }
 
   Future<Map<String, dynamic>?> test(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/asr/configs/$id/test');
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/asr/configs/$id/test',
+    );
     return resp;
   }
 
@@ -176,17 +227,26 @@ class ASRService {
   }
 
   Future<Map<String, dynamic>?> uploadAudio(String filePath) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/asr/upload', data: {'filePath': filePath});
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/asr/upload',
+      data: {'filePath': filePath},
+    );
     return resp;
   }
 
   Future<Map<String, dynamic>?> submitUrl(String url) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/asr/submit', data: {'url': url});
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/asr/submit',
+      data: {'url': url},
+    );
     return resp;
   }
 
   Future<Map<String, dynamic>?> queryResult(String taskId) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/asr/query', queryParameters: {'taskId': taskId});
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/asr/query',
+      queryParameters: {'taskId': taskId},
+    );
     return resp;
   }
 }

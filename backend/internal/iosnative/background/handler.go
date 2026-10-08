@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/u-ai/backend/internal/nativebridge"
 )
@@ -183,11 +184,17 @@ func (h *BackgroundHandler) handleTaskRegister(ctx context.Context, request nati
 }
 
 func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request nativebridge.Request) nativebridge.Response {
+	taskDefinitionID := getString(request.Payload, "taskDefinitionId")
+	if taskDefinitionID == "" {
+		// Accept the historical input spelling only at the boundary. All
+		// canonical output uses taskDefinitionId.
+		taskDefinitionID = getString(request.Payload, "taskDefinitionID")
+	}
 	req := BackgroundSubmissionRequest{
 		SystemClass:           BackgroundSystemClass(getString(request.Payload, "systemClass")),
 		Identifier:            getString(request.Payload, "identifier"),
 		TaskRunID:             getString(request.Payload, "taskRunId"),
-		TaskDefinitionID:      getString(request.Payload, "taskDefinitionID"),
+		TaskDefinitionID:      taskDefinitionID,
 		Reason:                getString(request.Payload, "reason"),
 		Strategy:              ContinuedTaskStrategy(getString(request.Payload, "strategy")),
 		Initiator:             TaskInitiator(getString(request.Payload, "initiator")),
@@ -197,21 +204,34 @@ func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request native
 		Title:                 getString(request.Payload, "title"),
 		Subtitle:              getString(request.Payload, "subtitle"),
 	}
+	if raw := getString(request.Payload, "earliestBeginAt"); raw != "" {
+		parsed, err := time.Parse(time.RFC3339Nano, raw)
+		if err != nil {
+			return NewBackgroundError(
+				request,
+				ErrBackgroundSubmissionFailed,
+				"invalid earliestBeginAt: "+err.Error(),
+			)
+		}
+		req.EarliestBeginAt = &parsed
+	}
 	if err := ValidateSubmission(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
 	}
 	payload := map[string]any{
 		"systemClass":           string(req.SystemClass),
+		"identifier":            req.Identifier,
+		"taskRunId":             req.TaskRunID,
 		"networkRequired":       req.NetworkRequired,
 		"externalPowerRequired": req.ExternalPowerRequired,
 		"gpuRequired":           req.GPURequired,
 	}
-	if req.TaskRunID != "" {
-		payload["taskRunId"] = req.TaskRunID
-	}
 	if req.TaskDefinitionID != "" {
 		payload["taskDefinitionId"] = req.TaskDefinitionID
+	}
+	if req.EarliestBeginAt != nil {
+		payload["earliestBeginAt"] = req.EarliestBeginAt.UTC().Format(time.RFC3339Nano)
 	}
 	if req.Reason != "" {
 		payload["reason"] = req.Reason
@@ -220,7 +240,7 @@ func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request native
 		payload["strategy"] = string(req.Strategy)
 	}
 	if req.Initiator != "" {
-		payload["initiator"] = req.Initiator
+		payload["initiator"] = string(req.Initiator)
 	}
 	if req.Title != "" {
 		payload["title"] = req.Title
@@ -232,17 +252,14 @@ func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request native
 }
 
 func (h *BackgroundHandler) handleTaskCancel(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	systemClass := BackgroundSystemClass(getString(request.Payload, "systemClass"))
-	if !IsValidSystemClass(systemClass) {
-		return NewBackgroundError(request, ErrBackgroundIdentifierInvalid, "invalid system class")
+	taskRunID := getString(request.Payload, "taskRunId")
+	if err := ValidateTaskRunID(taskRunID); err != nil {
+		code, msg := MapErrorToNativeBridge(err)
+		return NewBackgroundError(request, code, msg)
 	}
-	payload := map[string]any{
-		"systemClass": string(systemClass),
-	}
-	if reqID := getString(request.Payload, "RequestId"); reqID != "" {
-		payload["RequestId"] = reqID
-	}
-	return h.bridgeCall(ctx, request, OperationTaskCancel, payload)
+	return h.bridgeCall(ctx, request, OperationTaskCancel, map[string]any{
+		"taskRunId": taskRunID,
+	})
 }
 
 func (h *BackgroundHandler) handleTaskCancelAll(ctx context.Context, request nativebridge.Request) nativebridge.Response {
@@ -376,7 +393,7 @@ func (h *BackgroundHandler) handleCheckpointGet(ctx context.Context, request nat
 			"phase":     cp.Phase,
 		}
 		if cp.Data != nil {
-			result["data"] = cp.Data
+			result["checkpointData"] = cp.Data
 		}
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,

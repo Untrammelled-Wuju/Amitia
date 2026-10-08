@@ -11,7 +11,13 @@ import (
 )
 
 func (e *Engine) transcribeAudio(ctx context.Context, inference *Inference, input coordination.Mutation) (string, int64, error) {
-	if len(inference.Attachments) != 1 || inference.Attachments[0].Kind != "audio" {
+	var audio *Attachment
+	for i := range inference.Attachments {
+		if inference.Attachments[i].Kind == "audio" {
+			audio = &inference.Attachments[i]
+		}
+	}
+	if audio == nil {
 		return "", 1, nil
 	}
 	model, ok := e.model.(AudioModel)
@@ -21,7 +27,7 @@ func (e *Engine) transcribeAudio(ctx context.Context, inference *Inference, inpu
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return "", 1, err
 	}
-	text, err := model.TranscribeOwnedAudio(ctx, *inference, inference.Attachments[0])
+	text, err := model.TranscribeOwnedAudio(ctx, *inference, *audio)
 	if err != nil {
 		return "", 1, err
 	}

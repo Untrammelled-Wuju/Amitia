@@ -132,12 +132,15 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.PUT("/audit/settings", sharedCoreAdminOnly(), handler.UpdateAuditSettings)
 	r.GET("/audit/stats", sharedCoreAdminOnly(), handler.AuditStats)
 
-	r.GET("/notifications/settings", handler.NotificationsSettings)
-	r.PUT("/notifications/settings", handler.UpdateNotificationsSettings)
-	r.GET("/notifications/status", handler.NotificationsStatus)
-	r.POST("/notifications/subscribe", handler.NotificationsSubscribe)
-	r.POST("/notifications/test", handler.NotificationsTest)
-	r.POST("/notifications/unsubscribe", handler.NotificationsUnsubscribe)
+	// Browser-local notification preferences are intentionally isolated from
+	// /notifications, which is owned exclusively by Notification Runtime for
+	// Android/iOS device Push and native presentation.
+	r.GET("/browser-notifications/settings", handler.NotificationsSettings)
+	r.PUT("/browser-notifications/settings", handler.UpdateNotificationsSettings)
+	r.GET("/browser-notifications/status", handler.NotificationsStatus)
+	r.POST("/browser-notifications/subscribe", handler.NotificationsSubscribe)
+	r.POST("/browser-notifications/test", handler.NotificationsTest)
+	r.POST("/browser-notifications/unsubscribe", handler.NotificationsUnsubscribe)
 
 	r.GET("/search/credentials", sharedCoreAdminOnly(), handler.SearchCredentialList)
 	r.PUT("/search/credentials/:engineId", sharedCoreAdminOnly(), handler.SearchCredentialSave)

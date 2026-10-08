@@ -77,7 +77,7 @@ func TestMeshLegacyHistoryPagesAndCursorOwnership(t *testing.T) {
 
 func setupMeshLocalDataPort(t *testing.T) *meshLocalDataPort {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "business.db")), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "business.db")+"?_txlock=immediate&_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func setupMeshLocalDataPort(t *testing.T) *meshLocalDataPort {
 	if err := migration.ApplyBaseline(db); err != nil {
 		t.Fatal(err)
 	}
-	kernelDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "kernel.db"))
+	kernelDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "kernel.db")+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		t.Fatal(err)
 	}

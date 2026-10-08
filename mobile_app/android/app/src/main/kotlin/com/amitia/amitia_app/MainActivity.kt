@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import com.amitia.amitia_app.nativeprovider.AndroidNativeBridgePlugin
 import com.amitia.amitia_app.nativeprovider.AndroidNativeCompositionRoot
+import com.amitia.amitia_app.notifications.NotificationPlatformPlugin
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgePlugin
 import com.amitia.amitia_app.realtime.RealtimeAudioPlugin
 import com.amitia.amitia_app.realtime.RealtimeVisualPlugin
@@ -136,6 +137,13 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AndroidNativeCompositionRoot.initialize(applicationContext)
+        NotificationPlatformPlugin.handleIntent(applicationContext, intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        NotificationPlatformPlugin.handleIntent(applicationContext, intent)
     }
 
     override fun onResume() {
@@ -174,6 +182,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(RuntimeBridgePlugin())
         flutterEngine.plugins.add(AndroidNativeBridgePlugin())
+        flutterEngine.plugins.add(NotificationPlatformPlugin())
         flutterEngine.plugins.add(RealtimeAudioPlugin())
         flutterEngine.plugins.add(RealtimeVisualPlugin())
         flutterEngine.plugins.add(AppUpdatePlugin())

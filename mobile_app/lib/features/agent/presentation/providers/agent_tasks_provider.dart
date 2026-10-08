@@ -37,6 +37,8 @@ class AgentTaskItem {
   final String executionPlacement;
   final bool checkpointSupported;
   final bool retrySupported;
+  final String checkpointId;
+  final Map<String, dynamic>? sourceRun;
 
   AgentTaskItem({
     required this.id,
@@ -55,6 +57,8 @@ class AgentTaskItem {
     this.executionPlacement = '',
     this.checkpointSupported = false,
     this.retrySupported = false,
+    this.checkpointId = '',
+    this.sourceRun,
   });
 
   factory AgentTaskItem.fromJson(
@@ -101,6 +105,10 @@ class AgentTaskItem {
       executionPlacement: (json['executionPlacement'] ?? '').toString(),
       checkpointSupported: definition?['checkpoint'] == true,
       retrySupported: definitionRetrySupported,
+      checkpointId: (json['checkpointId'] ?? '').toString(),
+      sourceRun: json['executionScope'] is Map
+          ? Map<String, dynamic>.unmodifiable(json)
+          : null,
     );
   }
 
@@ -197,17 +205,28 @@ class AgentTaskItem {
       executionPlacement.trim().isEmpty || executionPlacement == 'local';
 
   bool get canPause =>
+      sourceRun?['readOnly'] != true &&
       checkpointSupported &&
-      isLocalExecution &&
+      generation > 0 &&
+      (isLocalExecution || executionPlacement == 'device') &&
       (status == AgentTaskStatus.running ||
           status == AgentTaskStatus.checkpointing);
 
-  bool get canResume => isLocalExecution && status == AgentTaskStatus.paused;
+  bool get canResume =>
+      sourceRun?['readOnly'] != true &&
+      checkpointSupported &&
+      checkpointId.isNotEmpty &&
+      generation > 0 &&
+      (isLocalExecution || executionPlacement == 'device') &&
+      status == AgentTaskStatus.paused;
 
   bool get canCancel {
+    if (sourceRun?['readOnly'] == true) return false;
     if (executionPlacement == 'cloud' || executionPlacement == 'device') {
       return status == AgentTaskStatus.queued ||
           status == AgentTaskStatus.running ||
+          status == AgentTaskStatus.pausing ||
+          status == AgentTaskStatus.paused ||
           status == AgentTaskStatus.cancelling;
     }
     return status == AgentTaskStatus.queued ||
@@ -217,11 +236,16 @@ class AgentTaskItem {
   }
 
   bool get canRecover =>
-      status == AgentTaskStatus.recoveryRequired ||
-      status == AgentTaskStatus.manualIntervention;
+      sourceRun?['readOnly'] != true &&
+      (status == AgentTaskStatus.recoveryRequired ||
+          status == AgentTaskStatus.manualIntervention);
 
   bool get canRetry =>
-      isTerminal && retrySupported && maxAttempts > 0 && attempt < maxAttempts;
+      sourceRun?['readOnly'] != true &&
+      isTerminal &&
+      retrySupported &&
+      maxAttempts > 0 &&
+      attempt < maxAttempts;
 }
 
 class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
@@ -301,6 +325,7 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
       if (item.id == id) return item;
     }
     final service = ref.read(extensionTaskServiceProvider);
+    if (service.bound) throw StateError('请重新加载并选择原任务记录');
     final detail = await service.runtimeDetail(id);
     final run = detail['run'];
     if (run is! Map) throw StateError('任务运行不存在');
@@ -317,42 +342,56 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     return AgentTaskItem.fromJson(runMap, definition: definition);
   }
 
-  Future<void> pause(String id) async {
-    final current = await _current(id);
+  Future<void> pause(String id, {AgentTaskItem? expectedTask}) async {
+    final current = expectedTask ?? await _current(id);
     if (!current.canPause) throw StateError('当前任务状态不允许暂停');
     await ref
         .read(extensionTaskServiceProvider)
-        .pause(id, generation: current.generation);
+        .pause(
+          id,
+          generation: current.generation,
+          expectedRun: current.sourceRun,
+        );
     await refresh();
   }
 
-  Future<void> resume(String id) async {
-    final current = await _current(id);
+  Future<void> resume(String id, {AgentTaskItem? expectedTask}) async {
+    final current = expectedTask ?? await _current(id);
     if (!current.canResume) throw StateError('当前任务状态不允许继续');
     await ref
         .read(extensionTaskServiceProvider)
-        .resume(id, generation: current.generation);
+        .resume(
+          id,
+          generation: current.generation,
+          expectedRun: current.sourceRun,
+        );
     await refresh();
   }
 
-  Future<void> cancel(String id) async {
-    final current = await _current(id);
+  Future<void> cancel(String id, {AgentTaskItem? expectedTask}) async {
+    final current = expectedTask ?? await _current(id);
     if (!current.canCancel) throw StateError('当前任务状态不允许取消');
-    await ref.read(extensionTaskServiceProvider).cancel(id);
+    await ref
+        .read(extensionTaskServiceProvider)
+        .cancel(id, expectedRun: current.sourceRun);
     await refresh();
   }
 
-  Future<void> retry(String id) async {
-    final current = await _current(id);
+  Future<void> retry(String id, {AgentTaskItem? expectedTask}) async {
+    final current = expectedTask ?? await _current(id);
     if (!current.canRetry) throw StateError('当前任务状态不允许重试');
-    await ref.read(extensionTaskServiceProvider).retry(id);
+    await ref
+        .read(extensionTaskServiceProvider)
+        .retry(id, expectedRun: current.sourceRun);
     await refresh();
   }
 
-  Future<void> recover(String id) async {
-    final current = await _current(id);
+  Future<void> recover(String id, {AgentTaskItem? expectedTask}) async {
+    final current = expectedTask ?? await _current(id);
     if (!current.canRecover) throw StateError('当前任务状态不允许恢复');
-    await ref.read(extensionTaskServiceProvider).recover(id);
+    await ref
+        .read(extensionTaskServiceProvider)
+        .recover(id, expectedRun: current.sourceRun);
     await refresh();
   }
 }
@@ -478,9 +517,15 @@ class AgentTaskRuntimeDetail {
 }
 
 final agentTaskRuntimeDetailProvider = FutureProvider.autoDispose
-    .family<AgentTaskRuntimeDetail, String>((ref, taskId) async {
+    .family<AgentTaskRuntimeDetail, (String, Map<String, dynamic>?)>((
+      ref,
+      selection,
+    ) async {
       final service = ref.read(extensionTaskServiceProvider);
-      final detail = await service.runtimeDetail(taskId);
+      final detail = await service.runtimeDetail(
+        selection.$1,
+        expectedRun: selection.$2,
+      );
       Map<String, dynamic> part(String key) {
         final value = detail[key];
         return value is Map

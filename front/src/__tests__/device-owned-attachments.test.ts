@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ownedImageAttachment, ownedImageURL, ownedAudioAttachment, ownedAudioURL, ownedMessageText } from "../runtime/device-owned-attachments";
+import { ownedImageAttachment, ownedImageURL, ownedAudioAttachment, ownedAudioURL, ownedMessageText, ownedFileAttachment, ownedAttachmentURL } from "../runtime/device-owned-attachments";
 
 describe("owned image attachments", () => {
   it("hashes the selected bytes and restores the owner message image", async () => {
@@ -24,6 +24,11 @@ describe("owned image attachments", () => {
     }
     expect(ownedImageURL([{ kind: "image", mimeType: "image/svg+xml", data: "AAAA" }])).toBeUndefined();
   });
+});
+
+describe("Owned 文件及视频原始字节", () => {
+ it.each([["file", "text/plain", "notes.txt"], ["video", "video/mp4", "clip.mp4"]] as const)("%s 校验原字节hash并从Owner内容恢复下载地址", async (kind, type, name) => { vi.stubGlobal("crypto", { subtle: { digest: vi.fn(async () => new Uint8Array(32).fill(2).buffer) } }); try { const blob = { type, size: 4, arrayBuffer: async () => Uint8Array.from([1,2,3,4]).buffer } as Blob; const attachment = await ownedFileAttachment(blob,name,kind); expect(attachment).toMatchObject({kind,mimeType:type,name,data:"AQIDBA==",sha256:"02".repeat(32)}); expect(ownedAttachmentURL(attachment)).toBe(`data:${type};base64,AQIDBA==`); } finally { vi.unstubAllGlobals(); } });
+ it("拒绝超限、HTML和未知附件类型且不读取原字节", async () => { const read = vi.fn(); for (const item of [{type:"text/html",size:10},{type:"text/plain",size:1048577},{type:"application/octet-stream",size:10}]) await expect(ownedFileAttachment({...item,arrayBuffer:read} as unknown as Blob,"unknown.bin")).rejects.toThrow(); expect(read).not.toHaveBeenCalled(); expect(ownedAttachmentURL({kind:"file",mimeType:"text/html",data:"AAAA"})).toBeUndefined(); });
 });
 
 describe("owned audio attachments", () => {

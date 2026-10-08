@@ -73,7 +73,10 @@ func (s *service) Update(id int, updates map[string]interface{}) (*AsrConfig, er
 	if err := s.repo.Update(id, updates); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
-	cfg, _ := s.repo.GetByID(id)
+	cfg, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
 	if cfg != nil {
 		cfg.HasApiKey = cfg.ApiKey != ""
 		cfg.ApiKey = ""
@@ -87,7 +90,10 @@ func (s *service) Activate(id int) (*AsrConfig, error) {
 	if err := s.repo.Activate(id); err != nil {
 		return nil, fmt.Errorf("激活失败: %w", err)
 	}
-	cfg, _ := s.repo.GetByID(id)
+	cfg, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
 	if cfg != nil {
 		cfg.HasApiKey = cfg.ApiKey != ""
 		cfg.ApiKey = ""

@@ -177,6 +177,7 @@
           <TaskResultArtifact
             :result="result || task.result || null"
             :task-run-id="task.taskRunId"
+            :original-task="task as unknown as import('../kernel/tasks/types').TaskRun"
           />
         </el-card>
       </template>
@@ -240,6 +241,7 @@ import type {
 const props = defineProps<{
   modelValue: boolean;
   taskRunId: string;
+  initialRun?: TaskRun;
 }>();
 
 const emit = defineEmits<{
@@ -257,6 +259,7 @@ const timeline = ref<TaskProgress[]>([]);
 const latestProgress = ref<TaskProgress | null>(null);
 const polling = ref(false);
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let loadGeneration = 0;
 
 const drawerTitle = computed(() => {
   if (!props.taskRunId) return "任务详情";
@@ -275,7 +278,7 @@ const activeStatuses: TaskRunStatus[] = [
 ];
 
 const canCancel = computed(() =>
-  task.value
+  task.value && task.value.readOnly !== true
     ? ![...activeStatuses, "cancelled", "succeeded", "failed", "timed_out"].includes(
         task.value.status,
       ) && task.value.status !== "manual_intervention"
@@ -285,13 +288,14 @@ const canCancel = computed(() =>
 const canRecover = computed(
   () =>
     task.value &&
+    task.value.readOnly !== true &&
     (task.value.status === "recovery_required" ||
       task.value.status === "paused" ||
       task.value.status === "manual_intervention"),
 );
 
 const canRetry = computed(() =>
-  task.value
+  task.value && task.value.readOnly !== true
     ? ["failed", "timed_out", "cancelled"].includes(task.value.status)
     : false,
 );
@@ -332,6 +336,7 @@ function handleClose() {
 }
 
 function resetState() {
+  loadGeneration++;
   task.value = null;
   result.value = null;
   timeline.value = [];
@@ -341,28 +346,33 @@ function resetState() {
 
 async function reload() {
   if (!props.taskRunId) return;
+  const generation = ++loadGeneration;
+  const original = props.initialRun;
   loading.value = true;
   loadError.value = "";
   try {
-    task.value = await fetchTask(props.taskRunId);
+    const loaded = await fetchTask(props.taskRunId, original);
+    if (generation !== loadGeneration) return;
+    task.value = loaded;
     if (task.value?.progress) {
       latestProgress.value = task.value.progress;
       pushTimeline(task.value.progress);
     }
-    loadNonBlocking();
+    void loadNonBlocking(generation, loaded);
     maybeStartPolling();
   } catch (error: any) {
-    loadError.value = problem(error, "任务详情加载失败");
+    if (generation === loadGeneration) loadError.value = problem(error, "任务详情加载失败");
   } finally {
-    loading.value = false;
+    if (generation === loadGeneration) loading.value = false;
   }
 }
 
-async function loadNonBlocking() {
+async function loadNonBlocking(generation: number, original: TaskRun) {
   try {
-    result.value = await fetchTaskResult(props.taskRunId);
+    const loaded = await fetchTaskResult(original.taskRunId, original);
+    if (generation === loadGeneration) result.value = loaded;
   } catch {
-    result.value = null;
+    if (generation === loadGeneration) result.value = null;
   }
 }
 
@@ -390,18 +400,22 @@ function stopPolling() {
 }
 
 async function pollProgress() {
-  if (!props.taskRunId) return;
+  const original = task.value;
+  const generation = loadGeneration;
+  if (!original) return;
   try {
-    const progress = await fetchTaskProgress(props.taskRunId);
+    const progress = await fetchTaskProgress(original.taskRunId, original);
+    if (generation !== loadGeneration) return;
     latestProgress.value = progress;
     pushTimeline(progress);
     const status = task.value?.status;
     if (status && !activeStatuses.includes(status)) {
       stopPolling();
-      task.value = await fetchTask(props.taskRunId);
+      const loaded = await fetchTask(original.taskRunId, original);
+      if (generation === loadGeneration) task.value = loaded;
     }
   } catch {
-    stopPolling();
+    if (generation === loadGeneration) stopPolling();
   }
 }
 
@@ -418,7 +432,8 @@ function pushTimeline(progress: TaskProgress) {
 }
 
 async function onCancel() {
-  if (!task.value) return;
+  const original = task.value;
+  if (!original) return;
   try {
     await ElMessageBox.confirm(
       "确认取消该任务？取消后任务将停止执行。",
@@ -430,7 +445,7 @@ async function onCancel() {
   }
   acting.value = true;
   try {
-    await cancelTask(task.value.taskRunId);
+    await cancelTask(original.taskRunId, original);
     ElMessage.success("已请求取消任务");
     await reload();
     emit("refresh");
@@ -442,12 +457,13 @@ async function onCancel() {
 }
 
 async function onRetry() {
-  if (!task.value) return;
+  const original = task.value;
+  if (!original) return;
   acting.value = true;
   try {
-    const newTask = await retryTask(task.value.taskRunId);
+    const newTask = await retryTask(original.taskRunId, original);
     ElMessage.success("已重新提交任务");
-    emit("retried", newTask?.taskRunId || task.value.taskRunId);
+    emit("retried", newTask?.taskRunId || original.taskRunId);
     emit("refresh");
     handleClose();
   } catch (error: any) {
@@ -458,10 +474,11 @@ async function onRetry() {
 }
 
 async function onRecover() {
-  if (!task.value) return;
+  const original = task.value;
+  if (!original) return;
   acting.value = true;
   try {
-    await recoverTask(task.value.taskRunId);
+    await recoverTask(original.taskRunId, original);
     ElMessage.success("已请求恢复任务");
     await reload();
     emit("refresh");

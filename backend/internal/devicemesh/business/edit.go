@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
@@ -32,7 +33,12 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	allowed := map[string]bool{}
 	switch edit.Kind {
 	case "conversation":
-		allowed = map[string]bool{"title": true, "archived": true, "pinned": true}
+		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "projectId": true}
+	case "project":
+		if edit.ExpectedScope == nil {
+			return coordination.Acknowledgement{}, errors.New("项目修改缺少原数据归属，请重新加载")
+		}
+		allowed = map[string]bool{"title": true, "pinned": true}
 	case "message":
 		allowed = map[string]bool{"content": true}
 	case "memory":
@@ -51,11 +57,20 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 			if json.Unmarshal(value, &text) != nil || len(text) > 128<<10 || strings.TrimSpace(text) == "" {
 				return coordination.Acknowledgement{}, errors.New("内容不能为空或超过上限")
 			}
+			if edit.Kind == "project" && (len(text) > 256 || !utf8.ValidString(text) || strings.ContainsAny(text, "\x00\r\n")) {
+				return coordination.Acknowledgement{}, errors.New("项目名称无效或超过上限")
+			}
 		}
 		if key == "archived" || key == "pinned" || key == "allowContextUse" {
 			var valueBool bool
 			if json.Unmarshal(value, &valueBool) != nil {
 				return coordination.Acknowledgement{}, errors.New("开关参数无效")
+			}
+		}
+		if key == "projectId" {
+			var projectID string
+			if edit.ExpectedScope == nil || json.Unmarshal(value, &projectID) != nil || len(projectID) > 128 || strings.ContainsAny(projectID, "\x00\r\n") {
+				return coordination.Acknowledgement{}, errors.New("项目归属参数无效，请重新加载")
 			}
 		}
 		if key == "expiresAt" || key == "archivedAt" {
@@ -150,13 +165,28 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	if resource == nil || resource.Deleted || resource.Revision != edit.ExpectedRevision {
 		return coordination.Acknowledgement{}, coordination.ErrResourceVersion
 	}
+	var dependencies []coordination.ResourceVersion
+	if rawProject, changed := edit.Changes["projectId"]; changed {
+		var projectID string
+		json.Unmarshal(rawProject, &projectID)
+		if projectID != "" {
+			project, err := port.Resource(ctx, scope, "project", projectID)
+			if err != nil {
+				return coordination.Acknowledgement{}, err
+			}
+			if project == nil || project.Deleted || project.OwnerID != scope.ResourceOwnerID || project.RoleID != scope.RoleID {
+				return coordination.Acknowledgement{}, coordination.ErrWrongOwner
+			}
+			dependencies = append(dependencies, coordination.ResourceVersion{Kind: "project", ID: projectID, Revision: project.Revision})
+		}
+	}
 	var document map[string]json.RawMessage
 	if err := json.Unmarshal(resource.Body, &document); err != nil || document == nil {
 		return coordination.Acknowledgement{}, errors.New("数据格式不支持修改")
 	}
 	for key, value := range edit.Changes {
 		document[key] = value
-		if edit.Kind == "conversation" && (key == "archived" || key == "pinned") {
+		if (edit.Kind == "conversation" || edit.Kind == "project") && (key == "archived" || key == "pinned") {
 			var enabled bool
 			json.Unmarshal(value, &enabled)
 			var timestamp any
@@ -172,7 +202,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	document["updatedAt"] = body(time.Now().UTC().Format(time.RFC3339Nano))
 	ack := coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{edit.Kind + "/" + edit.ID: resource.Revision + 1, "checkpoint/" + receiptID: 1}}
 	proof := body(map[string]any{"hash": fingerprint, "roleRevision": scope.RoleRevision, "acknowledgement": ack})
-	return e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: scope.RoleID, SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
+	return e.commit(ctx, coordination.Commit{Scope: scope, Dependencies: dependencies, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: scope.RoleID, SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
 }
 
 func (e *Engine) ReadResource(ctx context.Context, authority Request, kind, id string) (*coordination.Resource, coordination.ExecutionScope, error) {
@@ -197,11 +227,18 @@ func (e *Engine) ReadResource(ctx context.Context, authority Request, kind, id s
 	if !ok {
 		return nil, scope, errors.New("数据来源不支持记录查询")
 	}
-	resource, err := port.Resource(coordination.WithScope(ctx, scope), scope, kind, id)
+	ctx = coordination.WithScope(ctx, scope)
+	resource, err := port.Resource(ctx, scope, kind, id)
 	if err != nil {
 		return nil, scope, err
 	}
 	if err := e.coordination.Validate(ctx, scope); err != nil {
+		return nil, scope, err
+	}
+	if resource != nil && (resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != scope.RoleID || resource.Kind != kind || resource.ID != id || resource.Revision < 1 || !json.Valid(resource.Body)) {
+		return nil, scope, coordination.ErrWrongOwner
+	}
+	if err := coordination.ValidateRoleRevision(ctx, e.data, scope); err != nil {
 		return nil, scope, err
 	}
 	return resource, scope, nil

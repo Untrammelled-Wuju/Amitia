@@ -1,4 +1,5 @@
 import '../backend_transport/backend_service_api.dart';
+import 'role_authority.dart';
 
 class CharacterDetailService {
   final BackendServiceApi _api;
@@ -28,9 +29,13 @@ class CharacterDetailService {
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
-  Future<Map<String, dynamic>?> createFromTemplate(String templateId) async {
+  Future<Map<String, dynamic>?> createFromTemplate(
+    String templateId, {
+    String? roleAuthority,
+  }) async {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/character-templates/$templateId/create-character',
+      headers: roleAuthorityHeaders(roleAuthority),
     );
     return resp;
   }
@@ -39,31 +44,58 @@ class CharacterDetailService {
     return _api.get<Map<String, dynamic>>('/api/characters/$id');
   }
 
-  Future<Map<String, dynamic>?> updateCharacter(String id, Map<String, dynamic> data) async {
-    return _api.put<Map<String, dynamic>>('/api/characters/$id', data: data);
+  Future<Map<String, dynamic>?> updateCharacter(
+    String id,
+    Map<String, dynamic> data, {
+    String? roleAuthority,
+  }) async {
+    return _api.put<Map<String, dynamic>>(
+      '/api/characters/$id',
+      data: data,
+      headers: roleAuthorityHeaders(roleAuthority),
+    );
   }
 
   Future<Map<String, dynamic>?> roleProfile({String? characterId}) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/companion/role-profile',
-      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+      queryParameters: {
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+      },
     );
     return resp;
   }
 
-  Future<bool> updateRoleProfile(Map<String, dynamic> data, {String? characterId}) async {
+  Future<bool> updateRoleProfile(
+    Map<String, dynamic> data, {
+    String? characterId,
+    String? roleAuthority,
+  }) async {
     await _api.put(
       '/api/companion/role-profile',
-      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+      queryParameters: {
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+      },
       data: data,
+      headers: roleAuthorityHeaders(roleAuthority),
     );
     return true;
   }
 
-  Future<Map<String, dynamic>?> uploadAvatar(String id, String filePath) async {
+  Future<Map<String, dynamic>?> uploadAvatar(
+    String id,
+    String filePath, {
+    String? roleAuthority,
+  }) async {
+    roleAuthorityHeaders(roleAuthority);
     final resp = await _api.postMultipart<Map<String, dynamic>>(
       '/api/characters/$id/avatar',
-      files: {'avatar': [filePath]},
+      files: {
+        'avatar': [filePath],
+      },
+      fields: {if (roleAuthority != null) 'roleAuthority': roleAuthority},
     );
     return resp;
   }

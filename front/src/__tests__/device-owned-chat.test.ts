@@ -22,6 +22,11 @@ function stream(events: unknown[], split = false) {
 }
 
 describe("device owned chat stream", () => {
+  it("拒绝首帧及后续帧跨realm或原编辑角色同ID变更", async () => {
+    const original = { ...scope, authorizationRealm: "mesh" };
+    await expect(consumeOwnedChatStream(stream([{ type: "started", executionScope: { ...original, roleRevision: 2 } }]), "request", () => {}, original)).rejects.toThrow("迟到回复");
+    await expect(consumeOwnedChatStream(stream([{ type: "started", executionScope: original }, { type: "delta", text: "foreign", executionScope: { ...original, authorizationRealm: "other" } }]), "request", () => {})).rejects.toThrow("迟到回复");
+  });
 	it("accepts acknowledged transcription and rejects late or duplicate transcription", async () => {
 		const result = { requestId: "request", conversationId: "conversation", executionScope: scope, saved: true, reply: "你好", transcription: "喝茶", userRevision: 2, memoryStatus: "saved" };
 		const seen: any[] = [];

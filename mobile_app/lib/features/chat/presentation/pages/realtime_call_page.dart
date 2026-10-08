@@ -6,16 +6,25 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/notification_runtime_bootstrap.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_client.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_message.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_session.dart';
+import '../../../../core/notifications/notification_coordinator.dart';
 import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/realtime/realtime_voice_activity_detector.dart';
 import '../../../../core/realtime/realtime_visual_bridge.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
+import '../../../../core/services/device_owned_realtime_service.dart';
+import '../../../../core/services/owned_realtime_invitation.dart';
+import '../../../../core/services/owned_conversation_reference.dart';
+import '../../../../core/services/owned_speech_player.dart';
 import '../widgets/realtime_call_layout.dart';
 
 enum RealtimeCallMode { voice, video, screen }
@@ -27,12 +36,24 @@ class RealtimeCallPage extends ConsumerStatefulWidget {
     required this.characterName,
     this.characterAvatar = '',
     this.initialMode = RealtimeCallMode.voice,
+    this.incomingCallId = '',
+    this.initialAction = '',
+    this.characterId = '',
+    this.executionScope,
+    this.historicalRoleId = '',
+    this.ownedInvitation = false,
   });
 
   final String conversationId;
   final String characterName;
   final String characterAvatar;
   final RealtimeCallMode initialMode;
+  final String incomingCallId;
+  final String initialAction;
+  final String characterId;
+  final Map<String, dynamic>? executionScope;
+  final String historicalRoleId;
+  final bool ownedInvitation;
 
   @override
   ConsumerState<RealtimeCallPage> createState() => _RealtimeCallPageState();
@@ -41,14 +62,27 @@ class RealtimeCallPage extends ConsumerStatefulWidget {
 class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   final RealtimeAudioBridge _audio = RealtimeAudioBridge();
   final RealtimeVisualBridge _visual = RealtimeVisualBridge();
+  late final NotificationCoordinator _notifications;
 
   BackendWebSocketClient? _client;
   BackendWebSocketSession? _session;
   BackendWebSocketSession? _visualSession;
+  DeviceOwnedRealtimeService? _owned;
+  String? _ownedRoleAtStart;
+  String _ownedTurn = '';
+  String _ownedPending = '';
+  String _ownedCompleted = '';
+  String? _ownedSavedConversation;
+  Future<void> _ownedQueue = Future.value();
+  Future<void> _ownedIncoming = Future.value();
+  Timer? _ownedWatch;
+  bool _ownedChecking = false;
   StreamSubscription? _wsSubscription;
   StreamSubscription? _visualWsSubscription;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<RealtimeVisualFrame>? _visualFrameSubscription;
+  StreamSubscription<NotificationCallLifecycleEvent>?
+  _callLifecycleSubscription;
   Timer? _durationTimer;
   Timer? _heartbeatTimer;
   final RealtimeVoiceActivityDetector _vad = RealtimeVoiceActivityDetector();
@@ -63,6 +97,9 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   bool _cameraSupported = true;
   bool _screenSupported = true;
   bool _initialMediaApplied = false;
+  bool _awaitingAnswer = false;
+  bool _answerAcknowledged = false;
+  bool _callEndReported = false;
   int _seconds = 0;
   String? _dialogId;
   Uint8List? _latestCameraFrame;
@@ -75,13 +112,89 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _connect());
+    _notifications = ref.read(notificationCoordinatorProvider);
+    _callLifecycleSubscription = _notifications.callLifecycleEvents.listen(
+      _handleCallLifecycleEvent,
+    );
+    final incoming = widget.incomingCallId.trim().isNotEmpty;
+    final action = widget.initialAction.trim().toLowerCase();
+    _awaitingAnswer = incoming && action == 'incoming';
+    if (_awaitingAnswer) {
+      _state = 'ringing';
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_awaitingAnswer) {
+        setState(() {});
+        return;
+      }
+      if (incoming && action == 'answer') {
+        unawaited(_answerIncomingCall());
+      } else {
+        unawaited(_connect());
+      }
+    });
   }
 
   @override
   void dispose() {
+    if (widget.incomingCallId.trim().isNotEmpty &&
+        !_callEndReported &&
+        !_awaitingAnswer) {
+      unawaited(_reportIncomingCallEnd('page_disposed'));
+    }
+    unawaited(_callLifecycleSubscription?.cancel() ?? Future<void>.value());
     unawaited(_shutdown(sendStop: true));
     super.dispose();
+  }
+
+  void _handleCallLifecycleEvent(NotificationCallLifecycleEvent event) {
+    final callId = widget.incomingCallId.trim();
+    if (!mounted || callId.isEmpty || event.callId != callId) return;
+    _callEndReported = true;
+    _awaitingAnswer = false;
+    unawaited(() async {
+      await _shutdown(sendStop: false);
+      if (mounted) {
+        await Navigator.of(context).maybePop();
+      }
+    }());
+  }
+
+  Future<void> _answerIncomingCall() async {
+    if (!mounted) return;
+    _awaitingAnswer = false;
+    setState(() {
+      _state = 'connecting';
+      _error = null;
+    });
+    if (!widget.ownedInvitation) await _acknowledgeIncomingCallAnswer();
+    await _connect();
+  }
+
+  Future<void> _acknowledgeIncomingCallAnswer() async {
+    final callId = widget.incomingCallId.trim();
+    if (callId.isEmpty || _answerAcknowledged) return;
+    _answerAcknowledged = await _notifications.answerIncomingCall(
+      callId: callId,
+      conversationId: widget.conversationId,
+    );
+  }
+
+  Future<void> _declineIncomingCall() async {
+    await _reportIncomingCallEnd('user_declined');
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _reportIncomingCallEnd(String reason) async {
+    final callId = widget.incomingCallId.trim();
+    if (callId.isEmpty || _callEndReported) return;
+    _callEndReported = true;
+    await _notifications.endIncomingCall(
+      callId: callId,
+      conversationId: widget.conversationId,
+      reason: reason,
+    );
   }
 
   Future<void> _connect() async {
@@ -102,6 +215,57 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
       final availability = await ref.read(backendConnectionProvider.future);
       if (availability is! BackendConnectionAvailable) {
         throw StateError('后端当前不可用');
+      }
+      final cloud =
+          ref.read(mobileDeploymentConfigProvider).mode ==
+          MobileDeploymentMode.cloud;
+      if (widget.ownedInvitation && !cloud) {
+        throw StateError('当前 Core 绑定已变化，原通话邀请已失效');
+      }
+      if (cloud) {
+        final api = ref.read(rawBackendServiceApiProvider);
+        if (widget.ownedInvitation) {
+          if (api == null) throw StateError('Core 当前不可用');
+          final deployment = ref.read(mobileDeploymentConfigProvider);
+          _ownedRoleAtStart = ref.read(currentCharacterIdProvider);
+          final accepted = await acceptOwnedRealtimeInvitation(
+            api: api,
+            isCurrent: () =>
+                mounted &&
+                identical(ref.read(rawBackendServiceApiProvider), api) &&
+                ref.read(mobileDeploymentConfigProvider) == deployment &&
+                ref.read(currentCharacterIdProvider) == _ownedRoleAtStart,
+            callId: widget.incomingCallId.trim(),
+            characterId: widget.characterId,
+          );
+          _owned = accepted.service;
+          _answerAcknowledged = true;
+          await _connectOwned(availability, acceptedTicket: accepted.ticket);
+          return;
+        }
+        final scope = widget.executionScope;
+        if (api == null || scope == null || widget.characterId.isEmpty) {
+          throw StateError('请从已加载的角色对话发起通话，当前邀请缺少完整角色与权限范围');
+        }
+        final deployment = ref.read(mobileDeploymentConfigProvider);
+        _ownedRoleAtStart = widget.characterId;
+        _owned = DeviceOwnedRealtimeService(
+          api: api,
+          isCurrent: () =>
+              mounted &&
+              identical(ref.read(rawBackendServiceApiProvider), api) &&
+              ref.read(mobileDeploymentConfigProvider) == deployment &&
+              ref.read(currentCharacterIdProvider) == widget.characterId,
+          scope: scope,
+          characterId: widget.characterId,
+          conversationId:
+              parseConversationReference(widget.conversationId)?['id'] ??
+              widget.conversationId,
+          conversationOrigin: parseConversationReference(widget.conversationId),
+          historicalRoleId: widget.historicalRoleId,
+        );
+        await _connectOwned(availability);
+        return;
       }
 
       final realtimeStatus = await ref
@@ -131,6 +295,8 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
         queryParameters: <String, dynamic>{
           'conversationId': widget.conversationId,
           if ((_dialogId ?? '').isNotEmpty) 'dialogId': _dialogId,
+          if (widget.incomingCallId.trim().isNotEmpty)
+            'callId': widget.incomingCallId.trim(),
         },
       );
       _client = client;
@@ -200,7 +366,186 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
       await _audio.startCapture();
     } catch (error) {
       await _shutdown(sendStop: false);
+      if (widget.incomingCallId.trim().isNotEmpty && !_awaitingAnswer) {
+        unawaited(_reportIncomingCallEnd('connect_failed'));
+      }
       _fail(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  Future<void> _connectOwned(
+    BackendConnectionAvailable availability, {
+    Map<String, dynamic>? acceptedTicket,
+  }) async {
+    final owned = _owned!;
+    final ticket = acceptedTicket ?? await owned.ticket();
+    owned.validateScope(ticket);
+    owned.assertConnection();
+    try {
+      final visual = await _visual.status();
+      _cameraSupported = visual.cameraSupported;
+      _screenSupported = visual.screenSupported;
+    } catch (_) {
+      _cameraSupported = false;
+      _screenSupported = false;
+    }
+    final client = BackendWebSocketClient(availability.config);
+    _client = client;
+    final session = await client.connect(
+      ticket['wsPath'] as String,
+      queryParameters: {'ticket': ticket['ticket']},
+    );
+    owned.assertConnection();
+    _session = session;
+    _wsSubscription = session.messages.listen(
+      (message) {
+        if (message is WebSocketErrorMessage) {
+          _stopOwned(message.error.toString());
+          return;
+        }
+        if (message is! WebSocketTextMessage) return;
+        _ownedIncoming = _ownedIncoming.then<void>(
+          (_) => _ownedMessage(message.data),
+        );
+      },
+      onError: (Object error) => _stopOwned(error.toString()),
+      onDone: () => _stopOwned('Core 通话连接已断开，当前通话已停止'),
+    );
+    _audioSubscription = _audio.inputPcm.listen((pcm) {
+      if (_state != 'connected' || _muted || !identical(_owned, owned)) return;
+      final event = _vad.process(pcm);
+      if (event == RealtimeVadEvent.speechStart) {
+        unawaited(ref.read(ownedSpeechPlayerProvider).stop());
+        _aiSpeaking = false;
+        if (_ownedPending.isNotEmpty) {
+          _queueOwned(const {'type': 'interrupt'});
+          if (mounted) setState(() => _visionStatus = '已停止上一轮，请重新开始说话');
+          return;
+        }
+        _ownedTurn = ownedRealtimeRequestId();
+        _queueOwned({
+          'type': 'turn_start',
+          'requestId': _ownedTurn,
+          'expectedExecutionScope': owned.scope,
+        });
+      }
+      if (_ownedTurn.isNotEmpty) {
+        final bytes = Uint8List.fromList(pcm);
+        _ownedQueue = _ownedQueue
+            .then<void>((_) async {
+              owned.assertConnection();
+              await session.send(WebSocketBinaryMessage(bytes));
+            })
+            .catchError((Object error) => _stopOwned(error.toString()));
+      }
+      if (event == RealtimeVadEvent.speechEnd && _ownedTurn.isNotEmpty) {
+        _ownedPending = _ownedTurn;
+        _ownedTurn = '';
+        _ownedCompleted = '';
+        _queueOwned(const {'type': 'turn_end'});
+      }
+    }, onError: (Object error) => _stopOwned('麦克风采集失败：$error'));
+    _visualFrameSubscription = _visual.frames.listen(_handleVisualFrame);
+    _ownedWatch = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_ownedChecking || !identical(_owned, owned)) return;
+      _ownedChecking = true;
+      unawaited(
+        owned
+            .assertCurrent()
+            .catchError((Object error) => _stopOwned(error.toString()))
+            .whenComplete(() => _ownedChecking = false),
+      );
+    });
+    await _audio.startCapture();
+  }
+
+  void _queueOwned(Map<String, dynamic> value) {
+    final owned = _owned;
+    final session = _session;
+    if (owned == null || session == null) return;
+    _ownedQueue = _ownedQueue
+        .then<void>((_) async {
+          owned.assertConnection();
+          await session.send(WebSocketTextMessage(jsonEncode(value)));
+        })
+        .catchError((Object error) => _stopOwned(error.toString()));
+  }
+
+  void _stopOwned(String message) {
+    if (_owned == null) return;
+    _fail(message);
+    unawaited(_shutdown(sendStop: false));
+  }
+
+  Future<void> _ownedMessage(String payload) async {
+    final owned = _owned;
+    if (owned == null) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) throw StateError('实时通话响应无效');
+      owned.assertConnection();
+      switch (decoded['type']) {
+        case 'ready':
+          owned.validateScope(decoded);
+          if (mounted) setState(() => _state = 'connected');
+          _durationTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+            if (mounted && _state == 'connected') setState(() => _seconds++);
+          });
+          await _applyInitialMediaMode();
+        case 'event':
+          if (decoded['requestId'] != _ownedPending ||
+              decoded['data'] is! Map) {
+            return;
+          }
+          owned.validateScope(decoded['data'] as Map);
+        case 'completed':
+          if (decoded['requestId'] != _ownedPending ||
+              decoded['data'] is! Map) {
+            return;
+          }
+          owned.validateCompleted(decoded['data'] as Map, _ownedPending);
+          _ownedSavedConversation = conversationReference({
+            'ownerId': owned.scope['resourceOwnerId'],
+            'id': (decoded['data'] as Map)['conversationId'],
+          });
+          _ownedCompleted = _ownedPending;
+        case 'audio':
+          final request = _ownedPending;
+          if (request.isEmpty ||
+              decoded['requestId'] != request ||
+              _ownedCompleted != request ||
+              decoded['data'] is! Map) {
+            return;
+          }
+          final audio = await owned.audio(
+            Map<String, dynamic>.from(decoded['data'] as Map),
+            request,
+          );
+          owned.assertConnection();
+          if (_ownedPending != request || !identical(_owned, owned)) return;
+          await ref.read(ownedSpeechPlayerProvider).play(audio);
+          owned.assertConnection();
+          if (mounted) setState(() => _aiSpeaking = true);
+        case 'turn_ready':
+          if (decoded['requestId'] == _ownedPending) {
+            _ownedPending = '';
+          }
+        case 'error':
+          if (decoded['requestId'] != null &&
+              decoded['requestId'] != _ownedPending) {
+            return;
+          }
+          final saved = decoded['saved'] == true;
+          _ownedCompleted = '';
+          if (mounted) {
+            amitiaSnackBar(
+              context,
+              '${saved ? '对话已保存，朗读失败：' : '本轮通话未完成：'}${decoded['message'] ?? 'Core 服务异常'}',
+            );
+          }
+      }
+    } catch (error) {
+      _stopOwned(error.toString());
     }
   }
 
@@ -242,6 +587,20 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
         if (frame.source == 'camera') _latestCameraFrame = frame.bytes;
         if (frame.source == 'screen') _latestScreenFrame = frame.bytes;
       });
+    }
+    final owned = _owned;
+    if (owned != null) {
+      if (_state == 'connected' && _ownedTurn.isNotEmpty) {
+        try {
+          _queueOwned({
+            'type': 'visual',
+            'attachment': owned.image(frame.bytes, frame.mime),
+          });
+        } catch (error) {
+          if (mounted) setState(() => _visionStatus = error.toString());
+        }
+      }
+      return;
     }
     final visualSession = _visualSession;
     if (_state != 'connected' || visualSession == null) return;
@@ -289,6 +648,10 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
               await _connectVisualSession(call);
               if (!mounted) return;
               setState(() => _state = 'connected');
+              if (widget.incomingCallId.trim().isNotEmpty &&
+                  !_answerAcknowledged) {
+                unawaited(_acknowledgeIncomingCallAnswer());
+              }
               _durationTimer ??= Timer.periodic(const Duration(seconds: 1), (
                 _,
               ) {
@@ -384,6 +747,14 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   }
 
   Future<void> _shutdown({required bool sendStop}) async {
+    final owned = _owned;
+    _owned = null;
+    owned?.close();
+    _ownedWatch?.cancel();
+    _ownedWatch = null;
+    _ownedTurn = '';
+    _ownedPending = '';
+    if (owned != null) await ref.read(ownedSpeechPlayerProvider).stop();
     _durationTimer?.cancel();
     _durationTimer = null;
     _heartbeatTimer?.cancel();
@@ -396,7 +767,11 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
     if (sendStop) {
       try {
         await session?.send(
-          WebSocketTextMessage(jsonEncode(const {'event': 'stop'})),
+          WebSocketTextMessage(
+            jsonEncode(
+              owned == null ? const {'event': 'stop'} : const {'type': 'stop'},
+            ),
+          ),
         );
       } catch (_) {}
       try {
@@ -479,11 +854,19 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
       } else {
         final session = _session;
         if (_vad.isSpeechActive && session != null) {
-          await session.send(
-            WebSocketTextMessage(
-              jsonEncode(const <String, dynamic>{'event': 'speech_end'}),
-            ),
-          );
+          if (_owned != null) {
+            if (_ownedTurn.isNotEmpty) {
+              _ownedPending = _ownedTurn;
+              _ownedTurn = '';
+              _queueOwned(const {'type': 'turn_end'});
+            }
+          } else {
+            await session.send(
+              WebSocketTextMessage(
+                jsonEncode(const <String, dynamic>{'event': 'speech_end'}),
+              ),
+            );
+          }
         }
         _vad.reset();
         await _audio.stopCapture();
@@ -536,6 +919,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   }
 
   void _publishSources() {
+    if (_owned != null) return;
     final active = _session;
     if (active == null) return;
     unawaited(
@@ -555,8 +939,15 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   }
 
   Future<void> _endCall() async {
+    if (_awaitingAnswer) {
+      await _declineIncomingCall();
+      return;
+    }
+    if (widget.incomingCallId.trim().isNotEmpty) {
+      await _reportIncomingCallEnd('user_ended');
+    }
     await _shutdown(sendStop: true);
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop(_ownedSavedConversation);
   }
 
   String get _duration {
@@ -567,6 +958,17 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(rawBackendServiceApiProvider, (_, __) {
+      if (_owned != null) _stopOwned('Core 连接已切换，实时通话已中断');
+    });
+    ref.listen(mobileDeploymentConfigProvider, (_, __) {
+      if (_owned != null) _stopOwned('设备服务模式已变化，实时通话已中断');
+    });
+    ref.listen(currentCharacterIdProvider, (_, next) {
+      if (_owned != null && next != _ownedRoleAtStart) {
+        _stopOwned('角色已切换，实时通话已中断');
+      }
+    });
     final name = widget.characterName.trim().isEmpty
         ? 'Amitia'
         : widget.characterName.trim();
@@ -581,7 +983,9 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             RealtimeCallMode.screen => '屏幕通话',
             RealtimeCallMode.voice => '语音通话',
           };
-    final statusText = _state == 'connecting'
+    final statusText = _awaitingAnswer
+        ? '邀请你进行$callMode'
+        : _state == 'connecting'
         ? '正在连接实时通话…'
         : connected
         ? (_aiSpeaking ? '对方正在说话' : (_muted ? '麦克风已静音' : '$callMode中'))
@@ -781,6 +1185,33 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   }
 
   Widget _buildControlBar(bool connected) {
+    if (_awaitingAnswer) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _RealtimeCallControl(
+              icon: Icons.call_end,
+              label: '拒绝',
+              destructive: true,
+              enabled: true,
+              onTap: _declineIncomingCall,
+            ),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            child: _RealtimeCallControl(
+              icon: Icons.call,
+              label: '接听',
+              selected: true,
+              enabled: true,
+              onTap: _answerIncomingCall,
+            ),
+          ),
+        ],
+      );
+    }
     if (_state == 'error') return _buildErrorControls();
     final modeControl = widget.initialMode == RealtimeCallMode.screen
         ? _RealtimeCallControl(

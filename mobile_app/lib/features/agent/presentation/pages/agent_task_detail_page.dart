@@ -12,26 +12,42 @@ import '../../presentation/providers/agent_tasks_provider.dart';
 
 class AgentTaskDetailPage extends ConsumerWidget {
   final String taskId;
+  final Map<String, dynamic>? initialRun;
 
-  const AgentTaskDetailPage({super.key, required this.taskId});
+  const AgentTaskDetailPage({super.key, required this.taskId, this.initialRun});
 
   String _statusLabel(AgentTaskStatus status) {
     switch (status) {
-      case AgentTaskStatus.created: return '已创建';
-      case AgentTaskStatus.queued: return '排队中';
-      case AgentTaskStatus.starting: return '启动中';
-      case AgentTaskStatus.running: return '运行中';
-      case AgentTaskStatus.checkpointing: return '检查点保存中';
-      case AgentTaskStatus.pausing: return '暂停中';
-      case AgentTaskStatus.paused: return '已暂停';
-      case AgentTaskStatus.resuming: return '恢复中';
-      case AgentTaskStatus.cancelling: return '取消中';
-      case AgentTaskStatus.cancelled: return '已取消';
-      case AgentTaskStatus.succeeded: return '已成功';
-      case AgentTaskStatus.failed: return '已失败';
-      case AgentTaskStatus.timedOut: return '已超时';
-      case AgentTaskStatus.recoveryRequired: return '需恢复';
-      case AgentTaskStatus.manualIntervention: return '需人工干预';
+      case AgentTaskStatus.created:
+        return '已创建';
+      case AgentTaskStatus.queued:
+        return '排队中';
+      case AgentTaskStatus.starting:
+        return '启动中';
+      case AgentTaskStatus.running:
+        return '运行中';
+      case AgentTaskStatus.checkpointing:
+        return '检查点保存中';
+      case AgentTaskStatus.pausing:
+        return '暂停中';
+      case AgentTaskStatus.paused:
+        return '已暂停';
+      case AgentTaskStatus.resuming:
+        return '恢复中';
+      case AgentTaskStatus.cancelling:
+        return '取消中';
+      case AgentTaskStatus.cancelled:
+        return '已取消';
+      case AgentTaskStatus.succeeded:
+        return '已成功';
+      case AgentTaskStatus.failed:
+        return '已失败';
+      case AgentTaskStatus.timedOut:
+        return '已超时';
+      case AgentTaskStatus.recoveryRequired:
+        return '需恢复';
+      case AgentTaskStatus.manualIntervention:
+        return '需人工干预';
     }
   }
 
@@ -61,7 +77,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync = ref.watch(agentTaskRuntimeDetailProvider(taskId));
+    final detailAsync = ref.watch(
+      agentTaskRuntimeDetailProvider((taskId, initialRun)),
+    );
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -72,7 +90,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
           AmitiaIconButton(
             icon: Icons.refresh,
             tooltip: '刷新真实运行状态',
-            onPressed: () => ref.invalidate(agentTaskRuntimeDetailProvider(taskId)),
+            onPressed: () => ref.invalidate(
+              agentTaskRuntimeDetailProvider((taskId, initialRun)),
+            ),
           ),
         ],
       ),
@@ -88,12 +108,18 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 SizedBox(height: AppSpacing.md),
                 Text('运行详情加载失败', style: AppTypography.cardTitle(context)),
                 SizedBox(height: AppSpacing.sm),
-                Text('$err', style: AppTypography.caption(context), textAlign: TextAlign.center),
+                Text(
+                  '$err',
+                  style: AppTypography.caption(context),
+                  textAlign: TextAlign.center,
+                ),
                 SizedBox(height: AppSpacing.lg),
                 AmitiaButton(
                   label: '重新加载',
                   icon: Icons.refresh,
-                  onPressed: () => ref.invalidate(agentTaskRuntimeDetailProvider(taskId)),
+                  onPressed: () => ref.invalidate(
+                    agentTaskRuntimeDetailProvider((taskId, initialRun)),
+                  ),
                 ),
               ],
             ),
@@ -126,26 +152,11 @@ class AgentTaskDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildNotFound(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.search_off, size: 56, color: context.textTertiary),
-          SizedBox(height: AppSpacing.md),
-          Text('任务不存在', style: AppTypography.cardTitle(context)),
-          SizedBox(height: AppSpacing.lg),
-          AmitiaButton(
-            label: '返回任务列表',
-            icon: Icons.arrow_back,
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusCard(BuildContext context, AgentTaskItem task, AgentTaskRuntimeDetail detail) {
+  Widget _buildStatusCard(
+    BuildContext context,
+    AgentTaskItem task,
+    AgentTaskRuntimeDetail detail,
+  ) {
     final stage = (detail.progress['stage'] ?? '').toString();
     final message = (detail.progress['message'] ?? '').toString();
     final current = (detail.progress['current'] as num?)?.toInt();
@@ -156,8 +167,16 @@ class AgentTaskDetailPage extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(task.title, style: AppTypography.sectionTitle(context))),
-              AmitiaStatusBadge(label: _statusLabel(task.status), type: _badgeType(task.status)),
+              Expanded(
+                child: Text(
+                  task.title,
+                  style: AppTypography.sectionTitle(context),
+                ),
+              ),
+              AmitiaStatusBadge(
+                label: _statusLabel(task.status),
+                type: _badgeType(task.status),
+              ),
             ],
           ),
           if (task.description.trim().isNotEmpty) ...[
@@ -168,11 +187,17 @@ class AgentTaskDetailPage extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(stage.isEmpty ? '执行进度' : stage, style: AppTypography.caption(context)),
+              Text(
+                stage.isEmpty ? '执行进度' : stage,
+                style: AppTypography.caption(context),
+              ),
               if (detail.percentage != null)
                 Text(
                   '${detail.percentage!.toStringAsFixed(detail.percentage! % 1 == 0 ? 0 : 1)}%',
-                  style: AppTypography.caption(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600),
+                  style: AppTypography.caption(context).copyWith(
+                    color: context.accentPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
             ],
           ),
@@ -190,8 +215,13 @@ class AgentTaskDetailPage extends ConsumerWidget {
             runSpacing: 8,
             children: [
               _meta(context, Icons.timer_outlined, '已运行 ${task.elapsed}'),
-              if (current != null && total != null && total > 0) _meta(context, Icons.checklist, '进度 $current/$total'),
-              _meta(context, Icons.layers_outlined, 'Generation ${task.generation}'),
+              if (current != null && total != null && total > 0)
+                _meta(context, Icons.checklist, '进度 $current/$total'),
+              _meta(
+                context,
+                Icons.layers_outlined,
+                'Generation ${task.generation}',
+              ),
             ],
           ),
           if (task.requiredAbilities.isNotEmpty) ...[
@@ -200,11 +230,24 @@ class AgentTaskDetailPage extends ConsumerWidget {
               spacing: 6,
               runSpacing: 4,
               children: task.requiredAbilities
-                  .map((a) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brTag),
-                        child: Text(a, style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
-                      ))
+                  .map(
+                    (a) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: context.accentSoft,
+                        borderRadius: AppRadius.brTag,
+                      ),
+                      child: Text(
+                        a,
+                        style: AppTypography.label(
+                          context,
+                        ).copyWith(color: context.accentPrimary),
+                      ),
+                    ),
+                  )
                   .toList(growable: false),
             ),
           ],
@@ -228,9 +271,17 @@ class AgentTaskDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildRuntimeDetails(BuildContext context, AgentTaskRuntimeDetail detail) {
+  Widget _buildRuntimeDetails(
+    BuildContext context,
+    AgentTaskRuntimeDetail detail,
+  ) {
     final sections = <MapEntry<String, Map<String, dynamic>>>[
-      MapEntry('任务输入', detail.run['input'] is Map ? Map<String, dynamic>.from(detail.run['input'] as Map) : const <String, dynamic>{}),
+      MapEntry(
+        '任务输入',
+        detail.run['input'] is Map
+            ? Map<String, dynamic>.from(detail.run['input'] as Map)
+            : const <String, dynamic>{},
+      ),
       MapEntry('实时进度', detail.progress),
       MapEntry('执行结果', detail.result),
       MapEntry('检查点', detail.checkpoint),
@@ -244,30 +295,52 @@ class AgentTaskDetailPage extends ConsumerWidget {
         if (sections.isEmpty)
           Text('运行时尚未返回进度、结果或检查点数据', style: AppTypography.caption(context))
         else
-          ...sections.map((entry) => Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _payloadBox(context, entry.key, _pretty(entry.value)),
-              )),
+          ...sections.map(
+            (entry) => Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _payloadBox(context, entry.key, _pretty(entry.value)),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _payloadBox(BuildContext context, String title, String payload, {Color? tone}) {
+  Widget _payloadBox(
+    BuildContext context,
+    String title,
+    String payload, {
+    Color? tone,
+  }) {
     final color = tone ?? context.textPrimary;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: tone == null ? context.surfaceSecondary : color.withValues(alpha: 0.08),
+        color: tone == null
+            ? context.surfaceSecondary
+            : color.withValues(alpha: 0.08),
         borderRadius: AppRadius.brSmall,
-        border: Border.all(color: tone == null ? context.borderPrimary : color.withValues(alpha: 0.24), width: 0.5),
+        border: Border.all(
+          color: tone == null
+              ? context.borderPrimary
+              : color.withValues(alpha: 0.24),
+          width: 0.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600, color: color)),
+          Text(
+            title,
+            style: AppTypography.label(
+              context,
+            ).copyWith(fontWeight: FontWeight.w600, color: color),
+          ),
           const SizedBox(height: 6),
-          SelectableText(payload, style: AppTypography.caption(context).copyWith(color: color)),
+          SelectableText(
+            payload,
+            style: AppTypography.caption(context).copyWith(color: color),
+          ),
         ],
       ),
     );
@@ -284,12 +357,21 @@ class AgentTaskDetailPage extends ConsumerWidget {
         Text('工具调用记录', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.md),
         if (calls.isEmpty)
-          Text('当前运行时没有返回工具调用明细；页面不会再用固定空态覆盖真实数据。', style: AppTypography.caption(context))
+          Text(
+            '当前运行时没有返回工具调用明细；页面不会再用固定空态覆盖真实数据。',
+            style: AppTypography.caption(context),
+          )
         else
-          ...calls.asMap().entries.map((entry) => Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _payloadBox(context, '调用 ${entry.key + 1}', _pretty(entry.value)),
-              )),
+          ...calls.asMap().entries.map(
+            (entry) => Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _payloadBox(
+                context,
+                '调用 ${entry.key + 1}',
+                _pretty(entry.value),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -330,11 +412,18 @@ class AgentTaskDetailPage extends ConsumerWidget {
     }
   }
 
-  Widget _buildBottomActions(BuildContext context, AgentTaskItem task, WidgetRef ref) {
-    Future<void> run(Future<void> Function() action, String successMessage) async {
+  Widget _buildBottomActions(
+    BuildContext context,
+    AgentTaskItem task,
+    WidgetRef ref,
+  ) {
+    Future<void> run(
+      Future<void> Function() action,
+      String successMessage,
+    ) async {
       try {
         await action();
-        ref.invalidate(agentTaskRuntimeDetailProvider(task.id));
+        ref.invalidate(agentTaskRuntimeDetailProvider((taskId, initialRun)));
         if (context.mounted) amitiaSnackBar(context, successMessage);
       } catch (e) {
         if (context.mounted) amitiaSnackBar(context, '操作失败：$e');
@@ -344,57 +433,84 @@ class AgentTaskDetailPage extends ConsumerWidget {
     final notifier = ref.read(agentTasksProvider.notifier);
     final buttons = <Widget>[];
     if (task.canPause) {
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '暂停',
-          isSecondary: true,
-          icon: Icons.pause,
-          onPressed: () => run(() => notifier.pause(task.id), '任务已由服务端暂停'),
+      buttons.add(
+        Expanded(
+          child: AmitiaButton(
+            label: '暂停',
+            isSecondary: true,
+            icon: Icons.pause,
+            onPressed: () => run(
+              () => notifier.pause(task.id, expectedTask: task),
+              '任务已由服务端暂停',
+            ),
+          ),
         ),
-      ));
+      );
     } else if (task.canResume) {
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '继续',
-          icon: Icons.play_arrow,
-          onPressed: () => run(() => notifier.resume(task.id), '任务已由服务端继续执行'),
+      buttons.add(
+        Expanded(
+          child: AmitiaButton(
+            label: '继续',
+            icon: Icons.play_arrow,
+            onPressed: () => run(
+              () => notifier.resume(task.id, expectedTask: task),
+              '任务已由服务端继续执行',
+            ),
+          ),
         ),
-      ));
+      );
     } else if (task.canRecover) {
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '恢复任务',
-          icon: Icons.settings_backup_restore,
-          onPressed: () => run(() => notifier.recover(task.id), '已通过 Kernel recover 提交恢复'),
+      buttons.add(
+        Expanded(
+          child: AmitiaButton(
+            label: '恢复任务',
+            icon: Icons.settings_backup_restore,
+            onPressed: () => run(
+              () => notifier.recover(task.id, expectedTask: task),
+              '已通过 Kernel recover 提交恢复',
+            ),
+          ),
         ),
-      ));
+      );
     } else if (task.canRetry) {
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: task.status == AgentTaskStatus.manualIntervention ? '重新执行' : '重试',
-          icon: Icons.refresh,
-          onPressed: () => run(() => notifier.retry(task.id), '任务已通过 Retry 重新入队'),
+      buttons.add(
+        Expanded(
+          child: AmitiaButton(
+            label: task.status == AgentTaskStatus.manualIntervention
+                ? '重新执行'
+                : '重试',
+            icon: Icons.refresh,
+            onPressed: () => run(
+              () => notifier.retry(task.id, expectedTask: task),
+              '任务已通过 Retry 重新入队',
+            ),
+          ),
         ),
-      ));
+      );
     }
 
     if (task.canCancel) {
       if (buttons.isNotEmpty) buttons.add(SizedBox(width: AppSpacing.sm));
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '取消',
-          isSecondary: true,
-          isDestructive: true,
-          icon: Icons.cancel_outlined,
-          onPressed: () => _confirmDestructive(
-            context,
-            title: '取消任务',
-            message: '确定取消当前 Kernel Task 吗？',
-            confirmLabel: '取消任务',
-            onConfirm: () => run(() => notifier.cancel(task.id), '任务已由服务端取消'),
+      buttons.add(
+        Expanded(
+          child: AmitiaButton(
+            label: '取消',
+            isSecondary: true,
+            isDestructive: true,
+            icon: Icons.cancel_outlined,
+            onPressed: () => _confirmDestructive(
+              context,
+              title: '取消任务',
+              message: '确定取消当前 Kernel Task 吗？',
+              confirmLabel: '取消任务',
+              onConfirm: () => run(
+                () => notifier.cancel(task.id, expectedTask: task),
+                '任务已由服务端取消',
+              ),
+            ),
           ),
         ),
-      ));
+      );
     }
 
     if (buttons.isEmpty) {

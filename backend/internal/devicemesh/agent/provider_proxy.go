@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
 )
 
@@ -82,6 +83,17 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 		c.JSON(403, gin.H{"message": "不允许转发该服务路径"})
 		return
 	}
+	realtimeOrigin := ""
+	if ownedRealtimeOriginPath(path) {
+		realtimeOrigin = c.GetHeader("Origin")
+		if realtimeOrigin != "" {
+			parsed, err := url.Parse(realtimeOrigin)
+			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+				c.AbortWithStatus(403)
+				return
+			}
+		}
+	}
 	target, err := url.Parse(credential.CloudBaseUrl)
 	if err != nil || target.Host == "" || target.User != nil || (target.Scheme != "https" && target.Scheme != "http") {
 		c.JSON(503, gin.H{"message": "云端服务地址无效"})
@@ -110,12 +122,15 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 			request.Out.URL.RawQuery = query.Encode()
 			request.Out.Host = target.Host
 			forwarded := make(http.Header)
-			for _, name := range []string{"Accept", "Accept-Encoding", "Content-Type", "Range", "If-Range", "If-Match", "If-None-Match", "X-Request-ID", "X-Amitia-Target-Device-ID", "X-Device-Timezone", "Idempotency-Key", "X-Amitia-Client-Type"} {
+			for _, name := range []string{"Accept", "Accept-Encoding", "Content-Type", "Range", "If-Range", "If-Match", "If-None-Match", "X-Request-ID", "X-Amitia-Target-Device-ID", "X-Device-Timezone", "Idempotency-Key", "X-Amitia-Client-Type", "X-Amitia-Role-Authority", "X-Amitia-Expected-Core-ID", "X-Amitia-Expected-Configuration-Policy"} {
 				if values := request.In.Header.Values(name); len(values) > 0 {
 					forwarded[name] = append([]string(nil), values...)
 				}
 			}
 			request.Out.Header = forwarded
+			if realtimeOrigin != "" {
+				request.Out.Header.Set("Origin", realtimeOrigin)
+			}
 			if strings.EqualFold(request.In.Header.Get("Upgrade"), "websocket") {
 				request.Out.Header.Set("Connection", "Upgrade")
 				request.Out.Header.Set("Upgrade", "websocket")
@@ -145,4 +160,17 @@ func (h *LocalHandler) handleProviderProxy(c *gin.Context) {
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<20)
 	proxy.ServeHTTP(c.Writer, c.Request)
+}
+
+func ownedRealtimeOriginPath(path string) bool {
+	if path == "/api/device-mesh/v1/business/realtime/tickets" || path == "/api/device-mesh/v1/business/realtime/session" {
+		return true
+	}
+	const prefix = "/api/device-mesh/v1/business/realtime/invitations/"
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, "/accept") {
+		return false
+	}
+	id := strings.TrimSuffix(strings.TrimPrefix(path, prefix), "/accept")
+	_, err := uuid.Parse(id)
+	return err == nil && !strings.Contains(id, "/")
 }

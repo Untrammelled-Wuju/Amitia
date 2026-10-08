@@ -19,14 +19,14 @@ func (h *Handler) LogsFileContent(c *gin.Context) {
 	c.String(200, h.service.GetLogsFileContent(c.Param("name")))
 }
 
-func (h *Handler) LogsDelete(c *gin.Context) { util.SuccessResponse(c, h.service.DeleteLogs()) }
+func (h *Handler) LogsDelete(c *gin.Context) { h.administratorAction(c, "logs-delete", "") }
 
 func (h *Handler) LogsModelErrors(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetLogsModelErrors())
 }
 
 func (h *Handler) LogsDeleteModelErrors(c *gin.Context) {
-	util.SuccessResponse(c, h.service.DeleteLogsModelErrors())
+	h.administratorAction(c, "model-errors-delete", "")
 }
 
 func (h *Handler) LogsPromptTraces(c *gin.Context) {

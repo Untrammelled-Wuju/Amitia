@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package embedding_config
 
-import "gorm.io/gorm"
+import (
+	"github.com/u-ai/backend/internal/configwrite"
+	"gorm.io/gorm"
+)
 
 type Repository interface {
 	List() ([]EmbeddingConfig, error)
@@ -34,19 +37,20 @@ func (r *repository) GetByID(id int) (*EmbeddingConfig, error) {
 	return &cfg, err
 }
 
-func (r *repository) Create(cfg *EmbeddingConfig) error { return r.db.Create(cfg).Error }
+func (r *repository) Create(cfg *EmbeddingConfig) error {
+	return configwrite.Create(r.db, cfg, cfg.IsActive == 1)
+}
 
 func (r *repository) Update(id int, updates map[string]interface{}) error {
-	return r.db.Model(&EmbeddingConfig{}).Where("id = ?", id).Updates(updates).Error
+	return configwrite.Update[EmbeddingConfig](r.db, id, updates)
 }
 
 func (r *repository) Delete(id int) error {
-	return r.db.Where("id = ?", id).Delete(&EmbeddingConfig{}).Error
+	return configwrite.Delete[EmbeddingConfig](r.db, id)
 }
 
 func (r *repository) Activate(id int) error {
-	r.db.Model(&EmbeddingConfig{}).Where("is_active = 1").Update("is_active", 0)
-	return r.db.Model(&EmbeddingConfig{}).Where("id = ?", id).Update("is_active", 1).Error
+	return configwrite.Activate[EmbeddingConfig](r.db, id)
 }
 
 func (r *repository) GetActive() (*EmbeddingConfig, error) {

@@ -33,9 +33,13 @@ if (Test-Path $adminMySQLConfigPath) {
     $adminMySQLConfig = Get-Content -Raw $adminMySQLConfigPath | ConvertFrom-Json
 }
 
-$env:AMITIA_RUNTIME_ROOT = $root
+$env:AMITIA_RUNTIME_ROOT = Join-Path $root "AmitiaData"
+$env:AMITIA_CONFIG_DIR = Join-Path $env:AMITIA_RUNTIME_ROOT "config"
 $env:AMITIA_WORKSPACE_DIR = $root
 $env:AMITIA_DATA_DIR = Join-Path $root "AmitiaData"
+$env:AMITIA_RUN_MODE = "desktop"
+$env:AMITIA_SURREAL_USER = "root"
+$env:AMITIA_SURREAL_PASSWORD = $surrealPass
 $env:AMITIA_EXTENSION_DEV_MODE = "true"
 
 function Stop-ProjectProcess {
@@ -44,7 +48,7 @@ function Stop-ProjectProcess {
     if ($null -eq $process -or [string]::IsNullOrWhiteSpace($process.ExecutablePath)) {
         return
     }
-    if (-not $process.ExecutablePath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $process.ExecutablePath.StartsWith($root + "\", [System.StringComparison]::OrdinalIgnoreCase)) {
         return
     }
     Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
@@ -53,7 +57,7 @@ function Stop-ProjectProcess {
 Write-Host "=== U-Ai 完整启动脚本 ===" -ForegroundColor Cyan
 
 Write-Host "`n[1/8] 清理项目旧进程..." -ForegroundColor Yellow
-$projectNames = @("server", "admin-server", "AmitiaCore", "qdrant", "surreal", "mysqld", "node", "electron")
+$projectNames = @("server", "server.codex2", "server.codex", "server.runtime", "server.current", "server.new", "admin-server", "AmitiaCore", "qdrant", "surreal", "mysqld", "node", "electron")
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Where-Object {
         $_.Name -and [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -in $projectNames -and
@@ -153,16 +157,11 @@ Start-Process -FilePath $surrealExe `
     -WindowStyle Hidden
 Start-Sleep -Seconds 5
 
-Write-Host "`n[4/8] 启动 Qdrant..." -ForegroundColor Yellow
-Start-Process -FilePath $qdrantExe `
-    -ArgumentList "--config-path", "config\config.yaml" `
-    -WorkingDirectory (Join-Path $backendDir "qdrant") `
-    -WindowStyle Hidden
-Start-Sleep -Seconds 5
+Write-Host "`n[4/8] Qdrant 由核心运行时管理..." -ForegroundColor Yellow
 
 Write-Host "`n[5/8] 启动后端 Server..." -ForegroundColor Yellow
 $env:PATH = "$(Split-Path -Parent $nodeExe);$env:PATH"
-Start-Process -FilePath $serverExe -WorkingDirectory $backendDir -WindowStyle Hidden
+Start-Process -FilePath $serverExe -ArgumentList "--runtime-profile=local" -WorkingDirectory $env:AMITIA_RUNTIME_ROOT -WindowStyle Hidden
 Start-Sleep -Seconds 20
 
 Write-Host "`n[6/8] 启动前端..." -ForegroundColor Yellow
@@ -290,10 +289,12 @@ Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
     Where-Object { $_.LocalPort -in 13306, 18899, 18998, 18000, 19178, 15178, 15179 } |
     Format-Table LocalPort, OwningProcess -AutoSize
 
+$startupHealthy = $true
 try {
-    $health = Invoke-RestMethod -Uri "http://127.0.0.1:18899/api/health" -TimeoutSec 5
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:18899/api/public/health" -TimeoutSec 5
     Write-Host "后端健康检查: $($health | ConvertTo-Json -Compress)" -ForegroundColor Green
 } catch {
+    $startupHealthy = $false
     Write-Host "后端健康检查失败: $($_.Exception.Message)" -ForegroundColor Red
 }
 
@@ -301,5 +302,21 @@ try {
     $adminHealth = Invoke-RestMethod -Uri "http://127.0.0.1:18998/readyz" -TimeoutSec 5
     Write-Host "管理服务健康检查: $($adminHealth | ConvertTo-Json -Compress)" -ForegroundColor Green
 } catch {
+    $startupHealthy = $false
     Write-Host "管理服务健康检查失败: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+foreach ($serviceURL in @("http://127.0.0.1:15178", "http://127.0.0.1:15179", "http://127.0.0.1:18000/health", "http://127.0.0.1:19178/healthz")) {
+    try {
+        $serviceHealth = Invoke-WebRequest -Uri $serviceURL -TimeoutSec 5
+        if ($serviceHealth.StatusCode -ne 200) {
+            $startupHealthy = $false
+        }
+    } catch {
+        $startupHealthy = $false
+        Write-Host "服务健康检查失败: $serviceURL" -ForegroundColor Red
+    }
+}
+if (-not $startupHealthy) {
+    exit 1
 }

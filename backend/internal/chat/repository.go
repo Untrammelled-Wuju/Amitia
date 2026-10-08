@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"github.com/u-ai/backend/internal/configwrite"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -257,7 +258,7 @@ func (r *repository) CountModels() (int64, error) {
 }
 
 func (r *repository) CreateModel(cfg *ModelConfig) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
 		if cfg.IsActive == 1 {
 			if err := tx.Model(&ModelConfig{}).Where("is_active = 1").Update("is_active", 0).Error; err != nil {
 				return err
@@ -268,7 +269,11 @@ func (r *repository) CreateModel(cfg *ModelConfig) error {
 }
 
 func (r *repository) UpdateModel(id int, updates map[string]interface{}) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
+		var target ModelConfig
+		if err := tx.First(&target, id).Error; err != nil {
+			return err
+		}
 		active := updates["is_active"]
 		if active == true || active == 1 || active == float64(1) {
 			if err := tx.Model(&ModelConfig{}).Where("is_active = 1 AND id <> ?", id).Update("is_active", 0).Error; err != nil {
@@ -280,11 +285,17 @@ func (r *repository) UpdateModel(id int, updates map[string]interface{}) error {
 }
 
 func (r *repository) DeleteModel(id int) error {
-	return r.db.Delete(&ModelConfig{}, id).Error
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
+		var target ModelConfig
+		if err := tx.First(&target, id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&target).Error
+	})
 }
 
 func (r *repository) ActivateModel(id int) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
 		var target ModelConfig
 		if err := tx.First(&target, id).Error; err != nil {
 			return err
@@ -308,7 +319,7 @@ func (r *repository) GetModelRoutes() ([]map[string]interface{}, error) {
 }
 
 func (r *repository) UpdateModelRoutes(routes []map[string]interface{}) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
 		if err := tx.Exec("DELETE FROM model_scenario_routes").Error; err != nil {
 			return err
 		}

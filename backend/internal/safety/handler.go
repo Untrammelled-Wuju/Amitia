@@ -2,15 +2,25 @@ package safety
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/securityaudit"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
 func (h *Handler) GetBdiConfig(c *gin.Context) {
-	var value string
-	h.db.Raw("SELECT value FROM app_settings WHERE key = 'safety_bdi_config' LIMIT 1").Row().Scan(&value)
+	value, err := h.settingValue(c, "safety_bdi_config")
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取配置失败", nil)
+		return
+	}
 	if value == "" || value == "{}" {
 		util.SuccessResponse(c, &BdiConfig{
 			HardConstraints: []HardConstraint{},
@@ -52,15 +62,38 @@ func (h *Handler) PutBdiConfig(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "序列化失败", nil)
 		return
 	}
-	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('safety_bdi_config', ?, datetime('now', 'localtime'))", string(data))
+	if err := h.saveSetting(c, "safety_bdi_config", string(data)); err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存配置失败", nil)
+		return
+	}
 	util.SuccessMsgResponse(c, "BDI 配置已保存", nil)
 }
 
 func (h *Handler) GetAuditLogs(c *gin.Context) {
-	var logs []AuditLog
-	h.db.Table("audit_logs").Order("time DESC").Limit(50).Find(&logs)
-	if logs == nil {
-		logs = []AuditLog{}
+	actor, ok := auth.FromContext(c.Request.Context())
+	if !ok || actor == nil || strings.TrimSpace(string(actor.SpaceID)) == "" {
+		util.ErrorResponse(c, response.InternalError, "审计查询缺少可信空间身份", nil)
+		return
+	}
+	scope, scoped := coordination.FromContext(c.Request.Context())
+	if (actor.PrincipalType == auth.PrincipalTrustedDevice && !scoped) || (scoped && scope.SpaceID != string(actor.SpaceID)) {
+		util.ErrorResponse(c, response.InternalError, "审计空间与当前授权不一致", nil)
+		return
+	}
+	logs := make([]map[string]string, 0)
+	err := configwrite.Transaction(h.db.WithContext(c.Request.Context()), func(tx *gorm.DB) error {
+		var events []securityaudit.AuditEvent
+		if err := tx.Where("space_id = ?", string(actor.SpaceID)).Order("occurred_at DESC, event_id DESC").Limit(50).Find(&events).Error; err != nil {
+			return err
+		}
+		for _, event := range events {
+			logs = append(logs, map[string]string{"id": event.EventID, "time": event.OccurredAt, "ruleId": event.ReasonCode, "action": event.EventType})
+		}
+		return nil
+	})
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取审计记录失败", nil)
+		return
 	}
 	util.SuccessResponse(c, logs)
 }
@@ -82,8 +115,11 @@ func defaultSafetyConfig() *SafetyConfig {
 }
 
 func (h *Handler) GetConfig(c *gin.Context) {
-	var value string
-	h.db.Raw("SELECT value FROM app_settings WHERE key = 'safety_config' LIMIT 1").Row().Scan(&value)
+	value, err := h.settingValue(c, "safety_config")
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取配置失败", nil)
+		return
+	}
 	if value == "" || value == "{}" {
 		util.SuccessResponse(c, defaultSafetyConfig())
 		return
@@ -107,6 +143,30 @@ func (h *Handler) PutConfig(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "序列化失败", nil)
 		return
 	}
-	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('safety_config', ?, datetime('now', 'localtime'))", string(data))
+	if err := h.saveSetting(c, "safety_config", string(data)); err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存配置失败", nil)
+		return
+	}
 	util.SuccessMsgResponse(c, "安全配置已保存", nil)
+}
+
+func (h *Handler) settingValue(c *gin.Context, key string) (string, error) {
+	var value string
+	err := configwrite.Transaction(h.db.WithContext(c.Request.Context()), func(tx *gorm.DB) error {
+		var err error
+		var row struct{ Value string }
+		err = tx.Table("app_settings").Select("value").Where("key = ? AND deleted_at IS NULL", key).Take(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = nil
+		}
+		value = row.Value
+		return err
+	})
+	return value, err
+}
+
+func (h *Handler) saveSetting(c *gin.Context, key, value string) error {
+	return configwrite.Transaction(h.db.WithContext(c.Request.Context()), func(tx *gorm.DB) error {
+		return tx.Exec("INSERT INTO app_settings (key, value, revision, updated_at) VALUES (?, ?, 1, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, revision = app_settings.revision + 1, deleted_at = NULL, updated_at = excluded.updated_at", key, value).Error
+	})
 }

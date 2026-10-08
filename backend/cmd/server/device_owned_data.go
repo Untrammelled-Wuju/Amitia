@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 )
 
 func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.CancellableRuntimeInvokeHandler, error) {
@@ -26,16 +27,19 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 	credentials := agent.NewCredentialStore(dataDir)
 	return func(ctx context.Context, invocation protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
 		var req struct {
-			CancelledCallIDs         []string                      `json:"cancelledCallIds"`
-			FencedDeviceID           string                        `json:"fencedDeviceId"`
-			ClosedPermissionRevision int64                         `json:"closedPermissionRevision"`
-			Operation                string                        `json:"operation"`
-			Scope                    coordination.ExecutionScope   `json:"scope"`
-			Commit                   coordination.Commit           `json:"commit"`
-			Kind                     string                        `json:"kind"`
-			RoleID                   string                        `json:"roleId"`
-			Query                    coordination.DataQuery        `json:"query"`
-			Interrupted              coordination.InterruptedReply `json:"interrupted"`
+			CancelledCallIDs         []string                                 `json:"cancelledCallIds"`
+			FencedDeviceID           string                                   `json:"fencedDeviceId"`
+			ClosedPermissionRevision int64                                    `json:"closedPermissionRevision"`
+			Operation                string                                   `json:"operation"`
+			Scope                    coordination.ExecutionScope              `json:"scope"`
+			TaskRead                 coordination.TaskReadProof               `json:"taskRead"`
+			TaskPermission           task_runtime.SourceTaskPermissionRequest `json:"taskPermission"`
+			TaskCatalog              task_runtime.DeviceTaskCatalogRequest    `json:"taskCatalog"`
+			Commit                   coordination.Commit                      `json:"commit"`
+			Kind                     string                                   `json:"kind"`
+			RoleID                   string                                   `json:"roleId"`
+			Query                    coordination.DataQuery                   `json:"query"`
+			Interrupted              coordination.InterruptedReply            `json:"interrupted"`
 		}
 		if len(invocation.Input) > 4<<20 {
 			return nil, coordination.ErrPendingLimit
@@ -68,7 +72,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 		if cred == nil || cred.ExpiresAt.Before(time.Now()) || invocation.SpaceID != cred.SpaceID || invocation.DeviceID != identity.DeviceID || invocation.RuntimeID != identity.RuntimeID || scope.SpaceID != cred.SpaceID.String() || scope.CoreID != cred.SpaceID.String() || scope.TargetDeviceID != identity.DeviceID.String() {
 			return nil, coordination.ErrWrongOwner
 		}
-		if req.Operation != "task-definition" && req.Operation != "history" && req.Operation != "history-list" && req.Operation != "history-list-page" && req.Operation != "history-roles" && (scope.ResourceOwnerID != identity.DeviceID.String() || scope.RoleOwnerID != identity.DeviceID.String()) {
+		if req.Operation != "task-definition" && req.Operation != "task-catalog-entry" && req.Operation != "task-permissions" && req.Operation != "task-catalog" && req.Operation != "task-history-resource" && req.Operation != "history" && req.Operation != "history-list" && req.Operation != "history-list-page" && req.Operation != "history-roles" && (scope.ResourceOwnerID != identity.DeviceID.String() || scope.RoleOwnerID != identity.DeviceID.String()) {
 			return nil, coordination.ErrWrongOwner
 		}
 		var result any
@@ -96,7 +100,57 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				}
 			}
 			switch req.Operation {
-			case "task-definition":
+			case "task-catalog":
+				owner := identity.DeviceID.String()
+				if scope.Coordinated {
+					owner = scope.CoreID
+				}
+				if scope.ResourceOwnerID != owner || scope.RoleOwnerID != owner || services.KernelContainer.TaskRuntimeService == nil {
+					return coordination.ErrWrongOwner
+				}
+				list := func() error {
+					result, err = services.KernelContainer.TaskRuntimeService.DescribeInstalledTaskCatalog(ctx, identity.DeviceID.String(), req.TaskCatalog)
+					if err != nil {
+						return err
+					}
+					if err := coordination.ValidateSourceCall(ctx, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
+						return err
+					}
+					return coordination.ValidateSourceAuthority(ctx, services.KernelContainer.DeviceRegistry.Database(), scope)
+				}
+				if scope.Coordinated {
+					err = list()
+				} else {
+					err = port.WithSourceRole(ctx, scope, list)
+				}
+			case "task-permissions":
+				owner := identity.DeviceID.String()
+				if scope.Coordinated {
+					owner = scope.CoreID
+				}
+				if scope.ResourceOwnerID != owner || scope.RoleOwnerID != owner || req.TaskPermission.Scope != scope || services.KernelContainer.TaskRuntimeService == nil {
+					return coordination.ErrWrongOwner
+				}
+				permissionTarget := req.TaskPermission.Run.ExecutionTarget
+				if permissionTarget.RuntimeID != invocation.RuntimeID || permissionTarget.RuntimeSessionID != invocation.RuntimeSessionID || permissionTarget.ConnectionGeneration != invocation.ConnectionGeneration {
+					return coordination.ErrScopeExpired
+				}
+				check := func() error {
+					result, err = services.KernelContainer.TaskRuntimeService.CheckInstalledTaskPermissions(coordination.WithScope(ctx, scope), req.TaskPermission)
+					if err != nil {
+						return err
+					}
+					if err := coordination.ValidateSourceCall(ctx, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
+						return err
+					}
+					return coordination.ValidateSourceAuthority(ctx, services.KernelContainer.DeviceRegistry.Database(), scope)
+				}
+				if scope.Coordinated {
+					err = check()
+				} else {
+					err = port.WithSourceRole(ctx, scope, check)
+				}
+			case "task-definition", "task-catalog-entry":
 				owner := identity.DeviceID.String()
 				if scope.Coordinated {
 					owner = scope.CoreID
@@ -105,7 +159,11 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 					return coordination.ErrWrongOwner
 				}
 				describe := func() error {
-					result, err = services.KernelContainer.TaskRuntimeService.DescribeInstalledTask(ctx, req.Query.ResourceID, identity.DeviceID.String())
+					if req.Operation == "task-catalog-entry" {
+						result, err = services.KernelContainer.TaskRuntimeService.DescribeInstalledTaskCatalogEntry(ctx, identity.DeviceID.String(), req.Query.ResourceID)
+					} else {
+						result, err = services.KernelContainer.TaskRuntimeService.DescribeInstalledTask(ctx, req.Query.ResourceID, identity.DeviceID.String())
+					}
 					if err != nil {
 						return err
 					}
@@ -138,6 +196,14 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result, err = port.Snapshot(ctx, scope, req.Query)
 			case "resource":
 				result, err = port.Resource(ctx, scope, req.Query.ResourceKind, req.Query.ResourceID)
+			case "task-history-resource":
+				result, err = port.ReadTaskResource(ctx, scope, req.TaskRead, req.Query.ResourceKind, req.Query.ResourceID)
+				if err == nil {
+					err = coordination.ValidateSourceCall(ctx, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID)
+				}
+				if err == nil {
+					err = coordination.ValidateSourceAuthority(ctx, services.KernelContainer.DeviceRegistry.Database(), scope)
+				}
 			case "history":
 				if !scope.Coordinated || scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID {
 					return coordination.ErrWrongOwner

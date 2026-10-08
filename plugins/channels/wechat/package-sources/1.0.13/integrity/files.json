@@ -1,0 +1,96 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "assets/legacy-source/source/amitia-mobile-ui/pages/channels.html": {
+      "path": "assets/legacy-source/source/amitia-mobile-ui/pages/channels.html",
+      "size": 18642,
+      "hash": "28f954f6ebad5909b5ca4c6520e7df7ddd9133362bd6c075bfb109948232490a",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "assets/legacy-source/source/front/src/views/wechat-connect/WechatConnectView.vue": {
+      "path": "assets/legacy-source/source/front/src/views/wechat-connect/WechatConnectView.vue",
+      "size": 26094,
+      "hash": "0a60245ebdfea0951d8fdd8492341e64b2af9b15f0106db42a4a65ba6c424566",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "assets/legacy-source/source/mobile_app/lib/features/channels/presentation/pages/wechat_page.dart": {
+      "path": "assets/legacy-source/source/mobile_app/lib/features/channels/presentation/pages/wechat_page.dart",
+      "size": 16231,
+      "hash": "fbf456689f6ac7714de83079fab442aec525bc4657a41836928195704b4136c3",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "assets/legacy-source/sources.json": {
+      "path": "assets/legacy-source/sources.json",
+      "size": 479,
+      "hash": "4619e9f09f7e7b890ef813bac5a6e57a655a2b2570acfecddce6f7d9bd6af6a7",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "manifest.json": {
+      "path": "manifest.json",
+      "size": 20449,
+      "hash": "fa98f779addfe7b50bfb79c79208a0f111ffd13887547e15bed015a902e02198",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-service/bundle.mjs": {
+      "path": "modules/wechat-channel-service/bundle.mjs",
+      "size": 6157285,
+      "hash": "93fd3f44a764ed45b03b3d8a1ee75e6db47b65aeedfa544ada1a0a6eb69eaefd",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-service/launcher.mjs": {
+      "path": "modules/wechat-channel-service/launcher.mjs",
+      "size": 649,
+      "hash": "9c0732f6aa4c5b1fc93048e0774cd125b4043105d0d77da386b0142569a416cd",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-service/package.json": {
+      "path": "modules/wechat-channel-service/package.json",
+      "size": 94,
+      "hash": "0bb69f3b639b7e36cd7e153c85ca2111ed913daf5cd13e4a21614be109d4f801",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-ui/desktop/app.js": {
+      "path": "modules/wechat-channel-ui/desktop/app.js",
+      "size": 1023814,
+      "hash": "d0ef699706202987af5649c5aadb591682919f6ca33c4a6ae515c58e27c0650d",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-ui/desktop/index.html": {
+      "path": "modules/wechat-channel-ui/desktop/index.html",
+      "size": 380,
+      "hash": "a0d55c6c49f9ba79236ca2e06e2e7190218a19380778d509b52cdd230571ac9a",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-ui/desktop/styles.css": {
+      "path": "modules/wechat-channel-ui/desktop/styles.css",
+      "size": 387836,
+      "hash": "3503b87e27e4bc0479c3eb15fe29986d814abafc2bbec2b4681e9866e40a2872",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-ui/mobile/app.js": {
+      "path": "modules/wechat-channel-ui/mobile/app.js",
+      "size": 1023814,
+      "hash": "d0ef699706202987af5649c5aadb591682919f6ca33c4a6ae515c58e27c0650d",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-ui/mobile/index.html": {
+      "path": "modules/wechat-channel-ui/mobile/index.html",
+      "size": 380,
+      "hash": "a0d55c6c49f9ba79236ca2e06e2e7190218a19380778d509b52cdd230571ac9a",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-ui/mobile/styles.css": {
+      "path": "modules/wechat-channel-ui/mobile/styles.css",
+      "size": 387836,
+      "hash": "3503b87e27e4bc0479c3eb15fe29986d814abafc2bbec2b4681e9866e40a2872",
+      "modified": "2026-01-01T00:00:00Z"
+    },
+    "modules/wechat-channel-ui/package.json": {
+      "path": "modules/wechat-channel-ui/package.json",
+      "size": 23,
+      "hash": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+      "modified": "2026-01-01T00:00:00Z"
+    }
+  },
+  "generatedAt": "2026-01-01T00:00:00Z"
+}

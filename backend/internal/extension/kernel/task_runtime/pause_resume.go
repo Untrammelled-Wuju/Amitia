@@ -36,6 +36,8 @@ const (
 )
 
 func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest) error {
+	unlock := s.lockTaskOwner(req.TaskRunID)
+	defer unlock()
 	current, err := s.store.GetTaskRun(ctx, req.TaskRunID)
 	if err != nil {
 		return NewTaskError(ErrTaskNotFound, err.Error())
@@ -68,8 +70,8 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 		return NewTaskError(ErrTaskPauseUnsupported, "cannot pause in status: "+string(current.Status))
 	}
 
-	if current.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
-		return NewTaskError(ErrTaskPauseUnsupported, "only local task execution can be paused in G13")
+	if placement := current.EffectiveExecutionPlacement(); placement != TaskExecutionPlacementLocal && placement != TaskExecutionPlacementDevice {
+		return NewTaskError(ErrTaskPauseUnsupported, "当前执行位置不支持已确认暂停")
 	}
 
 	now := time.Now().UTC()
@@ -90,6 +92,11 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 	}); err != nil {
 		return err
 	}
+	if current.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		unlock()
+		return s.pauseRemoteTask(ctx, pausedRun, reason)
+	}
+	unlock()
 
 	s.mu.RLock()
 	host := s.activeHosts[req.TaskRunID]
@@ -164,8 +171,8 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 		return NewTaskError(ErrTaskResumeStaleGeneration, "stale generation")
 	}
 
-	if current.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
-		return NewTaskError(ErrTaskResumeIncompatible, "only local task execution can be resumed in G13")
+	if placement := current.EffectiveExecutionPlacement(); placement != TaskExecutionPlacementLocal && placement != TaskExecutionPlacementDevice {
+		return NewTaskError(ErrTaskResumeIncompatible, "当前执行位置不支持检查点恢复")
 	}
 
 	if req.ResumeKind == "" {
@@ -201,6 +208,19 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 	if err := coordination.ValidateCurrent(restored); err != nil {
 		return err
 	}
+	if current.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		executor, supported := s.remoteExecutor.(interface {
+			ConfirmPauseStopped(context.Context, *TaskRun) bool
+		})
+		confirmation, cancel := context.WithTimeout(restored, time.Second)
+		defer cancel()
+		if !supported || !executor.ConfirmPauseStopped(confirmation, current) {
+			return NewTaskError(ErrTaskPauseInProgress, "旧设备执行停止尚未确认，不能恢复")
+		}
+	}
+	if err := coordination.ValidateCurrent(restored); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if current.DeadlineAt != nil && !current.DeadlineAt.After(now) {
 		return NewTaskError(ErrTaskResumeIncompatible, "任务执行期限已过")
@@ -209,10 +229,28 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 	resumedRun.Status = RunStatusQueued
 	resumedRun.Generation++
 	resumedRun.ExecutionAttemptID = ""
+	resumedRun.LeaseID = ""
+	resumedRun.LeaseExpiresAt, resumedRun.LastHeartbeatAt = nil, nil
 	resumedRun.RuntimeInstanceID = nil
 	resumedRun.ResumedAt, resumedRun.QueuedAt = &now, &now
 	resumedRun.Revision = NextRevision(current.Revision)
-	if err := s.store.WithinTaskTx(restored, func(txCtx context.Context) error {
+	if owned && resumedRun.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice && len(def.PermissionRequirements)+len(def.PermissionRequirementStrings) > 0 {
+		if s.config.OwnedInputs == nil || s.config.OwnedTargetDefinitions == nil {
+			return NewTaskError(ErrTaskPermissionDenied, "恢复任务缺少所有者输入和设备版本端口")
+		}
+		input, err := s.config.OwnedInputs.Input(restored, current)
+		if err != nil {
+			return err
+		}
+		pin, err := s.config.OwnedTargetDefinitions.Prepare(restored, current, def)
+		if err != nil {
+			return err
+		}
+		if err := s.prepareOwnedTargetPermissions(restored, resumedRun, def, pin, input); err != nil {
+			return err
+		}
+	}
+	if err := s.withManagementTaskTx(restored, func(txCtx context.Context) error {
 		ok, err := s.store.UpdateTaskRunCAS(txCtx, resumedRun, current.Status, current.Generation, current.Revision)
 		if err != nil {
 			return err

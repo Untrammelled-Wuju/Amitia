@@ -1,4 +1,5 @@
 import Foundation
+import ActivityKit
 import UIKit
 import HealthKit
 import EventKit
@@ -383,7 +384,7 @@ private let supportedProtocolVersions: Set<Int> = [1]
 }
 
 @objc public class IOSLocalNotificationNativeHandler: NSObject, IOSNativeOperationHandler {
-    public let operations: Set<String> = ["notification.status", "notification.request_permission", "notification.post"]
+    public let operations: Set<String> = ["notification.status", "notification.request_permission", "notification.post", "notification.runtime_deliver"]
     private let stateLock = NSLock()
     private var cachedAuthorizationStatus: UNAuthorizationStatus = .notDetermined
 
@@ -409,6 +410,8 @@ private let supportedProtocolVersions: Set<Int> = [1]
             return await handleRequestPermission(request)
         case "notification.post":
             return await handlePost(request)
+        case "notification.runtime_deliver":
+            return await handleRuntimeDeliver(request)
         default:
             return error(request, code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
         }
@@ -496,6 +499,304 @@ private let supportedProtocolVersions: Set<Int> = [1]
         } catch {
             return self.error(request, code: "NOTIFICATION_POST_FAILED", message: error.localizedDescription)
         }
+    }
+
+    private func handleRuntimeDeliver(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        let payload = request.payload ?? [:]
+        let type = (payload["type"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if type.hasPrefix("call."),
+           let platform = IOSNotificationPlatform.active,
+           let result = await platform.deliverLocalCall(type: type, payload: payload) {
+            return success(request, result: result)
+        }
+        if type.hasPrefix("run."), #available(iOS 16.1, *) {
+            if let response = await handleRuntimeActivity(request, payload: payload, type: type) {
+                return response
+            }
+        }
+
+        let settings = await currentSettings()
+        cache(settings.authorizationStatus)
+        guard isAuthorized(settings.authorizationStatus) else {
+            return error(request, code: "NOTIFICATION_POST_DISABLED", message: "notifications are disabled for this app")
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = String((payload["title"] as? String ?? "Amitia").prefix(256))
+        content.body = String((payload["body"] as? String ?? payload["summary"] as? String ?? "").prefix(4096))
+        content.threadIdentifier = (payload["conversationId"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if type.hasPrefix("message.") {
+            content.categoryIdentifier = "AMITIA_MESSAGE"
+        } else if type.hasPrefix("reminder.") || type.hasPrefix("proactive.") {
+            content.categoryIdentifier = "AMITIA_REMINDER"
+        } else if type.hasPrefix("run.") {
+            content.categoryIdentifier = "AMITIA_EXECUTION"
+        }
+        if payload["sound"] as? Bool != false {
+            content.sound = .default
+        }
+        var userInfo: [String: Any] = [:]
+        for key in ["notificationId", "type", "spaceId", "conversationId", "characterId", "messageId", "runId", "deepLink"] {
+            if let value = payload[key] {
+                userInfo[key] = value
+            }
+        }
+        content.userInfo = userInfo
+        let deliveredContent: UNNotificationContent
+        if type.hasPrefix("message.") {
+            deliveredContent = await communicationNotificationContent(
+                base: content,
+                payload: payload
+            )
+        } else {
+            deliveredContent = content
+        }
+        let runId = (payload["runId"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let identifier = type.hasPrefix("run.") && !runId.isEmpty
+            ? "amitia.runtime.run." + runId
+            : "amitia.runtime." + request.requestId
+        if type.hasPrefix("run.") {
+            UNUserNotificationCenter.current()
+                .removeDeliveredNotifications(withIdentifiers: [identifier])
+        }
+        do {
+            try await add(UNNotificationRequest(identifier: identifier, content: deliveredContent, trigger: nil))
+            return success(request, result: [
+                "posted": true,
+                "notificationRef": identifier,
+                "revision": int64Value(payload["revision"])
+            ])
+        } catch {
+            return self.error(request, code: "NOTIFICATION_POST_FAILED", message: error.localizedDescription)
+        }
+    }
+
+    private func communicationNotificationContent(
+        base: UNMutableNotificationContent,
+        payload: [String: Any]
+    ) async -> UNNotificationContent {
+        let previewMode = (payload["previewMode"] as? String ?? "full")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard previewMode != "hidden" else {
+            return base
+        }
+        let conversationId = (payload["conversationId"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let characterId = (payload["characterId"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let senderName = (payload["senderName"] as? String ?? base.title)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = base.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !conversationId.isEmpty, !senderName.isEmpty, !body.isEmpty else {
+            return base
+        }
+
+        let handle = INPersonHandle(
+            value: characterId.isEmpty ? senderName : characterId,
+            type: .unknown
+        )
+        let sender = INPerson(
+            personHandle: handle,
+            nameComponents: nil,
+            displayName: senderName,
+            image: nil,
+            contactIdentifier: nil,
+            customIdentifier: characterId.isEmpty ? senderName : characterId
+        )
+        let intent = INSendMessageIntent(
+            recipients: nil,
+            outgoingMessageType: .outgoingMessageText,
+            content: body,
+            speakableGroupName: nil,
+            conversationIdentifier: conversationId,
+            serviceName: "Amitia",
+            sender: sender,
+            attachments: nil
+        )
+        let interaction = INInteraction(intent: intent, response: nil)
+        interaction.direction = .incoming
+
+        return await withCheckedContinuation {
+            (continuation: CheckedContinuation<UNNotificationContent, Never>) in
+            interaction.donate { _ in
+                do {
+                    let updated = try base.updating(from: intent)
+                    if let merged = updated.mutableCopy() as? UNMutableNotificationContent {
+                        merged.categoryIdentifier = base.categoryIdentifier
+                        merged.threadIdentifier = base.threadIdentifier
+                        merged.userInfo = base.userInfo
+                        merged.sound = base.sound
+                        merged.badge = base.badge
+                        continuation.resume(returning: merged)
+                    } else {
+                        continuation.resume(returning: base)
+                    }
+                } catch {
+                    continuation.resume(returning: base)
+                }
+            }
+        }
+    }
+
+    @available(iOS 16.1, *)
+    private func handleRuntimeActivity(
+        _ request: IOSNativeRequest,
+        payload: [String: Any],
+        type: String
+    ) async -> IOSNativeResponse? {
+        let runId = (payload["runId"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !runId.isEmpty else { return nil }
+        let conversationId = (payload["conversationId"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let characterId = (payload["characterId"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let agentName = (payload["agentId"] as? String ?? "Amitia").trimmingCharacters(in: .whitespacesAndNewlines)
+        let startedAt = isoTimestamp(payload["startedAt"]) ?? Int64(Date().timeIntervalSince1970)
+        let state = AmitiaRunAttributes.ContentState(
+            revision: int64Value(payload["revision"]),
+            phase: (payload["phase"] as? String ?? "running"),
+            title: (payload["title"] as? String ?? "Amitia 正在执行"),
+            summary: (payload["summary"] as? String ?? ""),
+            currentStep: intValue(payload["currentStep"]),
+            totalSteps: intValue(payload["totalSteps"]),
+            progress: doubleValue(payload["progress"]),
+            updatedAt: isoTimestamp(payload["updatedAt"]) ?? Int64(Date().timeIntervalSince1970),
+            locale: (payload["locale"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            appearance: (payload["appearance"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentName: agentName.isEmpty ? "Amitia" : agentName,
+            totalTokens: intValue(payload["totalTokens"]) > 0
+                ? intValue(payload["totalTokens"])
+                : nil
+        )
+        let existing = Activity<AmitiaRunAttributes>.activities.first { $0.attributes.runId == runId }
+        do {
+            if type == "run.start" || type == "run.started" {
+                if let existing {
+                    if #available(iOS 16.2, *) {
+                        await existing.update(activityContent(state))
+                    } else {
+                        await existing.update(using: state)
+                    }
+                    return success(request, result: ["posted": true, "notificationRef": existing.id, "revision": state.revision])
+                }
+                let attributes = AmitiaRunAttributes(
+                    runId: runId,
+                    conversationId: conversationId,
+                    characterId: characterId,
+                    agentName: agentName.isEmpty ? "Amitia" : agentName,
+                    startedAt: startedAt
+                )
+                let activity: Activity<AmitiaRunAttributes>
+                if #available(iOS 16.2, *) {
+                    activity = try Activity<AmitiaRunAttributes>.request(
+                        attributes: attributes,
+                        content: activityContent(state),
+                        pushType: nil
+                    )
+                } else {
+                    activity = try Activity<AmitiaRunAttributes>.request(
+                        attributes: attributes,
+                        contentState: state,
+                        pushType: nil
+                    )
+                }
+                return success(request, result: ["posted": true, "notificationRef": activity.id, "revision": state.revision])
+            }
+            if type == "run.end" || type == "run.completed" || type == "run.failed" || type == "run.cancelled" || type == "run.interrupted" || type == "run.dismiss" {
+                if let existing {
+                    let immediate =
+                        type == "run.dismiss" ||
+                        type == "run.cancelled" ||
+                        type == "run.interrupted" ||
+                        state.phase == "cancelled" ||
+                        state.phase == "interrupted"
+                    let policy: ActivityUIDismissalPolicy = immediate
+                        ? .immediate
+                        : .after(Date().addingTimeInterval(60))
+                    if #available(iOS 16.2, *) {
+                        await existing.end(
+                            activityContent(state, terminal: true),
+                            dismissalPolicy: policy
+                        )
+                    } else {
+                        await existing.end(using: state, dismissalPolicy: policy)
+                    }
+                    return success(request, result: ["posted": true, "notificationRef": existing.id, "revision": state.revision])
+                }
+                if type == "run.dismiss" {
+                    return success(request, result: [
+                        "posted": false,
+                        "reason": "activity_not_active",
+                        "revision": state.revision
+                    ])
+                }
+                return nil
+            }
+            if let existing {
+                if #available(iOS 16.2, *) {
+                    await existing.update(activityContent(state))
+                } else {
+                    await existing.update(using: state)
+                }
+                return success(request, result: ["posted": true, "notificationRef": existing.id, "revision": state.revision])
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
+    @available(iOS 16.2, *)
+    private func activityContent(
+        _ state: AmitiaRunAttributes.ContentState,
+        terminal: Bool = false
+    ) -> ActivityContent<AmitiaRunAttributes.ContentState> {
+        let score = terminal
+            ? 0
+            : Double(
+                state.updatedAt > 0
+                    ? state.updatedAt
+                    : Int64(Date().timeIntervalSince1970)
+            )
+        return ActivityContent(
+            state: state,
+            staleDate: terminal ? nil : Date().addingTimeInterval(300),
+            relevanceScore: score
+        )
+    }
+
+    private func intValue(_ value: Any?) -> Int {
+        if let value = value as? Int { return value }
+        if let value = value as? Int64 { return Int(value) }
+        if let value = value as? Double { return Int(value) }
+        if let value = value as? String { return Int(value) ?? 0 }
+        return 0
+    }
+
+    private func int64Value(_ value: Any?) -> Int64 {
+        if let value = value as? Int64 { return value }
+        if let value = value as? Int { return Int64(value) }
+        if let value = value as? Double { return Int64(value) }
+        if let value = value as? String { return Int64(value) ?? 0 }
+        return 0
+    }
+
+    private func doubleValue(_ value: Any?) -> Double {
+        if let value = value as? Double { return value }
+        if let value = value as? Int { return Double(value) }
+        if let value = value as? Int64 { return Double(value) }
+        if let value = value as? String { return Double(value) ?? 0 }
+        return 0
+    }
+
+    private func isoTimestamp(_ value: Any?) -> Int64? {
+        guard let raw = value as? String, !raw.isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: raw) {
+            return Int64(date.timeIntervalSince1970)
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw).map { Int64($0.timeIntervalSince1970) }
     }
 
     private func currentSettings() async -> UNNotificationSettings {

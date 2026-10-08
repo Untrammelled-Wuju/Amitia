@@ -54,3 +54,17 @@
 -keep class com.amitia.amitia_app.nativeprovider.shizuku.IPrivilegedCommandService$Stub { *; }
 -keep class com.amitia.amitia_app.virtualdisplay.host.** { *; }
 -keep class com.amitia.amitia_app.virtualdisplay.host.IVirtualDisplayHost$Stub { *; }
+
+# Optional manufacturer Push adapters. These classes are compiled only when the
+# matching SDK is present, but must keep their manifest callback entry points.
+-keep class com.amitia.amitia_app.notifications.vendor.** { *; }
+-dontwarn com.xiaomi.mipush.**
+-dontwarn com.huawei.hms.**
+-dontwarn com.honor.push.**
+-keep class com.heytap.msp.** { *; }
+-keep class * extends com.heytap.msp.push.service.DataMessageCallbackService { *; }
+-keep class * extends com.heytap.msp.push.service.CompatibleDataMessageCallbackService { *; }
+-dontwarn com.heytap.msp.**
+-keep class com.vivo.push.** { *; }
+-keep class * extends com.vivo.push.sdk.OpenClientPushMessageReceiver { *; }
+-dontwarn com.vivo.push.**

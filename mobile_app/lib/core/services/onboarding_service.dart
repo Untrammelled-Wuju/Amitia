@@ -96,6 +96,10 @@ class OnboardingService {
     String setupCode = '',
     String fingerprint = '',
     String coreId = '',
+    Future<Map<String, dynamic>> Function(
+      Map<String, dynamic> claimBody,
+      String coreId,
+    )? proofSigner,
   }) async {
     if (fingerprint.isNotEmpty) {
       final deadline = DateTime.now().add(const Duration(minutes: 2));
@@ -122,8 +126,15 @@ class OnboardingService {
       };
       final deadline = DateTime.now().add(const Duration(minutes: 2));
       while (DateTime.now().isBefore(deadline)) {
-      final proof = await _api.post<Map<String, dynamic>>('/internal/device-mesh/identity/sign-claim', data: {'coreId': status['spaceId'], 'body': claimBody});
-      if (proof == null) throw StateError('无法为本机配对身份签名');
+      final statusCoreId = (status['spaceId'] ?? '').toString().trim();
+      if (statusCoreId.isEmpty) throw StateError('Cloud Core 身份缺失');
+      final proof = proofSigner != null
+          ? await proofSigner(claimBody, statusCoreId)
+          : await _api.post<Map<String, dynamic>>(
+              '/internal/device-mesh/identity/sign-claim',
+              data: {'coreId': statusCoreId, 'body': claimBody},
+            );
+      if (proof == null || proof.isEmpty) throw StateError('无法为本机配对身份签名');
       final response = await dio.post<dynamic>(
         '/api/public/device-mesh/v1/pairing/claim',
         data: <String, dynamic>{

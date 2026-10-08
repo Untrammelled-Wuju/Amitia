@@ -13,7 +13,7 @@ func leaseKey(run, attempt, lease, session string, generation, sequence int64) s
 	return fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%d\x00%d", run, attempt, lease, session, generation, sequence)
 }
 
-func (c *MeshClient) awaitTaskLease(ctx context.Context, dispatch protocol.TaskDispatchPayload, sequence int64) error {
+func (c *MeshClient) awaitTaskLease(ctx context.Context, dispatch protocol.TaskDispatchPayload, sequence int64, confirmed ...func(time.Duration) error) error {
 	if c.State() != StateReady || dispatch.RuntimeSessionID != c.sessionIdentity() || dispatch.ConnectionGeneration != c.sessionGeneration() {
 		return fmt.Errorf("任务通道已失效")
 	}
@@ -27,6 +27,7 @@ func (c *MeshClient) awaitTaskLease(ctx context.Context, dispatch protocol.TaskD
 	c.taskLeases[key] = ch
 	c.taskLeaseMu.Unlock()
 	defer func() { c.taskLeaseMu.Lock(); delete(c.taskLeases, key); c.taskLeaseMu.Unlock() }()
+	requestedAt := time.Now()
 	if sequence == 0 {
 		c.sendTaskClaim(dispatch.TaskRunID, dispatch.AttemptID, dispatch.LeaseID, c.conf.Identity.RuntimeID.String(), 300000, dispatch)
 	} else {
@@ -44,6 +45,12 @@ func (c *MeshClient) awaitTaskLease(ctx context.Context, dispatch protocol.TaskD
 	case ack := <-ch:
 		if !ack.Accepted || ack.LeaseDurationMs < 60000 || ack.LeaseDurationMs > 300000 || c.State() != StateReady || dispatch.RuntimeSessionID != c.sessionIdentity() || dispatch.ConnectionGeneration != c.sessionGeneration() {
 			return fmt.Errorf("Core 拒绝任务租约或执行会话已失效")
+		}
+		if len(confirmed) > 1 {
+			return fmt.Errorf("任务租约确认端口无效")
+		}
+		if len(confirmed) == 1 {
+			return confirmed[0](time.Duration(ack.LeaseDurationMs)*time.Millisecond - time.Since(requestedAt))
 		}
 		return nil
 	}

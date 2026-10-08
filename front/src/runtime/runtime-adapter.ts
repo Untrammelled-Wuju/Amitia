@@ -15,9 +15,8 @@ import {
 
 let cachedConnection: RuntimeConnection | null = null;
 let cachedConfig: DeploymentModeConfig | null = null;
-let roleSourceCache: { key: string; expires: number; local: boolean } | null = null;
-let roleSourcePending: { key: string; promise: Promise<boolean> } | null = null;
 let roleSourceGeneration = 0;
+let deploymentChanging = false;
 const WEB_DEPLOYMENT_CONFIG_KEY = "amitia.web.deployment.v1";
 
 export const LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
@@ -61,25 +60,14 @@ export async function getApiBaseURLForPath(path: string): Promise<string> {
   if (window.amitiaDesktop && isDeviceRoleManagementPath(path) && (await getDeploymentConfig()).mode === "cloud") {
     const runtime = await getRuntimeConnection();
     const base = runtime.apiBaseURL;
-    const key = `${(await getDeploymentConfig()).serverURL}|${base}`;
     const generation = roleSourceGeneration;
-    if (roleSourceCache?.key === key && roleSourceCache.expires > Date.now()) return roleSourceCache.local ? LOCAL_DEVICE_RUNTIME_BASE_URL : base;
-    if (roleSourcePending?.key !== key) {
-      const promise = (async () => {
-        const response = await fetch(base + "/api/device-mesh/v1/coordination/me", { headers: await getBackendAuthHeaders("business"), redirect: "error" });
-        if (!response.ok) throw new Error("无法确认角色所属设备，请恢复 Core 连接后重试");
-        const payload = await response.json();
-        const policy = payload.data?.policy || payload.policy;
-        if (typeof policy?.coordinated !== "boolean") throw new Error("角色来源状态无效");
-        const local = !policy.coordinated;
-        if (generation !== roleSourceGeneration) throw new Error("Core 已切换，请重新加载角色");
-        roleSourceCache = { key, expires: Date.now()+2000, local };
-        return local;
-      })();
-      roleSourcePending = { key, promise };
-      promise.finally(() => { if (roleSourcePending?.promise === promise) roleSourcePending = null; }).catch(() => {});
-    }
-    return await roleSourcePending!.promise ? LOCAL_DEVICE_RUNTIME_BASE_URL : base;
+    const response = await fetch(base + "/api/device-mesh/v1/coordination/me", { headers: await getBackendAuthHeaders("business"), redirect: "error" });
+    if (!response.ok) throw new Error("无法确认角色所属设备，请恢复 Core 连接后重试");
+    const payload = await response.json();
+    const policy = payload.data?.policy || payload.policy;
+    if (typeof policy?.coordinated !== "boolean") throw new Error("角色来源状态无效");
+    if (generation !== roleSourceGeneration) throw new Error("Core 已切换，请重新加载角色");
+    return !policy.coordinated ? LOCAL_DEVICE_RUNTIME_BASE_URL : base;
   }
   return getApiBaseURL();
 }
@@ -173,6 +161,7 @@ export async function getBackendAuthHeaders(
 }
 
 export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
+  if (deploymentChanging) throw new Error("运行方式正在切换，请稍后重试");
   if (cachedConfig) return cachedConfig;
 
   const api = window.amitiaDesktop;
@@ -204,40 +193,44 @@ export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
 export async function saveDeploymentConfig(
   config: DeploymentModeConfig,
 ): Promise<DeploymentModeConfig> {
+  deploymentChanging = true;
   roleSourceGeneration++;
-  roleSourceCache = null;
-  roleSourcePending = null;
   cachedConnection = null;
   cachedConfig = null;
 
-  const api = window.amitiaDesktop;
-  if (!api) {
+  window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
+
+  try {
+    const api = window.amitiaDesktop;
+    if (!api) {
     const normalized: DeploymentModeConfig = config.mode === "cloud"
       ? { mode: "cloud", serverURL: normalizeHTTPBaseURL(config.serverURL || window.location.origin) }
       : { mode: "local" };
     window.localStorage.setItem(WEB_DEPLOYMENT_CONFIG_KEY, JSON.stringify(normalized));
     cachedConfig = normalized;
-    return normalized;
-  }
+      return normalized;
+    }
 
-  cachedConfig = await api.saveDeploymentConfig(config);
-  return cachedConfig;
+    cachedConfig = await api.saveDeploymentConfig(config);
+    return cachedConfig;
+  } finally {
+    deploymentChanging = false;
+    window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
+  }
 }
 
 export function clearRuntimeCache(): void {
   roleSourceGeneration++;
-  roleSourceCache = null;
-  roleSourcePending = null;
   cachedConnection = null;
   cachedConfig = null;
+  window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
 }
 
 export function resetRuntimeConnectionCache(): void {
   roleSourceGeneration++;
-  roleSourceCache = null;
-  roleSourcePending = null;
   cachedConnection = null;
   cachedConfig = null;
+  window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
 }
 
 

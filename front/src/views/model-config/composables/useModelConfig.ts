@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref, reactive, onMounted, inject } from "vue";
+import { ref, reactive, onMounted, inject, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { useApi } from "../../../composables/useApi";
+import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "../../../composables/useCoreConfigurationAccess";
 
 interface TestResultData {
   success: boolean;
@@ -46,6 +47,9 @@ function defaultTestMapper(result: any): TestResultData {
 
 export function useModelConfig(options?: ModelConfigOptions) {
   const { get, post, put, del } = useApi();
+  const access = useCoreConfigurationAccess();
+  const collectionContext = ref("");
+  const editorContext = ref("");
   const refreshHealth = inject<() => void>("refreshHealth", () => {});
 
   const apiBase = options?.apiBase ?? "/api/model";
@@ -122,6 +126,25 @@ export function useModelConfig(options?: ModelConfigOptions) {
     }
   }
 
+  watch(access.contextKey, (key) => {
+    if (key !== editorContext.value) dialogVisible.value = false;
+    if (key !== collectionContext.value) {
+      configs.value = [];
+      scenarioRoutes.value = [];
+      routeAssignments.value = {};
+      originalApiKey.value = "";
+      form.apiKey = "";
+      for (const field of ["realtimeAccessToken", "realtimeSecretKey"]) {
+        if (field in form) form[field] = "";
+      }
+    }
+  }, { flush: "sync" });
+
+  async function allowConfiguration(expected?: string) {
+    try { return await access.requireAccess(expected); }
+    catch (error: any) { ElMessage.warning(error?.message || access.explanation); return ""; }
+  }
+
   const rules: FormRules = {
     name: [{ required: true, message: "请输入名称", trigger: "blur" }],
     apiType: [{ required: true, message: "请选择类型", trigger: "change" }],
@@ -168,11 +191,16 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function fetchConfigs() {
+    const context = await allowConfiguration();
+    if (!context) return;
     if (apiBase === "/api/vision") {
       const status = await get<{ mainModelVision: boolean }>("/api/vision/status");
       visionSuspended.value = status?.mainModelVision === true;
     }
-    configs.value = ((await get<any[]>(`${apiBase}/configs`)) || []).map(
+    const rows = (await get<any[]>(`${apiBase}/configs`)) || [];
+    if (access.contextKey.value !== context) return;
+    collectionContext.value = context;
+    configs.value = rows.map(
       (c) => {
         if (transformConfig) c = transformConfig(c);
         return { ...c, isActive: !!c.isActive };
@@ -181,6 +209,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function loadProviders() {
+    if (!await allowConfiguration()) return;
     try {
       providers.value = (await get<any[]>(`${apiBase}/providers`)) || [];
     } catch {
@@ -210,6 +239,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
 
   async function detectModels() {
     if (!withDetect) return;
+    if (!await allowConfiguration(editorContext.value)) return;
     detectError.value = "";
     detectedModels.value = [];
     detectingModels.value = true;
@@ -218,7 +248,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
         baseUrl: form.baseUrl,
         apiKey: form.apiKey,
         apiType: form.apiType,
-      });
+      }, coreConfigurationRequestConfig(editorContext.value));
       detectedModels.value = res?.models || [];
       if (detectedModels.value.length === 0) {
         detectError.value = "未检测到可用模型";
@@ -232,6 +262,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function showDialog(row: any) {
+    if (saving.value) return;
+    const context = await allowConfiguration(row ? collectionContext.value : undefined);
+    if (!context) return;
     if (await blockIndependentVision()) return;
     editingId.value = row?.id || null;
     showApiKey.value = false;
@@ -278,14 +311,18 @@ export function useModelConfig(options?: ModelConfigOptions) {
       }
     }
     onProviderChange(form.apiType, !row);
+    if (!await allowConfiguration(context)) return;
+    editorContext.value = context;
     dialogVisible.value = true;
     setTimeout(() => dialogFormRef.value?.clearValidate(), 0);
   }
 
   async function saveConfig() {
+    if (saving.value || !await allowConfiguration(editorContext.value)) return;
     if (await blockIndependentVision()) return;
     const valid = await dialogFormRef.value?.validate().catch(() => false);
     if (!valid) return;
+    if (!await allowConfiguration(editorContext.value)) return;
 
     saving.value = true;
     try {
@@ -308,12 +345,12 @@ export function useModelConfig(options?: ModelConfigOptions) {
         }
       }
       if (editingId.value) {
-        await put(`${apiBase}/configs/${editingId.value}`, payload);
+        await put(`${apiBase}/configs/${editingId.value}`, payload, coreConfigurationRequestConfig(editorContext.value));
       } else {
         if (defaultIsActive) {
           payload.isActive = defaultIsActive;
         }
-        await post(`${apiBase}/configs`, { ...payload });
+        await post(`${apiBase}/configs`, { ...payload }, coreConfigurationRequestConfig(editorContext.value));
       }
       dialogVisible.value = false;
       ElMessage.success(editingId.value ? "保存成功" : "新建成功");
@@ -325,12 +362,13 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function testConfig(id: number) {
+    if (!await allowConfiguration(collectionContext.value)) return;
     if (await blockIndependentVision()) return;
     testingId.value = id;
     try {
       const result = await post<any>(`${apiBase}/configs/${id}/test`, {
         configId: id,
-      });
+      }, coreConfigurationRequestConfig(collectionContext.value));
       testResult.value = testResultMapper(result);
       testResultVisible.value = true;
       await fetchConfigs();
@@ -348,9 +386,10 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function setActive(id: number) {
+    if (!await allowConfiguration(collectionContext.value)) return;
     if (await blockIndependentVision()) return;
     try {
-      await post(`${apiBase}/configs/${id}${activatePath}`);
+      await post(`${apiBase}/configs/${id}${activatePath}`, undefined, coreConfigurationRequestConfig(collectionContext.value));
       ElMessage.success("已设为默认");
       await fetchConfigs();
       refreshHealth();
@@ -358,6 +397,8 @@ export function useModelConfig(options?: ModelConfigOptions) {
   }
 
   async function delConfig(id: number) {
+    const context = collectionContext.value;
+    if (!await allowConfiguration(context)) return;
     if (await blockIndependentVision()) return;
     const cfg = configs.value.find((c) => c.id === id);
     if (cfg?.isActive && configs.value.length <= 1) {
@@ -370,7 +411,8 @@ export function useModelConfig(options?: ModelConfigOptions) {
       { type: "warning", confirmButtonText: "删除" },
     );
     try {
-      await del(`${apiBase}/configs/${id}`);
+      if (!await allowConfiguration(context)) return;
+      await del(`${apiBase}/configs/${id}`, coreConfigurationRequestConfig(context));
       ElMessage.success("已删除");
       await fetchConfigs();
     } catch {}
@@ -378,8 +420,11 @@ export function useModelConfig(options?: ModelConfigOptions) {
 
   async function fetchRoutes() {
     if (!withScenario) return;
+    const context = await allowConfiguration();
+    if (!context) return;
     try {
       const data = await get<any[]>(`${apiBase}/routes`);
+      if (access.contextKey.value !== context) return;
       scenarioRoutes.value = Array.isArray(data)
         ? data
         : (data as any)?.data || [];
@@ -391,8 +436,9 @@ export function useModelConfig(options?: ModelConfigOptions) {
 
   async function assignRoute(scenario: string, modelConfigId: number | null) {
     if (!withScenario) return;
+    if (!await allowConfiguration(collectionContext.value)) return;
     try {
-      await put(`${apiBase}/routes`, { routes: { [scenario]: modelConfigId } });
+      await put(`${apiBase}/routes`, { routes: { [scenario]: modelConfigId } }, coreConfigurationRequestConfig(collectionContext.value));
       ElMessage.success("用途分配已更新");
       await fetchRoutes();
     } catch {

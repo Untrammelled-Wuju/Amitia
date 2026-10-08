@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -32,36 +33,11 @@ func actualSourceTaskHost(t *testing.T, handler string) *TaskProcessHost {
 	}
 	encodedRoot, _ := json.Marshal(sourceRoot)
 	encodedCompiler, _ := json.Marshal(compiler)
-	launcher := fmt.Sprintf(`
-const fs=require('node:fs');
-const path=require('node:path');
-const {pathToFileURL,fileURLToPath}=require('node:url');
-const {registerHooks}=require('node:module');
-const ts=require(%s);
-const sourceRoot=path.join(%s,'src');
-registerHooks({
- resolve(specifier,context,nextResolve){
-  if(context.parentURL && context.parentURL.startsWith('file:')){
-   const parent=fileURLToPath(context.parentURL);
-   if(parent.startsWith(sourceRoot+path.sep) && specifier.startsWith('./') && specifier.endsWith('.js')){
-    return {url:pathToFileURL(path.resolve(path.dirname(parent),specifier.slice(0,-3)+'.ts')).href,shortCircuit:true};
-   }
-  }
-  return nextResolve(specifier,context);
- },
- load(url,context,nextLoad){
-  if(url.startsWith('file:')){
-   const file=fileURLToPath(url);
-   if(file.startsWith(sourceRoot+path.sep) && file.endsWith('.ts')){
-    const source=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText;
-    return {source,format:'module',shortCircuit:true};
-   }
-  }
-  return nextLoad(url,context);
- }
-});
-import(pathToFileURL(path.join(sourceRoot,'bootstrap.ts')).href).then(m=>m.bootstrap()).catch(()=>process.exit(2));
-`, encodedCompiler, encodedRoot)
+	compile := fmt.Sprintf(`const fs=require('node:fs'),path=require('node:path'),ts=require(%s),root=path.join(%s,'src'),out=process.argv[1];for(const file of fs.readdirSync(root)){if(!file.endsWith('.ts'))continue;fs.writeFileSync(path.join(out,file.slice(0,-3)+'.js'),ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText);}fs.writeFileSync(path.join(out,'package.json'),JSON.stringify({type:'module'}));`, encodedCompiler, encodedRoot)
+	if output, err := exec.Command(host.config.NodePath, "-e", compile, host.config.WorkDir).CombinedOutput(); err != nil {
+		t.Fatalf("test TaskHost preparation failed: %v %s", err, output)
+	}
+	launcher := `import('./bootstrap.js').then(m=>m.bootstrap()).catch(error=>{console.error(error);process.exit(2)});`
 	if err := os.WriteFile(host.config.HostPath, []byte(launcher), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -72,6 +48,55 @@ import(pathToFileURL(path.join(sourceRoot,'bootstrap.ts')).href).then(m=>m.boots
 	}
 	host.config.EntryHash = "sha256:" + hashBytes([]byte(handler))
 	return host
+}
+
+func TestTaskProcessActualHostVerifiesGoBundlePinAndImportedBytes(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("dependency_changed_%t", changed), func(t *testing.T) {
+			host := actualSourceTaskHost(t, `module.exports=async()=>({success:true,output:{value:require('./私有依赖.cjs')}});`)
+			dependency := filepath.Join(host.config.WorkDir, "私有依赖.cjs")
+			if err := os.WriteFile(dependency, []byte(`module.exports="original";`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"\ue000.txt", "\U00010000.txt"} {
+				if err := os.WriteFile(filepath.Join(host.config.WorkDir, name), []byte(name), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			hash, err := TaskBundleHash(t.Context(), host.config.WorkDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			host.config.BundleRoot, host.config.BundleHash = host.config.WorkDir, hash
+			if changed {
+				if err := os.WriteFile(dependency, []byte(`module.exports="changed";`), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			defer cancel()
+			var completed atomic.Int32
+			var status string
+			var body json.RawMessage
+			if err := host.Start(ctx, json.RawMessage(`{}`), nil, nil, 1, 1, ProcessCallbacks{OnFinished: func(state string, output json.RawMessage, _, _, _ string) {
+				status, body = state, append(json.RawMessage(nil), output...)
+				completed.Add(1)
+			}}); err != nil {
+				t.Fatal(err)
+			}
+			code, err := host.Wait()
+			if err != nil || code != 0 || completed.Load() != 1 {
+				t.Fatalf("actual bundle host failed: %d %v %s", code, err, status)
+			}
+			if changed {
+				if status != "failed" {
+					t.Fatalf("changed dependency executed: %s %s", status, body)
+				}
+			} else if status != "succeeded" || !strings.Contains(string(body), "original") {
+				t.Fatalf("Go and Node bundle pins disagree: %s %s", status, body)
+			}
+		})
+	}
 }
 
 func TestTaskProcessActualHostStorageUsesAcknowledgedOwnerPort(t *testing.T) {

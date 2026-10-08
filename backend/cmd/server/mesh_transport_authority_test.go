@@ -25,9 +25,11 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	meshprotocol "github.com/u-ai/backend/internal/devicemesh/protocol"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	kernelsqlite "github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/middleware/security"
@@ -50,7 +52,7 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	if err := p.services.DB.Model(&character.Character{}).Where("space_id=?", p.legacySpaceID).Update("space_id", space.SpaceID()).Error; err != nil {
 		t.Fatal(err)
 	}
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "core.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "core.db")+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +104,12 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	router.GET(meshprotocol.WebSocketPath, credential.DeviceAuthMiddleware(rt.CredentialSvc, registry), rt.Handler.HandleWS)
 	router.GET("/authority-probe", credential.DeviceAuthMiddleware(rt.CredentialSvc, registry), func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	ownerServices := &AppServices{DeviceMesh: rt, KernelContainer: &kernel.Container{}}
-	registerMeshTaskOwnerRouter(router.Group("/api/device-mesh/v1/business", security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: "core", DeviceCredentials: rt.CredentialSvc, DeviceRegistry: registry, Coordination: rt.Coordination})), ownerServices)
+	businessGroup := router.Group("/api/device-mesh/v1/business", security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: "core", DeviceCredentials: rt.CredentialSvc, DeviceRegistry: registry, Coordination: rt.Coordination}))
+	registerMeshTaskOwnerRouter(businessGroup, ownerServices)
+	registerMeshTaskSubmissionRouter(businessGroup, ownerServices, "core")
+	ownerFacade := &kernel.Runtime{}
+	ownerFacade.SetContainer(ownerServices.KernelContainer)
+	extension.NewTaskAPI(&extension.Runtime{Kernel: ownerFacade}).RegisterRoutes(router.Group("/api/extensions", security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: "core", DeviceCredentials: rt.CredentialSvc, DeviceRegistry: registry, Coordination: rt.Coordination})))
 	server := httptest.NewTLSServer(router)
 	defer server.Close()
 	roots := x509.NewCertPool()
@@ -147,7 +154,7 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 		t.Fatal(err)
 	}
 	nativeStarted, nativeStopped := make(chan struct{}), make(chan struct{})
-	newClient := func() *agent.MeshClient {
+	newClient := func(executors ...agent.TaskRuntimeExecutor) *agent.MeshClient {
 		dispatcher := agent.NewRuntimeDispatcher()
 		dispatcher.RegisterCancellable("coordination.data", handler)
 		dispatcher.RegisterCancellable("test.native", func(ctx context.Context, _ protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
@@ -157,8 +164,21 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 			return nil, ctx.Err()
 		})
 		sourceDB := p.services.KernelContainer.DeviceRegistry.Database()
-		client := agent.NewMeshClient(agent.MeshClientConfig{CloudBaseURL: server.URL, Credential: raw, SpaceID: "core", Identity: identity, SignRequest: identityStore.SignRequest, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}, RuntimeDispatcher: dispatcher, ExecutionJournal: executionjournal.NewStore(sourceDB), ExecutionGuard: agent.NewOwnedToolGuard(sourceDB, dir, sourcePort)})
+		guard := agent.NewOwnedToolGuard(sourceDB, dir, sourcePort)
+		observedGuard := func(ctx context.Context, invocation protocol.RuntimeInvokePayload, run func(context.Context) (*protocol.RuntimeResultPayload, error)) (*protocol.RuntimeResultPayload, error) {
+			result, err := guard(ctx, invocation, run)
+			if err != nil && invocation.RuntimeType == "task" {
+				t.Logf("设备任务授权检查: %v", err)
+			}
+			return result, err
+		}
+		client := agent.NewMeshClient(agent.MeshClientConfig{CloudBaseURL: server.URL, Credential: raw, SpaceID: "core", Identity: identity, SignRequest: identityStore.SignRequest, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}, RuntimeDispatcher: dispatcher, ExecutionJournal: executionjournal.NewStore(sourceDB), ExecutionGuard: observedGuard})
 		client.SetCredentialStore(agent.NewCredentialStore(dir))
+		if len(executors) == 1 {
+			worker := agent.NewTaskWorker(client)
+			worker.SetTaskRuntime(executors[0])
+			client.SetTaskWorker(worker)
+		}
 		client.Start()
 		t.Cleanup(client.Stop)
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -207,6 +227,11 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 		t.Fatal(err)
 	}
 	sourceTaskConfig := task_runtime.DefaultTaskRuntimeConfig()
+	permissionRegistry := permission.NewPermissionDefinitionRegistry()
+	permissionRegistry.Register(permission.PermissionDefinition{ID: "test.source.read", Category: permission.CategoryFilesystem, RiskLevel: "high", AllowedScopes: []permission.ScopeType{permission.ScopeExtension}, PersistentGrantable: true, BackgroundAllowed: true, DefaultApproval: permission.ApprovalManual, RemoteExecution: permission.RemoteExecutionInherit})
+	sourcePermissionBroker := permission.NewDefaultPermissionBroker(permissionRegistry, permission.NewMemoryPermissionStorage())
+	t.Cleanup(func() { _ = sourcePermissionBroker.Close() })
+	sourceTaskConfig.SourcePermissionGuard = task_runtime.NewSourceTaskPermissionGuard(sourcePermissionBroker)
 	sourceGeneration := int64(2)
 	sourceTaskConfig.InstalledDefinitionValidator = func(_ context.Context, definition *task_runtime.TaskDefinition) error {
 		if definition.InstalledGeneration != sourceGeneration {
@@ -244,6 +269,58 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	if _, err := taskConfig.OwnedTargetDefinitions.Prepare(taskContext, taskRun, &coreDefinition); err != nil {
 		t.Fatalf("确认版本不能重读: %v", err)
 	}
+	if _, err := rt.TargetTaskCatalog(taskContext, scope, task_runtime.DeviceTaskCatalogRequest{Limit: 1}); err == nil {
+		t.Fatal("缺少设备任务授权的调用者读取了任务目录")
+	}
+	catalogContext, catalogScope, closeCatalog, err := rt.Coordination.Begin(t.Context(), "core", identity.DeviceID.String(), identity.DeviceID.String(), "core", "one", "catalog-proof")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeCatalog()
+	catalogScope.RoleRevision, catalogScope.TurnID, catalogScope.ExecutionID = 3, "catalog-turn", "catalog-execution"
+	catalogContext = coordination.WithScope(catalogContext, catalogScope)
+	catalog, err := rt.TargetTaskCatalog(catalogContext, catalogScope, task_runtime.DeviceTaskCatalogRequest{Limit: 1})
+	if err != nil || len(catalog.Entries) != 1 || catalog.Entries[0].Reference.CoreID != "core" || catalog.Entries[0].Reference.DeviceID != identity.DeviceID.String() || catalog.Entries[0].Reference.SourceTaskID != "task" || catalog.Entries[0].Target != targetPin {
+		t.Fatalf("实际 TLS 设备任务目录未固定设备与安装版本: %+v %v", catalog, err)
+	}
+	permissionConnection, connected := rt.Hub.GetByDevice(runtimeidentity.SpaceID(scope.CoreID), identity.DeviceID)
+	if !connected {
+		t.Fatal("资源权限联测目标设备未连接")
+	}
+	permissionRun := *taskRun
+	permissionRun.TaskRunID, permissionRun.InvocationID, permissionRun.ScopeSnapshotID = "transport-permission", "transport-permission", "transport-permission"
+	permissionRun.ExecutionTarget = task_runtime.TaskExecutionTarget{SpaceID: runtimeidentity.SpaceID(scope.CoreID), DeviceID: identity.DeviceID, RuntimeID: identity.RuntimeID, RuntimeSessionID: permissionConnection.SessionID, ConnectionGeneration: permissionConnection.Generation}
+	taskScope, _ := coordination.FromContext(taskContext)
+	permissionRequest := task_runtime.SourceTaskPermissionRequest{Scope: taskScope, Run: permissionRun, Target: targetPin, Input: taskInput}
+	if err := rt.TargetTaskPermissions(taskContext, permissionRequest); err != nil {
+		t.Fatalf("实际 TLS 无资源声明的权限准备失败: %v", err)
+	}
+	sourceDefinition.PermissionRequirementStrings = []string{"test.source.read"}
+	if err := sourceTaskService.PutTaskDefinition(t.Context(), sourceDefinition); err != nil {
+		t.Fatal(err)
+	}
+	permissionRequest.Target, err = rt.TargetTaskDefinition(taskContext, taskScope, sourceDefinition.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.TargetTaskPermissions(taskContext, permissionRequest); !task_runtime.IsTaskErrorCode(err, task_runtime.ErrTaskPermissionDenied) {
+		t.Fatalf("实际 TLS 未批准本机资源仍允许任务: %v", err)
+	}
+	grantRequest := permission.PermissionGrantRequest{Subject: permission.PermissionSubject{Type: permission.SubjectModule, ID: sourceDefinition.ModuleID, ExtensionID: sourceDefinition.ExtensionID, ModuleID: sourceDefinition.ModuleID}, PermissionID: "test.source.read", Scope: permission.ScopeForExtension(sourceDefinition.ExtensionID), Decision: permission.DecisionAllowPersistent, IssuedBy: permission.IssuerUser, TargetBinding: &permission.TargetBinding{DeviceID: identity.DeviceID, RuntimeID: identity.RuntimeID}}
+	resourceGrant, err := sourcePermissionBroker.Grant(t.Context(), grantRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.TargetTaskPermissions(taskContext, permissionRequest); err != nil {
+		t.Fatalf("实际 TLS 已批准本机资源未获确认: %v", err)
+	}
+	if err := sourcePermissionBroker.Revoke(t.Context(), resourceGrant.GrantID); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.TargetTaskPermissions(taskContext, permissionRequest); !task_runtime.IsTaskErrorCode(err, task_runtime.ErrTaskPermissionDenied) {
+		t.Fatalf("实际 TLS 撤销资源权限仍允许任务: %v", err)
+	}
+	sourceDefinition.PermissionRequirementStrings = nil
 	sourceGeneration++
 	sourceDefinition.InstalledGeneration = sourceGeneration
 	if err := sourceTaskService.PutTaskDefinition(t.Context(), sourceDefinition); err != nil {
@@ -289,6 +366,15 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	}
 	if err := coordination.ValidateSourceCall(t.Context(), p.services.KernelContainer.DeviceRegistry.Database(), "core", lostCall); !errors.Is(err, coordination.ErrScopeExpired) {
 		t.Fatalf("unknown old connection action stayed usable: %v", err)
+	}
+	taskFinish()
+	taskContext, taskFinish, err = taskConfig.OwnedExecutionGuard(t.Context(), scope, nil)
+	if err != nil {
+		t.Fatalf("重连后不能重新建立设备任务授权: %v", err)
+	}
+	defer taskFinish()
+	if err := coordination.ValidateCurrent(taskContext); err != nil {
+		t.Fatalf("重连后的设备任务授权无效: %v", err)
 	}
 	nativePort := capability.NewMeshDeviceRuntimeInvocationPort(&capability.MeshRuntimePorts{Hub: rt.Hub, PendingInvocations: pending})
 	nativeResult := make(chan capability.UnifiedToolResult, 1)
@@ -361,6 +447,11 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 		t.Fatalf("permanently rejected request was queued again: %v", err)
 	}
 	testTaskOwnerRPCOverActualTLS(t, rt, db, p.services.KernelContainer.DeviceRegistry.Database(), ownerServices, identityStore, identity.DeviceID, raw, server, &coreDefinition)
+	client.Stop()
+	sourceTaskRuntime, executingDefinition := sourceTaskTLSFixture(t, p.services.KernelContainer.DeviceRegistry.Database())
+	p.services.KernelContainer.TaskRuntimeService = sourceTaskRuntime
+	client = newClient(NewTaskRuntimeExecutor(sourceTaskRuntime))
+	testOwnedTaskExecutionOverActualTLS(t, rt, db, p.services.KernelContainer.DeviceRegistry.Database(), ownerServices, identity.DeviceID, executingDefinition, sourceTaskRuntime, identityStore, raw, server)
 	if err := rt.Coordination.RevokeDevice(t.Context(), "core", identity.DeviceID.String(), func(tx *sql.Tx) error {
 		if err := registry.RevokeDeviceTx(t.Context(), tx, identity.DeviceID); err != nil {
 			return err

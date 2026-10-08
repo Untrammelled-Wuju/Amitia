@@ -1,6 +1,86 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
+const ownedFileMimes = {
+  'txt': 'text/plain',
+  'md': 'text/markdown',
+  'csv': 'text/csv',
+  'json': 'application/json',
+  'xml': 'application/xml',
+  'pdf': 'application/pdf',
+  'docx':
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
+
+const ownedVideoMimes = {
+  'mp4': 'video/mp4',
+  'webm': 'video/webm',
+  'mov': 'video/quicktime',
+};
+
+Map<String, dynamic> ownedFileAttachment(
+  String uri, {
+  required String name,
+  String kind = 'file',
+}) {
+  final allowed = kind == 'file'
+      ? {...ownedFileMimes.values, 'text/xml'}
+      : kind == 'video'
+      ? ownedVideoMimes.values.toSet()
+      : <String>{};
+  final match = RegExp(
+    r'^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$',
+  ).firstMatch(uri);
+  if (match == null ||
+      !allowed.contains(match.group(1)) ||
+      match.group(2)!.length > ((1048576 + 2) ~/ 3) * 4 ||
+      name.isEmpty ||
+      utf8.encode(name).length > 256 ||
+      name.contains(RegExp(r'[\x00\r\n]'))) {
+    throw StateError('附件格式或名称无效，单件不超过 1 MiB');
+  }
+  final List<int> bytes;
+  try {
+    bytes = base64Decode(match.group(2)!);
+  } on FormatException {
+    throw StateError('附件编码无效');
+  }
+  if (bytes.isEmpty ||
+      bytes.length > 1048576 ||
+      base64Encode(bytes) != match.group(2)) {
+    throw StateError('附件编码或大小无效');
+  }
+  return {
+    'kind': kind,
+    'name': name,
+    'mimeType': match.group(1),
+    'data': match.group(2),
+    'sha256': sha256.convert(bytes).toString(),
+  };
+}
+
+Map<String, dynamic>? ownedFileMetadata(dynamic attachments) {
+  if (attachments is! List) return null;
+  for (final item in attachments.whereType<Map>()) {
+    if (item['kind'] != 'file' && item['kind'] != 'video') continue;
+    try {
+      final uri = 'data:${item['mimeType']};base64,${item['data']}';
+      final verified = ownedFileAttachment(
+        uri,
+        name: item['name'] as String,
+        kind: item['kind'] as String,
+      );
+      if (verified['sha256'] != item['sha256']) continue;
+      return {
+        ...verified,
+        'uri': uri,
+        'sizeBytes': base64Decode(verified['data'] as String).length,
+      };
+    } catch (_) {}
+  }
+  return null;
+}
+
 Map<String, dynamic> ownedAudioAttachment(
   String uri, {
   String name = 'voice.wav',

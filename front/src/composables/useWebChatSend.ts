@@ -10,7 +10,10 @@ import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { useConversationWorkspace } from "./useConversationWorkspace";
 import { useChatAppearancePreference } from "./useChatAppearancePreference";
 import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
-import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, type OwnedAttachment } from "@/runtime/device-owned-attachments";
+import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAttachment, ownedAttachmentURL, type OwnedAttachment } from "@/runtime/device-owned-attachments";
+import { parseOwnedProjectReference } from "@/runtime/owned-project-reference";
+import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
+import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -44,6 +47,7 @@ export function useWebChatSend(
   const { currentWorkspace, getWorkspaceRequestFields } = useConversationWorkspace();
   const isSubmitting = ref(false);
   const generating = sending;
+  const pendingVideoFile = ref<File | null>(null);
 
 
   function onImageAttached(file: File, base64: string) {
@@ -56,11 +60,13 @@ export function useWebChatSend(
     currentImageBase64.value = null;
   }
 
-  function onVideoAttached(_file: File, videoUrl: string) {
+  function onVideoAttached(file: File, videoUrl: string) {
+    pendingVideoFile.value = file;
     pendingVideoUrl.value = videoUrl;
   }
 
   function onVideoRemoved() {
+    pendingVideoFile.value = null;
     pendingVideoUrl.value = null;
   }
 
@@ -152,7 +158,12 @@ export function useWebChatSend(
     await doActualSend(text);
   }
 
-  async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string, ownedAudio?: OwnedAttachment) {
+  async function doActualSend(text: unknown, audioUrl?: string, voiceMessage?: boolean, videoUrl?: string, ownedAudio?: OwnedAttachment, ownedExtra?: OwnedAttachment) {
+    const originalConversation = convId.value;
+    const originalRole = characterId.value;
+    const originalReply = replyTarget?.value ? JSON.parse(JSON.stringify(replyTarget.value)) : undefined;
+    let activeConversation = originalConversation;
+    const draftProject = !convId.value && currentWorkspace.value?.workspaceKind === "logical" ? { ...currentWorkspace.value } : null;
     const safeText = typeof text === "string" ? text : "";
     if (isSubmitting.value || sending.value) return;
     isSubmitting.value = true;
@@ -161,6 +172,8 @@ export function useWebChatSend(
     const imgUrl = pendingImageBase64.value;
     const finalAudioUrl = audioUrl || pendingAudioUrl.value;
     const finalVideoUrl = videoUrl || pendingVideoUrl.value;
+    const videoFile = pendingVideoFile.value;
+    pendingVideoFile.value = null;
     pendingImageBase64.value = null;
     pendingAudioUrl.value = null;
     pendingVideoUrl.value = null;
@@ -182,6 +195,7 @@ export function useWebChatSend(
       imageUrl: imgUrl || undefined,
       audioUrl: ownedAudio ? ownedAudioURL([ownedAudio]) : finalAudioUrl || undefined,
       videoUrl: finalVideoUrl || undefined,
+      ...(ownedExtra ? { attachments: [{ ...ownedExtra, url: ownedAttachmentURL(ownedExtra), downloadUrl: ownedAttachmentURL(ownedExtra) }] } : {}),
       status: "sending",
       conversationId: convId.value,
       createdAt: new Date().toISOString(),
@@ -196,10 +210,20 @@ export function useWebChatSend(
     notifyDesktopPetChatState("assistant_thinking", requestEnvelope.requestId);
 
     try {
-      if (owned.enabled.value) {
-        if (finalAudioUrl || finalVideoUrl) throw new Error("当前设备数据通道尚未接入音频和视频保存，消息未发送");
+      if (await owned.refresh()) {
+        if (!originalRole) throw new Error("请选择调用角色后发送消息");
+        const prepared = await owned.data("working", originalRole);
+        const expectedExecutionScope = prepared.executionScope;
+        if (expectedExecutionScope.roleId !== originalRole || convId.value !== originalConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原消息未发送");
+        if (finalAudioUrl) throw new Error("请重新录制语音，以便当前数据所有者保存原始音频");
+				let video: OwnedAttachment | undefined;
+        if (finalVideoUrl) {
+          if (videoFile) video = await ownedFileAttachment(videoFile, videoFile.name, "video");
+          else { const match = /^data:(video\/(?:mp4|webm|quicktime));base64,([A-Za-z0-9+/]+={0,2})$/.exec(finalVideoUrl); if (!match || match[2].length > Math.ceil(1048576 / 3) * 4) throw new Error("请重新选择视频，当前 Core 需要校验并保存原始视频"); const bytes = Uint8Array.from(atob(match[2]), (value) => value.charCodeAt(0)); video = await ownedFileAttachment(new Blob([bytes], { type: match[1] }), "video", "video"); }
+        }
 				if (ownedAudio && imgUrl) throw new Error("语音消息不能同时携带图片");
-        const attachments = ownedAudio ? [ownedAudio] : imgUrl ? [await ownedImageAttachment(imgUrl)] : undefined;
+        const attachments = ownedAudio ? [ownedAudio] : [ownedExtra, video, imgUrl ? await ownedImageAttachment(imgUrl) : undefined].filter((item): item is OwnedAttachment => !!item);
+        if (attachments.length > 2) throw new Error("单条消息最多携带两个附件");
         const assistantId = `${requestEnvelope.requestId}/assistant`;
         const previousCore = [...messages.value].reverse().find((message) => message.executionScope?.coreId && message.executionScope.coreId !== owned.coreId.value)?.executionScope?.coreId;
         const context = previousCore && convId.value ? {
@@ -207,11 +231,19 @@ export function useWebChatSend(
           summary: owned.previousSummary(previousCore, convId.value),
           messages: messages.value.filter((message) => message.id !== userMsgLocalId && ["user", "assistant"].includes(message.role) && !["sending", "failed"].includes(message.status)).slice(-128).map((message) => ({ id: message.id, ownerId: message.ownerId || message.executionScope?.resourceOwnerId, role: message.role, content: String(message.content || ""), status: message.status })),
         } : undefined;
-        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, characterId: characterId.value || undefined, message: sendContent, context, attachments }, (event) => {
+        let quote;
+        if (originalReply) {
+          if (!originalReply.executionScope || !sameOwnedAuthority(originalReply.executionScope, expectedExecutionScope) || !originalReply.ownerId || !originalReply.characterId || !originalReply.sourceConversationId || typeof originalReply.fullContent !== "string") throw new Error("引用消息的服务、角色或归属已变化，请重新选择");
+          const source = parseConversationReference(originalReply.sourceConversationId);
+          const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(originalReply.fullContent))), (value) => value.toString(16).padStart(2, "0")).join("");
+          quote = { ownerId: originalReply.ownerId, characterId: originalReply.characterId, conversationId: source?.id || originalReply.sourceConversationId, messageId: originalReply.id, expectedRevision: originalReply.sourceRevision, contentHash, expectedExecutionScope: originalReply.executionScope };
+        }
+        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, characterId: expectedExecutionScope.roleId, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
+          if (convId.value !== activeConversation || characterId.value !== originalRole) return;
           if (event.type === "started") {
             const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
             if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope?.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId };
-            if (event.conversationId && !convId.value) { convId.value = event.conversationId; localStorage.setItem("webchat-conv-id", event.conversationId); }
+            if (event.conversationId && !convId.value) { convId.value = event.conversationId; activeConversation = event.conversationId; localStorage.setItem("webchat-conv-id", event.conversationId); }
             messages.value.push({ id: assistantId, uiKey: `${event.executionScope?.resourceOwnerId}:${assistantId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", createdAt: new Date().toISOString(), characterId: event.executionScope?.roleId, conversationId: event.conversationId, executionScope: event.executionScope });
           }
 					if (event.type === "transcribed") {
@@ -226,20 +258,31 @@ export function useWebChatSend(
           if (index >= 0 && (event.type === "interrupted" || event.type === "failed")) messages.value[index] = { ...messages.value[index], status: "interrupted", saved: event.data?.saved === true };
           scrollToBottom(true);
         });
+        if (convId.value !== activeConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原回复已丢弃");
         const index = messages.value.findIndex((message) => message.id === assistantId);
 				const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === response.executionScope.resourceOwnerId);
-				if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: response.transcription || messages.value[userIndex].content, sourceRevision: response.userRevision || 1 };
-        const assistant = { id: assistantId, uiKey: `${response.executionScope.resourceOwnerId}:${assistantId}`, ownerId: response.executionScope.resourceOwnerId, sourceRevision: response.saved ? 1 : undefined, requestId: response.requestId, role: "assistant", content: response.reply, reasoningContent: response.reasoning, status: "completed", conversationId: response.conversationId, characterId: response.executionScope.roleId, executionScope: response.executionScope, saved: response.saved, memoryStatus: response.memoryStatus, createdAt: new Date().toISOString() };
+				if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: response.transcription || messages.value[userIndex].content, sourceRevision: response.userRevision || 1, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId };
+        const assistant = { id: assistantId, uiKey: `${response.executionScope.resourceOwnerId}:${assistantId}`, ownerId: response.executionScope.resourceOwnerId, sourceRevision: response.saved ? 1 : undefined, requestId: response.requestId, role: "assistant", content: response.reply, reasoningContent: response.reasoning, status: "completed", conversationId: response.conversationId, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId, executionScope: response.executionScope, saved: response.saved, memoryStatus: response.memoryStatus, createdAt: new Date().toISOString() };
         if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
         else messages.value.push(assistant);
         convId.value = response.conversationId;
         sending.value = false;
         notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
         if (replyTarget) replyTarget.value = null;
+        if (draftProject?.projectId && draftProject.executionScope) {
+          try {
+            const project = parseOwnedProjectReference(draftProject.projectId);
+            if (!project || project.ownerId !== response.executionScope.resourceOwnerId) throw new Error("项目数据所有者已变化，请重新选择项目");
+            await owned.query(response.conversationId, response.executionScope.roleId);
+            await owned.edit("conversation", response.conversationId, { projectId: project.id }, { characterId: response.executionScope.roleId, expectedExecutionScope: draftProject.executionScope, expectedOwnerId: response.executionScope.resourceOwnerId });
+          } catch (error: any) {
+            ElMessage.warning(error?.message || "对话已保存，但尚未确认移入项目，请重新加载后处理");
+          }
+        }
         await onConversationCreated?.(response.conversationId);
         return;
       }
-			if (ownedAudio) throw new Error("设备服务状态已变化，语音未发送");
+			if (ownedAudio || ownedExtra) throw new Error("设备服务状态已变化，附件未发送");
       const result = await post<any>("/api/web-chat/messages", {
         requestId: requestEnvelope.requestId,
         sessionId: requestEnvelope.sessionId,
@@ -298,6 +341,8 @@ export function useWebChatSend(
     }
   }
 
+  async function handleFileSend(file: File) { const attachment = await ownedFileAttachment(file, file.name); await doActualSend(`[文件] ${file.name}`, undefined, undefined, undefined, undefined, attachment); }
+
   async function handleStop() {
     if (owned.enabled.value) { await owned.interrupt().catch((error) => ElMessage.error(error?.message || "停止失败")); return; }
     const conversationId = String(convId.value || "").trim();
@@ -354,6 +399,7 @@ export function useWebChatSend(
     onVideoRemoved,
     handleVoiceAudio,
     handleVoiceText,
+    handleFileSend,
     handleImageSend,
     handleSend,
     doActualSend,

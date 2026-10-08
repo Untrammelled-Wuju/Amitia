@@ -183,6 +183,55 @@ public class BackgroundTaskBridge: NSObject {
         }
     }
 
+    public func updateTaskRunProgress(
+        _ taskRunId: String,
+        totalUnits: Int64,
+        completedUnits: Int64,
+        phase: String
+    ) async -> Bool {
+        guard totalUnits > 0,
+              let identifier = await BGTaskIdentifierRegistry.shared.identifier(
+                forTaskRunId: taskRunId
+              ) else {
+            return false
+        }
+        guard #available(iOS 26.0, *) else {
+            return false
+        }
+        guard let task = queue.sync(execute: {
+            self.pendingTasks[identifier] as? BGContinuedProcessingTask
+        }) else {
+            return false
+        }
+
+        let clamped = min(max(completedUnits, 0), totalUnits)
+        task.progress.totalUnitCount = totalUnits
+        task.progress.completedUnitCount = clamped
+        let normalizedPhase = phase.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedPhase.isEmpty {
+            await MainActor.run {
+                task.updateTitle(task.title, subtitle: normalizedPhase)
+            }
+        }
+        return true
+    }
+
+    public func cancelTaskRun(_ taskRunId: String) async -> Bool {
+        guard let identifier = await BGTaskIdentifierRegistry.shared.identifier(
+            forTaskRunId: taskRunId
+        ) else {
+            return false
+        }
+        let task = queue.sync(flags: .barrier) {
+            self.pendingTasks.removeValue(forKey: identifier)
+        }
+        if let task {
+            task.setTaskCompleted(success: false)
+            return true
+        }
+        return false
+    }
+
     public func hasPendingTaskRun(_ taskRunId: String) async -> Bool {
         var result = false
         if let identifier = await BGTaskIdentifierRegistry.shared.identifier(forTaskRunId: taskRunId) {

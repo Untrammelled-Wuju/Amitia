@@ -14,9 +14,7 @@ func (h *Handler) GetUpdateConfig(c *gin.Context) {
 }
 
 func (h *Handler) UpdateConfig_Update(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.UpdateUpdateConfig(body))
+	h.updateAdministratorSettings(c, "update", true)
 }
 
 func (h *Handler) ReleaseCheckLatest(c *gin.Context) {
@@ -28,9 +26,9 @@ func (h *Handler) ReleaseCheckHistory(c *gin.Context) {
 }
 
 func (h *Handler) ReleaseCheckExport(c *gin.Context) {
-	util.SuccessResponse(c, h.service.ExportReleaseCheck())
+	h.administratorAction(c, "release-export", "")
 }
 
 func (h *Handler) ReleaseCheckRun(c *gin.Context) {
-	util.SuccessResponse(c, h.service.RunReleaseCheck())
+	h.updateAdministratorSettings(c, "release-check", false)
 }

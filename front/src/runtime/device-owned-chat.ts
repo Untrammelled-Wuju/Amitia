@@ -2,8 +2,10 @@ import { resolveApiUrl } from "./runtime-adapter";
 import { createAuthenticatedFetchInit } from "./request-auth";
 import type { OwnedAttachment } from "./device-owned-attachments";
 import type { OwnedConversationOrigin } from "./device-owned-conversation-reference";
+import { sameOwnedAuthority } from "./owned-speech-result";
 
 export interface OwnedExecutionScope {
+  authorizationRealm?: string;
   spaceId: string;
   initiatorDeviceId: string;
   targetDeviceId: string;
@@ -24,6 +26,7 @@ export interface OwnedExecutionScope {
 }
 
 export interface OwnedChatResponse {
+  resourceConversationId?: string;
   conversationOrigin?: OwnedConversationOrigin;
 	transcription?: string;
 	userRevision?: number;
@@ -51,6 +54,7 @@ export interface OwnedChatEvent {
 }
 
 export interface OwnedChatRequest {
+  quote?: { ownerId: string; characterId: string; conversationId: string; messageId: string; expectedRevision: number; contentHash: string; expectedExecutionScope: OwnedExecutionScope };
   conversationOrigin?: OwnedConversationOrigin;
   attachments?: OwnedAttachment[];
   expectedExecutionScope?: OwnedExecutionScope;
@@ -65,6 +69,7 @@ export interface OwnedChatRequest {
 
 function scopeFingerprint(scope: OwnedExecutionScope): string {
   return JSON.stringify([
+    scope.authorizationRealm,
     scope.spaceId, scope.initiatorDeviceId, scope.targetDeviceId, scope.coreId,
     scope.providerEpoch, scope.coordinated, scope.modeRevision, scope.permissionRevision,
     scope.targetPermissionRevision, scope.targetProviderEpoch, scope.roleId, scope.roleRevision,
@@ -83,6 +88,7 @@ export async function consumeOwnedChatStream(
   body: ReadableStream<Uint8Array>,
   requestId: string,
   onEvent: (event: OwnedChatEvent) => void,
+  expectedExecutionScope?: OwnedExecutionScope,
 ): Promise<OwnedChatResponse> {
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -97,6 +103,8 @@ export async function consumeOwnedChatStream(
     if (!lines.length) return;
     if (terminal) throw new Error("回复结束后仍收到数据，已拦截");
     const event = JSON.parse(lines.map((line) => line.slice(5).trimStart()).join("\n")) as OwnedChatEvent;
+    const suppliedScope = event.executionScope || event.data?.executionScope;
+    if (expectedExecutionScope && suppliedScope && !sameOwnedAuthority(expectedExecutionScope, suppliedScope)) throw new Error("服务提供者、角色或数据归属已变化，迟到回复已拦截");
     if (!["started", "transcribed", "delta", "completed", "interrupted", "failed"].includes(event.type)) throw new Error("未知的回复事件");
     if (event.type === "started" || event.type === "delta" || event.type === "transcribed") {
       const current = scopeFingerprint(validateScope(event.executionScope, requestId));
@@ -171,5 +179,5 @@ export async function streamOwnedChat(request: OwnedChatRequest, signal: AbortSi
     const error = await response.json().catch(() => null);
     throw new Error(error?.message || error?.msg || `云端对话服务不可用 (${response.status})`);
   }
-  return consumeOwnedChatStream(response.body, request.requestId, onEvent);
+  return consumeOwnedChatStream(response.body, request.requestId, onEvent, request.expectedExecutionScope);
 }

@@ -553,7 +553,7 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	if cfg.APIType == "" {
 		cfg.APIType = "openai"
 	}
-	result, err := h.service.CreateModel(&cfg)
+	result, err := h.configurationService(c.Request.Context()).CreateModel(&cfg)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -572,7 +572,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	_, hasReasoning := updates["supportsReasoning"]
 	_, hasVision := updates["supportsVision"]
 	if hasReasoning || hasVision {
-		existing, err := h.service.GetModel(id)
+		existing, err := h.configurationService(c.Request.Context()).GetModel(id)
 		if err != nil {
 			util.ErrorResponse(c, response.NotFound, "模型配置不存在", nil)
 			return
@@ -583,7 +583,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		delete(updates, "reasoningLevels")
 		delete(updates, "supportsVision")
 	}
-	result, err := h.service.UpdateModel(id, updates)
+	result, err := h.configurationService(c.Request.Context()).UpdateModel(id, updates)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -594,7 +594,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 
 func (h *Handler) DeleteModel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	if err := h.service.DeleteModel(id); err != nil {
+	if err := h.configurationService(c.Request.Context()).DeleteModel(id); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -603,7 +603,7 @@ func (h *Handler) DeleteModel(c *gin.Context) {
 
 func (h *Handler) ActivateModel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	result, err := h.service.ActivateModel(id)
+	result, err := h.configurationService(c.Request.Context()).ActivateModel(id)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -629,7 +629,7 @@ func (h *Handler) UpdateModelRoutes(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	if err := h.service.UpdateModelRoutes(body.Routes); err != nil {
+	if err := h.configurationService(c.Request.Context()).UpdateModelRoutes(body.Routes); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}

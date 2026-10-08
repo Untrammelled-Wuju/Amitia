@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
 	"github.com/u-ai/backend/internal/devicemesh/proof"
 )
@@ -34,6 +36,41 @@ func (h *LocalHandler) handlePinnedPairing(c *gin.Context) {
 	identity, err := h.identity.Load()
 	if err != nil {
 		c.JSON(503, gin.H{"message": "当前设备身份不可用"})
+		return
+	}
+	h.mu.RLock()
+	localCore := h.localCoreID
+	version := h.bindingVersion
+	credential, credentialErr := h.credStore.LoadCredential()
+	h.mu.RUnlock()
+	if credentialErr != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"message": "当前配对状态不可用，请稍后重试"})
+		return
+	}
+	if localCore == "" {
+		localCore = identity.DeviceID.String()
+	}
+	if request.Endpoint.CoreID == localCore || request.Endpoint.CoreID == identity.DeviceID.String() {
+		c.JSON(http.StatusConflict, gin.H{"code": "pairing.self", "message": "不能添加当前设备自身"})
+		return
+	}
+	if credential != nil && credential.SpaceID.String() == request.Endpoint.CoreID {
+		c.JSON(http.StatusConflict, gin.H{"code": "pairing.already_paired", "message": "该设备已添加，无需重复扫码"})
+		return
+	}
+	if _, err := client.ProviderPath(c.Request.Context(), request.Endpoint.URL, request.Endpoint.CoreID, localCore); err != nil {
+		if errors.Is(err, coordination.ErrProviderCycle) {
+			c.JSON(http.StatusConflict, gin.H{"code": "pairing.provider_topology_invalid", "message": "该设备已在当前服务连接链中，不能反向或重复扫码添加"})
+		} else {
+			c.JSON(http.StatusBadGateway, gin.H{"code": "pairing.provider_unavailable", "message": "无法验证局域网服务身份或连接链，请恢复连接后重试"})
+		}
+		return
+	}
+	h.mu.RLock()
+	unchanged := version == h.bindingVersion
+	h.mu.RUnlock()
+	if !unchanged {
+		c.JSON(http.StatusConflict, gin.H{"code": "pairing.binding_changed", "message": "设备绑定已变化，请刷新后重新扫码"})
 		return
 	}
 	body := proof.ClaimBody{DeviceID: identity.DeviceID.String(), RuntimeID: identity.RuntimeID.String(), Platform: h.platform.String(), Label: strings.TrimSpace(request.Label), OfferToken: strings.TrimSpace(request.OfferToken), SetupCode: strings.TrimSpace(request.SetupCode)}

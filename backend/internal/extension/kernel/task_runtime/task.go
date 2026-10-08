@@ -32,36 +32,38 @@ func (s TaskState) IsTerminal() bool {
 }
 
 type TaskDefinition struct {
-	TaskID                       string                  `json:"taskId"`
-	ExtensionID                  string                  `json:"extensionId"`
-	ModuleID                     string                  `json:"moduleId"`
-	ContributionID               string                  `json:"contributionId,omitempty"`
-	RuntimeType                  string                  `json:"runtimeType"`
-	Entry                        string                  `json:"entry"`
-	EntryHash                    string                  `json:"entryHash,omitempty"`
-	InputSchema                  json.RawMessage         `json:"inputSchema,omitempty"`
-	OutputSchema                 json.RawMessage         `json:"outputSchema,omitempty"`
-	CheckpointSchema             json.RawMessage         `json:"checkpointSchema,omitempty"`
-	Checkpoint                   bool                    `json:"checkpoint"`
-	Idempotent                   bool                    `json:"idempotent"`
-	Recoverable                  bool                    `json:"recoverable"`
-	Idempotency                  TaskIdempotency         `json:"idempotency,omitempty"`
-	Recoverability               TaskRecoverability      `json:"recoverability,omitempty"`
-	ResourceLimits               TaskResourceLimits      `json:"resourceLimits,omitempty"`
-	PermissionRequirements       []PermissionRequirement `json:"permissionRequirements,omitempty"`
-	PermissionRequirementStrings []string                `json:"permissionRequirementStrings,omitempty"`
-	AllowedNamespaces            []string                `json:"allowedNamespaces,omitempty"`
-	ScopeRule                    ScopeRule               `json:"scopeRule,omitempty"`
-	RetryPolicy                  TaskRetryPolicy         `json:"retryPolicy,omitempty"`
-	TimeoutPolicy                TaskTimeoutPolicy       `json:"timeoutPolicy,omitempty"`
-	ResultPolicy                 TaskResultPolicy        `json:"resultPolicy,omitempty"`
-	CleanupPolicy                TaskCleanupPolicy       `json:"cleanupPolicy,omitempty"`
-	DefinitionVersion            int                     `json:"definitionVersion,omitempty"`
-	InstalledGeneration          int64                   `json:"installedGeneration,omitempty"`
-	DefinitionHash               string                  `json:"definitionHash,omitempty"`
-	Version                      string                  `json:"version,omitempty"`
-	MaxDuration                  time.Duration           `json:"maxDuration,omitempty"`
-	ExecutionPlacement           TaskExecutionPlacement  `json:"executionPlacement,omitempty"`
+	RemoteSource                 *DeviceTaskDefinitionSource `json:"remoteSource,omitempty"`
+	TaskID                       string                      `json:"taskId"`
+	ExtensionID                  string                      `json:"extensionId"`
+	ModuleID                     string                      `json:"moduleId"`
+	ContributionID               string                      `json:"contributionId,omitempty"`
+	RuntimeType                  string                      `json:"runtimeType"`
+	Entry                        string                      `json:"entry"`
+	EntryHash                    string                      `json:"entryHash,omitempty"`
+	BundleHash                   string                      `json:"bundleHash,omitempty"`
+	InputSchema                  json.RawMessage             `json:"inputSchema,omitempty"`
+	OutputSchema                 json.RawMessage             `json:"outputSchema,omitempty"`
+	CheckpointSchema             json.RawMessage             `json:"checkpointSchema,omitempty"`
+	Checkpoint                   bool                        `json:"checkpoint"`
+	Idempotent                   bool                        `json:"idempotent"`
+	Recoverable                  bool                        `json:"recoverable"`
+	Idempotency                  TaskIdempotency             `json:"idempotency,omitempty"`
+	Recoverability               TaskRecoverability          `json:"recoverability,omitempty"`
+	ResourceLimits               TaskResourceLimits          `json:"resourceLimits,omitempty"`
+	PermissionRequirements       []PermissionRequirement     `json:"permissionRequirements,omitempty"`
+	PermissionRequirementStrings []string                    `json:"permissionRequirementStrings,omitempty"`
+	AllowedNamespaces            []string                    `json:"allowedNamespaces,omitempty"`
+	ScopeRule                    ScopeRule                   `json:"scopeRule,omitempty"`
+	RetryPolicy                  TaskRetryPolicy             `json:"retryPolicy,omitempty"`
+	TimeoutPolicy                TaskTimeoutPolicy           `json:"timeoutPolicy,omitempty"`
+	ResultPolicy                 TaskResultPolicy            `json:"resultPolicy,omitempty"`
+	CleanupPolicy                TaskCleanupPolicy           `json:"cleanupPolicy,omitempty"`
+	DefinitionVersion            int                         `json:"definitionVersion,omitempty"`
+	InstalledGeneration          int64                       `json:"installedGeneration,omitempty"`
+	DefinitionHash               string                      `json:"definitionHash,omitempty"`
+	Version                      string                      `json:"version,omitempty"`
+	MaxDuration                  time.Duration               `json:"maxDuration,omitempty"`
+	ExecutionPlacement           TaskExecutionPlacement      `json:"executionPlacement,omitempty"`
 }
 
 type TaskResourceLimits struct {
@@ -406,6 +408,9 @@ func (t *Task) ValidateRecovery(other *Task) error {
 	}
 	if t.definition.EntryHash != other.definition.EntryHash {
 		return errors.New("task_runtime: entry hash mismatch")
+	}
+	if t.definition.BundleHash != other.definition.BundleHash {
+		return errors.New("task_runtime: bundle hash mismatch")
 	}
 	if t.input.InputHash != other.input.InputHash {
 		return errors.New("task_runtime: input hash mismatch")

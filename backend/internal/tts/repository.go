@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/configwrite"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
@@ -55,20 +56,53 @@ func (r *repository) GetByID(id int) (*TtsConfig, error) {
 }
 
 func (r *repository) Create(cfg *TtsConfig) error {
-	return r.db.Create(cfg).Error
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
+		if cfg.IsActive == 1 {
+			if err := tx.Model(&TtsConfig{}).Where("is_active = 1").Update("is_active", 0).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Create(cfg).Error
+	})
 }
 
 func (r *repository) Update(id int, updates map[string]interface{}) error {
-	return r.db.Model(&TtsConfig{}).Where("id = ?", id).Updates(updates).Error
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
+		var target TtsConfig
+		if err := tx.First(&target, id).Error; err != nil {
+			return err
+		}
+		active := updates["is_active"]
+		if active == true || active == 1 || active == float64(1) {
+			if err := tx.Model(&TtsConfig{}).Where("is_active = 1 AND id <> ?", id).Update("is_active", 0).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&TtsConfig{}).Where("id = ?", id).Updates(updates).Error
+	})
 }
 
 func (r *repository) Delete(id int) error {
-	return r.db.Where("id = ?", id).Delete(&TtsConfig{}).Error
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
+		var target TtsConfig
+		if err := tx.First(&target, id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&target).Error
+	})
 }
 
 func (r *repository) Activate(id int) error {
-	r.db.Model(&TtsConfig{}).Where("is_active = 1").Update("is_active", 0)
-	return r.db.Model(&TtsConfig{}).Where("id = ?", id).Update("is_active", 1).Error
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
+		var target TtsConfig
+		if err := tx.First(&target, id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&TtsConfig{}).Where("is_active = 1").Update("is_active", 0).Error; err != nil {
+			return err
+		}
+		return tx.Model(&TtsConfig{}).Where("id = ?", id).Update("is_active", 1).Error
+	})
 }
 
 func (r *repository) GetActive() (*TtsConfig, error) {
@@ -277,6 +311,10 @@ func (r *repository) ResolveClonedVoiceConfig(spaceID, speakerID string) (*TtsCo
 }
 
 func (r *repository) UpsertClonedVoice(voice *ClonedVoice) error {
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error { return (&repository{db: tx}).upsertClonedVoice(voice) })
+}
+
+func (r *repository) upsertClonedVoice(voice *ClonedVoice) error {
 	if voice == nil || strings.TrimSpace(voice.SpaceID) == "" || strings.TrimSpace(voice.SpeakerID) == "" {
 		return gorm.ErrInvalidData
 	}
@@ -298,7 +336,9 @@ func (r *repository) UpsertClonedVoice(voice *ClonedVoice) error {
 }
 
 func (r *repository) DeleteClonedVoice(spaceID, speakerID string) error {
-	return ttsOwnerQuery(r.db.Model(&ClonedVoice{}), "space_id", spaceID).Where("speaker_id = ?", speakerID).Delete(&ClonedVoice{}).Error
+	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
+		return ttsOwnerQuery(tx.Model(&ClonedVoice{}), "space_id", spaceID).Where("speaker_id = ?", speakerID).Delete(&ClonedVoice{}).Error
+	})
 }
 
 func (r *repository) ListProviders() []ProviderInfo {

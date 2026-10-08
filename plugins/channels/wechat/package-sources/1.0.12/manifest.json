@@ -1,0 +1,519 @@
+{
+  "manifestVersion": 1,
+  "placement": "device",
+  "extension": {
+    "id": "com.amitia/channel-wechat",
+    "name": {
+      "default": "微信渠道"
+    },
+    "description": {
+      "default": "通过 OpenClaw 微信协议接入微信消息。"
+    },
+    "version": "1.0.12",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://amitia.untrammelled.top",
+    "categories": [
+      "channel",
+      "messaging"
+    ],
+    "keywords": [
+      "wechat",
+      "openclaw",
+      "channel"
+    ]
+  },
+  "publisher": {
+    "id": "com.amitia",
+    "displayName": "Amitia",
+    "trustLevel": "official"
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "wechat-channel-service",
+      "name": {
+        "default": "微信渠道服务"
+      },
+      "description": {
+        "default": "管理微信扫码登录、账号状态、入站消息和单条消息发送。"
+      },
+      "type": "service",
+      "runtime": {
+        "type": "service",
+        "entryPoint": "launcher.mjs",
+        "timeout": "30s",
+        "memory": 536870912,
+        "maxSubprocesses": 1
+      },
+      "placement": "device",
+      "providedCapabilities": [
+        {
+          "id": "channel.provider",
+          "version": "1.0.0"
+        }
+      ],
+      "provider": {
+        "id": "com.amitia.channel-wechat.provider",
+        "priority": 100,
+        "labels": {
+          "channelId": "wechat"
+        },
+        "metadata": {
+          "capabilities": {
+            "file": true,
+            "group": false,
+            "image": true,
+            "reply": false,
+            "text": true,
+            "thread": false,
+            "video": false,
+            "voice": true
+          },
+          "id": "wechat",
+          "sidecar": {
+            "defaultPort": 19876,
+            "healthPath": "/api/health",
+            "kind": "wechat",
+            "subdir": "sidecar"
+          }
+        }
+      },
+      "contributions": []
+    },
+    {
+      "id": "wechat-channel-ui",
+      "name": {
+        "default": "微信渠道界面"
+      },
+      "description": {
+        "default": "提供微信连接、扫码、账号状态和断开操作页面。"
+      },
+      "type": "data_only",
+      "contributions": [
+        {
+          "id": "wechat-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "微信连接"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "status",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.status",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查询微信状态"
+                }
+              },
+              {
+                "action_id": "config",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.config",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "读取微信配置"
+                }
+              },
+              {
+                "action_id": "connect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.connect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "连接微信"
+                }
+              },
+              {
+                "action_id": "disconnect",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.disconnect",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "断开微信"
+                }
+              },
+              {
+                "action_id": "messages",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.messages",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查看微信消息"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "wechat-page",
+            "display": {
+              "description": {
+                "default": "连接微信账号并查看扫码状态。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "微信连接"
+              }
+            },
+            "entry": {
+              "content_hash": "sha256-CaKKtRBQC5i7+eGk1xZrIPGif2fpT3VzozuX/K8rQoY=",
+              "path": "modules/wechat-channel-ui/desktop/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-wechat",
+            "integrity": {
+              "definition_hash": "wechat-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "wechat-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "service.network.request"
+          ]
+        },
+        {
+          "id": "wechat-messages-page",
+          "kind": "ui_page",
+          "name": {
+            "default": "微信消息"
+          },
+          "description": {
+            "default": "查看宿主保存的微信渠道会话和消息。"
+          },
+          "spec": {
+            "actions": [
+              {
+                "action_id": "messages",
+                "risk_level": "low",
+                "target": {
+                  "command": "channel.messages",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "查看微信消息"
+                }
+              }
+            ],
+            "contract_version": 1,
+            "contribution_id": "wechat-messages-page",
+            "display": {
+              "description": {
+                "default": "查看微信渠道消息记录。"
+              },
+              "icon": "channel",
+              "title": {
+                "default": "微信消息"
+              }
+            },
+            "entry": {
+              "content_hash": "sha256-CaKKtRBQC5i7+eGk1xZrIPGif2fpT3VzozuX/K8rQoY=",
+              "path": "modules/wechat-channel-ui/desktop/index.html",
+              "type": "web_restricted"
+            },
+            "extension_id": "com.amitia/channel-wechat",
+            "integrity": {
+              "definition_hash": "wechat-messages-page-v1"
+            },
+            "kind": "web_page",
+            "module_id": "wechat-channel-ui",
+            "sandbox": {
+              "enable_scripts": true,
+              "type": "web_restricted"
+            },
+            "slot": {
+              "contract_version": 1,
+              "slot_id": "provider.page.provider"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            }
+          },
+          "requiredPermissions": [
+            "conversation.read"
+          ]
+        },
+        {
+          "id": "wechat-routes",
+          "kind": "ui_provider",
+          "name": {
+            "default": "微信路由"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "route.registry",
+            "entries": {
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "web": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [],
+              "routes": [
+                {
+                  "capability": "page.provider",
+                  "id": "wechat",
+                  "path": "/channels/wechat",
+                  "priority": 200,
+                  "providerId": "wechat-page-provider",
+                  "title": "微信连接"
+                },
+                {
+                  "capability": "page.provider",
+                  "id": "wechat-messages",
+                  "path": "/channels/wechat/messages",
+                  "priority": 201,
+                  "providerId": "wechat-messages-page-provider-v2",
+                  "title": "微信消息"
+                }
+              ]
+            },
+            "mode": "replace",
+            "priority": 200,
+            "providerId": "wechat-routes",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "wechat-page-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "微信页面 Provider"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "page.provider",
+            "entries": {
+              "electron_linux": {
+                "contributionId": "wechat-page",
+                "type": "web_restricted"
+              },
+              "electron_macos": {
+                "contributionId": "wechat-page",
+                "type": "web_restricted"
+              },
+              "electron_windows": {
+                "contributionId": "wechat-page",
+                "type": "web_restricted"
+              },
+              "web": {
+                "contributionId": "wechat-page",
+                "type": "web_restricted"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/channels/wechat"
+              ]
+            },
+            "mode": "replace",
+            "priority": 200,
+            "providerId": "wechat-page-provider",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "wechat-messages-page-provider-v2",
+          "kind": "ui_provider",
+          "name": {
+            "default": "微信消息页面 Provider"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "page.provider",
+            "entries": {
+              "electron_linux": {
+                "contributionId": "wechat-messages-page",
+                "type": "web_restricted"
+              },
+              "electron_macos": {
+                "contributionId": "wechat-messages-page",
+                "type": "web_restricted"
+              },
+              "electron_windows": {
+                "contributionId": "wechat-messages-page",
+                "type": "web_restricted"
+              },
+              "web": {
+                "contributionId": "wechat-messages-page",
+                "type": "web_restricted"
+              }
+            },
+            "metadata": {
+              "routes": [
+                "/channels/wechat/messages"
+              ]
+            },
+            "mode": "replace",
+            "priority": 201,
+            "providerId": "wechat-messages-page-provider-v2",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "wechat-drawer",
+          "kind": "ui_provider",
+          "name": {
+            "default": "微信会话抽屉"
+          },
+          "description": {
+            "default": ""
+          },
+          "spec": {
+            "capability": "conversation.drawer",
+            "entries": {
+              "electron_linux": {
+                "type": "declarative"
+              },
+              "electron_macos": {
+                "type": "declarative"
+              },
+              "electron_windows": {
+                "type": "declarative"
+              },
+              "web": {
+                "type": "declarative"
+              }
+            },
+            "metadata": {
+              "navigationItems": [
+                {
+                  "id": "drawer.channel.wechat.messages",
+                  "label": "微信消息",
+                  "icon": "channel",
+                  "order": 40,
+                  "route": "/channels/wechat/messages",
+                  "channelId": "wechat",
+                  "platforms": [
+                    "windows",
+                    "macos",
+                    "linux"
+                  ]
+                }
+              ]
+            },
+            "mode": "replace",
+            "priority": 200,
+            "providerId": "wechat-drawer",
+            "trustLevel": "official"
+          }
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "permissions": [
+    {
+      "name": "conversation.read",
+      "reason": "在渠道消息查看页面读取宿主保存的微信会话和消息。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "conversation.write",
+      "reason": "将微信入站消息提交给统一会话管线。",
+      "required": true,
+      "scope": "global"
+    },
+    {
+      "name": "message.send",
+      "reason": "向微信用户发送角色回复。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.provider.register",
+      "reason": "注册并管理微信渠道 Provider。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.secret.use",
+      "reason": "读取微信机器人令牌。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.request",
+      "reason": "连接微信 iLink 服务。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.network.listen_loopback",
+      "reason": "在本地回环地址提供渠道状态和发送接口。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.background.run",
+      "reason": "保持微信连接和消息接收任务运行。",
+      "required": true,
+      "scope": "extension"
+    }
+  ],
+  "lifecycle": {
+    "autoUpdate": true,
+    "backgroundTasks": true,
+    "networkAccess": true,
+    "sandbox": true
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "development": {}
+}

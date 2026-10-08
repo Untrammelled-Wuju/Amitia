@@ -1,30 +1,45 @@
 import { apiClient } from "@/composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { getDeploymentConfig } from "@/runtime/runtime-adapter";
+import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 
-interface OwnedContinuityDocument { thread: ContinuityThread; waits: ContinuityWait[]; events: ContinuityEvent[]; ownerId: string; coreId: string; modeRevision: number; pausedReason?: string; lease?: { id: string; state: string } }
-const ownedRoles = new Map<string, string>();
+export interface OwnedContinuityDocument { thread: ContinuityThread; waits: ContinuityWait[]; events: ContinuityEvent[]; ownerId: string; coreId: string; modeRevision: number; executionScope: OwnedExecutionScope; managementExecutionScope?: OwnedExecutionScope; persistedExecutionScope?: OwnedExecutionScope; readOnly?: boolean; pausedReason?: string; lease?: { id: string; state: string } }
+const authority = (scope: OwnedExecutionScope) => JSON.stringify(Object.entries(scope).filter(([key]) => !["requestId", "turnId", "executionId"].includes(key)).sort(([left], [right]) => left.localeCompare(right)));
 function ownedData<T>(response: any): T { return response.data?.code === 200 ? response.data.data : response.data; }
+function managementDocument(document: OwnedContinuityDocument, expected?: OwnedExecutionScope): OwnedContinuityDocument {
+  const scope = document.managementExecutionScope;
+  if (!scope || document.ownerId !== scope.resourceOwnerId || document.thread?.characterId !== scope.roleId || (expected && authority(scope) !== authority(expected))) throw new Error("持续事项的管理范围或数据归属无效，请重新加载");
+  return { ...document, persistedExecutionScope: document.executionScope, executionScope: scope };
+}
 async function ownedRole(characterId?: unknown): Promise<string | null> {
   const mesh = useDeviceOwnedConversation();
-  if (!await mesh.refresh()) return null;
+  if (!await mesh.refresh()) {
+    if ((await getDeploymentConfig()).mode === "cloud") throw new Error("当前 Core 的持续事项服务尚未就绪");
+    return null;
+  }
   const role = typeof characterId === "string" && characterId ? characterId : mesh.selectInitialRole();
   if (!role) throw new Error("请先指定持续事项使用的角色");
   return role;
 }
-async function ownedDocument(id: string): Promise<OwnedContinuityDocument | null> {
-  const characterId = await ownedRole(ownedRoles.get(id));
-  if (!characterId) return null;
-  const result = ownedData<OwnedContinuityDocument>(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { id, characterId } }));
-  ownedRoles.set(id, result.thread.characterId || characterId);
+async function ownedDocument(id: string, intent?: OwnedContinuityDocument): Promise<OwnedContinuityDocument | null> {
+  const characterId = await ownedRole(intent?.executionScope.roleId);
+  if (!characterId) { if (intent) throw new Error("持续事项服务已变化，请重新加载"); return null; }
+  if (!intent?.executionScope || intent.thread.id !== id) throw new Error("请先加载持续事项并确认原始数据归属");
+  if (intent.readOnly) return intent;
+  const result = managementDocument(ownedData<OwnedContinuityDocument>(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { id, characterId } })));
+  if (result.thread.id !== id || result.ownerId !== intent.ownerId || authority(result.executionScope) !== authority(intent.executionScope)) throw new Error("持续事项所属设备或角色已变化，请重新加载");
   return result;
 }
-async function ownedMutation(action: string, payload: Record<string, unknown>, current?: OwnedContinuityDocument): Promise<OwnedContinuityDocument | null> {
-  const characterId = await ownedRole(current?.thread.characterId || payload.characterId);
-  if (!characterId) return null;
+async function ownedMutation(action: string, payload: Record<string, unknown>, current?: OwnedContinuityDocument, expected?: OwnedExecutionScope): Promise<OwnedContinuityDocument | null> {
+  const original = current?.executionScope || expected;
+  const characterId = await ownedRole(original?.roleId || payload.characterId);
+  if (!characterId) { if (original) throw new Error("持续事项服务已变化，请重新加载"); return null; }
+  if (!original || current?.readOnly) throw new Error("旧持续事项只读或缺少原始数据归属，请重新加载");
   const mesh = useDeviceOwnedConversation();
-  const result = ownedData<{ document: OwnedContinuityDocument; acknowledgement: { ownerId: string; versions: Record<string, number> } }>(await apiClient.post("/api/device-mesh/v1/business/continuity", { ...payload, action, characterId, requestId: crypto.randomUUID(), expectedRevision: current?.thread.revision || 0, expectedCoreId: current?.coreId || mesh.coreId.value, expectedOwnerId: current?.ownerId || mesh.roleOwnerId.value, expectedModeRevision: current?.modeRevision || mesh.policy.value?.modeRevision }));
-  if (result.acknowledgement.ownerId !== result.document.ownerId || result.acknowledgement.versions[`continuity/${result.document.thread.id}`] !== result.document.thread.revision) throw new Error("持续事项的数据持有方尚未确认保存");
-  ownedRoles.set(result.document.thread.id, characterId);
+  if (original.coreId !== mesh.coreId.value || original.providerEpoch !== mesh.policy.value?.providerEpoch || original.modeRevision !== mesh.policy.value?.modeRevision || original.permissionRevision !== mesh.policy.value?.permissionRevision) throw new Error("持续事项的数据归属已变化，请重新加载");
+  const requestId = crypto.randomUUID();
+  const result = ownedData<{ document: OwnedContinuityDocument; acknowledgement: { requestId: string; ownerId: string; versions: Record<string, number> } }>(await apiClient.post("/api/device-mesh/v1/business/continuity", { ...payload, action, characterId, requestId, expectedRevision: current?.thread.revision || 0, expectedCoreId: original.coreId, expectedOwnerId: original.resourceOwnerId, expectedModeRevision: original.modeRevision, expectedExecutionScope: original }));
+  if (authority(result.document.executionScope) !== authority(original) || result.document.executionScope.requestId !== requestId || result.acknowledgement.requestId !== requestId || result.document.ownerId !== original.resourceOwnerId || result.acknowledgement.ownerId !== original.resourceOwnerId || result.document.thread.id !== (current?.thread.id || `continuity/${requestId}`) || result.document.thread.revision !== (current?.thread.revision || 0) + 1 || result.acknowledgement.versions[`continuity/${result.document.thread.id}`] !== result.document.thread.revision || result.acknowledgement.versions[`checkpoint/continuity-operation/${requestId}`] !== 1) throw new Error("持续事项的数据持有方尚未确认保存");
   return result.document;
 }
 
@@ -32,6 +47,7 @@ export type ThreadStatus = "active" | "waiting" | "blocked" | "paused" | "comple
 export type WaitStatus = "waiting" | "resolved" | "cancelled";
 
 export interface ContinuityThread {
+  ownedDocument?: OwnedContinuityDocument;
   id: string;
   spaceId: string;
   characterId?: string;
@@ -79,6 +95,11 @@ export interface ContinuityEvent {
 }
 
 export interface ContinuityDetail {
+  executionScope?: OwnedExecutionScope;
+  ownerId?: string;
+  coreId?: string;
+  modeRevision?: number;
+  readOnly?: boolean;
 	lease?: { id: string; state: string };
 	pausedReason?: string;
   thread: ContinuityThread;
@@ -90,43 +111,73 @@ export interface ContinuityDetail {
 export async function listContinuityThreads(params: Record<string, unknown> = {}): Promise<ContinuityThread[]> {
   const characterId = await ownedRole(params.characterId);
   if (characterId) {
+    if (params.historicalRoleId) {
+      const mesh = useDeviceOwnedConversation();
+      const selected = String(params.historicalRoleId);
+      if (!(await mesh.historicalRoles(characterId)).some((role) => role.id === selected)) throw new Error("旧设备事项角色已变化，请重新选择");
+      const collected = new Map<string, ContinuityThread>();
+      let cursor = "";
+      let expected = "";
+      const cursors = new Set<string>();
+      do {
+        const page = await mesh.data("continuity", characterId, "", "", { historicalRoleId: selected, historicalCursor: cursor });
+        const currentScope = authority(page.executionScope);
+        if (expected && expected !== currentScope) throw new Error("旧持续事项的数据归属已变化，请重新加载");
+        expected = currentScope;
+        if (!page.historicalSnapshot) throw new Error("旧设备事项暂不可用");
+        for (const row of page.historicalSnapshot.resources) {
+          if (row.kind !== "continuity") continue;
+          const document = row.body as OwnedContinuityDocument;
+          if (row.ownerId !== page.historicalSnapshot.ownerId || row.roleId !== selected || document.thread?.id !== row.id) throw new Error("旧设备事项归属无效");
+          collected.set(`${row.ownerId}/${row.id}`, { ...document.thread, ownedDocument: { ...document, ownerId: row.ownerId, executionScope: page.executionScope, readOnly: true } });
+        }
+        cursor = page.historicalSnapshot.nextCursors?.continuity || "";
+        if (collected.size > 32768 || (cursor && cursors.has(cursor))) throw new Error("旧持续事项分页超过上限或游标重复");
+        cursors.add(cursor);
+      } while (cursor);
+      return [...collected.values()].filter((thread) => (!params.status || thread.status === params.status) && (!params.q || `${thread.title} ${thread.goal || ""} ${thread.summary || ""}`.toLowerCase().includes(String(params.q).toLowerCase())));
+    }
     const collected = new Map<string, OwnedContinuityDocument>();
     const cursors = new Set<string>();
     let cursor = "";
     let scope = "";
     do {
-      const page = ownedData<{ documents: OwnedContinuityDocument[]; executionScope: Record<string, unknown>; nextCursor?: string }>(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { characterId, pagination: "1", cursor } }));
-      const currentScope = JSON.stringify(page.executionScope, (key, value) => ["requestId", "turnId", "executionId"].includes(key) ? undefined : value);
+      const page: { documents: OwnedContinuityDocument[]; executionScope: OwnedExecutionScope; nextCursor?: string } = ownedData(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { characterId, pagination: "1", cursor } }));
+      const currentScope = authority(page.executionScope);
       if (scope && scope !== currentScope) throw new Error("持续事项的数据归属已变化，请重新加载");
       scope = currentScope;
       if (!Array.isArray(page.documents)) throw new Error("持续事项分页数据无效");
-      for (const document of page.documents) collected.set(document.thread.id, document);
+      const mesh = useDeviceOwnedConversation();
+      if (page.executionScope.coreId !== mesh.coreId.value || page.executionScope.roleId !== characterId) throw new Error("持续事项的数据归属已变化，请重新加载");
+      for (const document of page.documents) {
+        const presented = managementDocument(document, page.executionScope);
+        collected.set(`${document.ownerId}/${document.thread.id}`, presented);
+      }
       if (collected.size > 32768) throw new Error("持续事项数量超过加载上限，请缩小查询范围");
       cursor = page.nextCursor || "";
       if (cursor && cursors.has(cursor)) throw new Error("持续事项分页游标重复");
       cursors.add(cursor);
     } while (cursor);
     const documents = Array.from(collected.values());
-    for (const document of documents) ownedRoles.set(document.thread.id, document.thread.characterId || characterId);
-    return documents.map((document) => document.thread).filter((thread) => (!params.status || thread.status === params.status) && (!params.q || `${thread.title} ${thread.goal || ""} ${thread.summary || ""}`.toLowerCase().includes(String(params.q).toLowerCase())));
+    return documents.map((document) => ({ ...document.thread, ownedDocument: document })).filter((thread) => (!params.status || thread.status === params.status) && (!params.q || `${thread.title} ${thread.goal || ""} ${thread.summary || ""}`.toLowerCase().includes(String(params.q).toLowerCase())));
   }
   return (await apiClient.get<ContinuityThread[]>("/api/continuity/threads", { params })).data;
 }
 
-export async function createContinuityThread(payload: Record<string, unknown>): Promise<ContinuityThread> {
-  const document = await ownedMutation("create", payload);
-  if (document) return document.thread;
+export async function createContinuityThread(payload: Record<string, unknown>, expected?: OwnedExecutionScope): Promise<ContinuityThread> {
+  const document = await ownedMutation("create", payload, undefined, expected);
+  if (document) return { ...document.thread, ownedDocument: document };
   return (await apiClient.post<ContinuityThread>("/api/continuity/threads", payload)).data;
 }
 
-export async function getContinuityThread(id: string): Promise<ContinuityDetail> {
-  const document = await ownedDocument(id);
+export async function getContinuityThread(id: string, intent?: OwnedContinuityDocument): Promise<ContinuityDetail> {
+  const document = await ownedDocument(id, intent);
   if (document) return { ...document, bindings: [] };
   return (await apiClient.get<ContinuityDetail>(`/api/continuity/threads/${encodeURIComponent(id)}`)).data;
 }
 
-export async function updateContinuityThread(id: string, payload: Record<string, unknown>): Promise<ContinuityThread> {
-  const current = await ownedDocument(id);
+export async function updateContinuityThread(id: string, payload: Record<string, unknown>, intent?: OwnedContinuityDocument): Promise<ContinuityThread> {
+  const current = intent || await ownedDocument(id);
   if (current) {
     const action = payload.status === "paused" ? "pause" : payload.status === "active" ? "resume" : payload.status === "completed" ? "complete" : payload.status === "cancelled" ? "cancel" : "update";
     const document = await ownedMutation(action, { ...payload, id, updateGoal: Object.hasOwn(payload, "goal"), updateNextAction: Object.hasOwn(payload, "nextAction") }, current);
@@ -136,8 +187,8 @@ export async function updateContinuityThread(id: string, payload: Record<string,
   return (await apiClient.patch<ContinuityThread>(`/api/continuity/threads/${encodeURIComponent(id)}`, payload)).data;
 }
 
-export async function resolveContinuityWait(threadId: string, waitId: string, resume = true): Promise<ContinuityWait> {
-  const current = await ownedDocument(threadId);
+export async function resolveContinuityWait(threadId: string, waitId: string, resume = true, intent?: OwnedContinuityDocument): Promise<ContinuityWait> {
+  const current = intent || await ownedDocument(threadId);
   if (current) {
     const document = await ownedMutation("resolve_wait", { id: threadId, waitId, resume }, current);
     const wait = document?.waits.find((item) => item.id === waitId);
@@ -150,14 +201,14 @@ export async function resolveContinuityWait(threadId: string, waitId: string, re
   )).data;
 }
 
-export async function confirmContinuityExecution(id: string, leaseId: string, outcome: "completed" | "abandoned", result = ""): Promise<void> {
-  const current = await ownedDocument(id);
+export async function confirmContinuityExecution(id: string, leaseId: string, outcome: "completed" | "abandoned", result = "", intent?: OwnedContinuityDocument): Promise<void> {
+  const current = intent || await ownedDocument(id);
   if (!current || current.lease?.id !== leaseId || current.lease.state !== "unknown") throw new Error("执行状态已变化，请刷新后再确认");
   if (!await ownedMutation("confirm_execution", { id, leaseId, outcome, result }, current)) throw new Error("服务提供者已变化，请重新加载持续事项");
 }
 
-export async function cancelContinuityWait(threadId: string, waitId: string): Promise<ContinuityWait> {
-  const current = await ownedDocument(threadId);
+export async function cancelContinuityWait(threadId: string, waitId: string, intent?: OwnedContinuityDocument): Promise<ContinuityWait> {
+  const current = intent || await ownedDocument(threadId);
   if (current) {
     const document = await ownedMutation("cancel_wait", { id: threadId, waitId }, current);
     const wait = document?.waits.find((item) => item.id === waitId);
@@ -169,8 +220,8 @@ export async function cancelContinuityWait(threadId: string, waitId: string): Pr
   )).data;
 }
 
-export async function createContinuityWait(threadId: string, payload: Record<string, unknown>): Promise<ContinuityWait> {
-  const current = await ownedDocument(threadId);
+export async function createContinuityWait(threadId: string, payload: Record<string, unknown>, intent?: OwnedContinuityDocument): Promise<ContinuityWait> {
+  const current = intent || await ownedDocument(threadId);
   if (current) {
     const document = await ownedMutation("add_wait", { id: threadId, wait: { ...payload, waitType: payload.waitType || payload.type, conditionJson: payload.conditionJson || JSON.stringify(payload.condition || {}), autoResume: payload.autoResume === undefined ? (payload.waitType || payload.type) === "time" : payload.autoResume } }, current);
     if (!document?.waits.length) throw new Error("等待条件尚未确认保存");

@@ -7,6 +7,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   { path: "/dashboard/data", redirect: "/settings/data" },
   { path: "/chat", name: "chat", component: () => import("@/views/web-chat/WebChatView.vue"), meta: { requiresAuth: true } },
   { path: "/call-window", name: "realtimeCallWindow", component: () => import("@/views/realtime/RealtimeCallWindowView.vue") },
+  { path: "/call/:conversationId", name: "ownedIncomingCall", component: () => import("@/views/realtime/OwnedIncomingCallView.vue"), meta: { requiresAuth: true } },
 /**
  * Deprecated: Legacy extension architecture.
  * Do not add new static routes or navigation entries for the legacy

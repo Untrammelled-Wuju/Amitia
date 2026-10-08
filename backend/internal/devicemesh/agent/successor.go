@@ -124,7 +124,42 @@ func (h *LocalHandler) PrepareSuccessor(ctx context.Context, target string, coor
 	return result, nil
 }
 
+type providerFollowOperation struct {
+	done chan struct{}
+	err  error
+}
+
+func (h *LocalHandler) followProviderOnce(ctx context.Context, run func(context.Context) error) error {
+	if err := ctx.Err(); err != nil {
+		return context.Cause(ctx)
+	}
+	h.followMu.Lock()
+	if operation := h.followOperation; operation != nil {
+		h.followMu.Unlock()
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-operation.done:
+			return operation.err
+		}
+	}
+	operation := &providerFollowOperation{done: make(chan struct{})}
+	h.followOperation = operation
+	h.followMu.Unlock()
+	err := run(ctx)
+	h.followMu.Lock()
+	operation.err = err
+	h.followOperation = nil
+	close(operation.done)
+	h.followMu.Unlock()
+	return err
+}
+
 func (h *LocalHandler) FollowSuccessor(ctx context.Context) error {
+	return h.followProviderOnce(ctx, h.followSuccessor)
+}
+
+func (h *LocalHandler) followSuccessor(ctx context.Context) error {
 	if resumed, err := h.ResumeProviderBinding(ctx); resumed || err != nil {
 		return err
 	}

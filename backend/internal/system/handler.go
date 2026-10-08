@@ -96,6 +96,9 @@ func (h *Handler) SetSearchCredentialSecretBroker(broker *secret.Broker) {
 	h.searchCredentials.WithVault(newSearchCredentialVault(broker))
 	ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	if err := h.searchCredentials.CleanupPendingCredentials(ctx); err != nil {
+		applog.Warn("system search credential cleanup remains pending", "error", err)
+	}
 	if err := h.searchCredentials.MigrateLegacyCredentials(ctx); err != nil {
 		applog.Warn("system search credential migration to SecretBroker failed", "error", err)
 	}

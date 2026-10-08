@@ -42,6 +42,9 @@ type PermissionApprovalRecord struct {
 }
 
 func (b *DefaultPermissionBroker) RecordApproval(ctx context.Context, request PermissionApprovalRecordRequest) (PermissionApprovalRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return PermissionApprovalRecord{}, err
+	}
 	if request.Decision != ApprovalDecisionApproved && request.Decision != ApprovalDecisionDenied {
 		return PermissionApprovalRecord{}, fmt.Errorf("invalid approval decision: %s", request.Decision)
 	}
@@ -51,6 +54,13 @@ func (b *DefaultPermissionBroker) RecordApproval(ctx context.Context, request Pe
 	}
 	if request.ScopeSnapshotID == "" {
 		return PermissionApprovalRecord{}, fmt.Errorf("scope snapshot ID is required")
+	}
+	if request.ExpiresAt != nil {
+		expires := *request.ExpiresAt
+		if !expires.After(time.Now()) {
+			return PermissionApprovalRecord{}, fmt.Errorf("approval record has expired")
+		}
+		request.ExpiresAt = &expires
 	}
 
 	bindingKey := request.ExecutionBindingKey
@@ -74,6 +84,15 @@ func (b *DefaultPermissionBroker) RecordApproval(ctx context.Context, request Pe
 	b.mu.Lock()
 	if b.approvalRecords == nil {
 		b.approvalRecords = make(map[string]PermissionApprovalRecord)
+	}
+	for id, existing := range b.approvalRecords {
+		if existing.ExpiresAt != nil && !existing.ExpiresAt.After(time.Now()) {
+			delete(b.approvalRecords, id)
+		}
+	}
+	if len(b.approvalRecords) >= 4096 {
+		b.mu.Unlock()
+		return PermissionApprovalRecord{}, fmt.Errorf("approval record limit reached")
 	}
 	b.approvalRecords[recordID] = record
 	b.mu.Unlock()

@@ -6,8 +6,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/runtime/backend/mobile_backend_providers.dart';
-import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
+import '../../../../core/backend_transport/core_configuration_intent.dart';
+import '../../../../core/services/core_configuration_guard.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_editor.dart';
@@ -39,6 +39,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   bool _visionSuspended = false;
   bool _canConfigure = false;
   String? _error;
+  CoreConfigurationIntent? _configurationIntent;
+  int _loadEpoch = 0;
 
   String get _typeName => _typeLabels[widget.modelType] ?? '模型配置';
   bool get _isText => widget.modelType == 'text';
@@ -60,40 +62,67 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
 
   Future<void> _load() async {
     if (!mounted) return;
+    final epoch = ++_loadEpoch;
     setState(() {
       _loading = true;
       _canConfigure = false;
       _error = null;
     });
     try {
-      final deployment = ref.read(mobileDeploymentConfigProvider);
-      if (deployment.mode == MobileDeploymentMode.cloud) {
-        final policy = await ref.read(deviceMeshServiceProvider).coordination();
-        if (policy['canAdminister'] != true) {
-          if (!mounted) return;
-          setState(() { _configs = const []; _providers = const []; _loading = false; _error = 'AI 服务由云端 Core 提供。当前设备没有云端管理员权限，请在 Core 控制页面修改模型配置。'; });
-          return;
-        }
+      final intent = await coreConfigurationGuardFor(ref).capture();
+      if (!mounted || epoch != _loadEpoch) return;
+      _configurationIntent = intent;
+      if (!intent.canConfigure) {
+        if (!mounted) return;
+        setState(() {
+          _configs = const [];
+          _providers = const [];
+          _loading = false;
+          _error = 'AI 服务由云端 Core 提供。只有开启统筹模式的云端管理员设备可以配置模型，请在 Core 控制页面修改。';
+        });
+        return;
       }
-      final visionSuspended = widget.modelType == 'vision'
-          ? await ref.read(visionServiceProvider).mainModelVision()
-          : false;
-      final configs = await _loadConfigs();
-      final providers = await _loadProviders();
-      if (!mounted) return;
+      final values = await intent.run(
+        () async => <dynamic>[
+          widget.modelType == 'vision'
+              ? await ref.read(visionServiceProvider).mainModelVision()
+              : false,
+          await _loadConfigs(),
+          await _loadProviders(),
+        ],
+      );
+      await coreConfigurationGuardFor(ref).validate(intent);
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
-        _configs = configs;
-        _visionSuspended = visionSuspended;
-        _providers = providers;
+        _configs = values[1] as List<Map<String, dynamic>>;
+        _visionSuspended = values[0] as bool;
+        _providers = values[2] as List<Map<String, dynamic>>;
         _canConfigure = true;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _loading = false;
         _error = e.toString();
       });
+    }
+  }
+
+  Future<bool> _ensureConfiguration(CoreConfigurationIntent? intent) async {
+    try {
+      if (intent == null) throw StateError('模型配置归属无法确认，请重新加载');
+      await coreConfigurationGuardFor(ref).validate(intent);
+      return mounted;
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _canConfigure = false;
+          _error = error.toString();
+        });
+        _toast('模型配置已禁用：$error', error: true);
+      }
+      return false;
     }
   }
 
@@ -157,7 +186,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         actions: <Widget>[
           IconButton(
             tooltip: '新建',
-            onPressed: _busy || !_canConfigure ? null : () => _showConfigSheet(null),
+            onPressed: _busy || !_canConfigure
+                ? null
+                : () => _showConfigSheet(null),
             icon: const Icon(Icons.add),
           ),
           IconButton(
@@ -239,7 +270,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           ..._configs.map(_buildConfigCard),
         if (widget.modelType == 'voice') ...<Widget>[
           SizedBox(height: AppSpacing.sectionGap),
-          const VoiceCloneManager(),
+          VoiceCloneManager(configurationIntent: _configurationIntent),
         ],
       ],
     );
@@ -422,6 +453,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Future<void> _testConnection(Map<String, dynamic> config) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
+    if (CoreConfigurationIntent.current == null) {
+      return intent!.run(() => _testConnection(config));
+    }
     if (await _blockIndependentVision()) return;
     if (!mounted) return;
     final id = _idOf(config);
@@ -453,6 +489,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Future<void> _activate(Map<String, dynamic> config) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
+    if (CoreConfigurationIntent.current == null) {
+      return intent!.run(() => _activate(config));
+    }
     if (await _blockIndependentVision()) return;
     if (!mounted) return;
     final id = _idOf(config);
@@ -487,6 +528,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Future<void> _showConfigSheet(Map<String, dynamic>? existing) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
     if (await _blockIndependentVision()) return;
     if (!mounted) return;
     final nameCtrl = TextEditingController(
@@ -796,15 +839,28 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                     : () async {
                                         setSheetState(() => detecting = true);
                                         try {
-                                          final models = await ref
-                                              .read(modelConfigServiceProvider)
-                                              .detectModels(
-                                                baseUrl: baseUrlCtrl.text
-                                                    .trim(),
-                                                apiKey: apiKeyCtrl.text.trim(),
-                                                apiType: providerCtrl.text
-                                                    .trim(),
-                                              );
+                                          if (!await _ensureConfiguration(
+                                            intent,
+                                          )) {
+                                            setSheetState(
+                                              () => detecting = false,
+                                            );
+                                            return;
+                                          }
+                                          final models = await intent!.run(
+                                            () => ref
+                                                .read(
+                                                  modelConfigServiceProvider,
+                                                )
+                                                .detectModels(
+                                                  baseUrl: baseUrlCtrl.text
+                                                      .trim(),
+                                                  apiKey: apiKeyCtrl.text
+                                                      .trim(),
+                                                  apiType: providerCtrl.text
+                                                      .trim(),
+                                                ),
+                                          );
                                           setSheetState(() {
                                             detectedModels = models;
                                             detecting = false;
@@ -969,6 +1025,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                               Navigator.of(sheetContext).pop();
                               await _saveConfig(
                                 existing,
+                                intent: intent!,
                                 name: nameCtrl.text.trim(),
                                 provider: providerCtrl.text.trim(),
                                 protocol: selectedProtocol,
@@ -1029,6 +1086,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
 
   Future<void> _saveConfig(
     Map<String, dynamic>? existing, {
+    required CoreConfigurationIntent intent,
     required String name,
     required String provider,
     required String protocol,
@@ -1111,34 +1169,41 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
 
     setState(() => _busy = true);
     try {
-      switch (widget.modelType) {
-        case 'vision':
-          existing == null
-              ? await ref.read(visionServiceProvider).createConfig(data)
-              : await ref.read(visionServiceProvider).updateConfig(id, data);
-          break;
-        case 'voice':
-          existing == null
-              ? await ref.read(ttsServiceProvider).createConfig(data)
-              : await ref.read(ttsServiceProvider).updateConfig(id, data);
-          break;
-        case 'vector':
-          existing == null
-              ? await ref.read(embeddingServiceProvider).createConfig(data)
-              : await ref.read(embeddingServiceProvider).updateConfig(id, data);
-          break;
-        case 'image':
-          existing == null
-              ? await ref.read(imageGenServiceProvider).createConfig(data)
-              : await ref.read(imageGenServiceProvider).updateConfig(id, data);
-          break;
-        case 'text':
-        default:
-          existing == null
-              ? await ref.read(modelConfigServiceProvider).create(data)
-              : await ref.read(modelConfigServiceProvider).update(id, data);
-          break;
-      }
+      if (!await _ensureConfiguration(intent)) return;
+      await intent.run(() async {
+        switch (widget.modelType) {
+          case 'vision':
+            existing == null
+                ? await ref.read(visionServiceProvider).createConfig(data)
+                : await ref.read(visionServiceProvider).updateConfig(id, data);
+            break;
+          case 'voice':
+            existing == null
+                ? await ref.read(ttsServiceProvider).createConfig(data)
+                : await ref.read(ttsServiceProvider).updateConfig(id, data);
+            break;
+          case 'vector':
+            existing == null
+                ? await ref.read(embeddingServiceProvider).createConfig(data)
+                : await ref
+                      .read(embeddingServiceProvider)
+                      .updateConfig(id, data);
+            break;
+          case 'image':
+            existing == null
+                ? await ref.read(imageGenServiceProvider).createConfig(data)
+                : await ref
+                      .read(imageGenServiceProvider)
+                      .updateConfig(id, data);
+            break;
+          case 'text':
+          default:
+            existing == null
+                ? await ref.read(modelConfigServiceProvider).create(data)
+                : await ref.read(modelConfigServiceProvider).update(id, data);
+            break;
+        }
+      });
       await _load();
       _toast(existing == null ? '已新建配置' : '已更新配置');
     } catch (e) {
@@ -1149,6 +1214,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> config) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
     if (await _blockIndependentVision()) return;
     if (!mounted) return;
     final id = _idOf(config);
@@ -1177,24 +1244,27 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (confirmed != true) return;
     setState(() => _busy = true);
     try {
-      switch (widget.modelType) {
-        case 'vision':
-          await ref.read(visionServiceProvider).deleteConfig(id);
-          break;
-        case 'voice':
-          await ref.read(ttsServiceProvider).deleteConfig(id);
-          break;
-        case 'vector':
-          await ref.read(embeddingServiceProvider).deleteConfig(id);
-          break;
-        case 'image':
-          await ref.read(imageGenServiceProvider).deleteConfig(id);
-          break;
-        case 'text':
-        default:
-          await ref.read(modelConfigServiceProvider).delete(id);
-          break;
-      }
+      if (!await _ensureConfiguration(intent)) return;
+      await intent!.run(() async {
+        switch (widget.modelType) {
+          case 'vision':
+            await ref.read(visionServiceProvider).deleteConfig(id);
+            break;
+          case 'voice':
+            await ref.read(ttsServiceProvider).deleteConfig(id);
+            break;
+          case 'vector':
+            await ref.read(embeddingServiceProvider).deleteConfig(id);
+            break;
+          case 'image':
+            await ref.read(imageGenServiceProvider).deleteConfig(id);
+            break;
+          case 'text':
+          default:
+            await ref.read(modelConfigServiceProvider).delete(id);
+            break;
+        }
+      });
       await _load();
       _toast('已删除');
     } catch (e) {

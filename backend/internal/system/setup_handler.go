@@ -11,16 +11,14 @@ func (h *Handler) SetupStatus(c *gin.Context) { util.SuccessResponse(c, h.servic
 
 func (h *Handler) SetupChecks(c *gin.Context) { util.SuccessResponse(c, h.service.SetupChecks()) }
 
-func (h *Handler) SetupFinish(c *gin.Context) { util.SuccessResponse(c, h.service.SetupFinish()) }
+func (h *Handler) SetupFinish(c *gin.Context) {
+	h.updateAdministratorSettings(c, "setup-finish", false)
+}
 
-func (h *Handler) SetupReset(c *gin.Context) { util.SuccessResponse(c, h.service.SetupReset()) }
+func (h *Handler) SetupReset(c *gin.Context) { h.updateAdministratorSettings(c, "setup-reset", false) }
 
 func (h *Handler) SetupStep(c *gin.Context) {
-	var body struct {
-		Step string `json:"step"`
-	}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.SetupStep(body.Step))
+	h.updateAdministratorSettings(c, "setup-step", true)
 }
 
 func (h *Handler) OnboardingStatus(c *gin.Context) {
@@ -28,9 +26,9 @@ func (h *Handler) OnboardingStatus(c *gin.Context) {
 }
 
 func (h *Handler) OnboardingComplete(c *gin.Context) {
-	util.SuccessResponse(c, h.service.OnboardingComplete())
+	h.updateAdministratorSettings(c, "onboarding-complete", false)
 }
 
 func (h *Handler) OnboardingReset(c *gin.Context) {
-	util.SuccessResponse(c, h.service.OnboardingReset())
+	h.updateAdministratorSettings(c, "onboarding-reset", false)
 }

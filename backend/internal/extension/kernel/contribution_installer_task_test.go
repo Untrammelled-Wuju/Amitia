@@ -73,7 +73,11 @@ func TestInstalledTaskDefinitionPinsActualEntryAndInstallationGeneration(t *test
 				t.Fatal(err)
 			}
 			digest := sha256.Sum256(content)
-			if store.definition.EntryHash != "sha256:"+hex.EncodeToString(digest[:]) || store.definition.InstalledGeneration != 7 || store.definition.Version != "1.2.3" || store.definition.DefinitionHash == "" {
+			bundleHash, hashErr := task_runtime.TaskBundleHash(t.Context(), bundle)
+			if hashErr != nil {
+				t.Fatal(hashErr)
+			}
+			if store.definition.BundleHash != bundleHash || store.definition.EntryHash != "sha256:"+hex.EncodeToString(digest[:]) || store.definition.InstalledGeneration != 7 || store.definition.Version != "1.2.3" || store.definition.DefinitionHash == "" {
 				t.Fatalf("installed task lacks source or generation pin: %+v", store.definition)
 			}
 			if err := os.WriteFile(filepath.Join(bundle, "task.cjs"), []byte("changed source"), 0600); err != nil {

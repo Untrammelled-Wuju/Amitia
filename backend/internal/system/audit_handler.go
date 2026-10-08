@@ -3,6 +3,7 @@
 package system
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -18,12 +19,11 @@ func (h *Handler) AuditLogs(c *gin.Context) {
 			limit = value
 		}
 	}
-	util.SuccessResponse(c, h.service.GetAuditLogs(limit))
+	h.auditData(c, "logs", limit)
 }
 
 func (h *Handler) ClearAuditLogs(c *gin.Context) {
-	deleted := h.service.ClearAuditLogs()
-	util.SuccessResponse(c, map[string]interface{}{"deleted": deleted})
+	h.administratorAction(c, "audit-clear", "")
 }
 
 func (h *Handler) AuditSettings(c *gin.Context) {
@@ -31,11 +31,23 @@ func (h *Handler) AuditSettings(c *gin.Context) {
 }
 
 func (h *Handler) UpdateAuditSettings(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		body = map[string]interface{}{}
-	}
-	util.SuccessResponse(c, h.service.UpdateAuditSettings(body))
+	h.updateAdministratorSettings(c, "audit", true)
 }
 
-func (h *Handler) AuditStats(c *gin.Context) { util.SuccessResponse(c, h.service.GetAuditStats()) }
+func (h *Handler) AuditStats(c *gin.Context) { h.auditData(c, "stats", 0) }
+
+func (h *Handler) auditData(c *gin.Context, operation string, limit int) {
+	svc, ok := h.service.(interface {
+		AuditDataContext(context.Context, string, int) (interface{}, error)
+	})
+	if !ok {
+		util.ErrorResponse(c, 409, "当前服务不支持可撤销的审计查询", nil)
+		return
+	}
+	result, err := svc.AuditDataContext(c.Request.Context(), operation, limit)
+	if err != nil {
+		util.ErrorResponse(c, 409, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}

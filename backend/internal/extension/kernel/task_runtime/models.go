@@ -3,6 +3,7 @@ package task_runtime
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -424,14 +425,23 @@ type TaskQueueEntry struct {
 type TaskRuntimeConfig struct {
 	AuthoritySnapshots           TaskAuthoritySnapshotStore
 	OwnedExecutionGuard          OwnedTaskExecutionGuard
+	OwnedReadGuard               OwnedTaskExecutionGuard
+	PublicRequestGuard           PublicTaskRequestGuard
 	OwnedInputs                  OwnedTaskInputPort
 	OwnedCheckpoints             OwnedTaskCheckpointPort
 	OwnedOutcomes                OwnedTaskOutcomePort
 	OwnedProgress                OwnedTaskProgressPort
 	OwnedStorage                 OwnedTaskStoragePort
 	OwnedArtifacts               OwnedTaskArtifactPort
+	OwnedHost                    OwnedTaskHostPort
+	SourceHostPermissionGuard    func(context.Context, *TaskRun, *TaskDefinition, string, TaskHostNativeCall) error
+	SourceHostCapabilities       SourceTaskCapabilities
 	OwnedTargetDefinitions       OwnedTaskTargetDefinitionPort
+	OwnedTargetPermissions       OwnedTaskPermissionPort
 	InstalledDefinitionValidator func(context.Context, *TaskDefinition) error
+	InstalledExecutionLease      func(context.Context, *TaskDefinition) (string, func(), error)
+	SourcePermissionGuard        SourceTaskPermissionGuard
+	SourceApprovalRecorder       SourceTaskApprovalRecorder
 	GlobalMaxConcurrent          int
 	PerExtensionMaxConcurrent    int
 	PerDefinitionMaxConcurrent   int
@@ -443,6 +453,7 @@ type TaskRuntimeConfig struct {
 	WorkspaceRoot                string
 	NodeEnvironmentResolver      script_host.NodeEnvironmentResolver
 	HostArtifactResolver         script_host.ArtifactResolver
+	ProcessDiagnostics           io.Writer
 	EntryResolver                func(context.Context, *TaskDefinition) (string, error)
 	LeaseDuration                time.Duration
 	CancelGracePeriod            time.Duration
@@ -467,22 +478,23 @@ func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
 }
 
 type EnqueueTaskRequest struct {
-	TaskDefinitionID       string                         `json:"taskDefinitionId"`
-	ExtensionID            string                         `json:"extensionId"`
-	ModuleID               string                         `json:"moduleId"`
-	Input                  json.RawMessage                `json:"input"`
-	Priority               int                            `json:"priority"`
-	ExecutionPlacement     TaskExecutionPlacement         `json:"executionPlacement,omitempty"`
-	DeviceID               string                         `json:"deviceId,omitempty"`
-	TrustedExecutionTarget *TrustedExecutionTargetRequest `json:"-"`
-	OperationID            string                         `json:"operationId"`
-	InvocationID           string                         `json:"invocationId,omitempty"`
-	TraceID                string                         `json:"traceId,omitempty"`
-	CorrelationID          string                         `json:"correlationId,omitempty"`
-	CausationID            string                         `json:"causationId,omitempty"`
-	Source                 string                         `json:"source,omitempty"`
-	ScopeSnapshotID        string                         `json:"scopeSnapshotId"`
-	PermissionSnapshotID   string                         `json:"permissionSnapshotId"`
+	DeduplicateOwnedRequest bool                           `json:"-"`
+	TaskDefinitionID        string                         `json:"taskDefinitionId"`
+	ExtensionID             string                         `json:"extensionId"`
+	ModuleID                string                         `json:"moduleId"`
+	Input                   json.RawMessage                `json:"input"`
+	Priority                int                            `json:"priority"`
+	ExecutionPlacement      TaskExecutionPlacement         `json:"executionPlacement,omitempty"`
+	DeviceID                string                         `json:"deviceId,omitempty"`
+	TrustedExecutionTarget  *TrustedExecutionTargetRequest `json:"-"`
+	OperationID             string                         `json:"operationId"`
+	InvocationID            string                         `json:"invocationId,omitempty"`
+	TraceID                 string                         `json:"traceId,omitempty"`
+	CorrelationID           string                         `json:"correlationId,omitempty"`
+	CausationID             string                         `json:"causationId,omitempty"`
+	Source                  string                         `json:"source,omitempty"`
+	ScopeSnapshotID         string                         `json:"scopeSnapshotId"`
+	PermissionSnapshotID    string                         `json:"permissionSnapshotId"`
 }
 
 type TrustedExecutionTargetRequest struct {
@@ -499,8 +511,10 @@ type EnqueueTaskResult struct {
 }
 
 type ListTasksFilter struct {
-	ExtensionID string `json:"extensionId,omitempty"`
-	Status      string `json:"status,omitempty"`
-	Limit       int    `json:"limit,omitempty"`
-	Offset      int    `json:"offset,omitempty"`
+	ScopedSpaceID  string `json:"-"`
+	ScopedDeviceID string `json:"-"`
+	ExtensionID    string `json:"extensionId,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Limit          int    `json:"limit,omitempty"`
+	Offset         int    `json:"offset,omitempty"`
 }

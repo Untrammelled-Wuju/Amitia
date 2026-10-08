@@ -68,7 +68,12 @@ class ConversationDto {
 }
 
 class MessageDto {
+  final String resourceUri;
+  final String fileName;
+  final String mimeType;
+  final int fileSizeBytes;
   final String id;
+  final String sourceConversationId;
   final String sourceOwnerId;
   final Map<String, dynamic>? sourceScope;
   final int? sourceRevision;
@@ -97,8 +102,13 @@ class MessageDto {
   final String? replyToExcerpt;
 
   MessageDto({
+    this.resourceUri = '',
+    this.fileName = '',
+    this.mimeType = '',
+    this.fileSizeBytes = 0,
     required this.id,
     this.sourceOwnerId = '',
+    this.sourceConversationId = '',
     this.sourceScope,
     this.sourceRevision,
     required this.conversationId,
@@ -128,8 +138,15 @@ class MessageDto {
 
   factory MessageDto.fromJson(Map<String, dynamic> json) {
     return MessageDto(
+      resourceUri: (json['resourceUri'] ?? '').toString(),
+      fileName: (json['fileName'] ?? '').toString(),
+      mimeType: (json['mimeType'] ?? '').toString(),
+      fileSizeBytes: (json['fileSizeBytes'] as num?)?.toInt() ?? 0,
       id: (json['id'] ?? '').toString(),
       sourceOwnerId: (json['sourceOwnerId'] ?? '').toString(),
+      sourceConversationId:
+          (json['sourceConversationId'] ?? json['conversationId'] ?? '')
+              .toString(),
       sourceScope: json['sourceScope'] is Map
           ? Map<String, dynamic>.unmodifiable(
               Map<String, dynamic>.from(json['sourceScope'] as Map),

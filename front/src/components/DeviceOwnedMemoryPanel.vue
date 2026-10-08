@@ -11,6 +11,7 @@
       <el-option v-for="layer in layers" :key="layer.id" :label="layer.label" :value="layer.id" />
     </el-select>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <DeviceOwnedMemoryManagement v-if="source === 'current' && kind === 'memory' && loadedScope && !loading" :execution-scope="loadedScope" @saved="load()" />
     <div v-if="source === 'current' && ['vector', 'graph'].includes(kind)" class="projection-status">
       <p v-for="layer in projection?.status?.layers || []" :key="layer.kind">{{ layer.kind === 'vector' ? '向量' : '图谱' }}：已处理 {{ layer.current }}/{{ layer.total }} · 待更新 {{ layer.pending }} · 重试 {{ layer.retrying }}</p>
       <el-alert v-if="projectionNotice" :title="projectionNotice" type="info" :closable="false" />
@@ -25,8 +26,13 @@
           <el-tag v-if="row.body.allowContextUse === false" size="small" type="warning">已停用</el-tag>
           <el-tag v-if="row.body.expiresAt" size="small" type="info">到期 {{ row.body.expiresAt }}</el-tag>
         </div>
-        <div v-if="row.kind === 'memory' && source === 'current' && row.revision > 0" class="record-actions">
-          <el-button size="small" :disabled="loading" @click="setUse(row)">{{ row.body.allowContextUse === false ? '允许用于对话' : '停用' }}</el-button>
+        <div v-if="['memory', 'summary'].includes(row.kind) && source === 'current' && row.revision > 0" class="record-actions">
+          <el-button size="small" :disabled="loading" @click="editContent(row)">编辑</el-button>
+          <template v-if="row.kind === 'memory'">
+            <el-button size="small" :disabled="loading" @click="setUse(row)">{{ row.body.allowContextUse === false ? '允许用于对话' : '停用' }}</el-button>
+            <el-button size="small" :disabled="loading" @click="setExpiry(row)">到期时间</el-button>
+            <el-button size="small" :disabled="loading" @click="setArchive(row)">{{ row.body.archivedAt ? '取消归档' : '归档' }}</el-button>
+          </template>
           <el-button size="small" type="danger" :disabled="loading" @click="remove(row)">删除</el-button>
         </div>
       </article>
@@ -38,9 +44,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import { ElDrawer, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
+import DeviceOwnedMemoryManagement from "./DeviceOwnedMemoryManagement.vue";
 
 const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string }>();
 defineEmits<{ "update:visible": [value: boolean] }>();
@@ -63,8 +71,10 @@ const loading = ref(false);
 const projection = ref<any>(null);
 const projectionNotice = ref("");
 const rebuilding = ref(false);
+const loadedScope = ref<OwnedExecutionScope>();
 let generation = 0;
 let scope = "";
+let providerTimer: ReturnType<typeof setInterval> | undefined;
 
 function content(row: any): string {
   const value = row.body.content;
@@ -77,11 +87,16 @@ async function load(older = false) {
   const ticket = ++generation;
   const currentKind = kind.value;
   if (!older) { projection.value = null; projectionNotice.value = ""; }
+  if (!older) loadedScope.value = undefined;
   if (!older) { rows.value = []; next.value = ""; nextLegacy.value = ""; scope = ""; }
   error.value = "";
   loading.value = true;
   try {
-    if (owned.coordinated.value && historicalRoles.value.length === 0) historicalRoles.value = await owned.historicalRoles(props.characterId);
+    if (owned.coordinated.value && historicalRoles.value.length === 0) {
+      const catalog = await owned.historicalRoles(props.characterId);
+      if (ticket !== generation || !props.visible) return;
+      historicalRoles.value = catalog;
+    }
     const historical = source.value.startsWith("history:");
 	    const result = await owned.data(currentKind, props.characterId, historical ? "" : props.conversationId, !historical && older ? next.value : "", historical ? { historicalRoleId: source.value.slice(8), historicalCursor: older ? next.value : "", historicalLegacyCursor: older ? nextLegacy.value : "" } : { legacyCursor: older ? nextLegacy.value : "" });
     if (ticket !== generation || !props.visible) return;
@@ -90,13 +105,18 @@ async function load(older = false) {
     scope = currentScope;
     const snapshot = historical ? result.historicalSnapshot : result.snapshot;
     if (!snapshot) throw new Error("原设备历史数据暂不可用");
+    if (snapshot.ownerId !== (historical ? result.executionScope.targetDeviceId : result.executionScope.resourceOwnerId)) throw new Error("记忆数据所有者已变化，请重新加载");
     owner.value = snapshot.ownerId;
-    const merged = new Map((older ? rows.value : []).map((row: any) => [row.id, row]));
-    for (const row of snapshot.resources.filter((row: any) => row.kind === currentKind)) merged.set(row.id, { ...row, executionScope: result.executionScope });
+    loadedScope.value = result.executionScope;
+    const merged = new Map((older ? rows.value : []).map((row: any) => [`${row.ownerId}/${row.kind}/${row.id}`, row]));
+    for (const row of snapshot.resources.filter((row: any) => row.kind === currentKind)) {
+      if (row.ownerId !== snapshot.ownerId || row.roleId !== (historical ? source.value.slice(8) : props.characterId)) throw new Error("记忆所属设备或角色无效，请重新加载");
+      merged.set(`${row.ownerId}/${row.kind}/${row.id}`, { ...row, executionScope: result.executionScope });
+    }
     const legacy = currentKind === "memory" ? snapshot.legacyMemories : currentKind === "profile" ? snapshot.legacyProfiles : currentKind === "episodic" ? snapshot.legacyEpisodes : [];
     for (const row of legacy || []) {
       const id = `legacy/${row.id}`;
-      merged.set(id, { id, kind: currentKind, ownerId: snapshot.ownerId, revision: 0, body: { key: row.key || row.title || row.fieldName, content: row, expiresAt: row.expiresAt, allowContextUse: row.allowContextUse } });
+      merged.set(`${snapshot.ownerId}/${currentKind}/${id}`, { id, kind: currentKind, ownerId: snapshot.ownerId, revision: 0, body: { key: row.key || row.title || row.fieldName, content: row, expiresAt: row.expiresAt, allowContextUse: row.allowContextUse } });
     }
     rows.value = Array.from(merged.values());
     const cursor = snapshot.nextCursors?.[currentKind] || "";
@@ -124,9 +144,37 @@ async function load(older = false) {
 
 async function setUse(row: any) {
   try {
-    await owned.edit("memory", row.id, { allowContextUse: row.body.allowContextUse === false }, { characterId: props.characterId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await owned.edit("memory", row.id, { allowContextUse: row.body.allowContextUse === false }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
     await load();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : "修改失败"; }
+}
+
+async function editContent(row: any) {
+  const original = JSON.parse(JSON.stringify(row));
+  try {
+    const result = await ElMessageBox.prompt("修改当前数据所有者保存的内容；原设备历史记录需在原设备管理。", row.kind === "summary" ? "编辑摘要" : "编辑记忆", { inputType: "textarea", inputValue: content(original), inputValidator: (value) => Boolean(String(value || "").trim()) && new TextEncoder().encode(value).length <= 131072 || "内容不能为空或超出128 KiB", confirmButtonText: "保存", cancelButtonText: "取消" });
+    const text = result.value.trim();
+    const current = original.body.content;
+    const updated = typeof current === "object" && current !== null ? { ...current, [original.kind === "summary" ? Object.hasOwn(current, "text") && !Object.hasOwn(current, "summary") ? "text" : "summary" : Object.hasOwn(current, "text") && !Object.hasOwn(current, "value") ? "text" : "value"]: text } : text;
+    await owned.edit(original.kind, original.id, { content: updated }, { characterId: original.executionScope.roleId, expectedExecutionScope: original.executionScope, expectedOwnerId: original.ownerId, expectedRevision: original.revision });
+    await load();
+  } catch (cause) { if (cause !== "cancel" && cause !== "close") error.value = cause instanceof Error ? cause.message : "内容保存失败"; }
+}
+
+async function setExpiry(row: any) {
+  const original = JSON.parse(JSON.stringify(row));
+  try {
+    const result = await ElMessageBox.prompt("输入带时区的 ISO 时间，例如 2026-10-08T18:00:00+08:00；留空取消到期限制。", "记忆到期时间", { inputValue: original.body.expiresAt || "", inputValidator: (value) => !String(value || "").trim() || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value.trim()) && Number.isFinite(Date.parse(value)) || "请输入有效的带时区 ISO 时间", confirmButtonText: "保存", cancelButtonText: "取消" });
+    await owned.edit("memory", original.id, { expiresAt: result.value.trim() ? new Date(result.value.trim()).toISOString() : "" }, { characterId: original.executionScope.roleId, expectedExecutionScope: original.executionScope, expectedOwnerId: original.ownerId, expectedRevision: original.revision });
+    await load();
+  } catch (cause) { if (cause !== "cancel" && cause !== "close") error.value = cause instanceof Error ? cause.message : "到期时间保存失败"; }
+}
+
+async function setArchive(row: any) {
+  try {
+    await owned.edit("memory", row.id, { archivedAt: row.body.archivedAt ? "" : new Date().toISOString() }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : "记忆归档失败"; }
 }
 
 async function rebuild() {
@@ -134,7 +182,7 @@ async function rebuild() {
   const ticket = generation;
   rebuilding.value = true;
   try {
-    const value = await owned.projections(props.characterId, projection.value.executionScope);
+    const value = await owned.projections(projection.value.executionScope.roleId, projection.value.executionScope);
     if (ticket === generation) {
       projection.value = value;
       projectionNotice.value = "已加入所有者的重建队列；处理完成后刷新查看状态。";
@@ -146,19 +194,44 @@ async function rebuild() {
 
 async function remove(row: any) {
   try {
-    await ElMessageBox.confirm("删除原始记忆会同时停用其事实、向量和图谱数据。", "删除记忆", { confirmButtonText: "删除", cancelButtonText: "取消", type: "warning" });
-    await owned.edit("memory", row.id, {}, { characterId: props.characterId, deleted: true, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await ElMessageBox.confirm(row.kind === "summary" ? "删除当前所有者保存的摘要，原始对话仍会保留。" : "删除原始记忆会同时停用其事实、向量和图谱数据。", row.kind === "summary" ? "删除摘要" : "删除记忆", { confirmButtonText: "删除", cancelButtonText: "取消", type: "warning" });
+    await owned.edit(row.kind, row.id, {}, { characterId: row.executionScope.roleId, deleted: true, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
     await load();
   } catch (cause) {
     if (cause !== "cancel" && cause !== "close") error.value = cause instanceof Error ? cause.message : "删除失败";
   }
 }
 
-watch(() => [props.visible, props.characterId, props.conversationId, kind.value, source.value, owned.coreId.value, owned.policy.value?.modeRevision, owned.policy.value?.permissionRevision], () => {
+function clearAuthority() {
+  generation++;
+  historicalRoles.value = [];
+  source.value = "current";
+  rows.value = [];
+  owner.value = "";
+  projection.value = null;
+  loadedScope.value = undefined;
+  next.value = "";
+  nextLegacy.value = "";
+  scope = "";
+  loading.value = false;
+}
+watch(() => [props.characterId, owned.coreId.value, owned.policy.value?.providerEpoch, owned.policy.value?.modeRevision, owned.policy.value?.permissionRevision], clearAuthority, { flush: "sync" });
+watch(() => [props.visible, props.characterId, props.conversationId, kind.value, source.value, owned.coreId.value, owned.policy.value?.providerEpoch, owned.policy.value?.modeRevision, owned.policy.value?.permissionRevision], () => {
   generation++;
   loading.value = false;
   if (props.visible && props.characterId) void load();
 }, { immediate: true });
+onMounted(() => {
+  window.addEventListener("amitia:runtime-connection-changed", clearAuthority);
+  window.addEventListener("amitia:execution-scope-changed", clearAuthority);
+  providerTimer = setInterval(() => { if (props.visible) void owned.refresh().catch(clearAuthority); }, 3000);
+});
+onUnmounted(() => {
+  if (providerTimer) clearInterval(providerTimer);
+  window.removeEventListener("amitia:runtime-connection-changed", clearAuthority);
+  window.removeEventListener("amitia:execution-scope-changed", clearAuthority);
+  clearAuthority();
+});
 </script>
 
 <style scoped>

@@ -40,7 +40,7 @@
         />
 
         <StageModelConfig
-          v-else
+          v-else-if="canConfigureModels"
           :detecting="detectingModels"
           :modelReady="modelReady"
           :modelDetected="modelDetected"
@@ -61,6 +61,7 @@
           @update:protocol="modelProtocol = $event"
           @detect="detectModel"
         />
+        <el-alert v-else :title="configurationExplanation" type="info" :closable="false" show-icon />
       </section>
 
       <div class="ob-guide-actions">
@@ -76,7 +77,7 @@
           v-else-if="currentStage === 2"
           class="ob-model-setup-next"
           type="button"
-          :disabled="!isModelFormValid"
+          :disabled="configurationChecking || (canConfigureModels && !isModelFormValid)"
           @click="handleStartUsing"
         >
           开始使用
@@ -108,6 +109,9 @@ import "./styles/entry-transition.css";
 const router = useRouter();
 
 const {
+  canConfigureModels,
+  configurationChecking,
+  configurationExplanation,
   currentStage,
   deployMode,
   serverURL,
@@ -160,6 +164,7 @@ async function onHealthCheckDone() {
 }
 
 function handleStartUsing() {
+  if (!canConfigureModels.value) { void startEntryTransition(); return; }
   modelFieldErrors.value = {};
   if (!modelBaseUrl.value.trim()) modelFieldErrors.value.baseUrl = true;
   if (modelType.value !== "local" && !modelApiKey.value.trim()) {

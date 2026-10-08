@@ -7,12 +7,17 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/core_configuration_intent.dart';
+import '../../../../core/services/core_configuration_guard.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/services/voice_preview_player.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 
 class VoiceCloneManager extends ConsumerStatefulWidget {
-  const VoiceCloneManager({super.key});
+  final CoreConfigurationIntent? configurationIntent;
+  const VoiceCloneManager({super.key, required this.configurationIntent});
 
   @override
   ConsumerState<VoiceCloneManager> createState() => _VoiceCloneManagerState();
@@ -24,6 +29,7 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
   String _busySpeakerId = '';
   bool _creating = false;
   String? _error;
+  CoreConfigurationIntent? _loadedIntent;
 
   @override
   void initState() {
@@ -31,21 +37,37 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant VoiceCloneManager oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.configurationIntent, widget.configurationIntent)) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     if (!mounted) return;
+    final intent = widget.configurationIntent;
     setState(() {
       _loading = true;
       _error = null;
+      _voices = const [];
+      _loadedIntent = widget.configurationIntent;
     });
     try {
-      final voices = await ref.read(ttsServiceProvider).listClonedVoices();
-      if (!mounted) return;
+      if (intent == null) throw StateError('无法确认云端配置权限');
+      await coreConfigurationGuardFor(ref).validate(intent);
+      final voices = await intent.run(
+        () => ref.read(ttsServiceProvider).listClonedVoices(),
+      );
+      await coreConfigurationGuardFor(ref).validate(intent);
+      if (!mounted || !identical(intent, widget.configurationIntent)) return;
       setState(() {
         _voices = voices;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || !identical(intent, widget.configurationIntent)) return;
       setState(() {
         _loading = false;
         _error = e.toString();
@@ -54,11 +76,23 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
   }
 
   Future<void> _createVoice() async {
+    final intent = _loadedIntent;
+    if (!await _ensureConfiguration(intent)) return;
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const <String>['wav', 'mp3', 'm4a', 'aac', 'ogg', 'pcm'],
+      allowedExtensions: const <String>[
+        'wav',
+        'mp3',
+        'm4a',
+        'aac',
+        'ogg',
+        'pcm',
+      ],
     );
-    if (picked == null || picked.files.isEmpty || picked.files.first.path == null) return;
+    if (picked == null ||
+        picked.files.isEmpty ||
+        picked.files.first.path == null)
+      return;
 
     final nameController = TextEditingController();
     final speakerIdController = TextEditingController();
@@ -77,23 +111,35 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
               children: <Widget>[
                 Text('显示名称', style: AppTypography.label(context)),
                 const SizedBox(height: 4),
-                AmitiaTextField(controller: nameController, hintText: '例如：我的专属音色'),
+                AmitiaTextField(
+                  controller: nameController,
+                  hintText: '例如：我的专属音色',
+                ),
                 SizedBox(height: AppSpacing.md),
-                Text('复刻槽位 / Speaker ID（可选）', style: AppTypography.label(context)),
+                Text(
+                  '复刻槽位 / Speaker ID（可选）',
+                  style: AppTypography.label(context),
+                ),
                 const SizedBox(height: 4),
                 AmitiaTextField(
                   controller: speakerIdController,
                   hintText: '例如 S_xxxxxxxx；按服务商控制台要求填写',
                 ),
                 const SizedBox(height: 4),
-                Text('MegaTTS V1 需填写已购买槽位；V3 可留空，由 Core 生成 provider ID。', style: AppTypography.caption(context)),
+                Text(
+                  'MegaTTS V1 需填写已购买槽位；V3 可留空，由 Core 生成 provider ID。',
+                  style: AppTypography.caption(context),
+                ),
                 SizedBox(height: AppSpacing.md),
                 Text('语言', style: AppTypography.label(context)),
                 const SizedBox(height: 4),
                 DropdownButtonFormField<String>(
                   value: language,
                   isExpanded: true,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
                   items: const <DropdownMenuItem<String>>[
                     DropdownMenuItem(value: 'cn', child: Text('中文')),
                     DropdownMenuItem(value: 'en', child: Text('英文')),
@@ -112,12 +158,18 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
                   maxLines: 3,
                 ),
                 SizedBox(height: AppSpacing.sm),
-                Text('已选择：${picked.files.first.name}', style: AppTypography.caption(context)),
+                Text(
+                  '已选择：${picked.files.first.name}',
+                  style: AppTypography.caption(context),
+                ),
               ],
             ),
           ),
           actions: <Widget>[
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
             TextButton(
               onPressed: () {
                 final name = nameController.text.trim();
@@ -142,13 +194,18 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
 
     setState(() => _creating = true);
     try {
-      final result = await ref.read(ttsServiceProvider).cloneVoice(
-            filePath: picked.files.first.path!,
-            name: request['name']!,
-            speakerId: request['speakerId'] ?? '',
-            language: request['language'] ?? 'cn',
-            refText: request['refText'] ?? '',
-          );
+      if (!await _ensureConfiguration(intent)) return;
+      final result = await intent!.run(
+        () => ref
+            .read(ttsServiceProvider)
+            .cloneVoice(
+              filePath: picked.files.first.path!,
+              name: request['name']!,
+              speakerId: request['speakerId'] ?? '',
+              language: request['language'] ?? 'cn',
+              refText: request['refText'] ?? '',
+            ),
+      );
       final speakerId = (result?['speakerId'] ?? '').toString().trim();
       if (speakerId.isEmpty) throw StateError('后端未返回 speakerId');
       await _load();
@@ -161,13 +218,27 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
   }
 
   Future<void> _preview(Map<String, dynamic> voice) async {
+    if (ref.read(mobileDeploymentConfigProvider).mode ==
+        MobileDeploymentMode.cloud) {
+      _toast('云端音色请先绑定到角色，再进入角色语音页面试听已保存的角色设置');
+      return;
+    }
+    final intent = _loadedIntent;
+    if (!await _ensureConfiguration(intent)) return;
     final speakerId = (voice['speakerId'] ?? '').toString().trim();
     if (speakerId.isEmpty) return;
     setState(() => _busySpeakerId = speakerId);
     try {
-      final result = await ref.read(ttsServiceProvider).synthesizeWithSpeaker(speakerId, '测试');
+      final result = await intent!.run(
+        () =>
+            ref.read(ttsServiceProvider).synthesizeWithSpeaker(speakerId, '测试'),
+      );
       final url = (result?['audioUrl'] ?? '').toString();
-      await playBackendVoicePreview(ref, url, requestIdPrefix: 'cloned-voice-preview');
+      await playBackendVoicePreview(
+        ref,
+        url,
+        requestIdPrefix: 'cloned-voice-preview',
+      );
       _toast('试听已开始播放');
     } catch (e) {
       _toast('试听失败：$e', error: true);
@@ -177,6 +248,8 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
   }
 
   Future<void> _delete(Map<String, dynamic> voice) async {
+    final intent = _loadedIntent;
+    if (!await _ensureConfiguration(intent)) return;
     final speakerId = (voice['speakerId'] ?? '').toString().trim();
     if (speakerId.isEmpty) return;
     final name = (voice['name'] ?? speakerId).toString();
@@ -185,9 +258,15 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
         title: Text('删除复刻音色', style: AppTypography.cardTitle(context)),
-        content: Text('确定删除「$name」吗？此操作会同步删除服务商侧音色。', style: AppTypography.body(context)),
+        content: Text(
+          '确定删除「$name」吗？此操作会同步删除服务商侧音色。',
+          style: AppTypography.body(context),
+        ),
         actions: <Widget>[
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             child: Text('删除', style: TextStyle(color: context.error)),
@@ -199,7 +278,10 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
 
     setState(() => _busySpeakerId = speakerId);
     try {
-      await ref.read(ttsServiceProvider).deleteClonedVoice(speakerId);
+      if (!await _ensureConfiguration(intent)) return;
+      await intent!.run(
+        () => ref.read(ttsServiceProvider).deleteClonedVoice(speakerId),
+      );
       await _load();
       _toast('复刻音色已删除');
     } catch (e) {
@@ -212,8 +294,22 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
   void _toast(String message, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: error ? context.error : null),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? context.error : null,
+      ),
     );
+  }
+
+  Future<bool> _ensureConfiguration(CoreConfigurationIntent? intent) async {
+    try {
+      if (intent == null) throw StateError('无法确认云端配置权限');
+      await coreConfigurationGuardFor(ref).validate(intent);
+      return mounted;
+    } catch (error) {
+      _toast('模型配置已禁用：$error', error: true);
+      return false;
+    }
   }
 
   @override
@@ -230,7 +326,9 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Expanded(child: Text('声音复刻', style: AppTypography.sectionTitle(context))),
+              Expanded(
+                child: Text('声音复刻', style: AppTypography.sectionTitle(context)),
+              ),
               AmitiaButton(
                 label: _creating ? '复刻中...' : '复刻新音色',
                 icon: Icons.add,
@@ -240,14 +338,29 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
             ],
           ),
           const SizedBox(height: 4),
-          Text('音色元数据由 Core 统一保存，云端模式下可在不同设备之间保持一致。', style: AppTypography.caption(context)),
+          Text(
+            '音色元数据由 Core 统一保存，云端模式下可在不同设备之间保持一致。',
+            style: AppTypography.caption(context),
+          ),
           SizedBox(height: AppSpacing.md),
           if (_loading)
-            const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(),
+              ),
+            )
           else if (_error != null)
             Row(
               children: <Widget>[
-                Expanded(child: Text('加载失败：$_error', style: AppTypography.caption(context).copyWith(color: context.error))),
+                Expanded(
+                  child: Text(
+                    '加载失败：$_error',
+                    style: AppTypography.caption(
+                      context,
+                    ).copyWith(color: context.error),
+                  ),
+                ),
                 TextButton(onPressed: _load, child: const Text('重试')),
               ],
             )
@@ -273,12 +386,19 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
                         children: <Widget>[
                           Text(name, style: AppTypography.body(context)),
                           const SizedBox(height: 2),
-                          Text(speakerId, style: AppTypography.caption(context), overflow: TextOverflow.ellipsis),
+                          Text(
+                            speakerId,
+                            style: AppTypography.caption(context),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    TextButton(onPressed: busy ? null : () => _preview(voice), child: const Text('试听')),
+                    TextButton(
+                      onPressed: busy ? null : () => _preview(voice),
+                      child: const Text('试听'),
+                    ),
                     TextButton(
                       onPressed: busy ? null : () => _delete(voice),
                       child: Text('删除', style: TextStyle(color: context.error)),

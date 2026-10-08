@@ -1,3 +1,5 @@
+import type { TaskAuthority } from "./authority";
+
 export type TaskRunStatus =
   | "created"
   | "queued"
@@ -42,9 +44,9 @@ export interface TaskResourceLimits {
 }
 
 export interface PermissionRequirement {
-  permission: string;
-  reason?: string;
-  required: boolean;
+  permissionId: string;
+  optional: boolean;
+  conditions?: unknown;
   scope?: unknown;
 }
 
@@ -72,6 +74,8 @@ export interface TaskDefinition {
   recoverability?: TaskRecoverability;
   resourceLimits?: TaskResourceLimits;
   permissionRequirements?: PermissionRequirement[];
+  permissionRequirementStrings?: string[];
+  installedGeneration?: number;
   allowedNamespaces?: string[];
   scopeRule?: ScopeRule;
   retryPolicy?: TaskRetryPolicy;
@@ -85,7 +89,22 @@ export interface TaskDefinition {
   executionPlacement?: "local" | "cloud" | "device";
 }
 
-export interface TaskRun {
+export interface DeviceTaskDefinitionReference {
+  catalogId: string;
+  coreId: string;
+  deviceId: string;
+  sourceTaskId: string;
+  portableFingerprint: string;
+}
+
+export interface DeviceTaskCatalogPage {
+  executionScope: import("@/runtime/device-owned-chat").OwnedExecutionScope;
+  revision: string;
+  entries: Array<{ reference: DeviceTaskDefinitionReference; definition: TaskDefinition; target: { deviceId: string; taskId: string; portableFingerprint: string; definitionFingerprint: string; installedGeneration: number } }>;
+  nextCursor?: string;
+}
+
+export interface TaskRun extends TaskAuthority {
   taskRunId: string;
   operationId: string;
   invocationId?: string;
@@ -169,11 +188,49 @@ export interface EnqueueTaskResult {
   position?: number;
 }
 
+export interface OwnedTaskRoleOptions {
+  roles: Array<{ id: string; name: string; revision: number }>;
+  selectedRole: string;
+  roleOwnerId: string;
+  executionScope: import("@/runtime/device-owned-chat").OwnedExecutionScope;
+}
+
+export interface OwnedTaskSubmission {
+  taskCatalogReference?: DeviceTaskDefinitionReference;
+  taskDefinitionId: string;
+  targetDeviceId: string;
+  characterId: string;
+  requestId: string;
+  input: unknown;
+  expectedCoreId: string;
+  expectedModeRevision: number;
+  expectedRoleRevision: number;
+  expectedExecutionScope: import("@/runtime/device-owned-chat").OwnedExecutionScope;
+}
+
 export interface ListTasksFilter {
+  page?: number;
+  pageSize?: number;
   extensionId?: string;
   status?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface SourceTaskApproval {
+  id: string;
+  revision: number;
+  status: "pending" | "approved" | "denied" | "claimed" | "revoked";
+  expiresAt: string;
+  binding: {
+    executionScope: import("@/runtime/device-owned-chat").OwnedExecutionScope;
+    taskRunId: string;
+    taskGeneration: number;
+    executionTarget: { spaceId: string; deviceId: string; runtimeId: string; runtimeSessionId: string; connectionGeneration: number };
+    inputHash: string;
+    target: { taskId: string; extensionId: string; moduleId: string; installedGeneration: number; definitionFingerprint: string };
+  };
+  permissions: { permissionId: string; optional: boolean; conditions?: unknown }[];
 }
 
 export const TERMINAL_STATUSES: TaskRunStatus[] = [

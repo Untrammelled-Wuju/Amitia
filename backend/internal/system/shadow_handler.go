@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/mindruntime"
 )
 
@@ -37,36 +38,49 @@ func (h *Handler) ShadowModeStart(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid shadow phase"})
 		return
 	}
-	h.shadowMu.Lock()
-	h.shadowState.CurrentPhase = phase
-	h.shadowState.Status = mindruntime.ShadowModeShadow
 	startedAt := time.Now().UTC()
-	h.shadowState.ActiveSince = startedAt
-	h.shadowMu.Unlock()
+	if !h.commitAdministratorAction(c, func() error {
+		h.shadowMu.Lock()
+		h.shadowState.CurrentPhase = phase
+		h.shadowState.Status = mindruntime.ShadowModeShadow
+		h.shadowState.ActiveSince = startedAt
+		h.shadowMu.Unlock()
+		return nil
+	}) {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"started": true, "phase": phase, "startedAt": startedAt})
 }
 
 func (h *Handler) ShadowModeStop(c *gin.Context) {
-	h.shadowMu.Lock()
-	h.shadowState.Status = mindruntime.ShadowModeOff
-	h.shadowMu.Unlock()
+	if !h.commitAdministratorAction(c, func() error {
+		h.shadowMu.Lock()
+		h.shadowState.Status = mindruntime.ShadowModeOff
+		h.shadowMu.Unlock()
+		return nil
+	}) {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"stopped": true, "stoppedAt": time.Now().UTC()})
 }
 
 func (h *Handler) ShadowModePhaseAdvance(c *gin.Context) {
-	h.shadowMu.Lock()
-	defer h.shadowMu.Unlock()
-	phases := mindruntime.AllShadowPhases()
-	current := h.shadowState.CurrentPhase
-	for i, phase := range phases {
-		if phase == current && i+1 < len(phases) {
-			h.shadowState.PhasesCompleted = append(h.shadowState.PhasesCompleted, current)
-			h.shadowState.CurrentPhase = phases[i+1]
-			c.JSON(http.StatusOK, gin.H{"advanced": true, "fromPhase": current, "toPhase": phases[i+1]})
-			return
+	h.commitAdministratorAction(c, func() error {
+		h.shadowMu.Lock()
+		defer h.shadowMu.Unlock()
+		phases := mindruntime.AllShadowPhases()
+		current := h.shadowState.CurrentPhase
+		for i, phase := range phases {
+			if phase == current && i+1 < len(phases) {
+				h.shadowState.PhasesCompleted = append(h.shadowState.PhasesCompleted, current)
+				h.shadowState.CurrentPhase = phases[i+1]
+				c.JSON(http.StatusOK, gin.H{"advanced": true, "fromPhase": current, "toPhase": phases[i+1]})
+				return nil
+			}
 		}
-	}
-	c.JSON(http.StatusOK, gin.H{"advanced": false, "message": "no more phases"})
+		c.JSON(http.StatusOK, gin.H{"advanced": false, "message": "no more phases"})
+		return nil
+	})
 }
 
 func (h *Handler) ShadowModeThresholds(c *gin.Context) {
@@ -90,32 +104,37 @@ func (h *Handler) ShadowModeUpdateThresholds(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	h.shadowMu.Lock()
-	t := h.shadowState.Thresholds
-	if body.MaxErrorRate != nil && *body.MaxErrorRate >= 0 {
-		t.MaxErrorRate = *body.MaxErrorRate
+	if !h.commitAdministratorAction(c, func() error {
+		h.shadowMu.Lock()
+		t := h.shadowState.Thresholds
+		if body.MaxErrorRate != nil && *body.MaxErrorRate >= 0 {
+			t.MaxErrorRate = *body.MaxErrorRate
+		}
+		if body.MaxP95LatencyMs != nil && *body.MaxP95LatencyMs >= 0 {
+			t.MaxP95Latency = time.Duration(*body.MaxP95LatencyMs) * time.Millisecond
+		}
+		if body.MaxDuplicateDeliveries != nil && *body.MaxDuplicateDeliveries >= 0 {
+			t.MaxDuplicateDeliveries = *body.MaxDuplicateDeliveries
+		}
+		if body.MaxUnknownBacklog != nil && *body.MaxUnknownBacklog >= 0 {
+			t.MaxUnknownBacklog = *body.MaxUnknownBacklog
+		}
+		if body.MaxConsistencyDiffs != nil && *body.MaxConsistencyDiffs >= 0 {
+			t.MaxConsistencyDiffs = *body.MaxConsistencyDiffs
+		}
+		if body.MaxPostCancelSubmit != nil && *body.MaxPostCancelSubmit >= 0 {
+			t.MaxPostCancelSubmit = *body.MaxPostCancelSubmit
+		}
+		if body.MaxQueueAgeMs != nil && *body.MaxQueueAgeMs >= 0 {
+			t.MaxQueueAge = time.Duration(*body.MaxQueueAgeMs) * time.Millisecond
+		}
+		h.shadowState.Thresholds = t
+		h.shadowMu.Unlock()
+		c.JSON(http.StatusOK, gin.H{"updated": true, "thresholds": t})
+		return nil
+	}) {
+		return
 	}
-	if body.MaxP95LatencyMs != nil && *body.MaxP95LatencyMs >= 0 {
-		t.MaxP95Latency = time.Duration(*body.MaxP95LatencyMs) * time.Millisecond
-	}
-	if body.MaxDuplicateDeliveries != nil && *body.MaxDuplicateDeliveries >= 0 {
-		t.MaxDuplicateDeliveries = *body.MaxDuplicateDeliveries
-	}
-	if body.MaxUnknownBacklog != nil && *body.MaxUnknownBacklog >= 0 {
-		t.MaxUnknownBacklog = *body.MaxUnknownBacklog
-	}
-	if body.MaxConsistencyDiffs != nil && *body.MaxConsistencyDiffs >= 0 {
-		t.MaxConsistencyDiffs = *body.MaxConsistencyDiffs
-	}
-	if body.MaxPostCancelSubmit != nil && *body.MaxPostCancelSubmit >= 0 {
-		t.MaxPostCancelSubmit = *body.MaxPostCancelSubmit
-	}
-	if body.MaxQueueAgeMs != nil && *body.MaxQueueAgeMs >= 0 {
-		t.MaxQueueAge = time.Duration(*body.MaxQueueAgeMs) * time.Millisecond
-	}
-	h.shadowState.Thresholds = t
-	h.shadowMu.Unlock()
-	c.JSON(http.StatusOK, gin.H{"updated": true, "thresholds": t})
 }
 
 func (h *Handler) ShadowModeCompare(c *gin.Context) {
@@ -128,19 +147,24 @@ func (h *Handler) ShadowModeCompare(c *gin.Context) {
 		return
 	}
 	comparison := mindruntime.CompareShadowResults(body.OldMetrics, body.NewMetrics)
-	h.shadowMu.Lock()
-	stateBefore := h.shadowState
-	rollback, event := mindruntime.CheckAutoRollback(stateBefore, body.NewMetrics, stateBefore.Thresholds)
-	h.shadowState.Comparisons = append(h.shadowState.Comparisons, comparison)
-	h.shadowState.MetricsSnapshot = body.NewMetrics
-	if rollback {
-		h.shadowState.Rollbacks = append(h.shadowState.Rollbacks, event)
-		if event.ToStatus != "" {
-			h.shadowState.Status = event.ToStatus
+	if !h.commitAdministratorAction(c, func() error {
+		h.shadowMu.Lock()
+		stateBefore := h.shadowState
+		rollback, event := mindruntime.CheckAutoRollback(stateBefore, body.NewMetrics, stateBefore.Thresholds)
+		h.shadowState.Comparisons = append(h.shadowState.Comparisons, comparison)
+		h.shadowState.MetricsSnapshot = body.NewMetrics
+		if rollback {
+			h.shadowState.Rollbacks = append(h.shadowState.Rollbacks, event)
+			if event.ToStatus != "" {
+				h.shadowState.Status = event.ToStatus
+			}
 		}
+		h.shadowMu.Unlock()
+		c.JSON(http.StatusOK, gin.H{"comparison": comparison, "autoRollback": rollback, "rollback": event})
+		return nil
+	}) {
+		return
 	}
-	h.shadowMu.Unlock()
-	c.JSON(http.StatusOK, gin.H{"comparison": comparison, "autoRollback": rollback, "rollback": event})
 }
 
 func (h *Handler) ShadowModeRollbacks(c *gin.Context) {
@@ -151,6 +175,10 @@ func (h *Handler) ShadowModeRollbacks(c *gin.Context) {
 }
 
 func (h *Handler) ShadowModeLoadSim(c *gin.Context) {
+	if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+		h.commitAdministratorAction(c, func() error { return err })
+		return
+	}
 	var body struct {
 		Profile         string `json:"profile"`
 		DurationSeconds int    `json:"durationSeconds"`
@@ -174,11 +202,16 @@ func (h *Handler) ShadowModeLoadSim(c *gin.Context) {
 	if body.BurstRate > 0 {
 		cfg.BurstRate = body.BurstRate
 	}
-	c.JSON(http.StatusOK, gin.H{"result": mindruntime.InjectLoad(cfg)})
+	result := mindruntime.InjectLoad(cfg)
+	h.commitAdministratorAction(c, func() error { c.JSON(http.StatusOK, gin.H{"result": result}); return nil })
 }
 
 func (h *Handler) ShadowModeLongitudinalSim(c *gin.Context) {
+	if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+		h.commitAdministratorAction(c, func() error { return err })
+		return
+	}
 	cfg := mindruntime.DefaultLongitudinalSimConfig()
 	result := mindruntime.RunLongitudinalSim(cfg)
-	c.JSON(http.StatusOK, gin.H{"result": result})
+	h.commitAdministratorAction(c, func() error { c.JSON(http.StatusOK, gin.H{"result": result}); return nil })
 }

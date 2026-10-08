@@ -369,6 +369,8 @@ import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import ExtensionContributionRenderer from "@/components/extension/ExtensionContributionRenderer.vue";
 import type { TemplateItem } from "@/views/character-config/composables/types";
 import { normalizeVoicePitchRatio } from "@/utils/voicePitch";
+import { roleAuthorityConfig } from "@/runtime/role-authority";
+import { useOwnedSpeech } from "@/composables/useOwnedSpeech";
 import { useCharacterImportExport } from "@/views/character-config/composables/useCharacterImportExport";
 import { useCharacterExtensionTabs } from "./composables/useCharacterExtensionTabs";
 
@@ -425,6 +427,8 @@ const showTemplateDialog = ref(false);
 const templateLoading = ref(false);
 const showDialog = ref(false);
 const editingId = ref<string | null>(null);
+const editorAuthority = ref("");
+const collectionAuthority = ref("");
 const saving = ref(false);
 const voicePresets = ref<any[]>([]);
 const voiceConfigs = ref<any[]>([]);
@@ -557,7 +561,7 @@ async function openTemplates() {
 
 async function createFromTemplate(tpl: TemplateItem) {
   try {
-    const r = await apiClient.post(`/api/character-templates/${tpl.id}/create-character`, { name: tpl.name });
+    const r = await apiClient.post(`/api/character-templates/${tpl.id}/create-character`, { name: tpl.name }, roleAuthorityConfig((tpl as any).roleAuthority));
     const created = r.data?.data || r.data;
     showTemplateDialog.value = false;
     await loadCharacters();
@@ -598,9 +602,17 @@ async function loadVoices() {
 
 async function loadCharacters() {
   try {
+    const authorityResponse = await apiClient.get("/api/characters/authority");
+    const authority = authorityResponse.data?.roleAuthority || "";
+    roleAuthorityConfig(authority);
     const r = await apiClient.get("/api/characters");
-    characters.value = r.data?.data || r.data || [];
-  } catch {}
+    const rows = r.data?.data || r.data || [];
+    if (!Array.isArray(rows) || rows.some((row: any) => row.roleAuthority !== authority)) throw new Error("角色数据归属已变化，请重新加载");
+    collectionAuthority.value = authority;
+    characters.value = rows;
+  } catch {
+    collectionAuthority.value = "";
+  }
 }
 
 function selectChar(c: any) {
@@ -614,6 +626,8 @@ function onTabChange(tab: string) {
 }
 
 function openCreate() {
+  if (saving.value) return;
+  editorAuthority.value = collectionAuthority.value;
   editingId.value = null;
   form.name = "";
   form.description = "";
@@ -642,8 +656,10 @@ function openCreate() {
 }
 
 function editCurrent() {
+  if (saving.value) return;
   if (!selectedChar.value) return;
   editingId.value = selectedChar.value.id;
+  editorAuthority.value = selectedChar.value.roleAuthority || "";
   form.name = selectedChar.value.name || "";
   form.description = selectedChar.value.description || "";
   form.avatar = selectedChar.value.avatar || "";
@@ -694,9 +710,11 @@ function parseJsonObject(value: string, label: string): Record<string, unknown> 
 }
 
 function copyCurrentCharacter() {
+  if (saving.value) return;
   if (!selectedChar.value) return;
   const source = selectedChar.value;
   openCreate();
+  editorAuthority.value = source.roleAuthority || "";
   form.name = `${source.name || "角色"} (副本)`;
   form.avatar = source.avatar || "";
   form.description = source.description || "";
@@ -738,6 +756,12 @@ async function testVoice() {
   testingVoice.value = true;
   testAudioUrl.value = "";
   try {
+    const ownedUrl = await ownedSpeech.synthesizeIfBound("你好，我是你的AI伙伴", editingId.value || selectedId.value || undefined);
+    if (ownedUrl) {
+      testAudioUrl.value = ownedUrl;
+      ElMessage.info("当前试听使用已保存角色的音色设置，修改后请先保存角色");
+      return;
+    }
     const payload = form.voiceMode === "clone"
       ? { speakerId: form.customVoiceId, text: "你好，我是你的AI伙伴" }
       : {
@@ -769,7 +793,10 @@ async function testVoice() {
   }
 }
 
+const ownedSpeech = useOwnedSpeech(() => { testAudioUrl.value = ""; });
+
 async function saveCharacter() {
+  if (saving.value) return;
   saving.value = true;
   try {
     if (!form.name.trim()) {
@@ -810,9 +837,9 @@ async function saveCharacter() {
     };
 
     if (editingId.value) {
-      await apiClient.put(`/api/characters/${editingId.value}`, payload);
+      await apiClient.put(`/api/characters/${editingId.value}`, payload, roleAuthorityConfig(editorAuthority.value));
     } else {
-      const r = await apiClient.post("/api/characters", payload);
+      const r = await apiClient.post("/api/characters", payload, roleAuthorityConfig(editorAuthority.value));
       const created = r.data?.data || r.data;
       if (created) {
         selectedId.value = String(created.id);
@@ -840,19 +867,22 @@ async function saveCharacter() {
 
 async function deleteCurrent() {
   if (!selectedChar.value) return;
+  const target = { ...selectedChar.value };
   try {
     await ElMessageBox.confirm(
       "确定删除「" + selectedChar.value.name + "」？",
       "确认",
       { type: "warning" },
     );
-    await apiClient.delete(`/api/characters/${selectedChar.value.id}`);
+    await apiClient.delete(`/api/characters/${target.id}`, roleAuthorityConfig(target.roleAuthority));
     ElMessage.success("已删除");
     selectedId.value = null;
     selectedChar.value = null;
     router.push("/character");
     await loadCharacters();
-  } catch {}
+  } catch (err: any) {
+    if (err !== "cancel" && err !== "close") ElMessage.error(err?.response?.data?.message || err?.message || "角色删除失败，请重新加载后重试");
+  }
 }
 </script>
 

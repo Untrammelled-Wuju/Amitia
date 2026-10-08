@@ -44,29 +44,40 @@ func NewEncryptedFileStore(path, keyPath string) (*EncryptedFileStore, error) {
 }
 
 func (s *EncryptedFileStore) Put(ctx context.Context, namespace string, value []byte) (string, error) {
-	if err := ctx.Err(); err != nil {
+	ref := schemeCanonical + sanitizeNamespace(namespace) + "/" + uuid.NewString()
+	if err := s.PutReference(ctx, ref, value); err != nil {
 		return "", err
 	}
-	if len(value) == 0 {
-		return "", fmt.Errorf("secret must not be empty")
+	return ref, nil
+}
+
+func (s *EncryptedFileStore) PutReference(ctx context.Context, rawRef string, value []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	ref := schemeCanonical + sanitizeNamespace(namespace) + "/" + uuid.NewString()
+	ref, err := ParseRef(rawRef)
+	if err != nil || rawRef != ref.String() || len(value) == 0 {
+		return ErrSecretRefInvalid
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	records, err := s.readLocked()
 	if err != nil {
-		return "", err
+		return err
+	}
+	if _, exists := records[rawRef]; exists {
+		return ErrSecretRefInvalid
 	}
 	nonce := make([]byte, s.aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return "", err
+		return err
 	}
-	sealed := s.aead.Seal(nil, nonce, value, []byte(ref))
-	records[ref] = base64.RawStdEncoding.EncodeToString(append(nonce, sealed...))
-	if err := s.writeLocked(records); err != nil {
-		return "", err
+	sealed := s.aead.Seal(nil, nonce, value, []byte(rawRef))
+	records[rawRef] = base64.RawStdEncoding.EncodeToString(append(nonce, sealed...))
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return ref, nil
+	return s.writeLocked(records)
 }
 
 func (s *EncryptedFileStore) Get(ctx context.Context, ref string) ([]byte, error) {

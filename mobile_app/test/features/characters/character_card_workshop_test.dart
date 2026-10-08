@@ -11,20 +11,37 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Characters extends Fake implements CharacterService {
+  static const authorityValue =
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  @override
+  Future<String> authority() async => authorityValue;
   Map<String, dynamic>? created;
   Map<String, dynamic>? updated;
+  String currentAuthority = authorityValue;
   @override
-  Future<CharacterDto?> create(Map<String, dynamic> data) async {
+  Future<CharacterDto?> create(
+    Map<String, dynamic> data, {
+    String? roleAuthority,
+  }) async {
+    expect(roleAuthority, authorityValue);
+    if (roleAuthority != currentAuthority) {
+      throw StateError('角色数据归属已变化，请重新加载角色');
+    }
     created = data;
     return CharacterDto(id: 'new-role', name: data['name'] as String);
   }
 
   @override
-  Future<CharacterDto?> setActive(String id) async =>
+  Future<CharacterDto?> setActive(String id, {String? roleAuthority}) async =>
       CharacterDto(id: id, name: '星河');
 
   @override
-  Future<CharacterDto?> update(String id, Map<String, dynamic> data) async {
+  Future<CharacterDto?> update(
+    String id,
+    Map<String, dynamic> data, {
+    String? roleAuthority,
+  }) async {
+    expect(roleAuthority, authorityValue);
     updated = data;
     return CharacterDto(id: id, name: data['name'] as String);
   }
@@ -147,6 +164,33 @@ void main() {
   );
 
   testWidgets(
+    'draft captured before Core switch cannot be saved to the new Core',
+    (tester) async {
+      final service = _Characters();
+      final api = _Api();
+      await render(tester, api, service, []);
+      await tester.tap(find.text('创建角色卡').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('下一步：编辑角色卡'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, '名称'), '设备草稿');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      service.currentAuthority = 'b' * 64;
+      final save = find.text('保存角色卡');
+      await tester.ensureVisible(save);
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(service.created, isNull);
+      expect(api.savedCard, isNull);
+      expect(find.textContaining('角色数据归属已变化'), findsOneWidget);
+      expect(find.text('角色卡已保存'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'next opens a blank editor without generating and keeps manual edits',
     (tester) async {
       final service = _Characters();
@@ -210,7 +254,11 @@ void main() {
   ) async {
     final api = _Api()..failLoad = true;
     await render(tester, api, _Characters(), [
-      CharacterDto(id: 'existing', name: '原角色'),
+      CharacterDto(
+        id: 'existing',
+        name: '原角色',
+        roleAuthority: _Characters.authorityValue,
+      ),
     ]);
     expect(find.text('角色需求'), findsNothing);
     await tester.tap(find.text('原角色'));
@@ -229,7 +277,12 @@ void main() {
     final api = _Api();
     final service = _Characters();
     await render(tester, api, service, [
-      CharacterDto(id: 'existing', name: '原角色', characterBase: '原提示词'),
+      CharacterDto(
+        id: 'existing',
+        name: '原角色',
+        characterBase: '原提示词',
+        roleAuthority: _Characters.authorityValue,
+      ),
     ]);
     await tester.tap(find.text('原角色'));
     await tester.pumpAndSettle();

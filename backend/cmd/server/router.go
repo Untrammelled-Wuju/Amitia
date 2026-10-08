@@ -64,6 +64,7 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
+	"github.com/u-ai/backend/internal/notificationruntime"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/realtime"
 	"github.com/u-ai/backend/internal/reminder"
@@ -507,6 +508,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	apiGroup := r.Group("/api")
 	if services.DeviceMesh != nil && services.DeviceMesh.LocalHandler != nil {
 		services.DeviceMesh.LocalHandler.RegisterRoutes(r, security.LocalRuntimeControlMiddleware(localCredentialStore, config.AppCfg.Server.Host), security.AuthenticationMiddleware(newAuthConfig("local_single_user")))
+		registerLocalSourceTaskApprovalRouter(r.Group("/internal/device-mesh", security.LocalRuntimeControlMiddleware(localCredentialStore, config.AppCfg.Server.Host)), services)
 	}
 	apiGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
 	if services.DeviceMesh != nil && services.DeviceMesh.BusinessCoordinationReady {
@@ -557,6 +559,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
 		}
 		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
+		if services.NotificationRuntime != nil {
+			notificationruntime.RegisterRoutes(apiGroup, services.NotificationRuntime)
+		}
 		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
 		apiGroup.GET("/memory/pipeline/status", func(c *gin.Context) {
@@ -628,6 +633,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		realtime.RegisterRealtimeRouter(apiGroup, ctx, services.Vision)
 		r.GET("/api/realtime/v2/ws/session", realtime.HandleTicketedSession)
+		registerMeshRealtimePublicRoutes(r, services)
 		r.GET("/api/realtime/v2/ws/visual", realtime.HandleTicketedVisualSession)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
@@ -845,6 +851,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					}
 					return actor.DeviceID, true
 				},
+				DeviceRevokedHandler: devicemeshserver.DeviceRevokedHandler(func(
+					ctx context.Context,
+					revokedSpaceID runtimeidentity.SpaceID,
+					revokedDeviceID runtimeidentity.DeviceID,
+				) error {
+					if services.NotificationRuntime == nil || services.NotificationRuntime.Repository() == nil {
+						return nil
+					}
+					return services.NotificationRuntime.Repository().RevokeDevice(
+						ctx,
+						revokedSpaceID.String(),
+						revokedDeviceID.String(),
+					)
+				}),
 				InvocationResultHandler: devicemeshserver.InvocationResultHandler(func(result protocol.RuntimeResultPayload) {
 					if services.DeviceMesh.PendingInvocations == nil {
 						return
@@ -941,6 +961,15 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 						return
 					}
 					if !services.DeviceMesh.PendingTasks.ValidateBound(complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.RuntimeSessionID.String(), complete.ConnectionGeneration) {
+						return
+					}
+					if complete.PausedCheckpointVersion != 0 {
+						if complete.PausedCheckpointVersion < 1 || complete.OutcomeUnknown || complete.Success || len(complete.Result) != 0 || complete.ResultArtifactID != "" || complete.Error != "" {
+							return
+						}
+						if err := services.KernelContainer.TaskRuntimeService.HandleRemotePaused(context.Background(), complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.PausedCheckpointVersion); err == nil {
+							services.DeviceMesh.PendingTasks.CompleteBound(complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.RuntimeSessionID.String(), complete.ConnectionGeneration, false, "任务已确认暂停")
+						}
 						return
 					}
 					if complete.OutcomeUnknown {

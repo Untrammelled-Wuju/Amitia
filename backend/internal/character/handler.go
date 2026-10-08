@@ -64,6 +64,7 @@ func (h *Handler) List(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, chars)
 	util.SuccessResponse(c, chars)
 }
 
@@ -80,6 +81,7 @@ func (h *Handler) Get(c *gin.Context) {
 		util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
 		return
 	}
+	h.stampRoleAuthority(c, char)
 	util.SuccessResponse(c, char)
 }
 
@@ -136,6 +138,7 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, char)
 	util.SuccessMsgResponse(c, "角色创建成功", char)
 }
 
@@ -157,6 +160,7 @@ func (h *Handler) Update(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, char)
 	util.SuccessMsgResponse(c, "角色更新成功", char)
 }
 
@@ -188,6 +192,7 @@ func (h *Handler) SetActive(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, char)
 	util.SuccessMsgResponse(c, "已切换活跃角色", char)
 }
 
@@ -197,6 +202,7 @@ func (h *Handler) ListTemplates(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, templates)
 	util.SuccessResponse(c, templates)
 }
 
@@ -207,6 +213,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, t)
 	util.SuccessResponse(c, t)
 }
 
@@ -223,6 +230,7 @@ func (h *Handler) GetRoleProfile(c *gin.Context) {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, profile)
 	util.SuccessResponse(c, profile)
 }
 
@@ -299,6 +307,7 @@ func (h *Handler) ImportPackPreview(c *gin.Context) {
 		return
 	}
 
+	h.stampRoleAuthority(c, result)
 	util.SuccessResponse(c, result)
 }
 
@@ -327,6 +336,7 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 		return
 	}
 
+	h.stampRoleAuthority(c, result)
 	util.SuccessMsgResponse(c, "导入成功", result)
 }
 
@@ -359,6 +369,7 @@ func (h *Handler) CreateFromTemplate(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, created)
 	util.SuccessMsgResponse(c, "创建成功", created)
 }
 
@@ -407,6 +418,7 @@ func (h *Handler) UpdateRoleProfile(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	h.stampRoleAuthority(c, profile)
 	util.SuccessResponse(c, profile)
 }
 

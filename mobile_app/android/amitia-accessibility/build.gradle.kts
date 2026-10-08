@@ -3,6 +3,33 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// AIDL code generation on Windows must not read non-ASCII absolute paths:
+// aidl.exe writes dependency paths in the active code page while AGP reads
+// those files as UTF-8. Stage on the checkout's own drive, outside buildDir.
+val accessibilityWindowsHost = System.getProperty("os.name").lowercase().contains("windows")
+val accessibilityAidlHash =
+    Integer.toUnsignedString(layout.projectDirectory.asFile.absolutePath.hashCode(), 16)
+val accessibilityAidlRoot =
+    if (accessibilityWindowsHost) {
+        File(
+            layout.projectDirectory.asFile.toPath().root.toFile(),
+            "amitia-aidl-stage/$accessibilityAidlHash",
+        )
+    } else {
+        layout.buildDirectory.dir("generated/amitia-aidl").get().asFile
+    }
+val accessibilityAidlMain = File(accessibilityAidlRoot, "main")
+fun accessibilityAidlVariant(name: String) = File(accessibilityAidlRoot, name)
+val stageAccessibilityAidl by tasks.registering(org.gradle.api.tasks.Sync::class) {
+    from(layout.projectDirectory.dir("src/main/aidl"))
+    into(accessibilityAidlMain)
+    doLast {
+        listOf("debug", "profile", "release").forEach { name ->
+            accessibilityAidlVariant(name).mkdirs()
+        }
+    }
+}
+
 android {
     namespace = "com.amitia.amitia_app.accessibility"
     compileSdk = 36
@@ -58,12 +85,24 @@ android {
 
     sourceSets {
         getByName("main") {
-            aidl.srcDirs("src/main/aidl")
+            aidl.setSrcDirs(listOf(accessibilityAidlMain))
+        }
+        getByName("debug") {
+            aidl.setSrcDirs(listOf(accessibilityAidlVariant("debug")))
+        }
+        getByName("release") {
+            aidl.setSrcDirs(listOf(accessibilityAidlVariant("release")))
         }
     }
 
     base {
         archivesName.set("amitia-accessibility")
+    }
+}
+
+tasks.configureEach {
+    if (name.startsWith("compile") && name.endsWith("Aidl")) {
+        dependsOn(stageAccessibilityAidl)
     }
 }
 

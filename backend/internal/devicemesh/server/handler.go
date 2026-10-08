@@ -326,6 +326,24 @@ func (h *Handler) sendHelloAck(conn *MeshConnection, sessionID runtimeidentity.R
 }
 
 func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, sessionID runtimeidentity.RuntimeSessionID, generation int64, clientSequence int64) error {
+	callbackCtx, stopCallbacks := context.WithCancel(ctx)
+	defer stopCallbacks()
+	taskCallbacks := make(chan protocol.Envelope, 32)
+	var queuedTaskBytes atomic.Int64
+	go func() {
+		for {
+			select {
+			case <-callbackCtx.Done():
+				return
+			case envelope := <-taskCallbacks:
+				if callbackCtx.Err() != nil {
+					return
+				}
+				h.handleTaskCallback(conn, envelope)
+				queuedTaskBytes.Add(-int64(len(envelope.Payload) + 2048))
+			}
+		}
+	}()
 	for {
 		conn.Conn.SetReadDeadline(time.Now().Add(meshprotocol.ReadDeadlineSeconds * time.Second))
 		_, data, err := conn.Conn.ReadMessage()
@@ -462,67 +480,16 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 				}
 			}
 
-		case protocol.MessageTypeTaskClaim:
-			var claim protocol.TaskClaimPayload
-			if err := json.Unmarshal(env.Payload, &claim); err == nil {
-				accepted := false
-				valid := claim.DeviceID == conn.DeviceID && claim.RuntimeID == conn.RuntimeID && claim.RuntimeSessionID == conn.SessionID && claim.ConnectionGeneration == conn.Generation && claim.TaskRunID != "" && claim.AttemptID != "" && claim.LeaseID != "" && claim.WorkerID == conn.RuntimeID.String() && claim.LeaseDurationMs > 0 && claim.LeaseDurationMs <= 300000
-				if valid && h.onTaskClaimPayload != nil {
-					accepted = h.onTaskClaimPayload(claim)
-				} else if valid && h.onTaskClaim != nil {
-					accepted = h.onTaskClaim(claim.TaskRunID, claim.AttemptID, claim.WorkerID, time.Duration(claim.LeaseDurationMs)*time.Millisecond)
-				}
-				_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: claim.TaskRunID, AttemptID: claim.AttemptID, LeaseID: claim.LeaseID, Accepted: accepted, LeaseDurationMs: claim.LeaseDurationMs, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
+		case protocol.MessageTypeTaskClaim, protocol.MessageTypeTaskComplete, protocol.MessageTypeTaskProgress, protocol.MessageTypeTaskCheckpoint, protocol.MessageTypeTaskHeartbeat:
+			charge := int64(len(env.Payload) + 2048)
+			if queuedTaskBytes.Add(charge) > 4<<20 {
+				return fmt.Errorf("task callback bytes exceed connection limit")
 			}
-
-		case protocol.MessageTypeTaskComplete:
-			var complete protocol.TaskCompletePayload
-			if err := json.Unmarshal(env.Payload, &complete); err == nil {
-				if complete.DeviceID != conn.DeviceID || complete.RuntimeID != conn.RuntimeID || complete.RuntimeSessionID != conn.SessionID || complete.ConnectionGeneration != conn.Generation {
-					continue
-				}
-				if h.onTaskCompletePayload != nil {
-					h.onTaskCompletePayload(complete)
-				} else if h.onTaskComplete != nil {
-					h.onTaskComplete(complete.TaskRunID, complete.AttemptID, complete.Success, complete.Result, complete.Error)
-				}
-			}
-
-		case protocol.MessageTypeTaskProgress:
-			var progress protocol.TaskProgressPayload
-			if err := json.Unmarshal(env.Payload, &progress); err == nil {
-				if progress.DeviceID != conn.DeviceID || progress.RuntimeID != conn.RuntimeID || progress.RuntimeSessionID != conn.SessionID || progress.ConnectionGeneration != conn.Generation {
-					continue
-				}
-				if h.onTaskProgressPayload != nil {
-					h.onTaskProgressPayload(progress)
-				} else if h.onTaskProgress != nil {
-					h.onTaskProgress(progress.TaskRunID, progress.AttemptID, mustMarshal(progress))
-				}
-			}
-
-		case protocol.MessageTypeTaskCheckpoint:
-			var checkpoint protocol.TaskCheckpointPayload
-			if err := json.Unmarshal(env.Payload, &checkpoint); err == nil {
-				if checkpoint.DeviceID != conn.DeviceID || checkpoint.RuntimeID != conn.RuntimeID || checkpoint.RuntimeSessionID != conn.SessionID || checkpoint.ConnectionGeneration != conn.Generation {
-					continue
-				}
-				if h.onTaskCheckpointPayload != nil {
-					h.onTaskCheckpointPayload(checkpoint)
-				} else if h.onTaskCheckpoint != nil {
-					h.onTaskCheckpoint(checkpoint.TaskRunID, checkpoint.AttemptID, mustMarshal(checkpoint))
-				}
-			}
-
-		case protocol.MessageTypeTaskHeartbeat:
-			var heartbeat protocol.TaskHeartbeatPayload
-			if err := json.Unmarshal(env.Payload, &heartbeat); err == nil {
-				accepted := false
-				valid := heartbeat.DeviceID == conn.DeviceID && heartbeat.RuntimeID == conn.RuntimeID && heartbeat.RuntimeSessionID == conn.SessionID && heartbeat.ConnectionGeneration == conn.Generation && heartbeat.Sequence > 0
-				if valid && h.onTaskHeartbeatPayload != nil {
-					accepted = h.onTaskHeartbeatPayload(heartbeat)
-				}
-				_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: heartbeat.TaskRunID, AttemptID: heartbeat.AttemptID, LeaseID: heartbeat.LeaseID, Sequence: heartbeat.Sequence, Accepted: accepted, LeaseDurationMs: 300000, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
+			select {
+			case taskCallbacks <- env:
+			default:
+				queuedTaskBytes.Add(-charge)
+				return fmt.Errorf("task callback queue exceeds connection limit")
 			}
 
 		case protocol.MessageTypeRuntimeCancel:
@@ -536,6 +503,74 @@ func (h *Handler) messageLoop(ctx context.Context, conn *MeshConnection, session
 		default:
 			h.sendErrorConn(conn, "mesh.protocol_error", "unsupported message type: "+string(env.MessageType), false)
 		}
+	}
+}
+
+func (h *Handler) handleTaskCallback(conn *MeshConnection, env protocol.Envelope) {
+	switch env.MessageType {
+	case protocol.MessageTypeTaskClaim:
+		var claim protocol.TaskClaimPayload
+		if err := json.Unmarshal(env.Payload, &claim); err == nil {
+			accepted := false
+			valid := claim.DeviceID == conn.DeviceID && claim.RuntimeID == conn.RuntimeID && claim.RuntimeSessionID == conn.SessionID && claim.ConnectionGeneration == conn.Generation && claim.TaskRunID != "" && claim.AttemptID != "" && claim.LeaseID != "" && claim.WorkerID == conn.RuntimeID.String() && claim.LeaseDurationMs > 0 && claim.LeaseDurationMs <= 300000
+			if valid && h.onTaskClaimPayload != nil {
+				accepted = h.onTaskClaimPayload(claim)
+			} else if valid && h.onTaskClaim != nil {
+				accepted = h.onTaskClaim(claim.TaskRunID, claim.AttemptID, claim.WorkerID, time.Duration(claim.LeaseDurationMs)*time.Millisecond)
+			}
+			_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: claim.TaskRunID, AttemptID: claim.AttemptID, LeaseID: claim.LeaseID, Accepted: accepted, LeaseDurationMs: claim.LeaseDurationMs, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
+		}
+
+	case protocol.MessageTypeTaskComplete:
+		var complete protocol.TaskCompletePayload
+		if err := json.Unmarshal(env.Payload, &complete); err == nil {
+			if complete.DeviceID != conn.DeviceID || complete.RuntimeID != conn.RuntimeID || complete.RuntimeSessionID != conn.SessionID || complete.ConnectionGeneration != conn.Generation {
+				return
+			}
+			if h.onTaskCompletePayload != nil {
+				h.onTaskCompletePayload(complete)
+			} else if h.onTaskComplete != nil {
+				h.onTaskComplete(complete.TaskRunID, complete.AttemptID, complete.Success, complete.Result, complete.Error)
+			}
+		}
+
+	case protocol.MessageTypeTaskProgress:
+		var progress protocol.TaskProgressPayload
+		if err := json.Unmarshal(env.Payload, &progress); err == nil {
+			if progress.DeviceID != conn.DeviceID || progress.RuntimeID != conn.RuntimeID || progress.RuntimeSessionID != conn.SessionID || progress.ConnectionGeneration != conn.Generation {
+				return
+			}
+			if h.onTaskProgressPayload != nil {
+				h.onTaskProgressPayload(progress)
+			} else if h.onTaskProgress != nil {
+				h.onTaskProgress(progress.TaskRunID, progress.AttemptID, mustMarshal(progress))
+			}
+		}
+
+	case protocol.MessageTypeTaskCheckpoint:
+		var checkpoint protocol.TaskCheckpointPayload
+		if err := json.Unmarshal(env.Payload, &checkpoint); err == nil {
+			if checkpoint.DeviceID != conn.DeviceID || checkpoint.RuntimeID != conn.RuntimeID || checkpoint.RuntimeSessionID != conn.SessionID || checkpoint.ConnectionGeneration != conn.Generation {
+				return
+			}
+			if h.onTaskCheckpointPayload != nil {
+				h.onTaskCheckpointPayload(checkpoint)
+			} else if h.onTaskCheckpoint != nil {
+				h.onTaskCheckpoint(checkpoint.TaskRunID, checkpoint.AttemptID, mustMarshal(checkpoint))
+			}
+		}
+
+	case protocol.MessageTypeTaskHeartbeat:
+		var heartbeat protocol.TaskHeartbeatPayload
+		if err := json.Unmarshal(env.Payload, &heartbeat); err == nil {
+			accepted := false
+			valid := heartbeat.DeviceID == conn.DeviceID && heartbeat.RuntimeID == conn.RuntimeID && heartbeat.RuntimeSessionID == conn.SessionID && heartbeat.ConnectionGeneration == conn.Generation && heartbeat.Sequence > 0
+			if valid && h.onTaskHeartbeatPayload != nil {
+				accepted = h.onTaskHeartbeatPayload(heartbeat)
+			}
+			_ = h.sendEnvelope(conn, protocol.MessageTypeTaskLeaseAck, protocol.TaskLeaseAckPayload{TaskRunID: heartbeat.TaskRunID, AttemptID: heartbeat.AttemptID, LeaseID: heartbeat.LeaseID, Sequence: heartbeat.Sequence, Accepted: accepted, LeaseDurationMs: 300000, RuntimeSessionID: conn.SessionID, ConnectionGeneration: conn.Generation})
+		}
+
 	}
 }
 
@@ -601,7 +636,10 @@ func (h *Handler) sendError(conn *websocket.Conn, code, message string, fatal bo
 }
 
 func (h *Handler) sendErrorConn(conn *MeshConnection, code, message string, fatal bool) {
-	h.sendError(conn.Conn, code, message, fatal)
+	_ = h.sendEnvelope(conn, protocol.MessageTypeError, protocol.ErrorPayload{Code: code, Message: message})
+	if fatal {
+		_ = conn.Close(4000, code)
+	}
 }
 
 func mustMarshal(v interface{}) json.RawMessage {

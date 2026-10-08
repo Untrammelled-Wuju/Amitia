@@ -9,16 +9,36 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/device_management_intent.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import 'device_core_call_page.dart';
 import 'device_capability_grants_page.dart';
 
-final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(deviceMeshServiceProvider).devices();
-});
-
-final _deviceAuthorityProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) => ref.read(deviceMeshServiceProvider).coordination());
+final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+  (ref) async {
+    final api = ref.watch(rawBackendServiceApiProvider);
+    final deployment = ref.watch(mobileDeploymentConfigProvider);
+    var active = true;
+    ref.onDispose(() => active = false);
+    final service = ref.read(deviceMeshServiceProvider);
+    final intent = DeviceManagementIntent(
+      await service.coordination(),
+      isCurrent: () =>
+          active &&
+          api != null &&
+          identical(ref.read(rawBackendServiceApiProvider), api) &&
+          ref.read(mobileDeploymentConfigProvider) == deployment,
+    );
+    final devices = await service.devices();
+    intent.validate(await service.coordination());
+    return [
+      for (final device in devices) {...device, '_managementIntent': intent},
+    ];
+  },
+);
 
 class DevicesPage extends ConsumerWidget {
   const DevicesPage({super.key});
@@ -26,7 +46,6 @@ class DevicesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final devicesAsync = ref.watch(_devicesProvider);
-    final authority = ref.watch(_deviceAuthorityProvider).value;
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -58,15 +77,24 @@ class DevicesPage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: context.textSecondary,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   '加载失败：${_message(err)}',
-                  style: AppTypography.body(context).copyWith(color: context.error),
+                  style: AppTypography.body(
+                    context,
+                  ).copyWith(color: context.error),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                AmitiaButton(label: '重试', onPressed: () => ref.invalidate(_devicesProvider)),
+                AmitiaButton(
+                  label: '重试',
+                  onPressed: () => ref.invalidate(_devicesProvider),
+                ),
               ],
             ),
           ),
@@ -79,7 +107,11 @@ class DevicesPage extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.devices_other_outlined, size: 52, color: context.textTertiary),
+                    Icon(
+                      Icons.devices_other_outlined,
+                      size: 52,
+                      color: context.textTertiary,
+                    ),
                     const SizedBox(height: 14),
                     Text('暂无已绑定设备', style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 6),
@@ -92,13 +124,15 @@ class DevicesPage extends ConsumerWidget {
                     AmitiaButton(
                       label: '添加当前设备',
                       icon: Icons.add_link_outlined,
-                      onPressed: () => context.push(AppRoutes.settingsDeviceAdd),
+                      onPressed: () =>
+                          context.push(AppRoutes.settingsDeviceAdd),
                     ),
                     const SizedBox(height: 8),
                     AmitiaButton(
                       label: '设备设置',
                       isSecondary: true,
-                      onPressed: () => context.push(AppRoutes.settingsDeviceSettings),
+                      onPressed: () =>
+                          context.push(AppRoutes.settingsDeviceSettings),
                     ),
                   ],
                 ),
@@ -114,36 +148,102 @@ class DevicesPage extends ConsumerWidget {
               padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               children: [
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: Text('已绑定设备 (${items.length})', style: AppTypography.caption(context)),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                  ),
+                  child: Text(
+                    '已绑定设备 (${items.length})',
+                    style: AppTypography.caption(context),
+                  ),
                 ),
                 SizedBox(height: AppSpacing.sm),
                 Container(
-                  margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  margin: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                  ),
                   decoration: BoxDecoration(
                     color: context.surfacePrimary,
                     borderRadius: AppRadius.brMedium,
-                    border: Border.all(color: context.borderPrimary, width: 0.5),
+                    border: Border.all(
+                      color: context.borderPrimary,
+                      width: 0.5,
+                    ),
                   ),
                   child: Column(
                     children: [
                       for (var i = 0; i < items.length; i++) ...[
                         _DeviceTile(
                           item: items[i],
-                          onRevoke: () => _confirmRevoke(context, ref, items[i]),
-                          onCall: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeviceCoreCallPage(deviceId: items[i].deviceId, label: items[i].name))),
-                          onGrants: authority?['canAdminister'] == true || authority?['policy']?['deviceId'] == items[i].deviceId ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeviceCapabilityGrantsPage(deviceId: items[i].deviceId, label: items[i].name, devices: devices))) : null,
-                          onLoadSync: () => ref.read(deviceMeshServiceProvider).syncStatus(items[i].deviceId),
-                          onProbe: (runtimeId) async {
-                            final result = await ref.read(deviceMeshServiceProvider).probeRuntime(items[i].deviceId, runtimeId);
-                            if (context.mounted) {
-                              final ok = result?['ok'] != false;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(ok ? 'Runtime 探测成功' : 'Runtime 已返回探测结果')),
-                              );
-                            }
-                            ref.invalidate(_devicesProvider);
+                          onRevoke: items[i].intent.canAdminister
+                              ? () => _confirmRevoke(context, ref, items[i])
+                              : null,
+                          onCall: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => DeviceCoreCallPage(
+                                deviceId: items[i].deviceId,
+                                label: items[i].name,
+                              ),
+                            ),
+                          ),
+                          onGrants:
+                              items[i].intent.canAdminister ||
+                                  items[i].intent.policy['deviceId'] ==
+                                      items[i].deviceId
+                              ? () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => DeviceCapabilityGrantsPage(
+                                      deviceId: items[i].deviceId,
+                                      label: items[i].name,
+                                      devices: devices,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                          onLoadSync: () async {
+                            final service = ref.read(deviceMeshServiceProvider);
+                            items[i].intent.validate(
+                              await service.coordination(),
+                            );
+                            final result = await service.syncStatus(
+                              items[i].deviceId,
+                            );
+                            items[i].intent.validate(
+                              await service.coordination(),
+                            );
+                            return result;
                           },
+                          onProbe: items[i].intent.canAdminister
+                              ? (runtimeId) async {
+                                  final service = ref.read(
+                                    deviceMeshServiceProvider,
+                                  );
+                                  items[i].intent.requireAdministrator();
+                                  items[i].intent.validate(
+                                    await service.coordination(),
+                                  );
+                                  final result = await service.probeRuntime(
+                                    items[i].deviceId,
+                                    runtimeId,
+                                    headers: items[i].intent.headers,
+                                  );
+                                  items[i].intent.validate(
+                                    await service.coordination(),
+                                  );
+                                  if (context.mounted) {
+                                    final ok = result?['ok'] != false;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          ok
+                                              ? 'Runtime 探测成功'
+                                              : 'Runtime 已返回探测结果',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  ref.invalidate(_devicesProvider);
+                                }
+                              : null,
                         ),
                       ],
                     ],
@@ -157,14 +257,21 @@ class DevicesPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmRevoke(BuildContext context, WidgetRef ref, _DeviceItem item) async {
+  Future<void> _confirmRevoke(
+    BuildContext context,
+    WidgetRef ref,
+    _DeviceItem item,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('移除设备'),
         content: Text('确定移除「${item.name}」吗？该设备的云端凭据会立即失效。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             child: Text('移除', style: TextStyle(color: context.error)),
@@ -174,19 +281,28 @@ class DevicesPage extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      await ref.read(deviceMeshServiceProvider).revokeDevice(item.deviceId);
+      final service = ref.read(deviceMeshServiceProvider);
+      item.intent.requireAdministrator();
+      item.intent.validate(await service.coordination());
+      await service.revokeDevice(item.deviceId, headers: item.intent.headers);
+      item.intent.validate(await service.coordination());
       ref.invalidate(_devicesProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('设备已移除')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('设备已移除')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('移除失败：${_message(e)}')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('移除失败：${_message(e)}')));
       }
     }
   }
 
-  static String _message(Object error) => error.toString().replaceFirst('Exception: ', '');
+  static String _message(Object error) =>
+      error.toString().replaceFirst('Exception: ', '');
 }
 
 class _RuntimeItem {
@@ -194,16 +310,21 @@ class _RuntimeItem {
   final String presence;
   final String runtimeSessionId;
 
-  const _RuntimeItem({required this.runtimeId, required this.presence, required this.runtimeSessionId});
+  const _RuntimeItem({
+    required this.runtimeId,
+    required this.presence,
+    required this.runtimeSessionId,
+  });
 
   factory _RuntimeItem.fromJson(Map<String, dynamic> json) => _RuntimeItem(
-        runtimeId: (json['runtimeId'] ?? '').toString(),
-        presence: (json['presence'] ?? 'offline').toString(),
-        runtimeSessionId: (json['runtimeSessionId'] ?? '').toString(),
-      );
+    runtimeId: (json['runtimeId'] ?? '').toString(),
+    presence: (json['presence'] ?? 'offline').toString(),
+    runtimeSessionId: (json['runtimeSessionId'] ?? '').toString(),
+  );
 }
 
 class _DeviceItem {
+  final DeviceManagementIntent intent;
   final String deviceId;
   final String name;
   final String platform;
@@ -213,6 +334,7 @@ class _DeviceItem {
   final List<_RuntimeItem> runtimes;
 
   const _DeviceItem({
+    required this.intent,
     required this.deviceId,
     required this.name,
     required this.platform,
@@ -227,15 +349,24 @@ class _DeviceItem {
     final label = (json['label'] ?? '').toString().trim();
     final rawRuntimes = json['runtimes'];
     final runtimes = rawRuntimes is List
-        ? rawRuntimes.whereType<Map>().map((item) => _RuntimeItem.fromJson(Map<String, dynamic>.from(item))).toList()
+        ? rawRuntimes
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    _RuntimeItem.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList()
         : <_RuntimeItem>[];
     return _DeviceItem(
+      intent: json['_managementIntent'] as DeviceManagementIntent,
       deviceId: deviceId,
       name: label.isEmpty ? (deviceId.isEmpty ? '未命名设备' : deviceId) : label,
       platform: (json['platform'] ?? 'unknown').toString(),
       trustState: (json['trustState'] ?? '').toString(),
       presence: (json['presence'] ?? 'offline').toString(),
-      lastHeartbeat: DateTime.tryParse((json['lastHeartbeat'] ?? '').toString())?.toLocal(),
+      lastHeartbeat: DateTime.tryParse(
+        (json['lastHeartbeat'] ?? '').toString(),
+      )?.toLocal(),
       runtimes: runtimes,
     );
   }
@@ -243,11 +374,11 @@ class _DeviceItem {
 
 class _DeviceTile extends StatefulWidget {
   final _DeviceItem item;
-  final VoidCallback onRevoke;
+  final VoidCallback? onRevoke;
   final VoidCallback onCall;
   final VoidCallback? onGrants;
   final Future<Map<String, dynamic>?> Function() onLoadSync;
-  final Future<void> Function(String runtimeId) onProbe;
+  final Future<void> Function(String runtimeId)? onProbe;
 
   const _DeviceTile({
     required this.item,
@@ -276,18 +407,23 @@ class _DeviceTileState extends State<_DeviceTile> {
   @override
   void didUpdateWidget(covariant _DeviceTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.item.deviceId != widget.item.deviceId) {
+    if (oldWidget.item.deviceId != widget.item.deviceId ||
+        !identical(oldWidget.item.intent, widget.item.intent)) {
       _sync = null;
+      _syncLoading = false;
       _loadSync(silent: true);
     }
   }
 
   IconData get _icon {
     final platform = widget.item.platform.toLowerCase();
-    if (platform.contains('android') || platform.contains('ios') || platform.contains('mobile')) {
+    if (platform.contains('android') ||
+        platform.contains('ios') ||
+        platform.contains('mobile')) {
       return Icons.smartphone_outlined;
     }
-    if (platform.contains('ipad') || platform.contains('tablet')) return Icons.tablet_mac_outlined;
+    if (platform.contains('ipad') || platform.contains('tablet'))
+      return Icons.tablet_mac_outlined;
     return Icons.computer_outlined;
   }
 
@@ -295,8 +431,10 @@ class _DeviceTileState extends State<_DeviceTile> {
     if (_syncLoading && _sync == null) return '读取中';
     final value = _sync;
     if (value == null) return '暂不可用';
-    if ((value['error'] ?? '').toString().isNotEmpty) return (value['error']).toString();
-    final lastApplied = value['lastApplied'] ?? value['lastAppliedSequence'] ?? value['cursor'];
+    if ((value['error'] ?? '').toString().isNotEmpty)
+      return (value['error']).toString();
+    final lastApplied =
+        value['lastApplied'] ?? value['lastAppliedSequence'] ?? value['cursor'];
     final latest = value['latest'] ?? value['latestSequence'] ?? value['head'];
     if (lastApplied != null && latest != null) return '$lastApplied / $latest';
     if (lastApplied != null) return '已应用 $lastApplied';
@@ -306,17 +444,27 @@ class _DeviceTileState extends State<_DeviceTile> {
   Future<void> _loadSync({bool silent = false}) async {
     if (_syncLoading) return;
     setState(() => _syncLoading = true);
+    final intent = widget.item.intent;
     try {
       final value = await widget.onLoadSync();
-      if (!mounted) return;
+      if (!mounted || !identical(intent, widget.item.intent)) return;
       setState(() => _sync = value ?? <String, dynamic>{});
-      if (!silent) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('同步状态已刷新')));
+      if (!silent)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('同步状态已刷新')));
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _sync = <String, dynamic>{'error': DevicesPage._message(e)});
-      if (!silent) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('同步状态暂不可用')));
+      if (!mounted || !identical(intent, widget.item.intent)) return;
+      setState(
+        () => _sync = <String, dynamic>{'error': DevicesPage._message(e)},
+      );
+      if (!silent)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('同步状态暂不可用')));
     } finally {
-      if (mounted) setState(() => _syncLoading = false);
+      if (mounted && identical(intent, widget.item.intent))
+        setState(() => _syncLoading = false);
     }
   }
 
@@ -324,9 +472,12 @@ class _DeviceTileState extends State<_DeviceTile> {
     if (_probeBusy.isNotEmpty) return;
     setState(() => _probeBusy = runtimeId);
     try {
-      await widget.onProbe(runtimeId);
+      await widget.onProbe?.call(runtimeId);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Runtime 探测失败：${DevicesPage._message(e)}')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Runtime 探测失败：${DevicesPage._message(e)}')),
+        );
     } finally {
       if (mounted) setState(() => _probeBusy = '');
     }
@@ -336,7 +487,9 @@ class _DeviceTileState extends State<_DeviceTile> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final online = item.presence.toLowerCase() == 'online';
-    final heartbeat = item.lastHeartbeat == null ? '暂无心跳' : _relative(item.lastHeartbeat!);
+    final heartbeat = item.lastHeartbeat == null
+        ? '暂无心跳'
+        : _relative(item.lastHeartbeat!);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -348,7 +501,10 @@ class _DeviceTileState extends State<_DeviceTile> {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(color: context.accentSoft, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Icon(_icon, size: 20, color: context.accentPrimary),
               ),
               const SizedBox(width: 12),
@@ -356,15 +512,55 @@ class _DeviceTileState extends State<_DeviceTile> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(children: [
-                      Flexible(child: Text(item.name, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.textPrimary))),
-                      const SizedBox(width: 6),
-                      Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: online ? context.success : context.textTertiary)),
-                    ]),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: context.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: online
+                                ? context.success
+                                : context.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 2),
-                    Text('${item.platform} · ${online ? '在线' : '离线'} · $heartbeat · ${item.runtimes.length} 个运行时', style: TextStyle(fontSize: 12, color: context.textTertiary)),
-                    if (item.trustState.isNotEmpty) Text('信任状态：${item.trustState}', style: TextStyle(fontSize: 11, color: context.textTertiary)),
-                    Text('同步：$_syncLabel', style: TextStyle(fontSize: 11, color: context.textTertiary)),
+                    Text(
+                      '${item.platform} · ${online ? '在线' : '离线'} · $heartbeat · ${item.runtimes.length} 个运行时',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.textTertiary,
+                      ),
+                    ),
+                    if (item.trustState.isNotEmpty)
+                      Text(
+                        '信任状态：${item.trustState}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textTertiary,
+                        ),
+                      ),
+                    Text(
+                      '同步：$_syncLabel',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.textTertiary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -372,17 +568,31 @@ class _DeviceTileState extends State<_DeviceTile> {
                 tooltip: '设备操作',
                 onSelected: (action) {
                   switch (action) {
-                    case 'sync': _loadSync();
-                    case 'call': widget.onCall();
-                    case 'grants': widget.onGrants?.call();
-                    case 'revoke': widget.onRevoke();
+                    case 'sync':
+                      _loadSync();
+                    case 'call':
+                      widget.onCall();
+                    case 'grants':
+                      widget.onGrants?.call();
+                    case 'revoke':
+                      widget.onRevoke?.call();
                   }
                 },
                 itemBuilder: (_) => [
-                  PopupMenuItem(value: 'sync', enabled: !_syncLoading, child: const Text('刷新同步状态')),
-                  PopupMenuItem(value: 'call', enabled: item.trustState == 'trusted', child: const Text('通过 Core 调用')),
-                  if (widget.onGrants != null) const PopupMenuItem(value: 'grants', child: Text('能力授权')),
-                  const PopupMenuItem(value: 'revoke', child: Text('移除设备')),
+                  PopupMenuItem(
+                    value: 'sync',
+                    enabled: !_syncLoading,
+                    child: const Text('刷新同步状态'),
+                  ),
+                  PopupMenuItem(
+                    value: 'call',
+                    enabled: item.trustState == 'trusted',
+                    child: const Text('通过 Core 调用'),
+                  ),
+                  if (widget.onGrants != null)
+                    const PopupMenuItem(value: 'grants', child: Text('能力授权')),
+                  if (widget.onRevoke != null)
+                    const PopupMenuItem(value: 'revoke', child: Text('移除设备')),
                 ],
               ),
             ],
@@ -392,19 +602,54 @@ class _DeviceTileState extends State<_DeviceTile> {
             for (final runtime in item.runtimes)
               Container(
                 margin: const EdgeInsets.only(top: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
-                child: Row(children: [
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(runtime.runtimeId, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.caption(context).copyWith(color: context.textPrimary)),
-                    Text(runtime.runtimeSessionId.isEmpty ? runtime.presence : '${runtime.presence} · ${runtime.runtimeSessionId}', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.caption(context)),
-                  ])),
-                  TextButton.icon(
-                    onPressed: _probeBusy.isNotEmpty ? null : () => _probe(runtime.runtimeId),
-                    icon: _probeBusy == runtime.runtimeId ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.radar, size: 16),
-                    label: const Text('探测'),
-                  ),
-                ]),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: context.surfaceSecondary,
+                  borderRadius: AppRadius.brSmall,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            runtime.runtimeId,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption(
+                              context,
+                            ).copyWith(color: context.textPrimary),
+                          ),
+                          Text(
+                            runtime.runtimeSessionId.isEmpty
+                                ? runtime.presence
+                                : '${runtime.presence} · ${runtime.runtimeSessionId}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _probeBusy.isNotEmpty || widget.onProbe == null
+                          ? null
+                          : () => _probe(runtime.runtimeId),
+                      icon: _probeBusy == runtime.runtimeId
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.radar, size: 16),
+                      label: const Text('探测'),
+                    ),
+                  ],
+                ),
               ),
           ],
         ],

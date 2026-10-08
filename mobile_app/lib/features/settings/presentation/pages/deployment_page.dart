@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
+import '../../../../app/notification_runtime_bootstrap.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -91,7 +92,9 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                 _SectionLabel(text: '远程核心地址'),
                 SizedBox(height: AppSpacing.sm),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -101,10 +104,13 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                         autocorrect: false,
                         decoration: InputDecoration(
                           hintText: 'cloud.example.com 或 192.168.1.10:18899',
-                          helperText: currentConfig.mode == MobileDeploymentMode.cloud
+                          helperText:
+                              currentConfig.mode == MobileDeploymentMode.cloud
                               ? '云端业务请求将连接此 Cloud Core；设备 Runtime 仍保留在本机'
                               : '可先配置地址再切换云端模式；局域网地址默认使用 http',
-                          border: OutlineInputBorder(borderRadius: AppRadius.brSmall),
+                          border: OutlineInputBorder(
+                            borderRadius: AppRadius.brSmall,
+                          ),
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: AppSpacing.md,
                             vertical: AppSpacing.sm,
@@ -214,9 +220,9 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     final raw = _remoteUriController.text.trim();
     if (raw.isEmpty) {
       if (showError && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请输入远程核心地址')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('请输入远程核心地址')));
       }
       return null;
     }
@@ -224,16 +230,16 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       return normalizeRemoteCoreUri(raw).toString();
     } on DeploymentConfigValidationError catch (error) {
       if (showError && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('远程核心地址无效：${error.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('远程核心地址无效：${error.message}')));
       }
       return null;
     } catch (error) {
       if (showError && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('远程核心地址无效：$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('远程核心地址无效：$error')));
       }
       return null;
     }
@@ -247,16 +253,37 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       mode: current.mode,
       remoteCoreUri: normalized,
     );
-    await ref.read(mobileDeploymentConfigProvider.notifier).update(next);
-    _remoteUriController.text = normalized;
-    if (current.mode == MobileDeploymentMode.cloud) {
+    final notificationHandoff =
+        current.mode == MobileDeploymentMode.cloud &&
+        current.remoteCoreUri?.trim() != normalized;
+    final notificationCoordinator = ref.read(notificationCoordinatorProvider);
+    if (notificationHandoff) {
+      await notificationCoordinator
+          .revokeCurrentRegistrationForDeploymentTransition();
+    }
+    try {
+      await ref.read(mobileDeploymentConfigProvider.notifier).update(next);
+      _remoteUriController.text = normalized;
+      if (current.mode == MobileDeploymentMode.cloud) {
+        ref.invalidate(backendConnectionProvider);
+        await ref.read(mobileBackendLifecycleProvider).reconcile(next);
+      }
+    } catch (_) {
+      await ref.read(mobileDeploymentConfigProvider.notifier).update(current);
       ref.invalidate(backendConnectionProvider);
-      await ref.read(mobileBackendLifecycleProvider).reconcile(next);
+      try {
+        await ref.read(mobileBackendLifecycleProvider).reconcile(current);
+      } catch (_) {}
+      rethrow;
+    } finally {
+      if (notificationHandoff) {
+        notificationCoordinator.resumeRegistrationAfterDeploymentTransition();
+      }
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('云端地址已保存')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('云端地址已保存')));
     }
   }
 
@@ -304,9 +331,23 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       mode: newMode,
       remoteCoreUri: remoteUri ?? config.remoteCoreUri,
     );
-    await ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
-    ref.invalidate(backendConnectionProvider);
-    await ref.read(mobileBackendLifecycleProvider).reconcile(newConfig);
+    final notificationCoordinator = ref.read(notificationCoordinatorProvider);
+    await notificationCoordinator
+        .revokeCurrentRegistrationForDeploymentTransition();
+    try {
+      await ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
+      ref.invalidate(backendConnectionProvider);
+      await ref.read(mobileBackendLifecycleProvider).reconcile(newConfig);
+    } catch (_) {
+      await ref.read(mobileDeploymentConfigProvider.notifier).update(config);
+      ref.invalidate(backendConnectionProvider);
+      try {
+        await ref.read(mobileBackendLifecycleProvider).reconcile(config);
+      } catch (_) {}
+      rethrow;
+    } finally {
+      notificationCoordinator.resumeRegistrationAfterDeploymentTransition();
+    }
     if (!mounted) return;
     setState(() => _testState = false);
     _remoteUriController.text = newConfig.remoteCoreUri ?? '';

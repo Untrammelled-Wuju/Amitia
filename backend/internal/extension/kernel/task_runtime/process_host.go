@@ -4,22 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/platform/process"
+	"io"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
 type ProcessHostConfig struct {
-	Generation  int64  `json:"generation"`
-	InstanceID  string `json:"instanceId"`
-	TaskRunID   string `json:"taskRunId"`
-	ExtensionID string `json:"extensionId"`
-	ModuleID    string `json:"moduleId"`
-	DefHash     string `json:"defHash"`
-	NodePath    string `json:"nodePath"`
-	HostPath    string `json:"hostPath"`
-	WorkDir     string `json:"workDir"`
-	EntryPath   string `json:"entryPath"`
-	EntryHash   string `json:"entryHash"`
+	Generation     int64                  `json:"generation"`
+	InstanceID     string                 `json:"instanceId"`
+	TaskRunID      string                 `json:"taskRunId"`
+	ExtensionID    string                 `json:"extensionId"`
+	ModuleID       string                 `json:"moduleId"`
+	DefHash        string                 `json:"defHash"`
+	NodePath       string                 `json:"nodePath"`
+	HostPath       string                 `json:"hostPath"`
+	WorkDir        string                 `json:"workDir"`
+	EntryPath      string                 `json:"entryPath"`
+	EntryHash      string                 `json:"entryHash"`
+	BundleRoot     string                 `json:"bundleRoot,omitempty"`
+	BundleHash     string                 `json:"bundleHash,omitempty"`
+	NativeLimits   process.ResourceLimits `json:"nativeLimits"`
+	RequireSandbox bool                   `json:"requireSandbox"`
+	Diagnostics    io.Writer              `json:"-"`
 }
 
 type ProcessCallbacks struct {
@@ -47,6 +56,9 @@ type TaskProcessHost struct {
 }
 
 func NewTaskProcessHost(cfg ProcessHostConfig) (*TaskProcessHost, error) {
+	if (cfg.BundleRoot == "") != (cfg.BundleHash == "") || cfg.BundleHash != "" && (!filepath.IsAbs(cfg.BundleRoot) || !validTaskFingerprint(strings.TrimPrefix(cfg.BundleHash, "sha256:")) || !validTaskFingerprint(strings.TrimPrefix(cfg.EntryHash, "sha256:"))) {
+		return nil, fmt.Errorf("任务进程插件文件树身份无效")
+	}
 	if cfg.Generation == 0 {
 		cfg.Generation = 1
 	}
@@ -194,6 +206,15 @@ func (h *TaskProcessHost) Wait() (int, error) {
 
 func (h *TaskProcessHost) Done() <-chan struct{} {
 	return h.doneCh
+}
+
+func (h *TaskProcessHost) ConfirmedPauseVersion() int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.state != "paused" || h.exitErr != nil || h.exitCode != 0 {
+		return 0
+	}
+	return h.pauseVersion
 }
 
 func (h *TaskProcessHost) CancelCh() chan struct{} {

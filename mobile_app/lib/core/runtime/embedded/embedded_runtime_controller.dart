@@ -17,3 +17,27 @@ abstract interface class EmbeddedRuntimeController {
   Future<EmbeddedRuntimeStatus> getStatus();
   Future<BackendEndpoint> getEndpoint();
 }
+
+final class UnsupportedEmbeddedRuntimeController
+    implements EmbeddedRuntimeController {
+  const UnsupportedEmbeddedRuntimeController();
+
+  @override
+  Future<EmbeddedRuntimeStatus> ensureRunning(
+    EmbeddedRuntimeProfile profile,
+  ) async => EmbeddedRuntimeStatus.unsupported;
+
+  @override
+  Future<EmbeddedRuntimeStatus> getStatus() async =>
+      EmbeddedRuntimeStatus.unsupported;
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<BackendEndpoint> getEndpoint() {
+    throw UnsupportedError(
+      'embedded runtime is not available on this mobile platform',
+    );
+  }
+}

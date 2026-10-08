@@ -48,6 +48,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   final _chatStyleConfigController = TextEditingController();
   final _sceneRulesController = TextEditingController();
   String _loadedCharacterId = '';
+  String _editorAuthority = '';
   bool _savingSettings = false;
   bool _uploadingAvatar = false;
 
@@ -73,6 +74,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   void _syncControllers(CharacterDto character) {
     if (_loadedCharacterId == character.id) return;
     _loadedCharacterId = character.id;
+    _editorAuthority = character.roleAuthority;
     _nameController.text = character.name;
     _identityController.text = character.identity;
     _personalityController.text = character.personality;
@@ -444,7 +446,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             'personalityConfig': personalityConfig,
             'chatStyleConfig': jsonEncode(chatStyleConfig),
             'sceneRules': jsonEncode(sceneRules),
-          });
+          }, roleAuthority: _editorAuthority);
       _loadedCharacterId = '';
       ref.invalidate(characterListProvider);
       if (mounted) {
@@ -492,13 +494,19 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     try {
       final result = await ref
           .read(characterDetailServiceProvider)
-          .uploadAvatar(character.id, path);
+          .uploadAvatar(
+            character.id,
+            path,
+            roleAuthority: character.roleAuthority,
+          );
       final avatarUrl = (result?['avatarUrl'] ?? '').toString();
       if (avatarUrl.isEmpty) {
         throw StateError('后端未返回头像地址');
       }
       final refreshed = await ref.refresh(characterListProvider.future);
-      if (!refreshed.any((item) => item.id == character.id && item.avatar == avatarUrl)) {
+      if (!refreshed.any(
+        (item) => item.id == character.id && item.avatar == avatarUrl,
+      )) {
         throw StateError('头像已上传，但角色资料尚未同步，请重试刷新');
       }
       if (mounted) {
@@ -1247,14 +1255,25 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   }
 
   Future<void> _setAsCurrent(CharacterDto character) async {
-    ref.read(currentCharacterIdProvider.notifier).state = widget.characterId;
-    final svc = ref.read(characterServiceProvider);
-    await svc.setActive(widget.characterId);
-    ref.invalidate(characterListProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已将「${character.name}」设为当前角色')));
+    try {
+      final svc = ref.read(characterServiceProvider);
+      final activated = await svc.setActive(
+        widget.characterId,
+        roleAuthority: character.roleAuthority,
+      );
+      if (activated == null) throw StateError('服务未确认角色激活');
+      if (!mounted) return;
+      ref.read(currentCharacterIdProvider.notifier).state = widget.characterId;
+      ref.invalidate(characterListProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已将「${character.name}」设为当前角色')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('角色激活失败：$error')),
+        );
+      }
     }
   }
 
@@ -1262,7 +1281,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     try {
       final created = await ref
           .read(characterServiceProvider)
-          .duplicate(character.id);
+          .duplicate(character.id, roleAuthority: character.roleAuthority);
       if (created == null) throw StateError('后端未返回复制后的角色');
       ref.invalidate(characterListProvider);
       if (mounted) {
@@ -1341,19 +1360,27 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             TextButton(
               onPressed: () async {
                 Navigator.pop(dialogContext);
-                final svc = ref.read(characterServiceProvider);
-                final ok = await svc.delete(widget.characterId);
-                if (ok) {
-                  ref.invalidate(characterListProvider);
-                }
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                try {
+                  final svc = ref.read(characterServiceProvider);
+                  final ok = await svc.delete(
+                    widget.characterId,
+                    roleAuthority: character.roleAuthority,
+                  );
+                  if (!mounted) return;
+                  if (ok) ref.invalidate(characterListProvider);
+                  ScaffoldMessenger.of(this.context).showSnackBar(
                     SnackBar(
                       content: Text(ok ? '已删除角色：${character.name}' : '删除失败'),
-                      backgroundColor: ok ? null : context.error,
+                      backgroundColor: ok ? null : this.context.error,
                     ),
                   );
-                  if (ok) Navigator.of(context).pop();
+                  if (ok) Navigator.of(this.context).pop();
+                } catch (error) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(content: Text('删除角色失败：$error')),
+                    );
+                  }
                 }
               },
               child: Text('删除', style: TextStyle(color: dialogContext.error)),

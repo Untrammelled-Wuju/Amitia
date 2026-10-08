@@ -51,6 +51,7 @@ import { ref, computed, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "@/composables/useApi";
 import { formatDuration } from "./utils";
+import { useOwnedSpeech } from "@/composables/useOwnedSpeech";
 
 const props = defineProps<{
   audioUrl?: string;
@@ -69,8 +70,11 @@ const voicePlaying = ref(false);
 const voiceLoading = ref(false);
 const voiceAudio = ref<HTMLAudioElement | null>(null);
 const voiceDuration = ref("");
+const speech = useOwnedSpeech(stopVoice);
+let playbackGeneration = 0;
 
 function stopVoice() {
+  playbackGeneration++;
   if (voiceAudio.value) {
     voiceAudio.value.pause();
     voiceAudio.value = null;
@@ -86,7 +90,9 @@ async function toggleVoice() {
   }
   if (voiceAudio.value) {
     const audio = voiceAudio.value;
+    const playback = playbackGeneration;
     await audio.play();
+    if (playback !== playbackGeneration) { audio.pause(); return; }
     voicePlaying.value = true;
     audio.onended = () => {
       voicePlaying.value = false;
@@ -100,10 +106,12 @@ async function toggleVoice() {
     return;
   }
   voiceLoading.value = true;
+  const captured = playbackGeneration;
   try {
     let url = props.audioUrl || "";
     if (!url && props.messageRole === "assistant") {
-      const res = await post<any>("/api/tts/synthesize", {
+      const ownedUrl = await speech.synthesizeIfBound(props.messageContent || "", props.characterId);
+      const res = ownedUrl ? { audioUrl: ownedUrl } : await post<any>("/api/tts/synthesize", {
         characterId: props.characterId || undefined,
         conversationId: props.conversationId || undefined,
         requestId: props.requestId || undefined,
@@ -115,11 +123,14 @@ async function toggleVoice() {
       ElMessage.warning("语音加载失败");
       return;
     }
+    if (captured !== playbackGeneration) throw new Error("Core 已切换，旧语音已丢弃");
     stopVoice();
     const audio = new Audio(url);
     voiceAudio.value = audio;
     voiceDuration.value = formatDuration(props.audioDuration || 0);
+    const playback = playbackGeneration;
     await audio.play();
+    if (playback !== playbackGeneration) { audio.pause(); return; }
     voicePlaying.value = true;
     voiceLoading.value = false;
     audio.onended = () => {

@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/spaceidentity"
+	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -80,7 +81,10 @@ func (p *meshLocalDataPort) rolesLocked(ctx context.Context, scope coordination.
 		if err != nil {
 			return nil, err
 		}
-		body, err := json.Marshal(runtime)
+		body, err := json.Marshal(struct {
+			*character.RoleRuntimeProfile
+			Voice tts.OwnedVoiceSnapshot `json:"voice"`
+		}{runtime, tts.OwnedVoiceSnapshot{VoiceConfigID: row.VoiceConfigID, VoiceType: row.VoiceType, VoiceSpeed: row.VoiceSpeed, VoicePitch: row.VoicePitch, VoiceVolume: row.VoiceVolume, CustomVoiceID: row.CustomVoiceID, VoiceMode: row.VoiceMode, Emotion: row.Emotion, EmotionScale: row.EmotionScale, SilenceDuration: row.SilenceDuration}})
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +158,10 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	snapshot := coordination.DataSnapshot{OwnerID: p.ownerID, Role: role, Resources: make([]coordination.Resource, 0), NextCursors: make(map[string]string)}
 	usableMemories := make(map[string]bool)
-	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint"} {
+	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "project"} {
+		if kind == "project" && query.ResourceKind != "project" {
+			continue
+		}
 		if query.Management && query.Cursor == "" && query.LegacyCursor != "" {
 			continue
 		}
@@ -515,7 +522,7 @@ func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordi
 	}
 	filtered := make([]coordination.Resource, 0, len(snapshot.Resources))
 	for _, resource := range snapshot.Resources {
-		if resource.Kind != "checkpoint" && resource.Kind != "continuity" {
+		if resource.Kind != "checkpoint" && (resource.Kind != "continuity" || query.Management && query.ResourceKind == "continuity") {
 			filtered = append(filtered, resource)
 		}
 	}
@@ -578,6 +585,29 @@ func (p *meshLocalDataPort) Resource(ctx context.Context, scope coordination.Exe
 		return nil, coordination.ErrWrongOwner
 	}
 	return resource, nil
+}
+
+func (p *meshLocalDataPort) ReadTaskResource(ctx context.Context, current coordination.ExecutionScope, proof coordination.TaskReadProof, kind, id string) (*coordination.Resource, error) {
+	if proof.Scope.ResourceOwnerID != p.ownerID {
+		return nil, coordination.ErrWrongOwner
+	}
+	if err := coordination.ValidateTaskReadProof(current, proof); err != nil {
+		return nil, err
+	}
+	if err := coordination.ValidateTaskReadResourceID(proof, kind, id); err != nil {
+		return nil, err
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return nil, err
+	}
+	resource, err := p.store.Get(ctx, kind, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := coordination.ValidateTaskReadResource(proof, kind, id, resource); err != nil {
+		return nil, err
+	}
+	return resource, coordination.ValidateCurrent(ctx)
 }
 
 func meshMemoryUsable(item memory.Memory, now time.Time) bool {

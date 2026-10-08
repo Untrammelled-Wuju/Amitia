@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.service.notification.StatusBarNotification
 import com.amitia.amitia_app.MainActivity
+import com.amitia.amitia_app.notifications.NotificationRenderer
 
 internal class NotificationNativeHandler(context: Context) {
 
@@ -20,6 +21,7 @@ internal class NotificationNativeHandler(context: Context) {
             OP_LIST -> handleList(request)
             OP_GET -> handleGet(request)
             OP_POST -> handlePost(request)
+            OP_RUNTIME_DELIVER -> handleRuntimeDeliver(request)
             OP_CANCEL_OWN -> handleCancelOwn(request)
             OP_DISMISS -> handleDismiss(request)
             OP_OPEN -> handleOpen(request)
@@ -300,6 +302,35 @@ internal class NotificationNativeHandler(context: Context) {
         )
     }
 
+    private fun handleRuntimeDeliver(request: NativeNotificationRequest): NativeNotificationResponse {
+        val state = stateReader.readState()
+        if (!state.canPost) {
+            return NativeNotificationResponse(
+                requestId = request.requestId,
+                status = "error",
+                error = NativeNotificationError(
+                    code = if (state.notificationsEnabled) {
+                        "NOTIFICATION_POST_PERMISSION_REQUIRED"
+                    } else {
+                        "NOTIFICATION_POST_DISABLED"
+                    },
+                    message = "notification delivery is unavailable",
+                ),
+            )
+        }
+        val data = request.payload.mapValues { (_, value) -> value?.toString().orEmpty() }
+        NotificationRenderer.handleRemoteMessage(appContext, data)
+        return NativeNotificationResponse(
+            requestId = request.requestId,
+            status = "success",
+            result = mapOf(
+                "posted" to true,
+                "notificationRef" to request.requestId,
+                "revision" to ((request.payload["revision"] as? Number)?.toLong() ?: 0L),
+            ),
+        )
+    }
+
     private fun handleCancelOwn(request: NativeNotificationRequest): NativeNotificationResponse {
         val ref = request.payload["notificationRef"] as? String
             ?: return NativeNotificationResponse(
@@ -506,6 +537,7 @@ internal class NotificationNativeHandler(context: Context) {
         const val OP_LIST = "notification.list"
         const val OP_GET = "notification.get"
         const val OP_POST = "notification.post"
+        const val OP_RUNTIME_DELIVER = "notification.runtime_deliver"
         const val OP_CANCEL_OWN = "notification.cancel_own"
         const val OP_DISMISS = "notification.dismiss"
         const val OP_OPEN = "notification.open"

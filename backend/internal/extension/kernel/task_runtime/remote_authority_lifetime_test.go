@@ -142,3 +142,26 @@ func TestOwnedRemoteAuthorityDeadlineStopsUnfinishedExecution(t *testing.T) {
 		t.Fatal("expired execution was not cancelled")
 	}
 }
+
+func TestOwnedRemoteUnknownOrPausedStateReleasesExecutionWithoutConfirmingSuccess(t *testing.T) {
+	for _, status := range []TaskRunStatus{RunStatusRecoveryRequired, RunStatusPaused} {
+		t.Run(string(status), func(t *testing.T) {
+			svc, _, authority, run, _ := taskAuthorityFixture(t)
+			run.Status = RunStatusRunning
+			current := CloneTaskRun(run)
+			current.Status = status
+			svc.store = &remoteLifetimeStore{run: current, read: make(chan struct{}, 1)}
+			executor := remoteLifetimeExecutor{cancelled: make(chan struct{}, 1)}
+			ctx, cancel := context.WithTimeout(coordination.WithScope(t.Context(), authority), time.Second)
+			defer cancel()
+			if err := svc.waitOwnedRemoteExecution(ctx, run, executor); err == nil || errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("unknown execution retained a worker or reported success: %v", err)
+			}
+			select {
+			case <-executor.cancelled:
+				t.Fatal("stopped unknown execution was falsely cancelled again")
+			default:
+			}
+		})
+	}
+}

@@ -135,10 +135,11 @@ func TestTaskProcessRejectsUnconfirmedOrForeignResults(t *testing.T) {
 }
 
 func TestPinnedTaskProcessRejectsMissingHostCapabilitiesBeforeExecution(t *testing.T) {
-	for _, features := range []string{"[]", "['entry_pin']", "['checkpoint_ack']"} {
+	for _, features := range []string{"[]", "['entry_pin']", "['checkpoint_ack']", "['entry_pin','checkpoint_ack']"} {
 		t.Run(features, func(t *testing.T) {
 			host := fixtureProcessHost(t)
 			host.config.EntryHash = strings.Repeat("a", 64)
+			host.config.BundleRoot, host.config.BundleHash = host.config.WorkDir, strings.Repeat("b", 64)
 			data := strings.Replace(processFixture, "runtime_type:'task'", "runtime_type:'task',features:"+features, 1)
 			if err := os.WriteFile(host.config.HostPath, []byte(data), 0600); err != nil {
 				t.Fatal(err)

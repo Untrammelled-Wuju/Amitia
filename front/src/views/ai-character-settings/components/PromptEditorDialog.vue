@@ -31,11 +31,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "../../../composables/useApi";
+import { roleAuthorityConfig } from "../../../runtime/role-authority";
 
 const props = defineProps<{
   modelValue: boolean;
   editingPrompt: string;
   charId: string;
+  roleAuthority: string;
   charName: string;
 }>();
 
@@ -59,6 +61,7 @@ const editingPromptModel = computed({
 });
 
 async function saveCharPrompt() {
+  if (promptSaving.value) return;
   if (!props.charId) {
     ElMessage.warning("请先保存角色后再编辑提示词");
     return;
@@ -67,7 +70,7 @@ async function saveCharPrompt() {
   try {
     await put<any>(`/api/characters/${props.charId}`, {
       characterBase: props.editingPrompt,
-    });
+    }, roleAuthorityConfig(props.roleAuthority));
     ElMessage.success("提示词已保存");
     emit("update:modelValue", false);
     emit("saved");

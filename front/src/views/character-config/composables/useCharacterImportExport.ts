@@ -3,6 +3,7 @@
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import { apiClient, useApi } from "../../../composables/useApi";
+import { roleAuthorityConfig } from "../../../runtime/role-authority";
 
 export function useCharacterImportExport() {
   const { get, postUpload } = useApi();
@@ -16,6 +17,8 @@ export function useCharacterImportExport() {
   const importing = ref(false);
   const packHistory = ref<any[]>([]);
   const selectedFile = ref<File | null>(null);
+  const previewAuthority = ref("");
+  let previewFile: File | null = null;
 
   async function exportPack(characterId: string, characterName: string) {
     if (!characterId) return;
@@ -56,11 +59,17 @@ export function useCharacterImportExport() {
     }
     importPreviewing.value = true;
     importPreview.value = null;
+    previewAuthority.value = "";
+    previewFile = null;
     try {
+      const file = selectedFile.value;
       const d = await postUpload<any>(
         "/api/characters/import-card/preview",
-        selectedFile.value,
+        file,
       );
+      if (selectedFile.value !== file) return;
+      previewAuthority.value = d?.roleAuthority || "";
+      previewFile = file;
       importPreview.value = d?.preview
         ? {
             ...d.preview,
@@ -78,6 +87,7 @@ export function useCharacterImportExport() {
   }
 
   async function confirmImport(): Promise<any> {
+    if (importing.value) return null;
     if (importConfirmText.value !== "确认导入") return null;
     if (!selectedFile.value) {
       ElMessage.warning("请先选择角色卡片文件");
@@ -85,9 +95,12 @@ export function useCharacterImportExport() {
     }
     importing.value = true;
     try {
+      if (selectedFile.value !== previewFile || !importPreview.value) throw new Error("请先重新预览角色卡");
       const d = await postUpload<any>(
         "/api/characters/import-card/confirm",
         selectedFile.value,
+        "card",
+        roleAuthorityConfig(previewAuthority.value),
       );
       ElMessage.success("导入成功");
       importPreview.value = null;
@@ -116,12 +129,19 @@ export function useCharacterImportExport() {
   }
 
   function cancelImportPreview() {
+    previewAuthority.value = "";
+    previewFile = null;
     importPreview.value = null;
     importConfirmText.value = "";
     selectedFile.value = null;
   }
 
   function setSelectedFile(file: File | null) {
+    if (selectedFile.value !== file) {
+      importPreview.value = null;
+      previewAuthority.value = "";
+      previewFile = null;
+    }
     selectedFile.value = file;
   }
 

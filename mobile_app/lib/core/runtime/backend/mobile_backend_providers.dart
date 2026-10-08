@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'mobile_deployment_mode.dart';
 import 'mobile_deployment_config_repository.dart';
@@ -42,7 +44,10 @@ final backendTopologyResolverProvider =
 
 final embeddedRuntimeControllerProvider =
     Provider<EmbeddedRuntimeController>((ref) {
-  return AndroidEmbeddedRuntimeController();
+  if (Platform.isAndroid) {
+    return AndroidEmbeddedRuntimeController();
+  }
+  return const UnsupportedEmbeddedRuntimeController();
 });
 
 final mobileBackendLifecycleProvider =

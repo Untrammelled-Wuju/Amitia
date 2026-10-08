@@ -238,6 +238,8 @@ func (s *TaskRuntimeService) ValidateRemoteCompletion(ctx context.Context, taskR
 }
 
 func (s *TaskRuntimeService) ApplyRemoteCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string, artifactIDs ...string) error {
+	unlock := s.lockTaskOwner(taskRunID)
+	defer unlock()
 	artifactID := ""
 	if len(artifactIDs) > 1 || len(artifactIDs) == 1 && (!success || len(result) != 0) {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务产物结果与终态不一致")
@@ -387,10 +389,13 @@ func (s *TaskRuntimeService) HandleRemoteClaim(ctx context.Context, taskRunID, a
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "task already terminal")
 	}
 	if current.Status == RunStatusRunning {
-		if current.LeaseID != "" && current.LeaseID != leaseID {
+		if current.LeaseID == "" || current.LeaseID != leaseID || current.LeaseExpiresAt == nil || !current.LeaseExpiresAt.After(time.Now()) {
 			return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
 		}
 		return nil
+	}
+	if current.Status != RunStatusStarting || current.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice {
+		return NewTaskError(ErrTaskStateTransitionInvalid, "任务当前不能领取执行租约")
 	}
 
 	next := cloneTaskRun(current)
@@ -417,6 +422,8 @@ func (s *TaskRuntimeService) HandleRemoteClaim(ctx context.Context, taskRunID, a
 }
 
 func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID, attemptID, leaseID string, extendDuration time.Duration) error {
+	unlock := s.lockTaskOwner(taskRunID)
+	defer unlock()
 	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return err
@@ -439,7 +446,7 @@ func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID,
 	if current.LeaseID != leaseID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
 	}
-	if current.Status != RunStatusRunning {
+	if current.Status != RunStatusRunning && current.Status != RunStatusCheckpointing && current.Status != RunStatusPausing {
 		return NewTaskError(ErrTaskStateTransitionInvalid, "task not running")
 	}
 

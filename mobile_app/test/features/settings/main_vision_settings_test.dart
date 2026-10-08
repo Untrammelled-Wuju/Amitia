@@ -2,6 +2,7 @@ import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/services/channel_service.dart';
 import 'package:amitia_app/core/services/model_config_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
+import 'package:amitia_app/core/backend_transport/providers/backend_transport_providers.dart';
 import 'package:amitia_app/features/settings/presentation/pages/model_config_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,8 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class VisionSettingsApi implements BackendServiceApi {
+  @override
+  int get generation => 1;
   bool takeover = true;
   final mutations = <String>[];
 
@@ -75,6 +78,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
+          rawBackendServiceApiProvider.overrideWithValue(api),
           visionServiceProvider.overrideWithValue(VisionService(api)),
           modelConfigServiceProvider.overrideWithValue(ModelConfigService(api)),
         ],

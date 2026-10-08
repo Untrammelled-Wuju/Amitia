@@ -1,0 +1,20 @@
+{
+  "desktop": {
+    "commit": "fd1de3d98e398d48c8ae714dd68c23f861ceb6e5",
+    "paths": [
+      "front/src/views/wechat-connect/WechatConnectView.vue"
+    ]
+  },
+  "mobile": {
+    "commit": "2f037a15f534b6bcc27595cd9641b012ff5a356d",
+    "paths": [
+      "mobile_app/lib/features/channels/presentation/pages/wechat_page.dart"
+    ]
+  },
+  "mobilePrototype": {
+    "commit": "7f7259a7c",
+    "paths": [
+      "amitia-mobile-ui/pages/channels.html"
+    ]
+  }
+}

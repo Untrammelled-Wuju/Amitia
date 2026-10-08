@@ -3,10 +3,14 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
 import { getApiBaseURL, saveDeploymentConfig } from "@/runtime/runtime-adapter";
+import { roleAuthorityConfig } from "@/runtime/role-authority";
+import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "@/composables/useCoreConfigurationAccess";
 
 export function useImmersiveOnboarding() {
   const router = useRouter();
   const { get, post } = useApi();
+  const configurationAccess = useCoreConfigurationAccess();
+  const configurationContext = ref("");
 
   const currentStage = ref(0);
   const maxStage = ref(0);
@@ -79,6 +83,7 @@ export function useImmersiveOnboarding() {
   const identityAvatarUploaded = ref(false);
 
   const characterCreatedInSession = ref(false);
+  const roleAuthority = ref("");
 
   const memoryStep = ref(0);
   const memoryComplete = ref(false);
@@ -217,6 +222,11 @@ export function useImmersiveOnboarding() {
             }
           : { mode: "local" as const };
         await saveDeploymentConfig(config);
+        roleAuthority.value = "";
+        const authority = await get<{ roleAuthority: string }>("/api/characters/authority");
+        roleAuthorityConfig(authority?.roleAuthority);
+        roleAuthority.value = authority.roleAuthority;
+        configurationContext.value = await configurationAccess.refresh();
       } catch (error: any) {
         const message = error?.message || "部署配置保存失败，请重试";
         stageError.value = message;
@@ -235,6 +245,9 @@ export function useImmersiveOnboarding() {
   }
 
   async function detectModel() {
+    const context = configurationContext.value;
+    try { await configurationAccess.requireAccess(context); }
+    catch (error: any) { modelStatusText.value = error.message; return; }
     detectingModels.value = true;
     modelStatusText.value = "正在检测模型连接";
 
@@ -245,7 +258,7 @@ export function useImmersiveOnboarding() {
 		baseUrl: modelBaseUrl.value,
 		apiKey: modelApiKey.value,
 		apiType: "openai-compatible",
-	});
+	}, coreConfigurationRequestConfig(context));
 
       if (res?.models && res.models.length > 0) {
         modelReady.value = true;
@@ -269,6 +282,9 @@ export function useImmersiveOnboarding() {
   }
 
   async function detectVision() {
+    const context = configurationContext.value;
+    try { await configurationAccess.requireAccess(context); }
+    catch (error: any) { visionStatusText.value = error.message; return; }
     detectingVision.value = true;
     visionStatusText.value = "正在检测视觉模型连接";
 
@@ -279,7 +295,7 @@ const res = await post<any>("/api/model/detect-models", {
 		baseUrl: visionModelURL.value,
 		apiKey: visionModelKey.value,
 		apiType: "openai-compatible",
-	});
+	}, coreConfigurationRequestConfig(context));
 
       if (res?.models && res.models.length > 0) {
         visionReady.value = true;
@@ -300,6 +316,9 @@ const res = await post<any>("/api/model/detect-models", {
   }
 
   async function detectVoice() {
+    const context = configurationContext.value;
+    try { await configurationAccess.requireAccess(context); }
+    catch (error: any) { voiceStatusText.value = error.message; return; }
     detectingVoice.value = true;
     voiceStatusText.value = "正在测试语音服务连接";
 
@@ -311,7 +330,7 @@ const res = await post<any>("/api/model/detect-models", {
         baseUrl: voiceModelURL.value,
         resource: voiceModelResource.value,
         voiceType: voiceModelVoiceType.value,
-      });
+      }, coreConfigurationRequestConfig(context));
 
       voiceReady.value = true;
       voiceDetected.value = true;
@@ -326,6 +345,9 @@ const res = await post<any>("/api/model/detect-models", {
   }
 
   async function detectVector() {
+    const context = configurationContext.value;
+    try { await configurationAccess.requireAccess(context); }
+    catch (error: any) { vectorStatusText.value = error.message; return; }
     detectingVector.value = true;
     vectorStatusText.value = "正在检测向量模型连接";
 
@@ -336,7 +358,7 @@ const res = await post<any>("/api/model/detect-models", {
 		baseUrl: vectorModelURL.value,
 		apiKey: vectorModelKey.value,
 		apiType: "openai-compatible",
-	});
+	}, coreConfigurationRequestConfig(context));
 
       if (res?.models && res.models.length > 0) {
         vectorReady.value = true;
@@ -491,9 +513,12 @@ const res = await post<any>("/api/model/detect-models", {
   async function handleEnterAmitia() {
     if (entering.value) return;
     entering.value = true;
+    const context = configurationContext.value;
 
     try {
-      if (modelApiKey.value && modelBaseUrl.value && modelName.value) {
+      const configurationAllowed = Boolean(await configurationAccess.refresh());
+      if (configurationAllowed) await configurationAccess.requireAccess(context);
+      if (configurationAllowed && modelApiKey.value && modelBaseUrl.value && modelName.value) {
         await post("/api/model/configs", {
           apiType: modelProvider.value,
           protocol: modelProtocol.value,
@@ -502,10 +527,10 @@ const res = await post<any>("/api/model/detect-models", {
           modelName: modelName.value,
           isActive: 1,
           supportsVision: visionMode.value === "inherit",
-        });
+        }, coreConfigurationRequestConfig(context));
       }
 
-      if (visionMode.value === "dedicated" && visionModelKey.value && visionModelURL.value) {
+      if (configurationAllowed && visionMode.value === "dedicated" && visionModelKey.value && visionModelURL.value) {
         await post("/api/vision/configs", {
           name: "视觉模型",
           apiType: "volcengine",
@@ -513,21 +538,21 @@ const res = await post<any>("/api/model/detect-models", {
           apiKey: visionModelKey.value,
           modelName: visionModelName.value,
           isActive: 1,
-        });
+        }, coreConfigurationRequestConfig(context));
       }
 
-      if (voiceModelMode.value !== "disabled" && voiceModelKey.value) {
+      if (configurationAllowed && voiceModelMode.value !== "disabled" && voiceModelKey.value) {
         await post("/api/tts/configs", {
           name: "默认配置",
           apiKey: voiceModelKey.value,
           resourceId: voiceModelResource.value,
           voiceType: voiceModelVoiceType.value,
           isActive: 1,
-        });
+        }, coreConfigurationRequestConfig(context));
       }
 
       if (
-        vectorModelMode.value !== "disabled" &&
+        configurationAllowed && vectorModelMode.value !== "disabled" &&
         vectorModelKey.value &&
         vectorModelURL.value
       ) {
@@ -537,7 +562,7 @@ const res = await post<any>("/api/model/detect-models", {
           apiKey: vectorModelKey.value,
           modelName: vectorModelName.value,
           isActive: 1,
-        });
+        }, coreConfigurationRequestConfig(context));
       }
 
       if (identityName.value && !characterCreatedInSession.value) {
@@ -548,7 +573,7 @@ const res = await post<any>("/api/model/detect-models", {
           characterBase: identityPromptBase.value || "",
           isActive: 1,
           isDefault: true,
-        }).then((charRes: any) => {
+        }, roleAuthorityConfig(roleAuthority.value)).then((charRes: any) => {
           const charId = charRes?.id || charRes?.data?.id;
           if (charId) {
             localStorage.setItem("webchat-char-id", charId);
@@ -570,7 +595,9 @@ const res = await post<any>("/api/model/detect-models", {
         }
       }
 
-      await post("/api/onboarding/complete", {
+      if (configurationAllowed) {
+        await configurationAccess.requireAccess(context);
+        await post("/api/onboarding/complete", {
         deployMode:
           deployMode.value === "remote" ? "cloud-web" : "desktop-local",
         serverURL:
@@ -578,7 +605,7 @@ const res = await post<any>("/api/model/detect-models", {
             ? serverURL.value.trim().replace(/\/+$/, "")
             : undefined,
         webChatEnabled: true,
-        modelConfig: modelApiKey.value
+        modelConfig: configurationAllowed && modelApiKey.value
           ? {
               name: "default",
               apiType: modelProvider.value,
@@ -588,7 +615,9 @@ const res = await post<any>("/api/model/detect-models", {
               modelName: modelName.value,
             }
           : undefined,
-      });
+        }, coreConfigurationRequestConfig(context));
+      }
+      onboardingComplete.value = true;
 
       localStorage.removeItem("webchat-last-conv");
       const nextCacheVersion = Date.now();
@@ -613,6 +642,9 @@ const res = await post<any>("/api/model/detect-models", {
   }
 
   return {
+    canConfigureModels: configurationAccess.canConfigure,
+    configurationChecking: configurationAccess.checking,
+    configurationExplanation: configurationAccess.explanation,
     currentStage,
     maxStage,
     stageError,

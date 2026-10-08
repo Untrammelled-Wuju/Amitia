@@ -17,6 +17,13 @@ func (s *TaskRuntimeService) guardOwnedTaskDefinition(ctx context.Context, run *
 		if err := validateTaskDefinition(true, identity, definition); err != nil {
 			return err
 		}
+		if definition.RemoteSource != nil {
+			authority, owned := coordination.FromContext(current)
+			if !owned || identity.ExecutionTarget.SourceTaskDefinitionID != SourceTaskDefinitionID(definition) || identity.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice {
+				return NewTaskError(ErrTaskScopeDenied, "设备目录任务缺少固定来源授权")
+			}
+			return validateDeviceTaskSource(authority, definition)
+		}
 		if s.config.InstalledDefinitionValidator != nil {
 			return s.config.InstalledDefinitionValidator(current, definition)
 		}

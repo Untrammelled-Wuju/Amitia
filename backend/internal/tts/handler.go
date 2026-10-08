@@ -75,7 +75,7 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	cfg, err := h.service.Create(&req)
+	cfg, err := h.configurationService(c.Request.Context()).Create(&req)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -90,7 +90,7 @@ func (h *Handler) Update(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	cfg, err := h.service.Update(id, updates)
+	cfg, err := h.configurationService(c.Request.Context()).Update(id, updates)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -100,7 +100,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	if err := h.service.Delete(id); err != nil {
+	if err := h.configurationService(c.Request.Context()).Delete(id); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -109,7 +109,7 @@ func (h *Handler) Delete(c *gin.Context) {
 
 func (h *Handler) Activate(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	cfg, err := h.service.Activate(id)
+	cfg, err := h.configurationService(c.Request.Context()).Activate(id)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -375,9 +375,9 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 	var result *VoiceCloneResponse
 	var cloneErr error
 	if accessKey != "" && appKey != "" {
-		result, cloneErr = CloneVoiceV1(accessKey, appKey, providerSpeakerID, audioData, audioFormat, language, 5)
+		result, cloneErr = CloneVoiceV1WithContext(c.Request.Context(), accessKey, appKey, providerSpeakerID, audioData, audioFormat, language, 5)
 	} else {
-		result, cloneErr = CloneVoice(apiKey, appKey, accessKey, audioData, audioFormat, providerSpeakerID, language, refText)
+		result, cloneErr = CloneVoiceWithContext(c.Request.Context(), apiKey, appKey, accessKey, audioData, audioFormat, providerSpeakerID, language, refText)
 	}
 	if cloneErr != nil {
 		util.ErrorResponse(c, response.OperationFailed, cloneErr.Error(), nil)
@@ -416,11 +416,11 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := h.service.SaveClonedVoice(voice); err != nil {
+	if err := h.configurationService(c.Request.Context()).SaveClonedVoice(voice); err != nil {
 		// Only roll back a newly created provider voice. Retraining an already
 		// owned slot must never delete the previously valid provider resource.
 		if !resultWasOwned {
-			_ = DeleteClonedVoice(apiKey, appKey, accessKey, voice.SpeakerID)
+			_ = DeleteClonedVoiceWithContext(c.Request.Context(), apiKey, appKey, accessKey, voice.SpeakerID)
 		}
 		util.ErrorResponse(c, response.InternalError, "保存复刻音色元数据失败", nil)
 		return
@@ -451,11 +451,11 @@ func (h *Handler) DeleteClonedVoice(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, credentialErr.Error(), nil)
 		return
 	}
-	if err := DeleteClonedVoice(apiKey, appKey, accessKey, speakerID); err != nil {
+	if err := DeleteClonedVoiceWithContext(c.Request.Context(), apiKey, appKey, accessKey, speakerID); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
-	if err := h.service.DeleteClonedVoiceMetadata(spaceID, speakerID); err != nil {
+	if err := h.configurationService(c.Request.Context()).DeleteClonedVoiceMetadata(spaceID, speakerID); err != nil {
 		util.ErrorResponse(c, response.InternalError, "服务商音色已删除，但清理 Core 元数据失败", nil)
 		return
 	}

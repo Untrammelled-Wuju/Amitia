@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
 )
 
@@ -324,19 +325,26 @@ func (s *service) StorageExportAmitia(scope string, characterID string) map[stri
 }
 
 func (s *service) StorageImportUserData(body map[string]interface{}) map[string]interface{} {
+	return s.StorageImportUserDataContext(context.Background(), body)
+}
+
+func (s *service) StorageImportUserDataContext(ctx context.Context, body map[string]interface{}) map[string]interface{} {
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return map[string]interface{}{"imported": false, "error": "云端配置授权已变化，请重新加载后操作"}
+	}
 	coord := s.coordinator
 	if coord == nil {
 		return map[string]interface{}{"imported": false, "error": "coordinator not initialized"}
 	}
 
 	fileName, _ := body["fileName"].(string)
-	if fileName == "" {
+	if fileName == "" || filepath.Base(fileName) != fileName || fileName == "." || fileName == ".." {
 		return map[string]interface{}{"imported": false, "error": "missing fileName"}
 	}
 
 	archivePath := filepath.Join(s.dataDir, "exports", fileName)
 
-	preview, err := coord.PreviewImport(context.Background(), archivePath)
+	preview, err := coord.PreviewImport(ctx, archivePath)
 	if err != nil {
 		return map[string]interface{}{"imported": false, "error": err.Error()}
 	}
@@ -345,7 +353,7 @@ func (s *service) StorageImportUserData(body map[string]interface{}) map[string]
 		CharacterPolicy: dataportability.CollisionReplace,
 	}
 
-	_, err = coord.ExecuteImport(context.Background(), archivePath, importReq)
+	_, err = coord.ExecuteImport(ctx, archivePath, importReq)
 	if err != nil {
 		return map[string]interface{}{"imported": false, "error": err.Error()}
 	}

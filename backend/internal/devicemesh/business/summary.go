@@ -60,7 +60,7 @@ func summaryAuthority(scope coordination.ExecutionScope) coordination.ExecutionS
 func (e *Engine) summaryHistory(ctx context.Context, request Request, authority coordination.ExecutionScope) ([]SummaryMessage, []coordination.ResourceVersion, error) {
 	rows := map[string]SummaryMessage{}
 	dependencies := map[string]coordination.ResourceVersion{}
-	query := coordination.DataQuery{ConversationID: request.ConversationID, ResourceKind: "message", Limit: 128}
+	query := coordination.DataQuery{ConversationID: request.ConversationID, HistoricalRoleID: request.HistoricalRoleID, ResourceKind: "message", Limit: 128}
 	visited := map[string]bool{}
 	currentDone, historicalDone := false, false
 	bytes := 0

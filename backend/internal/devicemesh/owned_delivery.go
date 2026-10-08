@@ -39,7 +39,7 @@ func (rt *Runtime) CommitDeviceData(ctx context.Context, commit coordination.Com
 
 func (rt *Runtime) deliverDeviceData(ctx context.Context, pending coordination.PendingCommit) (coordination.Acknowledgement, error) {
 	scope := pending.Commit.Scope
-	if err := rt.Coordination.Validate(ctx, scope); err != nil {
+	if err := rt.Coordination.ValidateCommitAuthorities(ctx, pending.Commit); err != nil {
 		return coordination.Acknowledgement{}, err
 	}
 	if err := coordination.ValidateRoleRevision(ctx, rt, scope); err != nil {
@@ -60,7 +60,7 @@ func (rt *Runtime) deliverDeviceData(ctx context.Context, pending coordination.P
 	if err := json.Unmarshal(result.Structured, &ack); err != nil {
 		return ack, err
 	}
-	if err := rt.Coordination.Validate(ctx, scope); err != nil {
+	if err := rt.Coordination.ValidateCommitAuthorities(ctx, pending.Commit); err != nil {
 		return ack, err
 	}
 	if ack.RequestID != scope.RequestID || ack.OwnerID != scope.ResourceOwnerID {

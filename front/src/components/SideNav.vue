@@ -145,10 +145,13 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="thread-section">
         <div class="section-caption project-caption">
           <span>项目</span>
-          <button type="button" class="section-add" title="添加文件夹" aria-label="添加文件夹" @click="handleAddProject">
+          <button type="button" class="section-add" title="新增项目" aria-label="新增项目" @click="handleAddProject">
             <el-icon><Plus /></el-icon>
           </button>
         </div>
+        <el-select v-if="chatStore.ownedProjects && chatStore.historicalProjectRoles.length > 1" v-model="chatStore.historicalProjectRole" placeholder="选择旧设备的项目角色" size="small" @change="chatStore.fetchSidebar()">
+          <el-option v-for="role in chatStore.historicalProjectRoles" :key="role.id" :label="role.name" :value="role.id" />
+        </el-select>
         <SidebarProjectBlock
           v-for="project in regularProjects"
           :key="project.id"
@@ -316,11 +319,20 @@ async function handleArchiveConversation(conversation: ConversationItem) {
 }
 
 async function handleCreateProjectConversation(project: ProjectItem) {
+  if (project.readOnly) { ElMessage.warning("旧项目只读，可打开其中原有对话继续聊天"); return; }
   await startDraftConversation(project.id);
   await router.push({ path: "/chat", query: { projectId: project.id } });
 }
 
 async function handleAddProject() {
+  if (chatStore.ownedProjects) {
+    const expected = chatStore.projectIntent;
+    if (!expected) { ElMessage.warning("请先选择角色并加载项目列表"); return; }
+    const result = await ElMessageBox.prompt("为对话分组命名", "新增项目", { inputValidator: (value) => Boolean(String(value || "").trim()) || "项目名称不能为空", confirmButtonText: "创建", cancelButtonText: "取消" });
+    await chatStore.createProject({ name: result.value.trim(), expectedExecutionScope: expected });
+    ElMessage.success("项目已创建");
+    return;
+  }
   if (!window.amitiaDesktop?.selectWorkspaceDirectory) {
     ElMessage.warning("当前环境不支持直接选择本机目录");
     return;
@@ -346,6 +358,7 @@ async function handleAddProject() {
 }
 
 async function handleProjectCommand(project: ProjectItem, command: string | number | object) {
+  if (project.readOnly) { ElMessage.warning("旧项目为只读，请在原设备管理"); return; }
   if (command === "newChat") {
     await handleCreateProjectConversation(project);
     return;
@@ -357,10 +370,11 @@ async function handleProjectCommand(project: ProjectItem, command: string | numb
       cancelButtonText: "取消",
       inputValidator: (value) => Boolean(String(value || "").trim()) || "项目名称不能为空",
     });
-    await chatStore.updateProject(project.id, { name: result.value.trim() });
+    await chatStore.updateProject(project.id, { name: result.value.trim() }, project);
     return;
   }
   if (command === "changeRoot") {
+    if (project.logical) { ElMessage.warning("当前项目用于对话分组，文件访问需单独授权"); return; }
     if (!window.amitiaDesktop?.selectWorkspaceDirectory) {
       ElMessage.warning("当前环境不支持直接选择本机文件夹");
       return;
@@ -381,7 +395,7 @@ async function handleProjectCommand(project: ProjectItem, command: string | numb
     return;
   }
   if (command === "pin") {
-    await chatStore.updateProject(project.id, { pinned: !project.pinnedAt });
+    await chatStore.updateProject(project.id, { pinned: !project.pinnedAt }, project);
     return;
   }
   if (command === "open") {
@@ -394,12 +408,13 @@ async function handleProjectCommand(project: ProjectItem, command: string | numb
       confirmButtonText: "移除",
       confirmButtonClass: "el-button--danger",
     });
-    await chatStore.deleteProject(project.id);
+    await chatStore.deleteProject(project.id, project);
     ElMessage.success("项目已移除，对话已移至最近");
   }
 }
 
 async function handleOpenProject(project: ProjectItem) {
+  if (project.logical) { ElMessage.warning("当前项目用于对话分组，没有关联文件目录"); return; }
   const location = await get<{ kind: string; path?: string; uri?: string }>(
     `/api/web-chat/projects/${encodeURIComponent(project.id)}/location`,
   );

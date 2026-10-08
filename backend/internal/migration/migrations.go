@@ -219,6 +219,140 @@ func DefaultMigrations() []Migration {
 		TemporalRelationshipIndexesRepairMigration(),
 		QdrantOwnedProjectionMigration(),
 		SurrealOwnedProjectionMigration(),
+		NotificationRuntimeMigration(),
+		NotificationVoIPMigration(),
+		NotificationOutboxMigration(),
+		SearchCredentialCleanupMigration(),
+		WebChatRequestIdempotencyMigration(),
+	}
+}
+
+func NotificationOutboxMigration() Migration {
+	return Migration{
+		Version: "20261007003",
+		Name:    "notification_outbox",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS notification_outbox (
+				id TEXT PRIMARY KEY,
+				notification_id TEXT NOT NULL,
+				space_id TEXT NOT NULL,
+				device_id TEXT NOT NULL,
+				envelope_json TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'queued',
+				provider TEXT NOT NULL DEFAULT '',
+				provider_message_id TEXT NOT NULL DEFAULT '',
+				attempt_count INTEGER NOT NULL DEFAULT 0,
+				last_error TEXT NOT NULL DEFAULT '',
+				next_attempt_at DATETIME,
+				expires_at DATETIME,
+				created_at DATETIME,
+				updated_at DATETIME
+			)`)
+			s.CreateIndex("idx_notification_outbox_identity", "notification_outbox", []string{"notification_id", "space_id", "device_id"}, true)
+			s.CreateIndex("idx_notification_outbox_status", "notification_outbox", []string{"status"}, false)
+			s.CreateIndex("idx_notification_outbox_next_attempt", "notification_outbox", []string{"next_attempt_at"}, false)
+			s.CreateIndex("idx_notification_outbox_expires", "notification_outbox", []string{"expires_at"}, false)
+			return nil
+		},
+	}
+}
+
+func NotificationVoIPMigration() Migration {
+	return Migration{
+		Version: "20261007002",
+		Name:    "notification_voip_token",
+		Up: func(s *Step) error {
+			return s.AddColumn("notification_devices", "voip_token", "TEXT NOT NULL DEFAULT ''")
+		},
+	}
+}
+
+func NotificationRuntimeMigration() Migration {
+	return Migration{
+		Version: "20261007001",
+		Name:    "notification_runtime",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS notification_devices (
+				id TEXT PRIMARY KEY,
+				space_id TEXT NOT NULL,
+				device_id TEXT NOT NULL,
+				platform TEXT NOT NULL,
+				device_name TEXT NOT NULL DEFAULT '',
+				app_version TEXT NOT NULL DEFAULT '',
+				os_version TEXT NOT NULL DEFAULT '',
+				locale TEXT NOT NULL DEFAULT '',
+				timezone TEXT NOT NULL DEFAULT '',
+				preferred_provider TEXT NOT NULL DEFAULT '',
+				fcm_token TEXT NOT NULL DEFAULT '',
+				apns_token TEXT NOT NULL DEFAULT '',
+				hms_token TEXT NOT NULL DEFAULT '',
+				mipush_token TEXT NOT NULL DEFAULT '',
+				oppo_token TEXT NOT NULL DEFAULT '',
+				vivo_token TEXT NOT NULL DEFAULT '',
+				honor_token TEXT NOT NULL DEFAULT '',
+				live_activity_push_to_start_token TEXT NOT NULL DEFAULT '',
+				push_enabled INTEGER NOT NULL DEFAULT 1,
+				message_push_enabled INTEGER NOT NULL DEFAULT 1,
+				execution_activity_enabled INTEGER NOT NULL DEFAULT 1,
+				call_push_enabled INTEGER NOT NULL DEFAULT 1,
+				reminder_push_enabled INTEGER NOT NULL DEFAULT 1,
+				preview_mode TEXT NOT NULL DEFAULT 'full',
+				sound_enabled INTEGER NOT NULL DEFAULT 1,
+				live_activity_supported INTEGER NOT NULL DEFAULT 0,
+				dynamic_island_supported INTEGER NOT NULL DEFAULT 0,
+				progress_style_supported INTEGER NOT NULL DEFAULT 0,
+				communication_supported INTEGER NOT NULL DEFAULT 0,
+				foreground INTEGER NOT NULL DEFAULT 0,
+				active_conversation_id TEXT NOT NULL DEFAULT '',
+				presence_updated_at DATETIME,
+				last_seen_at DATETIME,
+				token_updated_at DATETIME,
+				created_at DATETIME,
+				updated_at DATETIME,
+				revoked_at DATETIME
+			)`)
+			s.CreateIndex("idx_notification_device_identity", "notification_devices", []string{"space_id", "device_id", "platform"}, true)
+			s.CreateIndex("idx_notification_device_space", "notification_devices", []string{"space_id"}, false)
+			s.CreateIndex("idx_notification_device_last_seen", "notification_devices", []string{"last_seen_at"}, false)
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS notification_live_activities (
+				id TEXT PRIMARY KEY,
+				space_id TEXT NOT NULL,
+				device_id TEXT NOT NULL,
+				run_id TEXT NOT NULL,
+				activity_id TEXT NOT NULL DEFAULT '',
+				update_token TEXT NOT NULL DEFAULT '',
+				revision INTEGER NOT NULL DEFAULT 0,
+				created_at DATETIME,
+				updated_at DATETIME,
+				ended_at DATETIME
+			)`)
+			s.CreateIndex("idx_notification_live_run", "notification_live_activities", []string{"device_id", "run_id"}, true)
+			s.CreateIndex("idx_notification_live_space", "notification_live_activities", []string{"space_id"}, false)
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS notification_deliveries (
+				id TEXT PRIMARY KEY,
+				notification_id TEXT NOT NULL,
+				space_id TEXT NOT NULL,
+				device_id TEXT NOT NULL,
+				provider TEXT NOT NULL,
+				type TEXT NOT NULL,
+				status TEXT NOT NULL,
+				provider_message_id TEXT NOT NULL DEFAULT '',
+				error_code TEXT NOT NULL DEFAULT '',
+				error_message TEXT NOT NULL DEFAULT '',
+				retry_count INTEGER NOT NULL DEFAULT 0,
+				queued_at DATETIME,
+				sent_at DATETIME,
+				accepted_at DATETIME,
+				opened_at DATETIME,
+				expires_at DATETIME
+			)`)
+			s.CreateIndex("idx_notification_delivery_notification", "notification_deliveries", []string{"notification_id"}, false)
+			s.CreateIndex("idx_notification_delivery_space", "notification_deliveries", []string{"space_id"}, false)
+			s.CreateIndex("idx_notification_delivery_device", "notification_deliveries", []string{"device_id"}, false)
+			s.CreateIndex("idx_notification_delivery_status", "notification_deliveries", []string{"status"}, false)
+			s.CreateIndex("idx_notification_delivery_expires", "notification_deliveries", []string{"expires_at"}, false)
+			return nil
+		},
 	}
 }
 

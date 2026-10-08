@@ -15,10 +15,10 @@ func (h *Handler) RuntimeHealth(c *gin.Context) {
 func (h *Handler) RuntimeCapabilities(c *gin.Context) {
 	profile := runtimeprofile.CurrentProcessProfile()
 	capabilities := map[string]bool{
-		"gameMode":           false,
-		"devicePluginRuntime": false,
+		"gameMode":             false,
+		"devicePluginRuntime":  false,
 		"deviceExecutionPlane": false,
-		"localUIEndpoints":   false,
+		"localUIEndpoints":     false,
 	}
 
 	switch profile {
@@ -33,7 +33,7 @@ func (h *Handler) RuntimeCapabilities(c *gin.Context) {
 
 	util.SuccessResponse(c, gin.H{
 		"runtimeProfile": profile.String(),
-		"capabilities":  capabilities,
+		"capabilities":   capabilities,
 	})
 }
 
@@ -49,22 +49,20 @@ func (h *Handler) CheckDBIntegrity(c *gin.Context) {
 	util.SuccessResponse(c, h.service.CheckDBIntegrity())
 }
 
-func (h *Handler) CheckNow(c *gin.Context) { util.SuccessResponse(c, h.service.RunNow()) }
+func (h *Handler) CheckNow(c *gin.Context) { h.administratorAction(c, "check-now", "") }
 
-func (h *Handler) CleanupTemp(c *gin.Context) { util.SuccessResponse(c, h.service.CleanupTemp()) }
+func (h *Handler) CleanupTemp(c *gin.Context) { h.administratorAction(c, "temp-clean", "") }
 
 func (h *Handler) ValidateMode(c *gin.Context) { util.SuccessResponse(c, h.service.ValidateMode()) }
 
-func (h *Handler) RotateLogs(c *gin.Context) { util.SuccessResponse(c, h.service.RotateLogs()) }
+func (h *Handler) RotateLogs(c *gin.Context) { h.administratorAction(c, "logs-rotate", "") }
 
 func (h *Handler) LongRunningConfig(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetLongRunningConfig())
 }
 
 func (h *Handler) UpdateLongRunningConfig(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.UpdateLongRunningConfig(body))
+	h.updateAdministratorSettings(c, "long-running", true)
 }
 
 func (h *Handler) LongRunningStatus(c *gin.Context) {
@@ -74,7 +72,5 @@ func (h *Handler) LongRunningStatus(c *gin.Context) {
 func (h *Handler) GetRuntimeMode(c *gin.Context) { util.SuccessResponse(c, h.service.GetRuntimeMode()) }
 
 func (h *Handler) UpdateRuntimeMode(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.UpdateRuntimeMode(body))
+	h.updateAdministratorSettings(c, "runtime", true)
 }

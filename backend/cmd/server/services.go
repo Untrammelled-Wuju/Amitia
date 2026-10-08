@@ -70,6 +70,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
 	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding"
@@ -95,6 +96,8 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/nativebridge"
+	"github.com/u-ai/backend/internal/notificationruntime"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
@@ -208,6 +211,7 @@ type AppServices struct {
 	Artifact                     *ArtifactRuntime
 	Sync                         *syncpkg.Service
 	NativeBridgeRelay            *nativeBridgeRelay
+	NotificationRuntime          *notificationruntime.Runtime
 }
 
 type RuntimeOrchestrator interface {
@@ -1128,6 +1132,32 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	agentAdminController.SetMCPConnections(mcpCompatibility.Connections)
 
+	var notificationRuntime *notificationruntime.Runtime
+	if !runtimeProfile.IsDeviceAgent() {
+		var notificationBridge nativebridge.Bridge
+		preferNativeNotification := false
+		if runtimeProfile == runtimeprofile.ProfileLocal && bootstrap != nil {
+			if bridge := bootstrap.IOSNativeBridge(); bridge != nil {
+				notificationBridge = bridge
+			} else if bridge := bootstrap.AndroidNativeBridge(); bridge != nil {
+				notificationBridge = bridge
+			}
+			preferNativeNotification = notificationBridge != nil
+		}
+		notificationRuntime = notificationruntime.NewRuntime(ctx.DB, notificationBridge, preferNativeNotification)
+		if notificationRuntime.Repository() == nil {
+			return nil, fmt.Errorf("initialize notification runtime: repository unavailable")
+		}
+		if schemaErr := notificationRuntime.Repository().InitSchema(); schemaErr != nil {
+			return nil, fmt.Errorf("initialize notification runtime schema: %w", schemaErr)
+		}
+		notificationContext := context.Background()
+		if ctx != nil && ctx.Context != nil {
+			notificationContext = ctx.Context
+		}
+		notificationRuntime.Start(notificationContext)
+	}
+
 	var desktopPetOwnerMapper *desktopPetOwnerMapper
 	if runtimeProfile.IsDeviceAgent() {
 		desktopPetOwnerMapper, err = newDesktopPetOwnerMapper(ctx.DB)
@@ -1216,6 +1246,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Sync:                         syncService,
 		DB:                           ctx.DB,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
+		NotificationRuntime:          notificationRuntime,
 	}
 
 	dataPortability, dataPortabilityErr := buildDataPortabilityCoordinator(dataPortabilityDeps{
@@ -1308,11 +1339,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		deviceDispatcher := devicemeshagent.NewChainedRuntimeDispatcher(localRuntimeDispatcher, dispatcher)
 		if err := deviceMeshRuntime.AttachDeviceAgent(mcpDataDirectory(ctx), platformFromGOOS(goruntime.GOOS), deviceDispatcher, func(cred *devicemeshagent.StoredCredential) error {
+			auditContext := meshaudit.WithActor(context.Background(), meshaudit.Actor{SpaceID: localSpace.SpaceID(), DeviceID: physicalIdentity.DeviceID.String(), PrincipalType: "device_runtime", AuthMethod: "local_provider_authority", Realm: "local"})
 			if cred == nil {
-				_, _, err := deviceMeshRuntime.Coordination.BindProvider(context.Background(), localSpace.SpaceID())
+				_, _, err := deviceMeshRuntime.Coordination.BindProvider(auditContext, localSpace.SpaceID())
 				return err
 			}
-			if _, _, err := deviceMeshRuntime.Coordination.BindProvider(context.Background(), cred.SpaceID.String()); err != nil {
+			if _, _, err := deviceMeshRuntime.Coordination.BindProvider(auditContext, cred.SpaceID.String()); err != nil {
 				return err
 			}
 			return bindDesktopPetOwnerFromCredential(context.Background(), services, cred.SpaceID.String(), cred.DeviceID.String())
@@ -1320,6 +1352,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("initialize hybrid device Agent: %w", err)
 		}
 		deviceMeshRuntime.LocalHandler.SetLocalCoreID(localSpace.SpaceID())
+		if err := deviceMeshRuntime.StartSecurityAudit(sqlDB, localSpace.SpaceID()); err != nil {
+			return nil, fmt.Errorf("initialize durable device security audit: %w", err)
+		}
 		if setter, ok := services.Chat.(interface{ SetInferenceAuthority(chat.InferenceAuthority) }); ok {
 			setter.SetInferenceAuthority(deviceMeshRuntime.LocalHandler.LocalInferenceContext)
 		}

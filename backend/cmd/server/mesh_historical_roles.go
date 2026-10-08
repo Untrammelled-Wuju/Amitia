@@ -11,7 +11,7 @@ func (p *meshLocalDataPort) HistoricalRoles(ctx context.Context, scope coordinat
 		return nil, coordination.ErrWrongOwner
 	}
 	roles := map[string]string{}
-	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT DISTINCT role_id FROM kernel_device_owned_resources WHERE owner_id=? AND deleted=0 AND kind IN ('memory','working','profile','episodic','fact','vector','graph','summary') LIMIT 4097`, p.ownerID)
+	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT DISTINCT role_id FROM kernel_device_owned_resources WHERE owner_id=? AND deleted=0 AND kind IN ('memory','working','profile','episodic','fact','vector','graph','summary','project','conversation','message','continuity','tool-result') LIMIT 4097`, p.ownerID)
 	if err != nil {
 		return nil, err
 	}

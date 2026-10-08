@@ -5,8 +5,15 @@
         <h2>持续事项</h2>
         <p>跨会话保存“做到哪、下一步、在等什么”。执行仍由现有 Agent / Workflow / Device Runtime 负责。</p>
       </div>
-      <el-button type="primary" @click="createDialog = true">新建事项</el-button>
+      <el-button type="primary" :disabled="source !== 'current'" @click="openCreateDialog">新建事项</el-button>
     </div>
+
+    <el-select v-if="mesh.coordinated.value" v-model="source" placeholder="事项数据来源" @change="refresh">
+      <el-option label="当前数据所有者" value="current" />
+      <el-option v-for="role in historicalRoles" :key="role.id" :label="`原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
+    </el-select>
+    <el-alert v-if="source !== 'current'" title="旧设备持续事项仅供读取，不会在当前 Core 自动恢复执行，请在原设备管理。" type="info" :closable="false" />
+    <el-alert v-if="mesh.notice.value" :title="mesh.notice.value" type="warning" :closable="false" />
 
     <div class="toolbar">
 	  <el-select v-if="mesh.enabled.value" v-model="characterId" placeholder="选择工作角色" @change="refresh">
@@ -23,11 +30,11 @@
     <div v-else class="thread-grid">
       <button
         v-for="thread in threads"
-        :key="thread.id"
+        :key="`${thread.ownedDocument?.ownerId || ''}/${thread.id}`"
         type="button"
         class="thread-card"
         :class="{ active: selectedId === thread.id }"
-        @click="selectThread(thread.id)"
+        @click="selectThread(thread)"
       >
         <div class="thread-card-top">
           <strong>{{ thread.title }}</strong>
@@ -42,7 +49,7 @@
     <el-drawer v-model="detailOpen" size="min(720px, 92vw)" :title="detail?.thread.title || '持续事项'">
       <template v-if="detail">
 	    <el-alert v-if="detail.pausedReason" :title="detail.pausedReason" type="warning" :closable="false" show-icon />
-        <div class="detail-actions">
+        <div v-if="!detail.readOnly" class="detail-actions">
           <el-button v-if="detail.thread.status !== 'paused' && !terminal(detail.thread.status)" @click="setStatus('paused')">暂停</el-button>
           <el-button v-if="detail.thread.status === 'paused'" type="primary" :disabled="detail.lease?.state === 'unknown'" @click="setStatus('active')">恢复</el-button>
           <el-button v-if="detail.lease?.state === 'unknown'" :loading="saving" @click="confirmExecution('completed')">确认执行已完成</el-button>
@@ -72,8 +79,8 @@
             </el-table-column>
             <el-table-column label="操作" width="110">
               <template #default="scope">
-                <el-button v-if="scope.row.status === 'waiting'" link type="primary" @click="resolveWait(scope.row)">解除</el-button>
-                <el-button v-if="scope.row.status === 'waiting'" link type="danger" @click="cancelWait(scope.row)">取消</el-button>
+                <el-button v-if="!detail.readOnly && scope.row.status === 'waiting'" link type="primary" @click="resolveWait(scope.row)">解除</el-button>
+                <el-button v-if="!detail.readOnly && scope.row.status === 'waiting'" link type="danger" @click="cancelWait(scope.row)">取消</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -134,7 +141,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import {
@@ -151,6 +159,7 @@ import {
   type ContinuityThread,
   type ContinuityWait,
   type ThreadStatus,
+  type OwnedContinuityDocument,
 } from "./api";
 
 const loading = ref(false);
@@ -160,6 +169,12 @@ const saving = ref(false);
 const threads = ref<ContinuityThread[]>([]);
 const selectedId = ref("");
 const detail = ref<ContinuityDetail | null>(null);
+const detailIntent = ref<OwnedContinuityDocument>();
+const createIntent = ref<OwnedExecutionScope>();
+const source = ref("current");
+const historicalRoles = ref<Array<{ id: string; name: string }>>([]);
+let generation = 0;
+let providerTimer: ReturnType<typeof setInterval> | undefined;
 const detailOpen = ref(false);
 const query = ref("");
 const statusFilter = ref<ThreadStatus | "">("");
@@ -170,6 +185,7 @@ const waitForm = reactive({ type: "user", description: "", dueAt: "", conditionJ
 
 async function confirmExecution(outcome: "completed" | "abandoned") {
   const current = detail.value;
+  const original = detailIntent.value;
   if (!current?.lease) return;
   let result = "";
   try {
@@ -179,7 +195,7 @@ async function confirmExecution(outcome: "completed" | "abandoned") {
     } else await ElMessageBox.confirm("请先核实原设备状态。放弃后不会重复执行本次等待，已发生的操作仍然保留，事项保持暂停。", "放弃本次执行", { type: "warning" });
   } catch { return; }
   saving.value = true;
-  try { await confirmContinuityExecution(current.thread.id, current.lease.id, outcome, result); await reloadDetail(); }
+  try { await confirmContinuityExecution(current.thread.id, current.lease.id, outcome, result, original); await reloadDetail(); }
   catch (error) { ElMessage.error(error instanceof Error ? error.message : "执行确认失败"); }
   finally { saving.value = false; }
 }
@@ -196,62 +212,83 @@ function formatTime(value?: string) { if (!value) return "—"; return new Date(
 function eventSummary(raw: string) { try { const data = JSON.parse(raw || "{}"); return String(data.summary || data.error || ""); } catch { return ""; } }
 
 async function refresh() {
+  let ticket = ++generation;
   loading.value = true;
   try {
     if (await mesh.refresh()) {
       if (!mesh.roles.value.some((role) => role.id === characterId.value)) characterId.value = mesh.selectInitialRole();
       if (!characterId.value) { threads.value = []; return; }
     }
-    threads.value = await listContinuityThreads({ characterId: characterId.value || undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
-  } finally { loading.value = false; }
+    ticket = ++generation;
+    loading.value = true;
+    const roles = mesh.coordinated.value ? await mesh.historicalRoles(characterId.value) : [];
+    const items = await listContinuityThreads({ characterId: characterId.value || undefined, historicalRoleId: source.value.startsWith("history:") ? source.value.slice(8) : undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
+    if (ticket === generation) { historicalRoles.value = roles; threads.value = items; }
+  } catch (error) {
+    if (ticket === generation) { threads.value = []; ElMessage.error(error instanceof Error ? error.message : "持续事项加载失败"); }
+  } finally { if (ticket === generation) loading.value = false; }
 }
 
-async function selectThread(id: string) {
-  selectedId.value = id;
-  detail.value = await getContinuityThread(id);
-  detailOpen.value = true;
+async function selectThread(thread: ContinuityThread) {
+  const ticket = generation;
+  try {
+    const result = await getContinuityThread(thread.id, thread.ownedDocument);
+    if (ticket !== generation) return;
+    selectedId.value = thread.id;
+    detail.value = result;
+    detailIntent.value = result.executionScope ? result as OwnedContinuityDocument : undefined;
+    detailOpen.value = true;
+  } catch (error) { if (ticket === generation) ElMessage.error(error instanceof Error ? error.message : "持续事项详情加载失败"); }
 }
 
 async function reloadDetail() {
   if (!selectedId.value) return;
-  detail.value = await getContinuityThread(selectedId.value);
+  const ticket = generation;
+  const result = await getContinuityThread(selectedId.value, detailIntent.value);
+  if (ticket !== generation) return;
+  detail.value = result;
+  detailIntent.value = result.executionScope ? result as OwnedContinuityDocument : undefined;
   await refresh();
 }
 
 async function setStatus(status: ThreadStatus) {
   if (!detail.value) return;
   saving.value = true;
-  try { await updateContinuityThread(detail.value.thread.id, { status }); await reloadDetail(); }
+  try { await updateContinuityThread(detail.value.thread.id, { status }, detailIntent.value); await reloadDetail(); }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : "持续事项状态修改失败"); }
   finally { saving.value = false; }
 }
 
 async function resolveWait(wait: ContinuityWait) {
   if (!detail.value) return;
-  await resolveContinuityWait(detail.value.thread.id, wait.id, wait.autoResume);
-  await reloadDetail();
+  try { await resolveContinuityWait(detail.value.thread.id, wait.id, wait.autoResume, detailIntent.value); await reloadDetail(); }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : "等待条件解除失败"); }
 }
 
 async function cancelWait(wait: ContinuityWait) {
   if (!detail.value) return;
+  const current = detailIntent.value;
+  const threadId = detail.value.thread.id;
   try {
     await ElMessageBox.confirm("取消后不会触发自动恢复。", "取消等待条件", { type: "warning" });
   } catch {
     return;
   }
-  await cancelContinuityWait(detail.value.thread.id, wait.id);
-  await reloadDetail();
+  try { await cancelContinuityWait(threadId, wait.id, current); await reloadDetail(); }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : "等待条件取消失败"); }
 }
 
 async function createThread() {
   if (!createForm.title.trim()) { ElMessage.warning("请输入标题"); return; }
   saving.value = true;
   try {
-    const item = await createContinuityThread({ ...createForm, characterId: characterId.value || undefined });
+    const item = await createContinuityThread({ ...createForm, characterId: characterId.value || undefined }, createIntent.value);
     createDialog.value = false;
     createForm.title = ""; createForm.goal = ""; createForm.nextAction = "";
     await refresh();
-    await selectThread(item.id);
-  } finally { saving.value = false; }
+    await selectThread(item);
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "持续事项创建失败"); }
+  finally { saving.value = false; }
 }
 
 async function addWait() {
@@ -265,14 +302,51 @@ async function addWait() {
       type: waitForm.type, description: waitForm.description, condition,
       dueAt: waitForm.type === "time" ? waitForm.dueAt || undefined : undefined,
       resumeHint: waitForm.resumeHint,
-    });
+    }, detailIntent.value);
     waitDialog.value = false;
     waitForm.description = ""; waitForm.dueAt = ""; waitForm.conditionJson = "{}"; waitForm.resumeHint = "";
     await reloadDetail();
-  } finally { saving.value = false; }
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "等待条件保存失败"); }
+  finally { saving.value = false; }
 }
 
-onMounted(refresh);
+async function openCreateDialog() {
+  const ticket = generation;
+  createIntent.value = undefined;
+  try {
+    if (await mesh.refresh()) {
+      const result = await mesh.data("continuity", characterId.value);
+      if (ticket !== generation) return;
+      createIntent.value = result.executionScope;
+    }
+    if (ticket === generation) createDialog.value = true;
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "持续事项数据归属加载失败"); }
+}
+function invalidate() {
+  generation++;
+  threads.value = [];
+  detail.value = null;
+  detailIntent.value = undefined;
+  createIntent.value = undefined;
+  detailOpen.value = false;
+  createDialog.value = false;
+  waitDialog.value = false;
+  selectedId.value = "";
+  loading.value = false;
+}
+watch(() => [characterId.value, source.value, mesh.coreId.value, mesh.policy.value?.providerEpoch, mesh.policy.value?.modeRevision, mesh.policy.value?.permissionRevision], invalidate, { flush: "sync" });
+onMounted(() => {
+  void refresh();
+  window.addEventListener("amitia:runtime-connection-changed", invalidate);
+  window.addEventListener("amitia:execution-scope-changed", invalidate);
+  providerTimer = setInterval(() => { void mesh.refresh().catch(invalidate); }, 3000);
+});
+onUnmounted(() => {
+  if (providerTimer) clearInterval(providerTimer);
+  window.removeEventListener("amitia:runtime-connection-changed", invalidate);
+  window.removeEventListener("amitia:execution-scope-changed", invalidate);
+  invalidate();
+});
 </script>
 
 <style scoped>

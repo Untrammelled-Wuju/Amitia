@@ -3,7 +3,11 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div v-if="visible" class="fa-panel profile-summary-panel">
+  <div v-if="visible && owned.enabled.value" class="fa-panel profile-summary-panel">
+    <div class="profile-panel-header"><h4>用户画像与数据归属</h4><button class="profile-close-btn" type="button" aria-label="关闭用户画像" @click="close">✕</button></div>
+    <DeviceOwnedMemoryPanel embedded :visible="true" :character-id="characterId || ''" conversation-id="" initial-kind="profile" />
+  </div>
+  <div v-else-if="visible" class="fa-panel profile-summary-panel">
     <div class="profile-panel-header">
       <h4>用户画像摘要</h4>
       <button class="profile-close-btn" type="button" aria-label="关闭用户画像" @click="close">✕</button>
@@ -26,6 +30,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useProfile } from "@/composables/useProfile";
+import DeviceOwnedMemoryPanel from "@/components/DeviceOwnedMemoryPanel.vue";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 
 const props = defineProps<{
   visible: boolean;
@@ -33,6 +39,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ close: [] }>();
 const { profiles: profData, fetchProfiles, categoryLabel } = useProfile();
+const owned = useDeviceOwnedConversation();
 const loading = ref(false);
 const items = ref<any[]>([]);
 let requestVersion = 0;
@@ -48,7 +55,7 @@ function close() {
 }
 
 async function loadProfiles() {
-  if (!props.visible) return;
+  if (!props.visible || owned.enabled.value) return;
   const version = ++requestVersion;
   loading.value = true;
   try {

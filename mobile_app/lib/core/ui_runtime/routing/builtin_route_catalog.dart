@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/app_routes.dart';
 import '../../../app/route_transitions.dart';
 import '../../../features/chat/presentation/pages/chat_page.dart';
+import '../../../features/chat/presentation/pages/realtime_call_page.dart';
 import '../../../features/settings/presentation/pages/notification_settings_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
 import '../../../features/agent/presentation/pages/agent_page.dart';
@@ -111,7 +112,9 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) => slideFadePage(
       context: context,
       state: state,
-      child: SettingsCategoryPage(categoryId: state.pathParameters['categoryId']!),
+      child: SettingsCategoryPage(
+        categoryId: state.pathParameters['categoryId']!,
+      ),
     ),
   ),
   GoRoute(
@@ -122,6 +125,26 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         initialConversationId: state.uri.queryParameters['conversationId'],
         initialCharacterId: state.uri.queryParameters['characterId'],
         initialProjectId: state.uri.queryParameters['projectId'],
+      ),
+    ),
+  ),
+  GoRoute(
+    path: '/call/:conversationId',
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: RealtimeCallPage(
+        conversationId: state.pathParameters['conversationId']!,
+        characterName: state.uri.queryParameters['caller'] ?? 'Amitia',
+        initialMode: switch (state.uri.queryParameters['type']) {
+          'video' => RealtimeCallMode.video,
+          'screen' => RealtimeCallMode.screen,
+          _ => RealtimeCallMode.voice,
+        },
+        incomingCallId: state.uri.queryParameters['call'] ?? '',
+        initialAction: state.uri.queryParameters['action'] ?? '',
+        characterId: state.uri.queryParameters['characterId'] ?? '',
+        ownedInvitation: state.uri.queryParameters['owned'] == '1',
       ),
     ),
   ),
@@ -141,7 +164,12 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) => slideFadePage(
       context: context,
       state: state,
-      child: AgentTaskDetailPage(taskId: state.pathParameters['id']!),
+      child: AgentTaskDetailPage(
+        taskId: state.pathParameters['id']!,
+        initialRun: state.extra is Map
+            ? Map<String, dynamic>.from(state.extra as Map)
+            : null,
+      ),
     ),
   ),
   GoRoute(
@@ -297,7 +325,12 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) => slideFadePage(
       context: context,
       state: state,
-      child: ContinuityDetailPage(threadId: state.pathParameters['id']!),
+      child: ContinuityDetailPage(
+        threadId: state.pathParameters['id']!,
+        initialDocument: state.extra is Map
+            ? Map<String, dynamic>.from(state.extra as Map)
+            : null,
+      ),
     ),
   ),
   GoRoute(

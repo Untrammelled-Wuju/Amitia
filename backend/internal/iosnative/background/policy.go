@@ -134,10 +134,9 @@ func ValidateSubmission(req BackgroundSubmissionRequest) error {
 		if utf8.RuneCountInString(req.Subtitle) > MaxSubtitleLength {
 			return fmt.Errorf("%v: subtitle exceeds max %d chars", ErrBackgroundSubmissionFailed, MaxSubtitleLength)
 		}
-	} else {
-		if req.TaskRunID == "" && req.TaskDefinitionID == "" {
-			return fmt.Errorf("%v: either taskRunId or taskDefinitionId required", ErrBackgroundTaskBindingInvalid)
-		}
+	}
+	if err := ValidateTaskRunID(req.TaskRunID); err != nil {
+		return err
 	}
 
 	return nil

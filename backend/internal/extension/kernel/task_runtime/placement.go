@@ -57,8 +57,9 @@ func (id TaskExecutionAttemptID) String() string {
 }
 
 type TaskExecutionTarget struct {
-	ProviderID         capability.ProviderID         `json:"providerId,omitempty"`
-	ProviderInstanceID capability.ProviderInstanceID `json:"providerInstanceId,omitempty"`
+	SourceTaskDefinitionID string                        `json:"sourceTaskDefinitionId,omitempty"`
+	ProviderID             capability.ProviderID         `json:"providerId,omitempty"`
+	ProviderInstanceID     capability.ProviderInstanceID `json:"providerInstanceId,omitempty"`
 
 	SpaceID          runtimeidentity.SpaceID          `json:"spaceId,omitempty"`
 	DeviceID         runtimeidentity.DeviceID         `json:"deviceId,omitempty"`
@@ -71,7 +72,7 @@ type TaskExecutionTarget struct {
 }
 
 func (t TaskExecutionTarget) IsZero() bool {
-	return t.ProviderID.IsEmpty() &&
+	return t.SourceTaskDefinitionID == "" && t.ProviderID.IsEmpty() &&
 		t.ProviderInstanceID.IsEmpty() &&
 		t.SpaceID == "" &&
 		t.DeviceID == "" &&
@@ -107,19 +108,20 @@ func (t TaskExecutionTarget) HasCurrentConnectionBinding() bool {
 
 func (t TaskExecutionTarget) Normalize() TaskExecutionTarget {
 	return TaskExecutionTarget{
-		ProviderID:           capability.ParseProviderID(string(t.ProviderID)),
-		ProviderInstanceID:   capability.ParseProviderInstanceID(string(t.ProviderInstanceID)),
-		SpaceID:              runtimeidentity.ParseSpaceID(string(t.SpaceID)),
-		DeviceID:             runtimeidentity.ParseDeviceID(string(t.DeviceID)),
-		RuntimeID:            runtimeidentity.ParseRuntimeID(string(t.RuntimeID)),
-		RuntimeSessionID:     runtimeidentity.ParseRuntimeSessionID(string(t.RuntimeSessionID)),
-		ConnectionGeneration: t.ConnectionGeneration,
-		RuntimeInstanceID:    strings.TrimSpace(t.RuntimeInstanceID),
+		SourceTaskDefinitionID: strings.TrimSpace(t.SourceTaskDefinitionID),
+		ProviderID:             capability.ParseProviderID(string(t.ProviderID)),
+		ProviderInstanceID:     capability.ParseProviderInstanceID(string(t.ProviderInstanceID)),
+		SpaceID:                runtimeidentity.ParseSpaceID(string(t.SpaceID)),
+		DeviceID:               runtimeidentity.ParseDeviceID(string(t.DeviceID)),
+		RuntimeID:              runtimeidentity.ParseRuntimeID(string(t.RuntimeID)),
+		RuntimeSessionID:       runtimeidentity.ParseRuntimeSessionID(string(t.RuntimeSessionID)),
+		ConnectionGeneration:   t.ConnectionGeneration,
+		RuntimeInstanceID:      strings.TrimSpace(t.RuntimeInstanceID),
 	}
 }
 
 func (t TaskExecutionTarget) StableEqual(other TaskExecutionTarget) bool {
-	return t.ProviderID == other.ProviderID &&
+	return t.SourceTaskDefinitionID == other.SourceTaskDefinitionID && t.ProviderID == other.ProviderID &&
 		t.ProviderInstanceID == other.ProviderInstanceID &&
 		t.SpaceID == other.SpaceID &&
 		t.DeviceID == other.DeviceID &&

@@ -3,6 +3,7 @@ package migration
 import (
 	_ "embed"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -12,13 +13,47 @@ import (
 var baselineSQL string
 
 func ApplyBaseline(db *gorm.DB) error {
-	if err := ApplyInitialSQL(db, baselineSQL); err != nil {
+	initial, err := startupBaselineSQL(db)
+	if err != nil {
+		return err
+	}
+	if err := ApplyInitialSQL(db, initial); err != nil {
 		return err
 	}
 	if err := ensureOptionalBaselineIndexes(db); err != nil {
 		return err
 	}
 	return applyDesktopPetCatalogBaseline(db)
+}
+
+func startupBaselineSQL(db *gorm.DB) (string, error) {
+	if db == nil {
+		return "", fmt.Errorf("db is required")
+	}
+	var tables int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'assistant_turns'").Scan(&tables).Error; err != nil {
+		return "", err
+	}
+	if tables == 0 {
+		return baselineSQL, nil
+	}
+	var duplicateGroups int64
+	if err := db.Raw("SELECT COUNT(*) FROM (SELECT conversation_id, request_id FROM assistant_turns WHERE request_id <> '' GROUP BY conversation_id, request_id HAVING COUNT(*) > 1)").Scan(&duplicateGroups).Error; err != nil {
+		return "", err
+	}
+	if duplicateGroups == 0 {
+		return baselineSQL, nil
+	}
+	statements := splitSQLStatements(baselineSQL)
+	filtered := make([]string, 0, len(statements))
+	for _, statement := range statements {
+		match := createIndexPattern.FindStringSubmatch(strings.TrimSpace(statement))
+		if match != nil && unquoteIdentifier(match[2]) == "idx_assistant_turns_conv_request_unique" {
+			continue
+		}
+		filtered = append(filtered, statement)
+	}
+	return strings.Join(filtered, ";\n") + ";", nil
 }
 
 func ensureOptionalBaselineIndexes(db *gorm.DB) error {

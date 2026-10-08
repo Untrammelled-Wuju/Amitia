@@ -36,6 +36,7 @@ enum MessageType {
 
 class ChatMessage {
   final String id;
+  final String sourceConversationId;
   final String sourceOwnerId;
   final Map<String, dynamic>? sourceScope;
   final int? sourceRevision;
@@ -68,6 +69,7 @@ class ChatMessage {
 
   ChatMessage({
     required this.id,
+    this.sourceConversationId = '',
     this.sourceOwnerId = '',
     this.sourceScope,
     this.sourceRevision,

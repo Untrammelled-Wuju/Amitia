@@ -5,10 +5,15 @@ package system
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
+	"io"
 )
 
 const ComponentIDSettings = "settings.records"
@@ -152,39 +157,39 @@ func (c *SettingsBackupContributor) Import(ctx context.Context, req dataportabil
 }
 
 func (c *SettingsBackupContributor) RestoreSettings(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
 	rc, err := in.ReadComponent(ComponentIDSettings)
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
 
-	scanner := bufio.NewScanner(rc)
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var rec settingsRecordV1
-		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
-		}
-
-		var existing struct{ Key string }
-		c.DB.WithContext(ctx).Table("app_settings").Select("key").Where("key = ?", rec.Key).Scan(&existing)
-
-		if existing.Key != "" {
-			c.DB.WithContext(ctx).Table("app_settings").Where("key = ?", rec.Key).Updates(map[string]interface{}{
-				"value":      rec.Value,
-				"updated_at": rec.UpdatedAt,
-			})
-		} else {
-			c.DB.WithContext(ctx).Table("app_settings").Create(map[string]interface{}{
-				"key":        rec.Key,
-				"value":      rec.Value,
-				"updated_at": rec.UpdatedAt,
-			})
-		}
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return err
 	}
+	return configwrite.Transaction(c.DB.WithContext(ctx), func(tx *gorm.DB) error {
+		store := NewSettingsStore(tx)
+		scanner := bufio.NewScanner(bytes.NewReader(data))
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			var rec settingsRecordV1
+			if err := json.Unmarshal(line, &rec); err != nil {
+				return fmt.Errorf("设置备份记录无效: %w", err)
+			}
+			if rec.Key == "" {
+				return fmt.Errorf("设置备份缺少配置键")
+			}
+			if _, err := store.Upsert(rec.Key, rec.Value); err != nil {
+				return err
+			}
+		}
 
-	return scanner.Err()
+		return scanner.Err()
+	})
 }

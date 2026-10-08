@@ -791,6 +791,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.runtimePolicy.TaskRuntime {
 		taskCfg := task_runtime.DefaultTaskRuntimeConfig()
 		taskCfg.AuthoritySnapshots = scopeStore
+		taskCfg.SourcePermissionGuard = task_runtime.NewSourceTaskPermissionGuard(permBroker)
+		taskCfg.SourceApprovalRecorder = permBroker
 		if b.taskOwnershipBinding != nil {
 			b.taskOwnershipBinding.Apply(&taskCfg)
 		}
@@ -803,7 +805,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			}
 			if definition.InstalledGeneration > 0 {
 				installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(definition.ExtensionID))
-				if err != nil || installation.Generation != definition.InstalledGeneration {
+				if err != nil || installation.Generation != definition.InstalledGeneration || installation.InstallationState != domain.InstallationStateInstalled || installation.EnablementState != domain.EnablementEnabled {
 					return fmt.Errorf("任务安装版本已变化，请确认后重新创建任务")
 				}
 			}
@@ -814,6 +816,28 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				return "", err
 			}
 			return task_runtime.ResolveTaskEntry(ctx, resolveExtensionBundlePath(b.extRoot, definition.ExtensionID), definition)
+		}
+		taskCfg.InstalledExecutionLease = func(ctx context.Context, definition *task_runtime.TaskDefinition) (string, func(), error) {
+			if definition == nil || definition.InstalledGeneration < 1 || definition.BundleHash == "" {
+				return "", nil, fmt.Errorf("设备任务缺少固定插件文件树，请重新安装插件")
+			}
+			if err := taskCfg.InstalledDefinitionValidator(ctx, definition); err != nil {
+				return "", nil, err
+			}
+			installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(definition.ExtensionID))
+			if err != nil {
+				return "", nil, err
+			}
+			generationID, _ := installation.Metadata["generationId"].(string)
+			root, release, err := packageGenerationStore.AcquireCurrentExecution(ctx, definition.ExtensionID, generationID, definition.BundleHash)
+			if err != nil {
+				return "", nil, err
+			}
+			if err := taskCfg.InstalledDefinitionValidator(ctx, definition); err != nil {
+				release()
+				return "", nil, err
+			}
+			return root, release, nil
 		}
 		taskRuntimeService = task_runtime.NewTaskRuntimeService(taskRepo, taskCfg)
 		taskHandler = task_runtime.NewTaskRuntimeHandler(taskRuntimeService)

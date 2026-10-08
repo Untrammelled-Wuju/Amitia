@@ -9,6 +9,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/role_authority.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../widgets/character_generation_chat.dart';
@@ -65,6 +66,7 @@ class _CharacterCardWorkshopPageState
   bool _saving = false;
   bool _importing = false;
   bool _exporting = false;
+  String _roleAuthority = '';
 
   bool get _inEditor => widget.creating || widget.character != null;
 
@@ -324,7 +326,9 @@ class _CharacterCardWorkshopPageState
   }
 
   Future<void> _selectCharacter(CharacterDto character) async {
+    if (_saving) return;
     setState(() {
+      _roleAuthority = character.roleAuthority;
       _selectedId = character.id;
       _loading = true;
       _cardLoadFailed = false;
@@ -352,14 +356,19 @@ class _CharacterCardWorkshopPageState
       ...character.personalityConfig,
     };
     _description.text = character.description;
+    final generation = _generationSession;
     try {
       final data = await ref
           .read(backendServiceProvider)
           .get<Map<String, dynamic>>(
             '/api/characters/${character.id}/card-data',
+            headers: roleAuthorityHeaders(_roleAuthority),
             fromJson: (value) => Map<String, dynamic>.from(value as Map),
           );
-      if (!mounted || _selectedId != character.id) return;
+      if (!mounted ||
+          _selectedId != character.id ||
+          generation != _generationSession)
+        return;
       _cardData = data ?? <String, dynamic>{};
       _description.text = (data?['description'] ?? character.description)
           .toString();
@@ -382,12 +391,16 @@ class _CharacterCardWorkshopPageState
               .join(', ') ??
           '';
     } catch (error) {
-      if (mounted && _selectedId == character.id) {
+      if (mounted &&
+          _selectedId == character.id &&
+          generation == _generationSession) {
         _cardLoadFailed = true;
         amitiaSnackBar(context, '角色卡加载失败：$error');
       }
     } finally {
-      if (mounted && _selectedId == character.id) {
+      if (mounted &&
+          _selectedId == character.id &&
+          generation == _generationSession) {
         setState(() => _loading = false);
       }
     }
@@ -402,6 +415,15 @@ class _CharacterCardWorkshopPageState
     setState(() => _saving = true);
     try {
       final api = ref.read(backendServiceProvider);
+      final authority = _roleAuthority;
+      final intent = roleAuthorityHeaders(authority);
+      final cardPayload = {
+        ..._cardData,
+        ..._draftSnapshot(),
+        'systemPrompt': _systemPrompt.text.trim(),
+      };
+      final avatarPath = _pendingAvatarPath;
+      final activate = _isActive;
       final payload = {
         for (final entry in _profile.entries)
           entry.key: entry.value.text.trim(),
@@ -412,17 +434,19 @@ class _CharacterCardWorkshopPageState
       if (_selectedId.isEmpty) {
         final created = await ref
             .read(characterServiceProvider)
-            .create(payload);
+            .create(payload, roleAuthority: authority);
         if (created == null || created.id.isEmpty) throw StateError('角色创建失败');
         if (!mounted) return;
         setState(() => _selectedId = created.id);
       } else {
-        await ref.read(characterServiceProvider).update(_selectedId, payload);
+        await ref
+            .read(characterServiceProvider)
+            .update(_selectedId, payload, roleAuthority: authority);
       }
-      if (_pendingAvatarPath != null) {
+      if (avatarPath != null) {
         final uploaded = await ref
             .read(characterDetailServiceProvider)
-            .uploadAvatar(_selectedId, _pendingAvatarPath!);
+            .uploadAvatar(_selectedId, avatarPath, roleAuthority: authority);
         final avatarUrl = uploaded?['avatarUrl'];
         if (avatarUrl is! String || avatarUrl.isEmpty) {
           throw StateError('头像上传未返回有效地址');
@@ -433,30 +457,14 @@ class _CharacterCardWorkshopPageState
       }
       await api.put<Map<String, dynamic>>(
         '/api/characters/$_selectedId/card-data',
-        data: {
-          ..._cardData,
-          'description': _description.text.trim(),
-          'scenario': _scenario.text.trim(),
-          'systemPrompt': _systemPrompt.text.trim(),
-          'exampleMessages': _exampleMessages.text.trim(),
-          'alternateGreetings': _alternateGreetings.text
-              .split('\n')
-              .map((item) => item.trim())
-              .where((item) => item.isNotEmpty)
-              .toList(),
-          'postHistoryInstructions': _postHistory.text.trim(),
-          'creator': _creator.text.trim(),
-          'characterVersion': _characterVersion.text.trim(),
-          'tags': _tags.text
-              .split(',')
-              .map((item) => item.trim())
-              .where((item) => item.isNotEmpty)
-              .toList(),
-        },
+        data: cardPayload,
+        headers: intent,
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
-      if (_isActive) {
-        await ref.read(characterServiceProvider).setActive(_selectedId);
+      if (activate) {
+        await ref
+            .read(characterServiceProvider)
+            .setActive(_selectedId, roleAuthority: authority);
       }
       ref.invalidate(characterListProvider);
       await ref.read(characterListProvider.future);
@@ -478,10 +486,12 @@ class _CharacterCardWorkshopPageState
   }
 
   void _newDraft() {
+    if (_saving) return;
     setState(() {
       _creating = true;
       _editing = false;
       _selectedId = '';
+      _roleAuthority = '';
       _generationSession++;
       _isActive = true;
       _pendingAvatarPath = null;
@@ -503,6 +513,20 @@ class _CharacterCardWorkshopPageState
       }
       _personalityConfig = {...characterPersonalityDefaults};
     });
+    final generation = _generationSession;
+    ref
+        .read(characterServiceProvider)
+        .authority()
+        .then((authority) {
+          if (mounted &&
+              generation == _generationSession &&
+              _selectedId.isEmpty)
+            setState(() => _roleAuthority = authority);
+        })
+        .catchError((Object error) {
+          if (mounted && generation == _generationSession)
+            amitiaSnackBar(context, '无法确认角色归属：$error');
+        });
   }
 
   Map<String, dynamic> _draftSnapshot() => {
@@ -611,22 +635,34 @@ class _CharacterCardWorkshopPageState
         ),
       );
       if (confirmed != true) return;
+      final authority = (previewResult?['roleAuthority'] ?? '').toString();
+      roleAuthorityHeaders(authority);
       final result = await api.postMultipart<Map<String, dynamic>>(
         '/api/characters/import-card/confirm',
+        fields: {'roleAuthority': authority},
         files: {
           'card': [path],
         },
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
-      ref.invalidate(characterListProvider);
       final characterId = (result?['characterId'] ?? '').toString();
+      if (result == null || characterId.isEmpty) {
+        throw StateError('角色卡导入未返回有效的角色，请刷新后确认');
+      }
+      ref.invalidate(characterListProvider);
       if (characterId.isNotEmpty && mounted) {
         setState(() => _selectedId = characterId);
         final chars = await ref.read(characterListProvider.future);
         final imported = chars
-            .where((item) => item.id == characterId)
+            .where(
+              (item) =>
+                  item.id == characterId && item.roleAuthority == authority,
+            )
             .firstOrNull;
-        if (imported != null) await _openEditor(character: imported);
+        if (imported == null) {
+          throw StateError('角色已导入，但当前角色数据归属已变化，请重新加载');
+        }
+        await _openEditor(character: imported);
       }
       if (mounted) amitiaSnackBar(context, '角色卡导入成功');
     } catch (error) {

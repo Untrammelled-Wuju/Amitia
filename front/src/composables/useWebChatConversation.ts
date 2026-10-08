@@ -5,6 +5,9 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "./useApi";
 import { useCachedApi } from "./useCachedApi";
 import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
+import { useChatStore } from "@/stores/chat";
+import { useConversationWorkspace } from "./useConversationWorkspace";
+import { ownedProjectReference } from "@/runtime/owned-project-reference";
 
 export function useWebChatConversation(
   messages: Ref<any[]>,
@@ -20,6 +23,8 @@ export function useWebChatConversation(
 ) {
   const { get, del } = useApi();
   const owned = useDeviceOwnedConversation();
+  const chatStore = useChatStore();
+  const { applySnapshotWorkspace } = useConversationWorkspace();
   const { saveCache } = useCachedApi();
 
   const characters = ref<any[]>([]);
@@ -54,10 +59,11 @@ export function useWebChatConversation(
       return;
     }
     selectCharacter(c);
-    if (owned.enabled.value) { disconnectSSE(); convId.value = ""; messages.value = []; convTitle.value = ""; }
+    if (owned.enabled.value) { owned.stopLocal("调用角色已切换，原回复已中断，将使用新角色开始对话"); disconnectSSE(); convId.value = ""; messages.value = []; convTitle.value = ""; }
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
     await fetchConversations();
+    if (owned.enabled.value) await chatStore.fetchSidebar();
   }
 
   async function loadCharacterConversation() {
@@ -78,6 +84,10 @@ export function useWebChatConversation(
       if (convId.value !== conversationID || characterId.value !== selectedRole) return;
       messages.value = owned.messages(result);
       const conversation = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body;
+      const historicalConversation = result.historicalSnapshot?.resources.find((resource) => resource.kind === "conversation")?.body;
+      const grouped = conversation || historicalConversation;
+      const owner = conversation ? result.snapshot.ownerId : result.historicalSnapshot?.ownerId;
+      applySnapshotWorkspace(null, grouped?.projectId && owner ? ownedProjectReference(owner, grouped.projectId) : "");
       convTitle.value = conversation?.title || "历史对话";
       hasMoreHistory.value = owned.hasMore(conversationID, characterId.value);
       return;
@@ -155,9 +165,8 @@ export function useWebChatConversation(
     if (!id) return "";
     try {
       if (owned.enabled.value) {
-        const result = await owned.query(id, characterId.value);
-        const content = result.snapshot.resources.find((resource) => resource.kind === "summary")?.body?.content;
-        return String(content?.summary || content?.text || (typeof content === "string" ? content : result.snapshot.legacySummary?.summaryText || result.snapshot.legacySummary?.summary_text || "")).trim();
+        const result = await owned.conversationSummary(id, characterId.value);
+        return String(result?.summaryText || result?.summary_text || "").trim();
       }
       const response = await get<any>(
         `/api/chats/conversations/${encodeURIComponent(id)}/summary`,

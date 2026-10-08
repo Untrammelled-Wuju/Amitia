@@ -26,6 +26,10 @@ type OwnedTaskDispatchOutcomeExecutor interface {
 	ExecuteOwnedDispatchOutcome(context.Context, protocol.TaskDispatchPayload) (protocol.OwnedTaskExecutionOutcome, error)
 }
 
+type OwnedTaskPauseExecutor interface {
+	PauseOwnedDispatch(context.Context, protocol.TaskPausePayload) error
+}
+
 type defaultTaskWorker struct {
 	client       *MeshClient
 	taskRuntime  TaskRuntimeExecutor
@@ -76,19 +80,22 @@ func (w *defaultTaskWorker) ExecuteTask(ctx context.Context, dispatch protocol.T
 	}
 	w.cancelFns[dispatch.TaskRunID] = taskCancellation{dispatch.AttemptID, dispatch.LeaseID, cancel}
 	w.mu.Unlock()
-	if err := w.client.awaitTaskLease(taskCtx, dispatch, 0); err != nil {
+	lease := &taskLeaseTimer{cancel: cancel}
+	if err := w.client.awaitTaskLease(taskCtx, dispatch, 0, lease.Confirm); err != nil {
 		w.mu.Lock()
 		if entry, exists := w.cancelFns[dispatch.TaskRunID]; exists && entry.attempt == dispatch.AttemptID && entry.lease == dispatch.LeaseID {
 			delete(w.cancelFns, dispatch.TaskRunID)
 		}
 		w.mu.Unlock()
 		cancel()
+		lease.Close()
 		return err
 	}
 
-	go w.runHeartbeat(taskCtx, dispatch)
+	go w.runHeartbeat(taskCtx, dispatch, lease)
 	go func() {
 		defer cancel()
+		defer lease.Close()
 		w.runTask(taskCtx, dispatch)
 	}()
 
@@ -110,10 +117,7 @@ func (w *defaultTaskWorker) CancelTask(ctx context.Context, taskRunID, attemptID
 		entry.cancel()
 		return nil
 	}
-	if w.client != nil {
-		w.client.sendTaskComplete(taskRunID, attemptID, leaseID, false, nil, "task was not running on device")
-	}
-	return nil
+	return fmt.Errorf("设备缺少可确认的当前任务执行，不能确认任务已停止")
 }
 
 func (w *defaultTaskWorker) runTask(ctx context.Context, dispatch protocol.TaskDispatchPayload) {
@@ -154,14 +158,37 @@ func (w *defaultTaskWorker) runTask(ctx context.Context, dispatch protocol.TaskD
 	}
 	if _, full := w.taskRuntime.(OwnedTaskDispatchOutcomeExecutor); full && len(dispatch.OwnedExecutionScope) > 0 {
 		var outcome protocol.OwnedTaskExecutionOutcome
-		if json.Unmarshal(result, &outcome) != nil || outcome.ResultArtifactID == "" && !json.Valid(outcome.Result) || outcome.ResultArtifactID != "" && len(outcome.Result) != 0 {
+		if json.Unmarshal(result, &outcome) != nil || outcome.PausedCheckpointVersion < 0 || outcome.PausedCheckpointVersion > 9007199254740991 || outcome.PausedCheckpointVersion > 0 && (len(outcome.Result) != 0 || outcome.ResultArtifactID != "") || outcome.PausedCheckpointVersion == 0 && (outcome.ResultArtifactID == "" && !json.Valid(outcome.Result) || outcome.ResultArtifactID != "" && len(outcome.Result) != 0) {
 			w.client.sendOwnedTaskUnknown(dispatch)
 			return
+		}
+		if outcome.PausedCheckpointVersion > 0 {
+			w.mu.Lock()
+			if entry, exists := w.cancelFns[dispatch.TaskRunID]; exists && entry.attempt == dispatch.AttemptID && entry.lease == dispatch.LeaseID {
+				delete(w.cancelFns, dispatch.TaskRunID)
+				delete(w.progressSeq, dispatch.TaskRunID)
+				delete(w.heartbeatSeq, dispatch.TaskRunID)
+			}
+			w.mu.Unlock()
 		}
 		w.client.sendOwnedTaskComplete(dispatch, outcome)
 		return
 	}
 	w.client.sendTaskComplete(dispatch.TaskRunID, dispatch.AttemptID, dispatch.LeaseID, true, result, "", dispatch)
+}
+
+func (w *defaultTaskWorker) PauseTask(ctx context.Context, request protocol.TaskPausePayload) error {
+	w.mu.Lock()
+	entry, exists := w.cancelFns[request.TaskRunID]
+	w.mu.Unlock()
+	if !exists || entry.attempt != request.AttemptID || entry.lease != request.LeaseID {
+		return fmt.Errorf("任务暂停请求不属于当前设备执行")
+	}
+	executor, supported := w.taskRuntime.(OwnedTaskPauseExecutor)
+	if !supported {
+		return fmt.Errorf("设备任务执行器不支持已确认暂停")
+	}
+	return executor.PauseOwnedDispatch(ctx, request)
 }
 
 func (w *defaultTaskWorker) executeAuthorizedTask(ctx context.Context, dispatch protocol.TaskDispatchPayload) (json.RawMessage, error) {
@@ -350,7 +377,7 @@ func (w *defaultTaskWorker) dispatchTaskExecution(ctx context.Context, taskType 
 	}
 }
 
-func (w *defaultTaskWorker) runHeartbeat(ctx context.Context, dispatch protocol.TaskDispatchPayload) {
+func (w *defaultTaskWorker) runHeartbeat(ctx context.Context, dispatch protocol.TaskDispatchPayload, lease *taskLeaseTimer) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -363,7 +390,7 @@ func (w *defaultTaskWorker) runHeartbeat(ctx context.Context, dispatch protocol.
 			seq := w.heartbeatSeq[dispatch.TaskRunID]
 			w.mu.Unlock()
 			if w.client != nil {
-				if err := w.client.awaitTaskLease(ctx, dispatch, seq); err != nil {
+				if err := w.client.awaitTaskLease(ctx, dispatch, seq, lease.Confirm); err != nil {
 					_ = w.CancelTask(ctx, dispatch.TaskRunID, dispatch.AttemptID, dispatch.LeaseID)
 					return
 				}

@@ -13,6 +13,7 @@ import { getApiBaseURL, getDeploymentConfig, isCurrentDevicePaired } from "../ru
 import { getWebAccessStatus, type WebAccessStatus } from "../runtime/web-access";
 import { isRuntimeRouteAvailable, shouldUseHashRouting } from "../runtime/runtime-capabilities";
 import { builtinBusinessRoutes } from "./builtinRoutes";
+import { canSkipCoreOnboarding } from "../runtime/core-onboarding-access";
 
 const ONBOARDING_CACHE_TTL = 30_000;
 let onboardingCompleted: boolean | null = null;
@@ -98,12 +99,13 @@ router.beforeEach(async (to) => {
 
   const isPublic = PUBLIC_PATHS.has(to.path);
   const completed = await readOnboardingCompleted(false);
+  const deviceOnboardingComplete = completed !== true && await canSkipCoreOnboarding();
 
   if (to.path === "/onboarding") {
     // A Cloud browser may need one-time password setup or Device Mesh pairing
     // even when the shared Space onboarding was completed on another device.
     if (webAccess?.configured === false || webDevicePaired === false) return true;
-    if (completed === true) return "/chat";
+    if (completed === true || deviceOnboardingComplete) return "/chat";
     return true;
   }
 
@@ -111,7 +113,7 @@ router.beforeEach(async (to) => {
     return "/onboarding";
   }
 
-  if (!isPublic && completed === false) {
+  if (!isPublic && completed === false && !deviceOnboardingComplete) {
     return "/onboarding";
   }
 

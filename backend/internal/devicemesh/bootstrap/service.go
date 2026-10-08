@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"time"
 
 	"github.com/google/uuid"
@@ -207,6 +208,10 @@ func (s *Service) Exchange(ctx context.Context, rawTicket string, deviceID runti
 
 	if err := s.trustFn(ctx, tx, deviceID); err != nil {
 		return "", "", time.Time{}, fmt.Errorf("device: mark trusted: %w", err)
+	}
+	actorContext := meshaudit.WithActor(ctx, meshaudit.Actor{SpaceID: ticket.SpaceID.String(), DeviceID: deviceID.String(), PrincipalType: "trusted_device", AuthMethod: "bootstrap_ticket", Realm: "mesh"})
+	if err := meshaudit.QueueTx(actorContext, tx, ticket.SpaceID.String(), deviceID.String(), "device_mesh.device_paired", meshaudit.Details{}); err != nil {
+		return "", "", time.Time{}, err
 	}
 
 	if err := tx.Commit(); err != nil {

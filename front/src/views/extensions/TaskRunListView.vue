@@ -72,7 +72,7 @@
             <button
               class="run-link"
               type="button"
-              @click="openDetail(row.taskRunId)"
+              @click="openDetail(row)"
             >
               {{ shortId(row.taskRunId) }}
             </button>
@@ -141,7 +141,7 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="actions">
-              <el-button size="small" @click="openDetail(row.taskRunId)"
+              <el-button size="small" @click="openDetail(row)"
                 >详情</el-button
               >
               <el-button
@@ -149,7 +149,7 @@
                 type="danger"
                 plain
                 :loading="actingId === row.taskRunId"
-                :disabled="!canCancel(row.status)"
+                :disabled="row.readOnly === true || !canCancel(row.status)"
                 @click="onCancel(row)"
                 >取消</el-button
               >
@@ -158,7 +158,7 @@
                 type="primary"
                 plain
                 :loading="actingId === row.taskRunId"
-                :disabled="!canRetry(row.status)"
+                :disabled="row.readOnly === true || !canRetry(row.status)"
                 @click="onRetry(row)"
                 >重试</el-button
               >
@@ -183,6 +183,7 @@
     <TaskRunDetailView
       v-model="detailVisible"
       :task-run-id="selectedTaskRunId"
+      :initial-run="selectedTask"
       @refresh="load"
     />
   </div>
@@ -205,6 +206,7 @@ const currentPage = ref(1);
 const pageSize = ref(20);
 const detailVisible = ref(false);
 const selectedTaskRunId = ref("");
+const selectedTask = ref<TaskRun>();
 const filters = reactive<{
   extensionId: string;
   status: TaskRunStatus | "";
@@ -265,8 +267,9 @@ function search() {
   load();
 }
 
-function openDetail(taskRunId: string) {
-  selectedTaskRunId.value = taskRunId;
+function openDetail(task: TaskRun) {
+  selectedTaskRunId.value = task.taskRunId;
+  selectedTask.value = task;
   detailVisible.value = true;
 }
 
@@ -290,7 +293,7 @@ async function onCancel(task: TaskRun) {
   }
   actingId.value = task.taskRunId;
   try {
-    await cancelTask(task.taskRunId);
+    await cancelTask(task.taskRunId, task);
     ElMessage.success("已请求取消任务");
     await load();
   } catch (error: any) {
@@ -303,7 +306,7 @@ async function onCancel(task: TaskRun) {
 async function onRetry(task: TaskRun) {
   actingId.value = task.taskRunId;
   try {
-    await retryTask(task.taskRunId);
+    await retryTask(task.taskRunId, task);
     ElMessage.success("已重新提交任务");
     await load();
   } catch (error: any) {

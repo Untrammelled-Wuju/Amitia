@@ -9,6 +9,7 @@
       >
         <el-icon><FolderOpened /></el-icon>
         <span>{{ project.name }}</span>
+        <small v-if="project.readOnly">旧设备 · 只读</small>
         <small v-if="!project.available">不可用</small>
       </button>
       <button
@@ -16,7 +17,7 @@
         class="project-action project-create-action"
         title="在项目中新建对话"
         aria-label="在项目中新建对话"
-        :disabled="!project.available"
+        :disabled="!project.available || project.readOnly"
         @click.stop="emit('createConversation', project)"
       >
         <el-icon><Plus /></el-icon>
@@ -31,12 +32,12 @@
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="newChat" :disabled="!project.available">新建对话</el-dropdown-item>
-            <el-dropdown-item command="rename">重命名项目</el-dropdown-item>
-            <el-dropdown-item command="changeRoot">更换根目录</el-dropdown-item>
-            <el-dropdown-item command="pin">{{ project.pinnedAt ? "取消置顶" : "置顶" }}</el-dropdown-item>
-            <el-dropdown-item command="open" :disabled="!project.available">在资源管理器中打开</el-dropdown-item>
-            <el-dropdown-item command="remove" divided>移除项目</el-dropdown-item>
+            <el-dropdown-item command="newChat" :disabled="!project.available || project.readOnly">新建对话</el-dropdown-item>
+            <el-dropdown-item v-if="!project.readOnly" command="rename">重命名项目</el-dropdown-item>
+            <el-dropdown-item v-if="!project.logical" command="changeRoot">更换根目录</el-dropdown-item>
+            <el-dropdown-item v-if="!project.readOnly" command="pin">{{ project.pinnedAt ? "取消置顶" : "置顶" }}</el-dropdown-item>
+            <el-dropdown-item v-if="!project.logical" command="open" :disabled="!project.available">在资源管理器中打开</el-dropdown-item>
+            <el-dropdown-item v-if="!project.readOnly" command="remove" divided>移除项目</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../backend_access/business_backend_unavailable.dart';
 import '../runtime/status/runtime_status_snapshot.dart';
 import 'backend_service_api.dart';
+import 'core_configuration_intent.dart';
 
 typedef BackendServiceApiResolver = BackendServiceApi? Function();
 typedef BusinessApiAvailabilityResolver =
@@ -31,14 +32,21 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   final BusinessApiAvailabilityWaiter? _waitForAvailability;
 
   Future<BackendServiceApi> _requireCurrentApi() async {
+    final intent = CoreConfigurationIntent.current;
     final status = _currentStatus();
     final api = _currentApi();
+    if (intent != null) {
+      intent.validateGeneration(api?.generation ?? 0);
+    }
     if (_canUseApi(status, api)) return api!;
     final waiter = _waitForAvailability;
     if (waiter != null) {
       await waiter();
       final readyStatus = _currentStatus();
       final readyApi = _currentApi();
+      if (intent != null) {
+        intent.validateGeneration(readyApi?.generation ?? 0);
+      }
       if (_canUseApi(readyStatus, readyApi)) return readyApi!;
     }
     final error = BusinessBackendUnavailable(

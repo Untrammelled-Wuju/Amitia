@@ -284,7 +284,12 @@ func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan)
 			terminal := conversationstream.AgentUIEvent{
 				ConversationID: plan.Conversation, RequestID: plan.Request.RequestID, ExecutionID: turn.ExecutionID,
 				TurnID: turn.ID, TurnSequence: turn.Sequence, Type: "turn.completed", Status: assistantTurnStatusCompleted,
-				Payload: map[string]any{"messageIds": result.MessageIDs, "recoveryCheckpoint": true},
+				Payload: map[string]any{
+					"messageIds":         result.MessageIDs,
+					"recoveryCheckpoint": true,
+					"source":             strings.TrimSpace(plan.Source),
+					"totalTokens":        plan.TotalTokens,
+				},
 			}
 			if result.TextMessageID != "" {
 				terminal.MessageID = result.TextMessageID

@@ -170,12 +170,13 @@ func TestLocalCredentialStore_ConcurrentValidateAndRotate(t *testing.T) {
 		t.Fatalf("NewLocalCredentialStore failed: %v", err)
 	}
 
+	initialToken := store.token
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			_ = store.Validate(store.token)
+			_ = store.Validate(initialToken)
 		}()
 		go func(i int) {
 			defer wg.Done()

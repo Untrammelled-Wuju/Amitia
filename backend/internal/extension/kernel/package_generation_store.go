@@ -22,6 +22,7 @@ var (
 	ErrPackageGenerationConflict = errors.New("package generation conflict")
 	ErrPackageGenerationCAS      = errors.New("package generation current compare-and-swap failed")
 	ErrPackageGenerationUnsafe   = errors.New("package generation path unsafe")
+	ErrPackageGenerationInUse    = errors.New("插件安装代次仍有任务执行，暂不能移除文件")
 )
 
 type PackageGenerationCurrent struct {
@@ -59,16 +60,36 @@ type PackageQuarantinedCurrent struct {
 
 type PackageGenerationStore struct {
 	root string
-	mu   sync.Mutex
+	*packageGenerationRuntimeState
 }
 
+type packageGenerationRuntimeState struct {
+	mu      sync.Mutex
+	readers map[string]int
+}
+
+var packageGenerationStates sync.Map
+
 func NewPackageGenerationStore(root string) *PackageGenerationStore {
-	return &PackageGenerationStore{root: root}
+	key := root
+	if root != "" {
+		if absolute, err := filepath.Abs(root); err == nil {
+			key = absolute
+		}
+		if resolved, err := filepath.EvalSymlinks(key); err == nil {
+			key = resolved
+		}
+	}
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	state, _ := packageGenerationStates.LoadOrStore(key, &packageGenerationRuntimeState{readers: make(map[string]int)})
+	return &PackageGenerationStore{root: root, packageGenerationRuntimeState: state.(*packageGenerationRuntimeState)}
 }
 
 func NewPackageGenerationStoreForArtifacts(store *PackageArtifactStore) *PackageGenerationStore {
 	if store == nil {
-		return &PackageGenerationStore{}
+		return NewPackageGenerationStore("")
 	}
 	return NewPackageGenerationStore(store.root)
 }
@@ -357,6 +378,9 @@ func (s *PackageGenerationStore) QuarantineGeneration(ctx context.Context, curre
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.readers[current.ExtensionID+"\x00"+current.GenerationID] > 0 {
+		return "", ErrPackageGenerationInUse
+	}
 	active, readErr := s.readCurrentLocked(current.ExtensionID)
 	if readErr == nil && active.GenerationID == current.GenerationID {
 		return "", fmt.Errorf("%w: active generation cannot be quarantined", ErrPackageGenerationConflict)
@@ -408,6 +432,9 @@ func (s *PackageGenerationStore) RestoreQuarantinedGeneration(ctx context.Contex
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.readers[current.ExtensionID+"\x00"+current.GenerationID] > 0 {
+		return ErrPackageGenerationInUse
+	}
 	if _, statErr := os.Stat(generation); statErr == nil {
 		return s.verifyGenerationPath(ctx, generation, current.TreeHash)
 	} else if !os.IsNotExist(statErr) {

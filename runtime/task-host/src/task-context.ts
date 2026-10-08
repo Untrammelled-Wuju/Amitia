@@ -139,6 +139,7 @@ export class StorageClient implements TaskStorageClient {
 }
 
 export class HostClient implements TaskHostClient {
+  readonly capabilities = Object.freeze({ executeTool: false, emitEvent: false });
   constructor(
     private readonly rpc: RpcClient,
     private readonly taskRunId: string,
@@ -158,7 +159,7 @@ export class HostClient implements TaskHostClient {
   }
 
   async emitEvent(type: string, payload: unknown): Promise<void> {
-    this.rpc.notify("task.host.emitEvent", {
+    await this.rpc.call("task.host.emitEvent", {
       task_run_id: this.taskRunId,
       type,
       payload,

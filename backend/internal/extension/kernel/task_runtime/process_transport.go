@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/platform/process"
 )
 
@@ -25,6 +26,26 @@ type taskProcessMessage struct {
 	ID      json.RawMessage `json:"id,omitempty"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
+}
+
+type taskDiagnosticWriter struct {
+	writer    io.Writer
+	remaining int
+}
+
+func (w *taskDiagnosticWriter) Write(value []byte) (int, error) {
+	count := len(value)
+	if len(value) > w.remaining {
+		value = value[:w.remaining]
+	}
+	w.remaining -= len(value)
+	if len(value) > 0 {
+		_, err := w.writer.Write(value)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return count, nil
 }
 
 func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json.RawMessage, deadline *time.Time, attempt, maxAttempts int, callbacks ProcessCallbacks) (int, error) {
@@ -53,9 +74,25 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 	nonce := uuid.NewString()
 	cmd := exec.CommandContext(processCtx, h.config.NodePath, "--max-old-space-size=128", h.config.HostPath)
 	cmd.Dir = h.config.WorkDir
+	limits := h.config.NativeLimits
+	if h.config.RequireSandbox {
+		args := []string{"--max-old-space-size=128", "--preserve-symlinks", "--preserve-symlinks-main", "--permission", "--allow-fs-read=" + filepath.Dir(h.config.HostPath), "--allow-fs-read=" + h.config.BundleRoot, "--allow-fs-read=" + h.config.WorkDir, "--allow-fs-write=" + h.config.WorkDir, h.config.HostPath}
+		plan, err := trusted_service.PrepareTaskSandbox(h.config.NodePath, args, h.config.WorkDir, filepath.Dir(h.config.HostPath), h.config.BundleRoot, limits)
+		if err != nil {
+			return 1, err
+		}
+		if plan.Cleanup != nil {
+			defer plan.Cleanup()
+		}
+		cmd = exec.CommandContext(processCtx, plan.Path, plan.Args...)
+		cmd.Dir = plan.WorkingDir
+		cmd.ExtraFiles = plan.ExtraFiles
+		limits = plan.SupervisorLimits
+	}
 	cmd.Env = process.NewEnvironmentBuilder().Build()
 	cmd.Env = append(cmd.Env, "AMITIA_GENERATION="+strconv.FormatInt(h.config.Generation, 10))
 	cmd.Env = append(cmd.Env, "AMITIA_ENTRY_HASH="+h.config.EntryHash)
+	cmd.Env = append(cmd.Env, "AMITIA_BUNDLE_ROOT="+h.config.BundleRoot, "AMITIA_BUNDLE_HASH="+h.config.BundleHash)
 	cmd.Env = append(cmd.Env, "AMITIA_INSTANCE_ID="+h.config.InstanceID, "AMITIA_TASK_RUN_ID="+h.config.TaskRunID, "AMITIA_EXTENSION_ID="+h.config.ExtensionID, "AMITIA_MODULE_ID="+h.config.ModuleID, "AMITIA_NONCE="+nonce, "AMITIA_DEFINITION_HASH="+h.config.DefHash, "AMITIA_WORKSPACE_PATH="+h.config.WorkDir)
 	process.ConfigureProcess(cmd)
 	stdin, err := cmd.StdinPipe()
@@ -68,10 +105,13 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 		return 1, err
 	}
 	cmd.Stderr = io.Discard
+	if h.config.Diagnostics != nil {
+		cmd.Stderr = &taskDiagnosticWriter{writer: h.config.Diagnostics, remaining: 8192}
+	}
 	if err = cmd.Start(); err != nil {
 		return 1, err
 	}
-	tree, err := process.AttachProcessTree(cmd)
+	tree, err := process.AttachProcessTreeWithLimits(cmd, limits)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
@@ -164,13 +204,14 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 				break
 			}
 			if h.config.EntryHash != "" {
-				entryPin, checkpointAck := false, false
+				entryPin, checkpointAck, bundlePin := false, false, false
 				for _, feature := range value.Features {
 					entryPin = entryPin || feature == "entry_pin"
 					checkpointAck = checkpointAck || feature == "checkpoint_ack"
+					bundlePin = bundlePin || feature == "bundle_pin"
 				}
-				if !entryPin || !checkpointAck {
-					protocolErr = errors.New("任务运行时缺少入口校验或检查点保存确认能力")
+				if !entryPin || !checkpointAck || h.config.BundleHash != "" && !bundlePin {
+					protocolErr = errors.New("任务运行时缺少源码校验或检查点保存确认能力")
 					break
 				}
 			}
@@ -294,6 +335,23 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 				finalStatus, finalResult, finalCode, finalMessage = value.Status, value.Result.Data, value.Error.Code, value.Error.Message
 				finalArtifactID = value.Result.ArtifactID
 			case "task.shutdown":
+			case "task.host.executeTool", "task.host.emitEvent":
+				if len(message.ID) == 0 || len(message.ID) > 128 {
+					protocolErr = errors.New("当前任务运行时未提供已授权的工具执行或事件发布端口")
+					break
+				}
+				if callbacks.OnRequest == nil {
+					protocolErr = write(map[string]any{"jsonrpc": "2.0", "id": message.ID, "error": map[string]any{"code": -32601, "message": "当前任务运行时未提供已授权的工具执行或事件发布端口"}})
+					break
+				}
+				response, err := callbacks.OnRequest(processCtx, nonce+"/"+string(message.ID), message.Method, message.Params)
+				if err != nil {
+					protocolErr = write(map[string]any{"jsonrpc": "2.0", "id": message.ID, "error": map[string]any{"code": -32001, "message": err.Error()}})
+				} else if !json.Valid(response) || len(response) > 80<<10 {
+					protocolErr = errors.New("任务Native确认无效或超过限制")
+				} else {
+					protocolErr = write(map[string]any{"jsonrpc": "2.0", "id": message.ID, "result": response})
+				}
 			case "task.storage.get", "task.storage.set", "task.storage.delete", "task.artifact.saveData", "task.artifact.saveFile", "task.artifact.list":
 				if len(message.ID) == 0 || len(message.ID) > 128 || callbacks.OnRequest == nil {
 					protocolErr = write(map[string]any{"jsonrpc": "2.0", "id": message.ID, "error": map[string]any{"code": -32601, "message": "任务所有者接口不可用"}})

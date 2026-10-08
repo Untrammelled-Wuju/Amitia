@@ -12,6 +12,7 @@ import (
 	"hash/crc32"
 	"image"
 	"image/png"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -25,6 +26,73 @@ func imageAttachment(t *testing.T, size int) Attachment {
 	}
 	hash := sha256.Sum256(data.Bytes())
 	return Attachment{Kind: "image", Name: "picture.png", MIME: "image/png", Data: base64.StdEncoding.EncodeToString(data.Bytes()), Hash: hex.EncodeToString(hash[:])}
+}
+
+func TestFileAndVideoAttachmentsRequireOwnerAcknowledgementBeforeCompute(t *testing.T) {
+	for _, coordinated := range []bool{false, true} {
+		for _, kind := range []string{"file", "video"} {
+			t.Run(map[bool]string{false: "device", true: "core"}[coordinated]+"/"+kind, func(t *testing.T) {
+				engine, db, service, model := engineHarness(t)
+				owner := "a"
+				if coordinated {
+					if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+						t.Fatal(err)
+					}
+					owner = "core"
+				}
+				data, mime := []byte("设备文件正文"), "text/plain"
+				if kind == "video" {
+					data, mime = []byte{0, 0, 0, 16, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 0, 0}, "video/mp4"
+				}
+				digest := sha256.Sum256(data)
+				item := Attachment{Kind: kind, Name: "附件", MIME: mime, Data: base64.StdEncoding.EncodeToString(data), Hash: hex.EncodeToString(digest[:])}
+				model.generate = func(_ context.Context, inference Inference) (Generation, error) {
+					row, err := coordination.NewOwnershipStore(db, owner).Get(t.Context(), "message", "attachment/user")
+					if err != nil || row == nil || len(inference.Attachments) != 1 || inference.Attachments[0] != item {
+						t.Fatal("Core computed before original binary owner acknowledgement")
+					}
+					return Generation{Text: "已处理"}, nil
+				}
+				request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RequestID: "attachment", Message: "处理附件", Attachments: []Attachment{item}}
+				response, err := engine.Run(t.Context(), request)
+				if err != nil || !response.Saved || response.Scope.ResourceOwnerID != owner {
+					t.Fatalf("response=%+v error=%v", response, err)
+				}
+				if _, err := engine.Run(t.Context(), request); err != nil || model.calls.Load() != 1 {
+					t.Fatalf("attachment executed again: %v", err)
+				}
+				other := "core"
+				if coordinated {
+					other = "a"
+				}
+				if row, err := coordination.NewOwnershipStore(db, other).Get(t.Context(), "message", "attachment/user"); err != nil || row != nil {
+					t.Fatal("binary data mirrored at another owner")
+				}
+			})
+		}
+	}
+}
+
+func TestFileAndVideoAttachmentsRejectSpoofingAndOverLimitBytes(t *testing.T) {
+	for _, test := range []struct {
+		kind, mime string
+		data       []byte
+	}{
+		{"file", "text/plain", []byte{0xff}},
+		{"file", "text/plain", []byte("text\x00hidden")},
+		{"file", "application/pdf", []byte("not a PDF")},
+		{"file", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", []byte("not ZIP")},
+		{"file", "application/octet-stream", []byte("unknown")},
+		{"video", "video/mp4", []byte("not MP4")},
+		{"video", "video/webm", []byte("not WebM")},
+		{"file", "text/plain", []byte(strings.Repeat("a", (1<<20)+1))},
+	} {
+		digest := sha256.Sum256(test.data)
+		item := Attachment{Kind: test.kind, Name: "附件", MIME: test.mime, Data: base64.StdEncoding.EncodeToString(test.data), Hash: hex.EncodeToString(digest[:])}
+		if err := ValidateAttachments([]Attachment{item}); err == nil {
+			t.Fatalf("invalid %s/%s accepted", test.kind, test.mime)
+		}
+	}
 }
 
 func TestAttachmentsRejectInvalidContentBeforeSavingOrComputing(t *testing.T) {

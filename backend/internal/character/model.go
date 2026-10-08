@@ -5,6 +5,7 @@ package character
 import "encoding/json"
 
 type Character struct {
+	RoleAuthority       string  `gorm:"-" json:"roleAuthority,omitempty"`
 	ID                  string  `gorm:"column:id;primaryKey" json:"id"`
 	SpaceID             string  `gorm:"column:space_id;not null;index" json:"-"`
 	Name                string  `gorm:"column:name;not null" json:"name"`
@@ -53,13 +54,14 @@ type Character struct {
 func (Character) TableName() string { return "characters" }
 
 type CharacterTemplate struct {
-	ID           string `gorm:"column:id;primaryKey" json:"id"`
-	Name         string `gorm:"column:name;not null" json:"name"`
-	Category     string `gorm:"column:category" json:"category"`
-	Description  string `gorm:"column:description" json:"description"`
-	Builtin      int    `gorm:"column:builtin" json:"builtin"`
-	TemplateJSON string `gorm:"column:template_json" json:"templateJson"`
-	CreatedAt    string `gorm:"column:created_at" json:"createdAt"`
+	RoleAuthority string `gorm:"-" json:"roleAuthority,omitempty"`
+	ID            string `gorm:"column:id;primaryKey" json:"id"`
+	Name          string `gorm:"column:name;not null" json:"name"`
+	Category      string `gorm:"column:category" json:"category"`
+	Description   string `gorm:"column:description" json:"description"`
+	Builtin       int    `gorm:"column:builtin" json:"builtin"`
+	TemplateJSON  string `gorm:"column:template_json" json:"templateJson"`
+	CreatedAt     string `gorm:"column:created_at" json:"createdAt"`
 }
 
 func (CharacterTemplate) TableName() string { return "character_templates" }
@@ -132,6 +134,7 @@ type UpdateCharacterRequest struct {
 }
 
 type RoleProfileResponse struct {
+	RoleAuthority       string  `json:"roleAuthority,omitempty"`
 	ID                  string  `json:"id"`
 	CharacterID         string  `json:"characterId"`
 	RoleName            string  `json:"roleName"`

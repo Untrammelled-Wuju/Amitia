@@ -186,13 +186,14 @@ export function useApi() {
     }
   }
 
-  async function postUpload<T>(url: string, file: File, fieldName: string = "card"): Promise<T> {
+  async function postUpload<T>(url: string, file: File, fieldName: string = "card", config?: AxiosRequestConfig): Promise<T> {
     loading.value = true;
     try {
       const formData = new FormData();
       formData.append(fieldName, file);
       const res = await apiClient.post(url, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        ...config,
+        headers: { ...config?.headers, "Content-Type": "multipart/form-data" },
       });
       return res.data as T;
     } finally {
@@ -200,20 +201,20 @@ export function useApi() {
     }
   }
 
-  async function put<T>(url: string, data?: any): Promise<T> {
+  async function put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     loading.value = true;
     try {
-      const res = await apiClient.put(url, data);
+      const res = await apiClient.put(url, data, config);
       return res.data as T;
     } finally {
       loading.value = false;
     }
   }
 
-  async function del<T>(url: string): Promise<T> {
+  async function del<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     loading.value = true;
     try {
-      const res = await apiClient.delete(url);
+      const res = await apiClient.delete(url, config);
       return res.data as T;
     } finally {
       loading.value = false;

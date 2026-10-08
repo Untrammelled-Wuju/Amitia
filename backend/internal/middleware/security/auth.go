@@ -228,6 +228,8 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		if policy.Coordinated && policy.Administrator {
 			permissions = auth.OwnerDevicePermissions()
 		}
+		c.Set(configurationPolicyContextKey, policy)
+		c.Set(configurationPolicyServiceContextKey, cfg.Coordination)
 	}
 	actor := &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, SpaceID: cred.SpaceID, DeviceID: cred.DeviceID, RuntimeID: cred.RuntimeID, Capabilities: []string{"*"}, Permissions: permissions, AuthMethod: AuthMethodDeviceCredential, RequestID: generateRequestID(), CorrelationID: sanitizeCorrelationID(c.GetHeader("X-Request-ID"))}
 	applyActorToContext(c, actor)

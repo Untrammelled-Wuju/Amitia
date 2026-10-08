@@ -66,7 +66,16 @@ func HandleSession(c *gin.Context) {
 	}
 
 	sessionID := uuid.New().String()
-	callID := uuid.New().String()
+	callID := strings.TrimSpace(c.Query("callId"))
+	if callID == "" {
+		callID = uuid.New().String()
+	} else if len(callID) > 128 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "callId is too long",
+		})
+		return
+	}
 	visualTicket, tokenErr := newSecureRealtimeToken(32)
 	if tokenErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to create realtime visual authorization"})

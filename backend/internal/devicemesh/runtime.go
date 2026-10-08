@@ -53,6 +53,8 @@ type Runtime struct {
 	deliveryMu                sync.Mutex
 	deliveryCancel            context.CancelFunc
 	deliveryDone              chan struct{}
+	auditCancel               context.CancelFunc
+	auditDone                 chan struct{}
 }
 
 func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, error) {
@@ -217,6 +219,12 @@ func (rt *Runtime) Start() error {
 func (rt *Runtime) Stop() error {
 	rt.deliveryMu.Lock()
 	defer rt.deliveryMu.Unlock()
+	if rt.auditCancel != nil {
+		rt.auditCancel()
+		<-rt.auditDone
+		rt.auditCancel = nil
+		rt.auditDone = nil
+	}
 	if rt.deliveryCancel != nil {
 		rt.deliveryCancel()
 		<-rt.deliveryDone

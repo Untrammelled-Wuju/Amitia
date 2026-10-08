@@ -35,6 +35,25 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   String _avatarPreview = '';
   bool _isPickingAvatar = false;
   bool _isCreating = false;
+  String _roleAuthority = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAuthority();
+  }
+
+  Future<void> _loadAuthority() async {
+    try {
+      final authority = await ref.read(characterServiceProvider).authority();
+      if (mounted) setState(() => _roleAuthority = authority);
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('无法确认角色归属：$error')));
+    }
+  }
 
   final _steps = ['基础形象', '名字', '身份', '性格', '说话方式', '提示词', '完成预览'];
 
@@ -85,7 +104,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         'status': '在线',
         'voiceSpeed': 1.0,
       };
-      final character = await svc.create(data);
+      final character = await svc.create(data, roleAuthority: _roleAuthority);
       if (character == null || character.id.isEmpty) {
         throw StateError('角色创建结果为空，请确认服务连接后重试');
       }
@@ -96,6 +115,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
           final result = await avatarService.uploadAvatar(
             character.id,
             avatarFile.path,
+            roleAuthority: character.roleAuthority,
           );
           if ((result?['avatarUrl'] ?? '').toString().isEmpty) {
             throw StateError('服务未返回头像地址');

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/devicemesh/proof"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
@@ -158,6 +159,9 @@ func (s *Service) createOffer(ctx context.Context, creator runtimeidentity.Devic
 			return nil, "", err
 		}
 	}
+	if err := meshaudit.QueueTx(ctx, tx, s.spaceID.String(), creator.String(), "device_mesh.pairing_offer_created", meshaudit.Details{}); err != nil {
+		return nil, "", err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, "", err
 	}
@@ -232,6 +236,9 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 			return nil, err
 		}
 		if pending != nil {
+			if err := meshaudit.QueueTx(pairingAuditContext(ctx, s.spaceID.String(), req), tx, s.spaceID.String(), req.DeviceID.String(), "device_mesh.pairing_approval_requested", meshaudit.Details{ApprovalID: pending.RequestID}); err != nil {
+				return nil, err
+			}
 			if err := tx.Commit(); err != nil {
 				return nil, err
 			}
@@ -279,10 +286,23 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 			return nil, ErrOfferConsumed
 		}
 	}
+	if err := meshaudit.QueueTx(pairingAuditContext(ctx, s.spaceID.String(), req), tx, s.spaceID.String(), req.DeviceID.String(), "device_mesh.pairing_claimed", meshaudit.Details{}); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &ClaimResult{Ticket: ticket, RawTicket: rawTicket}, nil
+}
+
+func pairingAuditContext(ctx context.Context, space string, request ClaimRequest) context.Context {
+	method := "pairing_offer"
+	if request.Proof != nil {
+		method = "pairing_proof"
+	} else if strings.TrimSpace(request.OfferToken) == "" {
+		method = "bootstrap_setup"
+	}
+	return meshaudit.WithActor(ctx, meshaudit.Actor{SpaceID: space, DeviceID: request.DeviceID.String(), PrincipalType: "device_bootstrap", AuthMethod: method, Realm: "mesh"})
 }
 
 func (s *Service) Status(ctx context.Context) (trustedDevices int64, firstDeviceSetupRequired bool, err error) {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,6 +16,7 @@ import '../../runtime/runtime_bridge_state.dart';
 import '../../runtime/backend/mobile_backend_providers.dart';
 import '../../runtime/backend/mobile_deployment_mode.dart';
 import '../../runtime/backend/backend_topology_resolver.dart';
+import '../../device_mesh/mobile_cloud_device_credential_store.dart';
 
 final backendConnectionRepositoryProvider = Provider<BackendConnectionRepository>((ref) {
   final source = ref.watch(backendConnectionSourceProvider);
@@ -160,7 +163,9 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
   const _CloudBackendConnectionSource(this._config);
 
   @override
-  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
+  Future<BackendConnectionAvailability> resolve({
+    int? expectedRuntimeGeneration,
+  }) async {
     final uri = _config.remoteCoreUri;
     if (uri == null || uri.trim().isEmpty) {
       return const BackendConnectionUnavailable(
@@ -173,79 +178,41 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
 
     try {
       final parsed = normalizeRemoteCoreUri(uri);
-      final localAvailability = await const RuntimeBackendConnectionSource().resolve();
-      if (localAvailability is! BackendConnectionAvailable) {
+      final auth = Platform.isIOS
+          ? await _loadIOSCredential(parsed)
+          : Platform.isAndroid
+          ? await _loadAndroidCredential(parsed)
+          : null;
+      if (auth == null) {
         return const BackendConnectionUnavailable(
           BackendConnectionError(
-            BackendConnectionErrorCode.RUNTIME_NOT_READY,
-            'device agent runtime is not ready',
+            BackendConnectionErrorCode.CREDENTIAL_UNAVAILABLE,
+            'this device is not paired with the configured Cloud Core',
           ),
         );
       }
 
-      final local = localAvailability.config;
-      final localBase = Uri(
-        scheme: local.endpoint.httpScheme,
-        host: local.endpoint.host,
-        port: local.endpoint.port,
-      );
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: localBase.toString(),
-          connectTimeout: const Duration(seconds: 5),
-          receiveTimeout: const Duration(seconds: 5),
-          headers: <String, String>{
-            'Accept': 'application/json',
-            'X-Amitia-Local-Token': local.credential.revealForTransport(),
-            'X-Amitia-Client-Type': 'mobile',
-          },
-        ),
-      );
-
-      Map<String, dynamic> auth;
-      try {
-        final response = await dio.get<dynamic>('/internal/device-mesh/cloud-auth');
-        final raw = response.data;
-        if (raw is! Map) {
-          return const BackendConnectionUnavailable(
-            BackendConnectionError(
-              BackendConnectionErrorCode.CREDENTIAL_UNAVAILABLE,
-              'device agent returned an invalid cloud credential response',
-            ),
-          );
-        }
-        auth = Map<String, dynamic>.from(raw);
-        if (auth['data'] is Map) {
-          auth = Map<String, dynamic>.from(auth['data'] as Map);
-        }
-      } on DioException catch (error) {
-        final status = error.response?.statusCode;
-        return BackendConnectionUnavailable(
-          BackendConnectionError(
-            status == 401
-                ? BackendConnectionErrorCode.CREDENTIAL_INVALID
-                : BackendConnectionErrorCode.CREDENTIAL_UNAVAILABLE,
-            status == 404
-                ? 'this device is not paired with the configured Cloud Core'
-                : 'failed to load Device Mesh cloud credential',
-          ),
-        );
-      } finally {
-        dio.close(force: true);
-      }
-
-      final cloudBaseUrl = (auth['cloudBaseUrl'] ?? '').toString().trim();
-      final authorization = (auth['authorization'] ?? '').toString().trim();
-      const prefix = 'AmitiaDevice ';
-      if (!authorization.startsWith(prefix)) {
+      final credential = BackendConnectionCredential.tryCreate(auth.credential);
+      if (credential == null ||
+          auth.spaceId.isEmpty ||
+          auth.deviceId.isEmpty ||
+          auth.runtimeId.isEmpty) {
         return const BackendConnectionUnavailable(
           BackendConnectionError(
             BackendConnectionErrorCode.CREDENTIAL_INVALID,
-            'device agent returned an invalid DeviceCredential',
+            'DeviceCredential identity is incomplete',
           ),
         );
       }
-      if (cloudBaseUrl.isEmpty || normalizeRemoteCoreUri(cloudBaseUrl).origin != parsed.origin) {
+      if (auth.isExpired) {
+        return const BackendConnectionUnavailable(
+          BackendConnectionError(
+            BackendConnectionErrorCode.CREDENTIAL_INVALID,
+            'DeviceCredential has expired; pair this device again',
+          ),
+        );
+      }
+      if (normalizeRemoteCoreUri(auth.cloudBaseUrl).origin != parsed.origin) {
         return const BackendConnectionUnavailable(
           BackendConnectionError(
             BackendConnectionErrorCode.CREDENTIAL_INVALID,
@@ -254,65 +221,135 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
         );
       }
 
-      final credential = BackendConnectionCredential.tryCreate(
-        authorization.substring(prefix.length),
-      );
-      final spaceId = (auth['spaceId'] ?? '').toString().trim();
-      final deviceId = (auth['deviceId'] ?? '').toString().trim();
-      final runtimeId = (auth['runtimeId'] ?? '').toString().trim();
-      if (credential == null || spaceId.isEmpty || deviceId.isEmpty || runtimeId.isEmpty) {
-        return const BackendConnectionUnavailable(
-          BackendConnectionError(
-            BackendConnectionErrorCode.CREDENTIAL_INVALID,
-            'DeviceCredential identity is incomplete',
-          ),
-        );
-      }
-
-      if ((auth['cloudBaseUrl'] ?? '').toString().isNotEmpty) {
-        return BackendConnectionAvailable(BackendConnectionConfig(
-          schemaVersion: 1, generation: 1,
-          endpoint: BackendConnectionEndpoint(
-            host: local.endpoint.host, port: local.endpoint.port,
-            httpScheme: local.endpoint.httpScheme, webSocketScheme: local.endpoint.webSocketScheme,
-            pathPrefix: '/internal/device-mesh/provider',
-            livenessPath: '/api/public/health', readinessPath: '/api/public/health',
-          ),
-          authStrategy: BackendAuthStrategy.localToken, credential: local.credential,
-          spaceId: spaceId, deviceId: deviceId, runtimeId: runtimeId,
-        ));
-      }
-
       final scheme = parsed.scheme.toLowerCase();
-      var port = parsed.port;
-      if (port == 0) port = scheme == 'https' ? 443 : 80;
-      final endpoint = BackendConnectionEndpoint(
-        host: parsed.host,
-        port: port,
-        httpScheme: scheme,
-        webSocketScheme: scheme == 'https' ? 'wss' : 'ws',
-        livenessPath: '/readyz',
-        readinessPath: '/readyz',
-      );
+      final port = parsed.hasPort ? parsed.port : (scheme == 'https' ? 443 : 80);
       return BackendConnectionAvailable(
         BackendConnectionConfig(
           schemaVersion: 1,
           generation: 1,
-          endpoint: endpoint,
+          endpoint: BackendConnectionEndpoint(
+            host: parsed.host,
+            port: port,
+            httpScheme: scheme,
+            webSocketScheme: scheme == 'https' ? 'wss' : 'ws',
+            livenessPath: '/readyz',
+            readinessPath: '/readyz',
+          ),
           authStrategy: BackendAuthStrategy.deviceCredential,
           credential: credential,
-          spaceId: spaceId,
-          deviceId: deviceId,
-          runtimeId: runtimeId,
+          spaceId: auth.spaceId,
+          deviceId: auth.deviceId,
+          runtimeId: auth.runtimeId,
         ),
       );
+    } on BackendConnectionError catch (error) {
+      return BackendConnectionUnavailable(error);
     } catch (error) {
       return BackendConnectionUnavailable(
         BackendConnectionError(
           BackendConnectionErrorCode.ENDPOINT_INVALID,
-          'failed to resolve cloud Device Mesh connection: $error',
+          'failed to resolve direct Cloud Core connection: $error',
         ),
       );
+    }
+  }
+
+  Future<MobileCloudDeviceCredential?> _loadIOSCredential(Uri cloud) async {
+    final stored = await const MobileCloudDeviceCredentialStore().load();
+    if (stored == null) return null;
+    if (normalizeRemoteCoreUri(stored.cloudBaseUrl).origin != cloud.origin) {
+      return null;
+    }
+    return stored;
+  }
+
+  Future<MobileCloudDeviceCredential?> _loadAndroidCredential(Uri cloud) async {
+    final localAvailability = await const RuntimeBackendConnectionSource().resolve();
+    if (localAvailability is! BackendConnectionAvailable) {
+      throw const BackendConnectionError(
+        BackendConnectionErrorCode.RUNTIME_NOT_READY,
+        'device agent runtime is not ready',
+      );
+    }
+
+    final local = localAvailability.config;
+    final localBase = Uri(
+      scheme: local.endpoint.httpScheme,
+      host: local.endpoint.host,
+      port: local.endpoint.port,
+    );
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: localBase.toString(),
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 5),
+        headers: <String, String>{
+          'Accept': 'application/json',
+          'X-Amitia-Local-Token': local.credential.revealForTransport(),
+          'X-Amitia-Client-Type': 'mobile',
+        },
+      ),
+    );
+
+    try {
+      final response = await dio.get<dynamic>(
+        '/internal/device-mesh/cloud-auth',
+      );
+      var raw = response.data;
+      if (raw is! Map) {
+        throw const BackendConnectionError(
+          BackendConnectionErrorCode.CREDENTIAL_UNAVAILABLE,
+          'device agent returned an invalid cloud credential response',
+        );
+      }
+      var auth = Map<String, dynamic>.from(raw);
+      if (auth['data'] is Map) {
+        auth = Map<String, dynamic>.from(auth['data'] as Map);
+      }
+      final authorization = (auth['authorization'] ?? '').toString().trim();
+      const prefix = 'AmitiaDevice ';
+      if (!authorization.startsWith(prefix)) {
+        throw const BackendConnectionError(
+          BackendConnectionErrorCode.CREDENTIAL_INVALID,
+          'device agent returned an invalid DeviceCredential',
+        );
+      }
+      final cloudBaseUrl = (auth['cloudBaseUrl'] ?? '').toString().trim();
+      if (cloudBaseUrl.isEmpty ||
+          normalizeRemoteCoreUri(cloudBaseUrl).origin != cloud.origin) {
+        throw const BackendConnectionError(
+          BackendConnectionErrorCode.CREDENTIAL_INVALID,
+          'paired Cloud Core does not match the configured remote core URI',
+        );
+      }
+      final expiresAt =
+          DateTime.tryParse((auth['expiresAt'] ?? '').toString())?.toUtc() ??
+          DateTime.now().toUtc().add(const Duration(days: 30));
+      return MobileCloudDeviceCredential(
+        cloudBaseUrl: cloudBaseUrl,
+        credentialId: (auth['credentialId'] ?? '').toString().trim(),
+        credential: authorization.substring(prefix.length).trim(),
+        spaceId: (auth['spaceId'] ?? '').toString().trim(),
+        deviceId: (auth['deviceId'] ?? '').toString().trim(),
+        runtimeId: (auth['runtimeId'] ?? '').toString().trim(),
+        expiresAt: expiresAt,
+        protocol: 'amitia.device-runtime',
+        envelopeVersion: 1,
+        schemaVersion: '1.0.0',
+        websocketPath: '/api/device-mesh/v1/runtime/ws',
+      );
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      throw BackendConnectionError(
+        status == 401
+            ? BackendConnectionErrorCode.CREDENTIAL_INVALID
+            : BackendConnectionErrorCode.CREDENTIAL_UNAVAILABLE,
+        status == 404
+            ? 'this device is not paired with the configured Cloud Core'
+            : 'failed to load Device Mesh cloud credential',
+      );
+    } finally {
+      dio.close(force: true);
     }
   }
 }

@@ -441,9 +441,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     notificationSettingsCheckedAt = now;
     try {
       const deviceId = await resolveUIHostDeviceId();
-      const path = `/api/notifications/status?deviceId=${encodeURIComponent(deviceId)}`;
+      const path = `/api/browser-notifications/status?deviceId=${encodeURIComponent(deviceId)}`;
       const url = await resolveApiUrl(path);
-      const init = await createAuthenticatedFetchInit("/api/notifications/status", { method: "GET" });
+      const init = await createAuthenticatedFetchInit("/api/browser-notifications/status", { method: "GET" });
       const response = await fetch(url, init);
       if (!response.ok) throw new Error(`notification status HTTP ${response.status}`);
       const rawStatus = await response.json() as Record<string, unknown>;

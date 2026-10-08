@@ -3,14 +3,18 @@
 package system
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
 func (h *Handler) PrivacyScan(c *gin.Context) {
@@ -20,7 +24,14 @@ func (h *Handler) PrivacyScan(c *gin.Context) {
 	// An empty body remains valid for backwards compatibility and scans the
 	// historical default scope. Updated clients always send their selected scope.
 	_ = c.ShouldBindJSON(&req)
-	util.SuccessResponse(c, h.service.PrivacyScan(req.Scope))
+	var result map[string]interface{}
+	if !h.commitAdministratorAction(c, func() error {
+		result = h.service.PrivacyScan(req.Scope)
+		return nil
+	}) {
+		return
+	}
+	util.SuccessResponse(c, result)
 }
 
 func (h *Handler) PrivacyMask(c *gin.Context) {
@@ -34,6 +45,10 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.ConfirmToken != "确认脱敏" {
 		util.ErrorResponse(c, response.InvalidParams, "confirmToken must be 确认脱敏", nil)
+		return
+	}
+	if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+		util.ErrorResponse(c, 409, err.Error(), nil)
 		return
 	}
 
@@ -84,11 +99,14 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", "memory service unavailable")
 			return
 		}
-		if _, err := h.memorySvc.Update(target.ID, &memory.UpdateMemoryRequest{
-			Value:                 &maskedValue,
-			SensitivityLevel:      &restricted,
-			AllowContextUse:       &allowContextUse,
-			AllowProactiveMention: &allowProactiveMention,
+		if err := coordination.CommitCurrent(c.Request.Context(), func() error {
+			_, err := h.memorySvc.Update(target.ID, &memory.UpdateMemoryRequest{
+				Value:                 &maskedValue,
+				SensitivityLevel:      &restricted,
+				AllowContextUse:       &allowContextUse,
+				AllowProactiveMention: &allowProactiveMention,
+			})
+			return err
 		}); err != nil {
 			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", err.Error())
 			return
@@ -106,34 +124,31 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 		}
 	}
 	if len(messageTargets) > 0 {
-		tx := h.db.Begin()
-		if tx.Error != nil {
-			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", tx.Error.Error())
-			return
-		}
-		for _, target := range messageTargets {
-			result := tx.Table("messages").Where("id = ?", target.ID).Updates(map[string]interface{}{
-				"content":      "[已脱敏]",
-				"safety_level": "masked",
-			})
-			if result.Error != nil {
-				tx.Rollback()
-				util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", result.Error.Error())
-				return
+		if err := configwrite.Transaction(h.db.WithContext(c.Request.Context()), func(tx *gorm.DB) error {
+			for _, target := range messageTargets {
+				result := tx.Table("messages").Where("id = ?", target.ID).Updates(map[string]interface{}{
+					"content":      "[已脱敏]",
+					"safety_level": "masked",
+				})
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected > 0 {
+					updated += result.RowsAffected
+					maskedTargets = append(maskedTargets, target)
+				}
 			}
-			if result.RowsAffected > 0 {
-				updated += result.RowsAffected
-				maskedTargets = append(maskedTargets, target)
-			}
-		}
-		if err := tx.Commit().Error; err != nil {
+			return nil
+		}); err != nil {
 			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", err.Error())
 			return
 		}
 	}
 
 	if svc, ok := h.service.(*service); ok {
-		svc.markPrivacyFindingsMasked(maskedTargets)
+		if !h.commitAdministratorAction(c, func() error { svc.markPrivacyFindingsMasked(maskedTargets); return nil }) {
+			return
+		}
 	}
 	util.SuccessResponse(c, map[string]interface{}{
 		"masked":               true,
@@ -155,6 +170,22 @@ func normalizePrivacyMaskID(value interface{}) string {
 }
 
 func (h *Handler) PrivacyScanResults(c *gin.Context) {
+	if c.Request.Method == "DELETE" {
+		if !h.commitAdministratorAction(c, func() error {
+			svc, ok := h.service.(*service)
+			if !ok {
+				return errors.New("隐私扫描服务不可用")
+			}
+			svc.privacyMu.Lock()
+			svc.privacyScans = nil
+			svc.privacyMu.Unlock()
+			return nil
+		}) {
+			return
+		}
+		util.SuccessResponse(c, gin.H{"deleted": true})
+		return
+	}
 	util.SuccessResponse(c, h.service.PrivacyScanResults())
 }
 
@@ -172,9 +203,15 @@ func (h *Handler) PrivacyDeletionRequest(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
 		return
 	}
-	tombstone, err := h.dataLifecycle.RequestDeletion(req)
-	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "deletion request failed", err.Error())
+	var tombstone mindruntime.DeletionTombstone
+	if !h.commitAdministratorAction(c, func() error {
+		if h.dataLifecycle == nil {
+			return errors.New("数据生命周期服务不可用")
+		}
+		var err error
+		tombstone, err = h.dataLifecycle.RequestDeletion(req)
+		return err
+	}) {
 		return
 	}
 	util.SuccessResponse(c, tombstone)
@@ -196,9 +233,15 @@ func (h *Handler) PrivacyDeletionStats(c *gin.Context) {
 }
 
 func (h *Handler) PrivacyDeletionCleanup(c *gin.Context) {
-	results, err := h.dataLifecycle.ExecuteOutboxCleanup()
-	if err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "deletion cleanup failed", err.Error())
+	var results []mindruntime.OutboxCleanupItem
+	if !h.commitAdministratorAction(c, func() error {
+		if h.dataLifecycle == nil {
+			return errors.New("数据生命周期服务不可用")
+		}
+		var err error
+		results, err = h.dataLifecycle.ExecuteOutboxCleanup()
+		return err
+	}) {
 		return
 	}
 	util.SuccessResponse(c, gin.H{"cleaned": len(results), "items": results})
@@ -213,8 +256,17 @@ func (h *Handler) PrivacyDeletionSecurityTests(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
 		return
 	}
-	results := h.dataLifecycle.RunAllSecurityTests(mindruntime.DeletionRequest{
-		TargetID: req.TargetID, TargetType: req.TargetType,
-	})
+	var results []mindruntime.SecurityTestResult
+	if !h.commitAdministratorAction(c, func() error {
+		if h.dataLifecycle == nil {
+			return errors.New("数据生命周期服务不可用")
+		}
+		results = h.dataLifecycle.RunAllSecurityTests(mindruntime.DeletionRequest{
+			TargetID: req.TargetID, TargetType: req.TargetType,
+		})
+		return nil
+	}) {
+		return
+	}
 	util.SuccessResponse(c, results)
 }

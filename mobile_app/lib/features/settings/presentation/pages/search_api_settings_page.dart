@@ -6,6 +6,10 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/core_configuration_guard.dart';
+import '../../../../core/services/core_configuration_session.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 class SearchApiSettingsPage extends ConsumerStatefulWidget {
@@ -25,15 +29,34 @@ class _SearchApiSettingsPageState extends ConsumerState<SearchApiSettingsPage> {
   List<Map<String, dynamic>> _items = const [];
   bool _loading = true;
   String? _loadError;
+  late final CoreConfigurationSession _configuration;
+  int _loadEpoch = 0;
 
   @override
   void initState() {
     super.initState();
+    _configuration = CoreConfigurationSession(
+      coreConfigurationGuardFor(ref),
+      onInvalidated: (reason) {
+        if (!mounted) return;
+        _loadEpoch++;
+        for (final controller in _controllers.values) {
+          controller.clear();
+        }
+        setState(() {
+          _items = const [];
+          _loading = false;
+          _loadError = reason.toString();
+        });
+      },
+    );
     _load();
   }
 
   @override
   void dispose() {
+    _loadEpoch++;
+    _configuration.close();
     for (final controller in _controllers.values) {
       controller.dispose();
     }
@@ -41,24 +64,28 @@ class _SearchApiSettingsPageState extends ConsumerState<SearchApiSettingsPage> {
   }
 
   Future<void> _load() async {
+    final epoch = ++_loadEpoch;
     setState(() {
       _loading = true;
       _loadError = null;
     });
     try {
-      final items = await ref.read(searchApiServiceProvider).listCredentials();
+      final items = await _configuration.load(
+        () => ref.read(searchApiServiceProvider).listCredentials(),
+      );
+      if (!mounted || epoch != _loadEpoch) return;
       for (final item in items) {
         final engineId = _engineId(item);
         if (engineId.isEmpty) continue;
         _controllers.putIfAbsent(engineId, TextEditingController.new);
       }
-      if (!mounted) return;
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _items = items;
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _loadError = error.toString();
         _loading = false;
@@ -67,15 +94,18 @@ class _SearchApiSettingsPageState extends ConsumerState<SearchApiSettingsPage> {
   }
 
   Future<void> _save(Map<String, dynamic> item) async {
+    final intent = _configuration.intent;
     final engineId = _engineId(item);
     final controller = _controllers[engineId];
     final value = controller?.text.trim() ?? '';
     if (engineId.isEmpty || value.isEmpty || _saving.contains(engineId)) return;
     setState(() => _saving.add(engineId));
     try {
-      final updated = await ref
-          .read(searchApiServiceProvider)
-          .saveCredential(engineId, value);
+      final updated = await _configuration.write(
+        intent,
+        () =>
+            ref.read(searchApiServiceProvider).saveCredential(engineId, value),
+      );
       if (!mounted) return;
       setState(() {
         final index = _items.indexWhere(
@@ -104,6 +134,7 @@ class _SearchApiSettingsPageState extends ConsumerState<SearchApiSettingsPage> {
   }
 
   Future<void> _clear(Map<String, dynamic> item) async {
+    final intent = _configuration.intent;
     final engineId = _engineId(item);
     if (engineId.isEmpty || _clearing.contains(engineId)) return;
     final confirmed = await showDialog<bool>(
@@ -126,7 +157,10 @@ class _SearchApiSettingsPageState extends ConsumerState<SearchApiSettingsPage> {
     if (confirmed != true || !mounted) return;
     setState(() => _clearing.add(engineId));
     try {
-      await ref.read(searchApiServiceProvider).clearCredential(engineId);
+      await _configuration.write(
+        intent,
+        () => ref.read(searchApiServiceProvider).clearCredential(engineId),
+      );
       if (!mounted) return;
       setState(() {
         final index = _items.indexWhere(
@@ -163,6 +197,14 @@ class _SearchApiSettingsPageState extends ConsumerState<SearchApiSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      rawBackendServiceApiProvider,
+      (_, __) => _configuration.invalidate(StateError('Core 连接已变化，请重新加载搜索配置')),
+    );
+    ref.listen(
+      mobileDeploymentConfigProvider,
+      (_, __) => _configuration.invalidate(StateError('设备模式已变化，请重新加载搜索配置')),
+    );
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '搜索 API',

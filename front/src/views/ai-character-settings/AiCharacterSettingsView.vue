@@ -75,6 +75,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       v-model="showPromptEditor"
       v-model:editingPrompt="editingPrompt"
       :charId="charId"
+      :role-authority="promptAuthority"
       :charName="form.name"
     />
   </div>
@@ -87,6 +88,7 @@ import { View } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useRoleProfile } from "../../composables/useRoleProfile";
+import { roleAuthorityConfig } from "../../runtime/role-authority";
 import PersonalitySlidersSection from "./components/PersonalitySlidersSection.vue";
 import RoleGenderSection from "./components/RoleGenderSection.vue";
 import RelationshipTimeSection from "./components/RelationshipTimeSection.vue";
@@ -106,6 +108,9 @@ const { updateRoleProfile } = useRoleProfile();
 const { getRoleProfile } = useRoleProfile();
 
 const charId = ref("");
+const roleAuthority = ref("");
+const profileAuthority = ref("");
+const promptAuthority = ref("");
 const saving = ref(false);
 const resetting = ref(false);
 const promptLoading = ref(false);
@@ -168,6 +173,7 @@ function normalizePersonalityConfig(value: unknown) {
 function applyCharacter(data: any) {
   if (!data) return;
   charId.value = data.id || charId.value;
+  roleAuthority.value = data.roleAuthority || "";
   form.name = data.name || form.name;
   form.description = data.description || form.description;
   form.isDefault = !!data.isDefault;
@@ -208,6 +214,7 @@ onMounted(async () => {
   try {
     const rp = await getRoleProfile(charId.value || undefined);
     if (rp) {
+      profileAuthority.value = rp.roleAuthority || "";
       genderForm.roleName = rp.roleName || "阿米提亚";
       genderForm.gender = rp.gender || "UNSPECIFIED";
       genderForm.genderLabel = rp.genderLabel;
@@ -218,11 +225,30 @@ onMounted(async () => {
     }
   } catch {}
 
+  if (!charId.value) {
+    try {
+      const authority = await get<{ roleAuthority: string }>("/api/characters/authority");
+      roleAuthority.value = authority.roleAuthority || "";
+    } catch {}
+  }
+
 });
 
 async function saveConfig() {
+  if (saving.value) return;
   saving.value = true;
   try {
+    const intent = roleAuthorityConfig(roleAuthority.value);
+    if (profileAuthority.value && profileAuthority.value !== roleAuthority.value) throw new Error("角色数据归属已变化，请重新加载角色");
+    const profile = {
+      roleName: form.name.trim(),
+      gender: genderForm.gender,
+      genderLabel: genderForm.gender === "CUSTOM" ? genderForm.genderLabel : null,
+      pronoun: genderForm.pronoun,
+      selfReference: genderForm.selfReference,
+      userAddressingStyle: genderForm.userAddressingStyle,
+      genderExpression: genderForm.genderExpression,
+    };
     const payload = {
       name: form.name.trim(),
       description: form.description.trim(),
@@ -230,30 +256,15 @@ async function saveConfig() {
       isDefault: form.isDefault,
     };
     const result = charId.value
-      ? await put<any>(`/api/characters/${charId.value}`, payload)
-      : await post<any>("/api/characters", payload);
+      ? await put<any>(`/api/characters/${charId.value}`, payload, intent)
+      : await post<any>("/api/characters", payload, intent);
     if (result?.id) charId.value = result.id;
 
-    try {
-      await updateRoleProfile(
-        {
-          roleName: form.name.trim(),
-          gender: genderForm.gender,
-          genderLabel:
-            genderForm.gender === "CUSTOM" ? genderForm.genderLabel : null,
-          pronoun: genderForm.pronoun,
-          selfReference: genderForm.selfReference,
-          userAddressingStyle: genderForm.userAddressingStyle,
-          genderExpression: genderForm.genderExpression,
-        },
-        charId.value || undefined,
-      );
-    } catch (e: any) {
-      console.warn("Role profile save failed:", e);
-    }
+    await updateRoleProfile(profile, charId.value || undefined, roleAuthority.value);
 
     ElMessage.success("保存成功");
-  } catch {
+  } catch (err: any) {
+    ElMessage.error(err?.message || "角色未完整保存，请重新加载后确认");
   } finally {
     saving.value = false;
   }
@@ -262,7 +273,7 @@ async function saveConfig() {
 async function setAsDefault(val: boolean) {
   if (!charId.value) return;
   try {
-    await put<any>(`/api/characters/${charId.value}`, { isDefault: val });
+    await put<any>(`/api/characters/${charId.value}`, { isDefault: val }, roleAuthorityConfig(roleAuthority.value));
     ElMessage.success(val ? "已设为默认角色" : "已取消默认角色");
     if (val) {
       localStorage.setItem(
@@ -294,7 +305,7 @@ async function resetConfig() {
     if (charId.value) {
       await put<any>(`/api/characters/${charId.value}`, {
         personalityConfig: form.personalityConfig,
-      });
+      }, roleAuthorityConfig(roleAuthority.value));
     }
     ElMessage.success("已重置为默认配置");
   } catch {
@@ -309,6 +320,8 @@ async function editCharPrompt() {
   try {
     if (charId.value) {
       const char = await get<any>("/api/characters/" + charId.value);
+      if (char?.roleAuthority !== roleAuthority.value) throw new Error("角色数据归属已变化，请重新加载角色");
+      promptAuthority.value = char.roleAuthority;
       editingPrompt.value = char?.characterBase || "";
     } else {
       editingPrompt.value = "";

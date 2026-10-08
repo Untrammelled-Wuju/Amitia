@@ -58,6 +58,16 @@
 		A1B2C3D4E5F60064 /* IOSNativeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60065 /* IOSNativeTransport.swift */; };
 		A1B2C3D4E5F60066 /* RealtimeVisualAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60067 /* RealtimeVisualAdapter.swift */; };
 		A1B2C3D4E5F6001C /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6002C /* ReplayKit.framework */; };
+		A1B2C3D4E5F60100 /* IOSNotificationPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60101 /* IOSNotificationPlatform.swift */; };
+		A1B2C3D4E5F60106 /* AmitiaLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60102 /* AmitiaLiveActivityBundle.swift */; };
+		A1B2C3D4E5F60107 /* AmitiaLiveActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60105 /* AmitiaLiveActivity.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A1B2C3D4E5F60200 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60201 /* NotificationService.swift */; };
+		A1B2C3D4E5F60206 /* AmitiaNotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60204 /* AmitiaNotificationService.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A1B2C3D4E5F60205 /* Intents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60029 /* Intents.framework */; };
+		A1B2C3D4E5F60207 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6002B /* UserNotifications.framework */; };
+		A1B2C3D4E5F60301 /* IOSDeviceMeshIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60300 /* IOSDeviceMeshIdentity.swift */; };
+		A1B2C3D4E5F60400 /* AmitiaRunAttributes.swift in Runner Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */; };
+		A1B2C3D4E5F60401 /* AmitiaRunAttributes.swift in LiveActivity Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +77,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		A1B2C3D4E5F6010F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1B2C3D4E5F60109;
+			remoteInfo = AmitiaLiveActivity;
+		};
+		A1B2C3D4E5F6020F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1B2C3D4E5F60209;
+			remoteInfo = AmitiaNotificationService;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -79,6 +103,18 @@
 			files = (
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F6010D /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A1B2C3D4E5F60107 /* AmitiaLiveActivity.appex in Embed App Extensions */,
+				A1B2C3D4E5F60206 /* AmitiaNotificationService.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -143,6 +179,17 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1B2C3D4E5F60101 /* IOSNotificationPlatform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/IOSNotificationPlatform.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60102 /* AmitiaLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmitiaLiveActivityBundle.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60103 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1B2C3D4E5F60104 /* AmitiaLiveActivity.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AmitiaLiveActivity.entitlements; sourceTree = "<group>"; };
+		A1B2C3D4E5F60105 /* AmitiaLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AmitiaLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60201 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60202 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1B2C3D4E5F60203 /* AmitiaNotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AmitiaNotificationService.entitlements; sourceTree = "<group>"; };
+		A1B2C3D4E5F60204 /* AmitiaNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AmitiaNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60300 /* IOSDeviceMeshIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSDeviceMeshIdentity.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifications/AmitiaRunAttributes.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -166,6 +213,22 @@
 				A1B2C3D4E5F6001A /* UniformTypeIdentifiers.framework in Frameworks */,
 				A1B2C3D4E5F6001B /* UserNotifications.framework in Frameworks */,
 				A1B2C3D4E5F6001C /* ReplayKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F6010B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F6020B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D4E5F60205 /* Intents.framework in Frameworks */,
+				A1B2C3D4E5F60207 /* UserNotifications.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -198,6 +261,8 @@
 				97C146F01CF9000F007C117D /* Runner */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				A1B2C3D4E5F60108 /* AmitiaLiveActivity */,
+				A1B2C3D4E5F60208 /* AmitiaNotificationService */,
 			);
 			sourceTree = "<group>";
 		};
@@ -206,6 +271,8 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				A1B2C3D4E5F60105 /* AmitiaLiveActivity.appex */,
+				A1B2C3D4E5F60204 /* AmitiaNotificationService.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -221,6 +288,9 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				A1B2C3D4E5F60300 /* IOSDeviceMeshIdentity.swift */,
+				A1B2C3D4E5F60101 /* IOSNotificationPlatform.swift */,
+				A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */,
 				A1B2C3D4E5F60001 /* libish.a */,
 				A1B2C3D4E5F60002 /* libish_emu.a */,
 				A1B2C3D4E5F60003 /* libfakefs.a */,
@@ -373,6 +443,26 @@
 			path = File;
 			sourceTree = "<group>";
 		};
+		A1B2C3D4E5F60108 /* AmitiaLiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60102 /* AmitiaLiveActivityBundle.swift */,
+				A1B2C3D4E5F60103 /* Info.plist */,
+				A1B2C3D4E5F60104 /* AmitiaLiveActivity.entitlements */,
+			);
+			path = AmitiaLiveActivity;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60208 /* AmitiaNotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60201 /* NotificationService.swift */,
+				A1B2C3D4E5F60202 /* Info.plist */,
+				A1B2C3D4E5F60203 /* AmitiaNotificationService.entitlements */,
+			);
+			path = AmitiaNotificationService;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -403,15 +493,52 @@
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
+				A1B2C3D4E5F6010D /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1B2C3D4E5F6010E /* PBXTargetDependency */,
+				A1B2C3D4E5F6020E /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A1B2C3D4E5F60109 /* AmitiaLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D4E5F60113 /* Build configuration list for PBXNativeTarget "AmitiaLiveActivity" */;
+			buildPhases = (
+				A1B2C3D4E5F6010A /* Sources */,
+				A1B2C3D4E5F6010B /* Frameworks */,
+				A1B2C3D4E5F6010C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AmitiaLiveActivity;
+			productName = AmitiaLiveActivity;
+			productReference = A1B2C3D4E5F60105 /* AmitiaLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A1B2C3D4E5F60209 /* AmitiaNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D4E5F60213 /* Build configuration list for PBXNativeTarget "AmitiaNotificationService" */;
+			buildPhases = (
+				A1B2C3D4E5F6020A /* Sources */,
+				A1B2C3D4E5F6020B /* Frameworks */,
+				A1B2C3D4E5F6020C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AmitiaNotificationService;
+			productName = AmitiaNotificationService;
+			productReference = A1B2C3D4E5F60204 /* AmitiaNotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -431,6 +558,12 @@
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
 					};
+					A1B2C3D4E5F60109 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					A1B2C3D4E5F60209 = {
+						CreatedOnToolsVersion = 16.0;
+					};
 				};
 			};
 			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
@@ -448,6 +581,8 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				A1B2C3D4E5F60109 /* AmitiaLiveActivity */,
+				A1B2C3D4E5F60209 /* AmitiaNotificationService */,
 			);
 		};
 /* End PBXProject section */
@@ -468,6 +603,20 @@
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F6010C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F6020C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -522,6 +671,7 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
+				A1B2C3D4E5F60301 /* IOSDeviceMeshIdentity.swift in Sources */,
 				A1B2C3D4E5F60030 /* IOSNativeHost.swift in Sources */,
 				A1B2C3D4E5F60031 /* HealthKitNativeHandler.swift in Sources */,
 				A1B2C3D4E5F60032 /* CalendarNativeHandler.swift in Sources */,
@@ -550,6 +700,25 @@
 				A1B2C3D4E5F60062 /* ShortcutActionGateway.swift in Sources */,
 				A1B2C3D4E5F60064 /* IOSNativeTransport.swift in Sources */,
 				A1B2C3D4E5F60066 /* RealtimeVisualAdapter.swift in Sources */,
+				A1B2C3D4E5F60100 /* IOSNotificationPlatform.swift in Sources */,
+				A1B2C3D4E5F60400 /* AmitiaRunAttributes.swift in Runner Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F6010A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D4E5F60106 /* AmitiaLiveActivityBundle.swift in Sources */,
+				A1B2C3D4E5F60401 /* AmitiaRunAttributes.swift in LiveActivity Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D4E5F6020A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D4E5F60200 /* NotificationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -560,6 +729,16 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		A1B2C3D4E5F6010E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1B2C3D4E5F60109 /* AmitiaLiveActivity */;
+			targetProxy = A1B2C3D4E5F6010F /* PBXContainerItemProxy */;
+		};
+		A1B2C3D4E5F6020E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1B2C3D4E5F60209 /* AmitiaNotificationService */;
+			targetProxy = A1B2C3D4E5F6020F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -639,6 +818,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
@@ -826,6 +1006,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
@@ -857,6 +1038,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
@@ -874,6 +1056,129 @@
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		A1B2C3D4E5F60110 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = AmitiaLiveActivity/AmitiaLiveActivity.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AmitiaLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1B2C3D4E5F60111 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = AmitiaLiveActivity/AmitiaLiveActivity.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AmitiaLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1B2C3D4E5F60112 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = AmitiaLiveActivity/AmitiaLiveActivity.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AmitiaLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
+		A1B2C3D4E5F60210 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = AmitiaNotificationService/AmitiaNotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AmitiaNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1B2C3D4E5F60211 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = AmitiaNotificationService/AmitiaNotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AmitiaNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1B2C3D4E5F60212 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = AmitiaNotificationService/AmitiaNotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AmitiaNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
 		};
 /* End XCBuildConfiguration section */
 
@@ -904,6 +1209,26 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D4E5F60113 /* Build configuration list for PBXNativeTarget "AmitiaLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4E5F60110 /* Debug */,
+				A1B2C3D4E5F60111 /* Release */,
+				A1B2C3D4E5F60112 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D4E5F60213 /* Build configuration list for PBXNativeTarget "AmitiaNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D4E5F60210 /* Debug */,
+				A1B2C3D4E5F60211 /* Release */,
+				A1B2C3D4E5F60212 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

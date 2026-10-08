@@ -22,7 +22,13 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		return
 	}
 	mesh := group.Group("/device-mesh/v1/business")
+	registerMeshSpeechRouter(mesh, services, coreID)
+	registerMeshRealtimeRouter(mesh, services, coreID)
+	registerMeshRealtimeInvitationRouter(mesh, services, coreID)
+	registerMeshProjectRouter(mesh, services, coreID)
+	registerMeshMemoryManagementRouter(mesh, services, coreID)
 	registerMeshTaskOwnerRouter(mesh, services)
+	registerMeshTaskSubmissionRouter(mesh, services, coreID)
 	mesh.POST("/continuity/signals", func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.DeviceID == "" {
@@ -107,7 +113,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "持续事项参数无效"})
 			return
 		}
-		if payload.ExpectedCoreID == "" || payload.ExpectedOwnerID == "" || payload.ExpectedModeRevision < 1 {
+		if payload.ExpectedScope == nil || payload.ExpectedCoreID == "" || payload.ExpectedOwnerID == "" || payload.ExpectedModeRevision < 1 {
 			c.JSON(400, gin.H{"message": "持续事项操作缺少服务提供者和数据归属版本，请刷新后重试"})
 			return
 		}
@@ -213,7 +219,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		kind := c.Query("kind")
 		switch kind {
-		case "memory", "working", "profile", "episodic", "fact", "vector", "graph", "summary":
+		case "memory", "working", "profile", "episodic", "fact", "vector", "graph", "summary", "continuity":
 		default:
 			c.JSON(400, gin.H{"message": "记忆层类型无效"})
 			return
@@ -357,6 +363,11 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.AbortWithStatusJSON(403, gin.H{"code": "mesh.administrator_required", "message": "能力授权只能由目标设备或 Core 管理员修改"})
 			return
 		}
+		finish, valid := security.BeginDeviceManagementIntent(c, services.DeviceMesh.Coordination)
+		if !valid {
+			return
+		}
+		defer finish()
 		var request struct {
 			CallerID         string `json:"callerId" binding:"required"`
 			ExpectedCoreID   string `json:"expectedCoreId" binding:"required"`
@@ -419,6 +430,10 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"code": "mesh.invalid_message", "message": "消息参数无效"})
 			return
 		}
+		if err := business.ValidateAttachments(request.Attachments); err != nil {
+			c.JSON(400, gin.H{"code": "mesh.invalid_attachment", "message": err.Error()})
+			return
+		}
 		request.SpaceID = actor.SpaceID.String()
 		request.DeviceID = actor.DeviceID.String()
 		request.CoreID = coreID
@@ -463,6 +478,12 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			case errors.Is(err, coordination.ErrScopeExpired):
 				status = 409
 				code = "mesh.scope_expired"
+			case errors.Is(err, coordination.ErrResourceVersion):
+				status = 409
+				code = "mesh.owned_resource_version"
+			case errors.Is(err, coordination.ErrWrongOwner):
+				status = 403
+				code = "mesh.wrong_owner"
 			case errors.Is(err, business.ErrUncertainExecution):
 				status = 409
 				code = "mesh.execution_uncertain"

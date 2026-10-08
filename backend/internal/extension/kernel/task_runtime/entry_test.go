@@ -1,6 +1,7 @@
 package task_runtime
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -36,5 +37,55 @@ func TestTaskEntryRequiresInstalledBoundaryAndMatchingSourceHash(t *testing.T) {
 	}
 	if _, err := ResolveTaskEntry(t.Context(), root, &def); err == nil {
 		t.Fatal("changed source accepted")
+	}
+}
+
+func TestPinnedTaskBundleDetectsDependencyChangesAndUnsafeTrees(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "src"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{"src/task.cjs": "module.exports=()=>require('../dependency.cjs');", "dependency.cjs": "module.exports='original';"} {
+		if err := os.WriteFile(filepath.Join(root, path), []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	definition := &TaskDefinition{Entry: "src/task.cjs"}
+	if err := PinTaskEntry(t.Context(), root, definition); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := ResolveTaskEntry(t.Context(), root, definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualRoot, err := TaskBundleRoot(entry, definition)
+	actualRootInfo, actualRootErr := os.Stat(actualRoot)
+	expectedRootInfo, expectedRootErr := os.Stat(root)
+	if err != nil || actualRootErr != nil || expectedRootErr != nil || !os.SameFile(actualRootInfo, expectedRootInfo) {
+		t.Fatalf("bundle root %q: %v", actualRoot, err)
+	}
+	original := definition.BundleHash
+	if err := os.WriteFile(filepath.Join(root, "dependency.cjs"), []byte("module.exports='changed';"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := TaskBundleHash(t.Context(), root)
+	if err != nil || changed == original {
+		t.Fatalf("dependency change not detected: %v", err)
+	}
+	if err := PinTaskEntry(t.Context(), root, definition); err == nil {
+		t.Fatal("changed dependency installation accepted")
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := TaskBundleHash(cancelled, root); err == nil {
+		t.Fatal("cancelled hashing accepted")
+	}
+	if _, err := TaskBundleHash(t.Context(), entry); err == nil {
+		t.Fatal("file accepted as bundle directory")
+	}
+	if err := os.Symlink(entry, filepath.Join(root, "linked.cjs")); err == nil {
+		if _, err := TaskBundleHash(t.Context(), root); err == nil {
+			t.Fatal("symbolic link accepted in bundle")
+		}
 	}
 }

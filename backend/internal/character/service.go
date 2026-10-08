@@ -17,15 +17,17 @@ import (
 )
 
 type CardPreviewResult struct {
-	Preview    *card.CharacterCardPreview `json:"preview"`
-	SourceHash string                     `json:"sourceHash"`
-	Format     card.CharacterCardFormat   `json:"format"`
+	RoleAuthority string                     `json:"roleAuthority,omitempty"`
+	Preview       *card.CharacterCardPreview `json:"preview"`
+	SourceHash    string                     `json:"sourceHash"`
+	Format        card.CharacterCardFormat   `json:"format"`
 }
 
 type CardImportResult struct {
-	CharacterID  string `json:"characterId"`
-	Name         string `json:"name"`
-	SourceFormat string `json:"sourceFormat"`
+	RoleAuthority string `json:"roleAuthority,omitempty"`
+	CharacterID   string `json:"characterId"`
+	Name          string `json:"name"`
+	SourceFormat  string `json:"sourceFormat"`
 }
 
 type CardExportResult struct {

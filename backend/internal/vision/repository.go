@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package vision
 
-import "gorm.io/gorm"
+import (
+	"errors"
+	"github.com/u-ai/backend/internal/configwrite"
+	"gorm.io/gorm"
+)
 
 type Repository interface {
 	List() ([]VisionConfig, error)
@@ -34,19 +38,31 @@ func (r *repository) GetByID(id int) (*VisionConfig, error) {
 	return &cfg, err
 }
 
-func (r *repository) Create(cfg *VisionConfig) error { return r.db.Create(cfg).Error }
+func (r *repository) Create(cfg *VisionConfig) error {
+	return configwrite.Create(r.db, cfg, cfg.IsActive == 1, requireIndependentVisionConfiguration)
+}
 
 func (r *repository) Update(id int, updates map[string]interface{}) error {
-	return r.db.Model(&VisionConfig{}).Where("id = ?", id).Updates(updates).Error
+	return configwrite.Update[VisionConfig](r.db, id, updates, requireIndependentVisionConfiguration)
 }
 
 func (r *repository) Delete(id int) error {
-	return r.db.Where("id = ?", id).Delete(&VisionConfig{}).Error
+	return configwrite.Delete[VisionConfig](r.db, id, requireIndependentVisionConfiguration)
 }
 
 func (r *repository) Activate(id int) error {
-	r.db.Model(&VisionConfig{}).Where("is_active = 1").Update("is_active", 0)
-	return r.db.Model(&VisionConfig{}).Where("id = ?", id).Update("is_active", 1).Error
+	return configwrite.Activate[VisionConfig](r.db, id, requireIndependentVisionConfiguration)
+}
+
+func requireIndependentVisionConfiguration(tx *gorm.DB) error {
+	main, err := (&repository{db: tx}).mainVisionModel()
+	if err != nil {
+		return err
+	}
+	if main != nil {
+		return errors.New(MainModelVisionNotice)
+	}
+	return nil
 }
 
 func (r *repository) GetActive() (*VisionConfig, error) {

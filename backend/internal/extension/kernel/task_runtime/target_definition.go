@@ -36,9 +36,22 @@ func portableTaskDefinitionFingerprint(definition *TaskDefinition) (string, erro
 	if definition == nil {
 		return "", NewTaskError(ErrTaskDefinitionInvalid, "任务定义不存在")
 	}
-	copy := *definition
-	copy.InstalledGeneration, copy.DefinitionHash = 0, ""
-	return taskDefinitionFingerprint(&copy)
+	copy, err := sourcePortableTaskDefinition(definition)
+	if err != nil {
+		return "", err
+	}
+	return taskDefinitionFingerprint(copy)
+}
+
+func ValidateTargetTaskDefinition(deviceID string, definition *TaskDefinition, target TargetTaskDefinitionPin) error {
+	portable, err := portableTaskDefinitionFingerprint(definition)
+	if err != nil {
+		return err
+	}
+	if target.DeviceID != deviceID || target.TaskID != SourceTaskDefinitionID(definition) || target.ExtensionID != definition.ExtensionID || target.ModuleID != definition.ModuleID || target.InstalledGeneration < 1 || target.PortableFingerprint != portable || !validTaskFingerprint(target.DefinitionFingerprint) || target.EntryHash != definition.EntryHash || definition.RemoteSource != nil && definition.RemoteSource.Reference.DeviceID != deviceID {
+		return NewTaskError(ErrTaskDefinitionInvalid, "目标设备任务与已授权插件定义不一致")
+	}
+	return nil
 }
 
 func validTaskFingerprint(value string) bool {
@@ -47,6 +60,9 @@ func validTaskFingerprint(value string) bool {
 }
 
 func (s *TaskRuntimeService) DescribeInstalledTask(ctx context.Context, taskID, deviceID string) (TargetTaskDefinitionPin, error) {
+	if err := validateSourceTaskExecutionAvailable(ctx); err != nil {
+		return TargetTaskDefinitionPin{}, err
+	}
 	if len(taskID) == 0 || len(taskID) > 256 || deviceID == "" || s.config.InstalledDefinitionValidator == nil || s.config.EntryResolver == nil {
 		return TargetTaskDefinitionPin{}, NewTaskError(ErrTaskDefinitionInvalid, "目标设备的已安装任务校验端口不完整")
 	}
@@ -57,11 +73,34 @@ func (s *TaskRuntimeService) DescribeInstalledTask(ctx context.Context, taskID, 
 	if definition == nil || definition.InstalledGeneration < 1 || !validTaskFingerprint(strings.TrimPrefix(definition.EntryHash, "sha256:")) {
 		return TargetTaskDefinitionPin{}, NewTaskError(ErrTaskDefinitionInvalid, "目标任务缺少安装版本或入口指纹")
 	}
+	if err := validateSourceTaskDeclaredCapabilities(definition); err != nil {
+		return TargetTaskDefinitionPin{}, err
+	}
 	if err := s.config.InstalledDefinitionValidator(ctx, definition); err != nil {
 		return TargetTaskDefinitionPin{}, err
 	}
-	if _, err := s.config.EntryResolver(ctx, definition); err != nil {
-		return TargetTaskDefinitionPin{}, err
+	if s.config.InstalledExecutionLease != nil {
+		root, release, err := s.config.InstalledExecutionLease(ctx, definition)
+		if err != nil {
+			if release != nil {
+				release()
+			}
+			return TargetTaskDefinitionPin{}, err
+		}
+		if release == nil || root == "" {
+			if release != nil {
+				release()
+			}
+			return TargetTaskDefinitionPin{}, NewTaskError(ErrTaskDefinitionInvalid, "目标任务安装读取租约未确认")
+		}
+		defer release()
+		if _, err := ResolveTaskEntry(ctx, root, definition); err != nil {
+			return TargetTaskDefinitionPin{}, err
+		}
+	} else {
+		if _, err := s.config.EntryResolver(ctx, definition); err != nil {
+			return TargetTaskDefinitionPin{}, err
+		}
 	}
 	if err := s.config.InstalledDefinitionValidator(ctx, definition); err != nil {
 		return TargetTaskDefinitionPin{}, err
@@ -97,19 +136,18 @@ func (p AcknowledgedTaskTargetDefinitionPort) Prepare(ctx context.Context, run *
 	if err := validateTaskDefinition(true, run, definition); err != nil {
 		return TargetTaskDefinitionPin{}, err
 	}
+	if err := validateDeviceTaskSource(scope, definition); err != nil {
+		return TargetTaskDefinitionPin{}, err
+	}
 	if _, err := (AcknowledgedTaskInputPort{Data: p.Data}).Input(ctx, run); err != nil {
 		return TargetTaskDefinitionPin{}, err
 	}
-	target, err := p.Provider.TargetTaskDefinition(ctx, scope, definition.TaskID)
+	target, err := p.Provider.TargetTaskDefinition(ctx, scope, SourceTaskDefinitionID(definition))
 	if err != nil {
 		return TargetTaskDefinitionPin{}, err
 	}
-	portable, err := portableTaskDefinitionFingerprint(definition)
-	if err != nil {
+	if err := ValidateTargetTaskDefinition(scope.TargetDeviceID, definition, target); err != nil {
 		return TargetTaskDefinitionPin{}, err
-	}
-	if target.DeviceID != scope.TargetDeviceID || target.TaskID != definition.TaskID || target.ExtensionID != definition.ExtensionID || target.ModuleID != definition.ModuleID || target.InstalledGeneration < 1 || target.PortableFingerprint != portable || !validTaskFingerprint(target.DefinitionFingerprint) || target.EntryHash != definition.EntryHash {
-		return TargetTaskDefinitionPin{}, NewTaskError(ErrTaskDefinitionInvalid, "目标设备任务与已授权插件定义不一致")
 	}
 	id := "task/target-definition/" + run.TaskRunID
 	document := ownedTargetTaskDefinition{Scope: scope, TaskRunID: run.TaskRunID, DefinitionFingerprint: run.DefinitionFingerprint, Target: target}

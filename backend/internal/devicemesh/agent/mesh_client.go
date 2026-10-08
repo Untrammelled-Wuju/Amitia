@@ -490,6 +490,8 @@ func (c *MeshClient) readLoop(conn *websocket.Conn) error {
 			c.handleTaskLeaseAck(&env)
 		case protocol.MessageTypeTaskCancel:
 			c.handleTaskCancel(&env)
+		case protocol.MessageTypeTaskPause:
+			c.handleTaskPause(&env)
 		}
 	}
 }
@@ -891,6 +893,28 @@ func (c *MeshClient) handleTaskCancel(env *protocol.Envelope) {
 	}
 }
 
+func (c *MeshClient) handleTaskPause(env *protocol.Envelope) {
+	var request protocol.TaskPausePayload
+	if json.Unmarshal(env.Payload, &request) != nil || request.RuntimeSessionID != env.RuntimeSessionID || request.ConnectionGeneration != env.ConnectionGeneration || request.RuntimeSessionID != c.sessionIdentity() || request.ConnectionGeneration != c.sessionGeneration() || c.State() != StateReady {
+		return
+	}
+	worker, supported := c.conf.TaskWorker.(interface {
+		PauseTask(context.Context, protocol.TaskPausePayload) error
+	})
+	if !supported {
+		c.sendTaskError(env.MessageID, request.TaskRunID, "pause_unsupported", "设备执行器不支持暂停")
+		return
+	}
+	messageID := env.MessageID
+	go func() {
+		ctx, cancel := context.WithTimeout(c.clientCtx, 10*time.Second)
+		defer cancel()
+		if err := worker.PauseTask(ctx, request); err != nil {
+			c.sendTaskError(messageID, request.TaskRunID, "pause_unconfirmed", err.Error())
+		}
+	}()
+}
+
 func (c *MeshClient) taskSource(source []protocol.TaskDispatchPayload) (runtimeidentity.RuntimeSessionID, int64) {
 	if len(source) > 0 {
 		return source[0].RuntimeSessionID, source[0].ConnectionGeneration
@@ -957,7 +981,7 @@ func (c *MeshClient) sendTaskProgress(taskRunID, attemptID, leaseID string, seq 
 }
 
 func (c *MeshClient) sendOwnedTaskComplete(dispatch protocol.TaskDispatchPayload, outcome protocol.OwnedTaskExecutionOutcome) {
-	c.sendTaskEnvelope(protocol.MessageTypeTaskComplete, protocol.TaskCompletePayload{TaskRunID: dispatch.TaskRunID, AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID, Success: true, Result: outcome.Result, ResultArtifactID: outcome.ResultArtifactID, RuntimeSessionID: dispatch.RuntimeSessionID, ConnectionGeneration: dispatch.ConnectionGeneration, DeviceID: c.conf.Identity.DeviceID, RuntimeID: c.conf.Identity.RuntimeID, CompletedAt: time.Now().UTC()})
+	c.sendTaskEnvelope(protocol.MessageTypeTaskComplete, protocol.TaskCompletePayload{TaskRunID: dispatch.TaskRunID, AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID, Success: outcome.PausedCheckpointVersion == 0, PausedCheckpointVersion: outcome.PausedCheckpointVersion, Result: outcome.Result, ResultArtifactID: outcome.ResultArtifactID, RuntimeSessionID: dispatch.RuntimeSessionID, ConnectionGeneration: dispatch.ConnectionGeneration, DeviceID: c.conf.Identity.DeviceID, RuntimeID: c.conf.Identity.RuntimeID, CompletedAt: time.Now().UTC()})
 }
 
 func (c *MeshClient) sendOwnedTaskUnknown(dispatch protocol.TaskDispatchPayload) {

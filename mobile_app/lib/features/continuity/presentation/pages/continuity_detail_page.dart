@@ -13,9 +13,14 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../widgets/continuity_editors.dart';
 
 class ContinuityDetailPage extends ConsumerStatefulWidget {
-  const ContinuityDetailPage({super.key, required this.threadId});
+  const ContinuityDetailPage({
+    super.key,
+    required this.threadId,
+    this.initialDocument,
+  });
 
   final String threadId;
+  final Map<String, dynamic>? initialDocument;
 
   @override
   ConsumerState<ContinuityDetailPage> createState() =>
@@ -28,10 +33,13 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
   bool _saving = false;
   String? _error;
   Timer? _refreshTimer;
+  bool get _readOnly => _detail?.thread.sourceDocument?['readOnly'] == true;
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialDocument != null)
+      _detail = ContinuityDetailDto.fromJson(widget.initialDocument!);
     _load();
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted && !_saving) unawaited(_load(showLoading: false));
@@ -45,6 +53,10 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
   }
 
   Future<void> _load({bool showLoading = true}) async {
+    if (_readOnly) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     if (showLoading && mounted) {
       setState(() {
         _loading = true;
@@ -54,8 +66,22 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     try {
       final detail = await ref
           .read(continuityServiceProvider)
-          .get(widget.threadId);
+          .get(
+            widget.threadId,
+            expectedDocument: _detail?.thread.sourceDocument,
+          );
       if (!mounted) return;
+      final original = _detail?.thread.sourceDocument?['executionScope'];
+      final incoming = detail.thread.sourceDocument?['executionScope'];
+      if (original is Map &&
+          incoming is Map &&
+          (original['coreId'] != incoming['coreId'] ||
+              original['resourceOwnerId'] != incoming['resourceOwnerId'] ||
+              original['roleId'] != incoming['roleId'] ||
+              original['providerEpoch'] != incoming['providerEpoch'] ||
+              original['modeRevision'] != incoming['modeRevision'] ||
+              original['permissionRevision'] != incoming['permissionRevision']))
+        throw StateError('原持续事项的数据归属已变化，请返回列表重新打开');
       setState(() {
         _detail = detail;
         _loading = false;
@@ -86,7 +112,7 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     try {
       await ref.read(continuityServiceProvider).update(detail.thread.id, {
         'status': status,
-      });
+      }, expectedDocument: detail.thread.sourceDocument);
       await _load(showLoading: false);
     } catch (error) {
       if (mounted) amitiaSnackBar(context, error.toString());
@@ -110,7 +136,9 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     if (input == null) return;
     _saving = true;
     try {
-      await ref.read(continuityServiceProvider).update(thread.id, input);
+      await ref
+          .read(continuityServiceProvider)
+          .update(thread.id, input, expectedDocument: thread.sourceDocument);
       await _load(showLoading: false);
     } catch (error) {
       if (mounted) amitiaSnackBar(context, error.toString());
@@ -138,6 +166,7 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
             detail.leaseId,
             outcome,
             result: outcome == 'completed' ? detail.thread.summary : '',
+            expectedDocument: detail.thread.sourceDocument,
           );
       await _load(showLoading: false);
     } catch (error) {
@@ -154,7 +183,13 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     if (input == null) return;
     _saving = true;
     try {
-      await ref.read(continuityServiceProvider).createWait(thread.id, input);
+      await ref
+          .read(continuityServiceProvider)
+          .createWait(
+            thread.id,
+            input,
+            expectedDocument: thread.sourceDocument,
+          );
       await _load(showLoading: false);
     } catch (error) {
       if (mounted) amitiaSnackBar(context, error.toString());
@@ -170,7 +205,12 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     try {
       await ref
           .read(continuityServiceProvider)
-          .resolveWait(thread.id, wait.id, resume: wait.autoResume);
+          .resolveWait(
+            thread.id,
+            wait.id,
+            resume: wait.autoResume,
+            expectedDocument: thread.sourceDocument,
+          );
       await _load(showLoading: false);
     } catch (error) {
       if (mounted) amitiaSnackBar(context, error.toString());
@@ -192,7 +232,13 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
     if (confirmed != true) return;
     _saving = true;
     try {
-      await ref.read(continuityServiceProvider).cancelWait(thread.id, wait.id);
+      await ref
+          .read(continuityServiceProvider)
+          .cancelWait(
+            thread.id,
+            wait.id,
+            expectedDocument: thread.sourceDocument,
+          );
       await _load(showLoading: false);
     } catch (error) {
       if (mounted) amitiaSnackBar(context, error.toString());
@@ -295,7 +341,8 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     : Icons.pause_outlined,
                 isSecondary: true,
                 outlined: true,
-                onPressed: _saving || detail.leaseState == 'unknown'
+                onPressed:
+                    _readOnly || _saving || detail.leaseState == 'unknown'
                     ? null
                     : () => _setStatus(thread.paused ? 'active' : 'paused'),
               ),
@@ -305,21 +352,23 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                 icon: Icons.check_circle_outline,
                 isSecondary: true,
                 outlined: true,
-                onPressed: _saving ? null : () => _setStatus('completed'),
+                onPressed: _readOnly || _saving
+                    ? null
+                    : () => _setStatus('completed'),
               ),
             AmitiaButton(
               label: '编辑',
               icon: Icons.edit_outlined,
               isSecondary: true,
               outlined: true,
-              onPressed: _saving ? null : _edit,
+              onPressed: _readOnly || _saving ? null : _edit,
             ),
             if (detail.leaseState == 'unknown')
               AmitiaButton(
                 label: '确认执行已完成',
                 isSecondary: true,
                 outlined: true,
-                onPressed: _saving
+                onPressed: _readOnly || _saving
                     ? null
                     : () => _confirmExecution('completed'),
               ),
@@ -328,7 +377,7 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                 label: '放弃本次执行',
                 isSecondary: true,
                 outlined: true,
-                onPressed: _saving
+                onPressed: _readOnly || _saving
                     ? null
                     : () => _confirmExecution('abandoned'),
               ),
@@ -353,7 +402,9 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
               isSecondary: true,
               outlined: true,
               height: 38,
-              onPressed: detail.thread.terminal || _saving ? null : _addWait,
+              onPressed: _readOnly || detail.thread.terminal || _saving
+                  ? null
+                  : _addWait,
             ),
           ],
         ),
@@ -431,7 +482,9 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     isSecondary: true,
                     outlined: true,
                     height: 40,
-                    onPressed: _saving ? null : () => _resolveWait(wait),
+                    onPressed: _readOnly || _saving
+                        ? null
+                        : () => _resolveWait(wait),
                   ),
                 ),
                 SizedBox(width: AppSpacing.sm),
@@ -441,7 +494,9 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
                     isSecondary: true,
                     outlined: true,
                     height: 40,
-                    onPressed: _saving ? null : () => _cancelWait(wait),
+                    onPressed: _readOnly || _saving
+                        ? null
+                        : () => _cancelWait(wait),
                   ),
                 ),
               ],

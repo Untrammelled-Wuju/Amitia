@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/secretstore"
 )
@@ -93,6 +94,23 @@ func (s *CredentialStore) loadCredentialLocked() (*StoredCredential, error) {
 func (s *CredentialStore) WithActiveCredential(ctx context.Context, expected *StoredCredential, write func(context.Context) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.withActiveCredentialLocked(ctx, expected, write)
+}
+
+func (s *CredentialStore) WithActiveSessionCredential(ctx context.Context, expected *StoredCredential, session runtimeidentity.RuntimeSessionID, generation int64, write func(context.Context) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cursor, err := s.loadCursorLocked()
+	if err != nil {
+		return err
+	}
+	if cursor == nil || session == "" || generation < 1 || cursor.RuntimeSessionID != session || cursor.ConnectionGeneration != generation {
+		return errors.Join(errors.New("设备执行连接已变化，旧审批已拦截"), coordination.ErrScopeExpired)
+	}
+	return s.withActiveCredentialLocked(ctx, expected, write)
+}
+
+func (s *CredentialStore) withActiveCredentialLocked(ctx context.Context, expected *StoredCredential, write func(context.Context) error) error {
 	credential, err := s.loadCredentialLocked()
 	if err != nil {
 		return err
@@ -187,6 +205,10 @@ func (s *CredentialStore) DeleteCredential() error {
 func (s *CredentialStore) LoadCursor() (*SessionCursor, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadCursorLocked()
+}
+
+func (s *CredentialStore) loadCursorLocked() (*SessionCursor, error) {
 
 	data, err := os.ReadFile(s.sessFile)
 	if err != nil {

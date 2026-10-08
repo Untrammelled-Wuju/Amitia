@@ -31,6 +31,7 @@ import 'theme/design_tokens.dart';
 import 'theme/appearance_colors.dart';
 import '../core/settings/custom_palette.dart';
 import 'app_routes.dart';
+import 'notification_runtime_bootstrap.dart';
 import 'router.dart';
 
 class AmitiaAppRoot extends ConsumerStatefulWidget {
@@ -345,6 +346,7 @@ class AmitiaApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(deviceTimezoneBootstrapProvider);
     ref.watch(nativeBridgeRelayBootstrapProvider);
+    ref.watch(notificationCoordinatorProvider);
     ref.watch(desktopPetMobileRuntimeBootstrapProvider);
     ref.watch(mobileUIHostEventClientProvider);
     final appearance = ref.watch(appearancePreferencesProvider);

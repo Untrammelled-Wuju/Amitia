@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
@@ -7,6 +9,7 @@ import 'character_service.dart';
 import 'character_detail_service.dart';
 import 'chat_service.dart';
 import 'memory_service.dart';
+import 'device_owned_memory_service.dart';
 import 'profile_service.dart';
 import 'episodic_service.dart';
 import 'worldbook_service.dart';
@@ -24,6 +27,7 @@ import 'search_api_service.dart';
 import 'channel_service.dart';
 import 'workspace_service.dart';
 import 'device_mesh_service.dart';
+import 'device_owned_speech_service.dart';
 import 'privacy_service.dart';
 import 'temporal_service.dart' as temporal_config;
 import 'onboarding_service.dart';
@@ -38,6 +42,8 @@ import '../models/reminder.dart';
 import '../models/model_config.dart';
 import '../runtime/backend/mobile_backend_providers.dart';
 import '../runtime/backend/mobile_deployment_mode.dart';
+import '../device_mesh/mobile_device_mesh_identity.dart';
+import '../device_mesh/mobile_device_mesh_provisioning.dart';
 
 BackendServiceApi _getDynamicServiceApi(Ref ref) {
   return ref.read(backendServiceProvider);
@@ -81,6 +87,20 @@ final memoryServiceProvider = Provider<MemoryService>(
   (ref) => MemoryService(_getDynamicServiceApi(ref)),
 );
 
+final deviceOwnedMemoryServiceProvider = Provider<DeviceOwnedMemoryService>((
+  ref,
+) {
+  final api = ref.watch(rawBackendServiceApiProvider);
+  if (api == null) throw StateError('记忆 Core 服务尚未就绪');
+  return DeviceOwnedMemoryService(
+    api,
+    isCurrent: () =>
+        identical(ref.read(rawBackendServiceApiProvider), api) &&
+        ref.read(mobileDeploymentConfigProvider).mode ==
+            MobileDeploymentMode.cloud,
+  );
+});
+
 final ownedMemoryModeProvider = FutureProvider<bool>((ref) async {
   final config = ref.watch(mobileDeploymentConfigProvider);
   final owned = ref.watch(chatServiceProvider).owned;
@@ -104,7 +124,12 @@ final worldBookServiceProvider = Provider<WorldBookService>(
 );
 
 final continuityServiceProvider = Provider<ContinuityService>(
-  (ref) => ContinuityService(_getDynamicServiceApi(ref)),
+  (ref) => ContinuityService(
+    _getDynamicServiceApi(ref),
+    isBound: () =>
+        ref.read(mobileDeploymentConfigProvider).mode ==
+        MobileDeploymentMode.cloud,
+  ),
 );
 
 final reminderServiceProvider = Provider<ReminderService>(
@@ -124,7 +149,12 @@ final feedbackServiceProvider = Provider<FeedbackService>(
 );
 
 final ttsServiceProvider = Provider<TTSService>(
-  (ref) => TTSService(_getDynamicServiceApi(ref)),
+  (ref) => TTSService(
+    _getDynamicServiceApi(ref),
+    isBound: () =>
+        ref.read(mobileDeploymentConfigProvider).mode ==
+        MobileDeploymentMode.cloud,
+  ),
 );
 
 final asrServiceProvider = Provider<ASRService>(
@@ -151,9 +181,28 @@ final kernelExtensionEnablementProvider = FutureProvider<Map<String, bool>>((
   };
 });
 
-final extensionTaskServiceProvider = Provider<ExtensionTaskService>(
-  (ref) => ExtensionTaskService(_getDynamicServiceApi(ref)),
-);
+final extensionTaskServiceProvider = Provider<ExtensionTaskService>((ref) {
+  final api = ref.watch(rawBackendServiceApiProvider);
+  return ExtensionTaskService(
+    _getDynamicServiceApi(ref),
+    isBound: () =>
+        ref.read(mobileDeploymentConfigProvider).mode ==
+        MobileDeploymentMode.cloud,
+    taskIsCurrent: () =>
+        api != null && identical(ref.read(rawBackendServiceApiProvider), api),
+  );
+});
+
+final sourceTaskApprovalServiceProvider = Provider<ExtensionTaskService>((ref) {
+  final api = ref.watch(rawDeviceLocalBackendServiceApiProvider);
+  if (api == null || api.generation <= 0)
+    throw StateError('本机 Device Agent Runtime 尚未就绪');
+  return ExtensionTaskService(
+    api,
+    sourceIsCurrent: () =>
+        identical(ref.read(rawDeviceLocalBackendServiceApiProvider), api),
+  );
+});
 
 final systemServiceProvider = Provider<SystemService>(
   (ref) => SystemService(_getDynamicServiceApi(ref)),
@@ -195,6 +244,28 @@ final deviceMeshServiceProvider = Provider<DeviceMeshService>(
   (ref) => DeviceMeshService(_getDynamicServiceApi(ref)),
 );
 
+final mobileDeviceMeshIdentityProvider = Provider<MobileDeviceMeshIdentity>(
+  (ref) => const MobileDeviceMeshIdentity(),
+);
+
+final mobileDeviceMeshProvisioningProvider =
+    Provider<MobileDeviceMeshProvisioning>(
+      (ref) => const MobileDeviceMeshProvisioning(),
+    );
+
+final deviceOwnedSpeechServiceProvider = Provider<DeviceOwnedSpeechService>(
+  (ref) => DeviceOwnedSpeechService(
+    api: _getDynamicServiceApi(ref),
+    currentApi: () => ref.read(rawBackendServiceApiProvider),
+    providerKey: () {
+      final config = ref.read(mobileDeploymentConfigProvider);
+      return config.mode == MobileDeploymentMode.cloud
+          ? config.remoteCoreUri ?? ''
+          : '';
+    },
+  ),
+);
+
 final deviceMeshLocalServiceProvider = Provider<DeviceMeshLocalService?>((ref) {
   final api = ref.watch(rawDeviceLocalBackendServiceApiProvider);
   return api == null ? null : DeviceMeshLocalService(api);
@@ -212,12 +283,37 @@ final deviceCoordinationProvider =
 
 final localDeviceMeshIdentityProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+      if (Platform.isIOS) {
+        return ref.watch(mobileDeviceMeshIdentityProvider).identity();
+      }
       final service = ref.watch(deviceMeshLocalServiceProvider);
       return service == null ? null : service.identity();
     });
 
 final localDeviceMeshStatusProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+      if (Platform.isIOS) {
+        final deployment = ref.watch(mobileDeploymentConfigProvider);
+        if (deployment.mode != MobileDeploymentMode.cloud ||
+            (deployment.remoteCoreUri ?? '').trim().isEmpty) {
+          return const <String, dynamic>{
+            'state': 'unsupported',
+            'platform': 'ios',
+            'deviceAgent': 'native-lightweight',
+          };
+        }
+        final credential = await ref
+            .watch(mobileDeviceMeshProvisioningProvider)
+            .currentFor(deployment.remoteCoreUri!);
+        return <String, dynamic>{
+          'state': credential == null ? 'unprovisioned' : 'provisioned',
+          'platform': 'ios',
+          'deviceAgent': 'native-lightweight',
+          if (credential != null) 'spaceId': credential.spaceId,
+          if (credential != null) 'deviceId': credential.deviceId,
+          if (credential != null) 'runtimeId': credential.runtimeId,
+        };
+      }
       final service = ref.watch(deviceMeshLocalServiceProvider);
       return service == null ? null : service.status();
     });

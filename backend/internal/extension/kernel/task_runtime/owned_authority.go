@@ -23,7 +23,8 @@ func (s *TaskRuntimeService) validateTaskReadScope(ctx context.Context, run *Tas
 	if run == nil {
 		return NewTaskError(ErrTaskNotFound, "任务不存在")
 	}
-	authority, owned, err := s.taskAuthority(ctx, run.ScopeSnapshotID, run.InvocationID, run.ExtensionID, run.ModuleID)
+	_, _, historical := coordination.TaskReadAuthority(ctx)
+	authority, owned, err := s.taskAuthoritySnapshot(ctx, run.ScopeSnapshotID, run.InvocationID, run.ExtensionID, run.ModuleID, historical)
 	if err != nil {
 		return err
 	}
@@ -34,6 +35,10 @@ func (s *TaskRuntimeService) validateTaskReadScope(ctx context.Context, run *Tas
 }
 
 func (s *TaskRuntimeService) taskAuthority(ctx context.Context, snapshotID, invocationID, extensionID, moduleID string) (coordination.ExecutionScope, bool, error) {
+	return s.taskAuthoritySnapshot(ctx, snapshotID, invocationID, extensionID, moduleID, false)
+}
+
+func (s *TaskRuntimeService) taskAuthoritySnapshot(ctx context.Context, snapshotID, invocationID, extensionID, moduleID string, historical bool) (coordination.ExecutionScope, bool, error) {
 	if snapshotID == "" {
 		return coordination.ExecutionScope{}, false, nil
 	}
@@ -44,7 +49,7 @@ func (s *TaskRuntimeService) taskAuthority(ctx context.Context, snapshotID, invo
 	if err != nil {
 		return coordination.ExecutionScope{}, false, WrapTaskError(ErrTaskScopeDenied, "任务授权快照不存在", err)
 	}
-	if snapshot.SnapshotID != snapshotID || snapshot.InvocationID != invocationID || snapshot.ExtensionID != extensionID || snapshot.ModuleID != moduleID || (snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(time.Now())) {
+	if snapshot.SnapshotID != snapshotID || snapshot.InvocationID != invocationID || snapshot.ExtensionID != extensionID || snapshot.ModuleID != moduleID || (!historical && snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(time.Now())) {
 		return coordination.ExecutionScope{}, false, NewTaskError(ErrTaskScopeDenied, "任务授权快照已过期或与调用不一致")
 	}
 	if len(snapshot.OwnedExecutionScope) == 0 {
@@ -63,6 +68,14 @@ func (s *TaskRuntimeService) validateEnqueueAuthority(ctx context.Context, req E
 		return err
 	}
 	current, currentOwned := coordination.FromContext(ctx)
+	if def.RemoteSource != nil {
+		if !owned || req.TrustedExecutionTarget == nil || req.TrustedExecutionTarget.Target.SourceTaskDefinitionID != SourceTaskDefinitionID(def) {
+			return NewTaskError(ErrTaskScopeDenied, "设备任务目录引用缺少固定目标与持久化执行授权")
+		}
+		if err := validateDeviceTaskSource(authority, def); err != nil {
+			return err
+		}
+	}
 	if currentOwned != owned || (owned && (current != authority || s.config.OwnedExecutionGuard == nil)) {
 		return NewTaskError(ErrTaskScopeDenied, "任务缺少一致的持久化设备授权或数据归属执行器")
 	}
@@ -70,6 +83,9 @@ func (s *TaskRuntimeService) validateEnqueueAuthority(ctx context.Context, req E
 }
 
 func (s *TaskRuntimeService) restoreTaskAuthority(ctx context.Context, run *TaskRun) (context.Context, func(), error) {
+	if _, _, readOnly := coordination.TaskReadAuthority(ctx); readOnly {
+		return ctx, nil, NewTaskError(ErrTaskScopeDenied, "历史只读授权不能恢复执行或控制任务")
+	}
 	authority, owned, err := s.taskAuthority(ctx, run.ScopeSnapshotID, run.InvocationID, run.ExtensionID, run.ModuleID)
 	if err != nil {
 		return ctx, nil, err

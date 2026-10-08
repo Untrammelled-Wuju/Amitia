@@ -5,6 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="page">
     <h2 class="page-title">音色配置</h2>
+    <el-alert v-if="!canConfigure" :title="configurationExplanation" type="info" :closable="false" show-icon />
+    <template v-if="canConfigure">
 
     <el-alert
       type="warning"
@@ -368,11 +370,12 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
       </template>
     </el-dialog>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, onMounted, watch } from "vue";
 import { Plus } from "@element-plus/icons-vue";
 import {
   ElMessage,
@@ -382,8 +385,18 @@ import {
 } from "element-plus";
 import { apiClient, useApi } from "../../composables/useApi";
 import type { TtsConfig, VoicePreset } from "@/types";
+import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "../../composables/useCoreConfigurationAccess";
+import { useOwnedSpeech } from "../../composables/useOwnedSpeech";
 
 const { get, post, put, del } = useApi();
+const access = useCoreConfigurationAccess();
+const { canConfigure, explanation: configurationExplanation } = access;
+const collectionContext = ref("");
+const editorContext = ref("");
+async function allowConfiguration(expected?: string) {
+  try { return await access.requireAccess(expected); }
+  catch (error: any) { ElMessage.warning(error?.message || configurationExplanation); return ""; }
+}
 
 const configs = ref<TtsConfig[]>([]);
 const availableVoices = ref<VoicePreset[]>([]);
@@ -393,6 +406,7 @@ const saving = ref(false);
 const testingId = ref<number | null>(null);
 const previewText = ref("测试");
 const previewAudio = ref("");
+const speech = useOwnedSpeech(() => { previewAudio.value = ""; });
 const previewLoading = ref(false);
 
 const emotions = [
@@ -418,6 +432,10 @@ const form = reactive({
 });
 
 const formRef = ref<FormInstance>();
+watch(access.contextKey, (key) => {
+  if (key !== editorContext.value) dialogVisible.value = false;
+  if (key !== collectionContext.value) { configs.value = []; form.apiKey = ""; }
+}, { flush: "sync" });
 
 const rules: FormRules = {
   name: [{ required: true, message: "请输入名称", trigger: "blur" }],
@@ -437,7 +455,12 @@ const rules: FormRules = {
 };
 
 async function fetchConfigs() {
-  configs.value = (await get<TtsConfig[]>("/api/tts/configs")) || [];
+  const context = await allowConfiguration();
+  if (!context) return;
+  const rows = (await get<TtsConfig[]>("/api/tts/configs")) || [];
+  if (access.contextKey.value !== context) return;
+  collectionContext.value = context;
+  configs.value = rows;
 }
 async function fetchVoices() {
   availableVoices.value = (await get<VoicePreset[]>("/api/tts/voices")) || [];
@@ -452,7 +475,10 @@ function emotionLabel(e: string): string {
   return found?.label || e;
 }
 
-function showDialog(cfg: TtsConfig | null) {
+async function showDialog(cfg: TtsConfig | null) {
+  const context = await allowConfiguration(cfg ? collectionContext.value : undefined);
+  if (!context) return;
+  editorContext.value = context;
   previewAudio.value = "";
   if (cfg) {
     editingId.value = cfg.id;
@@ -478,8 +504,10 @@ function showDialog(cfg: TtsConfig | null) {
 }
 
 async function saveConfig() {
+  if (saving.value || !await allowConfiguration(editorContext.value)) return;
   const valid = await formRef.value?.validate().catch(() => false);
   if (!valid) return;
+  if (!await allowConfiguration(editorContext.value)) return;
 
   saving.value = true;
   try {
@@ -494,12 +522,12 @@ async function saveConfig() {
     };
     if (editingId.value) {
       if (form.apiKey) payload.apiKey = form.apiKey;
-      await put("/api/tts/configs/" + editingId.value, payload);
+      await put("/api/tts/configs/" + editingId.value, payload, coreConfigurationRequestConfig(editorContext.value));
       ElMessage.success("已更新");
     } else {
       payload.apiKey = form.apiKey;
       payload.resourceId = form.resourceId;
-      await post("/api/tts/configs", payload);
+      await post("/api/tts/configs", payload, coreConfigurationRequestConfig(editorContext.value));
       ElMessage.success("已创建");
     }
     dialogVisible.value = false;
@@ -512,8 +540,10 @@ async function saveConfig() {
 }
 
 async function setActive(id: number) {
+  const context = collectionContext.value;
+  if (!await allowConfiguration(context)) return;
   try {
-    await post("/api/tts/configs/" + id + "/activate");
+    await post("/api/tts/configs/" + id + "/activate", undefined, coreConfigurationRequestConfig(context));
     ElMessage.success("已设为默认");
     fetchConfigs();
   } catch (err: any) {
@@ -522,21 +552,26 @@ async function setActive(id: number) {
 }
 
 async function delConfig(id: number) {
+  const context = collectionContext.value;
+  if (!await allowConfiguration(context)) return;
   try {
     await ElMessageBox.confirm("确定删除？", "确认", {
       type: "warning",
       confirmButtonText: "删除",
     });
-    await del("/api/tts/configs/" + id);
+    if (!await allowConfiguration(context)) return;
+    await del("/api/tts/configs/" + id, coreConfigurationRequestConfig(context));
     ElMessage.success("已删除");
     fetchConfigs();
   } catch {}
 }
 
 async function testConnection(id: number) {
+  const context = collectionContext.value;
+  if (!await allowConfiguration(context)) return;
   testingId.value = id;
   try {
-    await post("/api/tts/configs/" + id + "/test");
+    await post("/api/tts/configs/" + id + "/test", undefined, coreConfigurationRequestConfig(context));
     ElMessage.success("连接测试通过");
     fetchConfigs();
   } catch (err: any) {
@@ -550,7 +585,8 @@ async function doPreview(voiceId: number) {
   previewLoading.value = true;
   previewAudio.value = "";
   try {
-    const res = await post<any>("/api/tts/synthesize", {
+    const ownedUrl = await speech.synthesizeIfBound(previewText.value || "测试");
+    const res = ownedUrl ? { audioUrl: ownedUrl } : await post<any>("/api/tts/synthesize", {
       voiceId,
       text: previewText.value || "测试",
     });
@@ -569,6 +605,9 @@ onMounted(() => {
   fetchClonedVoices();
 });
 const showCloneDialog = ref(false);
+const cloneContext = ref("");
+watch(showCloneDialog, (visible) => { if (visible) cloneContext.value = collectionContext.value; });
+watch(access.contextKey, (key) => { if (key !== cloneContext.value) showCloneDialog.value = false; });
 const cloneLoading = ref(false);
 const clonedVoices = ref<any[]>([]);
 const previewCloneId = ref("");
@@ -595,6 +634,7 @@ async function fetchClonedVoices() {
 }
 
 async function submitClone() {
+  if (!await allowConfiguration(cloneContext.value)) return;
   if (!cloneForm.audioFile || !cloneForm.name.trim()) return;
   cloneLoading.value = true;
   try {
@@ -607,7 +647,7 @@ async function submitClone() {
     if (cloneForm.refText.trim())
       formData.append("refText", cloneForm.refText.trim());
 
-    const resp = await apiClient.post("/api/tts/voice-clone", formData);
+    const resp = await apiClient.post("/api/tts/voice-clone", formData, coreConfigurationRequestConfig(cloneContext.value));
     const data: any = resp.data?.data || resp.data;
     if (!data?.speakerId) {
       ElMessage.error((resp.data as any)?.message || "复刻失败");
@@ -630,7 +670,8 @@ async function submitClone() {
 async function previewClone(speakerId: string) {
   previewCloneId.value = speakerId;
   try {
-    const res = await post<any>("/api/tts/synthesize", {
+    const ownedUrl = await speech.synthesizeIfBound("测试");
+    const res = ownedUrl ? { audioUrl: ownedUrl } : await post<any>("/api/tts/synthesize", {
       speakerId,
       text: "测试",
     });
@@ -644,12 +685,15 @@ async function previewClone(speakerId: string) {
 }
 
 async function deleteClone(speakerId: string, name: string) {
+  const context = collectionContext.value;
+  if (!await allowConfiguration(context)) return;
   try {
     await ElMessageBox.confirm('确定删除音色"' + name + '"吗？', "确认", {
       type: "warning",
       confirmButtonText: "删除",
     });
-    await apiClient.delete("/api/tts/voice-clone", { params: { speakerId } });
+    if (!await allowConfiguration(context)) return;
+    await apiClient.delete("/api/tts/voice-clone", { params: { speakerId }, ...coreConfigurationRequestConfig(context) });
     await fetchClonedVoices();
     ElMessage.success("已删除");
   } catch {}

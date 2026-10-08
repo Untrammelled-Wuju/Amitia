@@ -67,6 +67,9 @@ func testTaskOwnerRPCModeOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db,
 	repository := kernelsqlite.NewTaskRepository(db)
 	service := task_runtime.NewTaskRuntimeService(repository, config)
 	services.KernelContainer.TaskRuntimeService = service
+	definitionCopy := *definition
+	definitionCopy.Checkpoint = true
+	definition = &definitionCopy
 	if err := service.PutTaskDefinition(ctx, definition); err != nil {
 		t.Fatal(err)
 	}
@@ -176,6 +179,33 @@ func testTaskOwnerRPCModeOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db,
 	}
 	if err := db.QueryRow(`SELECT count(*) FROM kernel_device_owned_resources WHERE resource_id=?`, "task/storage/"+run.TaskRunID).Scan(&copies); err != nil || copies != coreCopies {
 		t.Fatalf("Core owner body was not stored in the Core kernel: %d %v", copies, err)
+	}
+	current, err := repository.GetTaskRun(t.Context(), run.TaskRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pausing := task_runtime.CloneTaskRun(current)
+	pausing.Status, pausing.LeaseID = task_runtime.RunStatusPausing, entry.LeaseID
+	pausing.Revision = task_runtime.NextRevision(current.Revision)
+	if ok, err := repository.UpdateTaskRunCAS(t.Context(), pausing, current.Status, current.Generation, current.Revision); err != nil || !ok {
+		t.Fatalf("pause state was not persisted: %v", err)
+	}
+	invoke(request, true, http.StatusOK)
+	checkpointRequest.RequestID, checkpointRequest.Params = "pause-checkpoint-request", params(map[string]any{"version": 2, "payload": map[string]any{"cursor": 2, "data": map[string]string{"location": "owner-only-paused"}}})
+	invoke(checkpointRequest, true, http.StatusOK)
+	if err := service.HandleRemotePaused(t.Context(), run.TaskRunID, request.AttemptID, entry.LeaseID, 1); err == nil {
+		t.Fatal("old checkpoint confirmed a paused TLS task")
+	}
+	if err := service.HandleRemotePaused(t.Context(), run.TaskRunID, request.AttemptID, entry.LeaseID, 2); err != nil {
+		t.Fatal(err)
+	}
+	paused, err := repository.GetTaskRun(t.Context(), run.TaskRunID)
+	if err != nil || paused.Status != task_runtime.RunStatusPaused || paused.PausedAt == nil {
+		t.Fatalf("owner pause was not confirmed: %+v %v", paused, err)
+	}
+	invoke(request, true, http.StatusConflict)
+	if !pending.CompleteBound(run.TaskRunID, request.AttemptID, entry.LeaseID, request.SessionID, request.ConnectionGeneration, false, "paused") {
+		t.Fatal("pause stop receipt was not confirmed")
 	}
 	pending.Cancel(run.TaskRunID, "execution cancelled")
 	invoke(request, true, http.StatusConflict)

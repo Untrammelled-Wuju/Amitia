@@ -102,6 +102,29 @@ func (b *DefaultPermissionBroker) RequiresPerUse(permissionID string) bool {
 	return ok && def.RequiresPerUse
 }
 
+func (b *DefaultPermissionBroker) RequiresRemoteApproval(permissionID string) bool {
+	if b == nil || b.registry == nil {
+		return true
+	}
+	definition, ok := b.registry.Get(permissionID)
+	return !ok || definition.RequiresPerUse || definition.RemoteExecution == RemoteExecutionRequireApproval
+}
+
+func (b *DefaultPermissionBroker) CanApproveRemoteTask(ctx context.Context, request PermissionEvaluationRequest) bool {
+	if b == nil || b.registry == nil || !request.ExecutionContext.IsDeviceExecution() || len(request.Requirements) == 0 {
+		return false
+	}
+	request.ApprovalMode, request.ApprovalRecordID = "", ""
+	result := b.Evaluate(ctx, request)
+	for _, reason := range result.Reasons {
+		switch reason.Code {
+		case "unknown_permission", "trusted_only", "background_not_allowed", "scope_not_allowed", "system_policy_deny", "execution_policy_deny", "remote_execution_denied", "installation_permission_denied", "execution_context_invalid":
+			return false
+		}
+	}
+	return true
+}
+
 func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult {
 	request.ExecutionContext = request.ExecutionContext.Normalize()
 	if !request.ExecutionContext.IsEmpty() {

@@ -22,29 +22,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { getDeploymentConfig } from '@/runtime/runtime-adapter';
-import { useApi } from '@/composables/useApi';
+import { useCoreConfigurationAccess } from '@/composables/useCoreConfigurationAccess';
 
 const router = useRouter();
 const route = useRoute();
-const checking = ref(true);
-const canConfigure = ref(false);
-const api = useApi();
-
-async function checkAccess() {
-  checking.value = true;
-  canConfigure.value = false;
-  try {
-    const deployment = await getDeploymentConfig();
-    if (deployment.mode === 'cloud') {
-      const policy = await api.get<{ canAdminister: boolean }>('/api/device-mesh/v1/coordination/me');
-      canConfigure.value = policy.canAdminister;
-    } else { canConfigure.value = true; }
-  } catch { canConfigure.value = false; }
-  finally { checking.value = false; }
-}
+const { checking, canConfigure } = useCoreConfigurationAccess();
 
 const activeTab = computed(() => {
   const path = route.path;
@@ -62,13 +46,10 @@ function onTabChange(name: string) {
 }
 
 onMounted(() => {
-  void checkAccess();
-  window.addEventListener('amitia:execution-scope-changed', checkAccess);
   if (route.path === "/settings/model") {
     router.replace("/settings/model/llm");
   }
 });
-onUnmounted(() => window.removeEventListener('amitia:execution-scope-changed', checkAccess));
 </script>
 
 <style scoped>

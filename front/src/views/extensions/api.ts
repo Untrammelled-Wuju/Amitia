@@ -356,46 +356,38 @@ export async function setPackageSignerTrust(
   );
 }
 
-const taskRunPath = (taskRunId: string) =>
-  `/api/extensions/tasks/${encodeURIComponent(taskRunId)}`;
+import * as ownedTasks from "../kernel/tasks/api";
+import type { TaskRun as KernelTaskRun } from "../kernel/tasks/types";
 
 export async function fetchTasks(filters: TaskListFilters = {}) {
-  const response = await apiClient.get("/api/extensions/tasks", {
-    params: {
+  return await ownedTasks.listTasks({
       extensionId: filters.extensionId || undefined,
       status: filters.status || undefined,
       page: filters.page,
       pageSize: filters.pageSize,
-    },
-  });
-  return response.data as TaskRunPage;
+  }) as unknown as TaskRunPage;
 }
 
-export async function fetchTask(taskRunId: string) {
-  const response = await apiClient.get(taskRunPath(taskRunId));
-  return response.data as TaskRun;
+export async function fetchTask(taskRunId: string, expected?: TaskRun) {
+  return await ownedTasks.getTask(taskRunId, expected as KernelTaskRun | undefined) as unknown as TaskRun;
 }
 
-export async function cancelTask(taskRunId: string) {
-  await apiClient.post(`${taskRunPath(taskRunId)}/cancel`);
+export async function cancelTask(taskRunId: string, expected?: TaskRun) {
+  await ownedTasks.cancelTask(taskRunId, undefined, expected as KernelTaskRun | undefined);
 }
 
-export async function retryTask(taskRunId: string) {
-  const response = await apiClient.post(`${taskRunPath(taskRunId)}/retry`);
-  return response.data as TaskRun;
+export async function retryTask(taskRunId: string, expected?: TaskRun) {
+  return await ownedTasks.retryTask(taskRunId, expected as KernelTaskRun | undefined) as unknown as TaskRun;
 }
 
-export async function recoverTask(taskRunId: string) {
-  const response = await apiClient.post(`${taskRunPath(taskRunId)}/recover`);
-  return response.data as TaskRun;
+export async function recoverTask(taskRunId: string, expected?: TaskRun) {
+  return await ownedTasks.recoverTask(taskRunId, expected as KernelTaskRun | undefined) as unknown as TaskRun;
 }
 
-export async function fetchTaskProgress(taskRunId: string) {
-  const response = await apiClient.get(`${taskRunPath(taskRunId)}/progress`);
-  return response.data as TaskProgress;
+export async function fetchTaskProgress(taskRunId: string, expected?: TaskRun) {
+  return await ownedTasks.getTaskProgress(taskRunId, expected as KernelTaskRun | undefined) as unknown as TaskProgress;
 }
 
-export async function fetchTaskResult(taskRunId: string) {
-  const response = await apiClient.get(`${taskRunPath(taskRunId)}/result`);
-  return response.data as TaskResult;
+export async function fetchTaskResult(taskRunId: string, expected?: TaskRun) {
+  return await ownedTasks.getTaskResult(taskRunId, expected as KernelTaskRun | undefined) as unknown as TaskResult;
 }

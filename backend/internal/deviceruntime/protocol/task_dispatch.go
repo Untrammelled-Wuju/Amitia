@@ -90,24 +90,26 @@ type TaskLeaseAckPayload struct {
 }
 
 type TaskCompletePayload struct {
-	OutcomeUnknown       bool                             `json:"outcomeUnknown,omitempty"`
-	ResultArtifactID     string                           `json:"resultArtifactId,omitempty"`
-	TaskRunID            string                           `json:"taskRunId"`
-	AttemptID            string                           `json:"attemptId"`
-	LeaseID              string                           `json:"leaseId"`
-	Success              bool                             `json:"success"`
-	Result               json.RawMessage                  `json:"result,omitempty"`
-	Error                string                           `json:"error,omitempty"`
-	RuntimeSessionID     runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
-	ConnectionGeneration int64                            `json:"connectionGeneration"`
-	DeviceID             runtimeidentity.DeviceID         `json:"deviceId"`
-	RuntimeID            runtimeidentity.RuntimeID        `json:"runtimeId"`
-	CompletedAt          time.Time                        `json:"completedAt"`
+	PausedCheckpointVersion int64                            `json:"pausedCheckpointVersion,omitempty"`
+	OutcomeUnknown          bool                             `json:"outcomeUnknown,omitempty"`
+	ResultArtifactID        string                           `json:"resultArtifactId,omitempty"`
+	TaskRunID               string                           `json:"taskRunId"`
+	AttemptID               string                           `json:"attemptId"`
+	LeaseID                 string                           `json:"leaseId"`
+	Success                 bool                             `json:"success"`
+	Result                  json.RawMessage                  `json:"result,omitempty"`
+	Error                   string                           `json:"error,omitempty"`
+	RuntimeSessionID        runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
+	ConnectionGeneration    int64                            `json:"connectionGeneration"`
+	DeviceID                runtimeidentity.DeviceID         `json:"deviceId"`
+	RuntimeID               runtimeidentity.RuntimeID        `json:"runtimeId"`
+	CompletedAt             time.Time                        `json:"completedAt"`
 }
 
 type OwnedTaskExecutionOutcome struct {
-	Result           json.RawMessage `json:"result,omitempty"`
-	ResultArtifactID string          `json:"resultArtifactId,omitempty"`
+	PausedCheckpointVersion int64           `json:"pausedCheckpointVersion,omitempty"`
+	Result                  json.RawMessage `json:"result,omitempty"`
+	ResultArtifactID        string          `json:"resultArtifactId,omitempty"`
 }
 
 type TaskProgressPayload struct {

@@ -3,6 +3,7 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,23 +28,11 @@ func (s *service) AppConfig() map[string]interface{} {
 }
 
 func (s *service) UpdateAppConfig(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["theme"].(string); ok {
-		s.setAppSetting("theme", v)
+	result, err := s.UpdateAppConfigContext(context.Background(), body)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
 	}
-	if v, ok := body["language"].(string); ok {
-		s.setAppSetting("language", v)
-	}
-	if v, ok := body["timezone"].(string); ok {
-		s.setAppSetting("timezone", v)
-	}
-	if settings, ok := body["settings"].(map[string]interface{}); ok {
-		for k, v := range settings {
-			if sv, ok := v.(string); ok {
-				s.setAppSetting(k, sv)
-			}
-		}
-	}
-	return s.AppConfig()
+	return result
 }
 
 func (s *service) ConfigSettings() map[string]interface{} {
@@ -114,22 +103,11 @@ func (s *service) ConfigImportPreviewService(body map[string]interface{}) map[st
 }
 
 func (s *service) ConfigImportConfirmService(body map[string]interface{}) map[string]interface{} {
-	settings, err := parseConfigImportPayload(body)
+	result, err := s.ConfigImportConfirmContext(context.Background(), body)
 	if err != nil {
 		return map[string]interface{}{"imported": false, "error": err.Error(), "importedCount": 0}
 	}
-	if len(settings) == 0 {
-		return map[string]interface{}{"imported": false, "error": "configuration contains no settings", "importedCount": 0}
-	}
-
-	for key, value := range settings {
-		s.setAppSetting(key, value)
-	}
-	return map[string]interface{}{
-		"imported":      true,
-		"importedCount": len(settings),
-		"settings":      s.ConfigSettings(),
-	}
+	return result
 }
 
 func parseConfigImportPayload(body map[string]interface{}) (map[string]string, error) {
@@ -243,19 +221,11 @@ func (s *service) MoodDetectionConfig() map[string]interface{} {
 }
 
 func (s *service) UpdateMoodDetectionConfig(body map[string]interface{}) map[string]interface{} {
-	if enabled, ok := body["enabled"].(bool); ok {
-		s.setAppSetting("mood_detection_enabled", strconv.FormatBool(enabled))
+	result, err := s.UpdateMoodDetectionConfigContext(context.Background(), body)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
 	}
-	if value, ok := body["threshold"].(float64); ok {
-		if value < 0 {
-			value = 0
-		}
-		if value > 1 {
-			value = 1
-		}
-		s.setAppSetting("mood_detection_threshold", strconv.FormatFloat(value, 'f', -1, 64))
-	}
-	return s.MoodDetectionConfig()
+	return result
 }
 
 func (s *service) GetTheme() map[string]interface{} {
@@ -271,19 +241,11 @@ func (s *service) GetTheme() map[string]interface{} {
 }
 
 func (s *service) UpdateTheme(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["preset"].(string); ok {
-		s.setAppSetting("theme", v)
+	result, err := s.UpdateThemeContext(context.Background(), body)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
 	}
-	if v, ok := body["theme"].(string); ok {
-		s.setAppSetting("theme", v)
-	}
-	if v, ok := body["accentColor"].(string); ok {
-		s.setAppSetting("theme_accent_color", v)
-	}
-	if v, ok := body["mode"].(string); ok {
-		s.setAppSetting("theme_mode", v)
-	}
-	return s.GetTheme()
+	return result
 }
 
 func (s *service) GetThemePresets() map[string]interface{} {

@@ -9,6 +9,7 @@ import '../auth/backend_auth_header.dart';
 import '../errors/backend_transport_error.dart';
 import '../errors/backend_transport_error_code.dart';
 import '../state/backend_http_state.dart';
+import '../core_configuration_intent.dart';
 import 'backend_http_request.dart';
 import 'backend_http_response.dart';
 import 'backend_http_transport.dart';
@@ -43,6 +44,8 @@ class BackendHttpClient implements BackendHttpTransport {
 
   @override
   Future<BackendHttpResponse> send(BackendHttpRequest request) async {
+    final configurationIntent = CoreConfigurationIntent.current;
+    configurationIntent?.validateGeneration(_config.generation);
     if (_closed) {
       throw BackendTransportError(
         code: BackendTransportErrorCode.transportClosed,
@@ -89,6 +92,16 @@ class BackendHttpClient implements BackendHttpTransport {
         }
         headers[entry.key] = entry.value;
       }
+    }
+
+    final expectedCoreId = configurationIntent?.coreId;
+    if (expectedCoreId != null) {
+      headers['X-Amitia-Expected-Core-ID'] = expectedCoreId;
+      final revision = configurationIntent?.policyRevision;
+      if (revision == null) {
+        throw StateError('云端配置权限版本无法确认，请重新加载');
+      }
+      headers['X-Amitia-Expected-Configuration-Policy'] = revision;
     }
 
     _state = BackendHttpState.available;

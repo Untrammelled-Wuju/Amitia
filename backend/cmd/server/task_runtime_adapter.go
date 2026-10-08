@@ -29,6 +29,13 @@ func (a *taskRuntimeAdapter) ExecuteOwnedDispatchOutcome(ctx context.Context, di
 	return a.svc.ExecuteOwnedSourceDispatch(ctx, dispatch, agent.CallTaskOwner)
 }
 
+func (a *taskRuntimeAdapter) PauseOwnedDispatch(ctx context.Context, request protocol.TaskPausePayload) error {
+	if a.svc == nil {
+		return fmt.Errorf("设备任务运行服务未配置")
+	}
+	return a.svc.PauseOwnedSourceDispatch(ctx, request)
+}
+
 func (a *taskRuntimeAdapter) Execute(ctx context.Context, taskType string, input map[string]interface{}) (json.RawMessage, error) {
 	if _, owned := coordination.FromContext(ctx); owned {
 		return nil, fmt.Errorf("任务执行队列尚未接入持久化设备授权和数据归属，拒绝丢失授权范围后继续执行")

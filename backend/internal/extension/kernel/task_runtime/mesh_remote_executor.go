@@ -106,7 +106,7 @@ func (e *MeshRemoteTaskExecutor) Execute(ctx context.Context, request TaskExecut
 func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request TaskExecutionRequest) (TaskExecutionOutcome, error) {
 	if scope, owned := coordination.FromContext(ctx); owned {
 		pin := request.TargetDefinitionPin
-		if pin == nil || pin.DeviceID != scope.TargetDeviceID || pin.TaskID != request.Run.TaskDefinitionID || pin.InstalledGeneration < 1 || !validTaskFingerprint(pin.DefinitionFingerprint) {
+		if pin == nil || pin.DeviceID != scope.TargetDeviceID || pin.TaskID != SourceTaskDefinitionID(request.Definition) || pin.InstalledGeneration < 1 || !validTaskFingerprint(pin.DefinitionFingerprint) {
 			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired}, NewTaskError(ErrTaskDefinitionInvalid, "远端任务缺少目标设备已确认的插件版本")
 		}
 	}
@@ -168,7 +168,7 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		TaskGeneration:       request.Run.Generation,
 		ProgressBase:         request.ProgressBase,
 		TaskRunID:            request.Run.TaskRunID,
-		TaskDefinitionID:     request.Run.TaskDefinitionID,
+		TaskDefinitionID:     SourceTaskDefinitionID(request.Definition),
 		AttemptID:            request.AttemptID.String(),
 		LeaseID:              pt.LeaseID,
 		Input:                inputCopy,
@@ -349,6 +349,9 @@ func (e *MeshRemoteTaskExecutor) Cancel(ctx context.Context, run *TaskRun) error
 	leaseID := run.LeaseID
 	if e.PendingTasks != nil {
 		if pending, ok := e.PendingTasks.Get(run.TaskRunID); ok && pending != nil && pending.LeaseID != "" {
+			if pending.AttemptID != run.ExecutionAttemptID.String() || pending.SessionID != sessionID.String() || pending.Generation != generation || leaseID != "" && leaseID != pending.LeaseID {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "取消请求不能使用其他执行代次的租约")
+			}
 			leaseID = pending.LeaseID
 		}
 	}

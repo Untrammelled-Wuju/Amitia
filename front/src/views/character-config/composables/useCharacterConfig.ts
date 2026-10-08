@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
 import { createAuthenticatedFetchInit } from "../../../runtime/request-auth";
 import { resolveApiUrl, getDeploymentConfig } from "../../../runtime/runtime-adapter";
+import { roleAuthorityConfig } from "../../../runtime/role-authority";
 import {
   type TemplateItem,
   DEFAULT_BOUNDARY,
@@ -32,6 +33,8 @@ export function useCharacterConfig() {
   const generationSession = ref(0);
   const saving = ref(false);
   const readOnly = ref(false);
+  const collectionAuthority = ref("");
+  const editorAuthority = ref("");
 
   async function refreshRolePermission() {
     if ((await getDeploymentConfig()).mode !== "cloud") {
@@ -115,11 +118,22 @@ export function useCharacterConfig() {
   async function fetchChars() {
     try {
       await refreshRolePermission();
-      characters.value = (await get<any[]>("/api/characters")) || [];
-    } catch {}
+      const authority = await get<{ roleAuthority: string }>("/api/characters/authority");
+      roleAuthorityConfig(authority?.roleAuthority);
+      const rows = (await get<any[]>("/api/characters")) || [];
+      if (rows.some((row) => row.roleAuthority !== authority.roleAuthority)) {
+        throw new Error("角色数据归属已变化，请重新加载");
+      }
+      collectionAuthority.value = authority.roleAuthority;
+      characters.value = rows;
+    } catch {
+      collectionAuthority.value = "";
+    }
   }
 
   function selectChar(c: any) {
+    if (saving.value) return;
+    editorAuthority.value = c.roleAuthority || "";
     generationSession.value++;
     const cardData = parseCardData(c.cardData);
     cardDataExtra.value = cardData;
@@ -154,8 +168,10 @@ export function useCharacterConfig() {
   }
 
   function createNew() {
+    if (saving.value) return;
     if (!allowEditing()) return;
     generationSession.value++;
+    editorAuthority.value = collectionAuthority.value;
     cardDataExtra.value = {};
     selected.value = { id: "", name: "", isActive: false };
     selectedId.value = "";
@@ -186,6 +202,7 @@ export function useCharacterConfig() {
       const result = await post<any>(
         `/api/character-templates/${tpl.id}/create-character`,
         { name: tpl.name },
+        roleAuthorityConfig((tpl as any).roleAuthority),
       );
       if (result) {
         showTemplateDialog.value = false;
@@ -193,14 +210,16 @@ export function useCharacterConfig() {
         selectChar(result);
       }
     } catch (err: any) {
-      console.error("Failed to create from template:", err);
+      ElMessage.error(err?.message || "从模板创建角色失败，请重新加载后重试");
     }
   }
 
   function copyChar(c: any) {
+    if (saving.value) return;
     if (!allowEditing()) return;
     const cardData = parseCardData(c.cardData);
     createNew();
+    editorAuthority.value = c.roleAuthority || "";
     cardDataExtra.value = cardData;
     form.name = (c.name || "") + " (副本)";
     form.avatar = c.avatar || "";
@@ -231,6 +250,7 @@ export function useCharacterConfig() {
   }
 
   async function saveChar() {
+    if (saving.value) return;
     if (!allowEditing()) return;
     if (!form.name.trim()) {
       ElMessage.warning("请输入角色名称");
@@ -238,7 +258,20 @@ export function useCharacterConfig() {
     }
     saving.value = true;
     try {
-      const payload = { ...form };
+      const intent = roleAuthorityConfig(editorAuthority.value);
+      const wasExisting = Boolean(selected.value?.id);
+      const cardPayload = JSON.parse(JSON.stringify({
+        ...cardDataExtra.value,
+        scenario: form.scenario,
+        alternateGreetings: form.alternateGreetingsText.split("\n").map((item) => item.trim()).filter(Boolean),
+        exampleMessages: form.exampleMessages,
+        systemPrompt: form.characterBase,
+        postHistoryInstructions: form.postHistoryInstructions,
+        creator: form.creator,
+        characterVersion: form.characterVersion,
+        tags: form.tagsText.split(",").map((item) => item.trim()).filter(Boolean),
+      }));
+      const payload = JSON.parse(JSON.stringify(form));
       delete (payload as any).scenario;
       delete (payload as any).exampleMessages;
       delete (payload as any).alternateGreetingsText;
@@ -248,45 +281,32 @@ export function useCharacterConfig() {
       delete (payload as any).tagsText;
       let targetId = selected.value?.id || "";
       if (selected.value?.id) {
-        await put(`/api/characters/${selected.value.id}`, payload);
-        ElMessage.success("保存成功");
+        await put(`/api/characters/${selected.value.id}`, payload, intent);
       } else {
-        const created = await post<any>("/api/characters", payload);
-        ElMessage.success("创建成功");
+        const created = await post<any>("/api/characters", payload, intent);
         if (created?.id) {
           targetId = created.id;
-          selected.value = { ...payload, id: created.id };
+          selected.value = { ...created };
           selectedId.value = created.id;
         }
       }
       if (targetId) {
-        await put(`/api/characters/${targetId}/card-data`, {
-          ...cardDataExtra.value,
-          scenario: form.scenario,
-          alternateGreetings: form.alternateGreetingsText
-            .split("\n")
-            .map((item) => item.trim())
-            .filter(Boolean),
-          exampleMessages: form.exampleMessages,
-          systemPrompt: form.characterBase,
-          postHistoryInstructions: form.postHistoryInstructions,
-          creator: form.creator,
-          characterVersion: form.characterVersion,
-          tags: form.tagsText
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean),
-        });
+        await put(`/api/characters/${targetId}/card-data`, cardPayload, intent);
       }
+      ElMessage.success(wasExisting ? "保存成功" : "创建成功");
       await fetchChars();
       if (selectedId.value) {
         const refreshed = characters.value.find(
           (c: any) => c.id === selectedId.value,
         );
-        if (refreshed) selectChar(refreshed);
+        if (refreshed && refreshed.roleAuthority === editorAuthority.value) {
+          saving.value = false;
+          selectChar(refreshed);
+        }
       }
       refreshHealth();
-    } catch {
+    } catch (err: any) {
+      ElMessage.error(err?.message || "角色未完整保存，请重新加载后确认");
     } finally {
       saving.value = false;
     }
@@ -330,7 +350,7 @@ export function useCharacterConfig() {
       const path = `/api/characters/${selectedId.value}/avatar`;
       const [url, init] = await Promise.all([
         resolveApiUrl(path),
-        createAuthenticatedFetchInit(path, { method: "POST", body: formData }),
+        createAuthenticatedFetchInit(path, { method: "POST", body: formData, ...roleAuthorityConfig(editorAuthority.value) }),
       ]);
       const res = await fetch(url, init);
       if (!res.ok) throw new Error("上传失败");
@@ -352,6 +372,7 @@ export function useCharacterConfig() {
 
   async function delChar(c: any) {
     if (!allowEditing()) return;
+    const target = { ...c };
     if (c.isActive) {
       const others = characters.value.filter((x) => x.id !== c.id);
       if (others.length === 0) {
@@ -369,7 +390,7 @@ export function useCharacterConfig() {
       },
     );
     try {
-      await del(`/api/characters/${c.id}`);
+      await del(`/api/characters/${target.id}`, roleAuthorityConfig(target.roleAuthority));
       ElMessage.success("已删除");
       if (selectedId.value === c.id) {
         selected.value = null;
@@ -383,7 +404,9 @@ export function useCharacterConfig() {
         if (refreshed) selectChar(refreshed);
       }
       refreshHealth();
-    } catch {}
+    } catch (err: any) {
+      ElMessage.error(err?.message || "角色删除失败，请重新加载后重试");
+    }
   }
 
   return {

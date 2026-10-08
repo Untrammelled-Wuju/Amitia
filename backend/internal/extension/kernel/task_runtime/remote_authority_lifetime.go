@@ -20,6 +20,12 @@ func (s *TaskRuntimeService) waitOwnedRemoteExecution(ctx context.Context, run *
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	cancelRemote := func() {
+		checkCtx, finish := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		latest, err := s.store.GetTaskRun(checkCtx, run.TaskRunID)
+		finish()
+		if err == nil && latest != nil && latest.Generation == run.Generation && latest.ExecutionAttemptID == run.ExecutionAttemptID && (latest.Status.IsTerminal() || latest.Status == RunStatusPaused && latest.PausedAt != nil) {
+			return
+		}
 		remote, ok := executor.(interface {
 			Cancel(context.Context, *TaskRun) error
 		})
@@ -60,6 +66,9 @@ func (s *TaskRuntimeService) waitOwnedRemoteExecution(ctx context.Context, run *
 				return err
 			}
 			return nil
+		}
+		if current.Status == RunStatusRecoveryRequired || current.Status == RunStatusPaused {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "远端任务已暂停或结果未知，等待人工确认后恢复")
 		}
 		select {
 		case <-ctx.Done():

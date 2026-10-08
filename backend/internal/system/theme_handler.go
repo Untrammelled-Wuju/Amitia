@@ -11,8 +11,11 @@ func (h *Handler) GetTheme(c *gin.Context) { util.SuccessResponse(c, h.service.G
 
 func (h *Handler) UpdateTheme(c *gin.Context) {
 	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.UpdateTheme(body))
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, 400, err.Error(), nil)
+		return
+	}
+	h.updateScopedAppConfig(c, "theme", body)
 }
 
 func (h *Handler) ThemePresets(c *gin.Context) { util.SuccessResponse(c, h.service.GetThemePresets()) }

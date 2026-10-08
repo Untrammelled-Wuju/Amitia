@@ -24,14 +24,26 @@ class _Picker extends ImagePickerPlatform {
 }
 
 class _Characters extends Fake implements CharacterService {
+  static const authorityValue =
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  @override
+  Future<String> authority() async => authorityValue;
   int creates = 0;
   Map<String, dynamic>? payload;
 
   @override
-  Future<CharacterDto?> create(Map<String, dynamic> data) async {
+  Future<CharacterDto?> create(
+    Map<String, dynamic> data, {
+    String? roleAuthority,
+  }) async {
+    expect(roleAuthority, authorityValue);
     creates++;
     payload = data;
-    return CharacterDto(id: 'created-character', name: data['name'] as String);
+    return CharacterDto(
+      id: 'created-character',
+      name: data['name'] as String,
+      roleAuthority: authorityValue,
+    );
   }
 }
 
@@ -40,7 +52,12 @@ class _Details extends Fake implements CharacterDetailService {
   final uploads = <(String, String)>[];
 
   @override
-  Future<Map<String, dynamic>?> uploadAvatar(String id, String path) async {
+  Future<Map<String, dynamic>?> uploadAvatar(
+    String id,
+    String path, {
+    String? roleAuthority,
+  }) async {
+    expect(roleAuthority, _Characters.authorityValue);
     uploads.add((id, path));
     if (fail) throw StateError('upload failed');
     return {'avatarUrl': '/avatars/created.png'};

@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"fmt"
 
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
 	"github.com/u-ai/backend/internal/devicemesh/proof"
 )
 
 var schemaStmts = []string{
+	meshaudit.Schema,
 	coordination.PolicySchema,
 	coordination.ResourceSchema,
 	coordination.InboxSchema,

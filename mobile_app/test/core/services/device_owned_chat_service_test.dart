@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:amitia_app/core/services/owned_conversation_reference.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/services/device_owned_attachments.dart';
 
 class _OwnedApi implements BackendServiceApi {
   String core = 'core-b';
@@ -164,6 +165,97 @@ Stream<List<int>> bytes(List<Map<String, dynamic>> events) {
 }
 
 void main() {
+  test('手机从所有者原附件恢复文件和视频，不生成本地镜像文件', () {
+    final service = DeviceOwnedChatService(_OwnedApi(),
+      providerKey: () => 'https://provider');
+    for (final kind in ['file', 'video']) {
+      final uri = 'data:${kind == 'file' ? 'text/plain' : 'video/mp4'};base64,AQIDBA==';
+      final attachment = ownedFileAttachment(uri,
+        name: kind == 'file' ? 'notes.txt' : 'clip.mp4', kind: kind);
+      final rows = service.messages({
+        'executionScope': scope(),
+        'snapshot': {'ownerId': 'a', 'resources': [
+          {'kind': 'message', 'id': 'message', 'revision': 3,
+            'body': {'id': 'message', 'conversationId': 'chat',
+              'role': 'user', 'content': '附件', 'attachments': [attachment]}}
+        ]},
+      });
+      expect(rows, hasLength(1));
+      expect(rows.single.msgType, kind);
+      expect(rows.single.resourceUri, uri);
+      expect(rows.single.fileSizeBytes, 4);
+      expect(rows.single.fileName, attachment['name']);
+      expect(rows.single.sourceOwnerId, 'a');
+      expect(rows.single.sourceRevision, 3);
+      expect(rows.single.sourceConversationId, 'chat');
+    }
+  });
+  test('手机发送引用冻结原权限且保留实际Owner会话编号', () async {
+    final api = _OwnedApi();
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.streamEvents = [
+      {
+        'type': 'started',
+        'executionScope': scope(),
+        'conversationId': 'continuation/hash',
+      },
+      {
+        'type': 'completed',
+        'data': {
+          'requestId': 'request',
+          'saved': true,
+          'executionScope': scope(),
+          'conversationId': 'continuation/hash',
+        },
+      },
+    ];
+    final quote = {
+      'ownerId': 'a',
+      'characterId': 'role-a',
+      'conversationId': 'same',
+      'messageId': 'original',
+      'expectedRevision': 0,
+      'contentHash': 'a' * 64,
+      'expectedExecutionScope': scope(),
+    };
+    final events = await service
+        .send(
+          requestId: 'request',
+          message: '回应引用',
+          conversationId: 'meshconv1:a:same',
+          quote: quote,
+        )
+        .toList();
+    expect(api.streamRequest?['quote'], quote);
+    expect(api.streamRequest?['expectedExecutionScope'], scope());
+    expect(events.first['sourceConversationId'], 'continuation/hash');
+    expect(events.last['data']['sourceConversationId'], 'continuation/hash');
+  });
+  test('旧引用权限不得刷新成新权限继续发送', () async {
+    final api = _OwnedApi();
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    await expectLater(
+      service
+          .send(
+            requestId: 'request',
+            message: '旧引用',
+            quote: {
+              'expectedExecutionScope': {...scope(), 'permissionRevision': 3},
+            },
+          )
+          .toList(),
+      throwsStateError,
+    );
+    expect(api.streamRequest, isNull);
+  });
   test('手机明确导出时只读取选定所有者会话，不调用旧导出写入接口', () async {
     final api = _OwnedApi();
     final chat = ChatService(api, providerKey: () => 'https://provider');

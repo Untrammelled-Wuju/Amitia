@@ -1,5 +1,6 @@
 import { type Ref, ref, shallowRef, watch } from "vue";
 import { useApi } from "./useApi";
+import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 import { notifyReplyCompleted } from "./useReplyNotifications";
 import { projectAutomationStatus, type AutomationStatus } from "@/conversation/runtime/automationStatus";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
@@ -52,6 +53,7 @@ export function useConversationRuntime(
   ) => void | Promise<void>,
 ) {
   const { get } = useApi();
+  const owned = useDeviceOwnedConversation();
   const reducer = new AgentEventReducer();
   const messages = shallowRef<any[]>([]);
   const activeTurnId = ref("");
@@ -353,6 +355,7 @@ export function useConversationRuntime(
   }
 
   async function loadSnapshot(notify = true) {
+    if (owned.enabled.value) return;
     const id = String(conversationId.value || "").trim();
     const epoch = ++snapshotEpoch;
     if (!id) {
@@ -360,12 +363,14 @@ export function useConversationRuntime(
       return;
     }
     const snapshot = await get<ConversationSnapshot>(`/api/web-chat/conversations/${encodeURIComponent(id)}/snapshot`);
-    if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return;
+    if (owned.enabled.value || epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return;
     applySnapshot(snapshot);
     if (notify) await onConversationSnapshot?.(snapshot.conversation, snapshot.workspace ?? null, snapshot);
   }
 
   async function loadOlderTurns(): Promise<boolean> {
+    if (owned.enabled.value) return false;
+    const epoch = snapshotEpoch;
     const id = String(conversationId.value || "").trim();
     if (!id || !hasMoreTurnHistory.value || turnHistoryBefore.value <= 0) return false;
     const response = await get<any>(
@@ -373,6 +378,7 @@ export function useConversationRuntime(
       { before: turnHistoryBefore.value, limit: 50 },
     );
     const rows = Array.isArray(response?.items) ? response.items : [];
+    if (owned.enabled.value || epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return false;
     if (rows.length === 0) {
       hasMoreTurnHistory.value = false;
       return false;
@@ -395,7 +401,7 @@ export function useConversationRuntime(
   }
 
   function scheduleReconnect() {
-    if (disposed || !conversationId.value || reconnectTimer) return;
+    if (owned.enabled.value || disposed || !conversationId.value || reconnectTimer) return;
     if (automationStatus.value) automationStatus.value = {
       ...automationStatus.value,
       phase: "waiting",
@@ -444,9 +450,11 @@ export function useConversationRuntime(
   async function connect(withSnapshot = true) {
     disconnect();
     const id = String(conversationId.value || "").trim();
-    if (!id || disposed) return;
+    if (owned.enabled.value || !id || disposed) return;
     try {
       if (withSnapshot) await loadSnapshot();
+      if (owned.enabled.value || id !== String(conversationId.value || "")) return;
+      const captured = snapshotEpoch;
       const path = `/api/web-chat/conversations/${encodeURIComponent(id)}/events`;
       const query = lastEventSequence.value > 0 ? `?afterSequence=${lastEventSequence.value}` : "";
       const controller = new AbortController();
@@ -461,7 +469,9 @@ export function useConversationRuntime(
           signal: controller.signal,
         }),
       ]);
+      if (owned.enabled.value || captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) return;
       const response = await fetch(url, init);
+      if (owned.enabled.value || captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) { await response.body?.cancel(); return; }
       if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error(`HTTP ${response.status}`);
       await consume(response, controller.signal);
       if (!controller.signal.aborted) scheduleReconnect();
@@ -471,6 +481,7 @@ export function useConversationRuntime(
   }
 
   function disconnect() {
+    snapshotEpoch++;
     automationStatus.value = null;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -485,6 +496,7 @@ export function useConversationRuntime(
   function connectProactiveMessages() {
     if (proactiveListener) return;
     proactiveListener = (event) => {
+      if (owned.enabled.value) return;
       const data = (event as CustomEvent<string>).detail;
       if (!data) return;
       try {

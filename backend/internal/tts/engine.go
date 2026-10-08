@@ -5,6 +5,7 @@ package tts
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -113,26 +114,7 @@ func Synthesize(cfg *TtsConfig, text string) (*SynthesizeResponse, error) {
 		return &SynthesizeResponse{AudioURL: "/audio/" + cacheFile, Duration: 0}, nil
 	}
 
-	var audioBytes []byte
-	var err error
-	switch protocolForApiType(cfg.ApiType) {
-	case "openai":
-		audioBytes, err = synthesizeOpenAI(cfg, text)
-	case "azure":
-		audioBytes, err = synthesizeAzure(cfg, text)
-	case "edge":
-		audioBytes, err = synthesizeEdge(cfg, text)
-	case "elevenlabs":
-		audioBytes, err = synthesizeElevenLabs(cfg, text)
-	case "minimax":
-		audioBytes, err = synthesizeMiniMax(cfg, text)
-	case "aliyun":
-		audioBytes, err = synthesizeAliyun(cfg, text)
-	case "cosyvoice":
-		audioBytes, err = synthesizeCosyVoice(cfg, text)
-	default:
-		audioBytes, err = synthesizeVolcengine(cfg, text)
-	}
+	audioBytes, err := synthesizeBytes(context.Background(), cfg, text)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +142,7 @@ func TestConnection(cfg *TtsConfig) error {
 	return err
 }
 
-func synthesizeVolcengine(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeVolcengine(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	resourceId := cfg.ResourceId
 	if resourceId == "" {
 		resourceId = "seed-tts-2.0"
@@ -181,7 +163,7 @@ func synthesizeVolcengine(cfg *TtsConfig, text string) ([]byte, error) {
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", volcanoSSEUri, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", volcanoSSEUri, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -195,6 +177,7 @@ func synthesizeVolcengine(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -225,6 +208,9 @@ func synthesizeVolcengine(cfg *TtsConfig, text string) ([]byte, error) {
 				if err != nil {
 					continue
 				}
+				if audioBuffer.Len()+len(chunk) > privateSpeechAudioLimit {
+					return nil, fmt.Errorf("合成音频超过大小上限")
+				}
 				audioBuffer.Write(chunk)
 			}
 		}
@@ -237,7 +223,7 @@ func synthesizeVolcengine(cfg *TtsConfig, text string) ([]byte, error) {
 	return audioBuffer.Bytes(), nil
 }
 
-func synthesizeOpenAI(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeOpenAI(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
@@ -265,7 +251,7 @@ func synthesizeOpenAI(cfg *TtsConfig, text string) ([]byte, error) {
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/audio/speech", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/audio/speech", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -277,6 +263,7 @@ func synthesizeOpenAI(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("OpenAI TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -287,7 +274,7 @@ func synthesizeOpenAI(cfg *TtsConfig, text string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func synthesizeAzure(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeAzure(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://tts.speech.microsoft.com"
@@ -314,7 +301,7 @@ func synthesizeAzure(cfg *TtsConfig, text string) ([]byte, error) {
 
 	ssml := fmt.Sprintf(`<speak version='1.0' xml:lang='zh-CN'><voice name='%s'><prosody rate='%s' pitch='%s' volume='%s'>%s</prosody></voice></speak>`, voice, rate, pitch, volume, text)
 
-	req, err := http.NewRequest("POST", baseURL+"/cognitiveservices/v1", strings.NewReader(ssml))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/cognitiveservices/v1", strings.NewReader(ssml))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -327,6 +314,7 @@ func synthesizeAzure(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Azure TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -337,7 +325,7 @@ func synthesizeAzure(cfg *TtsConfig, text string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func synthesizeEdge(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeEdge(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://speech.platform.bing.com"
@@ -369,7 +357,7 @@ func synthesizeEdge(cfg *TtsConfig, text string) ([]byte, error) {
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/api/tts", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/tts", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -380,6 +368,7 @@ func synthesizeEdge(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Edge TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -409,7 +398,7 @@ func synthesizeEdge(cfg *TtsConfig, text string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func synthesizeElevenLabs(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeElevenLabs(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://api.elevenlabs.io/v1"
@@ -440,7 +429,7 @@ func synthesizeElevenLabs(cfg *TtsConfig, text string) ([]byte, error) {
 	jsonBody, _ := json.Marshal(reqBody)
 
 	url := fmt.Sprintf("%s/text-to-speech/%s", baseURL, voice)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -453,6 +442,7 @@ func synthesizeElevenLabs(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ElevenLabs TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -463,7 +453,7 @@ func synthesizeElevenLabs(cfg *TtsConfig, text string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func synthesizeMiniMax(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeMiniMax(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://api.minimax.chat/v1"
@@ -501,7 +491,7 @@ func synthesizeMiniMax(cfg *TtsConfig, text string) ([]byte, error) {
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/text_to_speech", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/text_to_speech", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -513,6 +503,7 @@ func synthesizeMiniMax(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("MiniMax TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -540,7 +531,7 @@ func synthesizeMiniMax(cfg *TtsConfig, text string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(audioB64)
 }
 
-func synthesizeAliyun(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeAliyun(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "https://nls-gateway.cn-shanghai.aliyuncs.com"
@@ -570,7 +561,7 @@ func synthesizeAliyun(cfg *TtsConfig, text string) ([]byte, error) {
 	jsonBody, _ := json.Marshal(reqBody)
 
 	url := fmt.Sprintf("%s/rest/v1/services/aigc/text2speech", baseURL)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -583,6 +574,7 @@ func synthesizeAliyun(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("阿里云 TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -617,7 +609,7 @@ func synthesizeAliyun(cfg *TtsConfig, text string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(audioB64)
 }
 
-func synthesizeCosyVoice(cfg *TtsConfig, text string) ([]byte, error) {
+func synthesizeCosyVoice(ctx context.Context, cfg *TtsConfig, text string) ([]byte, error) {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:5000"
@@ -638,7 +630,7 @@ func synthesizeCosyVoice(cfg *TtsConfig, text string) ([]byte, error) {
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequest("POST", baseURL+"/api/cosyvoice/tts", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/cosyvoice/tts", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -649,6 +641,7 @@ func synthesizeCosyVoice(cfg *TtsConfig, text string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("CosyVoice TTS 请求失败: %w", err)
 	}
+	resp.Body = &speechBoundedBody{ReadCloser: resp.Body, remaining: 2 << 20}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {

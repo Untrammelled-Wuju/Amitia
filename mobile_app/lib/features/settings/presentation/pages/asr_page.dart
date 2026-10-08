@@ -7,13 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/core_configuration_intent.dart';
+import '../../../../core/services/core_configuration_guard.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -36,6 +37,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   String _status = '';
   String _result = '';
   Timer? _pollTimer;
+  CoreConfigurationIntent? _configurationIntent;
+  int _loadEpoch = 0;
 
   @override
   void initState() {
@@ -50,22 +53,30 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Future<void> _loadConfigs() async {
+    final epoch = ++_loadEpoch;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      final intent = await coreConfigurationGuardFor(ref).capture();
+      if (!mounted || epoch != _loadEpoch) return;
+      _configurationIntent = intent;
+      if (!intent.canConfigure) {
+        throw StateError('AI 服务由云端 Core 提供，当前设备不能配置语音识别模型');
+      }
       final service = ref.read(asrServiceProvider);
-      final configs = await service.configs();
-      final providers = await service.providers();
-      if (!mounted) return;
+      final configs = await intent.run(service.configs);
+      final providers = await intent.run(service.providers);
+      await coreConfigurationGuardFor(ref).validate(intent);
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _configs = configs;
         _providers = providers;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || epoch != _loadEpoch) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -82,12 +93,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   bool get _configured => _configs.any((item) {
-        final active = item['isActive'];
-        final isActive = active == 1 || active == true;
-        return isActive && item['hasApiKey'] == true;
-      });
+    final active = item['isActive'];
+    final isActive = active == 1 || active == true;
+    return isActive && item['hasApiKey'] == true;
+  });
 
   Future<void> _activate(Map<String, dynamic> config) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
+    if (CoreConfigurationIntent.current == null) {
+      return intent!.run(() => _activate(config));
+    }
     final id = (config['id'] ?? '').toString();
     if (id.isEmpty) return;
     setState(() => _busy = true);
@@ -103,6 +119,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Future<void> _test(Map<String, dynamic> config) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
+    if (CoreConfigurationIntent.current == null) {
+      return intent!.run(() => _test(config));
+    }
     final id = (config['id'] ?? '').toString();
     if (id.isEmpty) return;
     setState(() => _busy = true);
@@ -116,20 +137,33 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     }
   }
 
-
   Future<void> _showConfigSheet([Map<String, dynamic>? existing]) async {
-    final nameCtrl = TextEditingController(text: (existing?['name'] ?? '').toString());
-    final typeCtrl = TextEditingController(text: (existing?['apiType'] ?? '').toString());
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
+    final nameCtrl = TextEditingController(
+      text: (existing?['name'] ?? '').toString(),
+    );
+    final typeCtrl = TextEditingController(
+      text: (existing?['apiType'] ?? '').toString(),
+    );
     final keyCtrl = TextEditingController();
-    final baseCtrl = TextEditingController(text: (existing?['baseUrl'] ?? '').toString());
-    final resourceCtrl = TextEditingController(text: (existing?['resourceId'] ?? '').toString());
-    bool active = existing == null ? _configs.isEmpty : (existing['isActive'] == 1 || existing['isActive'] == true);
+    final baseCtrl = TextEditingController(
+      text: (existing?['baseUrl'] ?? '').toString(),
+    );
+    final resourceCtrl = TextEditingController(
+      text: (existing?['resourceId'] ?? '').toString(),
+    );
+    bool active = existing == null
+        ? _configs.isEmpty
+        : (existing['isActive'] == 1 || existing['isActive'] == true);
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) => SafeArea(
           child: Padding(
@@ -144,30 +178,64 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(existing == null ? '新建 ASR 配置' : '编辑 ASR 配置', style: AppTypography.sectionTitle(context)),
+                  Text(
+                    existing == null ? '新建 ASR 配置' : '编辑 ASR 配置',
+                    style: AppTypography.sectionTitle(context),
+                  ),
                   SizedBox(height: AppSpacing.lg),
-                  TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '配置名称', border: OutlineInputBorder())),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: '配置名称',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                   SizedBox(height: AppSpacing.md),
                   if (_providers.isEmpty)
-                    TextField(controller: typeCtrl, decoration: const InputDecoration(labelText: 'Provider / API Type', border: OutlineInputBorder()))
+                    TextField(
+                      controller: typeCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Provider / API Type',
+                        border: OutlineInputBorder(),
+                      ),
+                    )
                   else
                     DropdownButtonFormField<String>(
-                      value: _providers.any((p) => (p['id'] ?? '').toString() == typeCtrl.text) ? typeCtrl.text : null,
+                      value:
+                          _providers.any(
+                            (p) => (p['id'] ?? '').toString() == typeCtrl.text,
+                          )
+                          ? typeCtrl.text
+                          : null,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Provider', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                        labelText: 'Provider',
+                        border: OutlineInputBorder(),
+                      ),
                       items: _providers
-                          .map((provider) => DropdownMenuItem<String>(
-                                value: (provider['id'] ?? '').toString(),
-                                child: Text((provider['name'] ?? provider['id'] ?? '').toString()),
-                              ))
+                          .map(
+                            (provider) => DropdownMenuItem<String>(
+                              value: (provider['id'] ?? '').toString(),
+                              child: Text(
+                                (provider['name'] ?? provider['id'] ?? '')
+                                    .toString(),
+                              ),
+                            ),
+                          )
                           .toList(growable: false),
                       onChanged: (value) {
                         if (value == null) return;
-                        final provider = _providers.firstWhere((item) => (item['id'] ?? '').toString() == value);
+                        final provider = _providers.firstWhere(
+                          (item) => (item['id'] ?? '').toString() == value,
+                        );
                         setSheetState(() {
                           typeCtrl.text = value;
-                          if (baseCtrl.text.trim().isEmpty) baseCtrl.text = (provider['defaultBaseUrl'] ?? '').toString();
-                          if (resourceCtrl.text.trim().isEmpty) resourceCtrl.text = (provider['defaultModel'] ?? '').toString();
+                          if (baseCtrl.text.trim().isEmpty)
+                            baseCtrl.text = (provider['defaultBaseUrl'] ?? '')
+                                .toString();
+                          if (resourceCtrl.text.trim().isEmpty)
+                            resourceCtrl.text = (provider['defaultModel'] ?? '')
+                                .toString();
                         });
                       },
                     ),
@@ -182,9 +250,21 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     ),
                   ),
                   SizedBox(height: AppSpacing.md),
-                  TextField(controller: baseCtrl, decoration: const InputDecoration(labelText: 'Base URL', border: OutlineInputBorder())),
+                  TextField(
+                    controller: baseCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Base URL',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                   SizedBox(height: AppSpacing.md),
-                  TextField(controller: resourceCtrl, decoration: const InputDecoration(labelText: 'Resource / Model ID', border: OutlineInputBorder())),
+                  TextField(
+                    controller: resourceCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Resource / Model ID',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
                   SizedBox(height: AppSpacing.sm),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -197,7 +277,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                     label: '保存',
                     isFullWidth: true,
                     onPressed: () async {
-                      if (nameCtrl.text.trim().isEmpty || typeCtrl.text.trim().isEmpty) {
+                      if (nameCtrl.text.trim().isEmpty ||
+                          typeCtrl.text.trim().isEmpty) {
                         _show('名称和 Provider 不能为空', error: true);
                         return;
                       }
@@ -207,10 +288,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                         'baseUrl': baseCtrl.text.trim(),
                         'resourceId': resourceCtrl.text.trim(),
                         'isActive': active ? 1 : 0,
-                        if (keyCtrl.text.trim().isNotEmpty) 'apiKey': keyCtrl.text.trim(),
+                        if (keyCtrl.text.trim().isNotEmpty)
+                          'apiKey': keyCtrl.text.trim(),
                       };
                       Navigator.of(sheetContext).pop();
-                      await _saveConfig(existing, data);
+                      await _saveConfig(existing, data, intent!);
                     },
                   ),
                 ],
@@ -228,17 +310,24 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     resourceCtrl.dispose();
   }
 
-  Future<void> _saveConfig(Map<String, dynamic>? existing, Map<String, dynamic> data) async {
+  Future<void> _saveConfig(
+    Map<String, dynamic>? existing,
+    Map<String, dynamic> data,
+    CoreConfigurationIntent intent,
+  ) async {
     setState(() => _busy = true);
     try {
+      if (!await _ensureConfiguration(intent)) return;
       final service = ref.read(asrServiceProvider);
-      if (existing == null) {
-        await service.createConfig(data);
-      } else {
-        final id = (existing['id'] ?? '').toString();
-        if (id.isEmpty) throw StateError('ASR 配置 ID 无效');
-        await service.updateConfig(id, data);
-      }
+      await intent.run(() async {
+        if (existing == null) {
+          await service.createConfig(data);
+        } else {
+          final id = (existing['id'] ?? '').toString();
+          if (id.isEmpty) throw StateError('ASR 配置 ID 无效');
+          await service.updateConfig(id, data);
+        }
+      });
       await _loadConfigs();
       _show(existing == null ? 'ASR 配置已创建' : 'ASR 配置已更新');
     } catch (e) {
@@ -249,6 +338,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Future<void> _deleteConfig(Map<String, dynamic> config) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
     final id = (config['id'] ?? '').toString();
     if (id.isEmpty) return;
     final confirmed = await showDialog<bool>(
@@ -257,15 +348,22 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         title: const Text('删除 ASR 配置'),
         content: Text('确定删除「${config['name'] ?? id}」吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text('删除', style: TextStyle(color: context.error))),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('删除', style: TextStyle(color: context.error)),
+          ),
         ],
       ),
     );
     if (confirmed != true) return;
     setState(() => _busy = true);
     try {
-      await ref.read(asrServiceProvider).deleteConfig(id);
+      if (!await _ensureConfiguration(intent)) return;
+      await intent!.run(() => ref.read(asrServiceProvider).deleteConfig(id));
       await _loadConfigs();
       _show('ASR 配置已删除');
     } catch (e) {
@@ -305,6 +403,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     } finally {
       dio.close(force: true);
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<bool> _ensureConfiguration(CoreConfigurationIntent? intent) async {
+    try {
+      if (intent == null) throw StateError('语音识别配置归属无法确认，请重新加载');
+      await coreConfigurationGuardFor(ref).validate(intent);
+      return mounted;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error.toString());
+        _show('模型配置已禁用：$error', error: true);
+      }
+      return false;
     }
   }
 
@@ -361,7 +473,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         _status = status.isEmpty ? _status : status;
         if (result.isNotEmpty) _result = result;
       });
-      if (status == 'success' || status == 'completed' || status == 'failed' || status == 'error') {
+      if (status == 'success' ||
+          status == 'completed' ||
+          status == 'failed' ||
+          status == 'error') {
         _pollTimer?.cancel();
         _pollTimer = null;
       }
@@ -375,7 +490,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   void _show(String message, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: error ? context.error : null),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? context.error : null,
+      ),
     );
   }
 
@@ -386,84 +504,148 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         title: '语音识别',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
-          IconButton(onPressed: _busy ? null : () => _showConfigSheet(), icon: const Icon(Icons.add), tooltip: '新建 ASR 配置'),
-          IconButton(onPressed: _busy ? null : _loadConfigs, icon: const Icon(Icons.refresh), tooltip: '刷新'),
+          IconButton(
+            onPressed: _busy || _configurationIntent?.canConfigure != true
+                ? null
+                : () => _showConfigSheet(),
+            icon: const Icon(Icons.add),
+            tooltip: '新建 ASR 配置',
+          ),
+          IconButton(
+            onPressed: _busy ? null : _loadConfigs,
+            icon: const Icon(Icons.refresh),
+            tooltip: '刷新',
+          ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: AmitiaButton(label: '重新加载', onPressed: _loadConfigs))
-              : ListView(
-                  padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.xxxl),
-                  children: [
-                    _statusCard(context),
-                    SizedBox(height: AppSpacing.sectionGap),
-                    Text('ASR 配置', style: AppTypography.sectionTitle(context)),
-                    SizedBox(height: AppSpacing.sm),
-                    if (_configs.isEmpty)
-                      AmitiaCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text('暂无 ASR 配置。', style: AppTypography.caption(context)),
-                            const SizedBox(height: 10),
-                            AmitiaButton(label: '新建 ASR 配置', icon: Icons.add, isSecondary: true, onPressed: _busy ? null : () => _showConfigSheet()),
-                          ],
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!, textAlign: TextAlign.center),
+                  AmitiaButton(label: '重新加载', onPressed: _loadConfigs),
+                ],
+              ),
+            )
+          : ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+                AppSpacing.pagePadding,
+                AppSpacing.xxxl,
+              ),
+              children: [
+                _statusCard(context),
+                SizedBox(height: AppSpacing.sectionGap),
+                Text('ASR 配置', style: AppTypography.sectionTitle(context)),
+                SizedBox(height: AppSpacing.sm),
+                if (_configs.isEmpty)
+                  AmitiaCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '暂无 ASR 配置。',
+                          style: AppTypography.caption(context),
                         ),
-                      )
-                    else
-                      ..._configs.map((config) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _configCard(context, config),
-                          )),
-                    SizedBox(height: AppSpacing.sectionGap),
-                    Text('音频识别', style: AppTypography.sectionTitle(context)),
-                    SizedBox(height: AppSpacing.sm),
-                    AmitiaCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(_audioUrl.isEmpty ? '尚未选择音频' : _audioUrl, style: AppTypography.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
-                          const SizedBox(height: 12),
-                          AmitiaButton(label: '选择并上传音频', icon: Icons.audio_file_outlined, isSecondary: true, onPressed: _busy ? null : _pickAndUpload),
-                          const SizedBox(height: 12),
-                          DropdownButtonFormField<String>(
-                            initialValue: _language,
-                            decoration: const InputDecoration(labelText: '语言'),
-                            items: const [
-                              DropdownMenuItem(value: '', child: Text('自动识别')),
-                              DropdownMenuItem(value: 'zh-CN', child: Text('中文普通话')),
-                              DropdownMenuItem(value: 'en-US', child: Text('英语')),
-                              DropdownMenuItem(value: 'ja-JP', child: Text('日语')),
-                              DropdownMenuItem(value: 'ko-KR', child: Text('韩语')),
-                            ],
-                            onChanged: _busy ? null : (value) => setState(() => _language = value ?? ''),
-                          ),
-                          const SizedBox(height: 12),
-                          AmitiaButton(label: '提交识别', icon: Icons.transcribe_outlined, onPressed: _busy ? null : _submit),
-                        ],
-                      ),
+                        const SizedBox(height: 10),
+                        AmitiaButton(
+                          label: '新建 ASR 配置',
+                          icon: Icons.add,
+                          isSecondary: true,
+                          onPressed: _busy ? null : () => _showConfigSheet(),
+                        ),
+                      ],
                     ),
-                    if (_taskId.isNotEmpty) ...[
-                      SizedBox(height: AppSpacing.md),
-                      AmitiaCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('任务 $_taskId', style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 8),
-                            Text('状态：${_status.isEmpty ? '等待查询' : _status}', style: AppTypography.bodySmall(context)),
-                            if (_result.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              SelectableText(_result, style: AppTypography.body(context)),
-                            ],
-                          ],
-                        ),
+                  )
+                else
+                  ..._configs.map(
+                    (config) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _configCard(context, config),
+                    ),
+                  ),
+                SizedBox(height: AppSpacing.sectionGap),
+                Text('音频识别', style: AppTypography.sectionTitle(context)),
+                SizedBox(height: AppSpacing.sm),
+                AmitiaCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _audioUrl.isEmpty ? '尚未选择音频' : _audioUrl,
+                        style: AppTypography.caption(context),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 12),
+                      AmitiaButton(
+                        label: '选择并上传音频',
+                        icon: Icons.audio_file_outlined,
+                        isSecondary: true,
+                        onPressed: _busy ? null : _pickAndUpload,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _language,
+                        decoration: const InputDecoration(labelText: '语言'),
+                        items: const [
+                          DropdownMenuItem(value: '', child: Text('自动识别')),
+                          DropdownMenuItem(
+                            value: 'zh-CN',
+                            child: Text('中文普通话'),
+                          ),
+                          DropdownMenuItem(value: 'en-US', child: Text('英语')),
+                          DropdownMenuItem(value: 'ja-JP', child: Text('日语')),
+                          DropdownMenuItem(value: 'ko-KR', child: Text('韩语')),
+                        ],
+                        onChanged: _busy
+                            ? null
+                            : (value) =>
+                                  setState(() => _language = value ?? ''),
+                      ),
+                      const SizedBox(height: 12),
+                      AmitiaButton(
+                        label: '提交识别',
+                        icon: Icons.transcribe_outlined,
+                        onPressed: _busy ? null : _submit,
                       ),
                     ],
-                  ],
+                  ),
                 ),
+                if (_taskId.isNotEmpty) ...[
+                  SizedBox(height: AppSpacing.md),
+                  AmitiaCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '任务 $_taskId',
+                          style: AppTypography.caption(context),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '状态：${_status.isEmpty ? '等待查询' : _status}',
+                          style: AppTypography.bodySmall(context),
+                        ),
+                        if (_result.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          SelectableText(
+                            _result,
+                            style: AppTypography.body(context),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
     );
   }
 
@@ -471,9 +653,19 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     return AmitiaCard(
       child: Row(
         children: [
-          Icon(_configured ? Icons.check_circle_outline : Icons.warning_amber_rounded, color: _configured ? context.success : context.warning),
+          Icon(
+            _configured
+                ? Icons.check_circle_outline
+                : Icons.warning_amber_rounded,
+            color: _configured ? context.success : context.warning,
+          ),
           const SizedBox(width: 10),
-          Expanded(child: Text(_configured ? 'ASR 已配置，可提交识别任务' : '尚未启用带 API Key 的 ASR 配置', style: AppTypography.bodySmall(context))),
+          Expanded(
+            child: Text(
+              _configured ? 'ASR 已配置，可提交识别任务' : '尚未启用带 API Key 的 ASR 配置',
+              style: AppTypography.bodySmall(context),
+            ),
+          ),
         ],
       ),
     );
@@ -489,9 +681,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text((config['name'] ?? '未命名配置').toString(), style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  (config['name'] ?? '未命名配置').toString(),
+                  style: AppTypography.bodySmall(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 3),
-                Text('${config['apiType'] ?? 'unknown'} · ${hasKey ? 'API Key 已配置' : '缺少 API Key'}${active ? ' · 当前启用' : ''}', style: AppTypography.caption(context)),
+                Text(
+                  '${config['apiType'] ?? 'unknown'} · ${hasKey ? 'API Key 已配置' : '缺少 API Key'}${active ? ' · 当前启用' : ''}',
+                  style: AppTypography.caption(context),
+                ),
               ],
             ),
           ),
@@ -515,7 +715,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'test', child: Text('测试连接')),
-              if (!active) const PopupMenuItem(value: 'activate', child: Text('设为默认')),
+              if (!active)
+                const PopupMenuItem(value: 'activate', child: Text('设为默认')),
               const PopupMenuItem(value: 'edit', child: Text('编辑')),
               const PopupMenuItem(value: 'delete', child: Text('删除')),
             ],

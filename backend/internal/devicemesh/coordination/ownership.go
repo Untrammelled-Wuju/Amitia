@@ -55,10 +55,11 @@ type Mutation struct {
 }
 
 type Commit struct {
-	LeaseProof   *CommitLeaseProof `json:"leaseProof,omitempty"`
-	Scope        ExecutionScope    `json:"scope"`
-	Mutations    []Mutation        `json:"mutations"`
-	Dependencies []ResourceVersion `json:"dependencies,omitempty"`
+	AdditionalAuthorities []ExecutionScope  `json:"additionalAuthorities,omitempty"`
+	LeaseProof            *CommitLeaseProof `json:"leaseProof,omitempty"`
+	Scope                 ExecutionScope    `json:"scope"`
+	Mutations             []Mutation        `json:"mutations"`
+	Dependencies          []ResourceVersion `json:"dependencies,omitempty"`
 }
 
 type ResourceVersion struct {
@@ -89,7 +90,7 @@ func payloadHash(payload []byte) string {
 
 func validKind(kind string) bool {
 	switch kind {
-	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "tool-result":
+	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "tool-result", "project":
 		return true
 	default:
 		return false
@@ -450,11 +451,14 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			arguments = append(arguments, query.ConversationID)
 		}
 	case "checkpoint":
-		if query.RequestID == "" {
+		if query.Management && query.ResourceKind == "checkpoint" {
+			statement += ` AND substr(resource_id,1,17)='memory-candidate/'`
+		} else if query.RequestID == "" {
 			return []Resource{}, "", nil
+		} else {
+			statement += ` AND resource_id IN (?,?)`
+			arguments = append(arguments, "turn/"+query.RequestID, "memory/"+query.RequestID)
 		}
-		statement += ` AND resource_id IN (?,?)`
-		arguments = append(arguments, "turn/"+query.RequestID, "memory/"+query.RequestID)
 	}
 	statement = `SELECT resource_id,source_id,revision,deleted,body,resource_order FROM (` + statement + `)`
 	if query.Cursor != "" {
@@ -552,7 +556,7 @@ func (s *Service) Enqueue(ctx context.Context, commit Commit) error {
 	if commit.Scope.Coordinated || commit.Scope.ResourceOwnerID == "" || commit.Scope.RequestID == "" {
 		return ErrWrongOwner
 	}
-	if err := s.Validate(ctx, commit.Scope); err != nil {
+	if err := s.ValidateCommitAuthorities(ctx, commit); err != nil {
 		return err
 	}
 	payload, err := json.Marshal(commit)
@@ -692,7 +696,7 @@ func (s *Service) DiscardPending(ctx context.Context, pending PendingCommit, rol
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.Validate(ctx, pending.Commit.Scope); err == nil && roleErr == nil {
+	if err := s.ValidateCommitAuthorities(ctx, pending.Commit); err == nil && roleErr == nil {
 		return ErrRequestConflict
 	} else if err != nil && !errors.Is(err, ErrScopeExpired) && !errors.Is(err, ErrWrongOwner) {
 		return err

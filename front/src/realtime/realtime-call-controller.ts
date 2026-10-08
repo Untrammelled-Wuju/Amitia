@@ -7,6 +7,10 @@ import {
 } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { RealtimeVoiceActivityDetector } from "./realtime-vad";
+import { OwnedRealtimeSession } from "./owned-realtime-session";
+import { ownedImageAttachment } from "../runtime/device-owned-attachments";
+import type { OwnedChatResponse, OwnedExecutionScope } from "../runtime/device-owned-chat";
+import { parseConversationReference } from "../runtime/device-owned-conversation-reference";
 
 export type RealtimeCallState = "idle" | "connecting" | "connected" | "error";
 export type RealtimeVisualSource = "camera" | "screen";
@@ -41,6 +45,12 @@ export interface RealtimeCallConnectedInfo {
 
 export interface RealtimeCallControllerOptions {
   conversationId: string;
+  characterId?: string;
+  expectedExecutionScope?: OwnedExecutionScope;
+  acceptedTicket?: Record<string, any>;
+  conversationOrigin?: { ownerId: string; id: string };
+  historicalRoleId?: string;
+  onOwnedCompleted?: (response: OwnedChatResponse) => void;
   dialogId?: string;
   voiceType?: string;
   resourceId?: string;
@@ -77,6 +87,7 @@ const VISUAL_INTERVAL_MS: Record<RealtimeVisualSource, number> = {
 export class RealtimeCallController {
   private readonly options: RealtimeCallControllerOptions;
   private controlSocket: WebSocket | null = null;
+  private ownedSession: OwnedRealtimeSession | null = null;
   private visualSocket: WebSocket | null = null;
   private audioContext: AudioContext | null = null;
   private playbackContext: AudioContext | null = null;
@@ -146,6 +157,38 @@ export class RealtimeCallController {
       this.emitMediaState();
       this.prepareAudioCapture();
 
+      if (this.options.expectedExecutionScope) {
+        const origin = parseConversationReference(this.options.conversationId);
+        this.ownedSession = new OwnedRealtimeSession({
+          characterId: this.options.characterId || "",
+          conversationId: origin?.id || this.options.conversationId,
+          conversationOrigin: this.options.conversationOrigin ?? origin,
+          historicalRoleId: this.options.historicalRoleId,
+          expectedExecutionScope: this.options.expectedExecutionScope,
+          acceptedTicket: this.options.acceptedTicket,
+          onReady: () => { this.setState("connected"); this.attachAudioProcessor(); },
+          onCompleted: (result) => { this.options.onAssistantText?.(result.reply); this.options.onOwnedCompleted?.(result); },
+          onAudio: async (bytes) => {
+            const context = this.playbackContext;
+            const generation = this.playbackGeneration;
+            if (!context) return;
+            const decoded = await context.decodeAudioData(bytes.slice().buffer as ArrayBuffer);
+            if (context !== this.playbackContext || generation !== this.playbackGeneration || !this.ownedSession) return;
+            const source = context.createBufferSource();
+            source.buffer = decoded;
+            source.connect(context.destination);
+            this.activeSources.add(source);
+            this.setAISpeaking(true);
+            source.onended = () => { this.activeSources.delete(source); if (!this.activeSources.size) this.setAISpeaking(false); };
+            source.start();
+          },
+          onError: (message) => { void this.fail(message); },
+          onInterrupted: () => this.flushPlayback(),
+        });
+        await this.ownedSession.start();
+        return;
+      }
+
       const access = await this.createAccessTicket();
       const endpoint = await resolveWebSocketUrl(access.wsPath);
       const params = new URLSearchParams({ ticket: access.ticket });
@@ -176,6 +219,7 @@ export class RealtimeCallController {
   }
 
   async setMuted(muted: boolean): Promise<void> {
+    if (muted && this.ownedSession) this.ownedSession.endTurn();
     const socket = this.controlSocket;
     if (muted && this.vad.isSpeechActive && socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ event: "speech_end" }));
@@ -435,8 +479,7 @@ export class RealtimeCallController {
     this.audioNode.onaudioprocess = (event) => {
       const socket = this.controlSocket;
       if (
-        !socket ||
-        socket.readyState !== WebSocket.OPEN ||
+        (!this.ownedSession && (!socket || socket.readyState !== WebSocket.OPEN)) ||
         this.mediaState.muted
       ) {
         return;
@@ -448,6 +491,14 @@ export class RealtimeCallController {
       }
       const rms = Math.sqrt(sumSquares / input.length);
       const vadEvent = this.vad.process(rms);
+      if (this.ownedSession) {
+        if (vadEvent === "speech_start") this.ownedSession.startTurn();
+        this.ownedSession.appendAudio(float32ToPCM(input));
+        if (vadEvent === "speech_end") this.ownedSession.endTurn();
+        if (rms >= 0.02) this.requestImmediateVisualFrame();
+        return;
+      }
+      if (!socket) return;
       if (vadEvent === "speech_start") {
         this.flushPlayback();
         socket.send(JSON.stringify({ event: "speech_start" }));
@@ -514,7 +565,7 @@ export class RealtimeCallController {
   private async captureVisualFrame(runtime: VisualCaptureRuntime | null): Promise<void> {
     if (!runtime || runtime.encoding || runtime.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
     const socket = this.visualSocket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    if (!this.ownedSession && (!socket || socket.readyState !== WebSocket.OPEN)) return;
     runtime.encoding = true;
     try {
       const originalWidth = runtime.video.videoWidth;
@@ -539,6 +590,13 @@ export class RealtimeCallController {
 
       const blob = await canvasToBlob(runtime.canvas, "image/jpeg", runtime.source === "screen" ? 0.78 : 0.72);
       if (!blob || blob.size === 0 || blob.size > 2 * 1024 * 1024) return;
+      if (this.ownedSession) {
+        const session = this.ownedSession;
+        const attachment = await ownedImageAttachment(await blobToDataURL(blob));
+        if (session === this.ownedSession) session.setVisual(attachment);
+        return;
+      }
+      if (!socket) return;
       runtime.sequence++;
       const bytes = await blob.arrayBuffer();
       socket.send(
@@ -722,6 +780,9 @@ export class RealtimeCallController {
   }
 
   private async cleanup(closeSockets: boolean): Promise<void> {
+    this.ownedSession?.stop();
+    this.ownedSession = null;
+    this.flushPlayback();
     this.stopVisualSource("camera");
     this.stopVisualSource("screen");
     const visual = this.visualSocket;
@@ -821,6 +882,15 @@ function base64ToUint8Array(value: string): Uint8Array {
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("通话画面读取失败"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function computeFrameSignature(context: CanvasRenderingContext2D, width: number, height: number): number {

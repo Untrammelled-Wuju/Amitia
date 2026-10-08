@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createOwnedConversationExport } from "../runtime/device-owned-export";
 
+it("导出当前Owner的实际文件及视频字节，拒绝只有Source地址的附件", () => {
+  const rows = [{ id: "m", ownerId: "source-a", role: "user", attachments: [{ kind: "file", name: "notes.txt", mimeType: "text/plain", data: "aGk=", sha256: "hash" }, { kind: "video", name: "clip.mp4", mimeType: "video/mp4", data: "AAAA", sha256: "hash" }] }];
+  const result = JSON.parse(createOwnedConversationExport("chat", rows, "json").content);
+  expect(result.messages[0].attachments).toHaveLength(2);
+  expect(result.messages[0].attachments[0].url).toBe("data:text/plain;base64,aGk=");
+  expect(createOwnedConversationExport("chat", rows, "markdown").content).toContain("[clip.mp4](data:video/mp4;base64,AAAA)");
+  expect(() => createOwnedConversationExport("chat", [{ ...rows[0], attachments: [{ kind: "file", url: "http://source/file" }] }], "json")).toThrow("原所有者内容");
+});
+
 describe("owned conversation export", () => {
   it("exports selected content and origin without authority tokens or runtime state", () => {
     const artifact = createOwnedConversationExport("meshconv1:device:chat", [

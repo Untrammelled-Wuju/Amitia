@@ -17,4 +17,4 @@ func (h *Handler) UsageModels(c *gin.Context) { util.SuccessResponse(c, h.servic
 
 func (h *Handler) UsageSources(c *gin.Context) { util.SuccessResponse(c, h.service.GetUsageSources()) }
 
-func (h *Handler) UsageClear(c *gin.Context) { util.SuccessResponse(c, h.service.ClearUsage()) }
+func (h *Handler) UsageClear(c *gin.Context) { h.administratorAction(c, "usage-clear", "") }

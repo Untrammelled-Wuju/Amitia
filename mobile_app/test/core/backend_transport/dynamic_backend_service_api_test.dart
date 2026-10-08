@@ -2,12 +2,38 @@ import 'package:dio/dio.dart';
 import 'package:amitia_app/core/backend_access/business_backend_unavailable.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/backend_transport/dynamic_backend_service_api.dart';
+import 'package:amitia_app/core/backend_transport/core_configuration_intent.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_phase.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_snapshot.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('配置请求等待期间切 generation 不发到新 Core', () async {
+    var current = _FakeApi(1);
+    var available = false;
+    final proxy = DynamicBackendServiceApiProxy(
+      currentApi: () => current,
+      currentStatus: _startingStatus,
+      canUseApi: (_, __) => available,
+      waitForAvailability: () async {
+        current = _FakeApi(2);
+        available = true;
+      },
+    );
+    final intent = CoreConfigurationIntent(
+      generation: 1,
+      coreId: 'core-b',
+      canConfigure: true,
+      isCurrent: () => true,
+    );
+    await expectLater(
+      intent.run(() => proxy.get('/api/model-configs')),
+      throwsStateError,
+    );
+    expect(current.getCount, 0);
+  });
+
   test('本地运行环境未就绪时记录并阻止业务请求', () async {
     BusinessBackendUnavailable? recorded;
     final api = DynamicBackendServiceApiProxy(

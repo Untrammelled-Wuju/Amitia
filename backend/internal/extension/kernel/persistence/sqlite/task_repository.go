@@ -70,6 +70,26 @@ func (r *TaskRepository) GetTaskDefinition(ctx context.Context, defID string) (*
 	return &def, nil
 }
 
+func (r *TaskRepository) CreateTaskDefinition(ctx context.Context, definition *task_runtime.TaskDefinition) (bool, error) {
+	if definition == nil || definition.TaskID == "" || definition.RemoteSource == nil || definition.InstalledGeneration != 0 {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskDefinitionInvalid, "原子目录导入只接受设备任务元数据")
+	}
+	encoded, err := json.Marshal(definition)
+	if err != nil {
+		return false, err
+	}
+	if len(encoded) > 64<<10 {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskDefinitionInvalid, "设备任务目录元数据超过上限")
+	}
+	now := time.Now().UTC()
+	result, err := getExecutor(ctx, r.db).ExecContext(ctx, `INSERT INTO extension_task_definitions(task_definition_id,extension_id,module_id,contribution_id,runtime_type,entry,definition_json,definition_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(task_definition_id) DO NOTHING`, definition.TaskID, definition.ExtensionID, definition.ModuleID, definition.ContributionID, definition.RuntimeType, definition.Entry, string(encoded), definition.DefinitionHash, now, now)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
+
 func (r *TaskRepository) ListTaskDefinitions(ctx context.Context, extensionID string) ([]*task_runtime.TaskDefinition, error) {
 	ex := getExecutor(ctx, r.db)
 	var rows *sql.Rows
@@ -117,9 +137,27 @@ func (r *TaskRepository) DeleteByExtension(ctx context.Context, extensionID stri
 }
 
 func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskRun) error {
+	created, err := r.writeTaskRun(ctx, run, false)
+	if err != nil {
+		return err
+	}
+	if !created {
+		return task_runtime.NewTaskError(task_runtime.ErrTaskStaleWrite, "stale task run write rejected")
+	}
+	return nil
+}
+
+func (r *TaskRepository) CreateTaskRun(ctx context.Context, run *task_runtime.TaskRun) (bool, error) {
+	if run == nil || run.Revision != 1 || run.Generation != 1 || run.Status != task_runtime.RunStatusQueued || run.ExecutionAttemptID != "" {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskStaleWrite, "新任务必须保持初始排队版本")
+	}
+	return r.writeTaskRun(ctx, run, true)
+}
+
+func (r *TaskRepository) writeTaskRun(ctx context.Context, run *task_runtime.TaskRun, createOnly bool) (bool, error) {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	res, err := ex.ExecContext(ctx, `
+	query := `
 		INSERT INTO extension_task_runs
 			(task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
 			 status, priority, input_json, input_hash, input_artifact_id,
@@ -133,7 +171,11 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			 pause_reason, pause_requested_at, paused_at, resumed_at,
 			 error_code, error_message, generation, revision, definition_fingerprint, lease_id, lease_expires_at, last_heartbeat_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(task_run_id) DO UPDATE SET
+	`
+	if createOnly {
+		query += `ON CONFLICT(task_run_id) DO NOTHING`
+	} else {
+		query += `ON CONFLICT(task_run_id) DO UPDATE SET
 			status = excluded.status, priority = excluded.priority,
 			input_json = excluded.input_json, input_hash = excluded.input_hash,
 			trace_id = excluded.trace_id, correlation_id = excluded.correlation_id,
@@ -159,7 +201,9 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			revision = excluded.revision,
 			lease_id = excluded.lease_id, lease_expires_at = excluded.lease_expires_at, last_heartbeat_at = excluded.last_heartbeat_at
 		WHERE excluded.revision = extension_task_runs.revision + 1 AND excluded.definition_fingerprint = extension_task_runs.definition_fingerprint
-	`,
+		`
+	}
+	res, err := ex.ExecContext(ctx, query,
 		run.TaskRunID, run.OperationID, run.InvocationID, run.TaskDefinitionID,
 		run.ExtensionID, run.ModuleID, string(run.Status), run.Priority,
 		string(run.Input), run.InputHash, nullableString(run.InputArtifactID),
@@ -183,13 +227,13 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 		run.LeaseID, nullableTime(run.LeaseExpiresAt), nullableTime(run.LastHeartbeatAt),
 	)
 	if err != nil {
-		return fmt.Errorf("sqlite: upsert task run: %w", err)
+		return false, fmt.Errorf("sqlite: write task run: %w", err)
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return task_runtime.NewTaskError(task_runtime.ErrTaskStaleWrite, "stale task run write rejected")
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
 	}
-	return nil
+	return n > 0, nil
 }
 
 func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64, expectedRevision int64) (bool, error) {
@@ -255,7 +299,7 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 	run, err := scanTaskRun(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("sqlite: task run not found: %s", runID)
+			return nil, task_runtime.NewTaskError(task_runtime.ErrTaskNotFound, "任务不存在")
 		}
 		return nil, fmt.Errorf("sqlite: query task run: %w", err)
 	}
@@ -296,7 +340,9 @@ func scanTaskRun(scanner interface {
 	if err != nil {
 		return nil, err
 	}
-	run.Input = json.RawMessage(inputJSON.String)
+	if inputJSON.Valid && inputJSON.String != "" {
+		run.Input = json.RawMessage(inputJSON.String)
+	}
 	run.InvocationID = invocationID.String
 	run.InputArtifactID = stringPtr(inputArtifactID)
 	run.RuntimeInstanceID = stringPtr(runtimeInstanceID)
@@ -349,6 +395,18 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 			where = " WHERE status = ?"
 		}
 		args = append(args, filter.Status)
+	}
+	if filter.ScopedSpaceID != "" || filter.ScopedDeviceID != "" {
+		if filter.ScopedSpaceID == "" || filter.ScopedDeviceID == "" {
+			return nil, fmt.Errorf("sqlite: task list requires complete device scope")
+		}
+		if where == "" {
+			where = " WHERE "
+		} else {
+			where += " AND "
+		}
+		where += `EXISTS (SELECT 1 FROM kernel_scope_snapshots AS authority WHERE authority.snapshot_id=extension_task_runs.scope_snapshot_id AND authority.invocation_id=extension_task_runs.invocation_id AND authority.extension_id=extension_task_runs.extension_id AND authority.module_id=extension_task_runs.module_id AND json_valid(authority.resolved_scopes) AND json_extract(authority.resolved_scopes,'$.version')=1 AND json_extract(authority.resolved_scopes,'$.snapshot.spaceId')=? AND json_extract(authority.resolved_scopes,'$.snapshot.ownedExecutionScope.spaceId')=? AND (json_extract(authority.resolved_scopes,'$.snapshot.ownedExecutionScope.initiatorDeviceId')=? OR json_extract(authority.resolved_scopes,'$.snapshot.ownedExecutionScope.targetDeviceId')=?))`
+		args = append(args, filter.ScopedSpaceID, filter.ScopedSpaceID, filter.ScopedDeviceID, filter.ScopedDeviceID)
 	}
 	query += where + " ORDER BY created_at DESC"
 	if filter.Limit > 0 {
@@ -411,13 +469,17 @@ func (r *TaskRepository) DequeueTask(ctx context.Context, leaseOwner string, lea
 	leaseExpires := now.Add(leaseDuration)
 
 	row := ex.QueryRowContext(ctx, `
-		SELECT task_run_id, priority, available_at, created_at
-		FROM extension_task_queue
-		WHERE (lease_expires_at IS NULL OR lease_expires_at < ?)
-		  AND available_at <= ?
-		ORDER BY priority DESC, available_at ASC, created_at ASC
-		LIMIT 1
-	`, now, now)
+		UPDATE extension_task_queue
+		SET lease_owner = ?, lease_expires_at = ?
+		WHERE task_run_id = (
+			SELECT task_run_id FROM extension_task_queue
+			WHERE (lease_expires_at IS NULL OR lease_expires_at < ?)
+			  AND available_at <= ?
+			ORDER BY priority DESC, available_at ASC, created_at ASC
+			LIMIT 1
+		)
+		RETURNING task_run_id, priority, available_at, created_at
+	`, leaseOwner, leaseExpires, now, now)
 
 	var entry task_runtime.TaskQueueEntry
 	err := row.Scan(&entry.TaskRunID, &entry.Priority, &entry.AvailableAt, &entry.CreatedAt)
@@ -426,13 +488,6 @@ func (r *TaskRepository) DequeueTask(ctx context.Context, leaseOwner string, lea
 			return nil, nil
 		}
 		return nil, fmt.Errorf("sqlite: dequeue query: %w", err)
-	}
-
-	_, err = ex.ExecContext(ctx, `
-		UPDATE extension_task_queue SET lease_owner = ?, lease_expires_at = ? WHERE task_run_id = ?
-	`, leaseOwner, leaseExpires, entry.TaskRunID)
-	if err != nil {
-		return nil, fmt.Errorf("sqlite: lease task: %w", err)
 	}
 
 	entry.LeaseOwner = leaseOwner
@@ -520,7 +575,9 @@ func (r *TaskRepository) GetLatestCheckpoint(ctx context.Context, taskRunID stri
 		}
 		return nil, fmt.Errorf("sqlite: get latest checkpoint: %w", err)
 	}
-	cp.Payload = json.RawMessage(payloadJSON)
+	if payloadJSON != "" {
+		cp.Payload = json.RawMessage(payloadJSON)
+	}
 	cp.DefinitionHash = defHash.String
 	cp.InputHash = inputHash.String
 	return &cp, nil
@@ -564,6 +621,17 @@ func (r *TaskRepository) GetProgress(ctx context.Context, taskRunID string) (*ta
 			return nil, nil
 		}
 		return nil, fmt.Errorf("sqlite: get progress: %w", err)
+	}
+	var stored task_runtime.TaskRunProgress
+	if err := json.Unmarshal([]byte(progressJSON), &stored); err != nil {
+		return nil, fmt.Errorf("sqlite: invalid task progress: %w", err)
+	}
+	if stored.TaskRunID != "" {
+		if stored.TaskRunID != prog.TaskRunID || stored.Sequence != prog.Sequence {
+			return nil, fmt.Errorf("sqlite: task progress identity or sequence mismatch")
+		}
+		stored.UpdatedAt = prog.UpdatedAt
+		return &stored, nil
 	}
 	prog.Details = json.RawMessage(progressJSON)
 	return &prog, nil
@@ -769,24 +837,26 @@ func (r *TaskRepository) UpdateExecutionAttempt(
 
 func serializeExecutionTarget(target task_runtime.TaskExecutionTarget) string {
 	type targetJSON struct {
-		ProviderID           string `json:"providerId,omitempty"`
-		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
-		SpaceID              string `json:"spaceId,omitempty"`
-		DeviceID             string `json:"deviceId,omitempty"`
-		RuntimeID            string `json:"runtimeId,omitempty"`
-		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
-		ConnectionGeneration int64  `json:"connectionGeneration,omitempty"`
-		RuntimeInstanceID    string `json:"runtimeInstanceId,omitempty"`
+		SourceTaskDefinitionID string `json:"sourceTaskDefinitionId,omitempty"`
+		ProviderID             string `json:"providerId,omitempty"`
+		ProviderInstanceID     string `json:"providerInstanceId,omitempty"`
+		SpaceID                string `json:"spaceId,omitempty"`
+		DeviceID               string `json:"deviceId,omitempty"`
+		RuntimeID              string `json:"runtimeId,omitempty"`
+		RuntimeSessionID       string `json:"runtimeSessionId,omitempty"`
+		ConnectionGeneration   int64  `json:"connectionGeneration,omitempty"`
+		RuntimeInstanceID      string `json:"runtimeInstanceId,omitempty"`
 	}
 	return mustMarshalJSON(targetJSON{
-		ProviderID:           target.ProviderID.String(),
-		ProviderInstanceID:   target.ProviderInstanceID.String(),
-		SpaceID:              target.SpaceID.String(),
-		DeviceID:             target.DeviceID.String(),
-		RuntimeID:            target.RuntimeID.String(),
-		RuntimeSessionID:     target.RuntimeSessionID.String(),
-		ConnectionGeneration: target.ConnectionGeneration,
-		RuntimeInstanceID:    target.RuntimeInstanceID,
+		SourceTaskDefinitionID: target.SourceTaskDefinitionID,
+		ProviderID:             target.ProviderID.String(),
+		ProviderInstanceID:     target.ProviderInstanceID.String(),
+		SpaceID:                target.SpaceID.String(),
+		DeviceID:               target.DeviceID.String(),
+		RuntimeID:              target.RuntimeID.String(),
+		RuntimeSessionID:       target.RuntimeSessionID.String(),
+		ConnectionGeneration:   target.ConnectionGeneration,
+		RuntimeInstanceID:      target.RuntimeInstanceID,
 	})
 }
 
@@ -795,28 +865,30 @@ func deserializeExecutionTarget(s string) task_runtime.TaskExecutionTarget {
 		return task_runtime.TaskExecutionTarget{}
 	}
 	type targetJSON struct {
-		ProviderID           string `json:"providerId,omitempty"`
-		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
-		SpaceID              string `json:"spaceId,omitempty"`
-		DeviceID             string `json:"deviceId,omitempty"`
-		RuntimeID            string `json:"runtimeId,omitempty"`
-		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
-		ConnectionGeneration int64  `json:"connectionGeneration,omitempty"`
-		RuntimeInstanceID    string `json:"runtimeInstanceId,omitempty"`
+		SourceTaskDefinitionID string `json:"sourceTaskDefinitionId,omitempty"`
+		ProviderID             string `json:"providerId,omitempty"`
+		ProviderInstanceID     string `json:"providerInstanceId,omitempty"`
+		SpaceID                string `json:"spaceId,omitempty"`
+		DeviceID               string `json:"deviceId,omitempty"`
+		RuntimeID              string `json:"runtimeId,omitempty"`
+		RuntimeSessionID       string `json:"runtimeSessionId,omitempty"`
+		ConnectionGeneration   int64  `json:"connectionGeneration,omitempty"`
+		RuntimeInstanceID      string `json:"runtimeInstanceId,omitempty"`
 	}
 	var j targetJSON
 	if err := json.Unmarshal([]byte(s), &j); err != nil {
 		return task_runtime.TaskExecutionTarget{}
 	}
 	return task_runtime.TaskExecutionTarget{
-		ProviderID:           capability.ParseProviderID(j.ProviderID),
-		ProviderInstanceID:   capability.ParseProviderInstanceID(j.ProviderInstanceID),
-		SpaceID:              runtimeidentity.ParseSpaceID(j.SpaceID),
-		DeviceID:             runtimeidentity.ParseDeviceID(j.DeviceID),
-		RuntimeID:            runtimeidentity.ParseRuntimeID(j.RuntimeID),
-		RuntimeSessionID:     runtimeidentity.ParseRuntimeSessionID(j.RuntimeSessionID),
-		ConnectionGeneration: j.ConnectionGeneration,
-		RuntimeInstanceID:    j.RuntimeInstanceID,
+		SourceTaskDefinitionID: j.SourceTaskDefinitionID,
+		ProviderID:             capability.ParseProviderID(j.ProviderID),
+		ProviderInstanceID:     capability.ParseProviderInstanceID(j.ProviderInstanceID),
+		SpaceID:                runtimeidentity.ParseSpaceID(j.SpaceID),
+		DeviceID:               runtimeidentity.ParseDeviceID(j.DeviceID),
+		RuntimeID:              runtimeidentity.ParseRuntimeID(j.RuntimeID),
+		RuntimeSessionID:       runtimeidentity.ParseRuntimeSessionID(j.RuntimeSessionID),
+		ConnectionGeneration:   j.ConnectionGeneration,
+		RuntimeInstanceID:      j.RuntimeInstanceID,
 	}
 }
 

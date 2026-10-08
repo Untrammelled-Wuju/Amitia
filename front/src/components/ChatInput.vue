@@ -280,6 +280,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               </div>
             </el-popover>
             <el-popover
+              v-if="!deviceOwned"
               v-model:visible="permissionMenuOpen"
               placement="top-start"
               :width="280"
@@ -361,7 +362,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   class="workspace-trigger"
                   :class="{ 'has-workspace': !!currentWorkspace }"
                   :disabled="workspaceLoading || isInputDisabled"
-                  title="选择或添加项目文件夹"
+                  title="选择项目"
                 >
                   <el-icon><FolderOpened /></el-icon>
                   <span>{{ workspaceLabel }}</span>
@@ -371,7 +372,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <div class="workspace-picker-header">
                   <div>
                     <strong>项目</strong>
-                    <small>当前项目中的所有对话共用此文件夹</small>
+                    <small>{{ ownedProjects ? '按当前角色和数据所属设备保存对话分组' : '当前项目中的所有对话共用此文件夹' }}</small>
                   </div>
                 </div>
                 <div v-if="recentWorkspaces.length" class="workspace-recent-list">
@@ -390,7 +391,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                     <el-icon class="workspace-option-icon"><FolderOpened /></el-icon>
                     <span class="workspace-option-copy">
                       <strong>{{ workspace.name }}</strong>
-                      <small>{{ workspace.available ? '本机目录' : (workspace.statusReason || '目录不可用') }}</small>
+                      <small>{{ workspace.kind === 'logical' ? '对话分组' : workspace.available ? '本机目录' : (workspace.statusReason || '目录不可用') }}</small>
                     </span>
                     <el-icon
                       v-if="currentWorkspace?.workspaceId === workspace.id"
@@ -401,6 +402,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <div v-else class="workspace-empty">暂无项目</div>
                 <div class="workspace-picker-divider"></div>
                 <button
+                  v-if="!ownedProjects"
                   type="button"
                   class="workspace-action"
                   :disabled="workspaceLoading"
@@ -525,6 +527,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
                     <div class="input-actions">
             <el-popover
+              v-if="!deviceOwned"
               v-model:visible="modelMenuOpen"
               placement="top-end"
               :width="260"
@@ -765,6 +768,7 @@ const env = resolveHostEnvironment();
 const { sendOnEnter } = useChatInputPreference();
 const props = withDefaults(defineProps<{
   disabled?: boolean;
+  deviceOwned?: boolean;
   sending?: boolean;
   generating?: boolean;
   isSubmitting?: boolean;
@@ -886,6 +890,7 @@ function selectPermissionMode(mode: string) {
 }
 const {
   currentWorkspace,
+  ownedProjects,
   recentWorkspaces,
   workspaceLoading,
   refreshRecentWorkspaces,

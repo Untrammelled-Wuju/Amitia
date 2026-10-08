@@ -12,6 +12,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     :actions="conversationHostActions"
   />
   <div v-else class="webchat-page">
+    <el-dialog v-if="boundCallScope" v-model="callActive" fullscreen :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" destroy-on-close>
+      <RealtimeCallDialog :mode="callMode" voice-type="" resource-id="" :conversation-id="boundCallConversation" :character-id="boundCallScope.roleId" :expected-execution-scope="boundCallScope" :historical-role-id="boundCallHistoricalRole" :char-name="charName" :char-avatar="charAvatar" @close="handleEndCall" @conversation-saved="handleOwnedCallSaved" />
+    </el-dialog>
     <section class="chat-surface">
     <el-alert v-if="owned.notice.value" :title="owned.notice.value" type="warning" show-icon :closable="false" />
     <AutomationStatusIndicator :status="automationStatus" />
@@ -148,6 +151,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :actions="conversationHostActions"
       ref="inputRef"
       :disabled="modelMissing"
+      :device-owned="owned.enabled.value"
       :sending="sending"
       :generating="generating"
       :is-submitting="isSubmitting"
@@ -216,6 +220,9 @@ import {
 } from "../../composables/useChatPermissionPreference";
 import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
+import RealtimeCallDialog from "../../components/RealtimeCallDialog.vue";
+import type { OwnedChatResponse, OwnedExecutionScope } from "../../runtime/device-owned-chat";
+import { conversationReference } from "../../runtime/device-owned-conversation-reference";
 import MessagesArea from "../../components/MessagesArea.vue";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
@@ -240,12 +247,30 @@ const router = useRouter();
 const route = useRoute();
 const callActive = ref(false);
 const callMode = ref<"voice" | "video" | "screen">("voice");
+const boundCallScope = ref<OwnedExecutionScope | null>(null);
+const boundCallConversation = ref("");
+const boundCallHistoricalRole = ref<string | undefined>();
 const ttsVoiceType = ref("");
 const ttsResourceId = ref("");
 let stopCallWindowListener: (() => void) | null = null;
 
 async function handleStartCall(mode: "voice" | "video" | "screen") {
   callMode.value = mode;
+  try {
+    if (await owned.refresh()) {
+      const originalRole = characterId.value;
+      const originalConversation = convId.value;
+      if (!originalRole) throw new Error("请先选择一个已保存的角色，再发起通话");
+      const snapshot = originalConversation ? await owned.query(originalConversation, originalRole) : await owned.data("working", originalRole);
+      if (characterId.value !== originalRole || convId.value !== originalConversation || !snapshot?.executionScope || snapshot.executionScope.roleId !== originalRole) throw new Error("通话角色或会话已变化，请重新发起");
+      boundCallScope.value = JSON.parse(JSON.stringify(snapshot.executionScope));
+      boundCallConversation.value = originalConversation;
+      const historicalConversation = snapshot.historicalSnapshot?.resources.find((item) => item.kind === "conversation");
+      boundCallHistoricalRole.value = historicalConversation?.roleId || snapshot.historicalSnapshot?.legacyConversations?.[0]?.characterId || undefined;
+      callActive.value = true;
+      return;
+    }
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "无法确认通话服务"); return; }
   const desktopApi = window.amitiaDesktop;
   if (!desktopApi?.openRealtimeCallWindow) {
     ElMessage.error("当前环境不支持独立通话窗口");
@@ -268,8 +293,24 @@ async function handleStartCall(mode: "voice" | "video" | "screen") {
 }
 
 async function handleEndCall() {
+  if (boundCallScope.value) {
+    callActive.value = false;
+    boundCallScope.value = null;
+    return;
+  }
   await window.amitiaDesktop?.closeRealtimeCallWindow?.();
   callActive.value = false;
+}
+
+async function handleOwnedCallSaved(result: OwnedChatResponse) {
+  if (!boundCallScope.value || !callActive.value || result.executionScope.coreId !== boundCallScope.value.coreId || result.executionScope.roleId !== characterId.value) return;
+  const origin = result.conversationOrigin || { ownerId: result.executionScope.resourceOwnerId, id: result.conversationId };
+  const reference = conversationReference(origin);
+  if (convId.value !== boundCallConversation.value) return;
+  convId.value = reference;
+  boundCallConversation.value = reference;
+  const rows = owned.messages(await owned.query(reference, characterId.value));
+  if (callActive.value && convId.value === reference) messages.value = rows;
 }
 
 const { get, post, put, del } = useApi();
@@ -427,6 +468,7 @@ async function handleNewChat(event?: CustomEvent) {
 
 async function handleFileSend(file: File) {
   if (!file) return;
+  try { if (await owned.refresh()) { if (!characterId.value) { ElMessage.warning("请先选择调用角色"); return; } await handleOwnedFileSend(file); return; } } catch (error: any) { ElMessage.error(error?.message || "文件发送失败"); return; }
   if (!convId.value || !characterId.value) {
     ElMessage.warning("请先选择角色和会话");
     return;
@@ -457,10 +499,10 @@ function findConversationMessage(messageId: string, ownerId?: string) {
 async function deleteConversationMessage(messageId: string, ownerId?: string) {
   const id = String(messageId || "").trim();
   if (!id) return;
-  if (owned.enabled.value) {
+  if (await owned.refresh()) {
     const message = findConversationMessage(id, ownerId);
     if (!message?.executionScope || !message?.ownerId || !message?.sourceRevision) throw new Error("该消息缺少原始数据来源，请重新加载或在原设备管理历史数据");
-    await owned.edit("message", id, {}, { deleted: true, characterId: characterId.value, expectedExecutionScope: message.executionScope, expectedOwnerId: message.ownerId, expectedRevision: message.sourceRevision });
+    await owned.edit("message", id, {}, { deleted: true, characterId: message.executionScope.roleId, expectedExecutionScope: message.executionScope, expectedOwnerId: message.ownerId, expectedRevision: message.sourceRevision });
   }
   else await del(`/api/chats/messages/${encodeURIComponent(id)}`);
   const index = persistedMessages.value.findIndex((item: any) => String(item.id) === id && (ownerId === undefined || item.ownerId === ownerId));
@@ -469,7 +511,9 @@ async function deleteConversationMessage(messageId: string, ownerId?: string) {
 
 async function handleEditMessage(msg: any) {
   if (!msg?.id || msg.role !== "user") return;
+  msg = JSON.parse(JSON.stringify(msg));
   try {
+    const bound = await owned.refresh();
     const result = await ElMessageBox.prompt("修改后将更新当前用户消息内容。", "修改消息", {
       inputValue: String(msg.content || ""),
       inputType: "textarea",
@@ -480,9 +524,9 @@ async function handleEditMessage(msg: any) {
     });
     const content = String(result.value || "").trim();
     if (!content || content === String(msg.content || "")) return;
-    if (owned.enabled.value && (!msg.executionScope || !msg.ownerId || !msg.sourceRevision)) throw new Error("该消息缺少原始数据来源，请重新加载或在原设备管理历史数据");
-    const updated = owned.enabled.value
-      ? (await owned.edit("message", msg.id, { content }, { characterId: characterId.value, expectedExecutionScope: msg.executionScope, expectedOwnerId: msg.ownerId, expectedRevision: msg.sourceRevision }), { content, sourceRevision: msg.sourceRevision + 1 })
+    if (bound && (!msg.executionScope || !msg.ownerId || !msg.sourceRevision)) throw new Error("该消息缺少原始数据来源，请重新加载或在原设备管理历史数据");
+    const updated = bound
+      ? (await owned.edit("message", msg.id, { content }, { characterId: msg.executionScope.roleId, expectedExecutionScope: msg.executionScope, expectedOwnerId: msg.ownerId, expectedRevision: msg.sourceRevision }), { content, sourceRevision: msg.sourceRevision + 1 })
       : await put<any>(`/api/web-chat/messages/${encodeURIComponent(msg.id)}`, { content });
     const index = persistedMessages.value.findIndex((item: any) => String(item.id) === String(msg.id) && item.ownerId === msg.ownerId);
     if (index >= 0) {
@@ -516,7 +560,13 @@ function toggleMemInject() {
 
 function handleSetReply(msg: any) {
   replyTarget.value = {
+    ownerId: msg.ownerId,
+    executionScope: msg.executionScope ? JSON.parse(JSON.stringify(msg.executionScope)) : undefined,
     id: msg.id,
+    characterId: msg.characterId || msg.executionScope?.roleId,
+    sourceConversationId: msg.sourceConversationId || msg.conversationId,
+    sourceRevision: msg.sourceRevision ?? 0,
+    fullContent: String(msg.content || ""),
     role: msg.role,
     content: (msg.content || "").slice(0, 100),
   };
@@ -524,6 +574,7 @@ function handleSetReply(msg: any) {
 
 async function loadLlmModels() {
   try {
+    if (await owned.refresh()) { llmModels.value = []; return; }
     const models = await get<any[]>("/api/model/available");
     llmModels.value = Array.isArray(models)
       ? models.filter((model: any) => {
@@ -582,6 +633,7 @@ function saveModelSettingsDraft(
 }
 
 async function handlePermissionModeChange(mode: string) {
+  if (await owned.refresh()) { ElMessage.info("调用权限由当前 Core 管理，请通过云端管理页面修改"); return; }
   const next = normalizeChatPermissionMode(mode);
   selectedPermissionMode.value = next;
   saveChatPermissionMode(next);
@@ -609,6 +661,7 @@ async function handleModelSettingChange(
   reasoningEffort: string,
   reasoningEnabled: boolean,
 ) {
+  if (await owned.refresh()) { ElMessage.info("模型配置由当前 Core 管理，请通过云端管理页面修改"); return; }
   const nextModelId = Number(modelId || 0);
   const nextReasoningEffort = reasoningEffort || "high";
   const nextReasoningEnabled = reasoningEnabled === true;
@@ -645,6 +698,7 @@ function handleModelSettingPreviewChange(
   reasoningEffort: string,
   reasoningEnabled: boolean,
 ) {
+  if (owned.enabled.value) return;
   selectedModelId.value = Number(modelId || 0);
   selectedReasoningEffort.value = reasoningEffort || "high";
   selectedReasoningEnabled.value = reasoningEnabled === true;
@@ -711,6 +765,7 @@ function resetConversationMessages() {
 }
 
 function disconnectAndResetConversation() {
+  if (owned.enabled.value && sending.value) owned.stopLocal("会话已切换，原回复已中断");
   disconnectSSE();
   resetConversationMessages();
 }
@@ -722,6 +777,7 @@ const {
   onVideoRemoved,
   handleVoiceAudio,
   handleVoiceText,
+  handleFileSend: handleOwnedFileSend,
   handleImageSend,
   handleSend,
   handleStop,
@@ -751,7 +807,7 @@ const {
       path: "/chat",
       query: { conversationId },
     });
-    if (owned.enabled.value) { await fetchConversations(); return; }
+    if (owned.enabled.value) { await fetchConversations(); await chatStore.fetchSidebar(); return; }
     void connectSSE(false);
     void chatStore.fetchSidebar().catch(() => {
       ElMessage.warning("消息已发送，侧栏刷新失败，请稍后重试");
@@ -871,6 +927,7 @@ watch(
       return;
     }
     if (nextId === convId.value) return;
+    if (owned.enabled.value && sending.value) owned.stopLocal("会话已切换，原回复已中断");
     convId.value = nextId;
     convTitle.value = "新对话";
     await loadCharacterConversation();
@@ -928,6 +985,7 @@ watch(isOffline, (offline) => {
 });
 
 onMounted(async () => {
+  window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
   stopCallWindowListener =
     window.amitiaDesktop?.onRealtimeCallWindowClosed?.(() => {
       callActive.value = false;
@@ -940,7 +998,7 @@ onMounted(async () => {
     const selected = characters.value.find((character) => character.id === selectedId);
     if (selected) selectCharacter(selected);
     else { characterId.value = ""; modelError.value = characters.value.length ? "请选择调用角色后发送消息" : "没有可用角色，拒绝调用"; }
-    if (characterId.value) { await loadCharacterConversation(); await fetchConversations(); }
+    if (characterId.value) { await chatStore.fetchSidebar(); await loadCharacterConversation(); await fetchConversations(); }
     ownedInitialized = true;
   };
   const startOwnedPolling = () => {
@@ -949,10 +1007,13 @@ onMounted(async () => {
       if (ownedDisposed || ownedPolling) return;
       ownedPolling = true;
       try {
+        const previousProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
         const available = await owned.refresh();
         if (ownedDisposed || !available) return;
         if (!ownedInitialized) { await initializeOwned(); return; }
         characters.value = owned.roles.value;
+        const currentProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
+        if (previousProvider !== currentProvider) await chatStore.fetchSidebar();
         if (!characters.value.some((character) => character.id === characterId.value)) { characterId.value = ""; modelError.value = "当前角色已失效，请重新选择角色"; }
       } catch {
         if (!ownedDisposed && !owned.notice.value.includes("等待新服务批准")) owned.stopLocal("云端服务暂不可用，当前回复已中断；不会自动切换到本机模型。");
@@ -1069,6 +1130,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener("amitia:execution-scope-changed", handleScopeChanged);
   ownedDisposed = true;
   if (ownedPolicyTimer) clearInterval(ownedPolicyTimer);
   ownedPolicyTimer = null;
@@ -1078,6 +1140,16 @@ onUnmounted(() => {
   disconnectProactiveSSE();
   window.removeEventListener("resize", updateViewport);
 });
+
+function handleScopeChanged() {
+  disconnectSSE();
+  disconnectProactiveSSE();
+  persistedMessages.value = persistedMessages.value.map((message) => ["streaming", "sending", "queued"].includes(message.status) ? { ...message, status: "interrupted" } : message);
+  sending.value = false;
+  llmModels.value = [];
+  replyTarget.value = null;
+  void handleEndCall();
+}
 </script>
 <style scoped>
 .webchat-page {

@@ -20,7 +20,14 @@ import (
 )
 
 func (r *Runtime) registerServiceModuleDefinitions(ctx context.Context, extID domain.ExtensionID, version domain.SemanticVersion, modules []domain.ModuleDefinition) error {
-	if r.container == nil || r.container.ServiceDefinitions == nil || r.container.NodeEnvironmentResolver == nil {
+	if r.container == nil {
+		return nil
+	}
+	return r.container.registerServiceModuleDefinitions(ctx, extID, version, modules)
+}
+
+func (c *Container) registerServiceModuleDefinitions(ctx context.Context, extID domain.ExtensionID, version domain.SemanticVersion, modules []domain.ModuleDefinition) error {
+	if c == nil || c.ServiceDefinitions == nil || c.NodeEnvironmentResolver == nil {
 		return nil
 	}
 	hasServiceModule := false
@@ -33,15 +40,15 @@ func (r *Runtime) registerServiceModuleDefinitions(ctx context.Context, extID do
 	if !hasServiceModule {
 		return nil
 	}
-	definition, err := r.container.DefinitionRepository.GetExtension(ctx, extID, version)
+	definition, err := c.DefinitionRepository.GetExtension(ctx, extID, version)
 	if err != nil {
 		return fmt.Errorf("get extension definition: %w", err)
 	}
-	bundlePath := resolveExtensionBundlePath(r.container.ExtRoot, string(extID))
+	bundlePath := resolveExtensionBundlePath(c.ExtRoot, string(extID))
 	if bundlePath == "" {
-		return nil
+		return fmt.Errorf("service bundle unavailable for %s", extID)
 	}
-	nodeEnv, err := r.container.NodeEnvironmentResolver.Resolve(ctx)
+	nodeEnv, err := c.NodeEnvironmentResolver.Resolve(ctx)
 	if err != nil {
 		return fmt.Errorf("resolve managed node: %w", err)
 	}
@@ -53,7 +60,7 @@ func (r *Runtime) registerServiceModuleDefinitions(ctx context.Context, extID do
 		if buildErr != nil {
 			return fmt.Errorf("build service definition %s: %w", module.ID, buildErr)
 		}
-		if err := r.container.registerServiceRuntimeDefinition(serviceDefinition); err != nil {
+		if err := c.registerServiceRuntimeDefinition(serviceDefinition); err != nil {
 			return fmt.Errorf("register service definition %s: %w", module.ID, err)
 		}
 	}

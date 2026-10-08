@@ -54,6 +54,7 @@ type TaskCompletePayloadAdapter func(complete protocol.TaskCompletePayload)
 type TaskProgressPayloadAdapter func(progress protocol.TaskProgressPayload)
 type TaskCheckpointPayloadAdapter func(checkpoint protocol.TaskCheckpointPayload)
 type TaskHeartbeatPayloadAdapter func(heartbeat protocol.TaskHeartbeatPayload) bool
+type DeviceRevokedHandler func(context.Context, runtimeidentity.SpaceID, runtimeidentity.DeviceID) error
 
 type RouterDeps struct {
 	DB                           *sql.DB
@@ -82,6 +83,7 @@ type RouterDeps struct {
 	TaskCheckpointPayloadHandler TaskCheckpointPayloadAdapter
 	TaskHeartbeatPayloadHandler  TaskHeartbeatPayloadAdapter
 	DisconnectHandler            DisconnectHandler
+	DeviceRevokedHandler         DeviceRevokedHandler
 }
 
 func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW gin.HandlerFunc, publicWebAccessMW gin.HandlerFunc, deps *RouterDeps) error {
@@ -255,6 +257,11 @@ func makeApprovalDecisionHandler(deps *RouterDeps) gin.HandlerFunc {
 		if !requirePairingAdministrator(c) {
 			return
 		}
+		finish, valid := security.BeginDeviceManagementIntent(c, deps.Coordination)
+		if !valid {
+			return
+		}
+		defer finish()
 		var request struct {
 			Allow            bool  `json:"allow"`
 			ExpectedRevision int64 `json:"expectedRevision" binding:"required"`
@@ -569,6 +576,11 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 		if !canManageDevice(c, deviceID.String()) {
 			return
 		}
+		finish, valid := security.BeginDeviceManagementIntent(c, deps.Coordination)
+		if !valid {
+			return
+		}
+		defer finish()
 
 		if err := deps.DeviceReg.RequireDeviceOwnedBy(c.Request.Context(), spaceID, deviceID); err != nil {
 			if err == host_registry.ErrDeviceNotFound {
@@ -613,6 +625,17 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 		if deps.Hub != nil {
 			deps.Hub.CloseDevice(spaceID, deviceID)
 		}
+		if deps.DeviceRevokedHandler != nil {
+			if cleanupErr := deps.DeviceRevokedHandler(c.Request.Context(), spaceID, deviceID); cleanupErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"code":     "mesh.device_revoked_notification_cleanup_failed",
+					"message":  cleanupErr.Error(),
+					"deviceId": deviceID.String(),
+					"revoked":  true,
+				})
+				return
+			}
+		}
 		c.JSON(200, gin.H{"ok": true, "deviceId": deviceID.String()})
 	}
 }
@@ -624,6 +647,11 @@ func makeProbeHandler(deps *RouterDeps) gin.HandlerFunc {
 			c.JSON(401, gin.H{"code": "mesh.unauthorized", "message": "unauthorized"})
 			return
 		}
+		finish, valid := security.BeginDeviceManagementIntent(c, deps.Coordination)
+		if !valid {
+			return
+		}
+		defer finish()
 
 		deviceID := runtimeidentity.ParseDeviceID(c.Param("deviceId"))
 		runtimeID := runtimeidentity.ParseRuntimeID(c.Param("runtimeId"))
@@ -636,6 +664,10 @@ func makeProbeHandler(deps *RouterDeps) gin.HandlerFunc {
 		latency, err := deps.Probe.ProbeRuntime(c.Request.Context(), spaceID, deviceID, runtimeID)
 		if err != nil {
 			c.JSON(503, gin.H{"code": "mesh.connection_unavailable", "message": err.Error()})
+			return
+		}
+		if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+			c.JSON(409, gin.H{"code": "mesh.management_scope_changed", "message": err.Error()})
 			return
 		}
 

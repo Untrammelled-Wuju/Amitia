@@ -19,6 +19,14 @@ func PinTaskEntry(ctx context.Context, bundleRoot string, definition *TaskDefini
 	if _, err := resolveTaskEntry(ctx, bundleRoot, definition, true); err != nil {
 		return err
 	}
+	bundleHash, err := TaskBundleHash(ctx, bundleRoot)
+	if err != nil {
+		return err
+	}
+	if definition.BundleHash != "" && definition.BundleHash != bundleHash {
+		return errors.New("任务插件文件树与安装声明不一致")
+	}
+	definition.BundleHash = bundleHash
 	if definition.DefinitionHash == "" {
 		fingerprint, err := taskDefinitionFingerprint(definition)
 		if err != nil {
@@ -87,4 +95,26 @@ func resolveTaskEntry(ctx context.Context, bundleRoot string, definition *TaskDe
 		definition.EntryHash = "sha256:" + actualHash
 	}
 	return entry, nil
+}
+
+func TaskBundleRoot(entry string, definition *TaskDefinition) (string, error) {
+	if definition == nil || definition.BundleHash == "" {
+		return "", nil
+	}
+	if !validTaskFingerprint(strings.TrimPrefix(definition.BundleHash, "sha256:")) {
+		return "", errors.New("任务插件文件树摘要无效")
+	}
+	relative := filepath.Clean(filepath.FromSlash(definition.Entry))
+	if filepath.IsAbs(relative) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", errors.New("任务插件入口路径无效")
+	}
+	root := entry
+	for range strings.Split(relative, string(filepath.Separator)) {
+		root = filepath.Dir(root)
+	}
+	actual, err := filepath.Abs(filepath.Join(root, relative))
+	if err != nil || actual != entry {
+		return "", errors.New("任务插件入口与固定文件树不一致")
+	}
+	return root, nil
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"log"
@@ -31,8 +32,12 @@ type TaskRuntimeService struct {
 	events         TaskEventSink
 	eventObservers []TaskEventSink
 
-	mu          sync.RWMutex
-	activeHosts map[string]*TaskProcessHost
+	mu              sync.RWMutex
+	activeHosts     map[string]*TaskProcessHost
+	sourceHosts     sync.Map
+	sourceApprovals *SourceTaskApprovalLedger
+	processBudget   taskProcessBudget
+	ownerLocks      [64]sync.Mutex
 
 	localExecutor  TaskExecutorPort
 	remoteExecutor RemoteTaskExecutor
@@ -59,13 +64,14 @@ func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRunti
 	queue := NewTaskQueue(store, "amitia-task-runtime", config.LeaseDuration)
 	limiter := NewConcurrencyLimiter(store, config)
 	svc := &TaskRuntimeService{
-		store:        store,
-		queue:        queue,
-		limiter:      limiter,
-		config:       config,
-		activeHosts:  make(map[string]*TaskProcessHost),
-		progressSeq:  make(map[string]*int64),
-		progressLast: make(map[string]time.Time),
+		store:           store,
+		queue:           queue,
+		limiter:         limiter,
+		config:          config,
+		activeHosts:     make(map[string]*TaskProcessHost),
+		sourceApprovals: NewSourceTaskApprovalLedger(),
+		progressSeq:     make(map[string]*int64),
+		progressLast:    make(map[string]time.Time),
 	}
 	svc.localExecutor = NewLocalTaskExecutor(svc)
 	svc.remoteExecutor = UnavailableRemoteTaskExecutor{}
@@ -138,7 +144,7 @@ type taskMutationParams struct {
 }
 
 func (s *TaskRuntimeService) mutateTaskRun(ctx context.Context, p taskMutationParams) error {
-	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+	return s.withManagementTaskTx(ctx, func(txCtx context.Context) error {
 		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, p.next, p.expected, p.generation, p.revision)
 		if casErr != nil {
 			return casErr
@@ -163,7 +169,7 @@ func (s *TaskRuntimeService) GetTaskDefinition(ctx context.Context, defID string
 }
 
 func (s *TaskRuntimeService) PutTaskDefinition(ctx context.Context, def *TaskDefinition) error {
-	return s.store.PutTaskDefinition(ctx, def)
+	return coordination.CommitCurrent(ctx, func() error { return s.store.PutTaskDefinition(ctx, def) })
 }
 
 func (s *TaskRuntimeService) DeleteTaskDefinition(ctx context.Context, defID string) error {
@@ -188,10 +194,17 @@ func (s *TaskRuntimeService) Start(ctx context.Context) {
 func (s *TaskRuntimeService) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	s.closed = true
+	if s.sourceApprovals != nil {
+		s.sourceApprovals.Close()
+	}
 	hosts := make([]*TaskProcessHost, 0, len(s.activeHosts))
 	for _, h := range s.activeHosts {
 		hosts = append(hosts, h)
 	}
+	s.sourceHosts.Range(func(_, value any) bool {
+		hosts = append(hosts, value.(*sourceTaskProcess).host)
+		return true
+	})
 	s.mu.Unlock()
 
 	for _, h := range hosts {
@@ -230,6 +243,21 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 	}
 	inputHash := hashBytes(req.Input)
 	runID := "tr-" + uuid.NewString()
+	var creator TaskRunCreationStore
+	if req.DeduplicateOwnedRequest {
+		authority, owned := coordination.FromContext(ctx)
+		if !owned {
+			return nil, coordination.ErrWrongOwner
+		}
+		runID, err = OwnedRequestTaskRunID(authority)
+		if err != nil {
+			return nil, err
+		}
+		creator, _ = s.store.(TaskRunCreationStore)
+		if creator == nil {
+			return nil, NewTaskError(ErrTaskScopeDenied, "任务存储不支持原子请求去重")
+		}
+	}
 	now := time.Now().UTC()
 
 	placement, err := ResolveRequestedPlacement(req.ExecutionPlacement, def.ExecutionPlacement)
@@ -300,6 +328,12 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		}
 	}
 
+	if req.DeduplicateOwnedRequest {
+		previous, err := s.existingOwnedEnqueue(ctx, run)
+		if err != nil || previous != nil {
+			return previous, err
+		}
+	}
 	if _, owned := coordination.FromContext(ctx); owned {
 		if s.config.OwnedInputs == nil {
 			return nil, NewTaskError(ErrTaskScopeDenied, "任务所有者输入端口不可用")
@@ -309,8 +343,16 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		}
 		run.Input = nil
 	}
-	if err := s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
-		if err := s.store.PutTaskRun(ctx, run); err != nil {
+	if err := s.withManagementTaskTx(ctx, func(ctx context.Context) error {
+		if creator != nil {
+			created, err := creator.CreateTaskRun(ctx, run)
+			if err != nil {
+				return err
+			}
+			if !created {
+				return errOwnedTaskAlreadyCreated
+			}
+		} else if err := s.store.PutTaskRun(ctx, run); err != nil {
 			return fmt.Errorf("task_runtime: persist run: %w", err)
 		}
 		if err := s.queue.Enqueue(ctx, run); err != nil {
@@ -318,6 +360,13 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		}
 		return s.publishTaskEvent(ctx, TaskEventQueued, run, "", "")
 	}); err != nil {
+		if errors.Is(err, errOwnedTaskAlreadyCreated) {
+			previous, readErr := s.existingOwnedEnqueue(ctx, run)
+			if readErr == nil && previous == nil {
+				readErr = coordination.ErrRequestConflict
+			}
+			return previous, readErr
+		}
 		return nil, err
 	}
 
@@ -430,7 +479,7 @@ func (s *TaskRuntimeService) dispatchLoop() {
 		case <-s.dispatchCtx.Done():
 			return
 		case <-ticker.C:
-			s.dispatchOnce(s.dispatchCtx)
+			s.tryDispatch()
 		}
 	}
 }
@@ -446,7 +495,7 @@ func (s *TaskRuntimeService) dispatchOnce(ctx context.Context) {
 		}
 
 		run, err := s.store.GetTaskRun(ctx, entry.TaskRunID)
-		if err != nil || run.Status.IsTerminal() {
+		if err != nil || run == nil || run.Status != RunStatusQueued {
 			if removeErr := s.queue.Remove(ctx, entry.TaskRunID); removeErr != nil {
 				return
 			}
@@ -491,6 +540,9 @@ func (s *TaskRuntimeService) persistExecutionAttempt(
 	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
 	if err != nil {
 		return err
+	}
+	if current == nil || current.Status != RunStatusQueued || current.Generation != run.Generation || current.Revision != run.Revision {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务已被领取或排队版本发生变化")
 	}
 	existingRevision := current.Revision
 
@@ -602,6 +654,18 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		return
 	}
 
+	releaseProcess, capacityErr := s.reserveTaskProcess(ctx, def)
+	if capacityErr != nil {
+		if errors.Is(capacityErr, ErrTaskProcessCapacity) {
+			if err := s.queue.ReenqueueWithDelay(ctx, run, 5*time.Second); err != nil {
+				s.failRun(ctx, run, ErrTaskRuntimeStartFailed, "任务进程容量等待入队失败")
+			}
+		} else {
+			s.failRun(ctx, run, ErrTaskRuntimeStartFailed, capacityErr.Error())
+		}
+		return
+	}
+	defer releaseProcess()
 	if err := s.persistExecutionAttempt(ctx, run, attemptID, ""); err != nil {
 		s.failRun(ctx, run, ErrTaskExecutionAttemptInvalid, fmt.Sprintf("persist attempt: %v", err))
 		return
@@ -713,24 +777,48 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		s.cleanupWorkspace(run.TaskRunID, workspace)
 		return
 	}
-	entryPath, err := s.config.EntryResolver(ctx, def)
+	var entryPath string
+	if s.config.InstalledExecutionLease != nil && def.BundleHash != "" {
+		root, release, leaseErr := s.config.InstalledExecutionLease(ctx, def)
+		if leaseErr != nil || release == nil || root == "" {
+			if release != nil {
+				release()
+			}
+			s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("任务安装读取租约未确认: %v", leaseErr))
+			s.cleanupWorkspace(run.TaskRunID, workspace)
+			return
+		}
+		defer release()
+		entryPath, err = ResolveTaskEntry(ctx, root, def)
+	} else {
+		entryPath, err = s.config.EntryResolver(ctx, def)
+	}
+	if err != nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, err.Error())
+		s.cleanupWorkspace(run.TaskRunID, workspace)
+		return
+	}
+	bundleRoot, err := TaskBundleRoot(entryPath, def)
 	if err != nil {
 		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, err.Error())
 		s.cleanupWorkspace(run.TaskRunID, workspace)
 		return
 	}
 	hostCfg := ProcessHostConfig{
-		Generation:  run.Generation,
-		InstanceID:  instanceID,
-		TaskRunID:   run.TaskRunID,
-		ExtensionID: run.ExtensionID,
-		ModuleID:    run.ModuleID,
-		DefHash:     def.DefinitionHash,
-		NodePath:    nodeEnv.NodeBinary,
-		HostPath:    hostArtifact.EntryPath,
-		WorkDir:     workspace,
-		EntryPath:   entryPath,
-		EntryHash:   def.EntryHash,
+		Generation:   run.Generation,
+		InstanceID:   instanceID,
+		TaskRunID:    run.TaskRunID,
+		ExtensionID:  run.ExtensionID,
+		ModuleID:     run.ModuleID,
+		DefHash:      def.DefinitionHash,
+		NodePath:     nodeEnv.NodeBinary,
+		HostPath:     hostArtifact.EntryPath,
+		WorkDir:      workspace,
+		EntryPath:    entryPath,
+		EntryHash:    def.EntryHash,
+		BundleRoot:   bundleRoot,
+		BundleHash:   def.BundleHash,
+		NativeLimits: taskProcessLimits(def),
 	}
 
 	host, err := NewTaskProcessHost(hostCfg)
@@ -874,6 +962,9 @@ func (s *TaskRuntimeService) runRemoteExecution(ctx context.Context, run *TaskRu
 			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired, ErrorCode: string(ErrTaskDefinitionInvalid), ErrorMessage: err.Error()}
 		}
 		pin = &prepared
+		if err := s.prepareOwnedTargetPermissions(ctx, run, def, prepared, run.Input); err != nil {
+			return TaskExecutionOutcome{Status: RunStatusRecoveryRequired, ErrorCode: string(ErrTaskPermissionDenied), ErrorMessage: err.Error()}
+		}
 	}
 	request := TaskExecutionRequest{
 		Run:                 run,
@@ -904,6 +995,8 @@ func (s *TaskRuntimeService) runRemoteExecution(ctx context.Context, run *TaskRu
 }
 
 func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *TaskRun, def *TaskDefinition, outcome TaskExecutionOutcome) {
+	unlock := s.lockTaskOwner(run.TaskRunID)
+	defer unlock()
 	now := time.Now().UTC()
 	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
 	if err != nil || current == nil || current.Generation != run.Generation || current.ExecutionAttemptID != run.ExecutionAttemptID {
@@ -935,7 +1028,7 @@ func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *Tas
 		CopyCommittedTaskRun(run, current)
 		return
 	}
-	if outcome.Status == RunStatusRunning && current.Status == RunStatusRunning {
+	if outcome.Status == RunStatusRunning && current.Status != RunStatusStarting {
 		CopyCommittedTaskRun(run, current)
 		return
 	}
@@ -1018,7 +1111,7 @@ func (s *TaskRuntimeService) persistTaskProgress(ctx context.Context, taskRunID 
 		return err
 	}
 	live, err := s.store.GetTaskRun(ctx, taskRunID)
-	if err != nil || live == nil || live.Status != RunStatusRunning && live.Status != RunStatusCheckpointing {
+	if err != nil || live == nil || !taskOwnerExecutionActive(live.Status) {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务进度所属状态无效")
 	}
 	if len(expected) > 0 && (expected[0] == nil || live.Generation != expected[0].Generation || live.ExecutionAttemptID != expected[0].ExecutionAttemptID) {
@@ -1639,12 +1732,13 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 		Priority:              run.Priority,
 		ExecutionPlacement:    run.ExecutionPlacement,
 		ExecutionTarget: TaskExecutionTarget{
-			ProviderID:         run.ExecutionTarget.ProviderID,
-			ProviderInstanceID: run.ExecutionTarget.ProviderInstanceID,
-			SpaceID:            run.ExecutionTarget.SpaceID,
-			DeviceID:           run.ExecutionTarget.DeviceID,
-			RuntimeID:          run.ExecutionTarget.RuntimeID,
-			RuntimeInstanceID:  run.ExecutionTarget.RuntimeInstanceID,
+			SourceTaskDefinitionID: run.ExecutionTarget.SourceTaskDefinitionID,
+			ProviderID:             run.ExecutionTarget.ProviderID,
+			ProviderInstanceID:     run.ExecutionTarget.ProviderInstanceID,
+			SpaceID:                run.ExecutionTarget.SpaceID,
+			DeviceID:               run.ExecutionTarget.DeviceID,
+			RuntimeID:              run.ExecutionTarget.RuntimeID,
+			RuntimeInstanceID:      run.ExecutionTarget.RuntimeInstanceID,
 		},
 		ExecutionResolvedAt: &now,
 		ExecutionResolvedBy: "retry-inherit",
@@ -1679,7 +1773,7 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 		newRun.Input = nil
 	}
 
-	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+	if err := s.withManagementTaskTx(ctx, func(txCtx context.Context) error {
 		if err := s.store.PutTaskRun(txCtx, newRun); err != nil {
 			return fmt.Errorf("task_runtime: persist retry run: %w", err)
 		}
@@ -1749,7 +1843,7 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 	run.ExecutionAttemptID = ""
 	run.RuntimeInstanceID = nil
 
-	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+	if err := s.withManagementTaskTx(ctx, func(txCtx context.Context) error {
 		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, run, previousStatus, run.Generation-1, run.Revision-1)
 		if casErr != nil {
 			return fmt.Errorf("task_runtime: recover cas: %w", casErr)
@@ -1865,6 +1959,9 @@ func (s *TaskRuntimeService) StartupRecovery(ctx context.Context) error {
 
 func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error {
 	if run.ScopeSnapshotID != "" {
+		if run.Status == RunStatusPaused && run.PausedAt != nil && run.CheckpointID != nil && *run.CheckpointID != "" && run.Generation > 0 && run.ExecutionAttemptID != "" && run.LeaseID != "" && run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice && run.ExecutionTarget.RuntimeSessionID != "" && run.ExecutionTarget.ConnectionGeneration > 0 {
+			return nil
+		}
 		return s.markTaskRecoveryUnknown(ctx, run)
 	}
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)

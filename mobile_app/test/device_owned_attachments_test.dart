@@ -5,6 +5,60 @@ import 'package:amitia_app/core/services/device_owned_attachments.dart';
 import 'package:amitia_app/core/services/owned_audio_source.dart';
 
 void main() {
+  test('file and video bytes retain their owner integrity and metadata', () {
+    for (final example in [
+      ['file', 'text/plain', 'notes.txt'],
+      ['file', 'application/pdf', 'report.pdf'],
+      ['file', ownedFileMimes['docx']!, 'report.docx'],
+      ['video', 'video/mp4', 'clip.mp4'],
+    ]) {
+      final uri = 'data:${example[1]};base64,AQIDBA==';
+      final item = ownedFileAttachment(uri, name: example[2], kind: example[0]);
+      expect(item['sha256'], sha256.convert([1, 2, 3, 4]).toString());
+      final restored = ownedFileMetadata([item])!;
+      expect(restored['uri'], uri);
+      expect(restored['name'], example[2]);
+      expect(restored['sizeBytes'], 4);
+      expect(
+        ownedFileMetadata([
+          {...item, 'sha256': 'invalid'},
+        ]),
+        isNull,
+      );
+    }
+  });
+  test(
+    'file and video reject remote sources, invalid bytes and unsafe names',
+    () {
+      for (final uri in [
+        'https://internal.example/private',
+        'amitia://artifacts/file',
+        'data:application/octet-stream;base64,AQID',
+        'data:text/plain;base64,AB==',
+        'data:text/plain;base64,${'A' * 1398108}',
+      ]) {
+        expect(
+          () => ownedFileAttachment(uri, name: 'file.txt'),
+          throwsStateError,
+        );
+      }
+      expect(
+        () => ownedFileAttachment(
+          'data:text/plain;base64,AQID',
+          name: '${'文' * 86}.txt',
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => ownedFileAttachment(
+          'data:video/mp4;base64,AQID',
+          name: 'video\n.mp4',
+          kind: 'video',
+        ),
+        throwsStateError,
+      );
+    },
+  );
   test(
     'audio remains in owner bytes and range playback never writes a second file',
     () async {

@@ -7,12 +7,31 @@ import UIKit
   private var rootfsHandler: RootfsInstallMethodHandler?
   private var iosNativeHost: IOSNativeHost?
   private var nativeTransport: IOSNativeTransport?
+  private var notificationPlatform: IOSNotificationPlatform?
+  private var deviceMeshIdentity: IOSDeviceMeshIdentity?
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+
+    let notificationRegistrar = self.registrar(
+      forPlugin: "IOSNotificationPlatform"
+    )!
+    self.notificationPlatform = IOSNotificationPlatform(
+      messenger: notificationRegistrar.messenger()
+    )
+    self.notificationPlatform?.start(application: application)
+    self.notificationPlatform?.handleLaunchOptions(launchOptions)
+
+    let deviceMeshRegistrar = self.registrar(
+      forPlugin: "IOSDeviceMeshIdentity"
+    )!
+    self.deviceMeshIdentity = IOSDeviceMeshIdentity()
+    self.deviceMeshIdentity?.register(
+      messenger: deviceMeshRegistrar.messenger()
+    )
 
     let bridge = IOSSandboxBridge.shared()
     self.sandboxHandler = IOSSandboxMethodHandler(bridge: bridge)
@@ -60,6 +79,50 @@ import UIKit
     self.rootfsHandler?.register(with: self.registrar(forPlugin: "RootfsInstallBridge")!)
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    notificationPlatform?.didRegisterRemoteNotifications(
+      deviceToken: deviceToken
+    )
+    super.application(
+      application,
+      didRegisterForRemoteNotificationsWithDeviceToken: deviceToken
+    )
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    notificationPlatform?.didFailRemoteNotifications(error: error)
+    super.application(
+      application,
+      didFailToRegisterForRemoteNotificationsWithError: error
+    )
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+    fetchCompletionHandler completionHandler:
+      @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+    if let notificationPlatform,
+       notificationPlatform.handleRemoteNotification(
+         userInfo,
+         completion: { completionHandler(.newData) }
+       ) {
+      return
+    }
+    super.application(
+      application,
+      didReceiveRemoteNotification: userInfo,
+      fetchCompletionHandler: completionHandler
+    )
   }
 
   func transportDidBecomeReady(_ transport: IOSNativeTransport) {

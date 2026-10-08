@@ -149,6 +149,7 @@ func TestOwnedTaskRetryPreservesAuthorizationAndOwnerInputInsteadOfDowngrading(t
 	saved.TaskDefinitionID = definition.TaskID
 	saved.DefinitionFingerprint, _ = taskDefinitionFingerprint(definition)
 	saved.Status, saved.Attempt, saved.MaxAttempts = RunStatusFailed, 1, 3
+	saved.ExecutionTarget.SourceTaskDefinitionID = "original-source-task"
 	saved.Input = json.RawMessage(`{"private":"retry input"}`)
 	saved.InputHash = hashBytes(saved.Input)
 	data := &taskInputData{}
@@ -166,7 +167,7 @@ func TestOwnedTaskRetryPreservesAuthorizationAndOwnerInputInsteadOfDowngrading(t
 	}
 	atomic.StoreInt32(&service.dispatching, 1)
 	retried, err := service.Retry(t.Context(), saved.TaskRunID)
-	if err != nil || retried.ScopeSnapshotID != saved.ScopeSnapshotID || retried.InvocationID != saved.InvocationID || retried.DefinitionFingerprint != saved.DefinitionFingerprint || len(retried.Input) != 0 || store.queued != 1 || retried.TaskRunID == saved.TaskRunID {
+	if err != nil || retried.ScopeSnapshotID != saved.ScopeSnapshotID || retried.InvocationID != saved.InvocationID || retried.DefinitionFingerprint != saved.DefinitionFingerprint || retried.ExecutionTarget.SourceTaskDefinitionID != saved.ExecutionTarget.SourceTaskDefinitionID || len(retried.Input) != 0 || store.queued != 1 || retried.TaskRunID == saved.TaskRunID {
 		t.Fatalf("retry lost owner authorization: %+v %v", retried, err)
 	}
 	input, err := port.Input(ctx, retried)

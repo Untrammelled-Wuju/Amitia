@@ -1,7 +1,8 @@
-import { ref } from "vue";
+import { ref, computed, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "./useApi";
 import { useChatStore, type ProjectItem } from "@/stores/chat";
+import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 
 export interface WorkspaceMountSummary {
   id: string;
@@ -9,6 +10,7 @@ export interface WorkspaceMountSummary {
   name: string;
   kind: string;
   rootUri: string;
+  executionScope?: OwnedExecutionScope;
   readOnly: boolean;
   available: boolean;
   status: string;
@@ -22,6 +24,7 @@ export interface ConversationWorkspaceBinding {
   workspaceName?: string;
   workspaceKind: string;
   rootUri: string;
+  executionScope?: OwnedExecutionScope;
 }
 
 const activeConversationId = ref("");
@@ -31,13 +34,14 @@ const workspaceLoading = ref(false);
 
 function projectToMount(project: ProjectItem): WorkspaceMountSummary {
   return {
-    id: project.workspaceId,
+    id: project.logical ? project.id : project.workspaceId,
     projectId: project.id,
     name: project.name,
-    kind: project.rootUri.startsWith("content://") ? "saf" : "local",
+    kind: project.logical ? "logical" : project.rootUri.startsWith("content://") ? "saf" : "local",
     rootUri: project.rootUri,
+    executionScope: project.executionScope,
     readOnly: project.status === "read_only",
-    available: project.available,
+    available: project.available && !project.readOnly,
     status: project.status,
     statusReason: project.statusReason,
   };
@@ -46,21 +50,25 @@ function projectToMount(project: ProjectItem): WorkspaceMountSummary {
 function projectToBinding(project: ProjectItem): ConversationWorkspaceBinding {
   return {
     projectId: project.id,
-    workspaceId: project.workspaceId,
+    workspaceId: project.logical ? project.id : project.workspaceId,
     deviceId: project.deviceId || undefined,
     workspaceName: project.name,
-    workspaceKind: project.rootUri.startsWith("content://") ? "saf" : "local",
+    workspaceKind: project.logical ? "logical" : project.rootUri.startsWith("content://") ? "saf" : "local",
     rootUri: project.rootUri,
+    executionScope: project.executionScope,
   };
 }
 
 function findProjectByWorkspace(projects: ProjectItem[], workspaceId: string) {
-  return projects.find((project) => project.workspaceId === workspaceId);
+  return projects.find((project) => (project.logical ? project.id : project.workspaceId) === workspaceId);
 }
 
 export function useConversationWorkspace() {
   const { post } = useApi();
   const chatStore = useChatStore();
+  watch(() => chatStore.currentProjectId, (id) => {
+    if (!id || (currentWorkspace.value?.projectId && currentWorkspace.value.projectId !== id)) currentWorkspace.value = null;
+  }, { flush: "sync" });
 
   async function refreshRecentWorkspaces(): Promise<void> {
     await chatStore.fetchSidebar();
@@ -68,6 +76,7 @@ export function useConversationWorkspace() {
   }
 
   async function moveConversationToProject(project: ProjectItem): Promise<void> {
+    if (project.readOnly) throw new Error("旧项目为只读，请在原设备管理");
     const conversationId = activeConversationId.value.trim();
     if (conversationId) {
       await chatStore.moveConversation(conversationId, project.id);
@@ -99,6 +108,7 @@ export function useConversationWorkspace() {
   }
 
   async function chooseWorkspaceDirectory(): Promise<ProjectItem | null> {
+    if (chatStore.ownedProjects) { ElMessage.warning("绑定模式的项目用于对话分组，文件访问需单独授权"); return null; }
     if (!window.amitiaDesktop?.selectWorkspaceDirectory) {
       ElMessage.warning("当前环境不支持直接选择本机文件夹");
       return null;
@@ -160,7 +170,7 @@ export function useConversationWorkspace() {
     const project = chatStore.sidebar.projects.find(
       (item) => item.id === normalizedProjectId,
     );
-    if (!project) throw new Error("项目不存在");
+    if (!project || project.readOnly) throw new Error("项目不存在或属于只读旧设备");
     currentWorkspace.value = projectToBinding(project);
     chatStore.currentProjectId = project.id;
     return project;
@@ -184,8 +194,9 @@ export function useConversationWorkspace() {
     conversationProjectId = "",
   ): void {
     if (!workspace || !String(workspace.workspaceId || "").trim()) {
-      currentWorkspace.value = null;
       chatStore.currentProjectId = String(conversationProjectId || "").trim();
+      const project = chatStore.sidebar.projects.find((row) => row.id === chatStore.currentProjectId && row.logical);
+      currentWorkspace.value = project ? projectToBinding(project) : null;
       return;
     }
     const projectId = String(workspace.projectId || "").trim();
@@ -202,7 +213,7 @@ export function useConversationWorkspace() {
 
   function getWorkspaceRequestFields(): Record<string, string> {
     const workspace = currentWorkspace.value;
-    if (!workspace || workspace.projectId) return {};
+    if (!workspace || workspace.projectId || workspace.workspaceKind === "logical") return {};
     return {
       workspaceId: workspace.workspaceId,
       ...(workspace.deviceId ? { workspaceDeviceId: workspace.deviceId } : {}),
@@ -223,5 +234,6 @@ export function useConversationWorkspace() {
     clearWorkspace,
     bindCurrentWorkspaceToConversation,
     getWorkspaceRequestFields,
+    ownedProjects: computed(() => chatStore.ownedProjects),
   };
 }

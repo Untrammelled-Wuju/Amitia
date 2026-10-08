@@ -8,7 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/device_owned_attachments.dart';
-import '../../../core/services/reply_notification_service.dart';
+import '../../../core/services/device_owned_realtime_service.dart';
+import '../../../core/services/owned_quote_reference.dart';
 import '../../../core/services/providers.dart';
 import '../../../core/settings/chat_permission_preferences.dart';
 import '../../../shared/models/models.dart';
@@ -22,7 +23,6 @@ class ConversationRuntimeController extends ChangeNotifier {
     this._chatService, {
     ChatPermissionPreferencesNotifier? permissionPreferences,
     ChatAppearancePreferencesNotifier? appearancePreferences,
-    this.replyNotifications,
   }) : _permissionPreferences = permissionPreferences,
        _appearancePreferences = appearancePreferences,
        _permissionMode = normalizeChatPermissionMode(
@@ -35,7 +35,6 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   final ChatService _chatService;
-  final ReplyNotificationService? replyNotifications;
   final ChatPermissionPreferencesNotifier? _permissionPreferences;
   final ChatAppearancePreferencesNotifier? _appearancePreferences;
   final ConversationMessageLedger _messages = ConversationMessageLedger();
@@ -69,6 +68,9 @@ class ConversationRuntimeController extends ChangeNotifier {
   String _ownedNotice = '';
   String _ownedRequestId = '';
   String _conversationCoreId = '';
+  Map<String, dynamic>? _realtimeScope;
+
+  Map<String, dynamic>? get realtimeScope => _realtimeScope;
 
   List<ChatMessage> get messages => _messages.messages;
   String? get conversationId => _conversationId;
@@ -164,6 +166,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     String text, {
     String? replyToMessageId,
     String? replyToExcerpt,
+    ChatMessage? quotedMessage,
   }) async {
     final value = text.trim();
     if (value.isEmpty || _sending) return;
@@ -180,6 +183,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       ),
       message: value,
       replyToMessageId: replyToMessageId,
+      quotedMessage: quotedMessage,
     );
   }
 
@@ -325,6 +329,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     double audioDuration = 0,
     String? videoUrl,
     String? replyToMessageId,
+    ChatMessage? quotedMessage,
   }) async {
     if (_sending) return;
     try {
@@ -335,6 +340,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           imageUrl: imageUrl,
           audioUrl: audioUrl,
           videoUrl: videoUrl,
+          quotedMessage: quotedMessage,
         );
         return;
       }
@@ -462,27 +468,41 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? imageUrl,
     String? audioUrl,
     String? videoUrl,
+    ChatMessage? quotedMessage,
   }) async {
-    if ((videoUrl ?? '').isNotEmpty) {
-      throw StateError('设备归属对话的视频通道尚未就绪');
+    final attachments = <Map<String, dynamic>>[
+      if ((audioUrl ?? '').isNotEmpty)
+        ownedAudioAttachment(
+          audioUrl!,
+          name: localMessage.fileName ?? 'voice.wav',
+        ),
+      if ((imageUrl ?? '').isNotEmpty)
+        ownedImageAttachment(
+          imageUrl!,
+          name: localMessage.fileName ?? 'image.png',
+        ),
+      if ((videoUrl ?? '').isNotEmpty)
+        ownedFileAttachment(
+          videoUrl!,
+          name: localMessage.fileName ?? 'video.mp4',
+          kind: 'video',
+        ),
+      if (localMessage.type == MessageType.file)
+        ownedFileAttachment(
+          localMessage.resourceUri ?? '',
+          name: localMessage.fileName ?? '',
+        ),
+    ];
+    if (attachments.length > 2 ||
+        ((audioUrl ?? '').isNotEmpty &&
+            attachments.any(
+              (row) => row['kind'] != 'audio' && row['kind'] != 'image',
+            ))) {
+      throw StateError('单条消息最多两个附件，语音只能同时携带图片');
     }
-    if ((audioUrl ?? '').isNotEmpty && (imageUrl ?? '').isNotEmpty)
-      throw StateError('语音消息不能同时携带图片');
-    final attachments = (audioUrl ?? '').isNotEmpty
-        ? [
-            ownedAudioAttachment(
-              audioUrl!,
-              name: localMessage.fileName ?? 'voice.wav',
-            ),
-          ]
-        : (imageUrl ?? '').isNotEmpty
-        ? [
-            ownedImageAttachment(
-              imageUrl!,
-              name: localMessage.fileName ?? 'image.png',
-            ),
-          ]
-        : null;
+    if (localMessage.type == MessageType.file) {
+      message = '[文件] ${localMessage.fileName}';
+    }
     final requestId = _localId('mobile-');
     final wasDraft = (_conversationId ?? '').isEmpty;
     final previousContext =
@@ -538,7 +558,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     var reasoning = '';
     var accepted = false;
     var completed = false;
+    final logicalProject = wasDraft ? _workspace?.logicalProject : null;
     Map<String, dynamic> acceptedScope = {};
+    String sourceConversationId = '';
     int? savedRevision;
     final time = DateTime.now();
     final sequence = _nextLocalSequence();
@@ -548,6 +570,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         ChatMessage(
           id: '$requestId/assistant',
           sourceOwnerId: (acceptedScope['resourceOwnerId'] ?? '').toString(),
+          sourceConversationId: sourceConversationId,
           sourceScope: acceptedScope,
           sourceRevision: savedRevision,
           renderId: _assistantRenderId(requestId),
@@ -573,14 +596,21 @@ class ConversationRuntimeController extends ChangeNotifier {
         characterId: _characterId,
         context: previousContext,
         attachments: attachments,
+        quote: quotedMessage == null
+            ? null
+            : ownedQuoteReference(quotedMessage),
       )) {
         if (_disposed || _ownedRequestId != requestId) break;
         final type = event['type'];
+        if (event['sourceConversationId'] is String) {
+          sourceConversationId = event['sourceConversationId'] as String;
+        }
         if (type == 'started') {
           accepted = true;
           _conversationId = (event['conversationId'] ?? '').toString();
           final scope = event['executionScope'] as Map;
           acceptedScope = Map<String, dynamic>.from(scope);
+          _realtimeScope = Map.unmodifiable(acceptedScope);
           _characterId = scope['roleId'].toString();
           _conversationCoreId = scope['coreId'].toString();
           _messages.remove(pending);
@@ -589,6 +619,8 @@ class ConversationRuntimeController extends ChangeNotifier {
               pending,
               status: MessageStatus.delivered,
               sourceOwnerId: scope['resourceOwnerId'].toString(),
+              sourceConversationId: sourceConversationId,
+              characterId: scope['roleId'].toString(),
               sourceScope: acceptedScope,
               sourceRevision: 1,
             ),
@@ -645,6 +677,27 @@ class ConversationRuntimeController extends ChangeNotifier {
             reasoning = (result['reasoning'] ?? reasoning).toString();
           }
           project(MessageStatus.interrupted);
+        }
+      }
+      if (completed &&
+          logicalProject != null &&
+          !_disposed &&
+          _ownedRequestId == requestId) {
+        try {
+          final conversationId = _conversationId;
+          if (conversationId == null || conversationId.isEmpty)
+            throw StateError('新会话编号不可用');
+          await _chatService.owned.query(
+            conversationId,
+            characterId: logicalProject.roleId,
+          );
+          await _chatService.moveConversationToProject(
+            conversationId,
+            logicalProject.id,
+            project: logicalProject,
+          );
+        } catch (error) {
+          if (!_disposed) _lastError = StateError('对话已保存，但项目归组未保存：$error');
         }
       }
     } catch (error) {
@@ -841,17 +894,6 @@ class ConversationRuntimeController extends ChangeNotifier {
         type == 'turn.failed' ||
         type == 'turn.interrupted';
     if (terminal) {
-      final completedTurn = _agentReducer.turns
-          .where((turn) => turn.id == event.turnId)
-          .firstOrNull;
-      if (type == 'turn.completed' &&
-          event.parentTurnId.isEmpty &&
-          (completedTurn?.parentTurnId.isEmpty ?? true)) {
-        unawaited(
-          replyNotifications?.completed(event.conversationId, event.turnId) ??
-              Future<void>.value(),
-        );
-      }
       _sending = false;
       _conversationUpdateEpoch++;
       _streamScheduler.schedule(_flushStreamingProjection);
@@ -978,6 +1020,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     return ChatMessage(
       id: dto.id,
       sourceOwnerId: dto.sourceOwnerId,
+      sourceConversationId: dto.sourceConversationId,
       sourceScope: dto.sourceScope,
       sourceRevision: dto.sourceRevision,
       renderId: dto.requestId.trim().isEmpty
@@ -1010,14 +1053,21 @@ class ConversationRuntimeController extends ChangeNotifier {
         'elapsed',
         'elapsedTime',
       ]),
-      fileName: type == MessageType.file
+      fileName: dto.fileName.isNotEmpty
+          ? dto.fileName
+          : type == MessageType.file
           ? altText.isNotEmpty
                 ? altText
                 : _fileNameFromContent(dto.content)
           : null,
       resourceUri: _resourceForDto(dto, null),
+      fileSizeKB: dto.fileSizeBytes > 0
+          ? (dto.fileSizeBytes / 1024).ceil()
+          : null,
       mediaUrl: _resourceForDto(dto, null),
-      mimeType: dto.imageUrl.isNotEmpty
+      mimeType: dto.mimeType.isNotEmpty
+          ? dto.mimeType
+          : dto.imageUrl.isNotEmpty
           ? 'image/*'
           : dto.videoUrl.isNotEmpty
           ? 'video/*'
@@ -1320,6 +1370,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         }
         final scope = result['executionScope'];
         if (scope is Map) {
+          _realtimeScope = Map.unmodifiable(Map<String, dynamic>.from(scope));
           _characterId = scope['roleId']?.toString();
           _conversationCoreId = scope['coreId']?.toString() ?? '';
         }
@@ -1347,9 +1398,27 @@ class ConversationRuntimeController extends ChangeNotifier {
     String projectId = '',
   }) async {
     try {
-      final conversation = await _chatService.createRealtimeConversation(
-        projectId: projectId,
-      );
+      ConversationDto? conversation;
+      if (await _chatService.owned.refresh()) {
+        final context = await _chatService.owned.query(
+          '',
+          characterId: characterId,
+        );
+        if (context['executionScope'] is! Map) throw StateError('通话缺少原角色权限范围');
+        _realtimeScope = Map.unmodifiable(
+          Map<String, dynamic>.from(context['executionScope'] as Map),
+        );
+        conversation = ConversationDto.fromJson({
+          'id': ownedRealtimeRequestId(),
+          'characterId': characterId ?? '',
+          'title': '实时通话',
+        });
+      } else {
+        _realtimeScope = null;
+        conversation = await _chatService.createRealtimeConversation(
+          projectId: projectId,
+        );
+      }
       if (conversation == null) return false;
       _disconnectRuntime();
       _conversationId = conversation.id;
@@ -1437,6 +1506,8 @@ class ConversationRuntimeController extends ChangeNotifier {
   ChatMessage _cloneMessage(
     ChatMessage message, {
     String? sourceOwnerId,
+    String? sourceConversationId,
+    String? characterId,
     Map<String, dynamic>? sourceScope,
     int? sourceRevision,
     String? id,
@@ -1449,10 +1520,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     return ChatMessage(
       id: id ?? message.id,
       sourceOwnerId: sourceOwnerId ?? message.sourceOwnerId,
+      sourceConversationId:
+          sourceConversationId ?? message.sourceConversationId,
       sourceScope: sourceScope ?? message.sourceScope,
       sourceRevision: sourceRevision ?? message.sourceRevision,
       renderId: renderId ?? message.renderId,
-      characterId: message.characterId,
+      characterId: characterId ?? message.characterId,
       role: message.role,
       type: message.type,
       content: content ?? message.content,
@@ -1579,6 +1652,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   String? _resourceForDto(MessageDto dto, ChatMessage? existing) {
+    if (dto.resourceUri.isNotEmpty) return dto.resourceUri;
     if (dto.imageUrl.isNotEmpty) return dto.imageUrl;
     if (dto.videoUrl.isNotEmpty) return dto.videoUrl;
     if (dto.audioUrl.isNotEmpty) return dto.audioUrl;
@@ -1721,7 +1795,6 @@ final conversationRuntimeControllerProvider =
     ChangeNotifierProvider<ConversationRuntimeController>((ref) {
       final controller = ConversationRuntimeController(
         ref.read(chatServiceProvider),
-        replyNotifications: ref.read(replyNotificationServiceProvider),
         appearancePreferences: ref.read(
           chatAppearancePreferencesProvider.notifier,
         ),

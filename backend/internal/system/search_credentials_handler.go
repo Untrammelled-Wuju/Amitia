@@ -1,9 +1,11 @@
 package system
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -48,6 +50,10 @@ func (h *Handler) SearchCredentialDelete(c *gin.Context) {
 		return
 	}
 	if err := h.searchCredentials.Delete(c.Request.Context(), c.Param("engineId")); err != nil {
+		if errors.Is(err, search.ErrCredentialCleanupPending) {
+			util.SuccessResponse(c, gin.H{"deleted": true, "cleanupPending": true})
+			return
+		}
 		util.ErrorResponse(c, http.StatusBadRequest, "搜索凭据清除失败", nil)
 		return
 	}

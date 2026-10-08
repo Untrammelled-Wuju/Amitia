@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../backend_transport/backend_service_api.dart';
 import '../models/conversation.dart';
+import '../models/project.dart';
 import 'device_owned_attachments.dart';
 import 'owned_conversation_reference.dart';
 
@@ -276,7 +277,10 @@ class DeviceOwnedChatService {
     unawaited(_saveProviderState());
     policy = nextPolicy;
     enabled = current['coordinationAvailable'] == true;
-    if (!enabled) return false;
+    if (!enabled) {
+      stopLocal('绑定的 Core 服务尚未就绪，当前请求已中断，请恢复连接后重试。');
+      throw StateError(notice);
+    }
     final available = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/roles',
     );
@@ -550,6 +554,11 @@ class DeviceOwnedChatService {
       throw StateError('记录所属设备已变化，请在原设备管理历史数据');
     if (resource['executionScope'] is! Map)
       throw StateError('记录缺少数据来源版本，请重新加载');
+    if (expectedScope != null &&
+        _authorityStamp(expectedScope) !=
+            _authorityStamp(resource['executionScope'] as Map)) {
+      throw StateError('记录原始归属已变化，请重新加载后再修改');
+    }
     final requestId =
         'edit-${DateTime.now().microsecondsSinceEpoch}-${_editSequence++}';
     final ack = await _api.post<Map<String, dynamic>>(
@@ -567,7 +576,9 @@ class DeviceOwnedChatService {
       },
     );
     if (captured != revision) throw StateError('服务状态已变化，请重新加载确认操作结果');
-    if (ack?['ownerId'] != resource['ownerId'] ||
+    if (((kind == 'project' || changes.containsKey('projectId')) &&
+            ack?['requestId'] != requestId) ||
+        ack?['ownerId'] != resource['ownerId'] ||
         ack?['versions'] is! Map ||
         (ack!['versions'] as Map)['$kind/$resourceId'] !=
             (expectedRevision ?? resource['revision'] as int) + 1)
@@ -576,6 +587,190 @@ class DeviceOwnedChatService {
   }
 
   static int _editSequence = 0;
+
+  static String _authorityStamp(Map scope) => jsonEncode(
+    _scopeFields
+        .where(
+          (key) => !const ['requestId', 'turnId', 'executionId'].contains(key),
+        )
+        .map((key) => scope[key])
+        .toList(),
+  );
+
+  Future<List<ProjectDto>> projects({String? characterId}) async {
+    if (!enabled) throw StateError('设备数据服务尚未就绪');
+    final role = selectRole(characterId);
+    final captured = revision;
+    final rows = <ProjectDto>[];
+    final seen = <String>{};
+    var cursor = '';
+    var historicalCursor = '';
+    final historyRoles = policy?['coordinated'] == true
+        ? (await historicalRoles(role))
+              .map((row) => (row['id'] ?? '').toString())
+              .where((id) => id.isNotEmpty)
+              .toList()
+        : <String>[];
+    var historyIndex = 0;
+    var currentDone = false;
+    final visitedCursors = <String>{};
+    Map<String, dynamic>? originalScope;
+    for (;;) {
+      final result = await _api.get<Map<String, dynamic>>(
+        '/api/device-mesh/v1/business/projects',
+        queryParameters: {
+          'characterId': role,
+          'cursor': cursor,
+          if (historyIndex < historyRoles.length)
+            'historicalRoleId': historyRoles[historyIndex],
+          if (historicalCursor.isNotEmpty) 'historicalCursor': historicalCursor,
+        },
+      );
+      final rawScope = result?['executionScope'];
+      if (captured != revision ||
+          rawScope is! Map ||
+          rawScope['coreId'] != coreId ||
+          rawScope['roleId'] != role) {
+        throw StateError('项目数据来源已变化，请重新加载');
+      }
+      final scope = Map<String, dynamic>.from(rawScope);
+      if (originalScope != null &&
+          _authorityStamp(scope) != _authorityStamp(originalScope)) {
+        throw StateError('项目数据来源在分页期间变化，请重新加载');
+      }
+      originalScope = scope;
+      for (final collection in ['projects', 'historicalProjects']) {
+        if (collection == 'projects' && currentDone) continue;
+        for (final row
+            in (result![collection] as List? ?? []).whereType<Map>()) {
+          if (row['id'] is! String ||
+              row['ownerId'] is! String ||
+              row['roleId'] is! String ||
+              row['revision'] is! int ||
+              row['revision'] < 1) {
+            throw StateError('项目归属或版本无效');
+          }
+          final readOnly =
+              collection == 'historicalProjects' || row['readOnly'] == true;
+          if (!readOnly &&
+              (row['ownerId'] != scope['resourceOwnerId'] ||
+                  row['roleId'] != role)) {
+            throw StateError('项目归属与当前服务不一致');
+          }
+          final key = '${row['ownerId']}/${row['roleId']}/${row['id']}';
+          if (!seen.add(key)) continue;
+          rows.add(
+            ProjectDto.fromJson({
+              ...Map<String, dynamic>.from(row),
+              'logical': true,
+              'readOnly': readOnly,
+              'executionScope': scope,
+            }),
+          );
+          if (!readOnly) {
+            _resources['project/${row['id']}'] = {
+              ...Map<String, dynamic>.from(row),
+              'kind': 'project',
+              'executionScope': scope,
+            };
+          }
+        }
+      }
+      final next = currentDone ? '' : (result?['nextCursor'] ?? '').toString();
+      if (next.isEmpty) currentDone = true;
+      final nextHistorical = (result?['nextHistoricalCursor'] ?? '').toString();
+      if (nextHistorical.isEmpty && historyIndex < historyRoles.length)
+        historyIndex++;
+      if (next.isEmpty &&
+          nextHistorical.isEmpty &&
+          historyIndex >= historyRoles.length)
+        return rows;
+      final cursorKey = '$historyIndex/$next/$nextHistorical';
+      if (!visitedCursors.add(cursorKey) || rows.length > 32768)
+        throw StateError('项目分页结果无效');
+      cursor = next;
+      historicalCursor = nextHistorical;
+    }
+  }
+
+  Future<ProjectDto> createProject(
+    String title, {
+    String? characterId,
+    Map<String, dynamic>? expectedScope,
+  }) async {
+    final role = selectRole(characterId);
+    final captured = revision;
+    final source = await data('memory', characterId: role);
+    final currentScope = Map<String, dynamic>.from(
+      source['executionScope'] as Map,
+    );
+    if (expectedScope != null &&
+        _authorityStamp(expectedScope) != _authorityStamp(currentScope))
+      throw StateError('项目创建表单的数据归属已变化，请重新打开');
+    final scope = expectedScope ?? currentScope;
+    final random = Random.secure();
+    final requestId =
+        'project-${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
+    final result = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/projects',
+      data: {
+        'requestId': requestId,
+        'title': title.trim(),
+        'characterId': role,
+        'expectedExecutionScope': scope,
+      },
+    );
+    final returned = result?['executionScope'];
+    final project = result?['project'];
+    final ack = result?['acknowledgement'];
+    if (captured != revision ||
+        result?['saved'] != true ||
+        returned is! Map ||
+        _authorityStamp(returned) != _authorityStamp(scope) ||
+        returned['requestId'] != requestId ||
+        project is! Map ||
+        project['id'] is! String ||
+        ack is! Map ||
+        ack['requestId'] != requestId ||
+        ack['ownerId'] != scope['resourceOwnerId'] ||
+        ack['versions'] is! Map ||
+        ack['versions']['project/${project['id']}'] != 1 ||
+        ack['versions']['checkpoint/project/$requestId'] != 1) {
+      throw StateError('项目所有者尚未确认保存或服务已切换');
+    }
+    return ProjectDto.fromJson({
+      ...Map<String, dynamic>.from(project),
+      'ownerId': scope['resourceOwnerId'],
+      'roleId': role,
+      'revision': 1,
+      'logical': true,
+      'executionScope': returned,
+    });
+  }
+
+  Future<void> editProject(
+    ProjectDto project, {
+    Map<String, dynamic> changes = const {},
+    bool deleted = false,
+  }) async {
+    if (!project.logical ||
+        project.readOnly ||
+        project.executionScope == null ||
+        project.ownerId.isEmpty ||
+        project.revision < 1) {
+      throw StateError('历史项目只能在原设备管理，请重新加载当前项目');
+    }
+    await edit(
+      'project',
+      project.id,
+      characterId: project.roleId,
+      expectedOwnerId: project.ownerId,
+      expectedScope: project.executionScope,
+      expectedRevision: project.revision,
+      changes: changes,
+      deleted: deleted,
+    );
+  }
 
   Future<Map<String, dynamic>?> conversationSummary(
     String conversationId,
@@ -806,6 +1001,7 @@ class DeviceOwnedChatService {
             ),
       ];
       for (final row in rows) {
+        final file = ownedFileMetadata(row['attachments']);
         final id = (row['id'] ?? '').toString();
         if (id.isEmpty ||
             !const ['user', 'assistant'].contains(row['role']) ||
@@ -821,7 +1017,16 @@ class DeviceOwnedChatService {
             'content': ownedMessageText(row),
             'audioUrl':
                 ownedAudioURL(row['attachments']) ?? row['audioUrl'] ?? '',
+            if (file != null) ...{
+              'msgType': file['kind'],
+              'resourceUri': file['uri'],
+              'fileName': file['name'],
+              'mimeType': file['mimeType'],
+              'fileSizeBytes': file['sizeBytes'],
+              if (file['kind'] == 'video') 'videoUrl': file['uri'],
+            },
             'sourceOwnerId': owner,
+            'sourceConversationId': row['conversationId'],
             'sourceScope': query['executionScope'],
           }),
         );
@@ -987,6 +1192,7 @@ class DeviceOwnedChatService {
     String? characterId,
     Map<String, dynamic>? context,
     List<Map<String, dynamic>>? attachments,
+    Map<String, dynamic>? quote,
   }) async* {
     if (_active != null || !enabled) throw StateError('当前回复尚未结束或设备服务尚未就绪');
     final origin = parseConversationReference(conversationId ?? '');
@@ -995,12 +1201,33 @@ class DeviceOwnedChatService {
     _active = token;
     _requestId = requestId;
     try {
+      final role = selectRole(characterId);
+      final view = await data('memory', characterId: role);
+      final expectedScope = Map<String, dynamic>.from(
+        view['executionScope'] as Map,
+      );
+      if (_scopeFields.any((key) => expectedScope[key] == null) ||
+          captured != revision ||
+          token.isCancelled) {
+        throw StateError('发送前无法确认当前角色、权限与数据归属');
+      }
+      if (quote != null &&
+          (quote['expectedExecutionScope'] is! Map ||
+              _authorityStamp(quote['expectedExecutionScope'] as Map) !=
+                  _authorityStamp(expectedScope))) {
+        throw StateError('引用消息的 Core、角色或归属已变化，请重新选择');
+      }
       final stream = await _api.postStream(
         '/api/device-mesh/v1/business/messages',
         data: {
           'requestId': requestId,
           'message': message,
-          'characterId': selectRole(characterId),
+          'characterId': role,
+          'expectedExecutionScope': expectedScope,
+          if (quote != null) 'quote': quote,
+          if (quote != null &&
+              quote['ownerId'] != expectedScope['resourceOwnerId'])
+            'historicalRoleId': quote['characterId'],
           if (conversationId?.isNotEmpty == true)
             'conversationId': origin?['id'] ?? conversationId,
           if (origin != null) 'conversationOrigin': origin,
@@ -1032,8 +1259,14 @@ class DeviceOwnedChatService {
           );
           yield {
             ...event,
+            'sourceConversationId': id,
             'conversationId': reference,
-            if (result is Map) 'data': {...result, 'conversationId': reference},
+            if (result is Map)
+              'data': {
+                ...result,
+                'sourceConversationId': id,
+                'conversationId': reference,
+              },
           };
         } else {
           yield event;
