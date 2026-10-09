@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -28,6 +29,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			return business.Generation{}, err
 		}
 	}
+	modelDefinitions, toolAliases := prepareAgentModelTools(definitions)
 	allowed := map[string]bool{}
 	for _, definition := range definitions {
 		allowed[definition.Function.Name] = true
@@ -37,16 +39,23 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	partial := func(err error) (business.Generation, error) {
 		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens, Partial: true}, err
 	}
-	for round := 0; round < 8; round++ {
+	maxRounds := 128
+	if config.AppCfg != nil && config.AppCfg.Chat.AgentMaxRounds > 0 {
+		maxRounds = config.AppCfg.Chat.AgentMaxRounds
+	}
+	for round := 0; round < maxRounds; round++ {
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return partial(err)
 		}
-		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(ctx, cfg, messages, definitions, sink)
+		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(ctx, cfg, messages, modelDefinitions, sink)
 		totalTokens += tokens
 		if err != nil {
 			return partial(err)
 		}
 		if len(calls) == 0 {
+			if strings.TrimSpace(sink.text.String()) == "" {
+				return partial(errors.New("模型未返回内容或能力调用，不能判定任务已完成"))
+			}
 			if err := coordination.ValidateCurrent(ctx); err != nil {
 				return partial(err)
 			}
@@ -68,11 +77,18 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 					Arguments string `json:"arguments"`
 				} `json:"function"`
 			}
-			if json.Unmarshal(encoded, &call) != nil || call.ID == "" || len(call.ID) > 128 || seen[call.ID] || !allowed[call.Function.Name] || len(call.Function.Arguments) > 256<<10 || !json.Valid([]byte(call.Function.Arguments)) {
-				return partial(errors.New("模型返回了重复、无效或未授权的能力调用，已拦截"))
+			if json.Unmarshal(encoded, &call) != nil || call.ID == "" || len(call.ID) > 128 || seen[call.ID] || len(call.Function.Arguments) > 256<<10 || !json.Valid([]byte(call.Function.Arguments)) {
+				return partial(errors.New("模型返回了重复或无效的能力调用，已拦截"))
+			}
+			modelName := call.Function.Name
+			if original, exists := toolAliases[modelName]; exists {
+				modelName = original
+			}
+			if !allowed[modelName] {
+				return partial(errors.New("模型调用了未授权的设备能力，已拦截"))
 			}
 			seen[call.ID] = true
-			result, err := s.ownedToolRuntime.Execute(ctx, inference, call.ID, call.Function.Name, json.RawMessage(call.Function.Arguments))
+			result, err := s.ownedToolRuntime.Execute(ctx, inference, call.ID, modelName, json.RawMessage(call.Function.Arguments))
 			if err != nil {
 				return partial(err)
 			}
@@ -86,11 +102,11 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			if len(result.Output) > 0 {
 				output = string(result.Output)
 			}
-			if result.Error != nil {
-				output = fmt.Sprintf("能力调用未成功：%s", result.Error.Message)
+			if outcome := toolResultToOutcome(result, true); outcome.HasError {
+				output = fmt.Sprintf("能力调用未成功：%s: %s", outcome.ErrorCode, outcome.ErrorMessage)
 			}
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": output})
 		}
 	}
-	return partial(errors.New("本轮能力调用已达到上限，请核查已完成的动作后再继续"))
+	return partial(fmt.Errorf("能力调用已达到 %d 轮上限，请核查已完成的动作后再继续", maxRounds))
 }
