@@ -438,6 +438,7 @@ func (i *SkillInstaller) Install(
 		installed.Candidate.Metadata = make(map[string]any)
 	}
 	installed.Candidate.Metadata["skillId"] = skillID
+	installed.Candidate.Metadata["existingSkill"] = strings.HasPrefix(desc.SourceURI, "amitia-skill:")
 
 	return installed, nil
 }
@@ -452,6 +453,9 @@ func (i *SkillInstaller) Rollback(
 
 	skillID, _ := installed.Candidate.Metadata["skillId"].(string)
 	if skillID == "" {
+		return nil
+	}
+	if existing, _ := installed.Candidate.Metadata["existingSkill"].(bool); existing {
 		return nil
 	}
 

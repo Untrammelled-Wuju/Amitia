@@ -28,6 +28,7 @@ chat:
   eventReplayRingSize: 4096
   contextWindowMaxRounds: 20
   agentTurnTimeoutSeconds: 0
+  agentMaxRounds: 128
   agentToolRepeatLimit: 0
   agentMaxParallelTools: 4
   agentMaxParallelTurns: 16

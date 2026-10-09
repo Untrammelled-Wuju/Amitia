@@ -73,6 +73,9 @@ func (s *Service) LocalWorkspaceRoot(workspaceID string) (string, error) {
 	if !ok || mount.Kind != WorkspaceKindLocal || !mount.Available {
 		return "", fmt.Errorf("local workspace %s is not available", workspaceID)
 	}
+	if mount.ReadOnly {
+		return "", fmt.Errorf("host commands are not permitted in a read-only workspace")
+	}
 	root, err := canonicalLocalRoot(mount.LocalRoot)
 	if err != nil {
 		return "", err

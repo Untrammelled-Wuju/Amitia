@@ -47,6 +47,11 @@ func (o *hostCommandOutput) Snapshot() (string, bool) {
 }
 
 func resolveHostCommandDirectory(root, requested string) (string, error) {
+	canonicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root: %w", err)
+	}
+	root = canonicalRoot
 	directory := root
 	if strings.TrimSpace(requested) != "" {
 		directory = requested
@@ -54,7 +59,7 @@ func resolveHostCommandDirectory(root, requested string) (string, error) {
 			directory = filepath.Join(root, directory)
 		}
 	}
-	directory, err := filepath.EvalSymlinks(directory)
+	directory, err = filepath.EvalSymlinks(directory)
 	if err != nil {
 		return "", fmt.Errorf("resolve host command directory: %w", err)
 	}

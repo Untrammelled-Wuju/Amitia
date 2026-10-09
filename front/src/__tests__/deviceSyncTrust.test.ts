@@ -16,6 +16,13 @@ vi.mock("@/components/DeviceCapabilityGrants.vue", () => ({ default: { template:
 vi.mock("@/components/DeviceCoreCall.vue", () => ({ default: { template: "<div />" } }));
 import DevicesView from "@/views/devices/DevicesView.vue";
 
+function mountDevices() {
+  return shallowMount(DevicesView, { global: {
+    stubs: { "el-button": true, "el-tag": true, "el-alert": true, "el-card": true, "el-input": true, "el-switch": true, "el-empty": true },
+    directives: { loading: () => {} },
+  } });
+}
+
 describe("设备同步信任状态", () => {
   beforeEach(() => {
     window.amitiaDesktop = { getMeshIdentity: async () => ({ deviceId: "trusted" }), getMeshStatus: async () => ({}) } as any;
@@ -23,7 +30,7 @@ describe("设备同步信任状态", () => {
     mocks.get.mockReset().mockImplementation(async (path: string) => path.endsWith("/devices") ? { devices: mocks.devices } : { lastApplied: 3 });
   });
   it("仅查询可信设备，撤销和待配对设备显示明确状态", async () => {
-    const wrapper = shallowMount(DevicesView);
+    const wrapper = mountDevices();
     await flushPromises();
     expect(mocks.get.mock.calls.filter(call => call[0].endsWith("/sync/status")).map(call => call[1].deviceId)).toEqual(["trusted"]);
     expect((wrapper.vm as any).syncLabel("revoked")).toBe("已撤销，不再同步");
@@ -33,7 +40,7 @@ describe("设备同步信任状态", () => {
     wrapper.unmount();
   });
   it("刷新后撤销状态覆盖已有同步结果", async () => {
-    const wrapper = shallowMount(DevicesView);
+    const wrapper = mountDevices();
     await flushPromises();
     mocks.devices = [{ deviceId: "trusted", trustState: "revoked" }];
     await (wrapper.vm as any).refresh();
