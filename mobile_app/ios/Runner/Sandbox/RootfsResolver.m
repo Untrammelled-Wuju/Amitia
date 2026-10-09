@@ -195,7 +195,7 @@ static NSString * const kStagingSubDirectory = @"amitia/rootfs-staging";
 
     NSError *err = nil;
     NSNumber *metaSize = nil;
-    if (![rootfsURL getResourceValue:&metaSize forKey:NSFileSizeKey error:&err] || metaSize.longLongValue <= 0) return NO;
+    if (![[NSURL fileURLWithPath:metaDbPath] getResourceValue:&metaSize forKey:NSFileSizeKey error:&err] || metaSize.longLongValue <= 0) return NO;
 
     return YES;
 }

@@ -9,8 +9,30 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/device_management_intent.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+
+final _deviceSettingsAuthorityProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+      final api = ref.watch(rawBackendServiceApiProvider);
+      final apiGeneration = api?.generation;
+      final deployment = ref.watch(mobileDeploymentConfigProvider);
+      var active = true;
+      ref.onDispose(() => active = false);
+      final data = await ref.read(deviceMeshServiceProvider).coordination();
+      final intent = DeviceManagementIntent(
+        data,
+        isCurrent: () =>
+            active &&
+            api != null &&
+            api.generation == apiGeneration &&
+            identical(ref.read(rawBackendServiceApiProvider), api) &&
+            deployment == ref.read(mobileDeploymentConfigProvider),
+      );
+      return {...data, '_managementIntent': intent};
+    });
 
 class DeviceSettingsPage extends ConsumerWidget {
   const DeviceSettingsPage({super.key});
@@ -22,9 +44,11 @@ class DeviceSettingsPage extends ConsumerWidget {
     final devices = ref.watch(deviceMeshDevicesProvider);
     final state = status.asData?.value?['state']?.toString() ?? '';
     final connected = state.toLowerCase() == 'connected';
-    final cloudBaseUrl = status.asData?.value?['cloudBaseUrl']?.toString().trim();
+    final cloudBaseUrl = status.asData?.value?['cloudBaseUrl']
+        ?.toString()
+        .trim();
     final deviceCount = devices.asData?.value.length;
-    final coordination = ref.watch(deviceCoordinationProvider);
+    final coordination = ref.watch(_deviceSettingsAuthorityProvider);
 
     return AmitiaScaffold(
       appBar: const AmitiaAppBar(
@@ -36,6 +60,7 @@ class DeviceSettingsPage extends ConsumerWidget {
           ref.invalidate(localDeviceMeshStatusProvider);
           ref.invalidate(deviceMeshDevicesProvider);
           ref.invalidate(deviceCoordinationProvider);
+          ref.invalidate(_deviceSettingsAuthorityProvider);
           await Future.wait([
             ref.read(localDeviceMeshStatusProvider.future),
             ref.read(deviceMeshDevicesProvider.future),
@@ -49,26 +74,91 @@ class DeviceSettingsPage extends ConsumerWidget {
               loading: () => const LinearProgressIndicator(),
               error: (_, _) => const SizedBox.shrink(),
               data: (data) {
-                final policy = Map<String, dynamic>.from(data['policy'] as Map? ?? const {});
+                final policy = Map<String, dynamic>.from(
+                  data['policy'] as Map? ?? const {},
+                );
                 final enabled = policy['coordinated'] == true;
                 final available = data['coordinationAvailable'] == true;
                 return SwitchListTile.adaptive(
                   title: const Text('统筹模式'),
-                  subtitle: Text(!available ? '统筹模式暂不可用，当前数据仍由现有服务管理。' : enabled ? '使用 Core 角色，新数据由 Core 管理；历史数据保留原归属。' : '使用设备角色，新数据由本机管理；AI 服务仍由 Core 提供。'),
+                  subtitle: Text(
+                    !available
+                        ? '统筹模式暂不可用，当前数据仍由现有服务管理。'
+                        : enabled
+                        ? '使用 Core 角色，新数据由 Core 管理；历史数据保留原归属。'
+                        : '使用设备角色，新数据由本机管理；AI 服务仍由 Core 提供。',
+                  ),
                   value: enabled,
-                  onChanged: !available ? null : (value) async {
-                    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(title: const Text('切换统筹模式'), content: const Text('切换会中断正在进行的回复。已有数据不迁移，关闭统筹会撤销云端管理员权限。'), actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')), TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('切换'))]));
-                    if (confirmed != true) return;
-                    try {
-                      await ref.read(deviceMeshServiceProvider).changeCoordination(coordinated: value, expectedRevision: (policy['modeRevision'] as num).toInt(), selectedRole: policy['selectedRole']?.toString() ?? '');
-                      ref.invalidate(deviceCoordinationProvider);
-                      ref.invalidate(deviceMeshDevicesProvider);
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('统筹模式已更新，当前回复已中断')));
-                    } catch (error) {
-                      ref.invalidate(deviceCoordinationProvider);
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
-                    }
-                  },
+                  onChanged: !available
+                      ? null
+                      : (value) async {
+                          final intent =
+                              data['_managementIntent']
+                                  as DeviceManagementIntent;
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('切换统筹模式'),
+                              content: const Text(
+                                '切换会中断正在进行的回复。已有数据不迁移，关闭统筹会撤销云端管理员权限。',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, false),
+                                  child: const Text('取消'),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, true),
+                                  child: const Text('切换'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) return;
+                          try {
+                            final service = ref.read(deviceMeshServiceProvider);
+                            intent.validate(await service.coordination());
+                            await service.changeCoordination(
+                              coordinated: value,
+                              expectedRevision: (policy['modeRevision'] as num)
+                                  .toInt(),
+                              selectedRole:
+                                  policy['selectedRole']?.toString() ?? '',
+                              headers: intent.headers,
+                            );
+                            intent.assertConnection();
+                            final after = await service.coordination();
+                            intent.assertConnection();
+                            if (after['coreId'] != intent.coreId ||
+                                after['policy'] is! Map ||
+                                after['policy']['coordinated'] != value ||
+                                after['policy']['modeRevision'] !=
+                                    policy['modeRevision'] + 1 ||
+                                after['policy']['permissionRevision'] !=
+                                    policy['permissionRevision'] + 1 ||
+                                after['policy']['providerEpoch'] !=
+                                    policy['providerEpoch'])
+                              throw StateError('Core未确认原设备统筹模式切换结果');
+                            ref.invalidate(deviceCoordinationProvider);
+                            ref.invalidate(_deviceSettingsAuthorityProvider);
+                            ref.invalidate(deviceMeshDevicesProvider);
+                            if (context.mounted)
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('统筹模式已更新，当前回复已中断'),
+                                ),
+                              );
+                          } catch (error) {
+                            ref.invalidate(deviceCoordinationProvider);
+                            ref.invalidate(_deviceSettingsAuthorityProvider);
+                            if (context.mounted)
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(error.toString())),
+                              );
+                          }
+                        },
                 );
               },
             ),
@@ -78,7 +168,9 @@ class DeviceSettingsPage extends ConsumerWidget {
                 icon: Icons.cloud_done_outlined,
                 title: '设备协同',
                 subtitle: connected
-                    ? (cloudBaseUrl == null || cloudBaseUrl.isEmpty ? 'Device Mesh 已连接' : cloudBaseUrl)
+                    ? (cloudBaseUrl == null || cloudBaseUrl.isEmpty
+                          ? 'Device Mesh 已连接'
+                          : cloudBaseUrl)
                     : _meshStatusText(status),
                 value: connected ? '已连接' : '未连接',
                 valueColor: connected ? context.success : context.textTertiary,
@@ -86,7 +178,9 @@ class DeviceSettingsPage extends ConsumerWidget {
               _StatusTile(
                 icon: Icons.route_outlined,
                 title: '任务路由',
-                subtitle: connected ? '云端可将设备任务路由到已连接 Runtime' : '连接云端协同后由 Device Mesh 自动路由',
+                subtitle: connected
+                    ? '云端可将设备任务路由到已连接 Runtime'
+                    : '连接云端协同后由 Device Mesh 自动路由',
                 value: connected ? '自动' : '关闭',
               ),
               _StatusTile(
@@ -132,7 +226,9 @@ class DeviceSettingsPage extends ConsumerWidget {
             if (connected) ...[
               SizedBox(height: AppSpacing.lg),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.pagePadding,
+                ),
                 child: AmitiaButton(
                   label: '解除本机云端绑定',
                   isSecondary: true,
@@ -154,8 +250,14 @@ class DeviceSettingsPage extends ConsumerWidget {
         title: const Text('解除云端绑定'),
         content: const Text('这会删除本机保存的 Device Mesh 云端凭据。云端设备记录仍可在“我的设备”中单独移除。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('解除')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('解除'),
+          ),
         ],
       ),
     );
@@ -166,11 +268,19 @@ class DeviceSettingsPage extends ConsumerWidget {
       await service.deleteCredential();
       ref.invalidate(localDeviceMeshStatusProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('本机云端绑定已解除')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('本机云端绑定已解除')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('解除失败：${e.toString().replaceFirst('Bad state: ', '')}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '解除失败：${e.toString().replaceFirst('Bad state: ', '')}',
+            ),
+          ),
+        );
       }
     }
   }
@@ -187,22 +297,24 @@ class DeviceSettingsPage extends ConsumerWidget {
   }
 
   static Widget _sectionTitle(BuildContext context, String title) => Padding(
-        padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.sm),
-        child: Text(title, style: AppTypography.caption(context)),
-      );
+    padding: EdgeInsets.fromLTRB(
+      AppSpacing.pagePadding,
+      AppSpacing.md,
+      AppSpacing.pagePadding,
+      AppSpacing.sm,
+    ),
+    child: Text(title, style: AppTypography.caption(context)),
+  );
 
-  static Widget _group(BuildContext context, List<Widget> children) => Container(
+  static Widget _group(BuildContext context, List<Widget> children) =>
+      Container(
         margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         decoration: BoxDecoration(
           color: context.surfacePrimary,
           borderRadius: AppRadius.brMedium,
           border: Border.all(color: context.borderPrimary, width: 0.6),
         ),
-        child: Column(
-          children: [
-            for (final child in children) child,
-          ],
-        ),
+        child: Column(children: [for (final child in children) child]),
       );
 }
 
@@ -213,7 +325,13 @@ class _StatusTile extends StatelessWidget {
   final String value;
   final Color? valueColor;
 
-  const _StatusTile({required this.icon, required this.title, required this.subtitle, required this.value, this.valueColor});
+  const _StatusTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    this.valueColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -230,12 +348,22 @@ class _StatusTile extends StatelessWidget {
               children: [
                 Text(title, style: AppTypography.body(context)),
                 const SizedBox(height: 2),
-                Text(subtitle, style: AppTypography.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(
+                  subtitle,
+                  style: AppTypography.caption(context),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          Text(value, style: AppTypography.caption(context).copyWith(color: valueColor ?? context.textTertiary)),
+          Text(
+            value,
+            style: AppTypography.caption(
+              context,
+            ).copyWith(color: valueColor ?? context.textTertiary),
+          ),
         ],
       ),
     );
@@ -248,7 +376,12 @@ class _RouteTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
 
-  const _RouteTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  const _RouteTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -266,7 +399,12 @@ class _RouteTile extends StatelessWidget {
                 children: [
                   Text(title, style: AppTypography.body(context)),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    subtitle,
+                    style: AppTypography.caption(context),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
@@ -279,8 +417,11 @@ class _RouteTile extends StatelessWidget {
 }
 
 Widget _leading(BuildContext context, IconData icon) => Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: BorderRadius.circular(11)),
-      child: Icon(icon, size: 17, color: context.textSecondary),
-    );
+  width: 32,
+  height: 32,
+  decoration: BoxDecoration(
+    color: context.surfaceSecondary,
+    borderRadius: BorderRadius.circular(11),
+  ),
+  child: Icon(icon, size: 17, color: context.textSecondary),
+);

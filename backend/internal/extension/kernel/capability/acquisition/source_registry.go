@@ -73,6 +73,21 @@ func (r *SourceRegistry) SearchAll(ctx context.Context, request AcquisitionReque
 	)
 
 	for _, src := range sources {
+		if request.SourceURI != "" || request.Install != nil {
+			if src.ID() != "explicit_source" {
+				continue
+			}
+		} else if len(request.PreferredKinds) > 0 {
+			matched := false
+			for _, kind := range request.PreferredKinds {
+				if kind == src.Kind() {
+					matched = true
+				}
+			}
+			if !matched && src.ID() != "explicit_source" && src.Kind() != CandidateInstalledExtension {
+				continue
+			}
+		}
 		wg.Add(1)
 		go func(s Source) {
 			defer wg.Done()

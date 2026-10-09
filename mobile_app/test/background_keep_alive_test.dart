@@ -11,6 +11,9 @@ class KeepAliveDispatcher implements NativeBridgePlatformDispatcher {
   bool unrestricted = false;
   bool permissionDenied = false;
   bool startFailed = false;
+  bool powerSaveMode = false;
+  String dataRestriction = 'disabled';
+  bool legacyStatus = false;
   final requests = <Map<String, dynamic>>[];
   @override
   Future<Map<String, dynamic>> execute(Map<String, dynamic> request) async {
@@ -37,6 +40,8 @@ class KeepAliveDispatcher implements NativeBridgePlatformDispatcher {
         'enabled': enabled,
         'active': active,
         'batteryUnrestricted': unrestricted,
+        if (!legacyStatus) 'powerSaveMode': powerSaveMode,
+        if (!legacyStatus) 'backgroundDataRestriction': dataRestriction,
       },
     };
   }
@@ -129,6 +134,76 @@ void main() {
       throwsUnsupportedError,
     );
     expect(dispatcher.requests, isEmpty);
+  });
+  test('legacy native status does not imply network permission', () async {
+    final dispatcher = KeepAliveDispatcher()..legacyStatus = true;
+    final status = await BackgroundKeepAliveService(
+      dispatcher,
+      platform: 'android',
+    ).load();
+    expect(status.powerSaveMode, isNull);
+    expect(status.backgroundDataRestriction, 'unknown');
+  });
+  testWidgets('system shortcuts are available while keep alive is disabled', (
+    tester,
+  ) async {
+    final dispatcher = KeepAliveDispatcher();
+    await tester.pumpWidget(
+      settings(BackgroundKeepAliveService(dispatcher, platform: 'android')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('后台保活未开启'), findsOneWidget);
+    expect(find.text('电池优化：未豁免'), findsOneWidget);
+    await tester.tap(find.text('后台流量设置'));
+    await tester.pumpAndSettle();
+    expect(
+      dispatcher.requests.last['operation'],
+      'device.keep_alive.network_settings',
+    );
+    await tester.tap(find.text('应用系统设置'));
+    await tester.pumpAndSettle();
+    expect(
+      dispatcher.requests.last['operation'],
+      'device.keep_alive.app_settings',
+    );
+    expect(dispatcher.enabled, false);
+    expect(find.text('电池优化：未豁免'), findsOneWidget);
+  });
+  testWidgets('returning from settings refreshes actual system states', (
+    tester,
+  ) async {
+    final dispatcher = KeepAliveDispatcher()
+      ..powerSaveMode = true
+      ..dataRestriction = 'restricted';
+    await tester.pumpWidget(
+      settings(BackgroundKeepAliveService(dispatcher, platform: 'android')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('省流量模式：后台流量受限'), findsOneWidget);
+    expect(find.text('系统省电模式已开启，后台运行仍可能受限'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    dispatcher.unrestricted = true;
+    dispatcher.powerSaveMode = false;
+    dispatcher.dataRestriction = 'whitelisted';
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('电池优化：已豁免'), findsOneWidget);
+    expect(find.text('省流量模式：已允许本应用不受限用量'), findsOneWidget);
+    expect(find.text('系统省电模式未开启'), findsOneWidget);
+    expect(find.text('后台保活未开启'), findsOneWidget);
+    expect(find.text('打开系统省电设置'), findsOneWidget);
+  });
+  testWidgets('legacy status renders unavailable values explicitly', (
+    tester,
+  ) async {
+    final dispatcher = KeepAliveDispatcher()..legacyStatus = true;
+    await tester.pumpWidget(
+      settings(BackgroundKeepAliveService(dispatcher, platform: 'android')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('省流量模式：状态暂不可用'), findsOneWidget);
+    expect(find.text('系统省电模式状态暂不可用'), findsOneWidget);
+    expect(find.text('应用系统设置'), findsOneWidget);
   });
   testWidgets('switch enables protection and exposes battery settings', (
     tester,

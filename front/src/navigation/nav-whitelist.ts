@@ -17,6 +17,7 @@ export const NAVIGATION_WHITELIST: readonly string[] = [
   "/runtime-mode",
   "/storage",
   "/profiles",
+  "/my-space",
   "/user-settings",
   "/episodic",
   "/world-book",

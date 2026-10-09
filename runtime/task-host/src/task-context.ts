@@ -21,6 +21,7 @@ export interface TaskContextOptions {
   maxAttempts: number;
   initialCheckpoint: TaskCheckpoint | null;
   signal: AbortSignal;
+  hostCapabilities?: { executeTool: boolean; emitEvent: boolean };
 }
 
 export class LoggerClient implements TaskLogger {
@@ -139,11 +140,17 @@ export class StorageClient implements TaskStorageClient {
 }
 
 export class HostClient implements TaskHostClient {
-  readonly capabilities = Object.freeze({ executeTool: false, emitEvent: false });
+  readonly capabilities: Readonly<{ executeTool: boolean; emitEvent: boolean }>;
   constructor(
     private readonly rpc: RpcClient,
     private readonly taskRunId: string,
-  ) {}
+    capabilities?: { executeTool: boolean; emitEvent: boolean },
+  ) {
+    this.capabilities = Object.freeze({
+      executeTool: capabilities?.executeTool === true,
+      emitEvent: capabilities?.emitEvent === true,
+    });
+  }
 
   async executeTool(toolId: string, input: unknown, timeoutMs?: number): Promise<unknown> {
     const response = await this.rpc.call<{ result: unknown }>(
@@ -159,11 +166,14 @@ export class HostClient implements TaskHostClient {
   }
 
   async emitEvent(type: string, payload: unknown): Promise<void> {
-    await this.rpc.call("task.host.emitEvent", {
+    const ack = await this.rpc.call<{ confirmed: boolean; eventId: string; outboxId: string }>("task.host.emitEvent", {
       task_run_id: this.taskRunId,
       type,
       payload,
     });
+    if (ack?.confirmed !== true || typeof ack.eventId !== "string" || !ack.eventId || typeof ack.outboxId !== "string" || !ack.outboxId) {
+      throw new Error("任务事件尚未获得实际持久事件与发件箱确认");
+    }
   }
 }
 
@@ -182,7 +192,7 @@ export function createTaskContext(options: TaskContextOptions): TaskContextBundl
   const checkpoint = new CheckpointClient(rpc, taskRunId, initialCheckpoint);
   const artifacts = new ArtifactClient(rpc, taskRunId);
   const storage = new StorageClient(rpc, taskRunId);
-  const host = new HostClient(rpc, taskRunId);
+  const host = new HostClient(rpc, taskRunId, options.hostCapabilities);
 
   const context: TaskContext = {
     taskId,

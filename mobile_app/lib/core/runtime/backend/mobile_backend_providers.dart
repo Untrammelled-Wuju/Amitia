@@ -6,24 +6,29 @@ import 'mobile_deployment_config_repository.dart';
 import 'backend_topology_resolver.dart';
 import 'mobile_backend_lifecycle.dart';
 import '../embedded/embedded_runtime_controller.dart';
-import '../embedded/android_embedded_runtime_controller.dart';
+import '../embedded/method_channel_embedded_runtime_controller.dart';
 
 final mobileDeploymentConfigRepositoryProvider =
     Provider<MobileDeploymentConfigRepository>((ref) {
-  return const SharedPreferencesMobileDeploymentConfigRepository();
-});
+      return const SharedPreferencesMobileDeploymentConfigRepository();
+    });
 
 final mobileDeploymentConfigProvider =
-    StateNotifierProvider<MobileDeploymentConfigNotifier, MobileDeploymentConfig>((ref) {
-  final repo = ref.watch(mobileDeploymentConfigRepositoryProvider);
-  return MobileDeploymentConfigNotifier(repo);
-});
+    StateNotifierProvider<
+      MobileDeploymentConfigNotifier,
+      MobileDeploymentConfig
+    >((ref) {
+      final repo = ref.watch(mobileDeploymentConfigRepositoryProvider);
+      return MobileDeploymentConfigNotifier(repo);
+    });
 
-class MobileDeploymentConfigNotifier extends StateNotifier<MobileDeploymentConfig> {
+class MobileDeploymentConfigNotifier
+    extends StateNotifier<MobileDeploymentConfig> {
   final MobileDeploymentConfigRepository _repo;
   bool _initialized = false;
 
-  MobileDeploymentConfigNotifier(this._repo) : super(MobileDeploymentConfig.local);
+  MobileDeploymentConfigNotifier(this._repo)
+    : super(MobileDeploymentConfig.local);
 
   Future<void> init() async {
     if (_initialized) return;
@@ -37,21 +42,22 @@ class MobileDeploymentConfigNotifier extends StateNotifier<MobileDeploymentConfi
   }
 }
 
-final backendTopologyResolverProvider =
-    Provider<BackendTopologyResolver>((ref) {
+final backendTopologyResolverProvider = Provider<BackendTopologyResolver>((
+  ref,
+) {
   return DefaultBackendTopologyResolver();
 });
 
-final embeddedRuntimeControllerProvider =
-    Provider<EmbeddedRuntimeController>((ref) {
-  if (Platform.isAndroid) {
-    return AndroidEmbeddedRuntimeController();
+final embeddedRuntimeControllerProvider = Provider<EmbeddedRuntimeController>((
+  ref,
+) {
+  if (Platform.isAndroid || Platform.isIOS) {
+    return MethodChannelEmbeddedRuntimeController();
   }
   return const UnsupportedEmbeddedRuntimeController();
 });
 
-final mobileBackendLifecycleProvider =
-    Provider<MobileBackendLifecycle>((ref) {
+final mobileBackendLifecycleProvider = Provider<MobileBackendLifecycle>((ref) {
   final resolver = ref.watch(backendTopologyResolverProvider);
   final embedded = ref.watch(embeddedRuntimeControllerProvider);
   final lifecycle = DefaultMobileBackendLifecycle(
@@ -64,8 +70,7 @@ final mobileBackendLifecycleProvider =
   return lifecycle;
 });
 
-final mobileBackendStatusProvider =
-    StreamProvider<MobileBackendStatus>((ref) {
+final mobileBackendStatusProvider = StreamProvider<MobileBackendStatus>((ref) {
   final lifecycle = ref.watch(mobileBackendLifecycleProvider);
   return lifecycle.statusStream.distinct();
 });

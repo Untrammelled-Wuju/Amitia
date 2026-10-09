@@ -13,22 +13,23 @@ import (
 )
 
 type ProcessHostConfig struct {
-	Generation     int64                  `json:"generation"`
-	InstanceID     string                 `json:"instanceId"`
-	TaskRunID      string                 `json:"taskRunId"`
-	ExtensionID    string                 `json:"extensionId"`
-	ModuleID       string                 `json:"moduleId"`
-	DefHash        string                 `json:"defHash"`
-	NodePath       string                 `json:"nodePath"`
-	HostPath       string                 `json:"hostPath"`
-	WorkDir        string                 `json:"workDir"`
-	EntryPath      string                 `json:"entryPath"`
-	EntryHash      string                 `json:"entryHash"`
-	BundleRoot     string                 `json:"bundleRoot,omitempty"`
-	BundleHash     string                 `json:"bundleHash,omitempty"`
-	NativeLimits   process.ResourceLimits `json:"nativeLimits"`
-	RequireSandbox bool                   `json:"requireSandbox"`
-	Diagnostics    io.Writer              `json:"-"`
+	Generation       int64                  `json:"generation"`
+	InstanceID       string                 `json:"instanceId"`
+	TaskRunID        string                 `json:"taskRunId"`
+	ExtensionID      string                 `json:"extensionId"`
+	ModuleID         string                 `json:"moduleId"`
+	DefHash          string                 `json:"defHash"`
+	NodePath         string                 `json:"nodePath"`
+	HostPath         string                 `json:"hostPath"`
+	WorkDir          string                 `json:"workDir"`
+	EntryPath        string                 `json:"entryPath"`
+	EntryHash        string                 `json:"entryHash"`
+	BundleRoot       string                 `json:"bundleRoot,omitempty"`
+	BundleHash       string                 `json:"bundleHash,omitempty"`
+	NativeLimits     process.ResourceLimits `json:"nativeLimits"`
+	RequireSandbox   bool                   `json:"requireSandbox"`
+	Diagnostics      io.Writer              `json:"-"`
+	HostCapabilities SourceTaskCapabilities `json:"hostCapabilities"`
 }
 
 type ProcessCallbacks struct {

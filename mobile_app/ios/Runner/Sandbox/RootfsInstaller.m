@@ -284,7 +284,7 @@ static NSCharacterSet *kSafeRootfsChars = nil;
 
     if (progress) progress(RootfsInstallStepPreparingTarget, 0.75, @"Preparing target directory");
 
-    NSURL *targetURL = [self.resolver.rootfsURLForVersion:version architecture:arch];
+    NSURL *targetURL = [self.resolver rootfsURLForVersion:version architecture:arch];
     if (targetURL && [[NSFileManager defaultManager] fileExistsAtPath:targetURL.path]) {
         RootfsDescriptor *existing = [self.resolver resolveInstalledRootfsVersion:version architecture:arch];
         if (existing && existing.packageDigestSHA256 && stagedDesc.packageDigestSHA256 && [existing.packageDigestSHA256 isEqualToString:stagedDesc.packageDigestSHA256]) {
@@ -316,7 +316,7 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         NSError *copyErr = nil;
         if (![fm copyItemAtURL:stagingDir toURL:targetURL error:&copyErr]) {
             [self cleanupStaging:stagingDir];
-            if (fm.fileExistsAtPath(targetURL.path)) [fm removeItemAtURL:targetURL error:nil];
+            if ([fm fileExistsAtPath:targetURL.path]) [fm removeItemAtURL:targetURL error:nil];
             if (error) *error = copyErr ?: moveErr;
             return nil;
         }
@@ -327,7 +327,13 @@ static NSCharacterSet *kSafeRootfsChars = nil;
     if (progress) progress(RootfsInstallStepWritingManifest, 0.90, @"Writing version manifest");
 
     NSError *manifestErr = nil;
-    if (![self writeVersionManifestForDescriptor:stagedDesc error:&manifestErr]) {
+    RootfsDescriptor *targetDescriptor = [[RootfsDescriptor alloc] initWithVersion:version
+        architecture:arch digestSHA256:request.expectedDigestSHA256 rootfsURL:targetURL
+        mountURL:[targetURL URLByAppendingPathComponent:@"data"] sourceType:RootfsSourceTypeBundled
+        format:RootfsFormatISHFakeFS packageDigestSHA256:request.expectedDigestSHA256
+        formatVersion:kVersionSchemaVersion manifestPath:[targetURL.path stringByAppendingPathComponent:kVersionManifestName]
+        state:RootfsStateInstalled];
+    if (![self writeVersionManifestForDescriptor:targetDescriptor error:&manifestErr]) {
         [fm removeItemAtURL:targetURL error:nil];
         [self cleanupStaging:stagingDir];
         if (error) *error = manifestErr;
@@ -418,7 +424,7 @@ static NSCharacterSet *kSafeRootfsChars = nil;
 
     NSNumber *metaSize = nil;
     NSError *resErr = nil;
-    if (![stagingDir getResourceValue:&metaSize forKey:NSFileSizeKey error:&resErr] || metaSize.longLongValue <= 0) {
+    if (![[NSURL fileURLWithPath:metaDbPath] getResourceValue:&metaSize forKey:NSFileSizeKey error:&resErr] || metaSize.longLongValue <= 0) {
         if (error) *error = [NSError errorWithDomain:RootfsInstallerErrorDomain code:RootfsInstallerErrorLayoutInvalid userInfo:@{NSLocalizedDescriptionKey: @"meta.db invalid"}];
         return nil;
     }
@@ -450,7 +456,10 @@ static NSCharacterSet *kSafeRootfsChars = nil;
 }
 
 - (BOOL)writeVersionManifestForDescriptor:(RootfsDescriptor *)descriptor error:(NSError **)error {
-    NSDictionary *manifest = @{
+    NSData *original = [NSData dataWithContentsOfFile:descriptor.manifestPath];
+    NSMutableDictionary *manifest = original ? [[NSJSONSerialization JSONObjectWithData:original options:NSJSONReadingMutableContainers error:nil] mutableCopy] : nil;
+    if (![manifest isKindOfClass:[NSMutableDictionary class]]) manifest = [NSMutableDictionary dictionary];
+    [manifest addEntriesFromDictionary:@{
         @"schemaVersion": @1,
         @"format": [RootfsDescriptor stringFromFormat:descriptor.format],
         @"formatVersion": descriptor.formatVersion ?: kVersionSchemaVersion,
@@ -459,8 +468,8 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         @"architecture": descriptor.architecture,
         @"packageSha256": descriptor.packageDigestSHA256 ?: descriptor.digestSHA256,
         @"sourceType": [RootfsDescriptor stringFromSourceType:descriptor.sourceType],
-        @"installedAt": [[ISO8601DateFormatter new] stringFromDate:[NSDate date]]
-    };
+        @"installedAt": [[NSISO8601DateFormatter new] stringFromDate:[NSDate date]]
+    }];
 
     NSError *serErr = nil;
     NSData *data = [NSJSONSerialization dataWithJSONObject:manifest options:0 error:&serErr];

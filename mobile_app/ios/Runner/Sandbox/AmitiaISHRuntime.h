@@ -69,7 +69,7 @@ typedef NS_ENUM(NSInteger, AmitiaISHNativeError) {
 
 - (void)stop;
 
-- (nullable AmitiaISHRuntimeHealth)health;
+- (nullable AmitiaISHRuntimeHealth *)health;
 
 @end
 

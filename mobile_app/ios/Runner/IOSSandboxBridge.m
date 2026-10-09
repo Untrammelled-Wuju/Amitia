@@ -680,8 +680,8 @@ typedef NS_ENUM(NSInteger, LifecycleStopResult) {
         }
 
         if (self.resumeOnForeground && self.desiredRunning) {
-            if (self.runningRootfsDigest && active.digestSha256 &&
-                ![self.runningRootfsDigest isEqualToString:active.digestSha256]) {
+            if (self.runningRootfsDigest && active.digestSHA256 &&
+                ![self.runningRootfsDigest isEqualToString:active.digestSHA256]) {
                 self.restartRequired = YES;
             }
             NSError *err = nil;

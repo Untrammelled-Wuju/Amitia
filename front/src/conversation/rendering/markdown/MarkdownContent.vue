@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="amrp-markdown" :class="{ 'is-streaming': streaming }" @click="handleClick">
+  <div v-resolved-media class="amrp-markdown" :class="{ 'is-streaming': streaming }" @click="handleClick">
     <template v-for="segment in segments" :key="segment.id">
       <div
         v-if="segment.type === 'markdown'"
@@ -56,7 +56,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef } from "vue";
+import { computed, ref, toRef, onBeforeUnmount } from "vue";
+import { resolveConversationMediaUrl, invalidateConversationMedia } from "../media";
 import { renderMarkdownSegment, splitMarkdownSegments } from "./markdownEngine";
 import { useStreamRenderScheduler } from "../stream/streamRenderScheduler";
 import { isSafeLink } from "../utils";
@@ -83,12 +84,46 @@ const emit = defineEmits<{
   citation: [id: string];
 }>();
 
-const rootEl = ref<HTMLElement>();
+let rootElement: HTMLElement | undefined;
 const imagePreview = ref("");
 const sourceRef = toRef(props, "source");
 const streamingRef = computed(() => props.streaming);
 const renderedSource = useStreamRenderScheduler(sourceRef, streamingRef);
 const segments = computed(() => splitMarkdownSegments(renderedSource.value));
+async function resolveImage(image: HTMLImageElement) {
+  if (image.dataset.mediaResolving) return;
+  image.dataset.mediaResolving = "true";
+  const raw = image.dataset.amitiaSource || "";
+  try {
+    const url = await resolveConversationMediaUrl(raw);
+    if (!image.isConnected || image.dataset.amitiaSource !== raw) return;
+    image.src = url;
+    image.title = "";
+    image.dataset.mediaFailed = "";
+  } catch {
+    image.title = "图片加载失败，点击重试";
+    image.dataset.mediaFailed = "true";
+  } finally {
+    delete image.dataset.mediaResolving;
+  }
+}
+function resolveImages() {
+  rootElement?.querySelectorAll<HTMLImageElement>("img[data-amitia-source]").forEach((image) => {
+    if (image.getAttribute("src")) return;
+    image.onerror = () => { image.dataset.mediaFailed = "true"; image.title = "图片加载失败，点击重试"; };
+    void resolveImage(image);
+  });
+}
+const observer = new MutationObserver(resolveImages);
+const vResolvedMedia = {
+  mounted(element: HTMLElement) {
+    rootElement = element;
+    observer.observe(element, { childList: true, subtree: true });
+    resolveImages();
+  },
+  updated: resolveImages,
+};
+onBeforeUnmount(() => observer.disconnect());
 
 function handleClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null;
@@ -98,6 +133,11 @@ function handleClick(event: MouseEvent) {
     return;
   }
   const image = target?.closest<HTMLImageElement>("img[data-amitia-image]");
+  if (image?.dataset.mediaFailed) {
+    invalidateConversationMedia(image.dataset.amitiaSource || "");
+    void resolveImage(image);
+    return;
+  }
   if (image?.src) {
     imagePreview.value = image.src;
     return;

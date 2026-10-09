@@ -106,7 +106,14 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Amitia App 需要添加照片到图库</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Amitia App 需要访问相机来拍摄照片和视频</string>
+	<string>Amitia App 需要访问相机来扫码配对设备、拍摄照片和视频</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Amitia 需要连接局域网设备，以完成扫码配对和授权设备服务调用。</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Amitia App 需要访问麦克风来录制音频</string>
 	<key>NSUserTrackingUsageDescription</key>

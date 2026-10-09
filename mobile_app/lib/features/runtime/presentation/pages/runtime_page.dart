@@ -8,6 +8,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/log_folder_button.dart';
 import '../../../../core/runtime/runtime_bridge_provider.dart';
 import '../../../../core/runtime/runtime_bridge.dart';
 import '../../../../core/runtime/runtime_bridge_state.dart';
@@ -242,6 +243,12 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                 icon: Icons.description_outlined,
                 isSecondary: true,
                 onPressed: () => context.push(AppRoutes.toolboxLog),
+              ),
+              AmitiaButton(
+                label: '打开文件夹',
+                icon: Icons.folder_open_outlined,
+                isSecondary: true,
+                onPressed: () => openLogFolder(context),
               ),
               if (status.runtimeInstalled)
                 AmitiaButton(

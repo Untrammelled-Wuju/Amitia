@@ -80,7 +80,7 @@ func (s *TaskRuntimeService) installedTaskCatalog(ctx context.Context) ([]TaskDe
 		if !definition.ExecutionPlacement.Normalize().IsValid() || definition.ExecutionPlacement == TaskExecutionPlacementCloud {
 			continue
 		}
-		if err := validateSourceTaskDeclaredCapabilities(definition); err != nil {
+		if err := validateSourceTaskDeclaredCapabilitiesWith(definition, s.declaredHostCapabilities()); err != nil {
 			continue
 		}
 		if definition.TaskID == "" || len(definition.TaskID) > 256 || definition.ExtensionID == "" || len(definition.ExtensionID) > 256 || definition.ModuleID == "" || len(definition.ModuleID) > 256 || seen[definition.TaskID] || !validTaskFingerprint(strings.TrimPrefix(definition.EntryHash, "sha256:")) {
@@ -116,7 +116,7 @@ func (s *TaskRuntimeService) DescribeInstalledTaskCatalog(ctx context.Context, d
 	if deviceID == "" || len(deviceID) > 256 || len(request.Cursor) > 1024 || request.Limit < 0 || request.Limit > 8 {
 		return page, NewTaskError(ErrTaskInputInvalid, "设备任务目录分页参数无效")
 	}
-	capabilities := CurrentSourceTaskCapabilities()
+	capabilities := s.sourceTaskCapabilities()
 	if err := validateSourceTaskCapabilities(capabilities); err != nil {
 		return page, err
 	}

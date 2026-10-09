@@ -33,7 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <el-card shadow="never" class="section-card">
     <template #header>
       <div class="section-header-row">
-        <span class="section-title">当前配置</span>
+        <span class="section-title">当前 Core 的服务端配置</span>
         <el-button
           size="small"
           :loading="validating"
@@ -46,12 +46,12 @@ SPDX-License-Identifier: AGPL-3.0-only
     </template>
 
     <el-descriptions :column="2" border size="small">
-      <el-descriptions-item label="部署模式">
+      <el-descriptions-item label="Core 部署形态">
         <el-tag
           :type="mode.deployMode === 'desktop-local' ? 'success' : 'warning'"
           size="small"
         >
-          {{ mode.deployMode === "desktop-local" ? "桌面本地" : "私有云" }}
+          {{ mode.deployMode === "desktop-local" ? "本机 Core" : "私有云 Core" }}
         </el-tag>
       </el-descriptions-item>
       <el-descriptions-item label="Core 地址">
@@ -146,7 +146,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <template #header>
       <span class="section-title">
         <el-icon><List /></el-icon>
-        云端部署检查项
+        Core 私有云部署检查项
       </span>
     </template>
     <el-checkbox-group v-model="cloudChecklistModel" class="checklist-group">
@@ -178,7 +178,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <template #header>
       <span class="section-title">
         <el-icon><InfoFilled /></el-icon>
-        本机运行详情
+        Core 本机运行详情
       </span>
     </template>
     <el-descriptions :column="1" border size="small">
@@ -241,7 +241,7 @@ const modeClass = computed(() => ({
 }));
 
 const modeLabel = computed(() =>
-  props.mode.deployMode === "desktop-local" ? "桌面本地模式" : "私有云模式",
+  props.mode.deployMode === "desktop-local" ? "当前 Core：本机部署" : "当前 Core：私有云部署",
 );
 
 const modeDescription = computed(() =>

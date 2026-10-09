@@ -1,4 +1,5 @@
 import type { RuntimeConnection, DeploymentModeConfig, LocalVoiceASRFinalEvent } from "./runtime-types";
+import type { DeviceManagementIntent } from "../composables/useDeviceManagementIntent";
 import {
   getWebDeviceAuthHeaders,
   getWebDeviceCredential,
@@ -39,6 +40,7 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/workspaces",
   "/api/storage",
   "/media",
+  "/api/artifacts/v1/previews",
   "/internal/device-mesh",
 ] as const;
 
@@ -279,7 +281,9 @@ export async function createCurrentDevicePairingOffer(baseURL: string, ttlSecond
   return createWebPairingOffer(baseURL, ttlSeconds);
 }
 
-export async function deprovisionCurrentDeviceMesh(baseURL: string): Promise<void> {
+export async function deprovisionCurrentDeviceMesh(baseURL: string, originalIntent?: DeviceManagementIntent): Promise<void> {
+  const originalConnection = (await getRuntimeConnection()).apiBaseURL;
+  if (originalIntent && (originalIntent.controller.signal.aborted || originalIntent.apiBaseURL !== originalConnection)) throw new Error("原解绑设备管理页面已变化，请重新确认");
   const api = window.amitiaDesktop;
   const identity = api?.getMeshIdentity
     ? await api.getMeshIdentity()
@@ -297,25 +301,55 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string): Promise<voi
     : baseURL;
   if (identity?.deviceId && (authHeaders.Authorization || authHeaders["X-Amitia-Desktop-Session"])) {
     let response: Response;
+    const controller = new AbortController();
+    const invalidate = () => controller.abort("Core 或设备权限已变化，请重新确认解绑");
+    window.addEventListener("amitia:runtime-connection-changed", invalidate);
+    window.addEventListener("amitia:execution-scope-changed", invalidate);
+    originalIntent?.controller.signal.addEventListener("abort", invalidate);
     try {
+      const policyURL = `${revokeBaseURL.replace(/\/+$/, "")}/api/device-mesh/v1/coordination/me`;
+      const policyInit: RequestInit = { method: "GET", headers: { ...authHeaders, Accept: "application/json" }, credentials: api ? undefined : "include", redirect: "error", signal: controller.signal };
+      const policyResponse = await fetch(policyURL, api ? policyInit : await signWebAuthenticatedFetch(baseURL, policyURL, policyInit));
+      if (!policyResponse.ok) throw new Error("无法确认原 Core 的设备管理权限，云端凭据尚未撤销");
+      const policyPayload = await policyResponse.json();
+      const state = policyPayload.data ?? policyPayload;
+      const policy = state?.policy;
+      const revisions = [policy?.providerEpoch, policy?.modeRevision, policy?.permissionRevision];
+      if (typeof state?.coreId !== "string" || !state.coreId || state.coreId !== state.coreId.trim() || policy?.deviceId !== identity.deviceId || revisions.some(value => !Number.isSafeInteger(value) || value < 1)) throw new Error("原 Core 的设备管理权限无法确认");
+      if (originalIntent) {
+        const original = originalIntent.state;
+        if (state.coreId !== original.coreId || state.canAdminister !== original.canAdminister || policy.deviceId !== original.policy.deviceId || policy.coordinated !== original.policy.coordinated || policy.administrator !== original.policy.administrator || revisions.join(":") !== [original.policy.providerEpoch, original.policy.modeRevision, original.policy.permissionRevision].join(":")) throw new Error("原解绑权限已变化，请重新确认");
+      }
+      if (controller.signal.aborted || (await getRuntimeConnection()).apiBaseURL !== originalConnection) throw new Error("Core 连接已变化，请重新确认解绑");
+      if (api?.getMeshStatus && (await api.getMeshStatus())?.cloudBaseUrl !== nativeStatus?.cloudBaseUrl) throw new Error("云端绑定已变化，请重新确认解绑");
       const url = `${revokeBaseURL.replace(/\/+$/, "")}/api/device-mesh/v1/devices/${encodeURIComponent(identity.deviceId)}`;
       const init: RequestInit = {
         method: "DELETE",
-        headers: { ...authHeaders, Accept: "application/json" },
+        headers: { ...authHeaders, Accept: "application/json", "X-Amitia-Expected-Core-ID": state.coreId, "X-Amitia-Expected-Configuration-Policy": revisions.join(":") },
         credentials: api ? undefined : "include",
         redirect: "error",
+        signal: controller.signal,
       };
       response = await fetch(url, api ? init : await signWebAuthenticatedFetch(baseURL, url, init));
+      if (controller.signal.aborted || (await getRuntimeConnection()).apiBaseURL !== originalConnection) throw new Error("解绑期间 Core 已变化，原解绑结果不能清除新绑定");
+      if (!response.ok) {
+        let message = `Cloud Core 撤销设备失败 (${response.status})`;
+        try {
+          const payload = await response.json();
+          message = String(payload?.message || payload?.msg || message);
+        } catch {}
+        throw new Error(message);
+      }
+      const acknowledgement = await response.json();
+      if (acknowledgement?.ok !== true || acknowledgement.deviceId !== identity.deviceId) throw new Error("Core 未确认原设备凭据撤销，不能清除本地绑定");
+      if (controller.signal.aborted || (await getRuntimeConnection()).apiBaseURL !== originalConnection) throw new Error("原解绑连接已变化，不能清除当前绑定");
+      if (api?.getMeshStatus && (await api.getMeshStatus())?.cloudBaseUrl !== nativeStatus?.cloudBaseUrl) throw new Error("云端绑定已变化，不能清除当前绑定");
     } catch (error: any) {
       throw new Error(error?.message || "无法连接 Cloud Core，云端设备凭证尚未撤销");
-    }
-    if (!response.ok && response.status !== 401 && response.status !== 404) {
-      let message = `Cloud Core 撤销设备失败 (${response.status})`;
-      try {
-        const payload = await response.json();
-        message = String(payload?.message || payload?.msg || message);
-      } catch {}
-      throw new Error(message);
+    } finally {
+      window.removeEventListener("amitia:runtime-connection-changed", invalidate);
+      window.removeEventListener("amitia:execution-scope-changed", invalidate);
+      originalIntent?.controller.signal.removeEventListener("abort", invalidate);
     }
   }
 

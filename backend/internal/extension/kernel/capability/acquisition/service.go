@@ -2,6 +2,7 @@ package acquisition
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -44,6 +45,7 @@ type AcquisitionService struct {
 	installerRegistry *InstallerRegistry
 	mu                sync.RWMutex
 	resumeContexts    map[string]CapabilityResumeContext
+	discovered        map[string]discoveredCandidate
 	capabilityService *capability.CapabilityService
 	providerRegistry  *capability.ProviderRegistry
 	providerLifecycle ProviderLifecyclePort
@@ -81,6 +83,7 @@ func NewAcquisitionService(deps AcquisitionDependencies) (*AcquisitionService, e
 		registry:          deps.SourceRegistry,
 		installerRegistry: deps.InstallerRegistry,
 		resumeContexts:    make(map[string]CapabilityResumeContext),
+		discovered:        make(map[string]discoveredCandidate),
 		capabilityService: deps.CapabilityService,
 		providerRegistry:  deps.ProviderRegistry,
 		providerLifecycle: deps.ProviderLifecycle,
@@ -170,6 +173,25 @@ func (s *AcquisitionService) FindCapabilities(ctx context.Context, request Acqui
 
 	resultSet := s.registry.SearchAll(ctx, request)
 	resultSet.Candidates = RankCandidates(resultSet.Candidates, request)
+	s.mu.Lock()
+	if s.discovered == nil {
+		s.discovered = make(map[string]discoveredCandidate)
+	}
+	for key, entry := range s.discovered {
+		if time.Now().After(entry.ExpiresAt) {
+			delete(s.discovered, key)
+		}
+	}
+	for _, candidate := range resultSet.Candidates {
+		if len(s.discovered) >= 1000 {
+			for key := range s.discovered {
+				delete(s.discovered, key)
+				break
+			}
+		}
+		s.discovered[discoveryKey(request, candidate.ID)] = discoveredCandidate{Candidate: candidate, ExpiresAt: time.Now().Add(10 * time.Minute)}
+	}
+	s.mu.Unlock()
 
 	return &resultSet, nil
 }
@@ -195,6 +217,17 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 
 	if request.CapabilityID == "" {
 		return nil, NewAcquisitionError("invalid_request", "capabilityId is required", nil)
+	}
+	if request.RequestedCandidateID != "" && request.Install == nil && request.SourceURI == "" {
+		s.mu.RLock()
+		entry, found := s.discovered[discoveryKey(request, request.RequestedCandidateID)]
+		s.mu.RUnlock()
+		if found && time.Now().Before(entry.ExpiresAt) && entry.Candidate.Install.Method != InstallEnableExisting && entry.Candidate.Install.Method != InstallGeneratedSkill {
+			request.Install = &entry.Candidate.Install
+			request.SourceURI = entry.Candidate.Source.URI
+			request.ExtensionID = entry.Candidate.ExtensionID
+			request.Version = entry.Candidate.Version
+		}
 	}
 
 	// Create child execution if ExecContext is present.
@@ -277,6 +310,13 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 
 	// Step 6: If policy = RequireApproval && !yes → create pending resume, return ApprovalRequired.
 	if plan.NeedsApproval() && !yes {
+		request.RequestedCandidateID = plan.Candidate.ID
+		if plan.Candidate.Install.Method != InstallEnableExisting && plan.Candidate.Install.Method != InstallGeneratedSkill {
+			request.Install = &plan.Candidate.Install
+			request.SourceURI = plan.Candidate.Source.URI
+			request.ExtensionID = plan.Candidate.ExtensionID
+			request.Version = plan.Candidate.Version
+		}
 		result.State = StateAwaitingApproval
 		result.UpdatedAt = time.Now()
 
@@ -284,6 +324,7 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		result.ResumeToken = resumeToken
 
 		resumeContext := CapabilityResumeContext{
+			Request:                  &request,
 			State:                    ResumePending,
 			CapabilityID:             plan.Request.CapabilityID,
 			AcquisitionTransactionID: resumeToken,
@@ -308,6 +349,11 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 					resume.Metadata["conversationId"] = resumeContext.ConversationID
 					resume.Metadata["spaceId"] = resumeContext.SpaceID
 					resume.Metadata["executionId"] = acqExecCtx.ExecutionID
+					if savedRequest, safe := approvalRequestMetadata(request); !safe {
+						resume.Metadata["requiresConfigurationResubmission"] = true
+					} else {
+						resume.Metadata["acquisitionRequest"] = savedRequest
+					}
 					_ = s.resumeRepo.Save(ctx, *resume)
 				}
 			}
@@ -347,7 +393,31 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 	// provider that happens to expose the same capability must not make this
 	// acquisition look successful.
 	verified := false
-	if request.RequestedCandidateID != "" {
+	if installOnly, _ := plan.Candidate.Metadata["installOnly"].(bool); installOnly && plan.Candidate.Install.Method == InstallExtension {
+		result.State = StateInstalledOnly
+		result.Installed = true
+		result.Enabled = false
+		result.CapabilityIDs = plan.Candidate.Capabilities
+		result.Warnings = append(result.Warnings, "package installed and verified; configure and enable its runtime before using its capabilities")
+		result.UpdatedAt = time.Now()
+		if s.execution != nil {
+			s.execution.CompleteExecution(acqExecCtx, "acquisition_completed: "+string(result.State))
+		}
+		return result, nil
+	}
+	if ready, verifyErr := s.verifyInstalled(ctx, plan); verifyErr != nil {
+		result.State = StateFailed
+		result.Error = verifyErr.Error()
+		if rollbackErr := s.rollbackPlan(ctx, plan); rollbackErr != nil {
+			result.Warnings = append(result.Warnings, "rollback also failed: "+rollbackErr.Error())
+		}
+		if s.execution != nil {
+			s.execution.CompleteExecution(acqExecCtx, "acquisition_failed: "+verifyErr.Error())
+		}
+		return result, verifyErr
+	} else if ready {
+		verified = true
+	} else if request.RequestedCandidateID != "" {
 		providerIDs := s.executableProviderIDsForCandidate(plan.Candidate, request.CapabilityID)
 		if len(providerIDs) > 0 {
 			verified = true
@@ -489,7 +559,15 @@ func candidateMatchesProvider(candidate CapabilityCandidate, definition *capabil
 // ResumeAcquire continues a previously suspended acquisition using the resume
 // token. This is used when a user has granted approval for a capability that
 // was awaiting approval.
-func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken string) (*AcquisitionResult, error) {
+func approvalRequestMetadata(request AcquisitionRequest) (AcquisitionRequest, bool) {
+	request.ExecContext = nil
+	if request.Install != nil && request.Install.MCP != nil && len(request.Install.MCP.Env) > 0 {
+		return AcquisitionRequest{}, false
+	}
+	return request, true
+}
+
+func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken string, spaceIDs ...string) (*AcquisitionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -515,6 +593,21 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 					ExecContext:              restoredExec,
 				}
 				if persisted.Metadata != nil {
+					if required, _ := persisted.Metadata["requiresConfigurationResubmission"].(bool); required {
+						return nil, NewAcquisitionError("configuration_resubmission_required", "MCP configuration must be supplied again after restart; sensitive values are not stored in approval metadata", nil)
+					}
+					if value, exists := persisted.Metadata["acquisitionRequest"]; exists {
+						raw, err := json.Marshal(value)
+						if err != nil {
+							return nil, err
+						}
+						var request AcquisitionRequest
+						if err := json.Unmarshal(raw, &request); err != nil {
+							return nil, err
+						}
+						request.ExecContext = restoredExec
+						resumeCtx.Request = &request
+					}
 					if convID, ok := persisted.Metadata["conversationId"].(string); ok {
 						resumeCtx.ConversationID = convID
 						restoredExec.ConversationID = convID
@@ -531,9 +624,19 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 			return nil, ErrResumeContextMissing
 		}
 	} else {
+		if len(spaceIDs) > 0 && resumeCtx.SpaceID != spaceIDs[0] {
+			s.mu.Unlock()
+			return nil, NewAcquisitionError("resume_scope_forbidden", "Acquisition approval belongs to another space", nil)
+		}
 		delete(s.resumeContexts, resumeToken)
 		s.mu.Unlock()
 	}
+	if len(spaceIDs) > 0 && resumeCtx.SpaceID != spaceIDs[0] {
+		return nil, NewAcquisitionError("resume_scope_forbidden", "Acquisition approval belongs to another space", nil)
+	}
+	s.mu.Lock()
+	delete(s.resumeContexts, resumeToken)
+	s.mu.Unlock()
 
 	if resumeCtx.State != ResumePending {
 		return nil, NewAcquisitionError("invalid_resume_state",
@@ -544,6 +647,9 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 		CapabilityID: resumeCtx.CapabilityID,
 		SpaceID:      runtimeidentity.SpaceID(resumeCtx.SpaceID),
 		ExecContext:  resumeCtx.ExecContext,
+	}
+	if resumeCtx.Request != nil {
+		request = *resumeCtx.Request
 	}
 
 	// Proceed with acquisition now that approval is granted.
@@ -566,10 +672,47 @@ func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionP
 			}
 			plan.InstalledCapability = result
 		case "enable":
+			if installOnly, _ := plan.Candidate.Metadata["installOnly"].(bool); installOnly && plan.Candidate.Install.Method == InstallExtension {
+				step.Completed = true
+				continue
+			}
+			if ready, err := s.verifyInstalled(ctx, plan); err != nil {
+				return err
+			} else if ready {
+				step.Completed = true
+				continue
+			}
 			if err := s.executeEnable(ctx, plan.Candidate); err != nil {
 				return errors.Join(ErrEnableFailed, err)
 			}
 		case "reconcile":
+			if installOnly, _ := plan.Candidate.Metadata["installOnly"].(bool); installOnly && plan.Candidate.Install.Method == InstallExtension {
+				installer, err := s.installerRegistry.Resolve(InstallExtension)
+				if err != nil {
+					return err
+				}
+				verifier, ok := installer.(interface {
+					VerifyPackageInstalled(context.Context, InstalledCapability) (bool, error)
+				})
+				if !ok {
+					return fmt.Errorf("package verification unavailable")
+				}
+				ready, err := verifier.VerifyPackageInstalled(ctx, plan.InstalledCapability)
+				if err != nil {
+					return err
+				}
+				if !ready {
+					return fmt.Errorf("package installation did not complete")
+				}
+				step.Completed = true
+				continue
+			}
+			if ready, err := s.verifyInstalled(ctx, plan); err != nil {
+				return err
+			} else if ready {
+				step.Completed = true
+				continue
+			}
 			if err := s.executeReconcile(ctx, plan.Candidate); err != nil {
 				return errors.Join(ErrReconcileFailed, err)
 			}
@@ -580,6 +723,29 @@ func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionP
 	}
 
 	return nil
+}
+
+type discoveredCandidate struct {
+	Candidate CapabilityCandidate
+	ExpiresAt time.Time
+}
+
+func discoveryKey(request AcquisitionRequest, id string) string {
+	return string(request.SpaceID) + "\x00" + string(request.CapabilityID) + "\x00" + id
+}
+
+func (s *AcquisitionService) verifyInstalled(ctx context.Context, plan *AcquisitionPlan) (bool, error) {
+	if plan.InstalledCapability.InstalledAt.IsZero() {
+		return false, nil
+	}
+	installer, err := s.installerRegistry.Resolve(plan.Candidate.Install.Method)
+	if err != nil {
+		return false, err
+	}
+	if verifier, ok := installer.(InstalledCapabilityVerifier); ok {
+		return verifier.VerifyInstalledCapability(ctx, plan.InstalledCapability)
+	}
+	return false, nil
 }
 
 // executeInstall performs the installation step for a candidate by dispatching

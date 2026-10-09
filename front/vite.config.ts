@@ -19,6 +19,10 @@ export default defineConfig({
         target: "http://127.0.0.1:18899",
         changeOrigin: true,
       },
+      "/media": {
+        target: "http://127.0.0.1:18899",
+        changeOrigin: true,
+      },
       "/bridge": {
         target: "http://127.0.0.1:8898",
         changeOrigin: true,

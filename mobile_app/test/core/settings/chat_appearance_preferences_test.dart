@@ -10,6 +10,47 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('AI avatar clipping follows every shape in both chat styles', (tester) async {
+    for (final style in ChatMessageStyle.values) {
+      for (final shape in AiAvatarShape.values) {
+        final preference = AiAvatarShapePreference(shape: shape, roundness: 38);
+        await tester.pumpWidget(MaterialApp(home: Scaffold(body: AmitiaMessageBubble(
+          messageStyle: style,
+          aiAvatarShape: preference,
+          message: ChatMessage(id: 'shape', role: MessageRole.assistant, type: MessageType.text, content: '头像形状验证', time: DateTime(2026, 10, 8)),
+        ))));
+        await tester.pumpAndSettle();
+        final avatars = tester.widgetList<CharacterAvatar>(find.byType(CharacterAvatar));
+        expect(avatars, isNotEmpty);
+        for (final avatar in avatars) {
+          expect(avatar.borderRadius, BorderRadius.circular(preference.radius(avatar.size)));
+        }
+        expect(tester.takeException(), isNull);
+      }
+    }
+  });
+  test(
+    'avatar shape persists custom roundness and scales to every avatar size',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preference = AiAvatarShapeNotifier();
+      await preference.init();
+      expect(preference.state.shape, AiAvatarShape.rounded);
+      await preference.setShape(AiAvatarShape.custom, 38);
+      expect(preference.state.radius(40), 7.6);
+      await preference.setShape(AiAvatarShape.circle);
+      expect(preference.state.radius(28), 14);
+      final restored = AiAvatarShapeNotifier();
+      await restored.init();
+      expect(restored.state.shape, AiAvatarShape.circle);
+      await restored.setShape(AiAvatarShape.custom);
+      expect(restored.state.roundness, 38);
+      await restored.setShape(AiAvatarShape.custom, 200);
+      expect(restored.state.radius(28), 14);
+      preference.dispose();
+      restored.dispose();
+    },
+  );
   test('AI identity defaults on and restores independent toggles', () async {
     SharedPreferences.setMockInitialValues({});
     final avatar = AiAvatarPreferencesNotifier();

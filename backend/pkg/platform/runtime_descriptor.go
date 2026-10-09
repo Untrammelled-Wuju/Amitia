@@ -21,6 +21,7 @@ const (
 	RuntimeKindUnknown       RuntimeKind = "unknown"
 	RuntimeKindNativeProcess RuntimeKind = "native-process"
 	RuntimeKindProot         RuntimeKind = "proot"
+	RuntimeKindEmulated      RuntimeKind = "emulated-process"
 	RuntimeKindEmbedded      RuntimeKind = "embedded"
 	RuntimeKindSandbox       RuntimeKind = "sandbox"
 	RuntimeKindRemote        RuntimeKind = "remote"

@@ -216,7 +216,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
         appBar: AmitiaAppBar(
           title: '文件浏览',
           showBackButton: true,
-          fallbackRoute: AppRoutes.settingsToolbox,
+          fallbackRoute: AppRoutes.settingsMaintenanceCategory,
         ),
         body: _loading
             ? const AmitiaLoadingState(message: '正在加载文件列表...')

@@ -13,6 +13,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/log_folder_button.dart';
 
 final _safetyConfigProvider = FutureProvider<SafetyConfigDto>((ref) async {
   final svc = ref.read(safetyServiceProvider);
@@ -171,6 +172,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                           style: AppTypography.sectionTitle(sheetContext),
                         ),
                       ),
+                      const LogFolderButton(),
                       IconButton(
                         onPressed: () => Navigator.pop(sheetContext),
                         icon: const Icon(Icons.close),

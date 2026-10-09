@@ -13,8 +13,25 @@ import (
 
 type linuxPlatform struct{}
 
+type iosISHPlatform struct {
+	linuxPlatform
+}
+
+var _ RuntimePlatform = iosISHPlatform{}
+
+func (iosISHPlatform) Name() string {
+	return IOSISHMode
+}
+
+func (iosISHPlatform) Descriptor() RuntimeDescriptor {
+	return newRuntimeDescriptor(HostPlatformIOS, RuntimeKindEmulated, GuestPlatformLinux)
+}
+
 func Detect() RuntimePlatform {
 	mode := os.Getenv(RuntimeModeEnv)
+	if IsIOSISHMode(mode) {
+		return iosISHPlatform{}
+	}
 	if IsAndroidPRootMode(mode) {
 		return androidPootPlatform{}
 	}

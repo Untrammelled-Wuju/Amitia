@@ -5,6 +5,7 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,16 +15,20 @@ import (
 type Handler struct {
 	svc          *Service
 	ticketSigner *mediaTicketSigner
+	previewMu    sync.Mutex
+	previews     map[string]previewDocument
 }
 
 func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc, ticketSigner: newMediaTicketSigner()}
+	return &Handler{svc: svc, ticketSigner: newMediaTicketSigner(), previews: make(map[string]previewDocument)}
 }
 
 func (h *Handler) Register(r *gin.RouterGroup) {
 	artifacts := r.Group("/artifacts/v1")
 	{
 		artifacts.POST("", h.Upload)
+		artifacts.POST("/previews", h.CreatePreview)
+		artifacts.DELETE("/previews/:previewId", h.DeletePreview)
 		artifacts.GET("/:artifactId", h.GetMetadata)
 		artifacts.GET("/:artifactId/content", h.GetContent)
 		artifacts.GET("/:artifactId/media-ticket", h.GetMediaTicket)
@@ -33,6 +38,7 @@ func (h *Handler) Register(r *gin.RouterGroup) {
 
 func (h *Handler) RegisterPublicMedia(r *gin.Engine) {
 	r.GET("/media/artifacts/:artifactId/:ticket", h.GetMediaContent)
+	r.GET("/media/artifact-previews/:previewId/:ticket", h.GetPreview)
 }
 
 func (h *Handler) Upload(c *gin.Context) {

@@ -20,6 +20,7 @@ import 'device_capability_grants_page.dart';
 final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
   (ref) async {
     final api = ref.watch(rawBackendServiceApiProvider);
+    final apiGeneration = api?.generation;
     final deployment = ref.watch(mobileDeploymentConfigProvider);
     var active = true;
     ref.onDispose(() => active = false);
@@ -29,6 +30,7 @@ final _devicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
       isCurrent: () =>
           active &&
           api != null &&
+          api.generation == apiGeneration &&
           identical(ref.read(rawBackendServiceApiProvider), api) &&
           ref.read(mobileDeploymentConfigProvider) == deployment,
     );
@@ -301,8 +303,10 @@ class DevicesPage extends ConsumerWidget {
     }
   }
 
-  static String _message(Object error) =>
-      error.toString().replaceFirst('Exception: ', '');
+  static String _message(Object error) {
+    if (error is StateError) return error.message.toString();
+    return error.toString().replaceFirst('Exception: ', '');
+  }
 }
 
 class _RuntimeItem {
@@ -411,6 +415,7 @@ class _DeviceTileState extends State<_DeviceTile> {
         !identical(oldWidget.item.intent, widget.item.intent)) {
       _sync = null;
       _syncLoading = false;
+      _probeBusy = '';
       _loadSync(silent: true);
     }
   }
@@ -470,16 +475,18 @@ class _DeviceTileState extends State<_DeviceTile> {
 
   Future<void> _probe(String runtimeId) async {
     if (_probeBusy.isNotEmpty) return;
+    final intent = widget.item.intent;
     setState(() => _probeBusy = runtimeId);
     try {
       await widget.onProbe?.call(runtimeId);
     } catch (e) {
-      if (mounted)
+      if (mounted && identical(intent, widget.item.intent))
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Runtime 探测失败：${DevicesPage._message(e)}')),
         );
     } finally {
-      if (mounted) setState(() => _probeBusy = '');
+      if (mounted && identical(intent, widget.item.intent))
+        setState(() => _probeBusy = '');
     }
   }
 

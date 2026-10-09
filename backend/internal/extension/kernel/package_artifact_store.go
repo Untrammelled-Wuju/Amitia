@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,7 +115,7 @@ func (s *PackageArtifactStore) PutArchiveFromURI(ctx context.Context, uri string
 	if err != nil {
 		return PackageArtifact{}, err
 	}
-	if metadata.ExpectedHash != "" && hash != metadata.ExpectedHash {
+	if metadata.ExpectedHash != "" && strings.TrimPrefix(hash, "sha256:") != strings.TrimPrefix(metadata.ExpectedHash, "sha256:") {
 		return PackageArtifact{}, fmt.Errorf("downloaded archive hash mismatch: expected %s, got %s", metadata.ExpectedHash, hash)
 	}
 	return PackageArtifact{
@@ -150,7 +151,14 @@ func (s *PackageArtifactStore) downloadToCanonical(ctx context.Context, uri stri
 	if err != nil {
 		return "", err
 	}
-	finalPath := s.canonicalArchivePath(hash)
+	hexDigest, err := archiveHexDigest(hash)
+	if err != nil {
+		return "", err
+	}
+	if expectedHash != "" && hexDigest != strings.TrimPrefix(expectedHash, "sha256:") {
+		return "", fmt.Errorf("downloaded archive hash mismatch")
+	}
+	finalPath := s.canonicalArchivePath(hexDigest)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(finalPath), 0o700); err != nil {
@@ -170,6 +178,39 @@ func (s *PackageArtifactStore) downloadFile(ctx context.Context, uri string, des
 }
 
 func downloadFileTo(ctx context.Context, uri string, dest io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme == "file" || (parsed.Scheme != "https" && parsed.Scheme != "http" && filepath.IsAbs(uri)) {
+		localPath := uri
+		if parsed.Scheme == "file" {
+			if parsed.Host != "" && parsed.Host != "localhost" {
+				return fmt.Errorf("remote file hosts are not supported")
+			}
+			localPath = filepath.FromSlash(parsed.Path)
+			if len(localPath) > 2 && localPath[0] == '\\' && localPath[2] == ':' {
+				localPath = localPath[1:]
+			}
+		}
+		info, err := os.Lstat(localPath)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("plugin archive must be a regular file")
+		}
+		file, err := os.Open(localPath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = io.Copy(dest, file)
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)

@@ -9,6 +9,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/log_folder_button.dart';
 
 class AdvancedSystemPage extends ConsumerStatefulWidget {
   const AdvancedSystemPage({super.key});
@@ -200,7 +201,7 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
   @override
   Widget build(BuildContext context) {
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '高级系统', showBackButton: true, fallbackRoute: AppRoutes.settings, actions: [AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: _load)]),
+      appBar: AmitiaAppBar(title: '高级系统', showBackButton: true, fallbackRoute: AppRoutes.settings, actions: [const LogFolderButton(), AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: _load)]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

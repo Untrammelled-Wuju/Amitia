@@ -11,6 +11,21 @@ function load(): ChatMessageStyle {
 const messageStyle = ref<ChatMessageStyle>(load());
 export const aiAvatarStorageKey = "amitia.chat.ai-avatar.desktop.v1";
 const aiAvatarEnabled = ref(loadAvatar());
+export type AiAvatarShape = "rounded" | "circle" | "custom";
+export const aiAvatarShapeStorageKey = "amitia.chat.ai-avatar-shape.desktop.v1";
+const avatarShape = ref(loadAvatarShape());
+const aiAvatarShape = computed(() => avatarShape.value.shape);
+const aiAvatarRoundness = computed(() => avatarShape.value.roundness);
+const aiAvatarRadius = computed(() => `${aiAvatarShape.value === "circle" ? 50 : aiAvatarShape.value === "custom" ? aiAvatarRoundness.value / 2 : 32}%`);
+function loadAvatarShape(): { shape: AiAvatarShape; roundness: number } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(aiAvatarShapeStorageKey) || "null");
+    if (saved && ["rounded", "circle", "custom"].includes(saved.shape) && Number.isFinite(saved.roundness)) {
+      return { shape: saved.shape, roundness: Math.min(100, Math.max(0, saved.roundness)) };
+    }
+  } catch {}
+  return { shape: "rounded", roundness: 64 };
+}
 export const aiNameStorageKey = "amitia.chat.ai-name.desktop.v1";
 const aiNameEnabled = ref(loadName());
 function loadName(): boolean {
@@ -38,6 +53,12 @@ function loadMaterial(): UserMessageMaterial {
 }
 
 export function useChatAppearancePreference() {
+  function setAiAvatarShape(shape: AiAvatarShape, roundness = aiAvatarRoundness.value) {
+    if (!["rounded", "circle", "custom"].includes(shape) || !Number.isFinite(roundness)) throw new Error("未知 AI 头像形状");
+    const next = { shape, roundness: Math.min(100, Math.max(0, roundness)) };
+    localStorage.setItem(aiAvatarShapeStorageKey, JSON.stringify(next));
+    avatarShape.value = next;
+  }
   function setAiNameEnabled(value: boolean) {
     localStorage.setItem(aiNameStorageKey, String(value));
     aiNameEnabled.value = value;
@@ -61,5 +82,5 @@ export function useChatAppearancePreference() {
     localStorage.setItem(userMessageMaterialStorageKey, value);
     userMessageMaterial.value = value;
   }
-  return { messageStyle: readonly(messageStyle), setMessageStyle, userMessageGlass, setUserMessageGlass, userMessageWaterGlass, setUserMessageWaterGlass, aiAvatarEnabled: readonly(aiAvatarEnabled), setAiAvatarEnabled, aiNameEnabled: readonly(aiNameEnabled), setAiNameEnabled };
+  return { messageStyle: readonly(messageStyle), setMessageStyle, userMessageGlass, setUserMessageGlass, userMessageWaterGlass, setUserMessageWaterGlass, aiAvatarEnabled: readonly(aiAvatarEnabled), setAiAvatarEnabled, aiAvatarShape, aiAvatarRoundness, aiAvatarRadius, setAiAvatarShape, aiNameEnabled: readonly(aiNameEnabled), setAiNameEnabled };
 }

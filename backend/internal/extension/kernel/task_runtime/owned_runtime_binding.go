@@ -2,10 +2,23 @@ package task_runtime
 
 import (
 	"context"
+	"encoding/json"
 	"sync/atomic"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
+
+func (b *OwnedRuntimeBinding) PublishOwnedSourceTaskEvent(ctx context.Context, run *TaskRun, definition *TaskDefinition, requestID string, call TaskHostNativeCall) (json.RawMessage, error) {
+	dependencies, err := b.load()
+	if err != nil {
+		return nil, err
+	}
+	port, ok := dependencies.data.(TaskHostSourceEventPort)
+	if !ok {
+		return nil, NewTaskError(ErrTaskDependencyUnavailable, "Source事件发布授信端口未就绪")
+	}
+	return port.PublishOwnedSourceTaskEvent(ctx, run, definition, requestID, call)
+}
 
 type ownedRuntimeDependencies struct {
 	guard     OwnedTaskExecutionGuard

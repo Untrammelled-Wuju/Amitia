@@ -1,5 +1,7 @@
 <template>
-  <div class="amrp-file">
+  <AmitiaArtifactBlock v-if="isHtml" :block="htmlArtifact" />
+  <AmitiaImageBlock v-else-if="isImage" :images="fileImages" />
+  <div v-else class="amrp-file">
     <div class="amrp-file-icon">{{ extensionLabel }}</div>
     <div class="amrp-file-main">
       <div class="amrp-file-title">{{ block.name }}</div>
@@ -25,6 +27,9 @@ import { ElMessage } from "element-plus";
 import type { FileBlock } from "../types";
 import { formatBytes } from "../utils";
 import { downloadConversationMedia } from "../media";
+import AmitiaArtifactBlock from "./AmitiaArtifactBlock.vue";
+import AmitiaImageBlock from "./AmitiaImageBlock.vue";
+import type { ArtifactBlock, ImageBlock } from "../types";
 
 const props = defineProps<{
   block: FileBlock;
@@ -33,6 +38,10 @@ const props = defineProps<{
 const status = ref(props.block.status);
 const error = ref(props.block.error ?? "");
 const downloading = ref(false);
+const isHtml = computed(() => Boolean(props.block.url) && (props.block.mimeType?.includes("html") || /\.html?$/i.test(props.block.name)));
+const isImage = computed(() => Boolean(props.block.url) && (props.block.mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|avif)$/i.test(props.block.name)));
+const htmlArtifact = computed<ArtifactBlock>(() => ({ ...props.block, kind: "artifact", artifactKind: "html", title: props.block.name }));
+const fileImages = computed<ImageBlock[]>(() => [{ ...props.block, kind: "image", url: props.block.url || "", alt: props.block.name }]);
 
 watch(
   () => props.block,
@@ -66,7 +75,7 @@ async function download() {
 }
 
 function retry() {
-  status.value = "loading";
+  status.value = props.block.url || props.block.downloadUrl ? "ready" : "failed";
   error.value = "";
 }
 </script>

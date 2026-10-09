@@ -321,7 +321,7 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
     self.state = AmitiaISHStateUnavailable;
 }
 
-- (nullable AmitiaISHRuntimeHealth)health {
+- (nullable AmitiaISHRuntimeHealth *)health {
     __block AmitiaISHRuntimeHealth *h;
     dispatch_sync(self.executionQueue, ^{
         h = [[AmitiaISHRuntimeHealth alloc] init];

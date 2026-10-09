@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -68,7 +66,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final _charIdentityCtrl = TextEditingController();
   final _initMemoryCtrl = TextEditingController();
 
-  int _deployMode = Platform.isIOS ? 1 : 0;
+  int _deployMode = 0;
   bool _envChecked = false;
   bool _envChecking = false;
   List<bool> _envResults = [];
@@ -171,22 +169,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       _envResults = const [];
     });
     try {
-      if (Platform.isIOS) {
-        final identity = await ref
-            .read(mobileDeviceMeshIdentityProvider)
-            .identity();
-        final checked = <bool>[
-          (identity['deviceId'] ?? '').toString().trim().isNotEmpty,
-          (identity['runtimeId'] ?? '').toString().trim().isNotEmpty,
-          (identity['publicKey'] ?? '').toString().trim().isNotEmpty,
-        ];
-        if (!mounted) return;
-        setState(() {
-          _envResults = checked;
-          _envChecked = checked.every((value) => value);
-        });
-        return;
-      }
       final onboarding = ref.read(onboardingServiceProvider);
       const localRuntimeUri = 'http://127.0.0.1:18899';
       final results = await Future.wait<dynamic>(<Future<dynamic>>[
@@ -333,10 +315,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         if (_deployMode == 1 && !_devicePaired) {
           final remoteCore = _remoteCoreCtrl.text.trim();
           final localMesh = ref.read(deviceMeshLocalServiceProvider);
-          final iosIdentity = ref.read(mobileDeviceMeshIdentityProvider);
-          final identity = Platform.isIOS
-              ? await iosIdentity.identity()
-              : await localMesh?.identity();
+          final identity = await localMesh?.identity();
           if (identity == null) {
             throw StateError('本机 Device Agent 不可用，无法完成云端设备配对');
           }
@@ -371,36 +350,18 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 label: 'Mobile',
                 offerToken: offerToken,
                 setupCode: setupCode,
-                proofSigner: Platform.isIOS
-                    ? (claimBody, coreId) => iosIdentity.pairingProof(
-                        claimBody: claimBody,
-                        coreId: coreId,
-                      )
-                    : null,
               );
           final ticket = (claimed['ticket'] ?? '').toString().trim();
           if (ticket.isEmpty) {
             throw StateError('Cloud Core 未返回 Bootstrap Ticket');
           }
-          if (Platform.isIOS) {
-            await ref
-                .read(mobileDeviceMeshProvisioningProvider)
-                .exchangeBootstrapTicket(
-                  coreUri: remoteCore,
-                  bootstrapTicket: ticket,
-                  deviceId: deviceId,
-                  runtimeId: runtimeId,
-                  platform: platform,
-                );
-          } else {
-            if (localMesh == null) {
-              throw StateError('本机 Device Agent 不可用，无法保存设备凭据');
-            }
-            await localMesh.bootstrap(
-              cloudBaseUrl: remoteCore,
-              bootstrapTicket: ticket,
-            );
+          if (localMesh == null) {
+            throw StateError('本机 Device Agent 不可用，无法保存设备凭据');
           }
+          await localMesh.bootstrap(
+            cloudBaseUrl: remoteCore,
+            bootstrapTicket: ticket,
+          );
           ref.invalidate(backendConnectionProvider);
           ref.invalidate(backendTransportProvider);
           await ref.read(backendConnectionProvider.future);
@@ -965,12 +926,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildEnvCheck() {
-    final checks = Platform.isIOS
-        ? ['iOS Device Mesh 身份', 'iOS Runtime ID', 'Keychain Ed25519 公钥']
-        : ['本地 Runtime 进程', 'Runtime 就绪状态', 'Runtime Profile / 本地能力'];
-    final results = Platform.isIOS
-        ? ['设备身份已创建', '轻量 Runtime 身份有效', '设备密钥已就绪']
-        : ['进程已响应', '编排已就绪', '能力声明有效'];
+    final checks = ['本地 Runtime 进程', 'Runtime 就绪状态', 'Runtime Profile / 本地能力'];
+    final results = ['进程已响应', '编排已就绪', '能力声明有效'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1066,9 +1023,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                   SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      Platform.isIOS
-                          ? 'iOS 原生设备身份尚未就绪。请重新检查后再继续。'
-                          : '本地 Runtime/Device Agent 尚未就绪。请修复后重新检查，全部通过后再继续。',
+                      '本地 Runtime/Device Agent 尚未就绪。请修复后重新检查，全部通过后再继续。',
                       style: AppTypography.caption(
                         context,
                       ).copyWith(color: context.warning),
@@ -1094,20 +1049,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   Widget _buildDeployMode() {
     final modes = [
-      (
-        '本地部署',
-        Platform.isIOS
-            ? 'iOS 不运行本地 Go Core；请使用 Cloud Core + iOS 原生能力'
-            : '所有数据存储在本地设备，隐私安全，无需网络',
-        Icons.laptop,
-        !Platform.isIOS,
-      ),
-      (
-        '云端部署',
-        '业务直连 Cloud Core，设备能力由当前手机原生运行时提供',
-        Icons.cloud_outlined,
-        Platform.isIOS,
-      ),
+      ('本地部署', '所有数据存储在本地设备，隐私安全，无需网络', Icons.laptop, true),
+      ('云端部署', '业务直连 Cloud Core，设备能力由当前手机原生运行时提供', Icons.cloud_outlined, false),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1122,9 +1065,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           return Padding(
             padding: EdgeInsets.only(bottom: AppSpacing.md),
             child: GestureDetector(
-              onTap: Platform.isIOS && i == 0
-                  ? null
-                  : () => setState(() => _deployMode = i),
+              onTap: () => setState(() => _deployMode = i),
               child: Container(
                 padding: EdgeInsets.all(AppSpacing.cardPadding),
                 decoration: BoxDecoration(
@@ -1218,9 +1159,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 ),
                 SizedBox(height: AppSpacing.sm),
                 Text(
-                  Platform.isIOS
-                      ? '业务 HTTP/WS 会直接连接该 Cloud Core；iOS 使用 Keychain 设备身份与轻量 Device Agent，不启动 Android Embedded Runtime。'
-                      : '业务 HTTP/WS 会直接连接该 Cloud Core；本机 Device Agent 仅保留设备能力与运行时职责。',
+                  '业务 HTTP/WS 会连接该 Cloud Core；本机 Runtime 保留设备身份、原生能力与设备数据管理职责。',
                   style: AppTypography.caption(context),
                 ),
               ],

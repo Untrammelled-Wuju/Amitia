@@ -91,7 +91,7 @@ class _ToolboxDeviceStatusPageState extends ConsumerState<ToolboxDeviceStatusPag
     }
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '设备状态', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
+      appBar: AmitiaAppBar(title: '设备状态', showBackButton: true, fallbackRoute: AppRoutes.settingsMaintenanceCategory),
       body: ListView(
         padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [

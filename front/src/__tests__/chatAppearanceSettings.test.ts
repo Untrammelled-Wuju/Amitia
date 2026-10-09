@@ -5,6 +5,26 @@ import { nextTick } from "vue";
 describe("chat message appearance", () => {
   beforeEach(() => { vi.resetModules(); localStorage.clear(); vi.restoreAllMocks(); });
 
+  it("restores avatar shapes, retains custom roundness and keeps state on failed saves", async () => {
+    const module = await import("../composables/useChatAppearancePreference");
+    const preference = module.useChatAppearancePreference();
+    expect(preference.aiAvatarShape.value).toBe("rounded");
+    preference.setAiAvatarShape("custom", 38);
+    expect(preference.aiAvatarRadius.value).toBe("19%");
+    preference.setAiAvatarShape("circle");
+    expect(preference.aiAvatarRadius.value).toBe("50%");
+    vi.resetModules();
+    const restored = (await import("../composables/useChatAppearancePreference")).useChatAppearancePreference();
+    expect(restored.aiAvatarShape.value).toBe("circle");
+    restored.setAiAvatarShape("custom");
+    expect(restored.aiAvatarRoundness.value).toBe(38);
+    restored.setAiAvatarShape("custom", 200);
+    expect(restored.aiAvatarRadius.value).toBe("50%");
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full"); });
+    expect(() => restored.setAiAvatarShape("rounded")).toThrow();
+    expect(restored.aiAvatarShape.value).toBe("custom");
+  });
+
   it("defaults to flow and persists one shared selection", async () => {
     const module = await import("../composables/useChatAppearancePreference");
     const first = module.useChatAppearancePreference();

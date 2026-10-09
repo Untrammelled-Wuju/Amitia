@@ -15,6 +15,8 @@ class NotificationPlatformState {
   final bool notificationsEnabled;
   final bool liveActivitySupported;
   final bool dynamicIslandSupported;
+  final String? islandProvider;
+  final bool xiaomiFocusPermissionGranted;
   final bool progressStyleSupported;
   final bool communicationNotificationSupported;
   final String? liveActivityPushToStartToken;
@@ -32,6 +34,8 @@ class NotificationPlatformState {
     this.notificationsEnabled = false,
     this.liveActivitySupported = false,
     this.dynamicIslandSupported = false,
+    this.islandProvider,
+    this.xiaomiFocusPermissionGranted = false,
     this.progressStyleSupported = false,
     this.communicationNotificationSupported = false,
     this.liveActivityPushToStartToken,
@@ -75,6 +79,8 @@ class NotificationPlatformState {
       notificationsEnabled: raw['notificationsEnabled'] == true,
       liveActivitySupported: raw['liveActivitySupported'] == true,
       dynamicIslandSupported: raw['dynamicIslandSupported'] == true,
+      islandProvider: text('islandProvider'),
+      xiaomiFocusPermissionGranted: raw['xiaomiFocusPermissionGranted'] == true,
       progressStyleSupported: raw['progressStyleSupported'] == true,
       communicationNotificationSupported:
           raw['communicationNotificationSupported'] == true,
@@ -201,6 +207,15 @@ class NotificationPlatformBridge {
       Map<String, dynamic>.from(
         await _channel.invokeMethod<Map<Object?, Object?>>(
               'floatingBubbleEnable',
+            ) ??
+            {},
+      );
+
+  Future<Map<String, dynamic>> configureFloatingBubble({required bool previewEnabled}) async =>
+      Map<String, dynamic>.from(
+        await _channel.invokeMethod<Map<Object?, Object?>>(
+              'floatingBubbleConfigure',
+              <String, Object>{'previewEnabled': previewEnabled},
             ) ??
             {},
       );

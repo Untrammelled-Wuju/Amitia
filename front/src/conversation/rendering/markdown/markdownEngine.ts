@@ -24,6 +24,7 @@ markdown.validateLink = (url: string) => {
     value.startsWith("https://") ||
     value.startsWith("mailto:") ||
     value.startsWith("amitia://") ||
+    (value.length <= 1400000 && /^data:image\/(png|jpeg|gif|webp);base64,/i.test(value)) ||
     value.startsWith("/")
   );
 };
@@ -37,6 +38,8 @@ markdown.renderer.rules.link_open = (tokens, index, options, _env, renderer) => 
 
 markdown.renderer.rules.image = (tokens, index, options, _env, renderer) => {
   const token = tokens[index];
+  token.attrSet("data-amitia-source", token.attrGet("src") || "");
+  token.attrSet("src", "");
   token.attrSet("loading", "lazy");
   token.attrSet("decoding", "async");
   token.attrSet("data-amitia-image", "true");
@@ -233,6 +236,7 @@ export function renderMarkdownSegment(source: string, citationIds: string[] = []
       "loading",
       "decoding",
       "data-amitia-image",
+      "data-amitia-source",
       "data-citation-id",
       "aria-hidden",
       "focusable",

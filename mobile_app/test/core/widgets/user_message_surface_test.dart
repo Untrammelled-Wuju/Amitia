@@ -75,7 +75,7 @@ void main() {
         expect((surface.decoration as BoxDecoration).gradient, isNotNull);
         expect(
           (surface.decoration as BoxDecoration).color!.a,
-          closeTo(0.42, 0.01),
+          closeTo(0.60, 0.01),
         );
         await render(UserMessageMaterial.solid, MessageRole.user);
         expect(find.byType(BackdropFilter), findsNothing);

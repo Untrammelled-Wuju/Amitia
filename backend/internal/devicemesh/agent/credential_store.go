@@ -184,7 +184,7 @@ func (s *CredentialStore) SaveCandidate(credential *StoredCredential) error {
 func (s *CredentialStore) DeleteCandidate() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	err := os.Remove(filepath.Join(s.dirPath, "candidate-credential.json"))
+	err := secretstore.Delete(filepath.Join(s.dirPath, "candidate-credential.json"))
 	if os.IsNotExist(err) {
 		return nil
 	}
@@ -195,7 +195,7 @@ func (s *CredentialStore) DeleteCredential() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := os.Remove(s.credFile)
+	err := secretstore.Delete(s.credFile)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}

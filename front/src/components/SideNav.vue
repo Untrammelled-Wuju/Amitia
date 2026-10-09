@@ -185,13 +185,9 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><Setting /></el-icon>
           <span>设置</span>
         </button>
-        <button type="button" role="menuitem" class="profile-menu__item" @click="openUserProfile">
+        <button type="button" role="menuitem" class="profile-menu__item" @click="openMySpace">
           <el-icon><UserFilled /></el-icon>
-          <span>个人资料</span>
-        </button>
-        <button type="button" role="menuitem" class="profile-menu__item" @click="openDevices">
-          <el-icon><Connection /></el-icon>
-          <span>我的设备</span>
+          <span>我的空间</span>
         </button>
         <button
           type="button"
@@ -231,7 +227,6 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Box,
-  Connection,
   Moon,
   Plus,
   Search,
@@ -432,19 +427,14 @@ const activeIndex = computed(() => {
   return active?.route ?? path;
 });
 
-function openUserProfile() {
+function openMySpace() {
   profileMenuOpen.value = false;
-  router.push("/user-settings");
+  router.push("/my-space");
 }
 
 function openArchivedConversations() {
   profileMenuOpen.value = false;
   router.push("/logs");
-}
-
-function openDevices() {
-  profileMenuOpen.value = false;
-  router.push("/devices");
 }
 
 function openSettings() {

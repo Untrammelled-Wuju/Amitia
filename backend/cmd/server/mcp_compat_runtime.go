@@ -39,6 +39,7 @@ func buildMCPCompatibilityRuntime(
 	toolFacade *kernel.ToolFacade,
 	chatService chat.Service,
 	dataDir string,
+	providedSecrets ...auth.SecretStore,
 ) (*MCPCompatibilityRuntime, error) {
 	if appContext == nil || appContext.DB == nil {
 		return nil, fmt.Errorf("MCP compatibility runtime: app context unavailable")
@@ -48,12 +49,16 @@ func buildMCPCompatibilityRuntime(
 	}
 
 	secretDir := filepath.Join(dataDir, "mcp")
-	secretStore, err := auth.NewEncryptedFileStore(
-		filepath.Join(secretDir, "secrets.json"),
-		filepath.Join(secretDir, "secrets.key"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("MCP compatibility runtime: secret store: %w", err)
+	var secretStore auth.SecretStore
+	if len(providedSecrets) > 0 {
+		secretStore = providedSecrets[0]
+	}
+	if secretStore == nil {
+		var err error
+		secretStore, err = auth.NewEncryptedFileStore(filepath.Join(secretDir, "secrets.json"), filepath.Join(secretDir, "secrets.key"))
+		if err != nil {
+			return nil, fmt.Errorf("MCP compatibility runtime: secret store: %w", err)
+		}
 	}
 	oauthManager := auth.NewManager(nil, secretStore, repository)
 	connections := mcpcanonical.NewManager(repository, stdio, remote, secretStore, oauthManager)

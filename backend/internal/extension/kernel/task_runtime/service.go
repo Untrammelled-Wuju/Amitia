@@ -32,12 +32,13 @@ type TaskRuntimeService struct {
 	events         TaskEventSink
 	eventObservers []TaskEventSink
 
-	mu              sync.RWMutex
-	activeHosts     map[string]*TaskProcessHost
-	sourceHosts     sync.Map
-	sourceApprovals *SourceTaskApprovalLedger
-	processBudget   taskProcessBudget
-	ownerLocks      [64]sync.Mutex
+	mu                   sync.RWMutex
+	activeHosts          map[string]*TaskProcessHost
+	sourceHosts          sync.Map
+	sourceEventPublisher func(context.Context, *TaskRun, *TaskDefinition, string, TaskHostNativeCall) (json.RawMessage, error)
+	sourceApprovals      *SourceTaskApprovalLedger
+	processBudget        taskProcessBudget
+	ownerLocks           [64]sync.Mutex
 
 	localExecutor  TaskExecutorPort
 	remoteExecutor RemoteTaskExecutor

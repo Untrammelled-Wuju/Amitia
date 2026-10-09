@@ -22,6 +22,10 @@ type RuntimeDispatcher interface {
 	Resolve(handlerName string) RuntimeInvokeHandler
 }
 
+type RuntimeContextDispatcher interface {
+	ResolveContext(string) CancellableRuntimeInvokeHandler
+}
+
 type RuntimeCancelDispatcher interface {
 	CancelInvocation(invocationID string) bool
 }
@@ -88,20 +92,32 @@ func (d *defaultRuntimeDispatcher) RegisterCancellable(handlerName string, handl
 	if d == nil || handlerName == "" || handler == nil {
 		return
 	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.cancellableHandlers[handlerName] = handler
 }
 
 func (d *defaultRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHandler {
+	handler := d.ResolveContext(handlerName)
+	if handler == nil {
+		return nil
+	}
+	return func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+		return handler(context.Background(), invoke)
+	}
+}
+
+func (d *defaultRuntimeDispatcher) ResolveContext(handlerName string) CancellableRuntimeInvokeHandler {
 	if d == nil {
 		return nil
 	}
 	d.mu.Lock()
 	generation := d.cancelGeneration
+	cancellable, legacy := d.cancellableHandlers[handlerName], d.handlers[handlerName]
 	d.mu.Unlock()
-	var base RuntimeInvokeHandler
-	if handler := d.cancellableHandlers[handlerName]; handler != nil {
-		base = func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
-			ctx := context.Background()
+	var base CancellableRuntimeInvokeHandler
+	if handler := cancellable; handler != nil {
+		base = func(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
 			var cancel context.CancelFunc
 			if invoke.DeadlineMs > 0 {
 				ctx, cancel = timeoutpolicy.WithTimeout(ctx, time.Duration(invoke.DeadlineMs)*time.Millisecond)
@@ -124,17 +140,18 @@ func (d *defaultRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHand
 			}()
 			return handler(ctx, invoke)
 		}
-	} else {
-		base = d.handlers[handlerName]
+	} else if legacy != nil {
+		base = func(_ context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+			return legacy(invoke)
+		}
 	}
 	if base == nil {
 		return nil
 	}
-	reliable := base
-	if handlerName != "coordination.data" {
-		reliable = d.withReliability(base)
-	}
-	return func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	return func(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, context.Cause(ctx)
+		}
 		d.mu.Lock()
 		cancelled := generation != d.cancelGeneration || d.invocationCancelledLocked(invoke.InvocationID)
 		d.mu.Unlock()
@@ -142,7 +159,13 @@ func (d *defaultRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHand
 			return nil, context.Canceled
 		}
 		if len(invoke.OwnedExecutionScope) > 0 {
-			return base(invoke)
+			return base(ctx, invoke)
+		}
+		reliable := func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+			return base(ctx, invoke)
+		}
+		if handlerName != "coordination.data" {
+			reliable = d.withReliability(reliable)
 		}
 		return reliable(invoke)
 	}
@@ -316,6 +339,27 @@ func (d *chainedRuntimeDispatcher) Resolve(handlerName string) RuntimeInvokeHand
 	}
 	if d.fallback != nil {
 		return d.fallback.Resolve(handlerName)
+	}
+	return nil
+}
+
+func (d *chainedRuntimeDispatcher) ResolveContext(name string) CancellableRuntimeInvokeHandler {
+	if d == nil {
+		return nil
+	}
+	for _, dispatcher := range []RuntimeDispatcher{d.primary, d.fallback} {
+		if dispatcher == nil {
+			continue
+		}
+		if contextual, ok := dispatcher.(RuntimeContextDispatcher); ok {
+			if handler := contextual.ResolveContext(name); handler != nil {
+				return handler
+			}
+		} else if handler := dispatcher.Resolve(name); handler != nil {
+			return func(_ context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+				return handler(invoke)
+			}
+		}
 	}
 	return nil
 }

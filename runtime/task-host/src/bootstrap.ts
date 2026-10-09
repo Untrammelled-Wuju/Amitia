@@ -41,6 +41,7 @@ interface TaskExecuteParams {
   deadline: number;
   attempt: number;
   max_attempts: number;
+  host_capabilities?: { executeTool: boolean; emitEvent: boolean };
 }
 
 export function readRuntimeConfig(): RuntimeConfig {
@@ -208,6 +209,7 @@ export async function bootstrap(): Promise<void> {
     maxAttempts,
     initialCheckpoint: checkpoint,
     signal: abortController.signal,
+    hostCapabilities: executeParams.host_capabilities,
   });
 
   let result: TaskResult;

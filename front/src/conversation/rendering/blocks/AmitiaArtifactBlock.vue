@@ -17,13 +17,16 @@
         <button type="button" @click="copyContent">复制</button>
       </div>
     </div>
-    <div v-if="preview && block.content" class="amrp-artifact-preview">
+    <div v-if="preview" class="amrp-artifact-preview">
+      <p v-if="loading">加载中</p>
+      <button v-else-if="error" type="button" @click="loadContent">{{ error }}，点击重试</button>
       <AmitiaHtmlPreview
-        v-if="isHtml"
-        :source="block.content"
+        v-else-if="isHtml"
+        :source="content"
+        :base-url="baseUrl"
         :filename="block.title"
       />
-      <pre v-else><code>{{ block.content }}</code></pre>
+      <pre v-else><code>{{ content }}</code></pre>
     </div>
   </section>
 
@@ -35,20 +38,22 @@
           <button type="button" @click="copyContent">复制</button>
           <button type="button" @click="fullscreen = false">关闭</button>
         </header>
-        <AmitiaHtmlPreview v-if="isHtml && block.content" :source="block.content" :filename="block.title" />
-        <pre v-else><code>{{ block.content || prettyJson(block) }}</code></pre>
+        <p v-if="loading">加载中</p>
+        <button v-else-if="error" type="button" @click="loadContent">{{ error }}，点击重试</button>
+        <AmitiaHtmlPreview v-else-if="isHtml" :source="content" :base-url="baseUrl" :filename="block.title" />
+        <pre v-else><code>{{ content || prettyJson(block) }}</code></pre>
       </div>
     </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import type { ArtifactBlock } from "../types";
 import { copyText, formatBytes, prettyJson } from "../utils";
 import AmitiaHtmlPreview from "../preview/AmitiaHtmlPreview.vue";
-import { downloadConversationMedia } from "../media";
+import { downloadConversationMedia, loadConversationText } from "../media";
 
 const props = defineProps<{
   block: ArtifactBlock;
@@ -57,14 +62,40 @@ const props = defineProps<{
 const preview = ref(false);
 const fullscreen = ref(false);
 const downloading = ref(false);
+const content = ref("");
+const baseUrl = ref("");
+const loading = ref(false);
+const error = ref("");
+let generation = 0;
+async function loadContent() {
+  const current = ++generation;
+  content.value = props.block.content || "";
+  baseUrl.value = "";
+  error.value = "";
+  loading.value = false;
+  if (content.value || !props.block.url || (!preview.value && !fullscreen.value)) return;
+  loading.value = true;
+  try {
+    const result = await loadConversationText(props.block.url);
+    if (current !== generation) return;
+    content.value = result.source;
+    baseUrl.value = result.url;
+  } catch (reason) {
+    if (current === generation) error.value = reason instanceof Error ? reason.message : "文件加载失败";
+  } finally {
+    if (current === generation) loading.value = false;
+  }
+}
+watch(() => [props.block.url, props.block.content, preview.value, fullscreen.value], loadContent, { immediate: true });
 const isHtml = computed(() => {
   const kind = props.block.artifactKind.toLowerCase();
   const mime = String(props.block.mimeType ?? "").toLowerCase();
-  return kind.includes("html") || mime.includes("html");
+  return kind.includes("html") || mime.includes("html") || /\.html?$/i.test(props.block.title);
 });
 
 async function copyContent() {
-  const copied = await copyText(props.block.content ?? prettyJson(props.block));
+  if (!content.value && props.block.url) { preview.value = true; await loadContent(); }
+  const copied = await copyText(content.value || prettyJson(props.block));
   copied ? ElMessage.success("已复制 Artifact") : ElMessage.warning("复制失败");
 }
 

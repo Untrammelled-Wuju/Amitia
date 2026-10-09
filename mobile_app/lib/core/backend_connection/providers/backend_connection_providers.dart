@@ -18,12 +18,15 @@ import '../../runtime/backend/mobile_deployment_mode.dart';
 import '../../runtime/backend/backend_topology_resolver.dart';
 import '../../device_mesh/mobile_cloud_device_credential_store.dart';
 
-final backendConnectionRepositoryProvider = Provider<BackendConnectionRepository>((ref) {
-  final source = ref.watch(backendConnectionSourceProvider);
-  return DefaultBackendConnectionRepository(source);
-});
+final backendConnectionRepositoryProvider =
+    Provider<BackendConnectionRepository>((ref) {
+      final source = ref.watch(backendConnectionSourceProvider);
+      return DefaultBackendConnectionRepository(source);
+    });
 
-final backendConnectionSourceProvider = Provider<BackendConnectionSource>((ref) {
+final backendConnectionSourceProvider = Provider<BackendConnectionSource>((
+  ref,
+) {
   final config = ref.watch(mobileDeploymentConfigProvider);
   if (config.mode == MobileDeploymentMode.local) {
     return const RuntimeBackendConnectionSource();
@@ -31,36 +34,39 @@ final backendConnectionSourceProvider = Provider<BackendConnectionSource>((ref) 
   return _CloudBackendConnectionSource(config);
 });
 
-final backendConnectionProvider = FutureProvider<BackendConnectionAvailability>((ref) async {
-  final config = ref.watch(mobileDeploymentConfigProvider);
-  final repo = ref.watch(backendConnectionRepositoryProvider);
+final backendConnectionProvider = FutureProvider<BackendConnectionAvailability>(
+  (ref) async {
+    final config = ref.watch(mobileDeploymentConfigProvider);
+    final repo = ref.watch(backendConnectionRepositoryProvider);
 
-  if (config.mode == MobileDeploymentMode.local) {
-    final runtimeAsync = ref.watch(runtimeSnapshotProvider);
-    final runtime = runtimeAsync.valueOrNull;
-    if (runtime == null ||
-        runtime.state != RuntimeBridgeState.ready ||
-        runtime.generation <= 0) {
-      repo.invalidate();
-      return const BackendConnectionUnavailable(
-        BackendConnectionError(
-          BackendConnectionErrorCode.RUNTIME_NOT_READY,
-          'embedded runtime is not ready',
-        ),
-      );
+    if (config.mode == MobileDeploymentMode.local) {
+      final runtimeAsync = ref.watch(runtimeSnapshotProvider);
+      final runtime = runtimeAsync.valueOrNull;
+      if (runtime == null ||
+          runtime.state != RuntimeBridgeState.ready ||
+          runtime.generation <= 0) {
+        repo.invalidate();
+        return const BackendConnectionUnavailable(
+          BackendConnectionError(
+            BackendConnectionErrorCode.RUNTIME_NOT_READY,
+            'embedded runtime is not ready',
+          ),
+        );
+      }
+      return repo.resolve(expectedRuntimeGeneration: runtime.generation);
     }
-    return repo.resolve(expectedRuntimeGeneration: runtime.generation);
-  }
 
-  return repo.resolve(expectedRuntimeGeneration: null);
-});
+    return repo.resolve(expectedRuntimeGeneration: null);
+  },
+);
 
 /// Repository-level generation semantics:
 /// - local mode: Native Runtime generation is the single source of truth and
 ///   must never be rewritten by Flutter;
 /// - cloud mode: the repository owns a monotonic business-generation counter
 ///   because there is no embedded runtime generation to bind against.
-class DefaultBackendConnectionRepository implements BackendConnectionRepository {
+class DefaultBackendConnectionRepository
+    implements BackendConnectionRepository {
   final BackendConnectionSource _source;
   BackendConnectionConfig? _cached;
   int _resolutionEpoch = 0;
@@ -178,10 +184,8 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
 
     try {
       final parsed = normalizeRemoteCoreUri(uri);
-      final auth = Platform.isIOS
-          ? await _loadIOSCredential(parsed)
-          : Platform.isAndroid
-          ? await _loadAndroidCredential(parsed)
+      final auth = Platform.isIOS || Platform.isAndroid
+          ? await _loadEmbeddedCredential(parsed)
           : null;
       if (auth == null) {
         return const BackendConnectionUnavailable(
@@ -222,7 +226,9 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
       }
 
       final scheme = parsed.scheme.toLowerCase();
-      final port = parsed.hasPort ? parsed.port : (scheme == 'https' ? 443 : 80);
+      final port = parsed.hasPort
+          ? parsed.port
+          : (scheme == 'https' ? 443 : 80);
       return BackendConnectionAvailable(
         BackendConnectionConfig(
           schemaVersion: 1,
@@ -254,17 +260,11 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
     }
   }
 
-  Future<MobileCloudDeviceCredential?> _loadIOSCredential(Uri cloud) async {
-    final stored = await const MobileCloudDeviceCredentialStore().load();
-    if (stored == null) return null;
-    if (normalizeRemoteCoreUri(stored.cloudBaseUrl).origin != cloud.origin) {
-      return null;
-    }
-    return stored;
-  }
-
-  Future<MobileCloudDeviceCredential?> _loadAndroidCredential(Uri cloud) async {
-    final localAvailability = await const RuntimeBackendConnectionSource().resolve();
+  Future<MobileCloudDeviceCredential?> _loadEmbeddedCredential(
+    Uri cloud,
+  ) async {
+    final localAvailability = await const RuntimeBackendConnectionSource()
+        .resolve();
     if (localAvailability is! BackendConnectionAvailable) {
       throw const BackendConnectionError(
         BackendConnectionErrorCode.RUNTIME_NOT_READY,

@@ -52,8 +52,5 @@ func (a *mcpServerAdapter) GetInstallState() string {
 }
 
 func (a *mcpServerAdapter) GetProvidedCapabilities() []string {
-	if a.server.Status == "ready" || a.server.Enabled == 1 {
-		return []string{"mcp.server." + a.server.Name}
-	}
-	return []string{}
+	return []string{"mcp.server." + a.server.Name}
 }

@@ -169,6 +169,10 @@ func (api *DevModeAPI) registerWorkspace(c *gin.Context) {
 }
 
 func (api *DevModeAPI) listWorkspaces(c *gin.Context) {
+	if !extensionDevelopmentModeEnabled() {
+		c.JSON(http.StatusOK, gin.H{"enabled": false, "workspaces": []gin.H{}, "total": 0})
+		return
+	}
 	container, ok := api.resolve(c)
 	if !ok {
 		return
@@ -178,7 +182,7 @@ func (api *DevModeAPI) listWorkspaces(c *gin.Context) {
 	for _, ws := range list {
 		items = append(items, serializeWorkspace(ws))
 	}
-	c.JSON(http.StatusOK, gin.H{"workspaces": items, "total": len(items)})
+	c.JSON(http.StatusOK, gin.H{"enabled": true, "workspaces": items, "total": len(items)})
 }
 
 func (api *DevModeAPI) getWorkspace(c *gin.Context) {

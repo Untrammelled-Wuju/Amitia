@@ -14,6 +14,8 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/ioshostbridge"
+	"github.com/u-ai/backend/internal/secretstore"
 )
 
 type EncryptedFileStore struct {
@@ -22,13 +24,25 @@ type EncryptedFileStore struct {
 	mu   sync.Mutex
 }
 
+var hostKeyLocks sync.Map
+
 func NewEncryptedFileStore(path, keyPath string) (*EncryptedFileStore, error) {
 	path = filepath.Clean(strings.TrimSpace(path))
 	keyPath = filepath.Clean(strings.TrimSpace(keyPath))
 	if path == "." || keyPath == "." || path == keyPath {
 		return nil, fmt.Errorf("secret store path is invalid")
 	}
-	key, err := loadOrCreateKey(keyPath)
+	var key []byte
+	var err error
+	bridge, bridgeErr := ioshostbridge.FromEnvironment()
+	if bridgeErr != nil {
+		return nil, bridgeErr
+	}
+	if bridge != nil {
+		key, err = loadOrCreateHostKey(path, keyPath)
+	} else {
+		key, err = loadOrCreateKey(keyPath)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +55,36 @@ func NewEncryptedFileStore(path, keyPath string) (*EncryptedFileStore, error) {
 		return nil, err
 	}
 	return &EncryptedFileStore{path: path, aead: aead}, nil
+}
+
+func loadOrCreateHostKey(storePath, keyPath string) ([]byte, error) {
+	lockValue, _ := hostKeyLocks.LoadOrStore(filepath.Clean(keyPath), &sync.Mutex{})
+	lock := lockValue.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+	key, err := secretstore.Read(keyPath)
+	if err == nil {
+		if len(key) != 32 {
+			return nil, ErrSecretStoreCorrupted
+		}
+		return key, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if data, err := os.ReadFile(storePath); err == nil && len(data) > 0 {
+		return nil, ErrSecretDecryptionFailed
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	key = make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	if err := secretstore.Write(keyPath, key); err != nil {
+		return nil, err
+	}
+	return key, nil
 }
 
 func (s *EncryptedFileStore) Put(ctx context.Context, namespace string, value []byte) (string, error) {

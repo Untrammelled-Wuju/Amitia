@@ -234,7 +234,7 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 			if len(checkpointValue) == 0 {
 				checkpointValue = json.RawMessage("null")
 			}
-			protocolErr = write(map[string]any{"jsonrpc": "2.0", "id": "execute", "method": "task.execute", "params": map[string]any{"task_run_id": h.config.TaskRunID, "entry": h.config.EntryPath, "input": input, "checkpoint": checkpointValue, "deadline": deadlineMillis, "attempt": attempt, "max_attempts": maxAttempts}})
+			protocolErr = write(map[string]any{"jsonrpc": "2.0", "id": "execute", "method": "task.execute", "params": map[string]any{"task_run_id": h.config.TaskRunID, "entry": h.config.EntryPath, "input": input, "checkpoint": checkpointValue, "deadline": deadlineMillis, "attempt": attempt, "max_attempts": maxAttempts, "host_capabilities": h.config.HostCapabilities}})
 			if protocolErr == nil {
 				close(h.readyCh)
 			}

@@ -53,7 +53,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, cfg ProviderConfig, req Mo
 		requestBody["tools"] = a.buildTools(req.Tools)
 	}
 
-	if req.ResponseFormat.Type == "json" || req.ResponseFormat.Type == "json_schema" {
+	if req.ResponseFormat.Type == "json" || req.ResponseFormat.Type == "json_schema" || req.ResponseFormat.Type == "json_object" {
 		requestBody["format"] = "json"
 	}
 

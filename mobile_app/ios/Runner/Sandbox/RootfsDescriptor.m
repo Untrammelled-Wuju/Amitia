@@ -79,10 +79,9 @@
 
 - (BOOL)verifyISHFakeFSLayout {
     NSFileManager *fm = [NSFileManager defaultManager];
-    NSURL *base = self.mountURL ?: self.rootfsURL;
     BOOL isDir = NO;
 
-    NSString *dataPath = [base.path stringByAppendingPathComponent:@"data"];
+    NSString *dataPath = (self.mountURL ?: [self.rootfsURL URLByAppendingPathComponent:@"data"]).path;
     if (![fm fileExistsAtPath:dataPath isDirectory:&isDir] || !isDir) return NO;
 
     NSString *metaDbPath = [self.rootfsURL.path stringByAppendingPathComponent:@"meta.db"];
@@ -99,7 +98,7 @@
 
     NSError *err = nil;
     NSNumber *metaSize = nil;
-    if ([self.rootfsURL getResourceValue:&metaSize forKey:NSFileSizeKey error:&err]) {
+    if ([[NSURL fileURLWithPath:metaDbPath] getResourceValue:&metaSize forKey:NSFileSizeKey error:&err]) {
         if (metaSize.longLongValue <= 0) return NO;
     } else {
         if (err) return NO;

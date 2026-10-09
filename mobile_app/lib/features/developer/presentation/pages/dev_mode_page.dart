@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,7 +10,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
-import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/backend_transport/errors/backend_transport_error.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -23,6 +24,7 @@ class DevModePage extends ConsumerStatefulWidget {
 class _DevModePageState extends ConsumerState<DevModePage> {
   bool _loading = true;
   String? _error;
+  bool _enabled = false;
   List<Map<String, dynamic>> _workspaces = [];
 
   @override
@@ -43,16 +45,30 @@ class _DevModePageState extends ConsumerState<DevModePage> {
         fromJson: (value) => Map<String, dynamic>.from(value as Map),
       );
       final raw = data?['workspaces'] as List<dynamic>? ?? const [];
-      final items = raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      final items = raw
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
       if (!mounted) return;
       setState(() {
         _workspaces = items;
+        _enabled = data?['enabled'] != false;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
+      final cause = e is BackendTransportError ? e.cause : null;
+      final response = cause is DioException ? cause.response : null;
+      final body = response?.data;
+      final disabled =
+          e is BackendTransportError &&
+          e.statusCode == 403 &&
+          body is Map &&
+          body['error'] == 'developer mode is disabled';
       setState(() {
-        _error = e.toString();
+        _enabled = false;
+        _workspaces = [];
+        _error = disabled ? null : e.toString();
         _loading = false;
       });
     }
@@ -76,11 +92,15 @@ class _DevModePageState extends ConsumerState<DevModePage> {
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(success)));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -92,8 +112,17 @@ class _DevModePageState extends ConsumerState<DevModePage> {
         showBackButton: true,
         fallbackRoute: AppRoutes.developer,
         actions: [
-          AmitiaIconButton(icon: Icons.refresh, onPressed: _load, tooltip: '刷新'),
-          AmitiaIconButton(icon: Icons.add, onPressed: _showRegisterDialog, tooltip: '注册工作区'),
+          AmitiaIconButton(
+            icon: Icons.refresh,
+            onPressed: _load,
+            tooltip: '刷新',
+          ),
+          if (!_loading && _error == null && _enabled)
+            AmitiaIconButton(
+              icon: Icons.add,
+              onPressed: _showRegisterDialog,
+              tooltip: '注册工作区',
+            ),
         ],
       ),
       body: SafeArea(top: false, child: _buildBody(context)),
@@ -103,16 +132,20 @@ class _DevModePageState extends ConsumerState<DevModePage> {
   Widget _buildBody(BuildContext context) {
     if (_loading) return const AmitiaLoadingState();
     if (_error != null) {
-      return AmitiaErrorState(
-        message: _error!,
-        onRetry: _load,
+      return AmitiaErrorState(message: _error!, onRetry: _load);
+    }
+    if (!_enabled) {
+      return const AmitiaEmptyState(
+        icon: Icons.developer_mode_outlined,
+        title: '开发模式未启用',
+        subtitle: '当前连接的后端未开放扩展开发功能。启用后可管理开发工作区。',
       );
     }
     if (_workspaces.isEmpty) {
       return AmitiaEmptyState(
         icon: Icons.developer_mode_outlined,
         title: '暂无开发工作区',
-        subtitle: '仅在后端启用 AMITIA_EXTENSION_DEV_MODE 后可使用',
+        subtitle: '注册工作区后可构建、热重载和调试扩展',
       );
     }
     return RefreshIndicator(
@@ -120,7 +153,8 @@ class _DevModePageState extends ConsumerState<DevModePage> {
       child: ListView.builder(
         padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
         itemCount: _workspaces.length,
-        itemBuilder: (context, index) => _workspaceCard(context, _workspaces[index]),
+        itemBuilder: (context, index) =>
+            _workspaceCard(context, _workspaces[index]),
       ),
     );
   }
@@ -135,7 +169,10 @@ class _DevModePageState extends ConsumerState<DevModePage> {
     final autoReload = workspace['autoReload'] == true;
     final revision = (workspace['currentRevision'] ?? '').toString();
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.pagePadding,
+        vertical: AppSpacing.xs,
+      ),
       child: AmitiaCard(
         onTap: () => _showWorkspaceDetails(workspace),
         child: Column(
@@ -146,23 +183,39 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-                  child: Icon(Icons.code_outlined, color: context.accentPrimary),
+                  decoration: BoxDecoration(
+                    color: context.accentSoft,
+                    borderRadius: AppRadius.brSmall,
+                  ),
+                  child: Icon(
+                    Icons.code_outlined,
+                    color: context.accentPrimary,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(extensionId.isEmpty ? id : extensionId, style: AppTypography.cardTitle(context)),
+                      Text(
+                        extensionId.isEmpty ? id : extensionId,
+                        style: AppTypography.cardTitle(context),
+                      ),
                       const SizedBox(height: 2),
-                      Text(path, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.caption(context)),
+                      Text(
+                        path,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.caption(context),
+                      ),
                     ],
                   ),
                 ),
                 AmitiaStatusBadge(
                   label: status,
-                  type: status == 'active' || status == 'ready' ? BadgeType.success : BadgeType.neutral,
+                  type: status == 'active' || status == 'ready'
+                      ? BadgeType.success
+                      : BadgeType.neutral,
                 ),
               ],
             ),
@@ -186,7 +239,10 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                   label: '构建',
                   isSecondary: true,
                   icon: Icons.build_outlined,
-                  onPressed: () => _mutate('/api/extensions/dev-mode/workspaces/$id/build', success: '构建完成'),
+                  onPressed: () => _mutate(
+                    '/api/extensions/dev-mode/workspaces/$id/build',
+                    success: '构建完成',
+                  ),
                 ),
                 AmitiaButton(
                   label: '重载',
@@ -201,15 +257,22 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 AmitiaButton(
                   label: trusted ? '撤销信任' : '授予信任',
                   isSecondary: true,
-                  icon: trusted ? Icons.lock_open_outlined : Icons.verified_user_outlined,
+                  icon: trusted
+                      ? Icons.lock_open_outlined
+                      : Icons.verified_user_outlined,
                   onPressed: () => trusted
                       ? _deleteTrust(id)
-                      : _mutate('/api/extensions/dev-mode/workspaces/$id/trust', success: '已授予开发信任'),
+                      : _mutate(
+                          '/api/extensions/dev-mode/workspaces/$id/trust',
+                          success: '已授予开发信任',
+                        ),
                 ),
                 AmitiaButton(
                   label: watching ? '停止监听' : '开始监听',
                   isSecondary: true,
-                  icon: watching ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  icon: watching
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
                   onPressed: () => _mutate(
                     '/api/extensions/dev-mode/workspaces/$id/watch/${watching ? 'stop' : 'start'}',
                     success: watching ? '监听已停止' : '监听已启动',
@@ -232,20 +295,29 @@ class _DevModePageState extends ConsumerState<DevModePage> {
   Widget _chip(BuildContext context, String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brTag),
+      decoration: BoxDecoration(
+        color: context.surfaceSecondary,
+        borderRadius: AppRadius.brTag,
+      ),
       child: Text(text, style: AppTypography.label(context)),
     );
   }
 
   Future<void> _deleteTrust(String id) async {
     try {
-      await ref.read(backendServiceProvider).delete('/api/extensions/dev-mode/workspaces/$id/trust');
+      await ref
+          .read(backendServiceProvider)
+          .delete('/api/extensions/dev-mode/workspaces/$id/trust');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已撤销开发信任')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已撤销开发信任')));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -264,9 +336,18 @@ class _DevModePageState extends ConsumerState<DevModePage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: extensionController, decoration: const InputDecoration(labelText: 'Extension ID')),
-                TextField(controller: pathController, decoration: const InputDecoration(labelText: '工作区路径')),
-                TextField(controller: manifestController, decoration: const InputDecoration(labelText: 'Manifest 路径')),
+                TextField(
+                  controller: extensionController,
+                  decoration: const InputDecoration(labelText: 'Extension ID'),
+                ),
+                TextField(
+                  controller: pathController,
+                  decoration: const InputDecoration(labelText: '工作区路径'),
+                ),
+                TextField(
+                  controller: manifestController,
+                  decoration: const InputDecoration(labelText: 'Manifest 路径'),
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('监听文件变更'),
@@ -277,42 +358,59 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('自动重载'),
                   value: autoReload,
-                  onChanged: (value) => setDialogState(() => autoReload = value),
+                  onChanged: (value) =>
+                      setDialogState(() => autoReload = value),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('注册')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('注册'),
+            ),
           ],
         ),
       ),
     );
     if (confirmed != true) return;
-    if (extensionController.text.trim().isEmpty || pathController.text.trim().isEmpty || manifestController.text.trim().isEmpty) {
+    if (extensionController.text.trim().isEmpty ||
+        pathController.text.trim().isEmpty ||
+        manifestController.text.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Extension ID、路径和 Manifest 路径不能为空')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Extension ID、路径和 Manifest 路径不能为空')),
+      );
       return;
     }
     try {
-      await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-        '/api/extensions/dev-mode/workspaces',
-        data: {
-          'extensionId': extensionController.text.trim(),
-          'path': pathController.text.trim(),
-          'manifestPath': manifestController.text.trim(),
-          'watchEnabled': watch,
-          'autoReload': autoReload,
-        },
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
+      await ref
+          .read(backendServiceProvider)
+          .post<Map<String, dynamic>>(
+            '/api/extensions/dev-mode/workspaces',
+            data: {
+              'extensionId': extensionController.text.trim(),
+              'path': pathController.text.trim(),
+              'manifestPath': manifestController.text.trim(),
+              'watchEnabled': watch,
+              'autoReload': autoReload,
+            },
+            fromJson: (value) => Map<String, dynamic>.from(value as Map),
+          );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('开发工作区已注册')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('开发工作区已注册')));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -340,15 +438,24 @@ class _DevModePageState extends ConsumerState<DevModePage> {
           content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
-              child: SelectableText(const JsonEncoder.withIndent('  ').convert(payload)),
+              child: SelectableText(
+                const JsonEncoder.withIndent('  ').convert(payload),
+              ),
             ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -361,13 +468,23 @@ class _DevModePageState extends ConsumerState<DevModePage> {
         title: const Text('删除开发工作区'),
         content: Text('确定删除 $extensionId？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
         ],
       ),
     );
     if (confirmed == true) {
-      await _mutate('/api/extensions/dev-mode/workspaces/$id', delete: true, success: '开发工作区已删除');
+      await _mutate(
+        '/api/extensions/dev-mode/workspaces/$id',
+        delete: true,
+        success: '开发工作区已删除',
+      );
     }
   }
 }

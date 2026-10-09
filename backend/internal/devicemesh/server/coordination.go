@@ -26,8 +26,8 @@ func makePolicyHandler(deps *RouterDeps) gin.HandlerFunc {
 			return
 		}
 		if actor.HasPermission(auth.PermSystemAdmin) {
-			if err:=deps.Coordination.InitializeCoreConsole(c.Request.Context(),actor.SpaceID.String(),actor.DeviceID.String());err!=nil {
-				c.JSON(503,gin.H{"code":"mesh.policy_unavailable","message":err.Error()})
+			if err := deps.Coordination.InitializeCoreConsole(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String()); err != nil {
+				c.JSON(503, gin.H{"code": "mesh.policy_unavailable", "message": err.Error()})
 				return
 			}
 		}
@@ -56,6 +56,11 @@ func makeModeHandler(deps *RouterDeps) gin.HandlerFunc {
 			ExpectedRevision int64  `json:"expectedRevision" binding:"required"`
 			SelectedRole     string `json:"selectedRole"`
 		}
+		finish, valid := security.BeginDeviceManagementIntent(c, deps.Coordination)
+		if !valid {
+			return
+		}
+		defer finish()
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"code": "mesh.invalid_policy", "message": err.Error()})
 			return
@@ -77,6 +82,11 @@ func makeAdministratorHandler(deps *RouterDeps) gin.HandlerFunc {
 			return
 		}
 		device := runtimeidentity.ParseDeviceID(c.Param("deviceId"))
+		finish, valid := security.BeginDeviceManagementIntent(c, deps.Coordination)
+		if !valid {
+			return
+		}
+		defer finish()
 		if err := deps.DeviceReg.RequireTrustedDevice(c.Request.Context(), actor.SpaceID, device); err != nil {
 			c.JSON(403, gin.H{"code": "mesh.device_not_trusted", "message": "设备未处于有效配对状态"})
 			return

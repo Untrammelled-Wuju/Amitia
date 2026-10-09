@@ -435,19 +435,19 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		defer cancelTools()
 	}
 
-	s.hasActionDirective = false
-	s.actionDirective = decision.ActionDirective{}
+	hasActionDirective := false
+	actionDirective := decision.ActionDirective{}
 	if req.Runtime != nil && req.Runtime.BehaviorPlan != nil && s.actionMaterializer != nil {
 		directive, dirErr := decision.BuildActionDirective(req.Runtime.BehaviorPlan)
 		if dirErr != nil {
 			applog.TraceWarn(trace.WithStage("action_directive_build_failed"), applog.Fields{"error": dirErr.Error()}, "行为计划 ActionDirective 构建失败，回退到无约束模式")
 		} else {
-			s.actionDirective = directive
-			s.hasActionDirective = true
+			actionDirective = directive
+			hasActionDirective = true
 		}
 	}
 
-	if s.hasActionDirective && s.actionDirective.Kind == decision.ActionDirectiveWait {
+	if hasActionDirective && actionDirective.Kind == decision.ActionDirectiveWait {
 		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		return &ComputeResult{
 			RequestID:            requestID,

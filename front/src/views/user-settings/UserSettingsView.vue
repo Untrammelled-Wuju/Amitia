@@ -1,118 +1,67 @@
 <template>
-  <div class="space-settings">
-    <header class="settings-header">
-      <div>
-        <h2>个人空间</h2>
-        <p>资料保存在当前 U-Ai Space 中；设备认证与个人资料相互独立。</p>
-      </div>
-      <el-button :loading="saving || avatarProcessing" type="primary" @click="saveProfile">保存资料</el-button>
+  <div id="local-profile" class="space-settings" v-loading="loading">
+    <header class="space-page-header">
+      <h2>资料与头像</h2>
+      <p>设置在当前 Space 中展示的个人信息。</p>
     </header>
 
-    <div class="settings-grid" v-loading="loading">
-      <section id="local-profile" class="settings-card profile-card">
-        <div class="section-heading">
-          <el-icon><UserFilled /></el-icon>
-          <div>
-            <h3>本地资料</h3>
-            <p>这里只保存昵称、头像、简介和偏好，不承担认证职责。</p>
-          </div>
+    <section class="profile-overview" aria-label="头像设置">
+      <button type="button" class="avatar-preview" :title="profile.avatar ? '更换头像' : '上传头像'" @click="triggerAvatarUpload">
+        <img v-if="profile.avatar" :src="profile.avatar" alt="个人头像" />
+        <el-icon v-else :size="30"><UserFilled /></el-icon>
+      </button>
+      <div class="profile-overview-text">
+        <strong>{{ profile.displayName.trim() || "设置你的昵称" }}</strong>
+        <span>{{ profile.userLabel.trim() || "个人资料" }}</span>
+        <div class="avatar-actions">
+          <el-button :loading="avatarProcessing" @click="triggerAvatarUpload">更换头像</el-button>
+          <el-button v-if="profile.avatar" text type="danger" @click="profile.avatar = ''">移除</el-button>
         </div>
+        <input ref="avatarInputRef" type="file" accept="image/*" hidden @change="handleAvatarFile" />
+      </div>
+    </section>
 
-        <el-form label-position="top">
+    <section class="profile-section" aria-labelledby="profile-section-title">
+      <div class="section-heading">
+        <h3 id="profile-section-title">基本信息</h3>
+        <p>这些信息仅用于你的个人资料展示。</p>
+      </div>
+      <el-form label-position="top" class="profile-form">
+        <div class="profile-field-row">
           <el-form-item label="显示名称">
-            <el-input v-model="profile.displayName" maxlength="100" placeholder="例如：无拘" />
+            <el-input v-model="profile.displayName" maxlength="100" placeholder="请输入昵称" />
           </el-form-item>
           <el-form-item label="用户标签">
             <el-input v-model="profile.userLabel" maxlength="100" placeholder="可选" />
           </el-form-item>
-          <el-form-item label="简介">
-            <el-input v-model="profile.bio" type="textarea" :rows="5" maxlength="1000" show-word-limit />
-          </el-form-item>
-          <el-form-item label="头像">
-            <div class="avatar-setting">
-              <button
-                type="button"
-                class="avatar-preview"
-                :title="profile.avatar ? '点击更换头像' : '点击上传头像'"
-                @click="triggerAvatarUpload"
-              >
-                <img v-if="profile.avatar" :src="profile.avatar" alt="个人头像" />
-                <span v-else>+</span>
-              </button>
-              <input
-                ref="avatarInputRef"
-                type="file"
-                accept="image/*"
-                hidden
-                @change="handleAvatarFile"
-              />
-              <div class="avatar-actions">
-                <el-button :loading="avatarProcessing" @click="triggerAvatarUpload">上传头像</el-button>
-                <el-button v-if="profile.avatar" text type="danger" @click="profile.avatar = ''">移除头像</el-button>
-              </div>
-            </div>
-          </el-form-item>
+        </div>
+        <el-form-item label="个人简介">
+          <el-input v-model="profile.bio" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="简单介绍一下自己" />
+        </el-form-item>
+      </el-form>
+      <details class="profile-advanced">
+        <summary>高级头像设置</summary>
+        <el-form label-position="top">
           <el-form-item label="头像地址">
-            <el-input v-model="profile.avatar" placeholder="本地文件或可访问的图片地址" />
+            <el-input v-model="profile.avatar" placeholder="本地文件或图片地址" />
           </el-form-item>
         </el-form>
-      </section>
-
-      <section id="space-identity" class="settings-card identity-card">
-        <div class="section-heading">
-          <el-icon><Connection /></el-icon>
-          <div>
-            <h3>Space 身份</h3>
-            <p>SpaceID 只负责数据归属，不作为密码，也不代表具体设备。</p>
-          </div>
-        </div>
-        <dl class="identity-list">
-          <div><dt>Space ID</dt><dd>{{ identity.spaceId || "未读取" }}</dd></div>
-          <div><dt>Instance ID</dt><dd>{{ identity.instanceId || "未读取" }}</dd></div>
-          <div><dt>运行模式</dt><dd>{{ deploymentLabel }}</dd></div>
-        </dl>
-      </section>
-
-      <section id="profile-device" class="settings-card device-card">
-        <div class="section-heading">
-          <el-icon><Monitor /></el-icon>
-          <div>
-            <h3>当前设备</h3>
-            <p>DeviceID 用于设备路由；Cloud 认证由 Device Credential 完成。</p>
-          </div>
-        </div>
-        <dl class="identity-list">
-          <div><dt>Device ID</dt><dd>{{ mesh.deviceId || "未获取" }}</dd></div>
-          <div><dt>Runtime ID</dt><dd>{{ mesh.runtimeId || "未获取" }}</dd></div>
-          <div><dt>连接状态</dt><dd>{{ mesh.state || (deployment.mode === "cloud" ? "未配对" : "本地模式") }}</dd></div>
-        </dl>
-        <div class="device-actions">
-          <el-button @click="router.push('/devices')">管理设备</el-button>
-          <el-button
-            v-if="deployment.mode === 'cloud' && mesh.state && mesh.state !== 'unprovisioned'"
-            type="danger"
-            plain
-            @click="disconnectCloud"
-          >
-            解除当前设备配对
-          </el-button>
-        </div>
-      </section>
-    </div>
+      </details>
+      <div class="profile-actions">
+        <span>修改后需要保存才会生效</span>
+        <el-button type="primary" :loading="saving || avatarProcessing" @click="saveProfile">保存资料</el-button>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
-import { Connection, Monitor, UserFilled } from "@element-plus/icons-vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { onMounted, reactive, ref } from "vue";
+import { UserFilled } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { apiClient } from "@/composables/useApi";
-import { getDeploymentConfig } from "@/runtime/runtime-adapter";
-import type { DeploymentModeConfig } from "@/runtime/runtime-types";
 import { useAppStore } from "@/stores/app";
 
-const router = useRouter();
 const appStore = useAppStore();
 const loading = ref(false);
 const saving = ref(false);
@@ -126,38 +75,16 @@ const profile = reactive({
   userLabel: "",
   preferences: {} as Record<string, unknown>,
 });
-const identity = reactive({ spaceId: "", instanceId: "" });
-const mesh = reactive({ state: "", deviceId: "", runtimeId: "" });
-const deployment = reactive<DeploymentModeConfig>({ mode: "local" });
-
-const deploymentLabel = computed(() =>
-  deployment.mode === "cloud" ? `云端 · ${deployment.serverURL || "未配置地址"}` : "本地",
-);
-
 async function loadAll() {
   loading.value = true;
   try {
-    const [profileRes, infoRes, deploymentConfig] = await Promise.all([
-      apiClient.get("/api/space/profile"),
-      apiClient.get("/api/public/core/info"),
-      getDeploymentConfig(),
-    ]);
+    const profileRes = await apiClient.get("/api/space/profile");
     Object.assign(profile, profileRes.data?.data || profileRes.data || {});
     appStore.setAvatar(String(profile.avatar || ""));
-    const info = infoRes.data?.data || infoRes.data || {};
-    identity.spaceId = String(info.spaceId || "");
-    identity.instanceId = String(info.instanceId || info.cloudId || "");
-    Object.assign(deployment, deploymentConfig);
   } catch (error: any) {
     ElMessage.error(error?.message || "个人空间信息加载失败");
   }
 
-  if (window.amitiaDesktop?.getMeshStatus) {
-    try {
-      const status = await window.amitiaDesktop.getMeshStatus();
-      if (status) Object.assign(mesh, status);
-    } catch {}
-  }
   loading.value = false;
 }
 
@@ -242,49 +169,31 @@ function resizeAvatar(file: File): Promise<string> {
   });
 }
 
-async function disconnectCloud() {
-  if (!window.amitiaDesktop?.deprovisionMesh) return;
-  try {
-    await ElMessageBox.confirm(
-      "这会删除当前设备保存的 Cloud Device Credential。个人 Space 数据不会被删除。",
-      "解除设备配对",
-      { confirmButtonText: "解除配对", cancelButtonText: "取消", type: "warning" },
-    );
-  } catch {
-    return;
-  }
-  try {
-    await window.amitiaDesktop.deprovisionMesh();
-    mesh.state = "unprovisioned";
-    ElMessage.success("当前设备已解除云端配对");
-  } catch (error: any) {
-    ElMessage.error(error?.message || "解除配对失败");
-  }
-}
-
 onMounted(loadAll);
 </script>
 
 <style scoped>
-.space-settings { padding: 24px; max-width: 1180px; margin: 0 auto; }
-.settings-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
-.settings-header h2, .section-heading h3 { margin: 0; }
-.settings-header p, .section-heading p { margin: 6px 0 0; color: var(--el-text-color-secondary); }
-.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.settings-card { padding: 20px; border: 1px solid var(--el-border-color-lighter); border-radius: 14px; background: var(--el-bg-color); }
-.profile-card { grid-row: span 2; }
-.section-heading { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; }
-.section-heading .el-icon { margin-top: 3px; font-size: 20px; }
-.avatar-setting { display: flex; align-items: center; gap: 14px; min-height: 88px; }
-.avatar-preview { width: 88px; height: 88px; flex: 0 0 auto; padding: 0; border: 1px dashed var(--el-border-color); border-radius: 22px; background: var(--el-fill-color-light); color: var(--el-color-primary); display: grid; place-items: center; overflow: hidden; cursor: pointer; transition: border-color .2s ease, transform .2s ease; }
-.avatar-preview:hover { border-color: var(--el-color-primary); transform: translateY(-1px); }
+.space-settings { max-width: 880px; min-width: 0; }
+.space-page-header { margin-bottom: 24px; }
+.space-page-header h2 { margin: 0; font-size: 23px; font-weight: 650; letter-spacing: -0.025em; }
+.space-page-header p, .section-heading p { margin: 7px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.profile-overview { display: flex; align-items: center; gap: 20px; padding: 22px 24px; margin-bottom: 26px; border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-bg); }
+.avatar-preview { width: 92px; height: 92px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; padding: 0; cursor: pointer; border: 1px solid var(--surface-border); border-radius: 24px; background: var(--control-hover-bg); color: var(--text-secondary); }
+.avatar-preview:hover { border-color: var(--el-color-primary); }
 .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
-.avatar-preview span { font-size: 30px; line-height: 1; }
-.avatar-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.identity-list { display: grid; gap: 12px; margin: 0; }
-.identity-list > div { display: grid; grid-template-columns: 100px 1fr; gap: 12px; }
-.identity-list dt { color: var(--el-text-color-secondary); }
-.identity-list dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
-.device-actions { display: flex; gap: 10px; margin-top: 20px; }
-@media (max-width: 820px) { .settings-grid { grid-template-columns: 1fr; } .profile-card { grid-row: auto; } .avatar-setting { align-items: flex-start; } }
+.profile-overview-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.profile-overview-text strong { font-size: 18px; overflow-wrap: anywhere; }
+.profile-overview-text > span { color: var(--text-secondary); font-size: 13px; }
+.avatar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.profile-section { padding: 24px; border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-bg); }
+.section-heading { margin-bottom: 20px; }
+.section-heading h3 { margin: 0; font-size: 16px; }
+.profile-field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.profile-form :deep(.el-form-item) { min-width: 0; margin-bottom: 20px; }
+.profile-advanced { margin-top: 2px; padding: 14px 0; border-top: 1px solid var(--surface-border); }
+.profile-advanced summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+.profile-advanced .el-form { padding-top: 16px; }
+.profile-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding-top: 20px; border-top: 1px solid var(--surface-border); }
+.profile-actions span { color: var(--text-secondary); font-size: 12px; }
+@media (max-width: 700px) { .profile-overview { padding: 18px; gap: 14px; } .profile-section { padding: 18px; } .profile-field-row { grid-template-columns: minmax(0, 1fr); gap: 0; } }
 </style>

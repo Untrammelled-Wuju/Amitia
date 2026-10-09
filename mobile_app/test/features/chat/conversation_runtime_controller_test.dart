@@ -301,6 +301,33 @@ void main() {
     await events.close();
   });
 
+  test('Core解绑后原内联附件不能回退为本地模型请求', () async {
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    final controller = ConversationRuntimeController(service);
+    await controller.sendImage(
+      resourceUri: 'data:image/png;base64,AQID',
+      displayUrl: 'data:image/png;base64,AQID',
+      fileName: 'picture.png',
+    );
+    await controller.sendVideo(
+      resourceUri: 'data:video/mp4;base64,AQID',
+      displayUrl: 'data:video/mp4;base64,AQID',
+      fileName: 'clip.mp4',
+    );
+    await controller.sendFile(
+      resourceUri: 'data:text/plain;base64,AQID',
+      fileName: 'notes.txt',
+      sizeBytes: 3,
+      mimeType: 'text/plain',
+    );
+    expect(service.submitCount, 0);
+    expect(controller.messages, isEmpty);
+    expect(controller.lastError.toString(), contains('原附件未发送'));
+    controller.dispose();
+    await events.close();
+  });
+
   test('openConversation 只接受 v1 Snapshot 作为权威状态', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events);

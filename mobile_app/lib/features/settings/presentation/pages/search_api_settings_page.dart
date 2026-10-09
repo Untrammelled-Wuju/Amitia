@@ -238,6 +238,12 @@ class _SearchApiSettingsPageState extends ConsumerState<SearchApiSettingsPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('搜索 API 配置加载失败', style: TextStyle(color: context.error)),
+            if (_loadError != null)
+              Text(
+                _loadError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.textSecondary),
+              ),
             SizedBox(height: AppSpacing.md),
             OutlinedButton(onPressed: _load, child: const Text('重试')),
           ],

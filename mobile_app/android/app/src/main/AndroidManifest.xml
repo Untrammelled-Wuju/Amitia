@@ -47,14 +47,8 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-enabled draggable AI chat overlay, visible only while the phone is unlocked and the application is in the background." />
+                android:value="User-enabled top-of-screen message previews while the phone is unlocked and the application is in the background." />
         </service>
-        <activity
-            android:name=".notifications.ConversationBubbleActivity"
-            android:exported="false"
-            android:resizeableActivity="true"
-            android:allowEmbedded="true"
-            android:documentLaunchMode="always" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -64,6 +58,9 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
@@ -105,9 +102,6 @@
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
-        <meta-data
-            android:name="flutter_deeplinking_enabled"
-            android:value="false" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

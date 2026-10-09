@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/ioshostbridge"
 	"math/big"
 	"net"
 	"net/http"
@@ -30,6 +31,19 @@ type Endpoint struct {
 }
 
 func PrivateAddresses() ([]net.IP, error) {
+	bridge, err := ioshostbridge.FromEnvironment()
+	if err != nil {
+		return nil, err
+	}
+	if bridge != nil {
+		var result struct {
+			Addresses []string `json:"addresses"`
+		}
+		if err := bridge.Call("network.privateAddresses", map[string]any{}, &result); err != nil {
+			return nil, err
+		}
+		return validatedHostAddresses(result.Addresses)
+	}
 	if configured := strings.TrimSpace(os.Getenv("AMITIA_LAN_ADDRESSES")); configured != "" {
 		seen := map[string]bool{}
 		result := []net.IP{}
@@ -75,6 +89,26 @@ func PrivateAddresses() ([]net.IP, error) {
 	for _, key := range keys {
 		result = append(result, seen[key])
 	}
+	return result, nil
+}
+
+func validatedHostAddresses(addresses []string) ([]net.IP, error) {
+	if len(addresses) > 16 {
+		return nil, errors.New("宿主提供的局域网地址超过上限")
+	}
+	seen := map[string]bool{}
+	result := []net.IP{}
+	for _, address := range addresses {
+		ip := net.ParseIP(address)
+		if ip == nil || ip.To4() == nil || !ip.IsPrivate() || !ip.IsGlobalUnicast() || ip.IsLoopback() {
+			return nil, errors.New("宿主提供的局域网地址无效")
+		}
+		if !seen[ip.String()] {
+			seen[ip.String()] = true
+			result = append(result, ip.To4())
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].String() < result[j].String() })
 	return result, nil
 }
 

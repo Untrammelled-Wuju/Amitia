@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,7 +13,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
-import '../../../../core/runtime/backend/mobile_backend_lifecycle.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/services/providers.dart';
@@ -55,6 +53,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
     try {
       final service = ref.read(deviceMeshServiceProvider);
       final api = ref.read(rawBackendServiceApiProvider);
+      final apiGeneration = api?.generation;
       final deployment = ref.read(mobileDeploymentConfigProvider);
       final policy = await service.coordination();
       final intent = DeviceManagementIntent(
@@ -62,6 +61,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
         isCurrent: () =>
             mounted &&
             api != null &&
+            api.generation == apiGeneration &&
             identical(ref.read(rawBackendServiceApiProvider), api) &&
             ref.read(mobileDeploymentConfigProvider) == deployment,
       );
@@ -350,10 +350,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
     final notificationCoordinator = ref.read(notificationCoordinatorProvider);
     try {
       final localService = ref.read(deviceMeshLocalServiceProvider);
-      final iosIdentity = ref.read(mobileDeviceMeshIdentityProvider);
-      final identity = Platform.isIOS
-          ? await iosIdentity.identity()
-          : await localService?.identity();
+      final identity = await localService?.identity();
       if (identity == null) {
         throw StateError('本机 Runtime 当前不可用，无法读取 Device Mesh 身份');
       }
@@ -387,37 +384,19 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
             setupCode: setupCode,
             fingerprint: fingerprint,
             coreId: coreId,
-            proofSigner: Platform.isIOS && fingerprint.isEmpty
-                ? (claimBody, resolvedCoreId) => iosIdentity.pairingProof(
-                    claimBody: claimBody,
-                    coreId: resolvedCoreId,
-                  )
-                : null,
           );
       final ticket = (claim['ticket'] ?? '').toString().trim();
       if (ticket.isEmpty) throw StateError('Cloud Core 未返回 Bootstrap Ticket');
 
-      if (Platform.isIOS) {
-        await ref
-            .read(mobileDeviceMeshProvisioningProvider)
-            .exchangeBootstrapTicket(
-              coreUri: cloudUri,
-              bootstrapTicket: ticket,
-              deviceId: deviceId,
-              runtimeId: runtimeId,
-              platform: platform,
-            );
-      } else {
-        if (localService == null) {
-          throw StateError('本机 Device Agent 不可用，无法保存设备凭据');
-        }
-        await localService.bootstrap(
-          cloudBaseUrl: cloudUri,
-          bootstrapTicket: ticket,
-          fingerprint: fingerprint,
-          coreId: coreId,
-        );
+      if (localService == null) {
+        throw StateError('本机 Device Agent 不可用，无法保存设备凭据');
       }
+      await localService.bootstrap(
+        cloudBaseUrl: cloudUri,
+        bootstrapTicket: ticket,
+        fingerprint: fingerprint,
+        coreId: coreId,
+      );
       if (fingerprint.isNotEmpty) {
         final previous = ref.read(mobileDeploymentConfigProvider);
         final next = MobileDeploymentConfig(

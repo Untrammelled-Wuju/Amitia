@@ -12,6 +12,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/log_folder_button.dart';
 
 class DevConsolePage extends ConsumerStatefulWidget {
   const DevConsolePage({super.key});
@@ -23,7 +24,8 @@ class DevConsolePage extends ConsumerStatefulWidget {
 class _DevConsolePageState extends ConsumerState<DevConsolePage> {
   static const _levels = ['全部', 'debug', 'info', 'warn', 'error'];
   static const _datasets = <String, String>{
-    '日志': '/api/dev-console/logs',
+    '日志': '/api/logs/recent',
+    '扩展日志': '/api/dev-console/logs',
     '调用': '/api/dev-console/invocations',
     '事件': '/api/dev-console/events',
     'Hooks': '/api/dev-console/hooks',
@@ -78,7 +80,9 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
       final records = _extractRecords(result);
       if (!mounted) return;
       setState(() {
-        _overview = overview is Map ? Map<String, dynamic>.from(overview) : const {};
+        _overview = overview is Map
+            ? Map<String, dynamic>.from(overview)
+            : const {};
         _records = records;
         _loading = false;
         _error = null;
@@ -95,17 +99,42 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
   List<Map<String, dynamic>> _extractRecords(dynamic value) {
     dynamic source = value;
     if (value is Map) {
-      source = value['items'] ?? value['logs'] ?? value['records'] ?? value['entries'] ?? value['data'] ?? const [];
+      source =
+          value['items'] ??
+          value['logs'] ??
+          value['records'] ??
+          value['entries'] ??
+          value['data'] ??
+          const [];
     }
     if (source is! List) return const [];
-    return source.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return source.whereType<Map>().map((e) {
+      final row = Map<String, dynamic>.from(e);
+      if (_dataset != '日志') return row;
+      final line = row['line']?.toString() ?? '';
+      Map<String, dynamic> structured = {};
+      try {
+        final decoded = jsonDecode(line);
+        if (decoded is Map) structured = Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+      return <String, dynamic>{
+        ...row,
+        'message': structured['@message'] ?? structured['message'] ?? line,
+        'level': structured['@level'] ?? structured['level'] ?? 'info',
+        'source': structured['source'] ?? structured['stage'] ?? row['file'],
+        'at': structured['@timestamp'] ?? row['time'],
+      };
+    }).toList();
   }
 
   List<Map<String, dynamic>> get _visibleRecords {
-    if (_dataset != '日志' || _selectedLevel == 0) return _records;
+    if (!{'日志', '扩展日志'}.contains(_dataset) || _selectedLevel == 0)
+      return _records;
     final expected = _levels[_selectedLevel];
     return _records.where((row) {
-      final level = (row['level'] ?? row['severity'] ?? '').toString().toLowerCase();
+      final level = (row['level'] ?? row['severity'] ?? '')
+          .toString()
+          .toLowerCase();
       return level == expected;
     }).toList();
   }
@@ -113,33 +142,39 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
   Future<void> _exportDiagnostics() async {
     try {
       final api = ref.read(backendServiceProvider);
-      final diagnostics = await api.get<dynamic>('/api/dev-console/export-diagnostics');
+      final diagnostics = await api.get<dynamic>(
+        '/api/dev-console/export-diagnostics',
+      );
       await Clipboard.setData(
-        ClipboardData(text: const JsonEncoder.withIndent('  ').convert(diagnostics ?? const {})),
+        ClipboardData(
+          text: const JsonEncoder.withIndent(
+            '  ',
+          ).convert(diagnostics ?? const {}),
+        ),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('完整诊断数据已复制到剪贴板')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('完整诊断数据已复制到剪贴板')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导出失败：$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出失败：$e')));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const AmitiaLoadingState();
-    if (_error != null && _records.isEmpty) return AmitiaErrorState(message: _error!, onRetry: _load);
-
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '诊断控制台',
         showBackButton: true,
         fallbackRoute: AppRoutes.developer,
         actions: [
+          const LogFolderButton(),
           AmitiaIconButton(
             icon: _isPaused ? Icons.play_arrow : Icons.pause,
             onPressed: () => setState(() => _isPaused = !_isPaused),
@@ -160,33 +195,49 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
           ),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            _buildOverview(context),
-            _buildToolbar(context),
-            if (_isPaused) _buildPausedBanner(context),
-            if (_error != null)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
-                child: Text(_error!, style: AppTypography.caption(context).copyWith(color: context.error)),
-              ),
-            Expanded(
-              child: _visibleRecords.isEmpty
-                  ? const AmitiaEmptyState(icon: Icons.terminal, title: '暂无诊断记录')
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView.builder(
-                        padding: EdgeInsets.only(bottom: AppSpacing.lg),
-                        itemCount: _visibleRecords.length,
-                        itemBuilder: (context, index) => _buildRecord(context, _visibleRecords[index]),
+      body: _loading
+          ? const AmitiaLoadingState()
+          : _error != null && _records.isEmpty
+          ? AmitiaErrorState(message: _error!, onRetry: _load)
+          : SafeArea(
+              top: false,
+              child: Column(
+                children: [
+                  _buildOverview(context),
+                  _buildToolbar(context),
+                  if (_isPaused) _buildPausedBanner(context),
+                  if (_error != null)
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.pagePadding,
+                        vertical: AppSpacing.xs,
+                      ),
+                      child: Text(
+                        _error!,
+                        style: AppTypography.caption(
+                          context,
+                        ).copyWith(color: context.error),
                       ),
                     ),
+                  Expanded(
+                    child: _visibleRecords.isEmpty
+                        ? const AmitiaEmptyState(
+                            icon: Icons.terminal,
+                            title: '暂无诊断记录',
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView.builder(
+                              padding: EdgeInsets.only(bottom: AppSpacing.lg),
+                              itemCount: _visibleRecords.length,
+                              itemBuilder: (context, index) =>
+                                  _buildRecord(context, _visibleRecords[index]),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -201,7 +252,12 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
     ];
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
       color: context.surfacePrimary,
       child: Wrap(
         spacing: AppSpacing.sm,
@@ -214,7 +270,10 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: context.borderPrimary, width: .5),
             ),
-            child: Text('${entry.key} ${entry.value}', style: AppTypography.label(context)),
+            child: Text(
+              '${entry.key} ${entry.value}',
+              style: AppTypography.label(context),
+            ),
           );
         }).toList(),
       ),
@@ -223,10 +282,15 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
 
   Widget _buildToolbar(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.pagePadding,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
-        border: Border(bottom: BorderSide(color: context.borderPrimary, width: .5)),
+        border: Border(
+          bottom: BorderSide(color: context.borderPrimary, width: .5),
+        ),
       ),
       child: Column(
         children: [
@@ -250,7 +314,7 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
               },
             ),
           ),
-          if (_dataset == '日志') ...[
+          if ({'日志', '扩展日志'}.contains(_dataset)) ...[
             SizedBox(height: AppSpacing.xs),
             SizedBox(
               height: 30,
@@ -274,23 +338,55 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
   Widget _buildPausedBanner(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 7),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.pagePadding,
+        vertical: 7,
+      ),
       color: context.warning.withValues(alpha: .1),
-      child: Text('自动刷新已暂停；当前数据保持不变。', style: AppTypography.label(context).copyWith(color: context.warning)),
+      child: Text(
+        '自动刷新已暂停；当前数据保持不变。',
+        style: AppTypography.label(context).copyWith(color: context.warning),
+      ),
     );
   }
 
   Widget _buildRecord(BuildContext context, Map<String, dynamic> row) {
     final level = (row['level'] ?? row['severity'] ?? '').toString();
-    final title = (row['message'] ?? row['name'] ?? row['eventType'] ?? row['taskId'] ?? row['invocationId'] ?? row['id'] ?? '记录').toString();
-    final source = (row['extension'] ?? row['extensionId'] ?? row['module'] ?? row['moduleId'] ?? row['source'] ?? '').toString();
-    final time = (row['at'] ?? row['createdAt'] ?? row['startedAt'] ?? row['updatedAt'] ?? '').toString();
+    final title =
+        (row['message'] ??
+                row['name'] ??
+                row['eventType'] ??
+                row['taskId'] ??
+                row['invocationId'] ??
+                row['id'] ??
+                '记录')
+            .toString();
+    final source =
+        (row['extension'] ??
+                row['extensionId'] ??
+                row['module'] ??
+                row['moduleId'] ??
+                row['source'] ??
+                '')
+            .toString();
+    final time =
+        (row['at'] ??
+                row['createdAt'] ??
+                row['startedAt'] ??
+                row['updatedAt'] ??
+                '')
+            .toString();
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
+      margin: EdgeInsets.symmetric(
+        horizontal: AppSpacing.pagePadding,
+        vertical: 2,
+      ),
       padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
-        border: Border(bottom: BorderSide(color: context.borderSecondary, width: .5)),
+        border: Border(
+          bottom: BorderSide(color: context.borderSecondary, width: .5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,10 +398,23 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
                 const SizedBox(width: 8),
               ],
               if (source.isNotEmpty)
-                Expanded(child: Text(source, style: AppTypography.label(context).copyWith(color: context.accentPrimary)))
+                Expanded(
+                  child: Text(
+                    source,
+                    style: AppTypography.label(
+                      context,
+                    ).copyWith(color: context.accentPrimary),
+                  ),
+                )
               else
                 const Spacer(),
-              if (time.isNotEmpty) Text(_shortTime(time), style: AppTypography.label(context).copyWith(color: context.textTertiary)),
+              if (time.isNotEmpty)
+                Text(
+                  _shortTime(time),
+                  style: AppTypography.label(
+                    context,
+                  ).copyWith(color: context.textTertiary),
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -315,7 +424,9 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
             SelectableText(
               const JsonEncoder.withIndent('  ').convert(row),
               maxLines: 8,
-              style: AppTypography.caption(context).copyWith(fontFamily: 'monospace', color: context.textSecondary),
+              style: AppTypography.caption(
+                context,
+              ).copyWith(fontFamily: 'monospace', color: context.textSecondary),
             ),
           ],
         ],
@@ -328,20 +439,29 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
     final color = level.contains('error')
         ? context.error
         : level.contains('warn')
-            ? context.warning
-            : level.contains('debug')
-                ? context.textTertiary
-                : context.accentPrimary;
+        ? context.warning
+        : level.contains('debug')
+        ? context.textTertiary
+        : context.accentPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: .1), borderRadius: BorderRadius.circular(4)),
-      child: Text(raw.toUpperCase(), style: AppTypography.label(context).copyWith(color: color, fontSize: 10)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        raw.toUpperCase(),
+        style: AppTypography.label(
+          context,
+        ).copyWith(color: color, fontSize: 10),
+      ),
     );
   }
 
   String _shortTime(String value) {
     final parsed = DateTime.tryParse(value)?.toLocal();
-    if (parsed == null) return value.length > 19 ? value.substring(0, 19) : value;
+    if (parsed == null)
+      return value.length > 19 ? value.substring(0, 19) : value;
     return '${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}:${parsed.second.toString().padLeft(2, '0')}';
   }
 }

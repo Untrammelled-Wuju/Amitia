@@ -14,7 +14,7 @@ func (s *CredentialStore) unpairIntent(begin bool) error {
 	defer s.mu.Unlock()
 	path := filepath.Join(s.dirPath, "unpair-intent.json")
 	if !begin {
-		err := os.Remove(path)
+		err := secretstore.Delete(path)
 		if os.IsNotExist(err) {
 			return nil
 		}

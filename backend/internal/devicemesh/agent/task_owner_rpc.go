@@ -53,7 +53,14 @@ func (c *MeshClient) callTaskOwner(ctx context.Context, dispatch protocol.TaskDi
 	if err != nil || base.Scheme != "https" || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" || dispatch.TaskRunID == "" || len(dispatch.TaskRunID) > 256 || strings.ContainsAny(dispatch.TaskRunID, "/\\\x00") {
 		return nil, fmt.Errorf("Core 所有者地址或任务编号无效")
 	}
-	requestBody, err := json.Marshal(protocol.TaskOwnerRPCRequest{Scope: authority, AuthorityCallID: dispatch.AuthorityCallID, TaskGeneration: dispatch.TaskGeneration, AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID, SessionID: dispatch.RuntimeSessionID.String(), ConnectionGeneration: dispatch.ConnectionGeneration, RequestID: requestID, Method: method, Params: params})
+	ownerRequest := protocol.TaskOwnerRPCRequest{Scope: authority, AuthorityCallID: dispatch.AuthorityCallID, TaskGeneration: dispatch.TaskGeneration, AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID, SessionID: dispatch.RuntimeSessionID.String(), ConnectionGeneration: dispatch.ConnectionGeneration, RequestID: requestID, Method: method, Params: params}
+	if method == "task.host.executeTool" || method == "task.host.emitEvent" {
+		if len(params) > 64<<10 {
+			return nil, fmt.Errorf("任务Native参数超过64KiB")
+		}
+		ownerRequest.NativeParamsBytes = append([]byte(nil), params...)
+	}
+	requestBody, err := json.Marshal(ownerRequest)
 	if err != nil {
 		return nil, err
 	}

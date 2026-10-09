@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -62,15 +63,60 @@ type MCPToolSyncResult struct {
 }
 
 type mcpInstallPortBridge struct {
-	lifecycle *mcp.MCPLifecycle
-	runtime   MCPRuntimeConnectPort
-	toolSync  MCPToolSyncPort
+	lifecycle   *mcp.MCPLifecycle
+	runtime     MCPRuntimeConnectPort
+	toolSync    MCPToolSyncPort
+	persistence MCPPersistencePort
 }
 
-func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string, transport string, command string, args []string, env map[string]string) (string, error) {
+type MCPPersistencePort interface {
+	SaveMCPConfiguration(context.Context, string, string, string, []string, map[string]string) (string, error)
+	MarkMCPReady(context.Context, string) error
+	RemoveMCPConfiguration(context.Context, string) error
+}
+
+func NewPersistentMCPPortBridge(lifecycle *mcp.MCPLifecycle, runtime MCPRuntimeConnectPort, toolSync MCPToolSyncPort, persistence MCPPersistencePort) MCPInstallPort {
+	return &mcpInstallPortBridge{lifecycle: lifecycle, runtime: runtime, toolSync: toolSync, persistence: persistence}
+}
+
+func (b *mcpInstallPortBridge) VerifyInstalledCapability(ctx context.Context, installed InstalledCapability) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	installation, err := b.lifecycle.GetInstallation(installed.TransactionID)
+	if err != nil {
+		return false, err
+	}
+	return installation.Enabled && installation.RuntimeState == mcp.MCPRuntimeReady, nil
+}
+
+func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string, transport string, command string, args []string, env map[string]string) (id string, failure error) {
 	if b.lifecycle == nil {
 		return "", fmt.Errorf("MCP lifecycle not configured")
 	}
+	if b.persistence != nil {
+		persistedID, err := b.persistence.SaveMCPConfiguration(ctx, serverName, transport, command, args, env)
+		if err != nil {
+			return "", err
+		}
+		serverName = persistedID
+	}
+	defer func() {
+		if failure != nil {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if b.runtime != nil {
+				_ = b.runtime.Disconnect(cleanupCtx, serverName)
+			}
+			_ = b.lifecycle.Uninstall(serverName)
+			if b.toolSync != nil {
+				_, _ = b.toolSync.SyncMCPTools(cleanupCtx, serverName, nil)
+			}
+			if b.persistence != nil {
+				_ = b.persistence.RemoveMCPConfiguration(cleanupCtx, serverName)
+			}
+		}
+	}()
 	launcherKind := resolveLauncherKind(transport, command)
 	binding := mcp.MCPBinding{
 		ID:        serverName,
@@ -97,6 +143,21 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 	}
 	if binding.Launcher != nil {
 		plan.Launcher = string(launcherKind)
+		if launcherKind == mcp.MCPLauncherNPX || launcherKind == mcp.MCPLauncherUVX {
+			for _, argument := range args {
+				if strings.HasPrefix(argument, "-") {
+					continue
+				}
+				if launcherKind == mcp.MCPLauncherUVX {
+					plan.RequestedPackage, plan.RequestedVersion, _ = strings.Cut(argument, "==")
+				} else if at := strings.LastIndex(argument, "@"); at > 0 {
+					plan.RequestedPackage, plan.RequestedVersion = argument[:at], argument[at+1:]
+				} else {
+					plan.RequestedPackage = argument
+				}
+				break
+			}
+		}
 	}
 	plan.PlanDigest = plan.ComputeDigest()
 	if err := b.lifecycle.Install(ctx, binding, plan); err != nil {
@@ -126,6 +187,11 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 	}
 	if err := b.lifecycle.MarkReady(serverName); err != nil {
 		return "", fmt.Errorf("MCP mark ready: %w", err)
+	}
+	if b.persistence != nil {
+		if err := b.persistence.MarkMCPReady(ctx, serverName); err != nil {
+			return "", err
+		}
 	}
 
 	return serverName, nil
@@ -157,7 +223,18 @@ func (b *mcpInstallPortBridge) RemoveMCP(ctx context.Context, serverName string)
 	if b.runtime != nil {
 		_ = b.runtime.Disconnect(ctx, serverName)
 	}
-	return b.lifecycle.Uninstall(serverName)
+	if err := b.lifecycle.Uninstall(serverName); err != nil {
+		return err
+	}
+	if b.toolSync != nil {
+		if _, err := b.toolSync.SyncMCPTools(ctx, serverName, nil); err != nil {
+			return err
+		}
+	}
+	if b.persistence != nil {
+		return b.persistence.RemoveMCPConfiguration(ctx, serverName)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -203,6 +280,7 @@ func NewPackagePortBridge(installer PackageInstallPort) PackageInstallPort {
 
 // EnableExistingDeps 定义 EnableExistingPort 所需的依赖。
 type EnableExistingDeps struct {
+	MCPExisting        MCPExistingConnectPort
 	EnablementSvc      *enablement.EnablementService
 	InstallRepo        domain.InstallationRepository
 	DefinitionRepo     domain.DefinitionRepository
@@ -224,6 +302,7 @@ func NewEnableExistingPortBridge(enablementSvc *enablement.EnablementService) En
 // NewEnableExistingPortBridgeWithDeps 创建带完整依赖的启用现有能力端口桥接
 func NewEnableExistingPortBridgeWithDeps(deps EnableExistingDeps) EnableExistingPort {
 	return &enableExistingPortBridge{
+		mcpExisting:        deps.MCPExisting,
 		enablementSvc:      deps.EnablementSvc,
 		installRepo:        deps.InstallRepo,
 		definitionRepo:     deps.DefinitionRepo,
@@ -239,6 +318,7 @@ func NewEnableExistingPortBridgeWithDeps(deps EnableExistingDeps) EnableExisting
 }
 
 type enableExistingPortBridge struct {
+	mcpExisting        MCPExistingConnectPort
 	enablementSvc      *enablement.EnablementService
 	installRepo        domain.InstallationRepository
 	definitionRepo     domain.DefinitionRepository
@@ -341,6 +421,9 @@ func (b *enableExistingPortBridge) EnableSkill(ctx context.Context, skillID stri
 }
 
 func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName string) error {
+	if b.mcpExisting != nil {
+		return b.mcpExisting.EnableExistingMCP(ctx, serverName)
+	}
 	if b.enablementSvc == nil {
 		return fmt.Errorf("enablement service not configured")
 	}
@@ -409,6 +492,18 @@ func (b *enableExistingPortBridge) isMCPConnected(ctx context.Context, serverNam
 		return false
 	}
 	return server.Status == "running" || server.Status == "connected"
+}
+
+type MCPExistingConnectPort interface {
+	EnableExistingMCP(context.Context, string) error
+	VerifyExistingMCP(context.Context, string) (bool, error)
+}
+
+func (b *enableExistingPortBridge) VerifyExistingMCP(ctx context.Context, id string) (bool, error) {
+	if b.mcpExisting != nil {
+		return b.mcpExisting.VerifyExistingMCP(ctx, id)
+	}
+	return false, nil
 }
 
 // ---------------------------------------------------------------------------

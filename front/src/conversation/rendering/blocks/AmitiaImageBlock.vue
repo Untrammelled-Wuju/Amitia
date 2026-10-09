@@ -2,7 +2,7 @@
   <div class="amrp-image-gallery" :class="{ multiple: images.length > 1 }">
     <figure v-for="(image, index) in images" :key="image.id" class="amrp-image-card">
       <div class="amrp-image-stage">
-        <span v-if="!resolvedUrls[index] || image.status === 'loading'" class="amrp-image-state">
+        <span v-if="image.status !== 'failed' && (!resolvedUrls[index] || image.status === 'loading')" class="amrp-image-state">
           <span class="amrp-spinner"></span>
           加载中
         </span>
@@ -11,7 +11,8 @@
           加载失败，点击重试
         </button>
         <img
-          v-show="resolvedUrls[index]"
+          v-if="resolvedUrls[index]"
+          :key="`${image.url}:${retryToken}`"
           :class="{ hidden: image.status === 'loading' }"
           :src="cacheBustedUrl(image, index)"
           :alt="image.alt || '图片'"
@@ -49,6 +50,7 @@ import type { ImageBlock } from "../types";
 import {
   downloadConversationMedia,
   resolveConversationMediaUrl,
+  invalidateConversationMedia,
 } from "../media";
 
 const props = defineProps<{
@@ -58,30 +60,35 @@ const props = defineProps<{
 const previewIndex = ref(-1);
 const retryToken = ref(0);
 const resolvedUrls = ref<string[]>([]);
+let generation = 0;
 
 function isGif(image: ImageBlock): boolean {
   return /\.gif(?:$|\?)/i.test(image.url) || image.mimeType === "image/gif";
 }
 
 async function resolveImages() {
-  resolvedUrls.value = await Promise.all(
+  const current = ++generation;
+  const next = await Promise.all(
     props.images.map(async (image) => {
       try {
         return await resolveConversationMediaUrl(image.url);
       } catch {
+        if (current === generation) image.status = "failed";
         return "";
       }
     }),
   );
+  if (current === generation) resolvedUrls.value = next;
 }
 
 function cacheBustedUrl(image: ImageBlock, index: number): string {
   const value = resolvedUrls.value[index] || "";
-  if (image.status !== "failed" || retryToken.value === 0) return value;
+  if (retryToken.value === 0 || !/^https?:/i.test(value)) return value;
   return `${value}${value.includes("?") ? "&" : "?"}amrpRetry=${retryToken.value}`;
 }
 
 function retry(image: ImageBlock) {
+  invalidateConversationMedia(image.url);
   image.status = "loading";
   retryToken.value += 1;
   void resolveImages();

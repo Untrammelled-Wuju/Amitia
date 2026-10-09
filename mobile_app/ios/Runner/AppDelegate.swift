@@ -9,6 +9,7 @@ import UIKit
   private var nativeTransport: IOSNativeTransport?
   private var notificationPlatform: IOSNotificationPlatform?
   private var deviceMeshIdentity: IOSDeviceMeshIdentity?
+  private var runtimeBridge: IOSRuntimeBridge?
 
   override func application(
     _ application: UIApplication,
@@ -75,6 +76,11 @@ import UIKit
 
     let resolver = RootfsResolver()
     let installer = RootfsInstaller(resolver: resolver)
+    if let identity = self.deviceMeshIdentity {
+      let runtime = IOSRuntimeBridge(resolver: resolver, installer: installer, identity: identity)
+      runtime.register(messenger: self.registrar(forPlugin: "IOSRuntimeBridge")!.messenger())
+      self.runtimeBridge = runtime
+    }
     self.rootfsHandler = RootfsInstallMethodHandler(installer: installer, resolver: resolver)
     self.rootfsHandler?.register(with: self.registrar(forPlugin: "RootfsInstallBridge")!)
 
@@ -143,6 +149,7 @@ import UIKit
   }
 
   override func applicationDidEnterBackground(_ application: UIApplication) {
+    runtimeBridge?.suspend()
     IOSScreenAwakeNativeHandler.apply(application, foreground: false)
     IOSSandboxBridge.shared().applicationDidEnterBackground()
     self.iosNativeHost?.didEnterBackground()
@@ -150,12 +157,14 @@ import UIKit
   }
 
   override func applicationWillEnterForeground(_ application: UIApplication) {
+    runtimeBridge?.resume()
     IOSSandboxBridge.shared().applicationWillEnterForeground()
     self.iosNativeHost?.willEnterForeground()
     super.applicationWillEnterForeground(application)
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
+    runtimeBridge?.terminate()
     IOSSandboxBridge.shared().applicationWillTerminate()
     self.iosNativeHost?.willTerminate()
     super.applicationWillTerminate(application)

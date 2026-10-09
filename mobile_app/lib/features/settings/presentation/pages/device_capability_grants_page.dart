@@ -50,6 +50,7 @@ class _DeviceCapabilityGrantsPageState
     try {
       final service = ref.read(deviceMeshServiceProvider);
       final api = ref.read(rawBackendServiceApiProvider);
+      final apiGeneration = api?.generation;
       final deployment = ref.read(mobileDeploymentConfigProvider);
       final before = await service.coordination();
       final authority = DeviceManagementIntent(
@@ -58,6 +59,7 @@ class _DeviceCapabilityGrantsPageState
             mounted &&
             ticket == _generation &&
             api != null &&
+            api.generation == apiGeneration &&
             identical(ref.read(rawBackendServiceApiProvider), api) &&
             ref.read(mobileDeploymentConfigProvider) == deployment,
       );

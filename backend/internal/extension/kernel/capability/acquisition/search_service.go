@@ -3,6 +3,7 @@ package acquisition
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // SourceSearchService 提供基于 SourceRegistry 的统一搜索入口，管理 Source 注册与去重
@@ -21,6 +22,13 @@ func NewSourceSearchService(registry *SourceRegistry) *SourceSearchService {
 // candidates as a flat error-returning slice for use by the Planner.
 func (s *SourceSearchService) Search(ctx context.Context, request AcquisitionRequest) ([]CapabilityCandidate, error) {
 	resultSet := s.SearchResultSet(ctx, request)
+	if len(resultSet.Candidates) == 0 && len(resultSet.Errors) > 0 {
+		messages := make([]string, 0, len(resultSet.Errors))
+		for _, failure := range resultSet.Errors {
+			messages = append(messages, failure.SourceID+": "+failure.Error)
+		}
+		return nil, fmt.Errorf("capability discovery failed: %s", strings.Join(messages, "; "))
+	}
 	return resultSet.Candidates, nil
 }
 

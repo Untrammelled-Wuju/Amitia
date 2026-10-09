@@ -29,6 +29,7 @@ class AmitiaMessageView extends StatefulWidget {
   final String avatarUrl;
   final bool showAvatar;
   final bool aiAvatarEnabled;
+  final AiAvatarShapePreference aiAvatarShape;
   final bool aiNameEnabled;
   final bool showHeader;
   final bool showThinking;
@@ -49,6 +50,7 @@ class AmitiaMessageView extends StatefulWidget {
     this.avatarUrl = '',
     this.showAvatar = true,
     this.aiAvatarEnabled = true,
+    this.aiAvatarShape = const AiAvatarShapePreference(),
     this.aiNameEnabled = true,
     this.showHeader = true,
     this.showThinking = false,
@@ -167,7 +169,9 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                 size: tokens.avatarSize,
                 initial: widget.avatarInitial,
                 color: _parseAvatarColor(widget.avatarColor, tokens.accent),
-                borderRadius: BorderRadius.circular(tokens.avatarSize * 0.32),
+                borderRadius: BorderRadius.circular(
+                  widget.aiAvatarShape.radius(tokens.avatarSize),
+                ),
               )
             else if (!bubble && widget.aiAvatarEnabled)
               SizedBox(width: tokens.avatarSize, height: tokens.avatarSize),
@@ -342,7 +346,9 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                       widget.avatarColor,
                       Theme.of(context).colorScheme.primary,
                     ),
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(
+                      widget.aiAvatarShape.radius(28),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Flexible(child: body),

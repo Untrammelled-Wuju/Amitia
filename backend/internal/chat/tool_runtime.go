@@ -139,6 +139,22 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 		out.ErrorMessage = r.Error.Message
 		out.HasError = true
 	}
+	switch strings.ToUpper(strings.TrimSpace(r.Status)) {
+	case "FAILED", "FAILURE", "ERROR", "DENIED", "REJECTED", "CANCELLED", "CANCELED", "TIMED_OUT", "TIMEOUT", "NOT_AVAILABLE", "UNAVAILABLE":
+		out.HasError = true
+		if out.ErrorCode == "" {
+			out.ErrorCode = "TOOL_" + strings.ToUpper(strings.TrimSpace(r.Status))
+		}
+		if out.ErrorMessage == "" {
+			out.ErrorMessage = strings.TrimSpace(r.VisibleText)
+		}
+	}
+	if !found {
+		out.HasError = true
+		if out.ErrorCode == "" {
+			out.ErrorCode = "TOOL_NOT_FOUND"
+		}
+	}
 	return out
 }
 

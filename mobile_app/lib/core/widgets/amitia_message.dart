@@ -14,6 +14,7 @@ import '../../features/conversation/rendering/amrp.dart';
 import 'amitia_button.dart';
 import 'amitia_misc.dart';
 import 'user_message_surface.dart';
+import 'conversation_media_image.dart';
 import 'amitia_popup_menu.dart';
 import '../settings/chat_appearance_preferences.dart';
 
@@ -72,6 +73,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   final UserMessageMaterial userMessageMaterial;
   final bool showAvatar;
   final bool aiAvatarEnabled;
+  final AiAvatarShapePreference aiAvatarShape;
   final bool aiNameEnabled;
   final bool showHeader;
   final bool compactBottom;
@@ -101,6 +103,7 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.userMessageMaterial = UserMessageMaterial.solid,
     this.showAvatar = true,
     this.aiAvatarEnabled = true,
+    this.aiAvatarShape = const AiAvatarShapePreference(),
     this.aiNameEnabled = true,
     this.showHeader = true,
     this.compactBottom = false,
@@ -173,6 +176,7 @@ class AmitiaMessageBubble extends StatelessWidget {
           avatarUrl: avatarUrl,
           showAvatar: showAvatar || messageStyle == ChatMessageStyle.bubble,
           aiAvatarEnabled: aiAvatarEnabled,
+          aiAvatarShape: aiAvatarShape,
           aiNameEnabled: aiNameEnabled,
           showHeader: showHeader || messageStyle == ChatMessageStyle.bubble,
           showThinking: showThinking,
@@ -850,17 +854,10 @@ class _ImageMessage extends StatelessWidget {
               height: 160,
               width: double.infinity,
               child: hasUrl
-                  ? Image.network(
-                      url!,
+                  ? ConversationMediaImage(
+                      url: url!,
                       fit: BoxFit.cover,
                       cacheWidth: 360,
-                      frameBuilder:
-                          (context, child, frame, wasSynchronouslyLoaded) {
-                            if (wasSynchronouslyLoaded) return child;
-                            if (frame != null) return child;
-                            return _placeholder(context);
-                          },
-                      errorBuilder: (_, __, ___) => _placeholder(context),
                     )
                   : _placeholder(context),
             ),
@@ -896,15 +893,10 @@ class _ImageMessage extends StatelessWidget {
           child: SafeArea(
             child: Center(
               child: InteractiveViewer(
-                child: Image.network(
-                  value,
+                child: ConversationMediaImage(
+                  url: value,
                   fit: BoxFit.contain,
                   cacheWidth: 1080,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.broken_image_outlined,
-                    color: Colors.white,
-                    size: 64,
-                  ),
                 ),
               ),
             ),

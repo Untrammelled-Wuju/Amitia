@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
@@ -283,39 +281,14 @@ final deviceCoordinationProvider =
 
 final localDeviceMeshIdentityProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
-      if (Platform.isIOS) {
-        return ref.watch(mobileDeviceMeshIdentityProvider).identity();
-      }
       final service = ref.watch(deviceMeshLocalServiceProvider);
-      return service == null ? null : service.identity();
+      return service?.identity();
     });
 
 final localDeviceMeshStatusProvider =
     FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
-      if (Platform.isIOS) {
-        final deployment = ref.watch(mobileDeploymentConfigProvider);
-        if (deployment.mode != MobileDeploymentMode.cloud ||
-            (deployment.remoteCoreUri ?? '').trim().isEmpty) {
-          return const <String, dynamic>{
-            'state': 'unsupported',
-            'platform': 'ios',
-            'deviceAgent': 'native-lightweight',
-          };
-        }
-        final credential = await ref
-            .watch(mobileDeviceMeshProvisioningProvider)
-            .currentFor(deployment.remoteCoreUri!);
-        return <String, dynamic>{
-          'state': credential == null ? 'unprovisioned' : 'provisioned',
-          'platform': 'ios',
-          'deviceAgent': 'native-lightweight',
-          if (credential != null) 'spaceId': credential.spaceId,
-          if (credential != null) 'deviceId': credential.deviceId,
-          if (credential != null) 'runtimeId': credential.runtimeId,
-        };
-      }
       final service = ref.watch(deviceMeshLocalServiceProvider);
-      return service == null ? null : service.status();
+      return service?.status();
     });
 
 final privacyServiceProvider = Provider<PrivacyService>(

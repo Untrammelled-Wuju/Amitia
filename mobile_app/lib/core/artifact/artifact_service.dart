@@ -62,9 +62,11 @@ abstract class ArtifactService {
 
   String contentUrl(String artifactId);
 
-  Future<Uri> resolveMediaUri(String rawUrl);
+  Future<Uri> resolveMediaUri(String rawUrl, {bool embed = false});
 
   Future<Uri> resolveDownloadUri(String rawUrl);
+
+  Future<String> readText(String rawUrl);
 
   Future<bool> saveToUserLocation({
     required String rawUrl,
@@ -242,18 +244,25 @@ class HttpArtifactService implements ArtifactService {
   }
 
   @override
-  Future<Uri> resolveMediaUri(String rawUrl) async {
+  Future<Uri> resolveMediaUri(String rawUrl, {bool embed = false}) async {
     final value = rawUrl.trim();
     if (value.isEmpty) throw ArtifactServiceException('empty_media_url');
     final parsed = Uri.tryParse(value);
     if (parsed == null) throw ArtifactServiceException('invalid_media_url');
-    if (parsed.hasScheme && !parsed.scheme.toLowerCase().startsWith('amitia')) {
-      return parsed;
-    }
-    final artifactId = parseArtifactUri(value);
+    final contentMatch = RegExp(r'/api/artifacts/v1/([^/?#]+)/content(?:[?#]|$)').firstMatch(value);
+    final artifactId = parseArtifactUri(value) ??
+        (contentMatch == null ? null : Uri.decodeComponent(contentMatch.group(1)!));
     if (artifactId != null) {
+      if (embed || Uri.parse(_baseUrl).path.contains('/internal/device-mesh/provider')) {
+        final response = await _dio.get<List<int>>(
+          '$_baseUrl/api/artifacts/v1/${Uri.encodeComponent(artifactId)}/content',
+          options: Options(responseType: ResponseType.bytes),
+        );
+        return Uri.dataFromBytes(response.data ?? const <int>[],
+            mimeType: (response.headers.value('content-type') ?? 'application/octet-stream').split(';').first);
+      }
       final response = await _dio.get(
-        '$_baseUrl/api/artifacts/v1/$artifactId/media-ticket',
+        '$_baseUrl/api/artifacts/v1/${Uri.encodeComponent(artifactId)}/media-ticket',
       );
       final data = response.data;
       final payload = data is Map && data['data'] is Map
@@ -265,8 +274,11 @@ class HttpArtifactService implements ArtifactService {
       if (ticketPath.isEmpty) {
         throw ArtifactServiceException('invalid_media_ticket_response');
       }
-      return Uri.parse('$_baseUrl$ticketPath');
+      return Uri.parse(ticketPath).hasScheme
+          ? Uri.parse(ticketPath)
+          : Uri.parse('$_baseUrl/${ticketPath.replaceFirst(RegExp(r'^/+'), '')}');
     }
+    if (parsed.hasScheme && const ['http', 'https', 'data', 'file'].contains(parsed.scheme.toLowerCase())) return parsed;
     if (value.startsWith('/')) {
       return Uri.parse('$_baseUrl$value');
     }
@@ -274,8 +286,16 @@ class HttpArtifactService implements ArtifactService {
   }
 
   @override
+  Future<String> readText(String rawUrl) async {
+    final bytes = await _downloadBytes(rawUrl);
+    if (bytes.length > 5 * 1024 * 1024) throw ArtifactServiceException('文件过大，无法预览，请下载查看');
+    return utf8.decode(bytes);
+  }
+
+  @override
   Future<Uri> resolveDownloadUri(String rawUrl) async {
     final resolved = await resolveMediaUri(rawUrl);
+    if (resolved.scheme == 'data' || resolved.scheme == 'file') return resolved;
     return resolved.replace(
       queryParameters: <String, String>{
         ...resolved.queryParameters,
@@ -427,6 +447,7 @@ class HttpArtifactService implements ArtifactService {
       return Uint8List.fromList(utf8.encode(Uri.decodeComponent(payload)));
     }
     final resolved = await resolveDownloadUri(value);
+    if (resolved.scheme == 'data') return resolved.data!.contentAsBytes();
     if (resolved.scheme == 'file') {
       return File(resolved.toFilePath()).readAsBytes();
     }

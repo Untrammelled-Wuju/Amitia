@@ -5,6 +5,7 @@ class DeviceManagementIntent {
   final Map<String, dynamic> policy;
   final String coreId;
   final bool canAdminister;
+  final bool _hasAdministratorPermission;
 
   DeviceManagementIntent(Map<String, dynamic> state, {required this.isCurrent})
     : policy = Map.unmodifiable(
@@ -13,17 +14,18 @@ class DeviceManagementIntent {
         ),
       ),
       coreId = (state['coreId'] ?? '').toString(),
+      _hasAdministratorPermission = state['canAdminister'] == true,
       canAdminister =
           state['canAdminister'] == true &&
           state['policy'] is Map &&
           state['policy']['coordinated'] == true {
-    if (state['coordinationAvailable'] != true ||
-        coreId.isEmpty ||
+    if (coreId.isEmpty ||
         policy['deviceId'] is! String ||
         (policy['deviceId'] as String).isEmpty ||
         state['canAdminister'] is! bool ||
-        policy['coordinated'] is! bool)
+        policy['coordinated'] is! bool) {
       throw StateError('设备管理身份与权限无法确认');
+    }
     for (final key in const [
       'providerEpoch',
       'modeRevision',
@@ -31,8 +33,9 @@ class DeviceManagementIntent {
     ]) {
       if (policy[key] is! int ||
           policy[key] < 1 ||
-          policy[key] > 9007199254740991)
+          policy[key] > 9007199254740991) {
         throw StateError('设备管理缺少有效权限版本');
+      }
     }
     assertConnection();
   }
@@ -65,9 +68,8 @@ class DeviceManagementIntent {
       ...policy,
       'permissionRevision': policy['permissionRevision'] + permissionIncrement,
     };
-    if (state['coordinationAvailable'] != true ||
-        state['coreId'] != coreId ||
-        state['canAdminister'] != canAdminister ||
+    if (state['coreId'] != coreId ||
+        state['canAdminister'] != _hasAdministratorPermission ||
         current is! Map ||
         jsonEncode([
               for (final key in const [
@@ -88,7 +90,8 @@ class DeviceManagementIntent {
                 'permissionRevision',
               ])
                 expected[key],
-            ]))
+            ])) {
       throw StateError('Core或原设备管理权限已变化，请重新加载原页面');
+    }
   }
 }

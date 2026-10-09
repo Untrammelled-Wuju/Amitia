@@ -14,10 +14,14 @@ class BackgroundKeepAliveStatus {
     required this.enabled,
     required this.active,
     required this.batteryUnrestricted,
+    this.powerSaveMode,
+    this.backgroundDataRestriction = 'unknown',
   });
   final bool enabled;
   final bool active;
   final bool batteryUnrestricted;
+  final bool? powerSaveMode;
+  final String backgroundDataRestriction;
 }
 
 class BackgroundKeepAliveService {
@@ -45,6 +49,12 @@ class BackgroundKeepAliveService {
 
   Future<BackgroundKeepAliveStatus> openBatterySettings() =>
       _execute('device.keep_alive.battery_settings', {});
+
+  Future<BackgroundKeepAliveStatus> openNetworkSettings() =>
+      _execute('device.keep_alive.network_settings', {});
+
+  Future<BackgroundKeepAliveStatus> openAppSettings() =>
+      _execute('device.keep_alive.app_settings', {});
 
   Future<Map<String, dynamic>> _executeRaw(
     String operation,
@@ -83,6 +93,17 @@ class BackgroundKeepAliveService {
       enabled: result['enabled'] as bool,
       active: result['active'] as bool,
       batteryUnrestricted: result['batteryUnrestricted'] as bool,
+      powerSaveMode: result['powerSaveMode'] is bool
+          ? result['powerSaveMode'] as bool
+          : null,
+      backgroundDataRestriction:
+          [
+            'disabled',
+            'whitelisted',
+            'restricted',
+          ].contains(result['backgroundDataRestriction'])
+          ? result['backgroundDataRestriction'] as String
+          : 'unknown',
     );
   }
 }

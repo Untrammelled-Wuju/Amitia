@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/artifact/artifact_service.dart';
+import '../../../../core/widgets/conversation_media_image.dart';
 import '../../../../core/services/owned_audio_source.dart';
 import '../amitia_message_theme.dart';
 import '../amrp.dart';
@@ -377,6 +378,7 @@ class AmitiaFileBlock extends StatefulWidget {
 
 class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
   late AmrpAssetStatus _status = widget.block.status;
+  bool _preview = false;
 
   @override
   Widget build(BuildContext context) {
@@ -384,7 +386,7 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
     final extension = RegExp(
       r'\.([A-Za-z0-9]+)$',
     ).firstMatch(widget.block.name)?.group(1)?.toUpperCase();
-    return Container(
+    final card = Container(
       constraints: const BoxConstraints(maxWidth: 560),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -450,6 +452,8 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
               ],
             ),
           ),
+          if (widget.block.url.isNotEmpty && (widget.block.mimeType.contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(widget.block.name) || widget.block.mimeType.startsWith('image/')))
+            TextButton(onPressed: () => setState(() { _preview = !_preview; }), child: Text(_preview ? '收起' : '预览')),
           if (_status == AmrpAssetStatus.failed)
             TextButton(
               onPressed: () => setState(
@@ -467,6 +471,13 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
         ],
       ),
     );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      card,
+      if (_preview && (widget.block.mimeType.contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(widget.block.name)))
+        AmitiaHtmlPreview(source: '', url: widget.block.url, filename: widget.block.name)
+      else if (_preview)
+        ConversationMediaImage(url: widget.block.url, alt: widget.block.name),
+    ]);
   }
 
   String _formatBytes(int value) {
@@ -697,6 +708,12 @@ class _ResolvedImageState extends State<_ResolvedImage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _future ??= _resolveMediaUri(context, widget.image.url);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ResolvedImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.image.url != widget.image.url) _future = _resolveMediaUri(context, widget.image.url);
   }
 
   @override
@@ -1510,13 +1527,13 @@ class AmitiaArtifactBlock extends StatelessWidget {
               ],
             ),
           ),
-          if (block.content.isNotEmpty &&
-              (block.artifactKind.toLowerCase().contains('html') ||
-                  block.mimeType.toLowerCase().contains('html')))
+          if (block.artifactKind.toLowerCase().contains('html') ||
+                  block.mimeType.toLowerCase().contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(block.title))
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: AmitiaHtmlPreview(
                 source: block.content,
+                url: block.url,
                 filename: block.title,
               ),
             ),
@@ -1564,9 +1581,10 @@ class AmitiaArtifactBlock extends StatelessWidget {
               Expanded(
                 child:
                     block.artifactKind.toLowerCase().contains('html') ||
-                        block.mimeType.toLowerCase().contains('html')
+                        block.mimeType.toLowerCase().contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(block.title)
                     ? AmitiaHtmlPreview(
                         source: block.content,
+                        url: block.url,
                         filename: block.title,
                       )
                     : SingleChildScrollView(
@@ -1599,9 +1617,12 @@ class AmitiaArtifactBlock extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context) async {
-    final uri = Uri.tryParse(block.url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final uri = await _resolveMediaUri(context, block.url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('文件打开失败：$error')));
+    }
   }
 
   Future<void> _save(BuildContext context) async {

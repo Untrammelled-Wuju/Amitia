@@ -158,9 +158,11 @@ class DeviceMeshService {
     required bool coordinated,
     required int expectedRevision,
     String selectedRole = '',
+    Map<String, String>? headers,
   }) async {
     final result = await _api.put<Map<String, dynamic>>(
       '/api/device-mesh/v1/coordination/me',
+      headers: headers,
       data: {
         'coordinated': coordinated,
         'expectedRevision': expectedRevision,
@@ -175,9 +177,11 @@ class DeviceMeshService {
     String deviceId, {
     required bool grant,
     required int expectedRevision,
+    Map<String, String>? headers,
   }) async {
     await _api.put(
       '/api/device-mesh/v1/devices/${Uri.encodeComponent(deviceId)}/administrator',
+      headers: headers,
       data: {'grant': grant, 'expectedRevision': expectedRevision},
     );
   }

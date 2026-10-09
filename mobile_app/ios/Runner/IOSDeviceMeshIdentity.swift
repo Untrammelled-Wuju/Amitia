@@ -10,11 +10,40 @@ final class IOSDeviceMeshIdentity {
         let deviceId: String
         let runtimeId: String
         let privateKey: Data
+        var createdAt: String?
+        var installGeneration: String?
     }
 
     private let service = "com.amitia.device-mesh.identity"
     private let account = "primary"
     private var channel: FlutterMethodChannel?
+    private let lock = NSRecursiveLock()
+
+    func hostIdentity() throws -> [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
+        let identity = try loadOrCreate()
+        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: identity.privateKey)
+        return [
+            "deviceId": identity.deviceId,
+            "runtimeId": identity.runtimeId,
+            "platform": "ios",
+            "publicKey": base64URL(key.publicKey.rawRepresentation),
+            "createdAt": identity.createdAt!,
+            "installGeneration": identity.installGeneration!,
+        ]
+    }
+
+    func hostSign(_ data: Data) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        guard data.count <= 65536 else {
+            throw NSError(domain: "IOSDeviceMeshIdentity", code: 1)
+        }
+        let identity = try loadOrCreate()
+        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: identity.privateKey)
+        return base64URL(try key.signature(for: data))
+    }
 
     func register(messenger: FlutterBinaryMessenger) {
         let channel = FlutterMethodChannel(
@@ -31,16 +60,7 @@ final class IOSDeviceMeshIdentity {
         do {
             switch call.method {
             case "identity":
-                let identity = try loadOrCreate()
-                let key = try Curve25519.Signing.PrivateKey(
-                    rawRepresentation: identity.privateKey
-                )
-                result([
-                    "deviceId": identity.deviceId,
-                    "runtimeId": identity.runtimeId,
-                    "platform": "ios",
-                    "publicKey": base64URL(key.publicKey.rawRepresentation),
-                ])
+                result(try hostIdentity())
             case "sign":
                 guard
                     let arguments = call.arguments as? [String: Any],
@@ -54,14 +74,12 @@ final class IOSDeviceMeshIdentity {
                     ))
                     return
                 }
-                let identity = try loadOrCreate()
-                let key = try Curve25519.Signing.PrivateKey(
-                    rawRepresentation: identity.privateKey
-                )
-                let signature = try key.signature(for: data)
-                result(base64URL(signature))
+                result(try hostSign(data))
             case "reset":
+                lock.lock()
+                defer { lock.unlock() }
                 try deleteIdentity()
+                UserDefaults.standard.removeObject(forKey: "amitia.device-mesh.install-generation")
                 result(true)
             default:
                 result(FlutterMethodNotImplemented)
@@ -77,21 +95,35 @@ final class IOSDeviceMeshIdentity {
 
     private func loadOrCreate() throws -> StoredIdentity {
         if let data = try readKeychain() {
-            let stored = try JSONDecoder().decode(StoredIdentity.self, from: data)
+            var stored = try JSONDecoder().decode(StoredIdentity.self, from: data)
             _ = try Curve25519.Signing.PrivateKey(
                 rawRepresentation: stored.privateKey
             )
-            return stored
+            let installation = UserDefaults.standard.string(forKey: "amitia.device-mesh.install-generation")
+            if let generation = stored.installGeneration, installation != generation {
+                try deleteIdentity()
+            } else {
+                if stored.createdAt == nil || stored.installGeneration == nil {
+                    stored.createdAt = ISO8601DateFormatter().string(from: Date())
+                    stored.installGeneration = UUID().uuidString.lowercased()
+                    try writeKeychain(JSONEncoder().encode(stored))
+                    UserDefaults.standard.set(stored.installGeneration!, forKey: "amitia.device-mesh.install-generation")
+                }
+                return stored
+            }
         }
 
         let key = Curve25519.Signing.PrivateKey()
         let stored = StoredIdentity(
             deviceId: "dev_" + UUID().uuidString.lowercased(),
             runtimeId: "rt_" + UUID().uuidString.lowercased(),
-            privateKey: key.rawRepresentation
+            privateKey: key.rawRepresentation,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            installGeneration: UUID().uuidString.lowercased()
         )
         let encoded = try JSONEncoder().encode(stored)
         try writeKeychain(encoded)
+        UserDefaults.standard.set(stored.installGeneration!, forKey: "amitia.device-mesh.install-generation")
         return stored
     }
 

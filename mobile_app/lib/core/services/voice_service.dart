@@ -227,17 +227,22 @@ class ASRService {
   }
 
   Future<Map<String, dynamic>?> uploadAudio(String filePath) async {
-    final resp = await _api.post<Map<String, dynamic>>(
+    final resp = await _api.postMultipart<Map<String, dynamic>>(
       '/api/asr/upload',
-      data: {'filePath': filePath},
+      files: {
+        'audio': [filePath],
+      },
     );
     return resp;
   }
 
-  Future<Map<String, dynamic>?> submitUrl(String url) async {
-    final resp = await _api.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>?> submitUrl(
+    String url, {
+    String language = '',
+  }) async {
+    final resp = await _api.postMultipart<Map<String, dynamic>>(
       '/api/asr/submit',
-      data: {'url': url},
+      fields: {'audioUrl': url, if (language.isNotEmpty) 'language': language},
     );
     return resp;
   }

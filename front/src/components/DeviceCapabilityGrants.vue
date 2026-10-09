@@ -20,6 +20,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useApi } from "@/composables/useApi";
+import { useDeviceManagementIntent, deviceManagementRequestConfig, type DeviceManagementIntent } from "@/composables/useDeviceManagementIntent";
 
 type Grant = { callerId: string; targetId: string; capability: string; allowed: boolean; revision: number };
 const props = defineProps<{ visible: boolean; deviceId: string; label?: string; devices: Array<{ deviceId: string; label: string; trustState: string }> }>();
@@ -33,17 +34,21 @@ const busy = ref(false);
 const error = ref("");
 const coreId = ref("");
 let generation = 0;
+let intent: DeviceManagementIntent | null = null;
+const management = useDeviceManagementIntent(() => { generation++; intent = null; grants.value = []; error.value = "原Core或设备权限已变化，请重新打开授权页面"; });
 
 async function load() {
+  management.release(intent);
+  intent = null;
   const ticket = ++generation;
   loading.value = true;
   error.value = "";
   try {
-    const before = await api.get<{ coreId: string }>("/api/device-mesh/v1/coordination/me");
-    const result = await api.get<{ grants: Grant[] }>(`/api/device-mesh/v1/business/devices/${encodeURIComponent(props.deviceId)}/grants`);
-    const after = await api.get<{ coreId: string }>("/api/device-mesh/v1/coordination/me");
-    if (!before.coreId || before.coreId !== after.coreId) throw new Error("服务提供者已变化，请刷新后重新授权");
-    if (ticket === generation) { grants.value = result.grants || []; coreId.value = before.coreId; }
+    const original = await management.capture();
+    if (!original.state.canAdminister && original.state.policy.deviceId !== props.deviceId) throw new Error("只能管理本设备授权或使用当前Core管理员权限");
+    const result = await api.get<{ grants: Grant[] }>(`/api/device-mesh/v1/business/devices/${encodeURIComponent(props.deviceId)}/grants`, undefined, deviceManagementRequestConfig(original));
+    await management.validate(original);
+    if (ticket === generation) { grants.value = result.grants || []; coreId.value = original.state.coreId; intent = original; }
   } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "授权加载失败"; }
   finally { if (ticket === generation) loading.value = false; }
 }
@@ -51,13 +56,17 @@ async function load() {
 async function save(allowed: boolean) {
   if (busy.value) return;
   const ticket = generation;
+  const original = intent;
+  if (!original) { error.value = "请先重新加载原设备授权"; return; }
   const target = props.deviceId;
   const name = capability.value.trim();
   const previous = grants.value.find(item => item.callerId === caller.value && item.capability === name);
   busy.value = true;
   error.value = "";
   try {
-    await api.put(`/api/device-mesh/v1/business/devices/${encodeURIComponent(target)}/grants`, { callerId: caller.value, capability: name, allowed, expectedRevision: previous?.revision || 0, expectedCoreId: coreId.value });
+    await management.validate(original);
+    await api.put(`/api/device-mesh/v1/business/devices/${encodeURIComponent(target)}/grants`, { callerId: caller.value, capability: name, allowed, expectedRevision: previous?.revision || 0, expectedCoreId: original.state.coreId }, deviceManagementRequestConfig(original));
+    await management.validate(original, target === original.state.policy.deviceId ? 1 : 0);
     if (ticket === generation) { emit("changed"); await load(); }
   } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "授权更新失败，请刷新后重试"; }
   finally { busy.value = false; }
@@ -70,6 +79,8 @@ async function toggle(grant: Grant) {
 }
 
 watch(() => [props.visible, props.deviceId], () => {
+  management.release(intent);
+  intent = null;
   generation++;
   grants.value = [];
   caller.value = "";

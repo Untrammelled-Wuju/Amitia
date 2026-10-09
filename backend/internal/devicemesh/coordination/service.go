@@ -200,10 +200,10 @@ func (s *Service) ChangeMode(ctx context.Context, space, device string, expected
 		return Policy{}, err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id) VALUES(?,?) ON CONFLICT DO NOTHING`, space, device); err != nil {
+	if err := ValidateRequestAuthorityTx(ctx, tx); err != nil {
 		return Policy{}, err
 	}
-	if err := ValidateRequestAuthorityTx(ctx, tx); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id) VALUES(?,?) ON CONFLICT DO NOTHING`, space, device); err != nil {
 		return Policy{}, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=?, selected_role=?, mode_revision=mode_revision+1, administrator=CASE WHEN ? THEN administrator ELSE 0 END, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=?`, coordinated, role, coordinated, space, device, expected)
@@ -221,7 +221,12 @@ func (s *Service) ChangeMode(ctx context.Context, space, device string, expected
 		return Policy{}, err
 	}
 	s.cancelLocked(space, device)
-	return s.Get(ctx, space, device)
+	previous.Coordinated = coordinated
+	previous.SelectedRole = role
+	previous.ModeRevision++
+	previous.PermissionRevision++
+	previous.Administrator = administrator
+	return previous, nil
 }
 
 func (s *Service) GrantAdministrator(ctx context.Context, space, device string, expected int64, grant bool) (Policy, error) {
@@ -265,7 +270,9 @@ func (s *Service) GrantAdministrator(ctx context.Context, space, device string, 
 		return p, err
 	}
 	s.cancelLocked(space, device)
-	return s.Get(ctx, space, device)
+	p.Administrator = grant
+	p.PermissionRevision++
+	return p, nil
 }
 
 func (s *Service) ResetTx(ctx context.Context, tx *sql.Tx, space, device string) error {

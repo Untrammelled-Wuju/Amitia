@@ -8,6 +8,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/log_folder_button.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
@@ -158,6 +159,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         showBackButton: true,
         fallbackRoute: AppRoutes.extensions,
         actions: [
+          if (_selectedTab == 6) const LogFolderButton(),
           AmitiaIconButton(
             icon: Icons.edit_outlined,
             onPressed: () => context.push(AppRoutes.mcpEdit(widget.mcpId)),

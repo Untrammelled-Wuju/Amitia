@@ -96,7 +96,12 @@ func inputSchemaFindCapabilities() json.RawMessage {
     "preferredKind": {
       "type": "string",
       "description": "Optional preferred kind filter: installed_extension, agent_skill, mcp, extension_package, builtin, generated_skill"
-    }
+    },
+    "query": {"type":"string","description":"Search words or package name; use this rather than inventing a dotted capability ID for keyword search"},
+    "sourceUri": {"type":"string","description":"Exact local skill directory, SKILL.md, ZIP, GitHub skill directory URL or Amitia package archive URL"},
+    "extensionId": {"type":"string","description":"Real Amitia extension ID from the package manifest, required for explicit package installs"},
+    "version": {"type":"string"},
+    "install": {"type":"object","description":"Verified install descriptor: method=mcp with mcp={serverName,transport,command,args,env}, or method=skill with skill={sourceUri,skillName,hash}, or method=extension with extensionPackage={packageUri,hash}"}
   },
   "required": ["capabilityId"]
 }`)
@@ -126,7 +131,13 @@ func inputSchemaAcquireCapability() json.RawMessage {
     "userConfirmed": {
       "type": "boolean",
       "description": "Whether the explicit user approval was already granted"
-    }
+    },
+    "query": {"type":"string"},
+    "preferredKind": {"type":"string"},
+    "sourceUri": {"type":"string","description":"Carry the exact sourceUri from discovery when acquiring an explicit source"},
+    "extensionId": {"type":"string"},
+    "version": {"type":"string"},
+    "install": {"type":"object","description":"Carry the real install descriptor from discovery; never invent credentials or package commands"}
   },
   "anyOf": [
     {"required": ["capabilityId"]},

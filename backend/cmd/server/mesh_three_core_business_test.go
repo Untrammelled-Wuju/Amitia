@@ -6,12 +6,14 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,17 +121,20 @@ func (*threeCoreModel) ExtractOwnedMemory(context.Context, business.Inference, b
 }
 
 type threeCoreFixture struct {
-	core     string
-	services *AppServices
-	local    *agent.LocalHandler
-	identity *agent.IdentityStore
-	device   *agent.LocalIdentity
-	pairing  *pairing.Service
-	endpoint lan.Endpoint
-	http     *http.Client
-	router   *gin.Engine
-	model    *threeCoreModel
-	platform runtimeidentity.Platform
+	core       string
+	services   *AppServices
+	local      *agent.LocalHandler
+	identity   *agent.IdentityStore
+	device     *agent.LocalIdentity
+	pairing    *pairing.Service
+	endpoint   lan.Endpoint
+	http       *http.Client
+	router     *gin.Engine
+	model      *threeCoreModel
+	platform   runtimeidentity.Platform
+	dispatcher interface {
+		RegisterCancellable(string, agent.CancellableRuntimeInvokeHandler)
+	}
 }
 
 func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, platforms ...runtimeidentity.Platform) *threeCoreFixture {
@@ -202,6 +207,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	services := sourceServices
 	services.DeviceMesh, services.OwnedBusiness = rt, business.NewEngine(rt.Coordination, rt, model)
 	f := &threeCoreFixture{core: core, services: services, local: local, identity: identity, device: device, pairing: pair, router: gin.New(), model: model, platform: platform}
+	f.dispatcher = dispatcher
 	authMW := security.AuthenticationMiddleware(security.AuthConfig{Mode: "network", SpaceID: core, DeviceCredentials: rt.CredentialSvc, DeviceRegistry: registry, Coordination: rt.Coordination})
 	deps := &meshserver.RouterDeps{DB: db, Sessions: rt.GetSessions(), BootstrapSvc: rt.BootstrapSvc, CredentialSvc: rt.CredentialSvc, Hub: rt.Hub, Handler: rt.Handler, Probe: rt.Probe, DeviceReg: registry, PairingSvc: pair, Coordination: rt.Coordination, BusinessCoordinationReady: true, ProviderPath: local.ProviderPath, LANEndpoints: local.LANEndpoints,
 		GetSpaceID: func(c *gin.Context) (runtimeidentity.SpaceID, bool) {
@@ -282,7 +288,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	return f
 }
 
-func (f *threeCoreFixture) request(t *testing.T, caller *threeCoreFixture, method, path string, payload any, expected int) []byte {
+func (f *threeCoreFixture) request(t *testing.T, caller *threeCoreFixture, method, path string, payload any, expected int, originalManagementHeaders ...map[string]string) []byte {
 	t.Helper()
 	var body []byte
 	if payload != nil {
@@ -298,6 +304,22 @@ func (f *threeCoreFixture) request(t *testing.T, caller *threeCoreFixture, metho
 	}
 	request.Header.Set("Content-Type", "application/json")
 	if caller != nil {
+		management := method != http.MethodGet && (path == "/api/device-mesh/v1/coordination/me" || strings.HasPrefix(path, "/api/device-mesh/v1/pairing/approvals/") || strings.HasPrefix(path, "/api/device-mesh/v1/devices/") || strings.HasPrefix(path, "/api/device-mesh/v1/business/devices/"))
+		if len(originalManagementHeaders) > 0 {
+			for key, value := range originalManagementHeaders[0] {
+				request.Header.Set(key, value)
+			}
+		} else if management {
+			var state struct {
+				CoreID string              `json:"coreId"`
+				Policy coordination.Policy `json:"policy"`
+			}
+			if err := json.Unmarshal(f.request(t, caller, http.MethodGet, "/api/device-mesh/v1/coordination/me", nil, http.StatusOK), &state); err != nil || state.CoreID != f.core || state.Policy.DeviceID != caller.device.DeviceID.String() {
+				t.Fatalf("invalid original management authority: %+v %v", state, err)
+			}
+			request.Header.Set(security.ExpectedCoreHeader, state.CoreID)
+			request.Header.Set(security.ExpectedConfigurationPolicyHeader, fmt.Sprintf("%d:%d:%d", state.Policy.ProviderEpoch, state.Policy.ModeRevision, state.Policy.PermissionRevision))
+		}
 		credential, err := caller.local.LoadCredential()
 		if err != nil || credential == nil {
 			t.Fatal("缺少当前设备凭证")

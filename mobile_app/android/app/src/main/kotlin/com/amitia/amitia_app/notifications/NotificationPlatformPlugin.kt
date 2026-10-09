@@ -2,8 +2,12 @@ package com.amitia.amitia_app.notifications
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ShortcutManager
 import android.net.Uri
+import android.util.Log
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.amitia.amitia_app.MainActivity
@@ -21,6 +25,9 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
         private const val PREFS = "amitia_notification_interactions"
         private const val PENDING = "pending"
         private const val VENDOR_PUSH_OPT_IN = "vendor_push_opt_in"
+        private val scenarioHandler = Handler(Looper.getMainLooper())
+        private var scenarioRunnable: Runnable? = null
+        private var scenarioRunId: String? = null
         @Volatile private var current: WeakReference<NotificationPlatformPlugin>? = null
 
         fun emitToken(token: String) {
@@ -109,6 +116,20 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                val shortcuts = appContext.getSystemService(Context.SHORTCUT_SERVICE) as ShortcutManager
+                val legacy = shortcuts.getShortcuts(
+                    ShortcutManager.FLAG_MATCH_DYNAMIC or
+                        ShortcutManager.FLAG_MATCH_PINNED or
+                        ShortcutManager.FLAG_MATCH_CACHED,
+                ).map { it.id }.filter { it.startsWith("amitia-chat-") }
+                if (legacy.isNotEmpty()) {
+                    shortcuts.removeDynamicShortcuts(legacy)
+                    shortcuts.removeLongLivedShortcuts(legacy)
+                }
+            }.onFailure { Log.w("AmitiaFloatingChat", "Legacy bubble cleanup failed", it) }
+        }
         NotificationRenderer.ensureChannels(appContext)
         channel = MethodChannel(binding.binaryMessenger, CHANNEL).also { it.setMethodCallHandler(this) }
         current = WeakReference(this)
@@ -166,14 +187,23 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
                 NotificationRenderer.clearAllReminders(appContext)
                 result.success(true)
             }
-            "floatingBubbleStatus" -> result.success(FloatingChatBubbleService.status(appContext))
+            "floatingBubbleStatus" -> {
+                val state = FloatingChatBubbleService.status(appContext)
+                Log.i("AmitiaFloatingChat", "method floatingBubbleStatus enabled=${state["enabled"]} active=${state["active"]} permission=${state["permissionGranted"]}")
+                result.success(state)
+            }
             "floatingBubbleEnable" -> {
+                Log.i("AmitiaFloatingChat", "method floatingBubbleEnable called")
                 try {
                     val started = FloatingChatBubbleService.enable(appContext)
                     result.success(FloatingChatBubbleService.status(appContext) + mapOf("started" to started))
                 } catch (error: Exception) {
                     result.error("FLOATING_BUBBLE_START_FAILED", error.message, null)
                 }
+            }
+            "floatingBubbleConfigure" -> {
+                val enabled = call.argument<Boolean>("previewEnabled") ?: true
+                result.success(FloatingChatBubbleService.configure(appContext, enabled))
             }
             "floatingBubbleDisable" -> {
                 FloatingChatBubbleService.disable(appContext)
@@ -194,36 +224,37 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
                     "sound" to "true",
                     "deepLink" to "amitia://settings/notifications",
                 )
-                val data = when (scenario) {
-                    "message" -> common + mapOf(
-                        "deepLink" to "amitia://chat/local-scenario",
-                        "type" to "message.received",
-                        "conversationId" to "local-scenario",
-                        "characterId" to "amitia-scenario",
-                        "title" to "Amitia Test",
-                        "body" to "Local notification scenario: a new message arrived.",
-                    )
-                    "reminder" -> common + mapOf(
-                        "type" to "reminder.triggered",
-                        "messageId" to now,
-                        "title" to "Amitia reminder test",
-                        "body" to "Local reminder notification, independent of cloud push.",
-                    )
-                    "task" -> common + mapOf(
-                        "type" to "run.started",
-                        "runId" to "local-scenario",
-                        "revision" to now,
-                        "title" to "Amitia task test",
-                        "summary" to "Task running in the background",
-                        "progress" to "0.4",
-                    )
-                    else -> null
-                }
-                if (data == null) {
-                    result.error("UNKNOWN_SCENARIO", "Unsupported local scenario", null)
+                if (scenario == "task") {
+                    if (!NotificationManagerCompat.from(appContext).areNotificationsEnabled()) {
+                        result.error("NOTIFICATIONS_DISABLED", "请先允许系统通知", null)
+                    } else {
+                        startTaskScenario(now, common)
+                        result.success(true)
+                    }
                 } else {
-                    NotificationRenderer.handleRemoteMessage(appContext, data)
-                    result.success(true)
+                    val data = when (scenario) {
+                        "message" -> common + mapOf(
+                            "deepLink" to "amitia://chat/local-scenario",
+                            "type" to "message.received",
+                            "conversationId" to "local-scenario",
+                            "characterId" to "amitia-scenario",
+                            "title" to "Amitia Test",
+                            "body" to "Local notification scenario: a new message arrived.",
+                        )
+                        "reminder" -> common + mapOf(
+                            "type" to "reminder.triggered",
+                            "messageId" to now,
+                            "title" to "Amitia reminder test",
+                            "body" to "Local reminder notification, independent of cloud push.",
+                        )
+                        else -> null
+                    }
+                    if (data == null) {
+                        result.error("UNKNOWN_SCENARIO", "Unsupported local scenario", null)
+                    } else {
+                        NotificationRenderer.handleRemoteMessage(appContext, data)
+                        result.success(true)
+                    }
                 }
             }
             "openSettings" -> {
@@ -235,6 +266,48 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             }
             else -> result.notImplemented()
         }
+    }
+
+    private fun startTaskScenario(now: String, common: Map<String, String>) {
+        scenarioRunnable?.let { scenarioHandler.removeCallbacks(it) }
+        scenarioRunId?.let { previous ->
+            NotificationRenderer.handleRemoteMessage(
+                appContext,
+                mapOf("type" to "run.dismiss", "runId" to previous),
+            )
+        }
+        val runId = "local-scenario-$now"
+        scenarioRunId = runId
+        val application = appContext.applicationContext
+        var step = 0
+        val tick = object : Runnable {
+            override fun run() {
+                if (scenarioRunId != runId) return
+                val finished = step >= 6
+                val data = common + mapOf(
+                    "type" to if (finished) "run.completed" else if (step == 0) "run.started" else "run.updated",
+                    "runId" to runId,
+                    "revision" to (step + 1).toString(),
+                    "phase" to if (finished) "completed" else "running",
+                    "title" to "Amitia Agent 模拟任务",
+                    "summary" to if (finished) "模拟任务已完成" else "模拟执行中：第 $step / 6 步",
+                    "currentStep" to step.toString(),
+                    "totalSteps" to "6",
+                    "progress" to (step.toDouble() / 6).toString(),
+                    "sound" to "false",
+                )
+                NotificationRenderer.handleRemoteMessage(application, data)
+                if (finished) {
+                    scenarioRunnable = null
+                    scenarioRunId = null
+                } else {
+                    step += 1
+                    scenarioHandler.postDelayed(this, 4_000L)
+                }
+            }
+        }
+        scenarioRunnable = tick
+        scenarioHandler.post(tick)
     }
 
     private fun requestPermission(result: MethodChannel.Result) {
@@ -297,7 +370,16 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             "notificationsEnabled" to NotificationManagerCompat.from(appContext).areNotificationsEnabled(),
             "progressStyleSupported" to (Build.VERSION.SDK_INT >= 36),
             "liveActivitySupported" to false,
-            "dynamicIslandSupported" to false,
+            "dynamicIslandSupported" to (
+                AgentTaskIslandRouting.choose(appContext) ==
+                    AgentTaskIslandRouting.Route.XIAOMI_SUPER_ISLAND ||
+                AgentTaskIslandRouting.choose(appContext) ==
+                    AgentTaskIslandRouting.Route.VIVO_ORIGIN_ISLAND
+            ),
+            "islandProvider" to AgentTaskIslandRouting.providerName(
+                AgentTaskIslandRouting.choose(appContext),
+            ),
+            "xiaomiFocusPermissionGranted" to XiaomiIslandTaskCompat.focusPermission(appContext),
             "communicationNotificationSupported" to true,
             "vendorTokens" to vendorTokens,
             "invalidatedProviders" to VendorPushBootstrap.invalidatedProviders(appContext),

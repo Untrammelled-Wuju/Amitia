@@ -349,8 +349,11 @@ class ConversationRuntimeController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if ((audioUrl ?? '').startsWith('data:audio/')) {
-      _lastError = StateError('设备服务状态已变化，语音未发送');
+    if ((audioUrl ?? '').startsWith('data:') ||
+        (imageUrl ?? '').startsWith('data:') ||
+        (videoUrl ?? '').startsWith('data:') ||
+        (localMessage.resourceUri ?? '').startsWith('data:')) {
+      _lastError = StateError('设备服务状态已变化，原附件未发送');
       notifyListeners();
       return;
     }

@@ -50,6 +50,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
         setState(() {
           _error = reason.toString();
           _loading = false;
+          _healthData = const {};
         });
       },
     );
@@ -89,9 +90,14 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   }
 
   Future<void> _loadHealth() async {
+    final api = ref.read(rawBackendServiceApiProvider);
+    final deployment = ref.read(mobileDeploymentConfigProvider);
     try {
       final health = await ref.read(systemServiceProvider).health();
-      if (mounted) setState(() => _healthData = health ?? const {});
+      if (mounted &&
+          identical(api, ref.read(rawBackendServiceApiProvider)) &&
+          deployment == ref.read(mobileDeploymentConfigProvider))
+        setState(() => _healthData = health ?? const {});
     } catch (_) {}
   }
 

@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/emotionstate"
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/graph"
@@ -163,8 +162,6 @@ type service struct {
 	actionMaterializer  *interaction.ActionMaterializer
 	actionDispatcher    interaction.ActionDispatcher
 	observationBuilder  interaction.ObservationBuilder
-	actionDirective     decision.ActionDirective
-	hasActionDirective  bool
 	relTimeCoordinator  *temporal.RelationshipTimeCoordinator
 	goalProgressService interaction.GoalProgressService
 	continuationService interaction.ContinuationService

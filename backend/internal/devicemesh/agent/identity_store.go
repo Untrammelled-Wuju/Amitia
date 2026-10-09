@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/ioshostbridge"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/secretstore"
 )
@@ -26,10 +27,11 @@ type LocalIdentity struct {
 var identityLocks sync.Map
 
 type IdentityStore struct {
-	mu       sync.Mutex
-	filePath string
-	cached   *LocalIdentity
-	private  ed25519.PrivateKey
+	mu               sync.Mutex
+	filePath         string
+	cached           *LocalIdentity
+	private          ed25519.PrivateKey
+	hostInstallation string
 }
 
 func NewIdentityStore(dataDir string) *IdentityStore {
@@ -41,6 +43,30 @@ func NewIdentityStore(dataDir string) *IdentityStore {
 func (s *IdentityStore) Load() (*LocalIdentity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	bridge, err := ioshostbridge.FromEnvironment()
+	if err != nil {
+		return nil, err
+	}
+	if bridge != nil {
+		var host struct {
+			LocalIdentity
+			InstallGeneration string `json:"installGeneration"`
+		}
+		if err := bridge.Call("identity.get", map[string]any{}, &host); err != nil {
+			return nil, err
+		}
+		public, err := base64.RawURLEncoding.DecodeString(host.PublicKey)
+		if err != nil || len(public) != ed25519.PublicKeySize || !validHostIdentityID(string(host.DeviceID), "dev_") || !validHostIdentityID(string(host.RuntimeID), "rt_") || host.CreatedAt.IsZero() || host.InstallGeneration == "" {
+			return nil, errors.New("iOS 宿主设备身份无效")
+		}
+		if s.cached != nil && (s.cached.DeviceID != host.DeviceID || s.cached.RuntimeID != host.RuntimeID || s.cached.PublicKey != host.PublicKey || s.hostInstallation != host.InstallGeneration) {
+			return nil, errors.New("iOS 宿主设备身份已更换，请重新启动 Runtime")
+		}
+		s.cached = &host.LocalIdentity
+		s.hostInstallation = host.InstallGeneration
+		copy := *s.cached
+		return &copy, nil
+	}
 
 	if s.cached != nil {
 		return s.cached, nil
@@ -129,12 +155,39 @@ func (s *IdentityStore) ensureKey(identity *LocalIdentity) error {
 }
 
 func (s *IdentityStore) Sign(data []byte) (string, error) {
-	if _, err := s.Load(); err != nil {
+	identity, err := s.Load()
+	if err != nil {
 		return "", err
+	}
+	bridge, err := ioshostbridge.FromEnvironment()
+	if err != nil {
+		return "", err
+	}
+	if bridge != nil {
+		var result struct {
+			Signature string `json:"signature"`
+		}
+		if err := bridge.Call("identity.sign", map[string]string{"data": base64.StdEncoding.EncodeToString(data)}, &result); err != nil {
+			return "", err
+		}
+		signature, err := base64.RawURLEncoding.DecodeString(result.Signature)
+		public, publicErr := base64.RawURLEncoding.DecodeString(identity.PublicKey)
+		if err != nil || publicErr != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(ed25519.PublicKey(public), data, signature) {
+			return "", errors.New("iOS 宿主设备签名无效")
+		}
+		return result.Signature, nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return base64.RawURLEncoding.EncodeToString(ed25519.Sign(s.private, data)), nil
+}
+
+func validHostIdentityID(value, prefix string) bool {
+	if len(value) <= len(prefix) || value[:len(prefix)] != prefix {
+		return false
+	}
+	_, err := uuid.Parse(value[len(prefix):])
+	return err == nil
 }
 
 func (s *IdentityStore) save(id *LocalIdentity) error {

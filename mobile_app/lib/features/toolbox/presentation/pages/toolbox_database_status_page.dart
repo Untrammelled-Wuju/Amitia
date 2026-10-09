@@ -101,7 +101,7 @@ class _ToolboxDatabaseStatusPageState extends ConsumerState<ToolboxDatabaseStatu
     final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '数据库状态', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
+      appBar: AmitiaAppBar(title: '数据库状态', showBackButton: true, fallbackRoute: AppRoutes.settingsMaintenanceCategory),
       body: ListView(
         padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [

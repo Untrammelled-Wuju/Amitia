@@ -47,6 +47,7 @@ func (s *TaskRuntimeService) ExecuteOwnedSourceDispatch(ctx context.Context, dis
 	if err := validateSourceTaskExecutionAvailable(ctx); err != nil {
 		return empty, err
 	}
+	ctx = context.WithValue(ctx, sourceTaskPreflightKey{}, true)
 	approvalBinding := SourceTaskApprovalBinding{Scope: authority, TaskRunID: run.TaskRunID, TaskGeneration: run.Generation, InputHash: run.InputHash, Target: target, ExecutionTarget: run.ExecutionTarget}
 	if s.sourceApprovals != nil {
 		for _, approval := range s.sourceApprovals.List() {
@@ -149,6 +150,7 @@ func (s *TaskRuntimeService) ExecuteOwnedSourceDispatch(ctx context.Context, dis
 	if err != nil {
 		return empty, err
 	}
+	host.config.HostCapabilities = s.declaredHostCapabilities()
 	processCtx, stop := context.WithCancelCause(guarded)
 	defer stop(nil)
 	var mu sync.Mutex
@@ -183,13 +185,16 @@ func (s *TaskRuntimeService) ExecuteOwnedSourceDispatch(ctx context.Context, dis
 				var ack TaskHostNativeConfirmation
 				resourceID := taskHostOperationID(&run, id)
 				commitScope := taskHostCommitScope(authority, &run, id, 2)
-				if json.Unmarshal(confirmed, &ack) != nil || ack.Scope != authority || ack.TaskRunID != run.TaskRunID || ack.Generation != run.Generation || ack.AttemptID != run.ExecutionAttemptID.String() || ack.RequestID != id || ack.Method != method || ack.InputHash != hashBytes(params) || !json.Valid(ack.Result) || len(ack.Result) > 64<<10 || ack.ResultHash != hashBytes(ack.Result) || ack.Acknowledgment.OwnerID != authority.ResourceOwnerID || ack.Acknowledgment.RequestID != commitScope.RequestID || ack.Acknowledgment.Versions["tool-result/"+resourceID] != 2 {
+				if json.Unmarshal(confirmed, &ack) != nil || ack.Scope != authority || ack.TaskRunID != run.TaskRunID || ack.Generation != run.Generation || ack.AttemptID != run.ExecutionAttemptID.String() || ack.RequestID != id || ack.Method != method || ack.InputHash != hashBytes(params) || !json.Valid(ack.ResultBytes) || len(ack.ResultBytes) > 64<<10 || ack.ResultHash != hashBytes(ack.ResultBytes) || ack.Acknowledgment.OwnerID != authority.ResourceOwnerID || ack.Acknowledgment.RequestID != commitScope.RequestID || ack.Acknowledgment.Versions["tool-result/"+resourceID] != 2 {
 					return nil, NewTaskError(ErrTaskScopeDenied, "Native结果未获得原所有者的精确归属确认")
+				}
+				if err := validateTaskHostNativeResult(method, ack.ResultBytes); err != nil {
+					return nil, err
 				}
 				if err := coordination.ValidateCurrent(current); err != nil {
 					return nil, err
 				}
-				return ack.Result, nil
+				return json.RawMessage(ack.ResultBytes), nil
 			}
 			return call(current, id, method, params)
 		},

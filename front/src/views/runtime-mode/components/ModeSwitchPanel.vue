@@ -5,9 +5,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <el-card shadow="never" class="section-card">
     <template #header>
-      <span class="section-title">切换模式</span>
+      <span class="section-title">修改当前 Core 的服务端部署形态</span>
     </template>
 
+    <p class="mode-scope-note">这里修改的是当前 Core 自身的服务端运行配置，不会切换这台设备连接的服务器，也不会自动将 Core 迁移到云主机。</p>
     <div class="mode-switch-row">
       <div
         class="mode-option"
@@ -17,8 +18,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="mo-icon">
           <el-icon :size="24"><Monitor /></el-icon>
         </div>
-        <div class="mo-label">桌面本地模式</div>
-        <div class="mo-desc">Core 在本机运行，可免登录</div>
+        <div class="mo-label">本机 Core 部署</div>
+        <div class="mo-desc">将当前 Core 配置为本机运行，监听本地地址</div>
         <div class="mo-tag-row">
           <el-tag size="small" effect="plain" type="success"
             >本机 127.0.0.1</el-tag
@@ -41,8 +42,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         <div class="mo-icon">
           <el-icon :size="24"><Cloudy /></el-icon>
         </div>
-        <div class="mo-label">私有云模式</div>
-        <div class="mo-desc">Core 部署在云服务器，需登录</div>
+        <div class="mo-label">Core 私有云部署</div>
+        <div class="mo-desc">将当前 Core 配置为适合服务器对外提供服务的形态</div>
         <div class="mo-tag-row">
           <el-tag size="small" effect="plain" type="warning">HTTPS 访问</el-tag>
         </div>
@@ -55,21 +56,19 @@ SPDX-License-Identifier: AGPL-3.0-only
     >
       <div class="impact-box-header">
         <el-icon><Warning /></el-icon>
-        <span>模式切换的影响</span>
+        <span>修改 Core 部署配置的影响</span>
       </div>
       <ul class="impact-list">
         <template v-if="selectedMode === 'cloud-web'">
-          <li>Core 将在你的云服务器上运行</li>
-          <li>Web UI 通过 HTTPS 访问</li>
-          <li><strong>登录变为必需</strong>（系统自动开启）</li>
-          <li>你的个人电脑<strong>不需要常开</strong></li>
-          <li>需要配置 publicBaseUrl 指向你的域名</li>
+          <li>当前 Core 将切换为私有云服务配置，但<strong>不会自动迁移至云服务器</strong></li>
+          <li>需要在目标服务器自行部署 Core 并配置 HTTPS 反向代理</li>
+          <li>需要启用登录验证和配置 publicBaseUrl</li>
+          <li>配置变更后可能需要重启 Core 才会生效</li>
         </template>
         <template v-else>
-          <li>Core 将在本机运行（127.0.0.1）</li>
-          <li>登录可选择关闭（免登录模式）</li>
-          <li>你的电脑需要<strong>保持开机</strong></li>
-          <li>仅限本机访问，不暴露到网络</li>
+          <li>当前 Core 将切换为本地服务配置，但<strong>不会自动迁移运行位置</strong></li>
+          <li>仅在本机地址监听，不会作为对外的云端服务提供访问</li>
+          <li>配置变更后可能需要重启 Core 才会生效</li>
         </template>
       </ul>
       <div class="impact-actions">
@@ -78,8 +77,8 @@ SPDX-License-Identifier: AGPL-3.0-only
           :loading="switching"
           @click="$emit('confirmSwitch', selectedMode)"
         >
-          确认切换到{{
-            selectedMode === "cloud-web" ? "私有云模式" : "桌面本地模式"
+          确认修改 Core 为{{
+            selectedMode === "cloud-web" ? "私有云部署配置" : "本机部署配置"
           }}
         </el-button>
         <el-button @click="clearSelection">取消</el-button>
@@ -121,6 +120,7 @@ function clearSelection() {
 .section-card {
   margin-bottom: 16px;
 }
+.mode-scope-note { margin: 0 0 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
 .section-title {
   font-size: 14px;
   font-weight: 600;

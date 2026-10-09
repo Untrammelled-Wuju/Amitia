@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/settings/settings_navigation.dart';
+import 'package:amitia_app/app/app_routes.dart';
 
 void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -37,6 +38,27 @@ void main() {
       advanced.group.items.map((item) => item.title),
       containsAll(['界面提供者', 'Core 运行模式', '开发者模式']),
     );
+    expect(
+      advanced.group.items.map((item) => item.title),
+      isNot(contains('工具箱')),
+    );
+    expect(
+      advanced.group.items.map((item) => item.route),
+      containsAll([
+        AppRoutes.toolboxFileBrowser,
+        AppRoutes.toolboxWorkspace,
+        AppRoutes.toolboxTaskLog,
+        AppRoutes.toolboxLog,
+        AppRoutes.toolboxPromptTrace,
+        AppRoutes.toolboxRuntimeStatus,
+        AppRoutes.toolboxDatabaseStatus,
+        AppRoutes.toolboxDeviceStatus,
+      ]),
+    );
+    expect(
+      advanced.group.items.map((item) => item.route),
+      isNot(contains(AppRoutes.settingsToolbox)),
+    );
     final privacy = categories.firstWhere((item) => item.id == 'privacy');
     expect(privacy.group.title, '隐私');
     expect(
@@ -60,6 +82,17 @@ void main() {
         items.any((item) => item.title == 'Android 自动化'),
         platform == TargetPlatform.android,
       );
+    }
+  });
+
+  test('developer options retain their visibility switch', () {
+    for (final enabled in [false, true]) {
+      final items = buildSettingsCategories(
+        modelSummary: '',
+        appearanceSummary: '',
+        isDeveloperMode: enabled,
+      ).expand((category) => category.group.items);
+      expect(items.any((item) => item.route == AppRoutes.developer), enabled);
     }
   });
 }

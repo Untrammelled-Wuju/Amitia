@@ -1,7 +1,77 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum ChatMessageStyle { flow, bubble }
+
+enum AiAvatarShape { circle, rounded, custom }
+
+class AiAvatarShapePreference {
+  final AiAvatarShape shape;
+  final double roundness;
+  const AiAvatarShapePreference({
+    this.shape = AiAvatarShape.rounded,
+    this.roundness = 64,
+  });
+  double radius(double size) =>
+      size *
+      (shape == AiAvatarShape.circle
+          ? 0.5
+          : shape == AiAvatarShape.custom
+          ? roundness / 200
+          : 0.32);
+}
+
+const aiAvatarShapeStorageKey = 'amitia.chat.ai-avatar-shape.mobile.v1';
+final aiAvatarShapeProvider =
+    StateNotifierProvider<AiAvatarShapeNotifier, AiAvatarShapePreference>(
+      (ref) => AiAvatarShapeNotifier(),
+    );
+
+class AiAvatarShapeNotifier extends StateNotifier<AiAvatarShapePreference> {
+  AiAvatarShapeNotifier() : super(const AiAvatarShapePreference());
+  Future<void>? _initialization;
+  Future<void> init() => _initialization ??= _load();
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    AiAvatarShapePreference loaded = const AiAvatarShapePreference();
+    try {
+      final saved = jsonDecode(
+        preferences.getString(aiAvatarShapeStorageKey) ?? 'null',
+      );
+      if (saved is Map &&
+          saved['roundness'] is num &&
+          (saved['roundness'] as num).isFinite) {
+        final shape = AiAvatarShape.values
+            .where((value) => value.name == saved['shape'])
+            .firstOrNull;
+        if (shape != null)
+          loaded = AiAvatarShapePreference(
+            shape: shape,
+            roundness: (saved['roundness'] as num).clamp(0, 100).toDouble(),
+          );
+      }
+    } catch (_) {}
+    if (mounted) state = loaded;
+  }
+
+  Future<void> setShape(AiAvatarShape shape, [double? roundness]) async {
+    await init();
+    final value = roundness ?? state.roundness;
+    if (!value.isFinite) throw ArgumentError.value(value);
+    final next = AiAvatarShapePreference(
+      shape: shape,
+      roundness: value.clamp(0, 100).toDouble(),
+    );
+    final preferences = await SharedPreferences.getInstance();
+    if (!await preferences.setString(
+      aiAvatarShapeStorageKey,
+      jsonEncode({'shape': shape.name, 'roundness': next.roundness}),
+    ))
+      throw StateError('保存 AI 头像形状失败');
+    if (mounted) state = next;
+  }
+}
 
 const aiAvatarStorageKey = 'amitia.chat.ai-avatar.mobile.v1';
 final aiAvatarPreferencesProvider =

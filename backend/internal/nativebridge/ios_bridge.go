@@ -1,6 +1,3 @@
-//go:build ios
-// +build ios
-
 package nativebridge
 
 import (
@@ -37,8 +34,15 @@ func (b *IOSBridge) SetEventSink(sink NativeEventSink) {
 }
 
 func (b *IOSBridge) Execute(ctx context.Context, req Request) (Response, error) {
+	if err := ctx.Err(); err != nil {
+		return Response{}, err
+	}
+	if req.Platform != "ios" || req.ProtocolVersion != IOSBridgeProtocolVersion || req.RequestId == "" {
+		return Response{RequestId: req.RequestId, ProtocolVersion: req.ProtocolVersion, Status: "error", Error: &Error{Code: "INVALID_ARGUMENT", Message: "iOS 原生请求参数无效"}}, fmt.Errorf("invalid iOS native request")
+	}
 	b.mu.RLock()
 	session := b.session
+	generation := b.generation.Load()
 	b.mu.RUnlock()
 
 	if session == nil {
@@ -77,13 +81,25 @@ func (b *IOSBridge) Execute(ctx context.Context, req Request) (Response, error) 
 			},
 		}, &bridgeError{Code: ErrBridgeDisconnected, Message: err.Error()}
 	}
+	if err := ctx.Err(); err != nil {
+		return Response{}, err
+	}
+	b.mu.RLock()
+	current := b.session == session && b.generation.Load() == generation
+	b.mu.RUnlock()
+	if !current || resp.ProtocolVersion != req.ProtocolVersion || resp.RequestId != req.RequestId || resp.Status != "success" && resp.Status != "error" {
+		return Response{}, fmt.Errorf("iOS 原生调用响应已失效或不匹配")
+	}
 	return resp, nil
 }
 
 func (b *IOSBridge) Health(_ context.Context) Health {
+	b.mu.RLock()
+	attached := b.session != nil
+	b.mu.RUnlock()
 	b.healthMu.RLock()
 	defer b.healthMu.RUnlock()
-	if b.session == nil {
+	if !attached {
 		return HealthUnhealthy
 	}
 	return b.hostHealth
@@ -135,6 +151,12 @@ func (b *IOSBridge) HandleRelayEnvelope(payload []byte) error {
 	if err := json.Unmarshal(payload, &env); err != nil {
 		return fmt.Errorf("decode relay envelope: %w", err)
 	}
+	if env.Platform != "" && env.Platform != "ios" {
+		return fmt.Errorf("iOS 原生通道平台不匹配")
+	}
+	if !b.SessionAttached() {
+		return fmt.Errorf("iOS 原生通道未连接")
+	}
 
 	switch env.Type {
 	case "native_bridge.response", "native_bridge.request":
@@ -146,7 +168,7 @@ func (b *IOSBridge) HandleRelayEnvelope(payload []byte) error {
 			return fmt.Errorf("no active relay session")
 		}
 		if gen != env.Generation {
-			return nil
+			return fmt.Errorf("iOS 原生响应代次已失效")
 		}
 		session.handleIncomingEnvelope(env)
 		return nil
@@ -156,18 +178,18 @@ func (b *IOSBridge) HandleRelayEnvelope(payload []byte) error {
 		gen := b.generation.Load()
 		b.mu.RUnlock()
 		if gen != env.Generation {
-			return nil
+			return fmt.Errorf("iOS 原生事件代次已失效")
 		}
 		if sink != nil {
 			return sink.PublishNativeEvent(context.Background(), "ios", env.Generation, env.Payload)
 		}
-		return nil
+		return fmt.Errorf("iOS 原生事件保存通道不可用")
 	case "native_bridge.health":
 		b.mu.RLock()
 		gen := b.generation.Load()
 		b.mu.RUnlock()
 		if gen != env.Generation {
-			return nil
+			return fmt.Errorf("iOS 原生健康事件代次已失效")
 		}
 		return b.updateHostHealthFromEnvelope(env)
 	default:

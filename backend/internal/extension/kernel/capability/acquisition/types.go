@@ -106,12 +106,13 @@ type ExtensionInstallDescriptor struct {
 }
 
 type MCPInstallDescriptor struct {
-	ServerName string            `json:"serverName"`
-	Transport  string            `json:"transport"`
-	Command    string            `json:"command,omitempty"`
-	Args       []string          `json:"args,omitempty"`
-	Env        map[string]string `json:"env,omitempty"`
-	Registry   string            `json:"registry,omitempty"`
+	RequiredInputs []string          `json:"requiredInputs,omitempty"`
+	ServerName     string            `json:"serverName"`
+	Transport      string            `json:"transport"`
+	Command        string            `json:"command,omitempty"`
+	Args           []string          `json:"args,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	Registry       string            `json:"registry,omitempty"`
 }
 
 type SkillInstallDescriptor struct {

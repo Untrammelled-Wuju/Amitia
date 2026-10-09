@@ -196,6 +196,9 @@ func (i *MCPInstaller) Install(
 	}
 
 	desc := candidate.Install.MCP
+	if len(desc.RequiredInputs) > 0 {
+		return InstalledCapability{}, fmt.Errorf("MCP configuration required before installation: %s", strings.Join(desc.RequiredInputs, ", "))
+	}
 
 	serverID, err := i.mcpPort.InstallMCP(ctx, desc.ServerName, desc.Transport, desc.Command, desc.Args, desc.Env)
 	if err != nil {
@@ -226,7 +229,11 @@ func (i *MCPInstaller) Rollback(
 		return nil
 	}
 
-	if err := i.mcpPort.RemoveMCP(ctx, desc.ServerName); err != nil {
+	serverID := installed.TransactionID
+	if serverID == "" {
+		serverID = desc.ServerName
+	}
+	if err := i.mcpPort.RemoveMCP(ctx, serverID); err != nil {
 		return fmt.Errorf("MCP installer rollback: remove %s: %w", desc.ServerName, err)
 	}
 	return nil
@@ -345,6 +352,48 @@ type SkillInstaller struct {
 	skillPort SkillInstallPort
 }
 
+type ScopedSkillInstallPort interface {
+	ImportSkillForSpace(context.Context, string, string, string, string) (string, error)
+	RemoveSkillForSpace(context.Context, string, string) error
+}
+
+type InstalledCapabilityVerifier interface {
+	VerifyInstalledCapability(context.Context, InstalledCapability) (bool, error)
+}
+
+func (i *ExtensionPackageInstaller) VerifyPackageInstalled(ctx context.Context, installed InstalledCapability) (bool, error) {
+	if verifier, ok := i.packagePort.(PackageInstallationVerifier); ok {
+		return verifier.VerifyPackageInstalled(ctx, installed.Candidate.ExtensionID, string(installed.Target.SpaceID))
+	}
+	return false, fmt.Errorf("canonical package installation verification is unavailable")
+}
+
+func (i *SkillInstaller) VerifyInstalledCapability(ctx context.Context, installed InstalledCapability) (bool, error) {
+	if verifier, ok := i.skillPort.(InstalledCapabilityVerifier); ok {
+		return verifier.VerifyInstalledCapability(ctx, installed)
+	}
+	return false, nil
+}
+
+func (i *MCPInstaller) VerifyInstalledCapability(ctx context.Context, installed InstalledCapability) (bool, error) {
+	if verifier, ok := i.mcpPort.(InstalledCapabilityVerifier); ok {
+		return verifier.VerifyInstalledCapability(ctx, installed)
+	}
+	return false, nil
+}
+
+func (i *EnableExistingInstaller) VerifyInstalledCapability(ctx context.Context, installed InstalledCapability) (bool, error) {
+	if installed.Candidate.Kind != CandidateMCP || installed.Candidate.Install.MCP == nil {
+		return false, nil
+	}
+	if verifier, ok := i.enablePort.(interface {
+		VerifyExistingMCP(context.Context, string) (bool, error)
+	}); ok {
+		return verifier.VerifyExistingMCP(ctx, installed.Candidate.Install.MCP.ServerName)
+	}
+	return false, nil
+}
+
 // NewSkillInstaller creates a SkillInstaller with real dependencies.
 func NewSkillInstaller(skillPort SkillInstallPort) *SkillInstaller {
 	return &SkillInstaller{skillPort: skillPort}
@@ -367,7 +416,13 @@ func (i *SkillInstaller) Install(
 
 	desc := candidate.Install.Skill
 
-	skillID, err := i.skillPort.ImportSkill(ctx, desc.SourceURI, desc.SkillName, desc.Hash)
+	var skillID string
+	var err error
+	if scoped, ok := i.skillPort.(ScopedSkillInstallPort); ok {
+		skillID, err = scoped.ImportSkillForSpace(ctx, string(target.SpaceID), desc.SourceURI, desc.SkillName, desc.Hash)
+	} else {
+		skillID, err = i.skillPort.ImportSkill(ctx, desc.SourceURI, desc.SkillName, desc.Hash)
+	}
 	if err != nil {
 		return InstalledCapability{}, fmt.Errorf("skill installer: import skill %s: %w", desc.SkillName, err)
 	}
@@ -400,7 +455,13 @@ func (i *SkillInstaller) Rollback(
 		return nil
 	}
 
-	if err := i.skillPort.RemoveSkill(ctx, skillID); err != nil {
+	var err error
+	if scoped, ok := i.skillPort.(ScopedSkillInstallPort); ok {
+		err = scoped.RemoveSkillForSpace(ctx, string(installed.Target.SpaceID), skillID)
+	} else {
+		err = i.skillPort.RemoveSkill(ctx, skillID)
+	}
+	if err != nil {
 		return fmt.Errorf("skill installer rollback: remove skill %s: %w", skillID, err)
 	}
 	return nil
@@ -512,7 +573,12 @@ func (i *GeneratedSkillInstaller) Install(
 	tmpFile.Close()
 
 	// Step 4: Import via SkillInstallPort (which now reads source → parser → validator → install)
-	skillID, err := i.skillPort.ImportSkill(ctx, tmpFile.Name(), draft.Name, "")
+	var skillID string
+	if scoped, ok := i.skillPort.(ScopedSkillInstallPort); ok {
+		skillID, err = scoped.ImportSkillForSpace(ctx, string(target.SpaceID), tmpFile.Name(), draft.Name, "")
+	} else {
+		skillID, err = i.skillPort.ImportSkill(ctx, tmpFile.Name(), draft.Name, "")
+	}
 	if err != nil {
 		return InstalledCapability{}, fmt.Errorf("generated skill installer: import generated skill: %w", err)
 	}
@@ -547,10 +613,23 @@ func (i *GeneratedSkillInstaller) Rollback(
 		return nil
 	}
 
-	if err := i.skillPort.RemoveSkill(ctx, skillID); err != nil {
+	var err error
+	if scoped, ok := i.skillPort.(ScopedSkillInstallPort); ok {
+		err = scoped.RemoveSkillForSpace(ctx, string(installed.Target.SpaceID), skillID)
+	} else {
+		err = i.skillPort.RemoveSkill(ctx, skillID)
+	}
+	if err != nil {
 		return fmt.Errorf("generated skill installer rollback: remove skill %s: %w", skillID, err)
 	}
 	return nil
+}
+
+func (i *GeneratedSkillInstaller) VerifyInstalledCapability(ctx context.Context, installed InstalledCapability) (bool, error) {
+	if verifier, ok := i.skillPort.(InstalledCapabilityVerifier); ok {
+		return verifier.VerifyInstalledCapability(ctx, installed)
+	}
+	return false, nil
 }
 
 // ---------------------------------------------------------------------------

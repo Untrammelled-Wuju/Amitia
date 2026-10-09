@@ -13,84 +13,135 @@ import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
-import android.os.SystemClock
+import android.os.Looper
+import android.os.PowerManager
 import android.os.UserManager
 import android.provider.Settings
+import android.util.Log
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.TextView
 import com.amitia.amitia_app.MainActivity
 import com.amitia.amitia_app.R
-import kotlin.math.abs
 
 class FloatingChatBubbleService : Service() {
     companion object {
         private const val PREFS = "amitia_floating_chat"
         private const val ENABLED = "enabled"
+        private const val PREVIEW = "preview_enabled"
+        private const val LAST_ERROR = "last_error"
+        private const val TAG = "AmitiaFloatingChat"
         private const val CHANNEL = "amitia_floating_chat"
         private const val NOTIFICATION_ID = 172004
         @Volatile private var current: FloatingChatBubbleService? = null
         @Volatile private var appForeground = false
 
         fun status(context: Context): Map<String, Any> {
+            val prefs = context.getSharedPreferences(PREFS, MODE_PRIVATE)
             val permitted = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
             return mapOf(
                 "supported" to true,
                 "permissionGranted" to permitted,
-                "enabled" to context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(ENABLED, false),
-                "visible" to (current?.bubble?.visibility == View.VISIBLE),
+                "enabled" to prefs.getBoolean(ENABLED, false),
+                "previewEnabled" to prefs.getBoolean(PREVIEW, true),
+                "lastError" to prefs.getString(LAST_ERROR, "").orEmpty(),
+                "visible" to (current?.preview != null),
                 "active" to (current != null),
+                "unreadCount" to (current?.messages?.size ?: 0),
             )
         }
 
-        fun enable(context: Context): Boolean {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                return false
+        fun configure(context: Context, previewEnabled: Boolean): Map<String, Any> {
+            context.getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(PREVIEW, previewEnabled).apply()
+            current?.mainHandler?.post {
+                if (!previewEnabled) current?.hidePreview()
             }
-            context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(ENABLED, true).apply()
-            start(context)
-            return true
+            return status(context)
+        }
+
+        fun enable(context: Context): Boolean {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) return false
+            val prefs = context.getSharedPreferences(PREFS, MODE_PRIVATE)
+            prefs.edit().putBoolean(ENABLED, true).remove(LAST_ERROR).apply()
+            return try {
+                start(context)
+                true
+            } catch (error: Exception) {
+                Log.e(TAG, "Unable to start message preview service", error)
+                prefs.edit().putBoolean(ENABLED, false)
+                    .putString(LAST_ERROR, error.javaClass.simpleName + ": " + error.message).apply()
+                false
+            }
         }
 
         fun disable(context: Context) {
-            context.getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(ENABLED, false).apply()
+            context.getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(ENABLED, false).apply()
             context.stopService(Intent(context, FloatingChatBubbleService::class.java))
         }
 
         fun restore(context: Context) {
             if (context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(ENABLED, false) &&
                 (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context))
-            ) {
-                start(context)
-            }
+            ) start(context)
         }
 
         fun setAppForeground(foreground: Boolean) {
             appForeground = foreground
-            current?.refreshVisibility()
+            if (foreground) current?.mainHandler?.post { current?.hidePreview() }
+        }
+
+        fun onMessage(context: Context, conversationId: String, title: String, body: String) {
+            if (conversationId.isBlank()) return
+            val service = current ?: return
+            service.mainHandler.post {
+                if (current !== service ||
+                    !context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(ENABLED, false)
+                ) return@post
+                service.messages.remove(conversationId)
+                service.messages[conversationId] = PreviewMessage(
+                    conversationId, title.take(50), body.take(220),
+                )
+                while (service.messages.size > 9) service.messages.remove(service.messages.keys.first())
+                service.showPreview()
+            }
+        }
+
+        fun onConversationRead(conversationId: String) {
+            val service = current ?: return
+            service.mainHandler.post {
+                service.messages.remove(conversationId)
+                if (service.messages.isEmpty()) service.hidePreview()
+            }
         }
 
         private fun start(context: Context) {
             val intent = Intent(context, FloatingChatBubbleService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+            else context.startService(intent)
         }
     }
 
+    private data class PreviewMessage(val id: String, val title: String, val body: String)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val messages = linkedMapOf<String, PreviewMessage>()
     private lateinit var windowManager: WindowManager
-    private var bubble: TextView? = null
-    private var params: WindowManager.LayoutParams? = null
+    private var preview: LinearLayout? = null
+    private var hideTask: Runnable? = null
     private var receiverRegistered = false
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+
     private val displayReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            refreshVisibility()
+            if (!canShowPreview()) hidePreview()
         }
     }
 
@@ -105,59 +156,115 @@ class FloatingChatBubbleService : Service() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
             registerReceiver(displayReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(displayReceiver, filter)
-        }
+        else registerReceiver(displayReceiver, filter)
         receiverRegistered = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (!getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(ENABLED, false) ||
-            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this))
-        ) {
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this))) {
             stopSelf()
             return START_NOT_STICKY
         }
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Amitia 悬浮球", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL, "Amitia 悬浮消息预览", NotificationManager.IMPORTANCE_LOW),
             )
         }
         val open = PendingIntent.getActivity(
             this, NOTIFICATION_ID,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL)
-        } else {
-            Notification.Builder(this)
-        }
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            Notification.Builder(this, CHANNEL) else Notification.Builder(this)
         val notification = builder.setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Amitia 悬浮球已启用")
-            .setContentText("返回桌面查看，长按悬浮球可关闭")
+            .setContentTitle("Amitia 消息预览")
+            .setContentText("仅在解锁且应用处于后台时显示顶部消息预览")
             .setContentIntent(open)
             .setOngoing(true)
+            .setVisibility(Notification.VISIBILITY_SECRET)
             .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            else startForeground(NOTIFICATION_ID, notification)
+        } catch (error: Exception) {
+            Log.e(TAG, "Unable to start message preview service", error)
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(ENABLED, false)
+                .putString(LAST_ERROR, error.javaClass.simpleName + ": " + error.message).apply()
+            stopSelf()
+            return START_NOT_STICKY
         }
-        if (bubble == null) createBubble()
-        refreshVisibility()
         return START_STICKY
     }
 
-    private fun createBubble() {
-        val size = (58 * resources.displayMetrics.density).toInt()
-        val initialX = getSharedPreferences(PREFS, MODE_PRIVATE).getInt("x", 8)
-        val initialY = getSharedPreferences(PREFS, MODE_PRIVATE).getInt("y", 260)
+    private fun canShowPreview(): Boolean {
+        if (appForeground || !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREVIEW, true)) return false
+        val power = getSystemService(POWER_SERVICE) as PowerManager
+        val user = getSystemService(USER_SERVICE) as UserManager
+        val keyguard = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
+        return power.isInteractive && user.isUserUnlocked && !keyguard.isKeyguardLocked &&
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
+    }
+
+    private fun showPreview() {
+        hidePreview()
+        if (!canShowPreview()) return
+        val item = messages.values.lastOrNull() ?: return
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(15), dp(11), dp(15), dp(11))
+            background = GradientDrawable().apply {
+                setColor(Color.BLACK)
+                cornerRadius = dp(19).toFloat()
+                setStroke(dp(1), Color.rgb(45, 45, 45))
+            }
+            elevation = dp(8).toFloat()
+            contentDescription = "Amitia 新消息：" + item.title
+        }
+        panel.addView(TextView(this).apply {
+            text = item.title
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        panel.addView(TextView(this).apply {
+            text = item.body.ifBlank { "收到一条新消息" }
+            textSize = 13f
+            setTextColor(Color.rgb(225, 225, 225))
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(0, dp(4), 0, 0)
+        })
+        panel.setOnClickListener {
+            hidePreview()
+            val deepLink = "amitia://chat/" + Uri.encode(item.id)
+            val intent = Intent(this, MainActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .setData(Uri.parse(deepLink))
+                .putExtra("amitia.deepLink", deepLink)
+                .putExtra("amitia.conversationId", item.id)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                )
+            runCatching { startActivity(intent) }
+                .onFailure { Log.w(TAG, "Unable to open full conversation", it) }
+        }
+        val width = dp(300).coerceAtMost(
+            (resources.displayMetrics.widthPixels - dp(28)).coerceAtLeast(dp(160)),
+        )
         val lp = WindowManager.LayoutParams(
-            size, size,
+            width,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             else WindowManager.LayoutParams.TYPE_PHONE,
@@ -167,95 +274,35 @@ class FloatingChatBubbleService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = initialX
-            y = initialY
-        }
-        val control = TextView(this).apply {
-            text = "AI"
-            textSize = 19f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            contentDescription = "Amitia 悬浮聊天球，点击打开应用，长按关闭"
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.rgb(94, 125, 233))
-                setStroke((2 * resources.displayMetrics.density).toInt(), Color.WHITE)
-            }
-            elevation = (6 * resources.displayMetrics.density)
-        }
-        var startRawX = 0f
-        var startRawY = 0f
-        var originX = 0
-        var originY = 0
-        var started = 0L
-        var moved = false
-        control.setOnTouchListener { _: View, event: MotionEvent ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    startRawX = event.rawX
-                    startRawY = event.rawY
-                    originX = lp.x
-                    originY = lp.y
-                    started = SystemClock.uptimeMillis()
-                    moved = false
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = event.rawX - startRawX
-                    val dy = event.rawY - startRawY
-                    if (abs(dx) > 12 || abs(dy) > 12) moved = true
-                    if (moved) {
-                        lp.x = (originX + dx).toInt().coerceAtLeast(0)
-                        lp.y = (originY + dy).toInt().coerceAtLeast(0)
-                        runCatching { windowManager.updateViewLayout(control, lp) }
-                    }
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (moved) {
-                        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                            .putInt("x", lp.x).putInt("y", lp.y).apply()
-                    } else if (SystemClock.uptimeMillis() - started >= 700L) {
-                        disable(this)
-                    } else {
-                        startActivity(
-                            Intent(this, MainActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        )
-                    }
-                    true
-                }
-                else -> true
-            }
+            y = dp(44)
+            x = ((resources.displayMetrics.widthPixels - width) / 2).coerceAtLeast(0)
         }
         try {
-            windowManager.addView(control, lp)
-            bubble = control
-            params = lp
-        } catch (_: Exception) {
-            stopSelf()
+            panel.alpha = 0f
+            panel.translationY = -dp(10).toFloat()
+            windowManager.addView(panel, lp)
+            panel.animate().alpha(1f).translationY(0f).setDuration(220L).start()
+            preview = panel
+            hideTask = Runnable { hidePreview() }.also { mainHandler.postDelayed(it, 4200L) }
+        } catch (error: Exception) {
+            Log.w(TAG, "Unable to show message preview", error)
         }
     }
 
-    private fun refreshVisibility() {
-        val view = bubble ?: return
-        val power = getSystemService(POWER_SERVICE) as android.os.PowerManager
-        val user = getSystemService(USER_SERVICE) as UserManager
-        val keyguard = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
-        val canShow = !appForeground && power.isInteractive && user.isUserUnlocked &&
-            !keyguard.isKeyguardLocked &&
-            (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))
-        view.visibility = if (canShow) View.VISIBLE else View.GONE
+    private fun hidePreview() {
+        hideTask?.let { mainHandler.removeCallbacks(it) }
+        hideTask = null
+        preview?.let { runCatching { windowManager.removeView(it) } }
+        preview = null
     }
 
     override fun onDestroy() {
+        hidePreview()
         if (receiverRegistered) {
             unregisterReceiver(displayReceiver)
             receiverRegistered = false
         }
-        bubble?.let { runCatching { windowManager.removeView(it) } }
-        bubble = null
-        params = null
+        messages.clear()
         if (current === this) current = null
         super.onDestroy()
     }

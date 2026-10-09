@@ -4,17 +4,27 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="deployment-panel">
+    <section class="mode-summary" aria-label="当前设备连接状态">
+      <div class="mode-summary-main">
+        <span class="mode-summary-label">当前设备连接到</span>
+        <strong>{{ currentMode === "local" ? "本机 Core" : "远程 Core" }}</strong>
+        <span class="mode-summary-address">{{ currentApiURL || "连接地址读取中" }}</span>
+      </div>
+      <el-tag :type="statusType" effect="plain">{{ statusLabel }}</el-tag>
+    </section>
+
     <el-card shadow="never" class="section-card">
-      <template #header><span>部署模式</span></template>
+      <template #header><span>当前设备的 Core 连接目标</span></template>
+      <p class="connection-explanation">只决定这台设备使用哪个 Core，不会改变 Core 服务器自身的部署形态。</p>
 
       <el-radio-group v-model="formMode" class="mode-radio-group">
         <el-radio value="local" border class="mode-radio-card" :disabled="!desktopShell">
-          <div class="mode-label">本地模式</div>
-          <div class="mode-desc">Core 在本机运行，数据存储在本地</div>
+          <div class="mode-label">连接本机 Core</div>
+          <div class="mode-desc">当前设备直接使用本机启动的 Core 服务</div>
         </el-radio>
         <el-radio value="cloud" border class="mode-radio-card">
-          <div class="mode-label">云端模式</div>
-          <div class="mode-desc">连接到你部署的远程 Core 服务器</div>
+          <div class="mode-label">连接远程 Core</div>
+          <div class="mode-desc">当前设备连接一台已经部署好的远程 Core</div>
         </el-radio>
       </el-radio-group>
 
@@ -38,28 +48,23 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-form>
       </div>
 
-      <div
-        style="margin-top: 16px; display: flex; gap: 8px; align-items: center"
-      >
-        <el-button type="primary" @click="handleSave" :loading="saving"
-          >保存配置</el-button
-        >
-        <el-tag v-if="saveSuccess" type="success" size="small" effect="plain"
-          >已保存</el-tag
-        >
+      <div class="mode-save-row">
+        <span class="mode-save-hint">仅更改当前设备的连接目标，保存后可能需要重新连接。</span>
+        <el-tag v-if="saveSuccess" type="success" size="small" effect="plain">已保存</el-tag>
         <div v-if="saveError" class="save-error">{{ saveError }}</div>
+        <el-button type="primary" @click="handleSave" :loading="saving">保存连接设置</el-button>
       </div>
     </el-card>
 
-    <el-card shadow="never" class="section-card">
-      <template #header><span>当前状态</span></template>
-      <el-descriptions :column="2" border size="small">
-        <el-descriptions-item label="当前模式">
+    <details class="deployment-advanced">
+      <summary>当前设备连接详情</summary>
+      <el-descriptions :column="1" border size="small">
+        <el-descriptions-item label="当前连接目标">
           <el-tag
             :type="currentMode === 'local' ? 'success' : 'warning'"
             size="small"
           >
-            {{ currentMode === "local" ? "本地模式" : "云端模式" }}
+            {{ currentMode === "local" ? "连接本机 Core" : "连接远程 Core" }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="API 地址">{{
@@ -82,7 +87,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
         </el-descriptions-item>
       </el-descriptions>
-    </el-card>
+    </details>
   </div>
 </template>
 
@@ -225,7 +230,7 @@ async function handleSave() {
     await saveDeploymentConfig(config);
     await initializeRuntimeCapabilities(true);
     saveSuccess.value = true;
-    ElMessage.success(desktopShell ? "部署配置已保存，部分更改需要重启应用后生效" : "Cloud Core 地址已保存；如服务已变更，请在设备页完成配对");
+    ElMessage.success(desktopShell ? "设备连接设置已保存，可能需要重新连接或重启应用生效；Core 服务端配置未改变" : "远程 Core 连接地址已保存；如服务已变更，请在设备配对页完成配对");
 
     currentMode.value = config.mode;
     currentApiURL.value = await getApiBaseURL();
@@ -310,4 +315,21 @@ onUnmounted(() => {
   font-size: var(--ac-font-size-xs);
   color: var(--el-color-danger);
 }
+.mode-summary { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 20px; padding: 24px; background: var(--surface-bg); border: 1px solid var(--surface-border); border-radius: 14px; }
+.mode-summary-main { display: grid; gap: 7px; min-width: 0; }
+.mode-summary-label { font-size: 12px; color: var(--text-secondary); }
+.mode-summary-main strong { font-size: 22px; line-height: 1.3; letter-spacing: -0.02em; }
+.mode-summary-address { color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
+.deployment-panel :deep(.section-card) { border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-bg); margin-bottom: 0; }
+.deployment-panel :deep(.section-card .el-card__header) { padding: 20px 24px 8px; border-bottom: 0; font-weight: 600; }
+.deployment-panel :deep(.section-card .el-card__body) { padding: 16px 24px 24px; }
+.connection-explanation { margin: 0 0 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.mode-radio-group { width: 100%; }
+.mode-radio-card { min-width: min(210px, 100%); }
+.mode-save-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--surface-border); }
+.mode-save-hint { flex: 1; font-size: 12px; color: var(--text-secondary); }
+.deployment-advanced { padding: 16px 20px; border: 1px solid var(--surface-border); border-radius: 12px; margin-top: 18px; }
+.deployment-advanced summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+.deployment-advanced .el-descriptions { margin-top: 16px; }
+@media (max-width: 720px) { .mode-summary { padding: 18px; } .deployment-panel :deep(.section-card .el-card__body) { padding: 14px 18px 20px; } .mode-radio-card { min-width: 100%; } }
 </style>

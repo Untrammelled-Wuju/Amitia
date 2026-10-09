@@ -48,9 +48,10 @@ final debugLogServiceProvider = Provider<DebugLogService>((ref) {
   return service;
 });
 
-final debugLogEntriesProvider = StreamProvider<List<DebugLogEntry>>((ref) {
+final debugLogEntriesProvider = StreamProvider<List<DebugLogEntry>>((ref) async* {
   final service = ref.watch(debugLogServiceProvider);
-  return service.stream;
+  yield service.entries;
+  yield* service.stream;
 });
 
 class DebugLogService {

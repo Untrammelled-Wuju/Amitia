@@ -88,7 +88,7 @@ class _ToolboxRuntimeStatusPageState extends ConsumerState<ToolboxRuntimeStatusP
 
     final allOk = _readyCount >= _totalCount && _totalCount > 0;
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: 'Runtime 状态', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
+      appBar: AmitiaAppBar(title: 'Runtime 状态', showBackButton: true, fallbackRoute: AppRoutes.settingsMaintenanceCategory),
       body: ListView(
         padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [

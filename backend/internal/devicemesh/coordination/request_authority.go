@@ -24,6 +24,13 @@ func ValidateRequestAuthorityTx(ctx context.Context, tx *sql.Tx) error {
 			return ErrScopeExpired
 		}
 		for _, device := range []string{scope.InitiatorDeviceID, scope.TargetDeviceID} {
+			var trusted string
+			if err := tx.QueryRowContext(ctx, `SELECT trust_state FROM kernel_devices WHERE space_id=? AND device_id=?`, scope.SpaceID, device).Scan(&trusted); err != nil {
+				return err
+			}
+			if trusted != "trusted" {
+				return ErrScopeExpired
+			}
 			policy := Policy{ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}
 			err := tx.QueryRowContext(ctx, `SELECT coordinated,mode_revision,permission_revision,provider_epoch FROM kernel_device_coordination WHERE space_id=? AND device_id=?`, scope.SpaceID, device).Scan(&policy.Coordinated, &policy.ModeRevision, &policy.PermissionRevision, &policy.ProviderEpoch)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {

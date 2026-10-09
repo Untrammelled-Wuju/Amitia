@@ -11,7 +11,12 @@ type AcquisitionContext struct {
 }
 
 type AcquisitionRequest struct {
-	CapabilityID capability.CapabilityID `json:"capabilityId"`
+	Query        string                      `json:"query,omitempty"`
+	SourceURI    string                      `json:"sourceUri,omitempty"`
+	Install      *CandidateInstallDescriptor `json:"install,omitempty"`
+	ExtensionID  string                      `json:"extensionId,omitempty"`
+	Version      string                      `json:"version,omitempty"`
+	CapabilityID capability.CapabilityID     `json:"capabilityId"`
 
 	RequestedCandidateID string `json:"candidateId,omitempty"`
 

@@ -79,6 +79,17 @@ type CanonicalPackageInstallPort interface {
 	UninstallExtension(ctx context.Context, extensionID, spaceID string) error
 }
 
+type PackageInstallationVerifier interface {
+	VerifyPackageInstalled(context.Context, string, string) (bool, error)
+}
+
+func (b *packagePortBridge) VerifyPackageInstalled(ctx context.Context, id, spaceID string) (bool, error) {
+	if verifier, ok := b.canonical.(PackageInstallationVerifier); ok {
+		return verifier.VerifyPackageInstalled(ctx, id, spaceID)
+	}
+	return false, fmt.Errorf("canonical package installation verifier is unavailable")
+}
+
 // NewPackagePortBridgeFromManager creates a PackageInstallPort backed by the lifecycle Manager.
 func NewPackagePortBridgeFromManager(manager *lifecycle_manager.Manager) PackageInstallPort {
 	return &packagePortBridge{manager: manager}

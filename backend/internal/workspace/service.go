@@ -65,6 +65,25 @@ func (s *Service) HasBackend(kind WorkspaceKind) bool {
 	return s.registry != nil && s.registry.HasBackend(kind)
 }
 
+func (s *Service) LocalWorkspaceRoot(workspaceID string) (string, error) {
+	if s == nil || s.registry == nil || strings.TrimSpace(workspaceID) == "" {
+		return "", fmt.Errorf("a local workspace must be bound")
+	}
+	mount, ok := s.registry.GetMountOrEmpty(WorkspaceID(workspaceID))
+	if !ok || mount.Kind != WorkspaceKindLocal || !mount.Available {
+		return "", fmt.Errorf("local workspace %s is not available", workspaceID)
+	}
+	root, err := canonicalLocalRoot(mount.LocalRoot)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve local workspace root: %w", err)
+	}
+	return resolved, nil
+}
+
 func (s *Service) ResolveWorkspaceAvailability(workspaceID string) (bool, string, string) {
 	if s == nil || s.registry == nil || strings.TrimSpace(workspaceID) == "" {
 		return false, "missing", "项目根目录不存在"

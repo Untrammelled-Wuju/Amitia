@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'debug_log_service.dart';
+import '../widgets/log_folder_button.dart';
 
 class DebugLogOverlay extends ConsumerStatefulWidget {
   const DebugLogOverlay({super.key});
@@ -239,6 +240,7 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
       ),
       child: Row(
         children: [
+          const LogFolderButton(),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,

@@ -8,7 +8,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../desktop_pet/infrastructure/desktop_pet_plugin_dto.dart';
 import '../../../desktop_pet/presentation/controllers/desktop_pet_plugin_controller_provider.dart';
 
@@ -20,7 +20,7 @@ class PetCenterPage extends ConsumerStatefulWidget {
 }
 
 class _PetCenterPageState extends ConsumerState<PetCenterPage> {
-  List<Map<String, dynamic>> _sessions = [];
+  List<Map<String, dynamic>> _tasks = [];
   List<DesktopPetPluginSummary> _plugins = [];
   bool _loading = true;
   String? _error;
@@ -37,15 +37,26 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       _error = null;
     });
     try {
-      final svc = ref.read(extensionServiceProvider);
+      final api = ref.read(backendServiceProvider);
       final desktopPetApi = ref.read(desktopPetPluginApiProvider);
       final results = await Future.wait([
-        svc.workshopSessions(),
+        api.get<Map<String, dynamic>>(
+          '/api/desktop-pets/generation-tasks',
+          queryParameters: {'page': 1, 'pageSize': 100},
+        ),
         desktopPetApi.list(),
       ]);
+      final response = results[0];
+      final items = response is Map ? response['items'] : null;
+      if (items is! List) {
+        throw StateError('桌宠生成任务列表返回格式无效');
+      }
       if (mounted) {
         setState(() {
-          _sessions = results[0] as List<Map<String, dynamic>>;
+          _tasks = items
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
           _plugins = (results[1] as DesktopPetPluginList).plugins;
           _loading = false;
         });
@@ -62,33 +73,43 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   @override
   Widget build(BuildContext context) {
+    final appBar = AmitiaAppBar(
+      title: '桌宠制作',
+      showBackButton: true,
+      fallbackRoute: AppRoutes.workshop,
+    );
     if (_loading) {
-      return const AmitiaScaffold(
-        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      return AmitiaScaffold(
+        appBar: appBar,
+        body: const SafeArea(child: Center(child: CircularProgressIndicator())),
       );
     }
     if (_error != null) {
       return AmitiaScaffold(
-        body: SafeArea(child: Center(child: Text('加载失败: $_error'))),
+        appBar: appBar,
+        body: SafeArea(
+          child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _load),
+        ),
       );
     }
 
     final running = _plugins.where((p) => p.enabled).toList();
     final runningPet = running.isNotEmpty ? running.first : null;
 
-    final activeSessions = _sessions.where((s) {
+    final activeTasks = _tasks.where((s) {
       final status = s['status']?.toString() ?? '';
-      return status != 'completed' && status != 'cancelled';
+      return !{
+        'succeeded',
+        'completed',
+        'failed',
+        'cancelled',
+      }.contains(status);
     }).toList();
 
-    final recentSessions = _sessions.take(3).toList();
+    final recentTasks = _tasks.take(3).toList();
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        title: '桌宠制作',
-        showBackButton: true,
-        fallbackRoute: AppRoutes.workshop,
-      ),
+      appBar: appBar,
       body: SafeArea(
         top: false,
         child: ListView(
@@ -107,11 +128,11 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
               onAction: () => context.push(AppRoutes.workshopPetTasks),
             ),
             SizedBox(height: AppSpacing.sm),
-            _buildTaskListCard(context, activeSessions),
+            _buildTaskListCard(context, activeTasks),
             SizedBox(height: AppSpacing.sectionGap),
             const AmitiaSectionHeader(title: '最近记录'),
             SizedBox(height: AppSpacing.sm),
-            _buildRecentRecords(context, recentSessions),
+            _buildRecentRecords(context, recentTasks),
           ],
         ),
       ),
@@ -237,7 +258,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
           child: AmitiaEmptyState(
             icon: Icons.check_circle_outline,
             title: '没有进行中的任务',
-            subtitle: '所有生成任务已完成',
+            subtitle: '创建桌宠后可在这里查看生成进度',
           ),
         ),
       );
@@ -261,20 +282,17 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   Widget _buildTaskItem(BuildContext context, Map<String, dynamic> task) {
     final name = task['name']?.toString() ?? '';
-    final completedActions = (task['completedActions'] is num)
-        ? (task['completedActions'] as num).toInt()
-        : 0;
-    final totalActions = (task['totalActions'] is num)
-        ? (task['totalActions'] as num).toInt()
+    final selectedActionCount = (task['selectedActionCount'] is num)
+        ? (task['selectedActionCount'] as num).toInt()
         : 0;
     final progress = (task['progress'] is num)
-        ? (task['progress'] as num).toInt()
+        ? (task['progress'] as num).toInt().clamp(0, 100)
         : 0;
     final status = task['status']?.toString() ?? '';
-    final sessionId = task['id']?.toString() ?? '';
+    final taskId = task['id']?.toString() ?? '';
 
     return GestureDetector(
-      onTap: () => context.push(AppRoutes.petProcessing(sessionId)),
+      onTap: () => context.push(AppRoutes.petProcessing(taskId)),
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: EdgeInsets.symmetric(
@@ -297,7 +315,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
             Row(
               children: [
                 Text(
-                  '$completedActions/$totalActions 动作',
+                  '$selectedActionCount 个动作',
                   style: AppTypography.caption(context),
                 ),
                 SizedBox(width: AppSpacing.md),
@@ -335,10 +353,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   Widget _buildRecordItem(BuildContext context, Map<String, dynamic> task) {
     final name = task['name']?.toString() ?? '';
-    final characterName =
-        task['characterName']?.toString() ??
-        task['character']?.toString() ??
-        '';
+    final modelName = task['modelName']?.toString() ?? '';
     final createdAt = task['createdAt']?.toString() ?? '';
     final status = task['status']?.toString() ?? '';
 
@@ -370,7 +385,10 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
                 Text(name, style: AppTypography.body(context)),
                 const SizedBox(height: 2),
                 Text(
-                  '$characterName · $createdAt',
+                  [
+                    modelName,
+                    createdAt,
+                  ].where((value) => value.isNotEmpty).join(' · '),
                   style: AppTypography.label(context),
                 ),
               ],
@@ -389,10 +407,19 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     switch (status) {
       case 'pending':
         return '待处理';
+      case 'queued':
+        return '排队中';
+      case 'running':
+        return '生成中';
       case 'processing':
         return '处理中';
       case 'completed':
+      case 'succeeded':
         return '已完成';
+      case 'failed':
+        return '生成失败';
+      case 'cancelling':
+        return '取消中';
       case 'cancelled':
         return '已取消';
       default:
@@ -405,10 +432,14 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       case 'pending':
         return BadgeType.neutral;
       case 'processing':
+      case 'running':
+      case 'cancelling':
         return BadgeType.accent;
       case 'completed':
+      case 'succeeded':
         return BadgeType.success;
       case 'cancelled':
+      case 'failed':
         return BadgeType.error;
       default:
         return BadgeType.neutral;

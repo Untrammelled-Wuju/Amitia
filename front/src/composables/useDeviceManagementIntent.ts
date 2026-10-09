@@ -22,6 +22,11 @@ export function deviceManagementRequestConfig(intent: DeviceManagementIntent) {
 export function useDeviceManagementIntent(onInvalidated?: () => void) {
   const api = useApi();
   const intents = new Set<DeviceManagementIntent>();
+  function release(intent: DeviceManagementIntent | null) {
+    if (!intent) return;
+    intent.controller.abort(changed);
+    intents.delete(intent);
+  }
   function invalidate() {
     for (const intent of intents) intent.controller.abort(changed);
     intents.clear();
@@ -52,5 +57,5 @@ export function useDeviceManagementIntent(onInvalidated?: () => void) {
     window.removeEventListener("amitia:execution-scope-changed", invalidate);
     invalidate();
   });
-  return { capture, validate, invalidate };
+  return { capture, validate, invalidate, release };
 }

@@ -53,6 +53,7 @@ type TaskOwnerRPCRequest struct {
 	RequestID            string                      `json:"requestId"`
 	Method               string                      `json:"method"`
 	Params               json.RawMessage             `json:"params"`
+	NativeParamsBytes    []byte                      `json:"nativeParamsBytes,omitempty"`
 }
 
 type TaskCancelPayload struct {

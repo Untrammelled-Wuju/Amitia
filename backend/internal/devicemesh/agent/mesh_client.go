@@ -732,12 +732,19 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 		return nil, fmt.Errorf("设备调用身份或会话已失效")
 	}
 	handler := c.resolveHandler(invoke.Handler)
+	var contextual CancellableRuntimeInvokeHandler
+	if dispatcher, ok := c.conf.RuntimeDispatcher.(RuntimeContextDispatcher); ok {
+		contextual = dispatcher.ResolveContext(invoke.Handler)
+	}
 	if handler == nil {
 		return nil, fmt.Errorf("unsupported handler: %s", invoke.Handler)
 	}
-	run := func() (*protocol.RuntimeResultPayload, error) {
+	run := func(current context.Context) (*protocol.RuntimeResultPayload, error) {
 		if c.State() != StateReady || invoke.RuntimeSessionID != c.sessionIdentity() || invoke.ConnectionGeneration != c.sessionGeneration() {
 			return nil, fmt.Errorf("设备调用执行前会话已失效")
+		}
+		if contextual != nil {
+			return contextual(current, invoke)
 		}
 		return handler(invoke)
 	}
@@ -760,9 +767,9 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 		})
 		defer stop()
 		if c.conf.ExecutionJournal != nil && invoke.Handler != "coordination.data" {
-			return c.conf.ExecutionJournal.Execute(current, invoke, run)
+			return c.conf.ExecutionJournal.Execute(current, invoke, func() (*protocol.RuntimeResultPayload, error) { return run(current) })
 		}
-		return run()
+		return run(current)
 	}
 	if c.conf.ExecutionGuard != nil && invoke.Handler != "coordination.data" {
 		result, err = c.conf.ExecutionGuard(c.clientCtx, invoke, execute)

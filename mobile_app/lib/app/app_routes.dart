@@ -65,6 +65,7 @@ abstract final class AppRoutes {
   static const settingsAppUpdate = '/settings/app-update';
   static const settingsAbout = '/settings/about';
   static const settingsToolbox = '/settings/toolbox';
+  static const settingsMaintenanceCategory = '/settings/category/maintenance';
   static const toolboxFileBrowser = '/settings/toolbox/file-browser';
   static const toolboxWorkspace = '/settings/toolbox/workspace';
   static const toolboxTaskLog = '/settings/toolbox/task-log';

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,9 +8,8 @@ import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/artifact/artifact_providers.dart';
-import '../../../../core/backend_connection/backend_connection_availability.dart';
-import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/backend_transport/core_configuration_intent.dart';
 import '../../../../core/services/core_configuration_guard.dart';
@@ -38,6 +36,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   String _result = '';
   Timer? _pollTimer;
   CoreConfigurationIntent? _configurationIntent;
+  CoreConfigurationIntent? _audioIntent;
+  CoreConfigurationIntent? _taskIntent;
   int _loadEpoch = 0;
 
   @override
@@ -54,7 +54,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   Future<void> _loadConfigs() async {
     final epoch = ++_loadEpoch;
+    _pollTimer?.cancel();
+    _audioIntent = null;
+    _taskIntent = null;
+    _configurationIntent = null;
     setState(() {
+      _audioUrl = '';
+      _taskId = '';
+      _result = '';
       _loading = true;
       _error = null;
     });
@@ -82,14 +89,6 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         _loading = false;
       });
     }
-  }
-
-  Future<Dio> _dio() async {
-    final availability = await ref.read(backendConnectionProvider.future);
-    if (availability is! BackendConnectionAvailable) {
-      throw StateError('后端当前不可用');
-    }
-    return createAuthenticatedDio(availability.config);
   }
 
   bool get _configured => _configs.any((item) {
@@ -374,34 +373,36 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Future<void> _pickAndUpload() async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'pcm'],
     );
     if (picked == null || picked.files.isEmpty) return;
+    if (!await _ensureConfiguration(intent)) return;
     final file = picked.files.first;
     if (file.path == null || file.path!.isEmpty) {
       _show('无法读取所选音频文件', error: true);
       return;
     }
     setState(() => _busy = true);
-    final dio = await _dio();
     try {
-      final form = FormData.fromMap({
-        'audio': await MultipartFile.fromFile(file.path!, filename: file.name),
-      });
-      final response = await dio.post('/api/asr/upload', data: form);
-      final body = response.data;
-      final payload = body is Map ? body['data'] : null;
-      final url = payload is Map ? (payload['url'] ?? '').toString() : '';
+      final payload = await intent!.run(
+        () => ref.read(asrServiceProvider).uploadAudio(file.path!),
+      );
+      if (!await _ensureConfiguration(intent)) return;
+      final url = (payload?['url'] ?? '').toString();
       if (url.isEmpty) throw StateError('后端未返回音频地址');
       if (!mounted) return;
-      setState(() => _audioUrl = url);
+      setState(() {
+        _audioUrl = url;
+        _audioIntent = intent;
+      });
       _show('音频已上传');
     } catch (e) {
       _show('上传失败：$e', error: true);
     } finally {
-      dio.close(force: true);
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -409,10 +410,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   Future<bool> _ensureConfiguration(CoreConfigurationIntent? intent) async {
     try {
       if (intent == null) throw StateError('语音识别配置归属无法确认，请重新加载');
+      if (!identical(intent, _configurationIntent))
+        throw StateError('语音识别原配置页面已变化，请重新选择音频');
       await coreConfigurationGuardFor(ref).validate(intent);
       return mounted;
     } catch (error) {
       if (mounted) {
+        _pollTimer?.cancel();
+        _audioIntent = null;
+        _taskIntent = null;
+        _configurationIntent = null;
+        _loadEpoch++;
+        _audioUrl = '';
+        _taskId = '';
+        _result = '';
         setState(() => _error = error.toString());
         _show('模型配置已禁用：$error', error: true);
       }
@@ -421,6 +432,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   Future<void> _submit() async {
+    final intent = _audioIntent;
+    if (!await _ensureConfiguration(intent)) return;
     if (!_configured) {
       _show('请先配置并启用 ASR API Key', error: true);
       return;
@@ -430,20 +443,19 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       return;
     }
     setState(() => _busy = true);
-    final dio = await _dio();
     try {
-      final form = FormData.fromMap({
-        'audioUrl': _audioUrl.trim(),
-        if (_language.isNotEmpty) 'language': _language,
-      });
-      final response = await dio.post('/api/asr/submit', data: form);
-      final body = response.data;
-      final payload = body is Map ? body['data'] : null;
-      final taskId = payload is Map ? (payload['taskId'] ?? '').toString() : '';
+      final url = _audioUrl.trim();
+      final language = _language;
+      final payload = await intent!.run(
+        () => ref.read(asrServiceProvider).submitUrl(url, language: language),
+      );
+      if (!await _ensureConfiguration(intent)) return;
+      final taskId = (payload?['taskId'] ?? '').toString();
       if (taskId.isEmpty) throw StateError('后端未返回任务 ID');
       if (!mounted) return;
       setState(() {
         _taskId = taskId;
+        _taskIntent = intent;
         _status = 'processing';
         _result = '';
       });
@@ -451,7 +463,6 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     } catch (e) {
       _show('提交失败：$e', error: true);
     } finally {
-      dio.close(force: true);
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -464,9 +475,18 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   Future<void> _poll() async {
     if (_taskId.isEmpty) return;
+    final intent = _taskIntent;
+    final taskId = _taskId;
+    if (!await _ensureConfiguration(intent)) return;
     try {
-      final response = await ref.read(asrServiceProvider).queryResult(_taskId);
-      if (!mounted || response == null) return;
+      final response = await intent!.run(
+        () => ref.read(asrServiceProvider).queryResult(taskId),
+      );
+      if (!await _ensureConfiguration(intent) ||
+          taskId != _taskId ||
+          !identical(intent, _taskIntent) ||
+          response == null)
+        return;
       final status = (response['status'] ?? '').toString();
       final result = (response['result'] ?? '').toString();
       setState(() {
@@ -499,6 +519,26 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   @override
   Widget build(BuildContext context) {
+    void invalidate() {
+      _loadEpoch++;
+      _pollTimer?.cancel();
+      _configurationIntent = null;
+      _audioIntent = null;
+      _taskIntent = null;
+      if (mounted)
+        setState(() {
+          _configs = const [];
+          _providers = const [];
+          _audioUrl = '';
+          _taskId = '';
+          _result = '';
+          _loading = false;
+          _error = 'Core连接或设备模式已变化，原语音识别测试已取消，请重新加载';
+        });
+    }
+
+    ref.listen(rawBackendServiceApiProvider, (_, __) => invalidate());
+    ref.listen(mobileDeploymentConfigProvider, (_, __) => invalidate());
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '语音识别',

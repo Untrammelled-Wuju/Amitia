@@ -17,6 +17,7 @@ class SettingsCategory {
 List<SettingsCategory> buildSettingsCategories({
   required String modelSummary,
   required String appearanceSummary,
+  bool isDeveloperMode = false,
 }) => <SettingsCategory>[
   SettingsCategory(
     id: 'ai',
@@ -184,10 +185,44 @@ List<SettingsCategory> buildSettingsCategories({
           route: AppRoutes.settingsMaintenance,
         ),
         SettingItem(
-          title: '工具箱',
-          icon: Icons.handyman_outlined,
-          value: '诊断工具',
-          route: AppRoutes.settingsToolbox,
+          title: '文件浏览',
+          icon: Icons.folder_outlined,
+          route: AppRoutes.toolboxFileBrowser,
+        ),
+        SettingItem(
+          title: '工作区',
+          icon: Icons.work_outline,
+          route: AppRoutes.toolboxWorkspace,
+        ),
+        SettingItem(
+          title: '任务日志',
+          icon: Icons.task_alt,
+          route: AppRoutes.toolboxTaskLog,
+        ),
+        SettingItem(
+          title: '运行日志',
+          icon: Icons.terminal,
+          route: AppRoutes.toolboxLog,
+        ),
+        SettingItem(
+          title: 'Prompt Trace',
+          icon: Icons.code,
+          route: AppRoutes.toolboxPromptTrace,
+        ),
+        SettingItem(
+          title: 'Runtime 状态',
+          icon: Icons.memory,
+          route: AppRoutes.toolboxRuntimeStatus,
+        ),
+        SettingItem(
+          title: '数据库状态',
+          icon: Icons.storage,
+          route: AppRoutes.toolboxDatabaseStatus,
+        ),
+        SettingItem(
+          title: '设备状态',
+          icon: Icons.devices,
+          route: AppRoutes.toolboxDeviceStatus,
         ),
         SettingItem(
           title: '高级系统',
@@ -204,6 +239,12 @@ List<SettingsCategory> buildSettingsCategories({
           icon: Icons.developer_mode_outlined,
           route: AppRoutes.kernelPage('dev-mode'),
         ),
+        if (isDeveloperMode)
+          SettingItem(
+            title: '开发者选项',
+            icon: Icons.developer_mode,
+            route: AppRoutes.developer,
+          ),
       ],
     ),
   ),

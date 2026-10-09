@@ -372,6 +372,9 @@ func (s *MCPPackageSource) buildCandidate(item interface{}, request AcquisitionR
 			containsCapability(providedCaps, capID) ||
 			containsString(inst.GetServerName(), capID) ||
 			containsString(inst.GetBindingID(), capID)
+		if request.Query != "" {
+			matchesQuery = containsString(inst.GetServerName(), request.Query) || containsString(inst.GetBindingID(), request.Query)
+		}
 		if !matchesQuery {
 			return nil
 		}
@@ -420,7 +423,7 @@ func (s *MCPPackageSource) buildCandidate(item interface{}, request AcquisitionR
 
 func mcpStateCanEnableExisting(state string) bool {
 	switch strings.ToLower(strings.TrimSpace(state)) {
-	case "installed", "ready", "connected", "running", "enabled", "disabled", "stopped":
+	case "installed", "ready", "connected", "running", "enabled", "disabled", "stopped", "disconnected", "failed":
 		return true
 	default:
 		return false

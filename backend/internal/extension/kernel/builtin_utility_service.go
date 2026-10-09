@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -89,6 +90,8 @@ func (s *BuiltinUtilityService) Supports(name string) bool {
 		return s.android != nil
 	case "execute_terminal", "execute_in_terminal_session_streaming", "get_terminal_session_screen", "ssh_login", "ssh_exit":
 		return s.androidLinux != nil && amitiaLinuxAvailable(s.androidLinux)
+	case "execute_host_command":
+		return s.workspace != nil && (runtime.GOOS == "windows" || runtime.GOOS == "linux" || runtime.GOOS == "darwin")
 	default:
 		return false
 	}
@@ -120,6 +123,8 @@ func (s *BuiltinUtilityService) Dispatch(ctx context.Context, name string, input
 		return s.pressKey(ctx, input, invocation)
 	case "combined_operation":
 		return s.combinedOperation(ctx, input, invocation)
+	case "execute_host_command":
+		return s.executeHostCommand(ctx, input, invocation)
 	case "execute_terminal":
 		return s.executeTerminal(ctx, input, invocation)
 	case "execute_in_terminal_session_streaming":

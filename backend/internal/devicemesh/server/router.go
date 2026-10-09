@@ -619,6 +619,10 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 			}
 		}
 		if err != nil {
+			if errors.Is(err, coordination.ErrScopeExpired) {
+				c.JSON(http.StatusConflict, gin.H{"code": "mesh.management_scope_changed", "message": err.Error()})
+				return
+			}
 			c.JSON(500, gin.H{"code": "mesh.revoke_failed", "message": err.Error()})
 			return
 		}
@@ -626,7 +630,9 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 			deps.Hub.CloseDevice(spaceID, deviceID)
 		}
 		if deps.DeviceRevokedHandler != nil {
-			if cleanupErr := deps.DeviceRevokedHandler(c.Request.Context(), spaceID, deviceID); cleanupErr != nil {
+			cleanupContext, cancelCleanup := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 15*time.Second)
+			defer cancelCleanup()
+			if cleanupErr := deps.DeviceRevokedHandler(cleanupContext, spaceID, deviceID); cleanupErr != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"code":     "mesh.device_revoked_notification_cleanup_failed",
 					"message":  cleanupErr.Error(),

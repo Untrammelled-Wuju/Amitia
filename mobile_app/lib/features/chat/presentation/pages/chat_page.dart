@@ -141,6 +141,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           .catchError((Object _) {}),
     );
     unawaited(
+      ref.read(aiAvatarShapeProvider.notifier).init().catchError((Object _) {}),
+    );
+    unawaited(
       ref
           .read(userMessageMaterialProvider.notifier)
           .init()
@@ -2917,6 +2920,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                   ),
                                                   aiAvatarEnabled: ref.watch(
                                                     aiAvatarPreferencesProvider,
+                                                  ),
+                                                  aiAvatarShape: ref.watch(
+                                                    aiAvatarShapeProvider,
                                                   ),
                                                   userMessageMaterial: ref.watch(
                                                     userMessageMaterialProvider,

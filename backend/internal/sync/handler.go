@@ -4,14 +4,17 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type DeviceOwnershipValidator interface {
-	RequireOwned(ctx context.Context, spaceID string, deviceID string) error
+	RequireTrustedDevice(ctx context.Context, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) error
 }
 
 type Handler struct {
@@ -21,6 +24,26 @@ type Handler struct {
 
 func NewHandler(svc *Service, ownDevices DeviceOwnershipValidator) *Handler {
 	return &Handler{svc: svc, ownDevices: ownDevices}
+}
+
+func (h *Handler) requireDevice(c *gin.Context, spaceID, deviceID string) bool {
+	if h.ownDevices == nil {
+		c.JSON(503, gin.H{"code": "device_registry_unavailable", "message": "device registry unavailable"})
+		return false
+	}
+	err := h.ownDevices.RequireTrustedDevice(c.Request.Context(), runtimeidentity.SpaceID(spaceID), runtimeidentity.DeviceID(deviceID))
+	if err == nil {
+		return true
+	}
+	switch {
+	case errors.Is(err, host_registry.ErrDeviceNotTrusted):
+		c.JSON(403, gin.H{"code": "device_not_trusted", "message": "device is not trusted"})
+	case errors.Is(err, host_registry.ErrDeviceNotFound), errors.Is(err, host_registry.ErrDeviceOwnedByOther):
+		c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
+	default:
+		c.JSON(503, gin.H{"code": "device_registry_unavailable", "message": "device registry unavailable"})
+	}
+	return false
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup, authMW gin.HandlerFunc) {
@@ -48,11 +71,8 @@ func (h *Handler) HandlePull(c *gin.Context) {
 	}
 	req.SpaceID = string(actor.SpaceID)
 
-	if req.DeviceID != "" && h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.SpaceID, req.DeviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
-			return
-		}
+	if !h.requireDevice(c, req.SpaceID, req.DeviceID) {
+		return
 	}
 
 	result, err := h.svc.Pull.Pull(req)
@@ -78,11 +98,8 @@ func (h *Handler) HandlePush(c *gin.Context) {
 	}
 	req.SpaceID = string(actor.SpaceID)
 
-	if req.DeviceID != "" && h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.SpaceID, req.DeviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
-			return
-		}
+	if !h.requireDevice(c, req.SpaceID, req.DeviceID) {
+		return
 	}
 
 	result, err := h.svc.Push.Push(req)
@@ -110,11 +127,8 @@ func (h *Handler) HandleAck(c *gin.Context) {
 		return
 	}
 
-	if req.DeviceID != "" && h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.SpaceID), req.DeviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
-			return
-		}
+	if !h.requireDevice(c, string(actor.SpaceID), req.DeviceID) {
+		return
 	}
 
 	if err := h.svc.Pull.MarkApplied(string(actor.SpaceID), req.DeviceID, ScopeDevice, req.LastApplied); err != nil {
@@ -138,11 +152,8 @@ func (h *Handler) HandleStatus(c *gin.Context) {
 		return
 	}
 
-	if h.ownDevices != nil {
-		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.SpaceID), deviceID); err != nil {
-			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by space"})
-			return
-		}
+	if !h.requireDevice(c, string(actor.SpaceID), deviceID) {
+		return
 	}
 
 	status, err := h.svc.Pull.GetStatus(string(actor.SpaceID), deviceID, ScopeDevice)

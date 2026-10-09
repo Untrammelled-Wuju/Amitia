@@ -9,6 +9,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/log_folder_button.dart';
 
 class _TraceEntry {
   final String id;
@@ -36,10 +37,12 @@ class ToolboxPromptTracePage extends ConsumerStatefulWidget {
   const ToolboxPromptTracePage({super.key});
 
   @override
-  ConsumerState<ToolboxPromptTracePage> createState() => _ToolboxPromptTracePageState();
+  ConsumerState<ToolboxPromptTracePage> createState() =>
+      _ToolboxPromptTracePageState();
 }
 
-class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage> {
+class _ToolboxPromptTracePageState
+    extends ConsumerState<ToolboxPromptTracePage> {
   List<_TraceEntry> _traces = const [];
   bool _loading = true;
   String? _error;
@@ -51,10 +54,14 @@ class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage>
     _load();
   }
 
-  int _int(dynamic value) => value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+  int _int(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final api = ref.read(backendServiceProvider);
       final resp = await api.get<Map<String, dynamic>>(
@@ -80,9 +87,17 @@ class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage>
           raw: m,
         );
       }).toList();
-      if (mounted) setState(() { _traces = traces; _loading = false; });
+      if (mounted)
+        setState(() {
+          _traces = traces;
+          _loading = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
     }
   }
 
@@ -96,100 +111,129 @@ class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage>
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const AmitiaLoadingState(message: '正在加载 Prompt Trace...');
-    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
-
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: 'Prompt Trace',
         showBackButton: true,
-        fallbackRoute: AppRoutes.settingsToolbox,
+        fallbackRoute: AppRoutes.settingsMaintenanceCategory,
+        actions: const [LogFolderButton()],
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _traces.isEmpty
-            ? ListView(
-                children: const [
-                  AmitiaEmptyState(
-                    icon: Icons.psychology_outlined,
-                    title: '暂无 Prompt Trace',
-                    subtitle: '产生一次真实模型回复后会记录 Prompt Trace',
-                  ),
-                ],
-              )
-            : ListView.separated(
-                padding: EdgeInsets.all(AppSpacing.pagePadding),
-                itemCount: _traces.length,
-                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
-                itemBuilder: (context, i) {
-                  final t = _traces[i];
-                  final expanded = _expandedId == t.id;
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: context.surfacePrimary,
-                      borderRadius: AppRadius.brMedium,
-                      border: Border.all(color: context.borderPrimary, width: 0.5),
-                    ),
-                    child: Column(
-                      children: [
-                        InkWell(
-                          onTap: () => setState(() => _expandedId = expanded ? null : t.id),
-                          child: Padding(
-                            padding: EdgeInsets.all(AppSpacing.cardPadding),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        t.id.isEmpty ? t.promptHash : t.id,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTypography.cardTitle(context),
-                                      ),
-                                    ),
-                                    AmitiaStatusBadge(label: t.source, type: BadgeType.accent),
-                                    Icon(
-                                      expanded ? Icons.expand_less : Icons.expand_more,
-                                      color: context.textTertiary,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(t.time, style: AppTypography.caption(context)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '注入区块：${t.sections.isEmpty ? '无' : t.sections.join(' / ')}',
-                                  style: AppTypography.caption(context),
-                                ),
-                                Text(
-                                  '回复长度：${t.rawReplyLength} → ${t.finalReplyLength}',
-                                  style: AppTypography.caption(context),
-                                ),
-                              ],
-                            ),
-                          ),
+      body: _loading
+          ? const AmitiaLoadingState(message: '正在加载 Prompt Trace...')
+          : _error != null
+          ? AmitiaErrorState(message: _error!, onRetry: _load)
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: _traces.isEmpty
+                  ? ListView(
+                      children: const [
+                        AmitiaEmptyState(
+                          icon: Icons.psychology_outlined,
+                          title: '暂无 Prompt Trace',
+                          subtitle: '产生一次真实模型回复后会记录 Prompt Trace',
                         ),
-                        if (expanded)
-                          Container(
-                            width: double.infinity,
-                            padding: EdgeInsets.all(AppSpacing.cardPadding),
-                            decoration: BoxDecoration(
-                              color: context.surfaceSecondary,
-                              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-                            ),
-                            child: SelectableText(
-                              _details(t),
-                              style: AppTypography.bodySmall(context).copyWith(fontFamily: 'monospace'),
+                      ],
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.all(AppSpacing.pagePadding),
+                      itemCount: _traces.length,
+                      separatorBuilder: (_, _) =>
+                          SizedBox(height: AppSpacing.md),
+                      itemBuilder: (context, i) {
+                        final t = _traces[i];
+                        final expanded = _expandedId == t.id;
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: context.surfacePrimary,
+                            borderRadius: AppRadius.brMedium,
+                            border: Border.all(
+                              color: context.borderPrimary,
+                              width: 0.5,
                             ),
                           ),
-                      ],
+                          child: Column(
+                            children: [
+                              InkWell(
+                                onTap: () => setState(
+                                  () => _expandedId = expanded ? null : t.id,
+                                ),
+                                child: Padding(
+                                  padding: EdgeInsets.all(
+                                    AppSpacing.cardPadding,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              t.id.isEmpty
+                                                  ? t.promptHash
+                                                  : t.id,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: AppTypography.cardTitle(
+                                                context,
+                                              ),
+                                            ),
+                                          ),
+                                          AmitiaStatusBadge(
+                                            label: t.source,
+                                            type: BadgeType.accent,
+                                          ),
+                                          Icon(
+                                            expanded
+                                                ? Icons.expand_less
+                                                : Icons.expand_more,
+                                            color: context.textTertiary,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        t.time,
+                                        style: AppTypography.caption(context),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '注入区块：${t.sections.isEmpty ? '无' : t.sections.join(' / ')}',
+                                        style: AppTypography.caption(context),
+                                      ),
+                                      Text(
+                                        '回复长度：${t.rawReplyLength} → ${t.finalReplyLength}',
+                                        style: AppTypography.caption(context),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (expanded)
+                                Container(
+                                  width: double.infinity,
+                                  padding: EdgeInsets.all(
+                                    AppSpacing.cardPadding,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: context.surfaceSecondary,
+                                    borderRadius: const BorderRadius.vertical(
+                                      bottom: Radius.circular(12),
+                                    ),
+                                  ),
+                                  child: SelectableText(
+                                    _details(t),
+                                    style: AppTypography.bodySmall(
+                                      context,
+                                    ).copyWith(fontFamily: 'monospace'),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-      ),
+            ),
     );
   }
 }

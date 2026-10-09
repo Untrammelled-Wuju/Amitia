@@ -6,9 +6,10 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="runtime-mode-page">
     <h2 class="page-title">
       <el-icon><Monitor /></el-icon>
-      运行模式
+      Core 配置与校验
     </h2>
 
+    <p class="page-description">仅配置当前 Core 服务端的部署形态，与上方当前设备连接哪个 Core 无关。</p>
     <ModeConfigPanel
       :mode="mode"
       :validating="validating"
@@ -17,7 +18,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       @update:cloud-checklist="cloudChecklist = $event"
       @validate="runValidate"
     />
-
     <ModeSwitchPanel
       :mode-deploy-mode="mode.deployMode"
       :switching="switching"
@@ -59,16 +59,13 @@ onMounted(async () => {
 
 async function fetchMode() {
   const data = await fetchModeApi();
-  if (data) {
-    Object.assign(mode, {
-      deployMode: data.deployMode,
-      host: data.host,
-      port: data.port,
-      web: data.web,
-      bridge: data.bridge,
-      storage: data.storage,
-    });
-  }
+  if (!data) return;
+  if (typeof data.deployMode === "string") mode.deployMode = data.deployMode;
+  if (typeof data.host === "string") mode.host = data.host;
+  if (Number.isFinite(data.port)) mode.port = data.port;
+  if (data.web && typeof data.web === "object") Object.assign(mode.web, data.web);
+  if (data.bridge && typeof data.bridge === "object") Object.assign(mode.bridge, data.bridge);
+  if (data.storage && typeof data.storage === "object") Object.assign(mode.storage, data.storage);
 }
 
 async function confirmSwitch(targetMode: DeployMode) {
@@ -77,7 +74,7 @@ async function confirmSwitch(targetMode: DeployMode) {
     await switchModeApi(targetMode);
     await fetchMode();
     ElMessage.success(
-      `已切换到${mode.deployMode === "cloud-web" ? "私有云模式" : "桌面本地模式"}。建议重启 Core 使配置生效。`,
+      `已更新当前 Core 的${mode.deployMode === "cloud-web" ? "私有云部署" : "本机部署"}配置。可能需要重启 Core 生效；这不会自动迁移服务或更改设备连接目标。`,
     );
   } catch (err: any) {
     ElMessage.error(
@@ -123,6 +120,12 @@ async function runValidate() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+}
+.page-description {
+  margin: 0 0 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
 }
 </style>

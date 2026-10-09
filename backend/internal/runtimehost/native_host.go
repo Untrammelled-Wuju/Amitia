@@ -16,14 +16,14 @@ import (
 )
 
 type nativeProcessHost struct {
-	descriptor       platform.RuntimeDescriptor
-	capabilities     *HostCapabilities
-	paths            util.RuntimePaths
-	instanceID       string
-	processes        *defaultProcessSupervisor
-	processManager   *process.DefaultProcessManager
-	mu               sync.RWMutex
-	stopped          bool
+	descriptor     platform.RuntimeDescriptor
+	capabilities   *HostCapabilities
+	paths          util.RuntimePaths
+	instanceID     string
+	processes      *defaultProcessSupervisor
+	processManager *process.DefaultProcessManager
+	mu             sync.RWMutex
+	stopped        bool
 }
 
 func newNativeProcessHost(descriptor platform.RuntimeDescriptor, paths util.RuntimePaths) *nativeProcessHost {
@@ -42,7 +42,7 @@ func newNativeProcessHost(descriptor platform.RuntimeDescriptor, paths util.Runt
 func (h *nativeProcessHost) Descriptor() platform.RuntimeDescriptor { return h.descriptor }
 func (h *nativeProcessHost) Capabilities() *HostCapabilities        { return h.capabilities }
 func (h *nativeProcessHost) Paths() util.RuntimePaths               { return h.paths }
-func (h *nativeProcessHost) Processes() ProcessSupervisor             { return h.processes }
+func (h *nativeProcessHost) Processes() ProcessSupervisor           { return h.processes }
 
 func (h *nativeProcessHost) RuntimeInstanceID() string { return h.instanceID }
 
@@ -56,9 +56,17 @@ func (h *nativeProcessHost) configureCapabilities() {
 	h.capabilities.set(CapNetworkLoopback, SupportSupported)
 	h.capabilities.set(CapRuntimeNativeOffload, SupportUnsupported)
 	h.capabilities.set(CapRuntimeBgPersistence, SupportLimited, "background execution depends on OS lifecycle")
+	if h.descriptor.Host == platform.HostPlatformIOS && h.descriptor.Kind == platform.RuntimeKindEmulated {
+		h.capabilities.set(CapRuntimeIOSNative, SupportSupported)
+	}
 
 	switch h.descriptor.Guest {
 	case platform.GuestPlatformLinux:
+		if h.descriptor.Kind == platform.RuntimeKindEmulated {
+			h.capabilities.set(CapProcessGracefulStop, SupportSupported)
+			h.capabilities.set(CapProcessForceStop, SupportSupported)
+			h.capabilities.set(CapRuntimeSandboxedExec, SupportUnsupported, "guest emulation does not provide verified task isolation")
+		}
 		if h.descriptor.Kind == platform.RuntimeKindProot || h.descriptor.Kind == platform.RuntimeKindNativeProcess {
 			h.capabilities.set(CapProcessGracefulStop, SupportSupported)
 			h.capabilities.set(CapProcessForceStop, SupportSupported)

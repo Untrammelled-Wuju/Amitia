@@ -20,4 +20,10 @@ func tryRegisterAndroidBridge(relay *nativeBridgeRelay, bootstrap *runtimeBootst
 }
 
 func tryRegisterIOSBridge(relay *nativeBridgeRelay, bootstrap *runtimeBootstrap) {
+	if relay == nil || bootstrap == nil {
+		return
+	}
+	if bridge, ok := bootstrap.IOSNativeBridge().(*nativebridge.IOSBridge); ok {
+		relay.handler.RegisterBridge("ios", bridge)
+	}
 }

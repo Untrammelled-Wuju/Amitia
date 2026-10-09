@@ -7,6 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD105A000000000000000001 = {isa = PBXBuildFile; fileRef = AD105A000000000000000065; };
+		AD105A000000000000000002 = {isa = PBXBuildFile; fileRef = AD105A000000000000000066; };
+		AD105A000000000000000003 = {isa = PBXBuildFile; fileRef = AD105A000000000000000067; };
+		AD105A000000000000000004 = {isa = PBXBuildFile; fileRef = AD105A000000000000000068; };
+		AD105A000000000000000005 = {isa = PBXBuildFile; fileRef = AD105A000000000000000069; };
+		AD105A000000000000000006 = {isa = PBXBuildFile; fileRef = AD105A00000000000000006A; };
+		AD105A000000000000000007 = {isa = PBXBuildFile; fileRef = AD105A00000000000000006B; };
+		AD105A000000000000000008 = {isa = PBXBuildFile; fileRef = AD105A00000000000000006C; };
+		AD105A000000000000000009 = {isa = PBXBuildFile; fileRef = AD105A00000000000000006D; };
+		AD105A00000000000000000A = {isa = PBXBuildFile; fileRef = AD105A00000000000000006E; };
+		AD105A00000000000000000B = {isa = PBXBuildFile; fileRef = AD105A00000000000000006F; };
+		AD105A00000000000000000C = {isa = PBXBuildFile; fileRef = AD105A000000000000000070; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
@@ -14,9 +26,12 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
-		A1B2C3D4E5F60001 /* libish.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001 /* libish.a */; };
-		A1B2C3D4E5F60002 /* libish_emu.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002 /* libish_emu.a */; };
-		A1B2C3D4E5F60003 /* libfakefs.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60003 /* libfakefs.a */; };
+		AD105A000000000000000301 = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001; };
+		AD105A000000000000000302 = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002; };
+		AD105A000000000000000303 = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60003; };
+		AD105A000000000000000304 = {isa = PBXBuildFile; fileRef = AD105A0000000000000000C9; };
+		AD105A000000000000000305 = {isa = PBXBuildFile; fileRef = AD105A0000000000000000CA; };
+		AD105A000000000000000306 = {isa = PBXBuildFile; fileRef = AD105A0000000000000000CB; };
 		A1B2C3D4E5F60010 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60020 /* HealthKit.framework */; };
 		A1B2C3D4E5F60011 /* EventKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60021 /* EventKit.framework */; };
 		A1B2C3D4E5F60012 /* Contacts.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60022 /* Contacts.framework */; };
@@ -120,6 +135,21 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AD105A000000000000000065 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSRuntimeBridge.swift"; sourceTree = "<group>"; };
+		AD105A000000000000000066 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSHostBridgeEndpoint.swift"; sourceTree = "<group>"; };
+		AD105A000000000000000067 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "IOSSandboxBridge.m"; sourceTree = "<group>"; };
+		AD105A000000000000000068 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSSandboxMethodHandler.swift"; sourceTree = "<group>"; };
+		AD105A000000000000000069 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Sandbox/AmitiaISHRuntime.m"; sourceTree = "<group>"; };
+		AD105A00000000000000006A = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Sandbox/IOSBusinessRuntimeProcess.m"; sourceTree = "<group>"; };
+		AD105A00000000000000006B = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Sandbox/RootfsDescriptor.m"; sourceTree = "<group>"; };
+		AD105A00000000000000006C = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Sandbox/RootfsResolver.m"; sourceTree = "<group>"; };
+		AD105A00000000000000006D = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Sandbox/RootfsInstaller.m"; sourceTree = "<group>"; };
+		AD105A00000000000000006E = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Sandbox/RootfsIntegrityVerifier.m"; sourceTree = "<group>"; };
+		AD105A00000000000000006F = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Sandbox/RootfsArchiveExtractor.m"; sourceTree = "<group>"; };
+		AD105A000000000000000070 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sandbox/RootfsInstallMethodHandler.swift"; sourceTree = "<group>"; };
+		AD105A0000000000000000C9 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ThirdParty/iSH/resources/rootfs-release.json"; sourceTree = SOURCE_ROOT; };
+		AD105A0000000000000000CA = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = "ThirdParty/iSH/resources/alpine-rootfs.zip"; sourceTree = SOURCE_ROOT; };
+		AD105A0000000000000000CB = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = "ThirdParty/iSH/lib/libamitia_ish_embed.a"; sourceTree = SOURCE_ROOT; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
@@ -131,9 +161,9 @@
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A1B2C3D4E5F60001 /* libish.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libish.a; sourceTree = "<group>"; };
-		A1B2C3D4E5F60002 /* libish_emu.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libish_emu.a; sourceTree = "<group>"; };
-		A1B2C3D4E5F60003 /* libfakefs.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libfakefs.a; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001 = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = ThirdParty/iSH/lib/libish.a; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60002 = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = ThirdParty/iSH/lib/libish_emu.a; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60003 = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = ThirdParty/iSH/lib/libfakefs.a; sourceTree = SOURCE_ROOT; };
 		A1B2C3D4E5F60020 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		A1B2C3D4E5F60021 /* EventKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = EventKit.framework; path = System/Library/Frameworks/EventKit.framework; sourceTree = SDKROOT; };
 		A1B2C3D4E5F60022 /* Contacts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Contacts.framework; path = System/Library/Frameworks/Contacts.framework; sourceTree = SDKROOT; };
@@ -197,9 +227,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1B2C3D4E5F60001 /* libish.a in Frameworks */,
-				A1B2C3D4E5F60002 /* libish_emu.a in Frameworks */,
-				A1B2C3D4E5F60003 /* libfakefs.a in Frameworks */,
+				AD105A000000000000000301,
+				AD105A000000000000000302,
+				AD105A000000000000000303,
+				AD105A000000000000000306,
 				A1B2C3D4E5F60010 /* HealthKit.framework in Frameworks */,
 				A1B2C3D4E5F60011 /* EventKit.framework in Frameworks */,
 				A1B2C3D4E5F60012 /* Contacts.framework in Frameworks */,
@@ -288,6 +319,21 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				AD105A000000000000000065,
+				AD105A000000000000000066,
+				AD105A000000000000000067,
+				AD105A000000000000000068,
+				AD105A000000000000000069,
+				AD105A00000000000000006A,
+				AD105A00000000000000006B,
+				AD105A00000000000000006C,
+				AD105A00000000000000006D,
+				AD105A00000000000000006E,
+				AD105A00000000000000006F,
+				AD105A000000000000000070,
+				AD105A0000000000000000C9,
+				AD105A0000000000000000CA,
+				AD105A0000000000000000CB,
 				A1B2C3D4E5F60300 /* IOSDeviceMeshIdentity.swift */,
 				A1B2C3D4E5F60101 /* IOSNotificationPlatform.swift */,
 				A1B2C3D4E5F60402 /* AmitiaRunAttributes.swift */,
@@ -603,6 +649,8 @@
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+				AD105A000000000000000304,
+				AD105A000000000000000305,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -670,6 +718,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				AD105A000000000000000001,
+				AD105A000000000000000002,
+				AD105A000000000000000003,
+				AD105A000000000000000004,
+				AD105A000000000000000005,
+				AD105A000000000000000006,
+				AD105A000000000000000007,
+				AD105A000000000000000008,
+				AD105A000000000000000009,
+				AD105A00000000000000000A,
+				AD105A00000000000000000B,
+				AD105A00000000000000000C,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				A1B2C3D4E5F60301 /* IOSDeviceMeshIdentity.swift in Sources */,
 				A1B2C3D4E5F60030 /* IOSNativeHost.swift in Sources */,
@@ -818,6 +878,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				HEADER_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/ThirdParty/iSH/include", "$(PROJECT_DIR)/Runner/Sandbox");
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/ThirdParty/iSH/lib");
+				OTHER_LDFLAGS = ("$(inherited)", "-lsqlite3", "-lz");
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -952,11 +1015,12 @@
 				CLANG_ENABLE_MODULES = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"../ThirdParty/iSH/include",
+					"$(PROJECT_DIR)/ThirdParty/iSH/include",
+					"$(PROJECT_DIR)/Runner/Sandbox",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"../ThirdParty/iSH/lib",
+					"$(PROJECT_DIR)/ThirdParty/iSH/lib",
 				);
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
@@ -1014,7 +1078,8 @@
 				ENABLE_BITCODE = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"../ThirdParty/iSH/include",
+					"$(PROJECT_DIR)/ThirdParty/iSH/include",
+					"$(PROJECT_DIR)/Runner/Sandbox",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1023,7 +1088,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"../ThirdParty/iSH/lib",
+					"$(PROJECT_DIR)/ThirdParty/iSH/lib",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.amitia.amitiaApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1038,6 +1103,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				HEADER_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/ThirdParty/iSH/include", "$(PROJECT_DIR)/Runner/Sandbox");
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/ThirdParty/iSH/lib");
+				OTHER_LDFLAGS = ("$(inherited)", "-lsqlite3", "-lz");
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;

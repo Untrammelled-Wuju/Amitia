@@ -101,6 +101,12 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 			permissions: []capability.PermissionRequirement{{Capability: "android.interaction.global", Risk: "high"}, {Capability: "android.interaction.click", Risk: "medium"}, {Capability: "android.interaction.input", Risk: "high"}, {Capability: "android.interaction.gesture", Risk: "medium"}, {Capability: "android.interaction.coordinate", Risk: "medium"}, {Capability: "android.root.execute", Risk: "high"}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, idempotent: false, timeout: 120 * time.Second, maxOutput: 512 * 1024, category: "android",
 		},
 		{
+			id: "builtin.execute_host_command", modelName: "execute_host_command", name: "Execute Host Command",
+			description: "Run a bounded command in a bound local workspace on Windows, Linux, or macOS. Requires explicit high-risk command approval; use for builds, tests, and code verification.",
+			input:       `{"type":"object","required":["command"],"additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":131072},"cwd":{"type":"string"},"workingDir":{"type":"string"},"timeoutMs":{"type":"integer","minimum":100,"maximum":300000},"maxOutputBytes":{"type":"integer","minimum":1,"maximum":1048576}}}`,
+			permissions: []capability.PermissionRequirement{{Capability: "runtime.host.command.execute", Risk: "high"}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, idempotent: false, timeout: 305 * time.Second, maxOutput: 2 * 1024 * 1024, category: "terminal",
+		},
+		{
 			id: "builtin.execute_terminal", modelName: "execute_terminal", name: "Execute Terminal",
 			description: "Execute a one-shot command in Amitia Android Linux. When ssh_login is active in the current scope and environment=linux/ssh, transparently routes the command through that SSH target.",
 			input:       `{"type":"object","required":["command"],"additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":131072},"environment":{"type":"string","enum":["linux","local","ssh"]},"cwd":{"type":"string"},"workingDir":{"type":"string"},"timeoutMs":{"type":"integer","minimum":100,"maximum":300000},"maxOutputBytes":{"type":"integer","minimum":1,"maximum":4194304}}}`,

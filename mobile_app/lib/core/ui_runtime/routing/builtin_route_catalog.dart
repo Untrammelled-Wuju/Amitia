@@ -79,7 +79,6 @@ import '../../../features/settings/presentation/pages/privacy_policy_page.dart';
 import '../../../features/settings/presentation/pages/user_agreement_page.dart';
 import '../../../features/settings/presentation/pages/app_update_page.dart';
 import '../../../features/settings/presentation/pages/about_page_new.dart';
-import '../../../features/toolbox/presentation/pages/toolbox_page.dart';
 import '../../../features/toolbox/presentation/pages/toolbox_file_browser_page.dart';
 import '../../../features/toolbox/presentation/pages/toolbox_workspace_page.dart';
 import '../../../features/toolbox/presentation/pages/toolbox_task_log_page.dart';
@@ -776,11 +775,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox',
-    pageBuilder: (context, state) => slideFadePage(
-      context: context,
-      state: state,
-      child: const ToolboxPage(),
-    ),
+    redirect: (context, state) => AppRoutes.settingsMaintenanceCategory,
   ),
   GoRoute(
     path: '/settings/toolbox/file-browser',

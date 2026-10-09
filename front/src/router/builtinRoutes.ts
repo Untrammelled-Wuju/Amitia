@@ -1,4 +1,24 @@
-import type { RouteRecordRaw } from "vue-router";
+import type { LocationQuery, RouteRecordRaw } from "vue-router";
+
+const legacySpaceSections: Record<string, string> = {
+  "local-profile": "profile",
+  "space-identity": "identity",
+  "runtime-mode": "runtime",
+  "device-pairing": "devices",
+  "current-device": "devices",
+  "bound-devices": "devices",
+  profile: "profile",
+  identity: "identity",
+  runtime: "runtime",
+  devices: "devices",
+};
+
+function resolveMySpaceLegacy(
+  to: { hash: string; query: LocationQuery },
+  fallback: "profile" | "identity" | "runtime" | "devices",
+) {
+  return { path: `/my-space/${legacySpaceSections[to.hash.slice(1)] ?? fallback}`, query: to.query };
+}
 
 /** Built-in business pages. Core router owns only bootstrap/recovery routes. */
 export const builtinBusinessRoutes: RouteRecordRaw[] = [
@@ -52,7 +72,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   children: [
     { path: "overview", name: "settingsOverview", component: () => import("@/views/dashboard/RunView.vue"), meta: { requiresAuth: true } },
     { path: "data", name: "settingsData", component: () => import("@/views/dashboard/DataView.vue"), meta: { requiresAuth: true } },
-    { path: "deployment", name: "settingsDeployment", component: () => import("@/views/settings/DeploymentPanel.vue"), meta: { requiresAuth: true } },
+    { path: "deployment", name: "settingsDeployment", redirect: "/my-space/runtime" },
     { path: "runtime", name: "settingsRuntime", component: () => import("@/views/settings/RuntimePanel.vue"), meta: { requiresAuth: true } },
     { path: "system", name: "settingsSystem", component: () => import("@/views/settings/SystemSettingsPanel.vue"), meta: { requiresAuth: true } },
     { path: "data-management", name: "settingsDataManagement", component: () => import("@/views/settings/DataManagementPanel.vue"), meta: { requiresAuth: true } },
@@ -104,10 +124,19 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/import", name: "import", component: () => import("@/views/chat-import/ChatImportView.vue"), meta: { requiresAuth: true } },
 { path: "/reminders", name: "reminders", component: () => import("@/views/reminders/Reminders.vue"), meta: { requiresAuth: true } },
 { path: "/settings/theme", name: "settingsTheme", component: () => import("@/views/settings/ThemeSettingsView.vue"), meta: { requiresAuth: true } },
-{ path: "/runtime-mode", name: "runtimeMode", component: () => import("@/views/runtime-mode/RuntimeModeView.vue"), meta: { requiresAuth: true } },
+{ path: "/runtime-mode", name: "runtimeMode", redirect: (to) => resolveMySpaceLegacy(to, "runtime") },
 { path: "/storage", name: "storage", component: () => import("@/views/chat-cleanup/ChatCleanupView.vue"), meta: { requiresAuth: true } },
 { path: "/profiles", name: "profiles", component: () => import("@/views/profile/ProfileView.vue"), meta: { requiresAuth: true } },
-{ path: "/user-settings", name: "userSettings", component: () => import("@/views/user-settings/UserSettingsView.vue"), meta: { requiresAuth: true } },
+{ path: "/my-space", component: () => import("@/views/user-settings/MySpaceView.vue"), meta: { requiresAuth: true },
+  redirect: (to) => resolveMySpaceLegacy(to, "profile"),
+  children: [
+    { path: "profile", name: "mySpaceProfile", component: () => import("@/views/user-settings/UserSettingsView.vue") },
+    { path: "identity", name: "mySpaceIdentity", component: () => import("@/views/user-settings/SpaceIdentityView.vue") },
+    { path: "runtime", name: "mySpaceRuntime", component: () => import("@/views/user-settings/MySpaceRuntimeView.vue") },
+    { path: "devices", name: "mySpaceDevices", component: () => import("@/views/devices/DevicesView.vue") },
+  ],
+},
+{ path: "/user-settings", name: "userSettings", redirect: (to) => resolveMySpaceLegacy(to, "profile") },
 { path: "/episodic", name: "episodic", component: () => import("@/views/episodic/EpisodicView.vue"), meta: { requiresAuth: true } },
 { path: "/world-book", name: "worldBook", component: () => import("@/views/world-book/WorldBookView.vue"), meta: { requiresAuth: true } },
 { path: '/runtime-debug', name: 'runtimeDebug', component: () => import('@/views/runtime-debug/RuntimeDebugView.vue'), meta: { requiresAuth: true } },
@@ -119,7 +148,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/privacy-scan", name: "privacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
 { path: "/game-center", name: "gameCenter", component: () => import("@/views/game-center/GameCenterView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
 { path: "/game-center/plugin", name: "gamePlugin", component: () => import("@/views/game-center/GamePluginView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
-{ path: "/devices", name: "devices", component: () => import("@/views/devices/DevicesView.vue"), meta: { requiresAuth: true } },
+{ path: "/devices", name: "devices", redirect: (to) => resolveMySpaceLegacy(to, "devices") },
 { path: "/realtime-voice", name: "realtimeVoice", component: () => import("@/views/realtime/RealtimeVoiceView.vue"), meta: { requiresAuth: true } },
 { path: "/long-running", name: "longRunning", component: () => import("@/views/long-running/LongRunningView.vue"), meta: { requiresAuth: true } },
 ];

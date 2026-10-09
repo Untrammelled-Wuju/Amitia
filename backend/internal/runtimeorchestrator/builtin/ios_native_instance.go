@@ -1,6 +1,3 @@
-//go:build ios
-// +build ios
-
 package builtin
 
 import (
@@ -39,6 +36,7 @@ type iosNativeProviderInstance struct {
 	host           runtimehost.RuntimeHost
 	orch           *runtimeorchestrator.RuntimeOrchestrator
 	healthy        bool
+	stopped        bool
 	generation     nativebridge.HostGeneration
 }
 
@@ -123,6 +121,7 @@ func (p *iosNativeProviderInstance) Descriptor() runtimeorchestrator.ComponentDe
 func (p *iosNativeProviderInstance) Start(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.stopped = false
 
 	if p.bridge != nil {
 		p.healthy = p.bridge.Health(ctx) == nativebridge.HealthReady
@@ -150,6 +149,7 @@ func (p *iosNativeProviderInstance) Ready(ctx context.Context) error {
 func (p *iosNativeProviderInstance) Stop(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.stopped = true
 
 	p.healthy = false
 	p.reportComponentStateLocked()
@@ -159,6 +159,7 @@ func (p *iosNativeProviderInstance) Stop(ctx context.Context) error {
 func (p *iosNativeProviderInstance) Restart(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.stopped = false
 
 	if p.bridge != nil {
 		p.healthy = p.bridge.Health(ctx) == nativebridge.HealthReady
@@ -186,14 +187,19 @@ func (p *iosNativeProviderInstance) Capability() any {
 		hostPlatform = string(p.host.Descriptor().Host)
 	}
 
+	ready := !p.stopped && p.isBridgeReady()
+	generation := p.generation
+	if bridge, ok := p.bridge.(interface{ Generation() uint64 }); ok {
+		generation = nativebridge.HostGeneration(bridge.Generation())
+	}
 	return IOSNativeProviderCapability{
 		ProviderID:   "ios-native",
 		Slot:         string(runtimeorchestrator.ProviderSlotIOSNative),
 		RuntimeID:    runtimeID,
 		HostPlatform: hostPlatform,
-		Healthy:      p.healthy,
-		BridgeReady:  p.isBridgeReady(),
-		Generation:   p.generation,
+		Healthy:      ready,
+		BridgeReady:  ready,
+		Generation:   generation,
 	}
 }
 
@@ -201,7 +207,8 @@ func (p *iosNativeProviderInstance) isBridgeReady() bool {
 	if p.bridge == nil {
 		return false
 	}
-	if !p.bridge.SessionAttached() {
+	relay, ok := p.bridge.(interface{ SessionAttached() bool })
+	if !ok || !relay.SessionAttached() {
 		return false
 	}
 	return p.bridge.Health(context.Background()) == nativebridge.HealthReady
@@ -238,12 +245,16 @@ func (p *iosNativeProviderInstance) Execute(ctx context.Context, request capabil
 	p.mu.RLock()
 	domain := p.domainProvider
 	bridge := p.bridge
+	stopped := p.stopped
 	p.mu.RUnlock()
+	if stopped {
+		return capability.IOSBridgeResponse{ProtocolVersion: request.ProtocolVersion, RequestID: request.RequestID, Status: "error", Error: &capability.IOSError{Code: nativebridge.ErrProviderUnavailable, Message: "iOS 原生服务已停止"}}
+	}
 
 	if domain != nil {
 		req := nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestID,
 			Platform:        "ios",
 			Operation:       request.Operation,
 			Payload:         request.Payload,
@@ -253,7 +264,7 @@ func (p *iosNativeProviderInstance) Execute(ctx context.Context, request capabil
 
 		return capability.IOSBridgeResponse{
 			ProtocolVersion: resp.ProtocolVersion,
-			RequestID:       resp.RequestID,
+			RequestID:       resp.RequestId,
 			Status:          resp.Status,
 			Result:          resp.Result,
 			Error: func() *capability.IOSError {
@@ -283,7 +294,7 @@ func (p *iosNativeProviderInstance) Execute(ctx context.Context, request capabil
 
 	req := nativebridge.Request{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Platform:        "ios",
 		Operation:       request.Operation,
 		Payload:         request.Payload,
@@ -304,7 +315,7 @@ func (p *iosNativeProviderInstance) Execute(ctx context.Context, request capabil
 
 	return capability.IOSBridgeResponse{
 		ProtocolVersion: resp.ProtocolVersion,
-		RequestID:       resp.RequestID,
+		RequestID:       resp.RequestId,
 		Status:          resp.Status,
 		Result:          resp.Result,
 		Error: func() *capability.IOSError {
@@ -323,9 +334,10 @@ func (p *iosNativeProviderInstance) Execute(ctx context.Context, request capabil
 func (p *iosNativeProviderInstance) Health(ctx context.Context) capability.HealthStatus {
 	p.mu.RLock()
 	bridge := p.bridge
+	stopped := p.stopped
 	p.mu.RUnlock()
 
-	if bridge == nil {
+	if bridge == nil || stopped {
 		return capability.HealthUnhealthy
 	}
 

@@ -11,6 +11,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/log_folder_button.dart';
 
 class _LogEntry {
   final String time;
@@ -66,18 +67,24 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
       level: (structured['@level'] ?? structured['level'] ?? 'INFO')
           .toString()
           .toUpperCase(),
-      module: (structured['stage'] ??
-              structured['path'] ??
-              structured['source'] ??
-              raw['file'] ??
-              'System')
+      module:
+          (structured['stage'] ??
+                  structured['path'] ??
+                  structured['source'] ??
+                  raw['file'] ??
+                  'System')
+              .toString(),
+      content: (structured['@message'] ?? structured['message'] ?? line)
           .toString(),
-      content: (structured['@message'] ?? structured['message'] ?? line).toString(),
     );
   }
 
   Future<void> _load() async {
-    if (mounted) setState(() { _loading = true; _error = null; });
+    if (mounted)
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
     try {
       final api = ref.read(backendServiceProvider);
       final results = await Future.wait([
@@ -101,9 +108,18 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList(growable: false);
-      if (mounted) setState(() { _logs = logs; _files = files; _loading = false; });
+      if (mounted)
+        setState(() {
+          _logs = logs;
+          _files = files;
+          _loading = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
     }
   }
 
@@ -115,9 +131,9 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
       if (mounted) setState(() => _logs = const []);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('清空失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('清空失败：$e')));
       }
     } finally {
       if (mounted) setState(() => _clearing = false);
@@ -128,10 +144,12 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
     final name = (file['name'] ?? '').toString();
     if (name.isEmpty) return;
     try {
-      final content = await ref.read(backendServiceProvider).get<String>(
-        '/api/logs/files/${Uri.encodeComponent(name)}',
-        fromJson: (value) => value?.toString() ?? '',
-      );
+      final content = await ref
+          .read(backendServiceProvider)
+          .get<String>(
+            '/api/logs/files/${Uri.encodeComponent(name)}',
+            fromJson: (value) => value?.toString() ?? '',
+          );
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -143,15 +161,27 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
             child: SingleChildScrollView(
               child: SelectableText(
                 content ?? '',
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.45),
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  height: 1.45,
+                ),
               ),
             ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+          ],
         ),
       );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取日志文件失败：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('读取日志文件失败：$e')));
     }
   }
 
@@ -166,11 +196,28 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
           child: Column(
             children: [
               Padding(
-                padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  0,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                ),
                 child: Row(
                   children: [
-                    Expanded(child: Text('日志文件 (${_files.length})', style: AppTypography.sectionTitle(context))),
-                    IconButton(icon: const Icon(Icons.refresh), onPressed: () async { Navigator.pop(sheetContext); await _load(); if (mounted) await _showLogFiles(); }),
+                    Expanded(
+                      child: Text(
+                        '日志文件 (${_files.length})',
+                        style: AppTypography.sectionTitle(context),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: () async {
+                        Navigator.pop(sheetContext);
+                        await _load();
+                        if (mounted) await _showLogFiles();
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -187,9 +234,14 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
                           return ListTile(
                             leading: const Icon(Icons.description_outlined),
                             title: Text(name),
-                            subtitle: Text('${_formatBytes(size)} · ${file['modTime'] ?? ''}'),
+                            subtitle: Text(
+                              '${_formatBytes(size)} · ${file['modTime'] ?? ''}',
+                            ),
                             trailing: const Icon(Icons.chevron_right),
-                            onTap: () { Navigator.pop(sheetContext); _openLogFile(file); },
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              _openLogFile(file);
+                            },
                           );
                         },
                       ),
@@ -233,172 +285,220 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const AmitiaLoadingState(message: '正在加载日志...');
-    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
-
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '运行日志',
         showBackButton: true,
-        fallbackRoute: AppRoutes.settingsToolbox,
+        fallbackRoute: AppRoutes.settingsMaintenanceCategory,
         actions: [
-          AmitiaIconButton(icon: Icons.folder_open_outlined, tooltip: '日志文件', onPressed: _showLogFiles),
-          AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: _load),
+          const LogFolderButton(),
+          AmitiaIconButton(
+            icon: Icons.folder_open_outlined,
+            tooltip: '日志文件',
+            onPressed: _showLogFiles,
+          ),
+          AmitiaIconButton(
+            icon: Icons.refresh,
+            tooltip: '刷新',
+            onPressed: _load,
+          ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(AppSpacing.pagePadding),
-            child: Row(
+      body: _loading
+          ? const AmitiaLoadingState(message: '正在加载日志...')
+          : _error != null
+          ? AmitiaErrorState(message: _error!, onRetry: _load)
+          : Column(
               children: [
-                Expanded(
-                  child: AmitiaSearchField(
-                    hintText: '搜索日志',
-                    controller: _searchCtrl,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                SizedBox(width: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: context.surfaceSecondary,
-                    borderRadius: AppRadius.brSmall,
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _levelFilter,
-                      items: const ['全部', 'INFO', 'WARN', 'ERROR', 'DEBUG']
-                          .map((l) => DropdownMenuItem(
-                                value: l,
-                                child: Text(l, style: AppTypography.label(context)),
-                              ))
-                          .toList(),
-                      onChanged: (v) => setState(() => _levelFilter = v ?? '全部'),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: Row(
-              children: [
-                Text('共 ${_filtered.length} 条', style: AppTypography.caption(context)),
-                const Spacer(),
-                GestureDetector(
-                  onTap: _logs.isEmpty || _clearing ? null : _clear,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _logs.isEmpty
-                          ? context.borderSecondary
-                          : context.error.withValues(alpha: 0.1),
-                      borderRadius: AppRadius.brTag,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.delete_outline,
-                          size: 16,
-                          color: _logs.isEmpty ? context.textTertiary : context.error,
+                Padding(
+                  padding: EdgeInsets.all(AppSpacing.pagePadding),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AmitiaSearchField(
+                          hintText: '搜索日志',
+                          controller: _searchCtrl,
+                          onChanged: (_) => setState(() {}),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _clearing ? '清理中' : '清空',
-                          style: AppTypography.label(context).copyWith(
-                            color: _logs.isEmpty ? context.textTertiary : context.error,
+                      ),
+                      SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: context.surfaceSecondary,
+                          borderRadius: AppRadius.brSmall,
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _levelFilter,
+                            items:
+                                const ['全部', 'INFO', 'WARN', 'ERROR', 'DEBUG']
+                                    .map(
+                                      (l) => DropdownMenuItem(
+                                        value: l,
+                                        child: Text(
+                                          l,
+                                          style: AppTypography.label(context),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                            onChanged: (v) =>
+                                setState(() => _levelFilter = v ?? '全部'),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          SizedBox(height: AppSpacing.sm),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _load,
-              child: _filtered.isEmpty
-                  ? ListView(
-                      children: const [
-                        AmitiaEmptyState(
-                          icon: Icons.inbox_outlined,
-                          title: '暂无日志',
-                          subtitle: '当前没有符合条件的运行日志',
-                        ),
-                      ],
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        0,
-                        AppSpacing.pagePadding,
-                        AppSpacing.xl,
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '共 ${_filtered.length} 条',
+                        style: AppTypography.caption(context),
                       ),
-                      itemCount: _filtered.length,
-                      separatorBuilder: (_, _) => Divider(
-                        height: 1,
-                        thickness: 0.5,
-                        color: context.borderSecondary,
-                      ),
-                      itemBuilder: (context, i) {
-                        final l = _filtered[i];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _logs.isEmpty || _clearing ? null : _clear,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _logs.isEmpty
+                                ? context.borderSecondary
+                                : context.error.withValues(alpha: 0.1),
+                            borderRadius: AppRadius.brTag,
+                          ),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              SizedBox(
-                                width: 120,
-                                child: Text(l.time, style: AppTypography.label(context)),
+                              Icon(
+                                Icons.delete_outline,
+                                size: 16,
+                                color: _logs.isEmpty
+                                    ? context.textTertiary
+                                    : context.error,
                               ),
-                              const SizedBox(width: 8),
-                              Container(
-                                width: 52,
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _levelColor(l.level).withValues(alpha: 0.12),
-                                  borderRadius: AppRadius.brTag,
-                                ),
-                                child: Text(
-                                  l.level,
-                                  textAlign: TextAlign.center,
-                                  style: AppTypography.label(context).copyWith(
-                                    color: _levelColor(l.level),
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      l.module,
-                                      style: AppTypography.label(context)
-                                          .copyWith(fontWeight: FontWeight.w600),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(l.content, style: AppTypography.bodySmall(context)),
-                                  ],
+                              const SizedBox(width: 4),
+                              Text(
+                                _clearing ? '清理中' : '清空',
+                                style: AppTypography.label(context).copyWith(
+                                  color: _logs.isEmpty
+                                      ? context.textTertiary
+                                      : context.error,
                                 ),
                               ),
                             ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: AppSpacing.sm),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: _filtered.isEmpty
+                        ? ListView(
+                            children: const [
+                              AmitiaEmptyState(
+                                icon: Icons.inbox_outlined,
+                                title: '暂无日志',
+                                subtitle: '当前没有符合条件的运行日志',
+                              ),
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              AppSpacing.pagePadding,
+                              0,
+                              AppSpacing.pagePadding,
+                              AppSpacing.xl,
+                            ),
+                            itemCount: _filtered.length,
+                            separatorBuilder: (_, _) => Divider(
+                              height: 1,
+                              thickness: 0.5,
+                              color: context.borderSecondary,
+                            ),
+                            itemBuilder: (context, i) {
+                              final l = _filtered[i];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      width: 120,
+                                      child: Text(
+                                        l.time,
+                                        style: AppTypography.label(context),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      width: 52,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _levelColor(
+                                          l.level,
+                                        ).withValues(alpha: 0.12),
+                                        borderRadius: AppRadius.brTag,
+                                      ),
+                                      child: Text(
+                                        l.level,
+                                        textAlign: TextAlign.center,
+                                        style: AppTypography.label(context)
+                                            .copyWith(
+                                              color: _levelColor(l.level),
+                                              fontSize: 10,
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            l.module,
+                                            style: AppTypography.label(context)
+                                                .copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            l.content,
+                                            style: AppTypography.bodySmall(
+                                              context,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -16,6 +16,14 @@ interface CachedMediaTicket {
 }
 
 const mediaTicketCache = new Map<string, CachedMediaTicket>();
+const mediaBlobCache = new Map<string, string>();
+if (typeof window !== "undefined") {
+  window.addEventListener("amitia:runtime-connection-changed", () => {
+    mediaTicketCache.clear();
+    for (const url of mediaBlobCache.values()) URL.revokeObjectURL(url);
+    mediaBlobCache.clear();
+  });
+}
 
 function artifactIdFromRaw(raw: string): string {
   const value = String(raw || "").trim();
@@ -27,7 +35,20 @@ function artifactIdFromRaw(raw: string): string {
 }
 
 async function getMediaTicket(artifactId: string): Promise<string> {
-  const cached = mediaTicketCache.get(artifactId);
+  const base = await getApiBaseURLForPath("/api/artifacts/v1");
+  const key = `${base}:${artifactId}`;
+  if (new URL(base).pathname.includes("/internal/device-mesh/provider")) {
+    const cachedBlob = mediaBlobCache.get(key);
+    if (cachedBlob) return cachedBlob;
+    const response = await apiClient.get<Blob>(
+      `/api/artifacts/v1/${encodeURIComponent(artifactId)}/content`,
+      { responseType: "blob" },
+    );
+    const url = URL.createObjectURL(response.data);
+    mediaBlobCache.set(key, url);
+    return url;
+  }
+  const cached = mediaTicketCache.get(key);
   if (cached && cached.expiresAt > Date.now() + 30_000) return cached.url;
   const response = await apiClient.get<MediaTicketResponse>(
     `/api/artifacts/v1/${encodeURIComponent(artifactId)}/media-ticket`,
@@ -36,11 +57,49 @@ async function getMediaTicket(artifactId: string): Promise<string> {
   const url = String(payload?.url || "").trim();
   if (!url) throw new Error("后端未返回媒体访问地址");
   const expiresAt = Date.parse(String(payload?.expiresAt || ""));
-  mediaTicketCache.set(artifactId, {
-    url,
+  const absolute = /^https?:\/\//i.test(url) ? url : `${base.replace(/\/+$/, "")}/${url.replace(/^\/+/, "")}`;
+  mediaTicketCache.set(key, {
+    url: absolute,
     expiresAt: Number.isFinite(expiresAt) ? expiresAt : Date.now() + 55 * 60_000,
   });
-  return url;
+  return absolute;
+}
+
+export function invalidateConversationMedia(raw: string) {
+  const id = artifactIdFromRaw(raw);
+  for (const key of mediaTicketCache.keys()) {
+    if (key.endsWith(`:${id}`)) mediaTicketCache.delete(key);
+  }
+  for (const [key, url] of mediaBlobCache) {
+    if (key.endsWith(`:${id}`)) {
+      URL.revokeObjectURL(url);
+      mediaBlobCache.delete(key);
+    }
+  }
+}
+
+export async function loadConversationText(raw: string): Promise<{ source: string; url: string }> {
+  const url = await resolveConversationMediaUrl(raw);
+  const response = await fetch(url, { credentials: "omit" });
+  if (!response.ok) throw new Error(`文件加载失败 (${response.status})`);
+  const source = await response.text();
+  if (source.length > 5 * 1024 * 1024) throw new Error("文件过大，无法预览，请下载查看");
+  return { source, url };
+}
+
+export async function resolveEmbeddedConversationMedia(raw: string): Promise<string> {
+  const url = await resolveConversationMediaUrl(raw);
+  if (url.startsWith("data:")) return url;
+  const response = await fetch(url, { credentials: "omit" });
+  if (!response.ok) throw new Error(`图片加载失败 (${response.status})`);
+  const blob = await response.blob();
+  if (blob.size > 25 * 1024 * 1024) throw new Error("图片过大，无法内嵌预览");
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function absoluteMediaUrl(path: string): Promise<string> {

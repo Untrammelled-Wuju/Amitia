@@ -6,25 +6,82 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/pkg/util"
 )
 
-func (s *service) GetLogsRecent(limit int) map[string]interface{} {
-	logDir := "logs"
+func runtimeLogDirectory() string {
+	return util.RuntimeLogDir(util.RuntimeRoot())
+}
+
+func recentLogFiles(logDir string) []os.FileInfo {
 	entries, _ := os.ReadDir(logDir)
-	var lines []interface{}
+	files := make([]os.FileInfo, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		info, err := entry.Info()
+		if err == nil && info.Mode().IsRegular() {
+			files = append(files, info)
+		}
+	}
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].ModTime().Equal(files[j].ModTime()) {
+			return files[i].Name() > files[j].Name()
+		}
+		return files[i].ModTime().After(files[j].ModTime())
+	})
+	return files
+}
+
+func readLogTail(path string, maxBytes int64) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, os.ErrPermission
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	size := info.Size()
+	start := int64(0)
+	if size > maxBytes {
+		start = size - maxBytes
+	}
+	data := make([]byte, size-start)
+	n, err := file.ReadAt(data, start)
+	if err != nil && n == 0 && len(data) != 0 {
+		return nil, err
+	}
+	data = data[:n]
+	if start > 0 {
+		if newline := strings.IndexByte(string(data), '\n'); newline >= 0 {
+			data = data[newline+1:]
+		}
+	}
+	return data, nil
+}
+
+func (s *service) GetLogsRecent(limit int) map[string]interface{} {
+	logDir := runtimeLogDirectory()
+	entries := recentLogFiles(logDir)
+	lines := make([]interface{}, 0)
 	count := 0
-	for i := len(entries) - 1; i >= 0 && count < limit; i-- {
+	for i := 0; i < len(entries) && count < limit; i++ {
 		if !entries[i].IsDir() && strings.HasSuffix(entries[i].Name(), ".log") {
-			data, err := os.ReadFile(filepath.Join(logDir, entries[i].Name()))
+			data, err := readLogTail(filepath.Join(logDir, entries[i].Name()), 1024*1024)
 			if err == nil {
 				fileLines := strings.Split(string(data), "\n")
-				start := len(fileLines) - limit
-				if start < 0 {
-					start = 0
-				}
-				for _, l := range fileLines[start:] {
+				for j := len(fileLines) - 1; j >= 0 && count < limit; j-- {
+					l := fileLines[j]
 					if l != "" && count < limit {
 						lines = append(lines, map[string]interface{}{"file": entries[i].Name(), "line": l, "time": time.Now().Format(time.DateTime)})
 						count++
@@ -37,13 +94,13 @@ func (s *service) GetLogsRecent(limit int) map[string]interface{} {
 }
 
 func (s *service) GetLogsRecentErrors(limit int) map[string]interface{} {
-	logDir := "logs"
-	entries, _ := os.ReadDir(logDir)
-	var errs []interface{}
+	logDir := runtimeLogDirectory()
+	entries := recentLogFiles(logDir)
+	errs := make([]interface{}, 0)
 	count := 0
-	for i := len(entries) - 1; i >= 0 && count < limit; i-- {
+	for i := 0; i < len(entries) && count < limit; i++ {
 		if !entries[i].IsDir() && strings.HasSuffix(entries[i].Name(), ".log") {
-			data, err := os.ReadFile(filepath.Join(logDir, entries[i].Name()))
+			data, err := readLogTail(filepath.Join(logDir, entries[i].Name()), 1024*1024)
 			if err == nil {
 				fileLines := strings.Split(string(data), "\n")
 				for _, l := range fileLines {
@@ -59,39 +116,36 @@ func (s *service) GetLogsRecentErrors(limit int) map[string]interface{} {
 }
 
 func (s *service) GetLogsFiles() map[string]interface{} {
-	logDir := "logs"
-	entries, _ := os.ReadDir(logDir)
-	var files []interface{}
+	logDir := runtimeLogDirectory()
+	entries := recentLogFiles(logDir)
+	files := make([]interface{}, 0)
 	for _, e := range entries {
 		if !e.IsDir() {
-			info, _ := e.Info()
+			info := e
 			files = append(files, map[string]interface{}{
 				"name": e.Name(), "size": info.Size(), "modTime": info.ModTime().Format(time.DateTime),
 			})
 		}
 	}
-	return map[string]interface{}{"files": files}
+	return map[string]interface{}{"files": files, "directory": logDir}
 }
 
 func (s *service) GetLogsFileContent(name string) string {
-	logDir := "logs"
+	logDir := runtimeLogDirectory()
 	cleanName := filepath.Base(strings.TrimSpace(name))
-	if cleanName == "." || cleanName == "" || cleanName != name {
+	if cleanName == "." || cleanName == ".." || cleanName == "" || cleanName != name || strings.ContainsAny(name, `/\`) {
 		return "Invalid log file name"
 	}
-	data, err := os.ReadFile(filepath.Join(logDir, cleanName))
+	data, err := readLogTail(filepath.Join(logDir, cleanName), 50000)
 	if err != nil {
 		return "File not found: " + cleanName
 	}
 	content := string(data)
-	if len(content) > 50000 {
-		content = content[:50000] + "\n... (truncated)"
-	}
 	return content
 }
 
 func (s *service) DeleteLogs() map[string]interface{} {
-	logDir := "logs"
+	logDir := runtimeLogDirectory()
 	entries, _ := os.ReadDir(logDir)
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
@@ -102,12 +156,12 @@ func (s *service) DeleteLogs() map[string]interface{} {
 }
 
 func (s *service) GetLogsModelErrors() map[string]interface{} {
-	logDir := "logs"
-	entries, _ := os.ReadDir(logDir)
-	var errs []interface{}
+	logDir := runtimeLogDirectory()
+	entries := recentLogFiles(logDir)
+	errs := make([]interface{}, 0)
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
-			data, err := os.ReadFile(filepath.Join(logDir, e.Name()))
+			data, err := readLogTail(filepath.Join(logDir, e.Name()), 1024*1024)
 			if err == nil {
 				for _, line := range strings.Split(string(data), "\n") {
 					if strings.Contains(strings.ToLower(line), "model") && (strings.Contains(strings.ToLower(line), "error") || strings.Contains(strings.ToLower(line), "fail")) {
@@ -121,7 +175,7 @@ func (s *service) GetLogsModelErrors() map[string]interface{} {
 }
 
 func (s *service) DeleteLogsModelErrors() map[string]interface{} {
-	logDir := "logs"
+	logDir := runtimeLogDirectory()
 	entries, err := os.ReadDir(logDir)
 	if err != nil {
 		return map[string]interface{}{"deleted": false, "removedLines": 0, "error": err.Error()}
@@ -166,25 +220,28 @@ func (s *service) DeleteLogsModelErrors() map[string]interface{} {
 }
 
 func (s *service) GetLogsPromptTraces(limit int) map[string]interface{} {
-	logDir := "logs"
-	entries, _ := os.ReadDir(logDir)
+	logDir := runtimeLogDirectory()
+	entries := recentLogFiles(logDir)
 	traces := make([]interface{}, 0)
-	for i := len(entries) - 1; i >= 0 && len(traces) < limit; i-- {
+	for i := 0; i < len(entries) && len(traces) < limit; i++ {
 		if entries[i].IsDir() || !strings.HasSuffix(entries[i].Name(), ".log") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(logDir, entries[i].Name()))
+		data, err := readLogTail(filepath.Join(logDir, entries[i].Name()), 1024*1024)
 		if err != nil {
 			continue
 		}
 		lines := strings.Split(string(data), "\n")
 		for j := len(lines) - 1; j >= 0 && len(traces) < limit; j-- {
 			line := strings.TrimSpace(lines[j])
-			if line == "" || !strings.Contains(line, `"stage":"prompt_trace"`) {
+			if line == "" || !strings.Contains(line, "prompt_trace") {
 				continue
 			}
 			var item map[string]interface{}
 			if err := json.Unmarshal([]byte(line), &item); err != nil {
+				continue
+			}
+			if item["stage"] != "prompt_trace" {
 				continue
 			}
 			traces = append(traces, item)

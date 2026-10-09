@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_markdown_plus_latex/flutter_markdown_plus_latex.dart';
@@ -14,6 +12,7 @@ import '../math/amitia_latex_block.dart';
 import '../mermaid/amitia_mermaid_block.dart';
 import '../preview/amitia_html_preview.dart';
 import 'markdown_parser.dart';
+import '../../../../core/widgets/conversation_media_image.dart';
 
 class AmitiaMarkdownView extends StatelessWidget {
   final String source;
@@ -306,59 +305,6 @@ class _AmitiaMarkdownImage extends StatelessWidget {
   }
 
   Widget _image() {
-    if (uri.scheme == 'data') {
-      final comma = uri.toString().indexOf(',');
-      if (comma >= 0) {
-        try {
-          final data = base64Decode(uri.toString().substring(comma + 1));
-          return Image.memory(data, fit: BoxFit.contain);
-        } catch (_) {}
-      }
-    }
-    if (uri.scheme == 'http' || uri.scheme == 'https') {
-      return Image.network(
-        uri.toString(),
-        fit: BoxFit.contain,
-        loadingBuilder: (context, child, progress) => progress == null
-            ? child
-            : const SizedBox(
-                height: 160,
-                child: Center(child: CircularProgressIndicator()),
-              ),
-        errorBuilder: (_, _, _) => _ImageError(alt: alt),
-      );
-    }
-    return Image.asset(
-      uri.toFilePath(),
-      fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => _ImageError(alt: alt),
-    );
-  }
-}
-
-class _ImageError extends StatelessWidget {
-  final String alt;
-
-  const _ImageError({required this.alt});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = AmitiaMessageTheme.of(context);
-    return Container(
-      height: 140,
-      alignment: Alignment.center,
-      color: tokens.soft,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.broken_image_outlined, color: tokens.danger),
-          const SizedBox(height: 6),
-          Text(
-            alt.isEmpty ? '图片加载失败' : alt,
-            style: TextStyle(color: tokens.muted, fontSize: 11),
-          ),
-        ],
-      ),
-    );
+    return ConversationMediaImage(url: uri.toString(), alt: alt.isEmpty ? '图片加载失败' : alt);
   }
 }

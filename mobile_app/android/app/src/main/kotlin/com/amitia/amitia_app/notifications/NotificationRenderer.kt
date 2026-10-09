@@ -3,16 +3,20 @@ package com.amitia.amitia_app.notifications
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.pm.ShortcutInfo
-import android.content.pm.ShortcutManager
-import android.graphics.drawable.Icon
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -33,6 +37,57 @@ object NotificationRenderer {
     const val REPLY_KEY = "amitia_reply_text"
     private const val PREFS = "amitia_notification_runtime"
     private const val MAX_HISTORY = 6
+    private const val MAX_RECENT_EVENTS = 24
+
+    @Synchronized
+    private fun shouldDisplayMessage(context: Context, conversationId: String, data: Map<String, String>): Boolean {
+        val eventId = data["messageId"].orEmpty()
+            .ifBlank { data["eventId"].orEmpty() }
+            .ifBlank { data["notificationId"].orEmpty() }
+            .trim()
+        if (eventId.isEmpty() || conversationId.isEmpty()) return true
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val key = "recent_events:$conversationId"
+        val history = runCatching { JSONArray(prefs.getString(key, "[]")) }.getOrDefault(JSONArray())
+        val previous = prefs.getString("last_event:$conversationId", null)
+        if (previous == eventId) return false
+        for (index in 0 until history.length()) {
+            if (history.optString(index) == eventId) return false
+        }
+        val recent = JSONArray()
+        for (index in (history.length() - MAX_RECENT_EVENTS + 1).coerceAtLeast(0) until history.length()) {
+            val value = history.optString(index)
+            if (value.isNotBlank()) recent.put(value)
+        }
+        recent.put(eventId)
+        prefs.edit().putString(key, recent.toString()).remove("last_event:$conversationId").apply()
+        return true
+    }
+
+    private fun publicNotification(context: Context, channel: String, title: String, text: String): android.app.Notification {
+        return NotificationCompat.Builder(context, channel)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .build()
+    }
+
+    private fun avatarBitmap(context: Context, name: String): Bitmap {
+        val size = (48 * context.resources.displayMetrics.density).toInt().coerceAtLeast(48)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = Color.rgb(108, 115, 193)
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+        paint.color = Color.WHITE
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = size * 0.43f
+        paint.textAlign = Paint.Align.CENTER
+        val initial = name.trim().take(1).ifEmpty { "A" }
+        val center = (paint.ascent() + paint.descent()) / 2f
+        canvas.drawText(initial, size / 2f, size / 2f - center, paint)
+        return bitmap
+    }
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -86,6 +141,7 @@ object NotificationRenderer {
         val callType = data["callType"].orEmpty().ifBlank { "audio" }
         val person = Person.Builder()
             .setName(callerName)
+            .setIcon(IconCompat.createWithBitmap(avatarBitmap(context, callerName)))
             .setKey(data["characterId"].orEmpty().ifBlank { callerName })
             .setImportant(true)
             .build()
@@ -150,6 +206,8 @@ object NotificationRenderer {
             .setAutoCancel(false)
             .setOnlyAlertOnce(false)
             .setContentIntent(fullscreenIntent)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicNotification(context, CHANNEL_CALLS, "Amitia", "有新的语音或视频通话邀请"))
         if (canUseFullScreenCall(context)) {
             builder.setFullScreenIntent(fullscreenIntent, true)
         }
@@ -209,6 +267,8 @@ object NotificationRenderer {
             .setAutoCancel(true)
             .setGroup("amitia:reminders")
             .setContentIntent(contentIntent(context, deepLink, "reminder:$conversationId"))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicNotification(context, CHANNEL_REMINDERS, "Amitia 提醒", "你有一条新提醒"))
         if (data["sound"] == "false") {
             builder.setSilent(true)
         }
@@ -246,17 +306,20 @@ object NotificationRenderer {
         val characterId = data["characterId"].orEmpty()
         val title = data["title"].orEmpty().ifBlank { "Amitia" }
         val body = data["body"].orEmpty()
-        if (body.isBlank()) return
+        if (body.isBlank() || conversationId.isBlank() || !shouldDisplayMessage(context, conversationId, data)) return
         val deepLink = data["deepLink"].orEmpty().ifBlank { "amitia://chat/$conversationId" }
-        val previewMode = data["previewMode"].orEmpty().trim().lowercase().ifBlank { "full" }
-        val visibleBody = if (previewMode == "full") body else if (previewMode == "hidden") "????????" else "????"
+        val previewMode = data["previewMode"].orEmpty().trim().lowercase().ifBlank { "sender_only" }
+        val visibleTitle = if (previewMode == "hidden") "Amitia" else title
+        val visibleBody = if (previewMode == "full") body else "你有一条新消息"
+        val avatar = avatarBitmap(context, visibleTitle)
         val sender = Person.Builder()
-            .setName(title)
-            .setKey(characterId.ifBlank { title })
+            .setName(visibleTitle)
+            .setIcon(IconCompat.createWithBitmap(avatar))
+            .setKey(characterId.ifBlank { visibleTitle })
             .build()
         val self = Person.Builder().setName("我").setKey("amitia-user").build()
         val style = NotificationCompat.MessagingStyle(self)
-            .setConversationTitle(title)
+            .setConversationTitle(visibleTitle)
             .setGroupConversation(false)
         if (previewMode == "full") {
             loadMessageHistory(context, conversationId).forEach { item ->
@@ -290,8 +353,9 @@ object NotificationRenderer {
 
         val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
+            .setContentTitle(visibleTitle)
             .setContentText(visibleBody)
+            .setLargeIcon(avatar)
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -300,45 +364,18 @@ object NotificationRenderer {
             .setGroup("amitia:conversation:$conversationId")
             .setContentIntent(contentIntent(context, deepLink, conversationId))
             .addAction(replyAction)
-        if (conversationId.isNotBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val shortcutId = "amitia-chat-" + stableId(conversationId)
-            val shortcutIntent = Intent(context, ConversationBubbleActivity::class.java)
-                .setAction(Intent.ACTION_VIEW)
-                .setData(Uri.parse("amitia://bubble/$conversationId"))
-                .putExtra("conversationId", conversationId)
-                .putExtra("title", title)
-                .putExtra("body", visibleBody)
-                .putExtra("deepLink", deepLink)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-            val shortcut = ShortcutInfo.Builder(context, shortcutId)
-                .setShortLabel(title.take(32))
-                .setLongLived(true)
-                .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
-                .setIntent(shortcutIntent)
-                .setPersons(arrayOf(android.app.Person.Builder().setName(title).setKey(characterId.ifBlank { conversationId }).build()))
-                .build()
-            val shortcuts = context.getSystemService(Context.SHORTCUT_SERVICE) as ShortcutManager
-            runCatching { shortcuts.pushDynamicShortcut(shortcut) }
-            val bubble = PendingIntent.getActivity(
-                context,
-                stableId("bubble:$conversationId"),
-                shortcutIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-            )
-            val metadata = NotificationCompat.BubbleMetadata.Builder(
-                bubble,
-                IconCompat.createWithResource(context, R.mipmap.ic_launcher),
-            ).setDesiredHeight((520 * context.resources.displayMetrics.density).toInt())
-                .setAutoExpandBubble(false)
-                .setSuppressNotification(false)
-                .build()
-            builder.setShortcutId(shortcutId)
-            builder.setBubbleMetadata(metadata)
-        }
+        val publicVersion = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(if (previewMode == "sender_only") title else "Amitia")
+            .setContentText("你有一条新消息")
+            .build()
+        builder.setPublicVersion(publicVersion)
+        builder.setVisibility(if (previewMode == "hidden") NotificationCompat.VISIBILITY_SECRET else NotificationCompat.VISIBILITY_PRIVATE)
         if (data["sound"] == "false") {
             builder.setSilent(true)
         }
         NotificationManagerCompat.from(context).notify(stableId("message:$conversationId"), builder.build())
+        FloatingChatBubbleService.onMessage(context, conversationId, visibleTitle, visibleBody)
         if (conversationId.isNotBlank()) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
@@ -353,44 +390,86 @@ object NotificationRenderer {
         val revision = data["revision"]?.toLongOrNull() ?: 0L
         if (!acceptRevision(context, runId, revision)) return
         val phase = data["phase"].orEmpty()
-        val summary = data["summary"].orEmpty().ifBlank { if (terminal) "已结束" else "正在执行" }
+        val finishedSuccessfully = terminal && phase == "completed"
+        val summary = when {
+            finishedSuccessfully -> "已完成 · 100% · " + data["summary"].orEmpty().ifBlank { "Agent 任务执行成功" }
+            else -> data["summary"].orEmpty().ifBlank { if (terminal) "已结束" else "正在执行" }
+        }
         val title = data["title"].orEmpty().ifBlank {
             data["agentId"].orEmpty().ifBlank { "Amitia" }
         }
+        val conversationTitle = data["conversationTitle"].orEmpty().trim()
+            .ifBlank { data["conversation_title"].orEmpty().trim() }
+            .ifBlank { data["chatTitle"].orEmpty().trim() }
+            .ifBlank { title }
+        val islandRoute = AgentTaskIslandRouting.choose(context)
+        val timestamps = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val startKey = "run_started_at:$runId"
+        var startedAt = timestamps.getLong(startKey, 0L)
+        if (startedAt <= 0L || revision <= 1L) {
+            startedAt = System.currentTimeMillis()
+            timestamps.edit().putLong(startKey, startedAt).apply()
+        }
+        val timeLabel = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(startedAt))
         val deepLink = data["deepLink"].orEmpty().ifBlank { "amitia://run/$runId" }
         val currentStep = data["currentStep"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val totalSteps = data["totalSteps"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val progressFraction = data["progress"]?.toDoubleOrNull()?.coerceIn(0.0, 1.0) ?: 0.0
         val totalTokens = data["totalTokens"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val progress = when {
+            finishedSuccessfully -> 100
             totalSteps > 0 -> ((currentStep.toDouble() / totalSteps.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
             progressFraction > 0 -> (progressFraction * 100.0).roundToInt().coerceIn(0, 100)
             terminal && phase == "completed" -> 100
             else -> 0
         }
 
+        val showPercent = totalSteps > 0 || progressFraction > 0
+        val notificationTitle = if (
+            !terminal && showPercent && XiaomiIslandTaskCompat.supported(context)
+        ) "$progress% · $title" else if (finishedSuccessfully) "✓ 已完成 · $title" else title
         val builder = NotificationCompat.Builder(context, CHANNEL_TASKS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
+            .setContentTitle(notificationTitle)
             .setContentText(summary)
-            .setSubText(
-                when {
-                    totalSteps > 0 -> "$currentStep / $totalSteps"
-                    terminal && totalTokens > 0 -> formatTokenCount(totalTokens)
-                    else -> phase
-                },
-            )
+            .setSubText("$conversationTitle · $timeLabel")
+            .setWhen(startedAt)
+            .setShowWhen(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setColor(android.graphics.Color.WHITE)
+            .setColorized(false)
             .setOnlyAlertOnce(true)
             .setContentIntent(contentIntent(context, deepLink, stableId(runId).toString()))
             .setGroup("amitia:run")
-            .setOngoing(!terminal)
-            .setAutoCancel(terminal)
+            .setOngoing(!terminal || finishedSuccessfully)
+            // System-owned expiry survives process death, unlike the main-thread Handler.
+            // Keep the completed island for two minutes without leaving stale chips.
+            .setTimeoutAfter(
+                when (phase) {
+                    "completed" -> 120_000L
+                    "cancelled", "interrupted" -> 1_000L
+                    "failed" -> 45_000L
+                    else -> 0L
+                },
+            )
+            .setAutoCancel(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                publicNotification(
+                    context,
+                    CHANNEL_TASKS,
+                    "Amitia 任务",
+                    if (terminal) "任务状态已更新" else "后台任务正在执行",
+                ),
+            )
 
-        if (!terminal && Build.VERSION.SDK_INT >= 36) {
+        if (Build.VERSION.SDK_INT >= 36 && (!terminal || finishedSuccessfully)) {
             val style = NotificationCompat.ProgressStyle()
                 .setStyledByProgress(true)
-            if (totalSteps > 0) {
+            if (finishedSuccessfully) {
+                style.addProgressSegment(NotificationCompat.ProgressStyle.Segment(100))
+                style.setProgress(100)
+            } else if (totalSteps > 0) {
                 style.addProgressSegment(NotificationCompat.ProgressStyle.Segment(totalSteps.coerceAtLeast(1)))
                 style.setProgress(currentStep.coerceIn(0, totalSteps))
             } else if (progress > 0) {
@@ -400,15 +479,34 @@ object NotificationRenderer {
                 style.setProgressIndeterminate(true)
             }
             builder.setStyle(style)
-            builder.setRequestPromotedOngoing(true)
+            // Send vendor island extras when available, plus Android 16 Live Update
+            // for cases where the ROM rejects this app's native island scene.
+            // Android owns the fallback card theme and notification header.
+            builder.setRequestPromotedOngoing(
+                AgentTaskIslandRouting.shouldRequestLiveUpdate(),
+            )
         } else if (!terminal) {
             if (progress > 0) {
                 builder.setProgress(100, progress, false)
             } else {
                 builder.setProgress(100, 0, true)
             }
+        } else if (finishedSuccessfully) {
+            builder.setProgress(100, 100, false)
         } else {
             builder.setProgress(0, 0, false)
+        }
+
+        if (islandRoute == AgentTaskIslandRouting.Route.XIAOMI_SUPER_ISLAND) {
+            XiaomiIslandTaskCompat.attach(
+                context, builder, conversationTitle, summary, progress, revision, terminal,
+                timeLabel,
+            )
+        } else if (islandRoute == AgentTaskIslandRouting.Route.VIVO_ORIGIN_ISLAND) {
+            VivoOriginIslandTaskCompat.attach(
+                context, builder, conversationTitle, summary, progress, finishedSuccessfully,
+                timeLabel,
+            )
         }
 
         val manager = NotificationManagerCompat.from(context)
@@ -417,10 +515,12 @@ object NotificationRenderer {
         if (terminal) {
             val dismissalDelayMs = when (phase) {
                 "cancelled", "interrupted" -> 0L
-                else -> 60_000L
+                "completed" -> 120_000L
+                else -> 45_000L
             }
             val dismiss = Runnable {
                 manager.cancel(notificationId)
+                timestamps.edit().remove(startKey).apply()
                 clearRevision(context, runId)
             }
             if (dismissalDelayMs == 0L) {
@@ -537,9 +637,13 @@ object NotificationRenderer {
         val editor = prefs.edit()
         conversationIds.forEach { conversationId ->
             manager.cancel(stableId("message:$conversationId"))
+            FloatingChatBubbleService.onConversationRead(conversationId)
             editor.remove("message_active:$conversationId")
             editor.remove("history:$conversationId")
         }
+        prefs.all.keys
+            .filter { it.startsWith("last_event:") || it.startsWith("recent_events:") }
+            .forEach { editor.remove(it) }
         editor.apply()
     }
 
@@ -563,6 +667,7 @@ object NotificationRenderer {
         val normalized = conversationId.trim()
         if (normalized.isEmpty()) return
         clearMessageHistory(context, normalized)
+        FloatingChatBubbleService.onConversationRead(normalized)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .remove("message_active:$normalized")

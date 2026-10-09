@@ -175,6 +175,9 @@ func (a *GeminiAdapter) buildGenConfig(cfg ProviderConfig, req ModelRequest) map
 		"temperature":     cfg.Temperature,
 		"maxOutputTokens": cfg.MaxOutputTokens,
 	}
+	if req.ResponseFormat.Type == "json_object" || req.ResponseFormat.Type == "json" || req.ResponseFormat.Type == "json_schema" {
+		config["responseMimeType"] = "application/json"
+	}
 
 	if cfg.TopP > 0 && cfg.TopP < 1 {
 		config["topP"] = cfg.TopP

@@ -13,7 +13,6 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/conversationstream"
-	"github.com/u-ai/backend/internal/decision"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension"
 	promptir "github.com/u-ai/backend/internal/prompt"
@@ -26,6 +25,7 @@ type agentToolCall struct {
 	Arguments   string
 	Scope       SkillScope
 	Fingerprint string
+	Duplicate   bool
 }
 
 type agentToolExecution struct {
@@ -48,8 +48,16 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 	forceVoice := false
 	baseMessageCount := len(messages)
 	fingerprints := map[string]int{}
+	modelTools, toolAliases := prepareAgentModelTools(toolDefs)
+	maxRounds := 128
+	if config.AppCfg != nil && config.AppCfg.Chat.AgentMaxRounds > 0 {
+		maxRounds = config.AppCfg.Chat.AgentMaxRounds
+	}
 
 	for round := 0; ; round++ {
+		if round >= maxRounds {
+			return "", strings.Join(reasoningParts, "\n\n"), false, totalTokens, reasoningDurationMS, fmt.Errorf("agent execution exhausted the maximum of %d model rounds without a verified final response", maxRounds)
+		}
 		if steers := conversationstream.DefaultManager().ConsumeSteer(convID, turnRecorder.TurnID); len(steers) > 0 {
 			for _, steer := range steers {
 				messages = append(messages, map[string]interface{}{"role": "user", "content": steer})
@@ -62,10 +70,10 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 		projector := newModelEventProjector(turnRecorder)
 		providerCtx, providerCancel := context.WithCancel(ctx)
 		conversationstream.DefaultManager().RegisterProviderCancel(convID, turnRecorder.TurnID, providerCancel)
-		aiContent, reasoning, toolCalls, tok, llmErr := s.invokeProcessLLMWithToolsStream(providerCtx, cfg, messages, toolDefs, projector)
+		aiContent, reasoning, toolCalls, tok, llmErr := s.invokeProcessLLMWithToolsStream(providerCtx, cfg, messages, modelTools, projector)
 		providerCancel()
 		conversationstream.DefaultManager().ClearProviderCancel(convID, turnRecorder.TurnID)
-		totalTokens = tok
+		totalTokens += tok
 		if streamedReasoning := strings.TrimSpace(projector.Reasoning()); streamedReasoning != "" {
 			reasoning = streamedReasoning
 		}
@@ -103,26 +111,18 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 		applog.TraceInfo(trace.WithStage("model_call_completed"), applog.Fields{"round": round, "tool_call_count": len(toolCalls), "reply_size": len(aiContent), "reasoning_size": len(reasoning)}, "process message model call completed")
 		if len(toolCalls) == 0 {
 			if strings.TrimSpace(aiContent) == "" {
-				if err := projector.EnsureText(ctx, "操作已完成"); err != nil {
-					return "", "", false, 0, 0, err
-				}
-				aiContent = projector.Text()
+				_ = projector.Complete(context.Background(), assistantTurnStatusFailed)
+				return "", strings.Join(reasoningParts, "\n\n"), false, totalTokens, reasoningDurationMS, fmt.Errorf("model returned neither a response nor tool calls; task completion was not verified")
 			}
 			reply = aiContent
 			break
 		}
-		if s.hasActionDirective && s.actionDirective.Kind == decision.ActionDirectiveRespond {
-			applog.TraceWarn(trace.WithStage("tool_call_blocked_by_directive"), applog.Fields{"plan_id": s.actionDirective.PlanID, "tool_call_count": len(toolCalls)}, "模型返回 tool_calls 但 ActionDirective=respond，拒绝执行并仅使用文本")
-			reply = aiContent
-			break
-		}
-
 		assistantToolCall := map[string]interface{}{"role": "assistant", "content": aiContent, "tool_calls": toolCalls}
 		if reasoning != "" {
 			assistantToolCall["reasoning_content"] = reasoning
 		}
 		messages = append(messages, assistantToolCall)
-		calls, err := s.prepareAgentToolCalls(ctx, toolCalls, seenTools, convID, charID, channel, requestID, spaceID, sessionID, permissionMode, trace, execCtx, turnRecorder, fingerprints)
+		calls, err := s.prepareAgentToolCalls(ctx, toolCalls, toolAliases, seenTools, convID, charID, channel, requestID, spaceID, sessionID, permissionMode, trace, execCtx, turnRecorder, fingerprints)
 		if err != nil {
 			return "", "", false, 0, 0, err
 		}
@@ -159,6 +159,13 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				appendAgentSkillPromptTrace(promptTrace, *traceItem)
 			}
 			if activationPrompt != "" {
+				if s.toolRuntime != nil {
+					if refreshed, refreshErr := s.toolRuntime.ModelTools(ctx, call.Scope); refreshErr == nil {
+						modelTools, toolAliases = prepareAgentModelTools(refreshed)
+					} else {
+						applog.TraceWarn(trace.WithStage("skill_tools_refresh_failed"), applog.Fields{"error": refreshErr.Error()}, "agent skill tool refresh failed")
+					}
+				}
 				content := promptir.RenderAgentSkillContribution([]promptir.AgentSkillContribution{{Content: activationPrompt, InstructionPosition: "after_character_rules"}})
 				if len(messages) > 0 && messages[0]["role"] == "system" {
 					messages[0]["content"] = fmt.Sprint(messages[0]["content"]) + "\n\n" + content
@@ -212,24 +219,34 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 	return reply, strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS, nil
 }
 
-func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[string]interface{}, seenTools map[string]bool, convID, charID, channel, requestID, spaceID, sessionID, permissionMode string, trace applog.TraceFields, execCtx *coreexec.ExecutionContext, turnRecorder *assistantTurnRecorder, fingerprints map[string]int) ([]agentToolCall, error) {
+func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[string]interface{}, toolAliases map[string]string, seenTools map[string]bool, convID, charID, channel, requestID, spaceID, sessionID, permissionMode string, trace applog.TraceFields, execCtx *coreexec.ExecutionContext, turnRecorder *assistantTurnRecorder, fingerprints map[string]int) ([]agentToolCall, error) {
 	result := make([]agentToolCall, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		function, _ := tc["function"].(map[string]interface{})
 		name, _ := function["name"].(string)
+		if original, exists := toolAliases[name]; exists {
+			name = original
+		}
 		args, _ := function["arguments"].(string)
 		toolCallID, _ := tc["id"].(string)
-		if strings.TrimSpace(name) == "" {
-			continue
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(toolCallID) == "" {
+			return nil, fmt.Errorf("model tool call is missing a required name or id")
 		}
+		if strings.TrimSpace(args) == "" {
+			args = "{}"
+		}
+		if !json.Valid([]byte(args)) {
+			return nil, fmt.Errorf("model tool %s returned malformed JSON arguments", name)
+		}
+		duplicate := false
 		if name == "create_schedule" {
 			dedupKey := name + "|" + args
-			if seenTools[dedupKey] {
-				continue
-			}
+			duplicate = seenTools[dedupKey]
 			seenTools[dedupKey] = true
 			var toolArgs map[string]interface{}
-			json.Unmarshal([]byte(args), &toolArgs)
+			if err := json.Unmarshal([]byte(args), &toolArgs); err != nil || toolArgs == nil {
+				return nil, fmt.Errorf("create_schedule requires a JSON object of arguments")
+			}
 			toolArgs["conversation_id"] = convID
 			toolArgs["character_id"] = charID
 			if channel == "web" {
@@ -248,7 +265,7 @@ func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[str
 			return nil, err
 		}
 		s.emitDesktopPetTool(ctx, scope, toolCallID, name, "started", "", fingerprints[fingerprint])
-		result = append(result, agentToolCall{ID: toolCallID, Name: name, Arguments: args, Scope: scope, Fingerprint: fingerprint})
+		result = append(result, agentToolCall{ID: toolCallID, Name: name, Arguments: args, Scope: scope, Fingerprint: fingerprint, Duplicate: duplicate})
 	}
 	return result, nil
 }
@@ -299,11 +316,15 @@ func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, c
 
 func (s *service) executeAgentToolCall(ctx context.Context, call agentToolCall, trace applog.TraceFields, round int, turnRecorder *assistantTurnRecorder) agentToolExecution {
 	startedAt := time.Now()
+	if call.Duplicate {
+		return agentToolExecution{Outcome: toolExecOutcome{VisibleText: "重复的定时任务创建请求已拒绝", Status: "FAILED", ErrorCode: "DUPLICATE_TOOL_CALL", HasError: true, Found: true}, DurationMS: 0}
+	}
+	idempotencyKey := call.Scope.ConversationID + ":" + call.Scope.RequestID + ":" + call.ID
 	if s.toolRuntime == nil {
 		return agentToolExecution{Outcome: toolExecOutcome{VisibleText: "工具运行时不可用", Status: "FAILED", ErrorCode: extension.ErrSkillExecutionFailed, HasError: true, Found: false}, DurationMS: time.Since(startedAt).Milliseconds()}
 	}
 	if streamingRuntime, ok := s.toolRuntime.(ModelToolProgressRuntime); ok {
-		toolResult, found, err := streamingRuntime.ExecuteModelToolWithProgress(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, "", func(progressCtx context.Context, event ToolProgressEvent) error {
+		toolResult, found, err := streamingRuntime.ExecuteModelToolWithProgress(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, idempotencyKey, func(progressCtx context.Context, event ToolProgressEvent) error {
 			if turnRecorder == nil {
 				return nil
 			}
@@ -318,7 +339,7 @@ func (s *service) executeAgentToolCall(ctx context.Context, call agentToolCall, 
 		}
 		return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}
 	}
-	toolResult, found := s.toolRuntime.ExecuteModelTool(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, "")
+	toolResult, found := s.toolRuntime.ExecuteModelTool(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, idempotencyKey)
 	return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}
 }
 
@@ -386,6 +407,9 @@ func (s *service) compactAgentMessages(ctx context.Context, cfg *ModelConfig, me
 		return messages
 	}
 	middleEnd := len(messages) - tailCount
+	for middleEnd > baseMessageCount && fmt.Sprint(messages[middleEnd]["role"]) == "tool" {
+		middleEnd--
+	}
 	if middleEnd <= baseMessageCount {
 		return messages
 	}

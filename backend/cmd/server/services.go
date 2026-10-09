@@ -396,7 +396,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
 	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
 	mcpRepository := mcp.NewRepository(ctx.DB)
-	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry)
+	var mcpCompatibility *MCPCompatibilityRuntime
+	var mcpCompatibilityErr error
+	mcpAcquisitionPersistence, err := newMCPAcquisitionPersistence(mcpRepository, mcpDataDirectory(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("initialize MCP acquisition persistence: %w", err)
+	}
+	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry, func() *MCPCompatibilityRuntime { return mcpCompatibility })
 	agentAdminController := newServerAgentAdminController(chatSvc, charRepo, ctx.DB, graphSvc, extensionRuntime.Kernel, mcpRepository)
 	scopeRelationDB, err := ctx.DB.DB()
 	if err != nil {
@@ -449,6 +455,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap, androidImageIntelligence, resourceResolver, config.AppCfg.Storage.DataDir)
 	}
 
+	if extensionRuntime.AgentSkills != nil {
+		acquisitionSkills := extension.NewAgentSkillAcquisitionAdapter(extensionRuntime.AgentSkills)
+		kernelBuilder.WithAcquisitionSkills(acquisitionSkills, acquisitionSkills)
+	}
+	kernelBuilder.WithMCPAcquisitionPersistence(mcpAcquisitionPersistence)
+	kernelBuilder.WithMCPExistingConnector(&mcpExistingConnector{repository: mcpRepository, runtime: func() *MCPCompatibilityRuntime { return mcpCompatibility }})
 	kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
@@ -1117,7 +1129,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	syncApplier = syncpkg.NewBusinessApplier(ctx.DB)
 	syncService = syncpkg.NewService(ctx.DB, syncApplier)
 
-	mcpCompatibility, mcpCompatibilityErr := buildMCPCompatibilityRuntime(
+	mcpCompatibility, mcpCompatibilityErr = buildMCPCompatibilityRuntime(
 		ctx,
 		mcpRepository,
 		canonicalStdioRegistry,
@@ -1126,6 +1138,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelContainer.ToolFacade,
 		chatSvc,
 		mcpDataDirectory(ctx),
+		mcpAcquisitionPersistence.secrets,
 	)
 	if mcpCompatibilityErr != nil {
 		return nil, fmt.Errorf("initialize canonical MCP compatibility runtime: %w", mcpCompatibilityErr)
@@ -1331,6 +1344,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, ownedDataErr
 		}
 		localRuntimeDispatcher.RegisterCancellable("coordination.data", ownedDataHandler)
+		registerSourceTaskHostEventDispatcher(localRuntimeDispatcher, services)
 		extension.RegisterDeviceWorkflowMeshHandlers(localRuntimeDispatcher, services.Extension)
 		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshResolveHandler, newDesktopPetBehaviorMeshResolveHandler(services))
 		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshHandler, newDesktopPetBehaviorMeshInvokeHandler(services))

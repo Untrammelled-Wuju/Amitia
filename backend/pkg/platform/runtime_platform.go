@@ -8,6 +8,12 @@ const RuntimeModeEnv = "AMITIA_RUNTIME_MODE"
 
 const AndroidPRootMode = "android-proot"
 
+const IOSISHMode = "ios-ish"
+
+func IsIOSISHMode(v string) bool {
+	return NormalizeRuntimeMode(v) == IOSISHMode
+}
+
 func NormalizeRuntimeMode(v string) string {
 	return strings.ToLower(strings.TrimSpace(v))
 }

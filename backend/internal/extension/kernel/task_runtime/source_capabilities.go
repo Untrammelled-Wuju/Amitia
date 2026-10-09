@@ -54,13 +54,36 @@ func validateSourceTaskCapabilities(capabilities SourceTaskCapabilities) error {
 }
 
 func validateSourceTaskDeclaredCapabilities(definition *TaskDefinition) error {
+	return validateSourceTaskDeclaredCapabilitiesWith(definition, SourceTaskCapabilities{})
+}
+
+func (s *TaskRuntimeService) sourceTaskCapabilities() SourceTaskCapabilities {
+	capabilities := CurrentSourceTaskCapabilities()
+	if capabilities.IsolatedExecution && s.config.SourceHostPermissionGuard != nil {
+		capabilities.ExecuteTool = s.config.SourceHostCapabilities.ExecuteTool
+		capabilities.EmitEvent = s.config.SourceHostCapabilities.EmitEvent
+	}
+	return capabilities
+}
+
+func (s *TaskRuntimeService) declaredHostCapabilities() SourceTaskCapabilities {
+	if s.config.SourceHostPermissionGuard == nil {
+		return SourceTaskCapabilities{}
+	}
+	return s.config.SourceHostCapabilities
+}
+
+func validateSourceTaskDeclaredCapabilitiesWith(definition *TaskDefinition, capabilities SourceTaskCapabilities) error {
 	requirements, err := sourceTaskPermissionRequirements(definition)
 	if err != nil {
 		return err
 	}
 	for _, requirement := range requirements {
-		if requirement.PermissionID == "service.tool.execute" {
+		if requirement.PermissionID == "service.tool.execute" && !capabilities.ExecuteTool {
 			return NewTaskError(ErrTaskDependencyUnavailable, "当前设备任务运行时尚未提供已授权的工具执行端口，不能提交要求执行工具的任务")
+		}
+		if requirement.PermissionID == "event.emit" && !capabilities.EmitEvent {
+			return NewTaskError(ErrTaskDependencyUnavailable, "当前设备任务运行时尚未提供已授权的事件发布端口")
 		}
 	}
 	return nil

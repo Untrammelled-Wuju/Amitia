@@ -10,6 +10,8 @@
       </div>
     </header>
     <pre v-if="showSource || streaming" class="amrp-source"><code>{{ source }}</code></pre>
+    <button v-else-if="previewError" type="button" @click="retryVersion++">{{ previewError }}，点击重试</button>
+    <div v-else-if="!sandboxDocument">加载中</div>
     <div v-else class="amrp-browser">
       <div class="amrp-browser-bar">
         <i></i><i></i><i></i>
@@ -17,7 +19,7 @@
       </div>
       <iframe
         title="Sandboxed HTML Preview"
-        :srcdoc="sandboxDocument"
+        :src="previewUrl"
         sandbox="allow-scripts"
         referrerpolicy="no-referrer"
       ></iframe>
@@ -37,7 +39,7 @@
         <iframe
           class="amrp-fullscreen-frame"
           title="Sandboxed HTML Preview Fullscreen"
-          :srcdoc="sandboxDocument"
+          :src="previewUrl"
           sandbox="allow-scripts"
           referrerpolicy="no-referrer"
         ></iframe>
@@ -47,7 +49,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref, watch, onBeforeUnmount } from "vue";
+import { buildHtmlPreviewDocument } from "./htmlDocument";
+import { apiClient } from "@/composables/useApi";
+import { getApiBaseURLForPath } from "@/runtime/runtime-adapter";
 import { ElMessage } from "element-plus";
 import { copyText } from "../utils";
 
@@ -56,6 +61,7 @@ const props = withDefaults(
     source: string;
     filename?: string;
     streaming?: boolean;
+    baseUrl?: string;
   }>(),
   {
     filename: "",
@@ -66,19 +72,39 @@ const props = withDefaults(
 const showSource = ref(false);
 const fullscreen = ref(false);
 
-const sandboxDocument = computed(() => `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'; frame-src 'none'; media-src data: blob:;">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-html,body{min-height:100%;margin:0;background:#fff;color:#19191c;font:14px/1.6 Inter,ui-sans-serif,system-ui,sans-serif}
-body{padding:20px}*{box-sizing:border-box}
-</style>
-</head>
-<body>${String(props.source ?? "")}</body>
-</html>`);
+const sandboxDocument = ref("");
+const previewError = ref("");
+const previewUrl = ref("");
+const retryVersion = ref(0);
+let previewId = "";
+function releasePreview(id: string) {
+  if (id) void apiClient.delete(`/api/artifacts/v1/previews/${encodeURIComponent(id)}`).catch(() => {});
+}
+let generation = 0;
+onBeforeUnmount(() => { generation++; releasePreview(previewId); });
+watch(() => [props.source, props.baseUrl, props.streaming, retryVersion.value], async () => {
+  const current = ++generation;
+  if (props.streaming) return;
+  sandboxDocument.value = "";
+  previewError.value = "";
+  try {
+    const document = await buildHtmlPreviewDocument(props.source, props.baseUrl);
+    if (current !== generation) return;
+    const response = await apiClient.post<{ url: string; previewId: string }>("/api/artifacts/v1/previews", { html: document });
+    if (current !== generation) { releasePreview(response.data.previewId); return; }
+    const base = await getApiBaseURLForPath("/api/artifacts/v1/previews");
+    const url = response.data?.url;
+    if (!url) throw new Error("后端未返回 HTML 预览地址");
+    if (current === generation) {
+      releasePreview(previewId);
+      previewId = response.data.previewId;
+      previewUrl.value = `${base.replace(/\/+$/, "")}/${url.replace(/^\/+/, "")}`;
+      sandboxDocument.value = document;
+    }
+  } catch (reason) {
+    if (current === generation) previewError.value = reason instanceof Error ? reason.message : "HTML 加载失败";
+  }
+}, { immediate: true });
 
 async function copySource() {
   const copied = await copyText(props.source);

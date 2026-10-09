@@ -219,7 +219,7 @@ const emit = defineEmits<{
 }>();
 
 const { resolvedMode } = useTheme();
-const { messageStyle, userMessageGlass, userMessageWaterGlass, aiAvatarEnabled, aiNameEnabled } = useChatAppearancePreference();
+const { messageStyle, userMessageGlass, userMessageWaterGlass, aiAvatarEnabled, aiNameEnabled, aiAvatarRadius } = useChatAppearancePreference();
 const activeCitationId = ref("");
 const copyMenuOpen = ref(false);
 const message = computed<AIMessageData>(() =>
@@ -424,7 +424,7 @@ async function handleCopy(mode: "plain" | "markdown") {
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 11px;
+  border-radius: v-bind(aiAvatarRadius);
   background: var(--tp-logo-bg);
   color: white;
   font-size: 12px;
@@ -690,7 +690,7 @@ async function handleCopy(mode: "plain" | "markdown") {
   }
 
   .amrp-avatar {
-    border-radius: 10px;
+    border-radius: v-bind(aiAvatarRadius);
   }
 
   .amrp-head {
@@ -712,13 +712,18 @@ async function handleCopy(mode: "plain" | "markdown") {
 }
 .amrp-user-water .amrp-user-bubble,
 .amrp-user-water :deep(.bubble-content--user .message-piece) {
-  background-image: linear-gradient(135deg, rgb(255 255 255 / 24%), transparent 45%, rgb(255 255 255 / 8%));
-  box-shadow: inset 0 1px 1px rgb(255 255 255 / 50%), inset 0 -1px 1px color-mix(in srgb, var(--ac-color-primary) 18%, transparent), 0 3px 12px rgb(0 0 0 / 6%);
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--ac-color-surface) 86%, var(--ac-color-primary)) 60%, transparent);
+  background-image: linear-gradient(135deg, rgb(255 255 255 / 36%), transparent 45%, color-mix(in srgb, var(--ac-color-primary) 12%, transparent));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 70%), inset 0 -1px 1px color-mix(in srgb, var(--ac-color-primary) 28%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--ac-color-primary) 16%, transparent), 0 3px 12px rgb(0 0 0 / 9%);
+}
+.amrp-dark.amrp-user-water .amrp-user-bubble,
+.amrp-dark.amrp-user-water :deep(.bubble-content--user .message-piece) {
+  background-image: linear-gradient(135deg, rgb(255 255 255 / 16%), transparent 45%, color-mix(in srgb, var(--ac-color-primary) 16%, transparent));
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 30%), inset 0 -1px 1px color-mix(in srgb, var(--ac-color-primary) 35%, transparent), inset 0 0 0 1px rgb(255 255 255 / 16%), 0 3px 12px rgb(0 0 0 / 20%);
 }
 @supports ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
   .amrp-user-water .amrp-user-bubble,
   .amrp-user-water :deep(.bubble-content--user .message-piece) {
-    background-color: color-mix(in srgb, var(--ac-color-primary-bg) 42%, transparent);
     backdrop-filter: blur(4px) saturate(140%);
     -webkit-backdrop-filter: blur(4px) saturate(140%);
   }

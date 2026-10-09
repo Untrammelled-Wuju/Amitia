@@ -27,6 +27,14 @@ func (s *TaskRuntimeService) lockTaskOwner(taskID string) func() {
 }
 
 func (s *TaskRuntimeService) CallRemoteOwner(ctx context.Context, taskID string, request RemoteTaskOwnerRequest, checkBinding func() error) (json.RawMessage, error) {
+	if request.Method == "task.host.executeTool" || request.Method == "task.host.emitEvent" {
+		if len(request.NativeParamsBytes) == 0 || len(request.NativeParamsBytes) > 64<<10 || !json.Valid(request.NativeParamsBytes) {
+			return nil, NewTaskError(ErrTaskInputInvalid, "任务Native接口缺少完整原始参数字节")
+		}
+		request.Params = append(json.RawMessage(nil), request.NativeParamsBytes...)
+	} else if len(request.NativeParamsBytes) != 0 {
+		return nil, NewTaskError(ErrTaskInputInvalid, "非Native任务接口不得携带Native参数")
+	}
 	actor, ok := auth.FromContext(ctx)
 	if !ok || actor == nil || actor.PrincipalType != auth.PrincipalTrustedDevice || actor.DeviceID == "" || actor.RuntimeID == "" || taskID == "" || len(taskID) > 256 || request.AuthorityCallID == "" || len(request.AuthorityCallID) > 512 || request.RequestID == "" || len(request.RequestID) > 256 || !json.Valid(request.Params) || len(request.Params) > 1500<<10 || checkBinding == nil {
 		return nil, NewTaskError(ErrTaskScopeDenied, "任务所有者接口缺少已配对执行设备或完整请求")

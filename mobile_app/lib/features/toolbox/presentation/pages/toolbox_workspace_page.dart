@@ -589,7 +589,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
       appBar: AmitiaAppBar(
         title: '工作区',
         showBackButton: true,
-        fallbackRoute: AppRoutes.settingsToolbox,
+        fallbackRoute: AppRoutes.settingsMaintenanceCategory,
         actions: [
           IconButton(onPressed: _loading ? null : _showCreateIsolated, icon: const Icon(Icons.add), tooltip: '创建隔离工作区'),
           IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh), tooltip: '刷新'),

@@ -53,7 +53,7 @@ func (s *CredentialStore) SaveTransition(pending PendingProviderTransition) erro
 func (s *CredentialStore) DeleteTransition() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	err := os.Remove(filepath.Join(s.dirPath, "provider-transition.json"))
+	err := secretstore.Delete(filepath.Join(s.dirPath, "provider-transition.json"))
 	if os.IsNotExist(err) {
 		return nil
 	}

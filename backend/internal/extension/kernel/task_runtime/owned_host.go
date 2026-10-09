@@ -32,15 +32,15 @@ type AcknowledgedTaskHostPort struct {
 }
 
 type TaskHostNativeConfirmation struct {
-	Scope          coordination.ExecutionScope `json:"executionScope"`
-	TaskRunID      string                      `json:"taskRunId"`
-	Generation     int64                       `json:"generation"`
-	AttemptID      string                      `json:"attemptId"`
-	RequestID      string                      `json:"requestId"`
-	Method         string                      `json:"method"`
-	InputHash      string                      `json:"inputHash"`
-	ResultHash     string                      `json:"resultHash"`
-	Result         json.RawMessage             `json:"result"`
+	Scope          coordination.ExecutionScope  `json:"executionScope"`
+	TaskRunID      string                       `json:"taskRunId"`
+	Generation     int64                        `json:"generation"`
+	AttemptID      string                       `json:"attemptId"`
+	RequestID      string                       `json:"requestId"`
+	Method         string                       `json:"method"`
+	InputHash      string                       `json:"inputHash"`
+	ResultHash     string                       `json:"resultHash"`
+	ResultBytes    []byte                       `json:"resultBytes"`
 	Acknowledgment coordination.Acknowledgement `json:"acknowledgement"`
 }
 
@@ -55,7 +55,7 @@ type ownedTaskHostOperation struct {
 	InputHash             string                      `json:"inputHash"`
 	State                 string                      `json:"state"`
 	ResultHash            string                      `json:"resultHash,omitempty"`
-	Result                json.RawMessage             `json:"result,omitempty"`
+	ResultBytes           []byte                      `json:"resultBytes,omitempty"`
 }
 
 func taskHostOperationID(run *TaskRun, requestID string) string {
@@ -94,6 +94,30 @@ func parseTaskHostCall(run *TaskRun, definition *TaskDefinition, method string, 
 	return call, NewTaskError(ErrTaskPermissionDenied, "原任务未声明此Native能力的最小权限")
 }
 
+func validateTaskHostNativeResult(method string, result json.RawMessage) error {
+	if !json.Valid(result) || len(result) > 64<<10 {
+		return NewTaskError(ErrTaskScopeDenied, "任务Native结果无效或超过64KiB")
+	}
+	if method == "task.host.emitEvent" {
+		var ack struct {
+			Confirmed bool   `json:"confirmed"`
+			EventID   string `json:"eventId"`
+			OutboxID  string `json:"outboxId"`
+		}
+		if json.Unmarshal(result, &ack) != nil || !ack.Confirmed || ack.EventID == "" || ack.OutboxID == "" || len(ack.EventID) > 256 || len(ack.OutboxID) > 256 {
+			return NewTaskError(ErrTaskScopeDenied, "任务事件尚未获得实际持久事件与发件箱确认")
+		}
+	} else {
+		var ack struct {
+			Result json.RawMessage `json:"result"`
+		}
+		if json.Unmarshal(result, &ack) != nil || !json.Valid(ack.Result) {
+			return NewTaskError(ErrTaskScopeDenied, "任务Native工具缺少实际执行结果")
+		}
+	}
+	return nil
+}
+
 func (p AcknowledgedTaskHostPort) Call(ctx context.Context, run *TaskRun, definition *TaskDefinition, requestID, method string, params json.RawMessage) (json.RawMessage, error) {
 	scope, err := taskInputScope(ctx, run)
 	if err != nil {
@@ -119,13 +143,16 @@ func (p AcknowledgedTaskHostPort) Call(ctx context.Context, run *TaskRun, defini
 	}
 	if stored != nil {
 		var previous ownedTaskHostOperation
-		if stored.Deleted || stored.OwnerID != scope.ResourceOwnerID || stored.RoleID != scope.RoleID || stored.Kind != "tool-result" || stored.ID != id || stored.Revision != 2 || len(stored.Body) > 80<<10 || json.Unmarshal(stored.Body, &previous) != nil || previous.Scope != scope || previous.TaskRunID != run.TaskRunID || previous.Generation != run.Generation || previous.AttemptID != run.ExecutionAttemptID.String() || previous.DefinitionFingerprint != run.DefinitionFingerprint || previous.RequestID != requestID || previous.Method != method || previous.InputHash != inputHash || previous.State != "confirmed" || !json.Valid(previous.Result) || hashBytes(previous.Result) != previous.ResultHash {
+		if stored.Deleted || stored.OwnerID != scope.ResourceOwnerID || stored.RoleID != scope.RoleID || stored.Kind != "tool-result" || stored.ID != id || stored.Revision != 2 || len(stored.Body) > 128<<10 || json.Unmarshal(stored.Body, &previous) != nil || previous.Scope != scope || previous.TaskRunID != run.TaskRunID || previous.Generation != run.Generation || previous.AttemptID != run.ExecutionAttemptID.String() || previous.DefinitionFingerprint != run.DefinitionFingerprint || previous.RequestID != requestID || previous.Method != method || previous.InputHash != inputHash || previous.State != "confirmed" || len(previous.ResultBytes) > 64<<10 || !json.Valid(previous.ResultBytes) || hashBytes(previous.ResultBytes) != previous.ResultHash {
 			return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "Native调用已有未确认或不一致记录，禁止自动重复执行")
 		}
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return nil, err
 		}
-		return taskHostConfirmation(scope, run, requestID, method, inputHash, previous.Result, id)
+		if err := validateTaskHostNativeResult(method, previous.ResultBytes); err != nil {
+			return nil, err
+		}
+		return taskHostConfirmation(scope, run, requestID, method, inputHash, previous.ResultBytes, id)
 	}
 	commit := func(revision int64) error {
 		body, err := json.Marshal(document)
@@ -152,10 +179,10 @@ func (p AcknowledgedTaskHostPort) Call(ctx context.Context, run *TaskRun, defini
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return nil, err
 	}
-	if !json.Valid(result) || len(result) > 64<<10 {
-		return nil, NewTaskError(ErrTaskScopeDenied, "任务Native结果无效或超过64KiB")
+	if err := validateTaskHostNativeResult(method, result); err != nil {
+		return nil, err
 	}
-	document.State, document.Result, document.ResultHash = "confirmed", append(json.RawMessage(nil), result...), hashBytes(result)
+	document.State, document.ResultBytes, document.ResultHash = "confirmed", append([]byte(nil), result...), hashBytes(result)
 	if err := commit(2); err != nil {
 		return nil, err
 	}
@@ -173,5 +200,5 @@ func taskHostCommitScope(scope coordination.ExecutionScope, run *TaskRun, reques
 
 func taskHostConfirmation(scope coordination.ExecutionScope, run *TaskRun, requestID, method, inputHash string, result json.RawMessage, id string) (json.RawMessage, error) {
 	commitScope := taskHostCommitScope(scope, run, requestID, 2)
-	return json.Marshal(TaskHostNativeConfirmation{Scope: scope, TaskRunID: run.TaskRunID, Generation: run.Generation, AttemptID: run.ExecutionAttemptID.String(), RequestID: requestID, Method: method, InputHash: inputHash, Result: result, ResultHash: hashBytes(result), Acknowledgment: coordination.Acknowledgement{OwnerID: scope.ResourceOwnerID, RequestID: commitScope.RequestID, Versions: map[string]int64{"tool-result/" + id: 2}}})
+	return json.Marshal(TaskHostNativeConfirmation{Scope: scope, TaskRunID: run.TaskRunID, Generation: run.Generation, AttemptID: run.ExecutionAttemptID.String(), RequestID: requestID, Method: method, InputHash: inputHash, ResultBytes: result, ResultHash: hashBytes(result), Acknowledgment: coordination.Acknowledgement{OwnerID: scope.ResourceOwnerID, RequestID: commitScope.RequestID, Versions: map[string]int64{"tool-result/" + id: 2}}})
 }

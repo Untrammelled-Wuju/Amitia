@@ -14,8 +14,8 @@ struct AmitiaRunLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: AmitiaRunAttributes.self) { context in
       LockScreenRunView(context: context)
-        .activityBackgroundTint(activityBackground(context.state))
-        .activitySystemActionForegroundColor(activityForeground(context.state))
+        .activityBackgroundTint(.black)
+        .activitySystemActionForegroundColor(.white)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
@@ -25,14 +25,19 @@ struct AmitiaRunLiveActivity: Widget {
             isStale: context.isStale
           ))
             .font(.title3)
+            .foregroundStyle(tint(context.state.phase))
+            .padding(7)
+            .background(tint(context.state.phase).opacity(0.14), in: Circle())
         }
         DynamicIslandExpandedRegion(.trailing) {
           progressText(context.state, isStale: context.isStale)
             .font(.caption.monospacedDigit())
+            .foregroundStyle(.white)
         }
         DynamicIslandExpandedRegion(.center) {
           Text(context.state.title.isEmpty ? context.attributes.agentName : context.state.title)
             .font(.headline)
+            .foregroundStyle(.white)
             .lineLimit(1)
         }
         DynamicIslandExpandedRegion(.bottom) {
@@ -50,7 +55,9 @@ struct AmitiaRunLiveActivity: Widget {
                 .lineLimit(2)
             }
             ProgressView(value: normalizedProgress(context.state))
+              .tint(tint(context.state.phase))
           }
+          .foregroundStyle(.white)
         }
       } compactLeading: {
         Image(systemName: iconName(
@@ -58,18 +65,23 @@ struct AmitiaRunLiveActivity: Widget {
           agentName: effectiveAgentName(context),
           isStale: context.isStale
         ))
+        .foregroundStyle(.white)
       } compactTrailing: {
         progressText(context.state, isStale: context.isStale)
           .font(.caption2.monospacedDigit())
+          .foregroundStyle(.white)
       } minimal: {
         Image(systemName: iconName(
           context.state.phase,
           agentName: effectiveAgentName(context),
           isStale: context.isStale
         ))
+        .foregroundStyle(.white)
       }
       .widgetURL(deepLink(context.attributes))
-      .keylineTint(tint(context.state.phase))
+      .keylineTint(.black)
+      .background(Color.black)
+      .environment(\.colorScheme, .dark)
     }
   }
 
@@ -147,7 +159,7 @@ struct AmitiaRunLiveActivity: Widget {
     case "waiting_approval":
       return .orange
     default:
-      return .accentColor
+      return Color(red: 0.56, green: 0.64, blue: 1.0)
     }
   }
 
@@ -307,34 +319,27 @@ private func liveActivityAgentIcon(_ raw: String) -> String {
   return "sparkles"
 }
 
-private func activityBackground(
-  _ state: AmitiaRunAttributes.ContentState
-) -> Color {
-  state.appearance == "light"
-    ? Color.white.opacity(0.94)
-    : Color.black.opacity(0.82)
-}
-
-private func activityForeground(
-  _ state: AmitiaRunAttributes.ContentState
-) -> Color {
-  state.appearance == "light" ? .black : .white
-}
-
-private struct LockScreenRunView: View {
+ private struct LockScreenRunView: View {
   let context: ActivityViewContext<AmitiaRunAttributes>
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(spacing: 8) {
         Image(systemName: symbol)
+          .font(.system(size: 16, weight: .semibold))
+          .foregroundStyle(statusTint)
+          .padding(7)
+          .background(statusTint.opacity(0.14), in: Circle())
         Text(effectiveAgentName)
           .font(.headline)
           .lineLimit(1)
         Spacer()
         Text(status)
-          .font(.caption)
-          .foregroundStyle(.secondary)
+          .font(.caption.weight(.medium))
+          .foregroundStyle(statusTint)
+          .padding(.horizontal, 9)
+          .padding(.vertical, 5)
+          .background(statusTint.opacity(0.12), in: Capsule())
       }
       Text(context.state.title)
         .font(.subheadline.weight(.semibold))
@@ -346,6 +351,7 @@ private struct LockScreenRunView: View {
           .lineLimit(2)
       }
       ProgressView(value: progress)
+        .tint(statusTint)
       HStack {
         if context.state.totalSteps > 0 {
           Text(liveActivityStepText(
@@ -370,7 +376,19 @@ private struct LockScreenRunView: View {
       }
     }
     .padding()
+    .foregroundStyle(.white)
+    .environment(\.colorScheme, .dark)
     .widgetURL(deepLink)
+  }
+
+  private var statusTint: Color {
+    switch context.state.phase {
+    case "completed": return .green
+    case "failed": return .red
+    case "waiting_approval": return .orange
+    case "interrupted", "cancelled": return .secondary
+    default: return Color(red: 0.40, green: 0.46, blue: 0.85)
+    }
   }
 
   private var progress: Double {

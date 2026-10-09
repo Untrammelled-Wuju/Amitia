@@ -35,9 +35,24 @@ class UserMessageSurface extends StatelessWidget {
       );
     }
     final water = material == UserMessageMaterial.water;
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final waterColor = Color.lerp(scheme.surface, scheme.primary, 0.14)!;
     return Container(
       margin: margin,
       constraints: constraints,
+      decoration: water
+          ? BoxDecoration(
+              borderRadius: decoration.borderRadius,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: dark ? 0.20 : 0.09),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            )
+          : null,
       child: ClipRRect(
         borderRadius: decoration.borderRadius ?? BorderRadius.zero,
         child: BackdropFilter(
@@ -48,22 +63,26 @@ class UserMessageSurface extends StatelessWidget {
           child: Container(
             padding: padding,
             decoration: decoration.copyWith(
-              color: decoration.color?.withValues(alpha: water ? 0.42 : 0.65),
+              color: water
+                  ? waterColor.withValues(alpha: 0.60)
+                  : decoration.color?.withValues(alpha: 0.65),
               gradient: water
                   ? LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Colors.white.withValues(alpha: 0.24),
+                        Colors.white.withValues(alpha: dark ? 0.16 : 0.36),
                         Colors.white.withValues(alpha: 0),
-                        Colors.white.withValues(alpha: 0.08),
+                        scheme.primary.withValues(alpha: dark ? 0.16 : 0.12),
                       ],
                       stops: const [0, 0.45, 1],
                     )
                   : decoration.gradient,
               border: Border.all(
                 color: water
-                    ? Colors.white.withValues(alpha: 0.5)
+                    ? (dark ? Colors.white : scheme.primary).withValues(
+                        alpha: 0.16,
+                      )
                     : Theme.of(
                         context,
                       ).colorScheme.onSurface.withValues(alpha: 0.10),

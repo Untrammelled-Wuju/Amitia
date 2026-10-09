@@ -6,10 +6,11 @@ import (
 )
 
 type CapabilityResumeContext struct {
-	ConversationID        string `json:"conversationId,omitempty"`
-	TaskID                string `json:"taskId,omitempty"`
-	ParentInvocationID    string `json:"parentInvocationId,omitempty"`
-	OriginalUserMessageID string `json:"originalUserMessageId,omitempty"`
+	Request               *AcquisitionRequest `json:"request,omitempty"`
+	ConversationID        string              `json:"conversationId,omitempty"`
+	TaskID                string              `json:"taskId,omitempty"`
+	ParentInvocationID    string              `json:"parentInvocationId,omitempty"`
+	OriginalUserMessageID string              `json:"originalUserMessageId,omitempty"`
 
 	FailedToolCall *ToolCallSnapshot `json:"failedToolCall,omitempty"`
 

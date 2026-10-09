@@ -33,6 +33,7 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 	}
 
 	request := AcquisitionRequest{
+		Query: input.Query, SourceURI: input.SourceURI, Install: input.Install, ExtensionID: input.ExtensionID, Version: input.Version,
 		CapabilityID: capability.CapabilityID(input.CapabilityID),
 		SpaceID:      runtimeidentity.SpaceID(spaceID),
 		Description:  input.Description,
@@ -40,7 +41,7 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 
 	// Apply preferred kind filter if specified.
 	if input.PreferredKind != "" {
-		request.PreferredKinds = []CandidateKind{CandidateKind(input.PreferredKind)}
+		request.PreferredKinds = []CandidateKind{normalizeCandidateKind(input.PreferredKind)}
 	}
 
 	startTime := time.Now()
@@ -52,6 +53,7 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 	}
 
 	output := &FindCapabilitiesOutput{
+		Errors:       resultSet.Errors,
 		Candidates:   resultSet.Candidates,
 		TotalFound:   len(resultSet.Candidates),
 		SearchTimeMs: elapsed,
@@ -67,11 +69,11 @@ func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input Acq
 		if !input.UserConfirmed && !input.Approval {
 			return nil, NewAcquisitionError("approval_required", "userConfirmed=true is required to resume an approval-gated acquisition", nil)
 		}
-		result, err := b.acquisitionService.ResumeAcquire(ctx, input.ResumeToken)
+		result, err := b.acquisitionService.ResumeAcquire(ctx, input.ResumeToken, spaceID)
 		if err != nil {
 			return &AcquireOutput{Success: false, State: StateFailed, ResumeToken: input.ResumeToken, ErrorMessage: err.Error()}, err
 		}
-		output := &AcquireOutput{Success: result.IsReady(), State: result.State, ResumeToken: input.ResumeToken}
+		output := &AcquireOutput{Success: result.IsReady() || result.State == StateInstalledOnly, Installed: result.Installed, Enabled: result.Enabled, Warnings: result.Warnings, State: result.State, ResumeToken: input.ResumeToken}
 		if len(result.CapabilityIDs) > 0 {
 			output.CapabilityID = string(result.CapabilityIDs[0])
 		}
@@ -89,12 +91,16 @@ func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input Acq
 	}
 
 	request := AcquisitionRequest{
+		Query: input.Query, SourceURI: input.SourceURI, Install: input.Install, ExtensionID: input.ExtensionID, Version: input.Version,
 		CapabilityID:         capability.CapabilityID(input.CapabilityID),
 		RequestedCandidateID: input.CandidateID,
 		SpaceID:              runtimeidentity.SpaceID(spaceID),
 		ExecContext:          execCtx,
 	}
 
+	if input.PreferredKind != "" {
+		request.PreferredKinds = []CandidateKind{normalizeCandidateKind(input.PreferredKind)}
+	}
 	yes := input.Approval || input.UserConfirmed
 
 	result, err := b.acquisitionService.Acquire(ctx, request, yes)
@@ -119,8 +125,9 @@ func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input Acq
 	}
 
 	output := &AcquireOutput{
-		Success: result.IsReady(),
-		State:   result.State,
+		Success:   result.IsReady() || result.State == StateInstalledOnly,
+		Installed: result.Installed, Enabled: result.Enabled, Warnings: result.Warnings,
+		State: result.State,
 	}
 
 	if len(result.CapabilityIDs) > 0 {

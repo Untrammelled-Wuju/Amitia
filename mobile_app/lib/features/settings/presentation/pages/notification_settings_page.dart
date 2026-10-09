@@ -26,7 +26,7 @@ class _NotificationSettingsPageState
   bool _loading = true;
   bool _updating = false;
   bool _floatingPermission = false;
-  bool _floatingEnabled = false;
+  bool _floatingPreviewEnabled = true;
   bool _floatingBusy = false;
   bool _pendingFloatingEnable = false;
   String? _error;
@@ -77,11 +77,11 @@ class _NotificationSettingsPageState
       if (!mounted) return;
       setState(() {
         _floatingPermission = status['permissionGranted'] == true;
-        _floatingEnabled = status['enabled'] == true;
+        _floatingPreviewEnabled = status['enabled'] == true && status['previewEnabled'] != false;
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _floatingEnabled = false);
+      setState(() => _floatingPreviewEnabled = false);
     }
   }
 
@@ -99,7 +99,18 @@ class _NotificationSettingsPageState
         }
         final result = await coordinator.enableFloatingBubble();
         if (result['enabled'] != true || result['started'] != true) {
-          throw StateError('无法启动悬浮球服务');
+          throw StateError(
+            result['lastError']?.toString() ??
+                'Floating service was not started',
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        final activeStatus = await coordinator.floatingBubbleStatus();
+        if (activeStatus['active'] != true || activeStatus['enabled'] != true) {
+          throw StateError(
+            activeStatus['lastError']?.toString() ??
+                'Floating overlay did not become active',
+          );
         }
       } else {
         _pendingFloatingEnable = false;
@@ -110,9 +121,24 @@ class _NotificationSettingsPageState
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('悬浮球设置失败：$error')));
+      ).showSnackBar(SnackBar(content: Text('顶部消息预览设置失败：$error')));
     } finally {
       if (mounted) setState(() => _floatingBusy = false);
+    }
+  }
+
+  Future<void> _toggleFloatingPreview(bool enabled) async {
+    if (_floatingBusy) return;
+    try {
+      await ref
+          .read(notificationCoordinatorProvider)
+          .configureFloatingBubble(previewEnabled: enabled);
+      await _toggleFloatingBubble(enabled);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('消息预览设置失败：$error')),
+      );
     }
   }
 
@@ -282,19 +308,15 @@ class _NotificationSettingsPageState
           children: [
             if (Platform.isAndroid)
               SettingsSection(
-                title: '桌面聊天气泡',
+                title: '顶部悬浮消息',
                 children: [
                   AmitiaSwitchTile(
-                    title: '启用可拖动悬浮球',
-                    subtitle: _floatingEnabled
-                        ? '应用退到桌面后显示；点击返回，长按关闭'
-                        : _floatingPermission
-                        ? '已授权，开启后可在其他应用和桌面上显示'
-                        : '需要先授权 Android 悬浮窗权限',
-                    value: _floatingEnabled,
-                    onChanged: _floatingBusy
-                        ? null
-                        : (value) => _toggleFloatingBubble(value),
+                    title: '悬浮消息预览',
+                    subtitle: _floatingPermission
+                        ? '收到新消息时顶部短暂显示黑色胶囊，点击直达 App 会话；锁屏自动隐藏'
+                        : '需要授权悬浮窗权限，启用后仅显示顶部消息预览',
+                    value: _floatingPreviewEnabled,
+                    onChanged: _floatingBusy ? null : (value) => _toggleFloatingPreview(value),
                   ),
                   ListTile(
                     leading: const Icon(Icons.security_outlined),
@@ -460,11 +482,25 @@ class _NotificationSettingsPageState
                         : '不支持',
                   ),
                   _CapabilityTile(
-                    title: 'Dynamic Island',
-                    value: _platformState?.dynamicIslandSupported == true
-                        ? '支持'
-                        : '不支持',
+                    title: Platform.isAndroid ? 'Agent 进度通知方式' : 'Dynamic Island',
+                    value: switch (_platformState?.islandProvider) {
+                      'xiaomi_super_island' => '小米超级岛优先 · Android 16 实时通知兜底',
+                      'vivo_origin_island' => 'vivo 原子岛（需厂商场景许可）',
+                      'android_live_update' => 'Android 16 实时通知',
+                      'standard_progress' => '通用后台进度通知',
+                      _ => _platformState?.dynamicIslandSupported == true
+                          ? '支持'
+                          : '不支持',
+                    },
                   ),
+                  if (Platform.isAndroid &&
+                      _platformState?.islandProvider == 'xiaomi_super_island')
+                    _CapabilityTile(
+                      title: '超级岛焦点通知权限',
+                      value: _platformState?.xiaomiFocusPermissionGranted == true
+                          ? '已允许'
+                          : '未允许；请在系统通知设置中开启',
+                    ),
                   _CapabilityTile(
                     title: 'Android ProgressStyle',
                     value: _platformState?.progressStyleSupported == true

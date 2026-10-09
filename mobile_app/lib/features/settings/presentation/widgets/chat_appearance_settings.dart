@@ -17,6 +17,7 @@ class _ChatAppearanceSettingsState
     extends ConsumerState<ChatAppearanceSettings> {
   bool _busy = true;
   bool _failed = false;
+  double? _avatarRoundnessDraft;
 
   @override
   void initState() {
@@ -29,6 +30,7 @@ class _ChatAppearanceSettingsState
       await ref.read(chatAppearancePreferencesProvider.notifier).init();
       await ref.read(userMessageMaterialProvider.notifier).init();
       await ref.read(aiAvatarPreferencesProvider.notifier).init();
+      await ref.read(aiAvatarShapeProvider.notifier).init();
       await ref.read(aiNamePreferencesProvider.notifier).init();
     } catch (_) {
       _failed = true;
@@ -57,6 +59,11 @@ class _ChatAppearanceSettingsState
   Widget build(BuildContext context) {
     final style = ref.watch(chatAppearancePreferencesProvider);
     final material = ref.watch(userMessageMaterialProvider);
+    final savedAvatarShape = ref.watch(aiAvatarShapeProvider);
+    final avatarShape = AiAvatarShapePreference(
+      shape: savedAvatarShape.shape,
+      roundness: _avatarRoundnessDraft ?? savedAvatarShape.roundness,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -86,6 +93,60 @@ class _ChatAppearanceSettingsState
           value: ref.watch(aiAvatarPreferencesProvider),
           onChanged: _busy || _failed ? null : _updateAvatar,
         ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('AI 头像形状'),
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.accentPrimary,
+                borderRadius: BorderRadius.circular(avatarShape.radius(40)),
+              ),
+              child: Text(
+                'AI',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        IgnorePointer(
+          ignoring: _busy || _failed,
+          child: AmitiaSegmentedControl(
+            segments: const ['圆形', '圆角', '自定义'],
+            selectedIndex: avatarShape.shape.index,
+            onChanged: (index) =>
+                _updateAvatarShape(AiAvatarShape.values[index]),
+          ),
+        ),
+        if (avatarShape.shape == AiAvatarShape.custom) ...[
+          const SizedBox(height: 10),
+          Text(
+            '圆润度 ${avatarShape.roundness.round()}%，从直角调整至圆形。',
+            style: AppTypography.caption(context),
+          ),
+          Slider(
+            value: avatarShape.roundness,
+            min: 0,
+            max: 100,
+            divisions: 100,
+            label: '${avatarShape.roundness.round()}%',
+            semanticFormatterCallback: (value) => 'AI 头像圆润度 ${value.round()}%',
+            onChanged: _busy || _failed
+                ? null
+                : (value) => setState(() => _avatarRoundnessDraft = value),
+            onChangeEnd: _busy || _failed
+                ? null
+                : (value) => _updateAvatarShape(AiAvatarShape.custom, value),
+          ),
+        ],
+        const SizedBox(height: 12),
         AmitiaSwitchTile(
           title: '显示 AI 名称',
           subtitle: '在 AI 消息中显示角色名称，与头像独立控制。',
@@ -116,6 +177,27 @@ class _ChatAppearanceSettingsState
         ),
       ],
     );
+  }
+
+  Future<void> _updateAvatarShape(
+    AiAvatarShape shape, [
+    double? roundness,
+  ]) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(aiAvatarShapeProvider.notifier).setShape(shape, roundness);
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('保存 AI 头像形状失败，请重试')));
+    } finally {
+      if (mounted)
+        setState(() {
+          _busy = false;
+          _avatarRoundnessDraft = null;
+        });
+    }
   }
 
   Future<void> _updateMaterial(UserMessageMaterial value) async {

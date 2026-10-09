@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 // acquisitionPackageInstaller is the only package-install adapter exposed to
@@ -16,6 +17,18 @@ import (
 // lifecycle_manager's direct install plan.
 type acquisitionPackageInstaller struct {
 	container func() *Container
+}
+
+func (a *acquisitionPackageInstaller) VerifyPackageInstalled(ctx context.Context, id, spaceID string) (bool, error) {
+	_, container, err := a.runtime()
+	if err != nil {
+		return false, err
+	}
+	installation, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(id))
+	if err != nil {
+		return false, err
+	}
+	return installation.InstallationState == domain.InstallationStateInstalled, nil
 }
 
 func newAcquisitionPackageInstaller(container func() *Container) acquisition.CanonicalPackageInstallPort {

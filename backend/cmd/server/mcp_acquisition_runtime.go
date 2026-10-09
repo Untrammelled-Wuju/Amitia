@@ -16,17 +16,31 @@ import (
 // connection registries. Installation state remains owned by MCPLifecycle;
 // this bridge owns the real transport handshake and tools/list discovery.
 type mcpAcquisitionRuntime struct {
-	stdio  *kernelmcp.CanonicalStdioRegistry
-	remote *kernelmcp.CanonicalRemoteRegistry
+	stdio     *kernelmcp.CanonicalStdioRegistry
+	remote    *kernelmcp.CanonicalRemoteRegistry
+	canonical func() *MCPCompatibilityRuntime
 }
 
-func newMCPAcquisitionRuntime(stdio *kernelmcp.CanonicalStdioRegistry, remote *kernelmcp.CanonicalRemoteRegistry) acquisition.MCPRuntimeConnectPort {
-	return &mcpAcquisitionRuntime{stdio: stdio, remote: remote}
+func newMCPAcquisitionRuntime(stdio *kernelmcp.CanonicalStdioRegistry, remote *kernelmcp.CanonicalRemoteRegistry, canonical ...func() *MCPCompatibilityRuntime) acquisition.MCPRuntimeConnectPort {
+	runtime := &mcpAcquisitionRuntime{stdio: stdio, remote: remote}
+	if len(canonical) > 0 {
+		runtime.canonical = canonical[0]
+	}
+	return runtime
 }
 
 func (r *mcpAcquisitionRuntime) ConnectAndDiscover(ctx context.Context, req acquisition.MCPRuntimeConnectRequest) ([]capability.MCPToolDescriptor, error) {
 	if req.ServerID == "" {
 		return nil, fmt.Errorf("MCP runtime: serverId is required")
+	}
+	if r.canonical != nil {
+		runtime := r.canonical()
+		if runtime == nil || runtime.Connections == nil {
+			return nil, fmt.Errorf("canonical MCP connection manager is unavailable")
+		}
+		if err := runtime.Connections.Connect(ctx, req.ServerID); err != nil {
+			return nil, err
+		}
 	}
 
 	var tools []discovery.Tool
@@ -100,6 +114,11 @@ func (r *mcpAcquisitionRuntime) ConnectAndDiscover(ctx context.Context, req acqu
 
 func (r *mcpAcquisitionRuntime) Disconnect(ctx context.Context, serverID string) error {
 	var firstErr error
+	if r.canonical != nil {
+		if runtime := r.canonical(); runtime != nil && runtime.Connections != nil {
+			firstErr = runtime.Connections.Disconnect(ctx, serverID)
+		}
+	}
 	if r.stdio != nil {
 		if err := r.stdio.Close(ctx, serverID); err != nil {
 			firstErr = err

@@ -87,6 +87,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/uiagent"
 	"github.com/u-ai/backend/internal/uiagent/preview"
@@ -98,6 +99,7 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type ContainerBuilder struct {
@@ -133,8 +135,12 @@ type ContainerBuilder struct {
 	runtimeProfile               runtimeprofile.Profile
 	runtimePolicy                runtimeprofile.Policy
 
-	mcpRepository         *mcp.Repository
-	mcpRuntimeConnectPort acquisition.MCPRuntimeConnectPort
+	mcpRepository          *mcp.Repository
+	mcpRuntimeConnectPort  acquisition.MCPRuntimeConnectPort
+	mcpPersistence         acquisition.MCPPersistencePort
+	mcpExisting            acquisition.MCPExistingConnectPort
+	acquisitionSkillPort   acquisition.SkillInstallPort
+	acquisitionSkillSource acquisition.Source
 
 	meshHub                  *server.ConnectionHub
 	pendingInvocationManager *capability.PendingInvocationManager
@@ -384,6 +390,22 @@ func (b *ContainerBuilder) WithMCPRepository(repo *mcp.Repository) *ContainerBui
 
 func (b *ContainerBuilder) WithMCPRuntimeConnectPort(port acquisition.MCPRuntimeConnectPort) *ContainerBuilder {
 	b.mcpRuntimeConnectPort = port
+	return b
+}
+
+func (b *ContainerBuilder) WithAcquisitionSkills(port acquisition.SkillInstallPort, source acquisition.Source) *ContainerBuilder {
+	b.acquisitionSkillPort = port
+	b.acquisitionSkillSource = source
+	return b
+}
+
+func (b *ContainerBuilder) WithMCPAcquisitionPersistence(port acquisition.MCPPersistencePort) *ContainerBuilder {
+	b.mcpPersistence = port
+	return b
+}
+
+func (b *ContainerBuilder) WithMCPExistingConnector(port acquisition.MCPExistingConnectPort) *ContainerBuilder {
+	b.mcpExisting = port
 	return b
 }
 
@@ -1172,6 +1194,20 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	acquisitionSourceRegistry := acquisition.NewSourceRegistry()
+	acquisitionSourceRegistry.Register(acquisition.NewExplicitSource())
+	acquisitionSourceRegistry.Register(acquisition.NewPublicMCPSource("https://registry.modelcontextprotocol.io/v0.1/servers"))
+	acquisitionSourceRegistry.Register(acquisition.NewPublicSkillSource())
+	acquisitionSourceRegistry.Register(acquisition.NewPublicPackageSource())
+	localSkillRoots := []string{filepath.Join(util.RuntimeRoot(), "skills"), filepath.Join(b.extRoot, "skills")}
+	if roots := os.Getenv("AMITIA_SKILL_DIRS"); roots != "" {
+		localSkillRoots = append(localSkillRoots, filepath.SplitList(roots)...)
+	}
+	acquisitionSourceRegistry.Register(acquisition.NewLocalSkillSource(localSkillRoots...))
+	localPackageRoots := []string{filepath.Join(util.RuntimeRoot(), "plugin"), filepath.Join(filepath.Dir(util.RuntimeRoot()), "plugin")}
+	if roots := os.Getenv("AMITIA_PACKAGE_DIRS"); roots != "" {
+		localPackageRoots = append(localPackageRoots, filepath.SplitList(roots)...)
+	}
+	acquisitionSourceRegistry.Register(acquisition.NewLocalPackageSource(localPackageRoots...))
 
 	var builtContainer *Container
 	canonicalPackageInstaller := newAcquisitionPackageInstaller(func() *Container { return builtContainer })
@@ -1179,8 +1215,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	acquisitionSourceRegistry.Register(acquisition.NewInstalledSource(capabilityService, capabilityProviderRegistry))
 	acquisitionSourceRegistry.Register(acquisition.NewAgentSkillSource(agentSkillCatalog))
 	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
-	remoteSkillCatalog := acquisition.NewRemoteSkillCatalog("https://amitia.untrammelled.top/api/skills")
-	acquisitionSourceRegistry.Register(acquisition.NewNewSkillSource(remoteSkillCatalog))
+	if uri := os.Getenv("AMITIA_SKILL_CATALOG_URL"); uri != "" {
+		acquisitionSourceRegistry.Register(acquisition.NewNewSkillSource(acquisition.NewRemoteSkillCatalog(uri)))
+	}
+	if b.acquisitionSkillSource != nil {
+		acquisitionSourceRegistry.Register(b.acquisitionSkillSource)
+	}
 
 	extensionCenterService := extension_center.NewCenterService(extension_center.NewKernelCardProvider(defRepo, instRepo))
 	acquisitionSourceRegistry.Register(acquisition.NewExtensionCatalogSource(extensionCenterService))
@@ -1189,11 +1229,19 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		mcpAdapter := acquisition.NewMCPRepositoryAdapter(b.mcpRepository)
 		acquisitionSourceRegistry.Register(acquisition.NewMCPPackageSource(mcpAdapter))
 	}
-	acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource("https://amitia.untrammelled.top/api/catalog"))
-	acquisitionSourceRegistry.Register(acquisition.NewRemoteMCPCatalogSource("https://amitia.untrammelled.top/api/mcp"))
+	if uri := os.Getenv("AMITIA_EXTENSION_CATALOG_URL"); uri != "" {
+		acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource(uri))
+	}
+	if uri := os.Getenv("AMITIA_MCP_CATALOG_URL"); uri != "" {
+		acquisitionSourceRegistry.Register(acquisition.NewRemoteMCPCatalogSource(uri))
+	}
 
 	mcpProvisioner := kernelmcpinstaller.NewDefaultProvisioner()
-	mcpInstaller := kernelmcpinstaller.NewDefaultInstaller()
+	mcpCommandResolver, err := commandenv.NewResolver(commandenv.ResolveContext{NodeResolver: nodeResolver})
+	if err != nil {
+		return nil, err
+	}
+	mcpInstaller := kernelmcpinstaller.NewDefaultInstaller(mcpCommandResolver)
 	mcpLifecycle := kernelmcp.NewMCPLifecycle(mcpProvisioner, mcpInstaller)
 	workshopPort := acquisition.NewDefaultWorkshop()
 
@@ -1205,11 +1253,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	mcpToolSync := NewAcquisitionMCPToolSync(toolRegistry)
 	if b.mcpRuntimeConnectPort != nil {
-		mcpInstallPort = acquisition.NewMCPPortBridgeWithRuntime(mcpLifecycle, b.mcpRuntimeConnectPort, mcpToolSync)
+		mcpInstallPort = acquisition.NewPersistentMCPPortBridge(mcpLifecycle, b.mcpRuntimeConnectPort, mcpToolSync, b.mcpPersistence)
+	}
+	skillInstallPort := b.acquisitionSkillPort
+	if skillInstallPort == nil {
+		skillInstallPort = acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog))
 	}
 
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridgeWithDeps(acquisition.EnableExistingDeps{
+			MCPExisting:        b.mcpExisting,
 			EnablementSvc:      enablementService,
 			InstallRepo:        instRepo,
 			DefinitionRepo:     defRepo,
@@ -1221,7 +1274,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		}),
 		PackageInstallPort: acquisition.NewPackagePortBridgeWithCanonicalResolver(lifecycleMgr, packageArtifactStoreAdapter, packageRepoAdapter, canonicalPackageInstaller),
 		MCPInstallPort:     mcpInstallPort,
-		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
+		SkillInstallPort:   skillInstallPort,
 		WorkshopPort:       workshopPort,
 	})
 	if err != nil {
@@ -1426,6 +1479,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	if err := registerAndroidNativeToolsIfPresent(ctx, toolRegistry, b.androidNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register android native tools: %w", err)
+	}
+	if taskRuntimeService != nil && b.taskOwnershipBinding != nil {
+		bridge := &sourceTaskHostBridge{pipeline: executionKernel, tools: toolRegistry, events: eventBridge, owner: b.taskOwnershipBinding, providers: capabilityProviderRegistry}
+		var publish func(context.Context, *task_runtime.TaskRun, *task_runtime.TaskDefinition, string, task_runtime.TaskHostNativeCall) (json.RawMessage, error)
+		if eventBridge != nil {
+			publish = bridge.publish
+		}
+		if err := taskRuntimeService.BindNativeHost(b.taskOwnershipBinding, bridge, task_runtime.NewSourceTaskHostPermissionGuard(permBroker, bridge.toolRequirements), publish); err != nil {
+			return nil, fmt.Errorf("kernel: bind scoped task native host: %w", err)
+		}
 	}
 	if err := registerAndroidUIAgentTool(ctx, toolRegistry); err != nil {
 		return nil, fmt.Errorf("kernel: register android ui agent tool: %w", err)

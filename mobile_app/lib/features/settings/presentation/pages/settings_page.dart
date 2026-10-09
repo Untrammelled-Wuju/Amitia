@@ -7,6 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/profile_avatar.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/settings/appearance_preferences.dart';
@@ -22,7 +23,11 @@ class SettingsCategoryPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final categories = buildSettingsCategories(modelSummary: '', appearanceSummary: '');
+    final categories = buildSettingsCategories(
+      modelSummary: '',
+      appearanceSummary: '',
+      isDeveloperMode: ref.watch(isDeveloperModeProvider),
+    );
     final group = categories.where((category) => category.id == categoryId).firstOrNull?.group ?? categories.first.group;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -70,6 +75,7 @@ class SettingsPage extends ConsumerWidget {
     final categories = buildSettingsCategories(
       modelSummary: modelSummary,
       appearanceSummary: appearanceSummary,
+      isDeveloperMode: ref.watch(isDeveloperModeProvider),
     );
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
