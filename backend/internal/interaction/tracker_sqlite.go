@@ -142,9 +142,10 @@ func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string
 	}
 	if update.RecoveryDescriptor != nil {
 		data, err := update.RecoveryDescriptor.NormalizeOnSerialize()
-		if err == nil {
-			updates["recovery_descriptor_json"] = string(data)
+		if err != nil {
+			return nil, err
 		}
+		updates["recovery_descriptor_json"] = string(data)
 	}
 	if update.CommitToken != nil {
 		updates["commit_token"] = *update.CommitToken

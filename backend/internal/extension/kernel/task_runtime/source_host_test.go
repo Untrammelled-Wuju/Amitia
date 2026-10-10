@@ -69,3 +69,39 @@ func TestSourceTaskNativeGuardChecksActualPermissionInputAndTargetEachTime(t *te
 		t.Fatal("fixture lost owner scope")
 	}
 }
+
+func TestSourceTaskNativeGuardRetainsDeclaredConditionsAndScope(t *testing.T) {
+	ctx, run, definition, _ := sourcePermissionFixture(t)
+	condition := json.RawMessage(`[{"field":"path","operator":"eq","value":"allowed"}]`)
+	definition.PermissionRequirementStrings = []string{"service.tool.execute"}
+	definition.PermissionRequirements = []permission.PermissionRequirement{{PermissionID: "native.file.read", Scope: permission.ScopeForExtension(definition.ExtensionID), Conditions: condition}}
+	calls := 0
+	guard := NewSourceTaskHostPermissionGuard(taskPermissionEvaluatorFunc(func(_ context.Context, request permission.PermissionEvaluationRequest) permission.PermissionEvaluationResult {
+		calls++
+		found := false
+		for _, requirement := range request.Requirements {
+			if string(requirement.Conditions) == string(condition) && requirement.Scope == definition.PermissionRequirements[0].Scope && !requirement.Optional {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("original task condition or scope discarded")
+		}
+		return permission.PermissionEvaluationResult{Decision: permission.DecisionAllowPersistent}
+	}), func(context.Context, string) ([]permission.PermissionRequirement, error) {
+		return []permission.PermissionRequirement{{PermissionID: "native.file.read"}}, nil
+	})
+	call := TaskHostNativeCall{TaskRunID: run.TaskRunID, ToolID: "native.read", Input: json.RawMessage(`{"path":"allowed"}`)}
+	if err := guard(ctx, run, definition, "task.host.executeTool", call); err != nil {
+		t.Fatal(err)
+	}
+	call.Input = json.RawMessage(`{"path":"private"}`)
+	if err := guard(ctx, run, definition, "task.host.executeTool", call); err == nil || calls != 1 {
+		t.Fatal("persistent approval bypassed declared input condition")
+	}
+	definition.PermissionRequirements[0].Conditions = json.RawMessage(`{"paths":["allowed"]}`)
+	call.Input = json.RawMessage(`{"path":"allowed"}`)
+	if err := guard(ctx, run, definition, "task.host.executeTool", call); err == nil || calls != 1 {
+		t.Fatal("unsupported permission condition was silently ignored")
+	}
+}

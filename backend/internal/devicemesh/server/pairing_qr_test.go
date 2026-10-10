@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/devicemesh/pairing"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
@@ -28,6 +29,9 @@ func TestPairingOfferReturnsCanonicalCodeAndPngWithoutCaching(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(meshaudit.Schema); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT NOT NULL,platform TEXT NOT NULL DEFAULT '',label TEXT NOT NULL DEFAULT '',trust_state TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,trusted_at TEXT,last_seen_at TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1)`); err != nil {
 		t.Fatal(err)
 	}

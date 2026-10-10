@@ -22,6 +22,13 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     private var foreground = true
     private var stopReason: String?
     private var sink: FlutterEventSink?
+    private var verifiedPayloadID: String?
+    private var hasMountedKernel = false
+    private var upgradeCompletion: ((Any?) -> Void)?
+    private var expectedIdentity: [String: String]?
+    private var probeInFlight = false
+    private var probeTask: URLSessionDataTask?
+    private var hostRestartRequired = false
 
     init(resolver: RootfsResolver, installer: RootfsInstaller, identity: IOSDeviceMeshIdentity) {
         self.resolver = resolver
@@ -54,6 +61,13 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     func suspend() { queue.sync { foreground = false; stop(reason: "应用进入后台，运行中的任务已中断，请确认结果后再恢复") } }
     func resume() { queue.async { self.foreground = true; self.generation += 1; self.emit() } }
     func terminate() { suspend() }
+    func invalidateIdentity() {
+        queue.sync {
+            stop(reason: nil)
+            hostRestartRequired = true
+            fail("RESTART_REQUIRED", "设备身份已重置，已中断旧 Core。请关闭并重新打开应用后继续配对。")
+        }
+    }
 
     private func snapshot() -> [String: Any] {
         let installed = resolver.resolveCurrentRootfs() != nil
@@ -66,7 +80,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     private func manifest() -> [String: Any]? {
         guard let root = resolver.resolveCurrentRootfs() else { return nil }
         return ["schemaVersion": 1, "runtimeVersion": root.version, "packageId": "amitia-ios-runtime",
-                "targetPlatform": "ios", "targetArch": "arm64", "verified": (try? verifyPayload(root)) != nil]
+                "targetPlatform": "ios", "targetArch": "arm64", "verified": verifiedPayloadID == payloadID(root)]
     }
 
     private func emit() {
@@ -82,7 +96,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         case "runtime.stop": stop(reason: nil); completion(["accepted": true, "snapshot": snapshot()])
         case "runtime.start", "runtime.startWithProfile":
             let requested = args["profile"] as? String ?? "local"
-            guard foreground, requested == "local" || requested == "device-agent", process == nil,
+            guard foreground, !hostRestartRequired, requested == "local" || requested == "device-agent", process == nil,
                   state != "INSTALLING" else {
                 completion(["accepted": false, "snapshot": snapshot()]); return
             }
@@ -93,8 +107,14 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         case "runtime.verify":
             var nativeError: NSError?
             let verified = resolver.resolveCurrentRootfs().map { installer.verifyInstalledRootfs($0, error: &nativeError) && (try? verifyPayload($0)) != nil } ?? false
-            if !verified { fail("VERIFY_FAILED", "iOS Runtime 校验失败") }
-            completion(["accepted": verified, "snapshot": snapshot()])
+            if verified, let root = resolver.resolveCurrentRootfs() { verifiedPayloadID = payloadID(root) }
+            else { verifiedPayloadID = nil }
+            if !verified {
+                stop(reason: nil)
+                hostRestartRequired = true
+                fail("VERIFY_FAILED", "iOS Runtime 校验失败，已停止当前 Core。请关闭并重新打开应用后修复 Runtime。", retryable: false)
+            }
+            completion(["accepted": verified, "snapshot": snapshot(), "error": error as Any? ?? NSNull()])
         case "runtime.getBackendConnection":
             guard state == "READY", let token, process != nil,
                   args["expectedRuntimeGeneration"] == nil || (args["expectedRuntimeGeneration"] as? Int) == generation else {
@@ -109,7 +129,8 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     }
 
     private func install(completion: @escaping (Any?) -> Void) {
-        guard process == nil, state != "INSTALLING" else { completion(["accepted": false, "snapshot": snapshot()]); return }
+        if hostRestartRequired { requireHostRestart(completion); return }
+        guard state != "INSTALLING", upgradeCompletion == nil else { completion(["accepted": false, "snapshot": snapshot()]); return }
         do {
             guard let releaseURL = Bundle.main.url(forResource: "rootfs-release", withExtension: "json"),
                   let release = try JSONSerialization.jsonObject(with: Data(contentsOf: releaseURL)) as? [String: Any],
@@ -119,19 +140,36 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                   let asset = release["asset"] as? String, asset == "alpine-rootfs.zip",
                   let bundle = Bundle.main.url(forResource: "alpine-rootfs", withExtension: "zip") else { throw unavailable() }
             if let installed = resolver.resolveCurrentRootfs(), installed.version == version,
-               installed.packageDigestSHA256 == hash, installed.verifyISHFakeFSLayout() {
-                state = "INSTALLED"; error = nil; emit(); completion(["accepted": true, "snapshot": snapshot()]); return
+               installed.packageDigestSHA256 == hash, installed.verifyISHFakeFSLayout(),
+               verifiedPayloadID == payloadID(installed) || !hasMountedKernel && !AmitiaISHRuntime.shared().rootMounted && (try? verifyPayload(installed)) != nil {
+                verifiedPayloadID = payloadID(installed)
+                if process == nil { state = "INSTALLED"; error = nil; emit() }
+                completion(["accepted": true, "snapshot": snapshot()]); return
             }
+            if hasMountedKernel || AmitiaISHRuntime.shared().rootMounted {
+                if process != nil {
+                    upgradeCompletion = completion
+                    stop(reason: "Runtime 更新已中断当前操作，请关闭并重新打开应用后继续")
+                } else { requireHostRestart(completion) }
+                return
+            }
+            guard process == nil, state != "STOPPING" else { completion(["accepted": false, "snapshot": snapshot()]); return }
+            verifiedPayloadID = nil
             state = "INSTALLING"; generation += 1; error = nil; emit()
             let request = RootfsInstallRequest()
             request.version = version; request.architecture = "aarch64"; request.expectedDigestSHA256 = hash
             request.localBundleURL = bundle; request.packageFormat = "ish_fakefs"
+            request.forceReplace = true
+            request.requireBusinessPrograms = true
             installer.installRootfs(withRequest: request, progress: nil) { [weak self] success, _, nativeError in
                 guard let self else { return }
                 self.queue.async {
-                    if success { self.state = "INSTALLED"; self.error = nil; self.emit() }
+                    if success, let root = self.resolver.resolveCurrentRootfs(), (try? self.verifyPayload(root)) != nil {
+                        self.verifiedPayloadID = self.payloadID(root)
+                        self.state = "INSTALLED"; self.error = nil; self.emit()
+                    }
                     else { self.fail("INSTALL_FAILED", nativeError?.localizedDescription ?? "iOS Runtime 安装失败") }
-                    completion(["accepted": success, "snapshot": self.snapshot()])
+                    completion(["accepted": self.state == "INSTALLED", "snapshot": self.snapshot(), "error": self.error as Any? ?? NSNull()])
                 }
             }
         } catch { fail("SOURCE_UNAVAILABLE", "当前安装包缺少有效的 iOS Runtime，请使用包含 Runtime 的安装包"); completion(["accepted": false, "snapshot": snapshot()]) }
@@ -141,8 +179,12 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         do {
             guard let root = resolver.resolveCurrentRootfs(), root.architecture == "aarch64", root.verifyISHFakeFSLayout() else { throw unavailable() }
             try verifyPayload(root)
+            verifiedPayloadID = payloadID(root)
             let hostIdentity = try identity.hostIdentity()
-            guard let installation = hostIdentity["installGeneration"] as? String else { throw unavailable() }
+            guard let installation = hostIdentity["installGeneration"] as? String,
+                  let deviceId = hostIdentity["deviceId"] as? String,
+                  let runtimeId = hostIdentity["runtimeId"] as? String,
+                  let publicKey = hostIdentity["publicKey"] as? String else { throw unavailable() }
             var volume = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("AmitiaRuntimeData", isDirectory: true)
                 .appendingPathComponent(installation, isDirectory: true)
@@ -178,9 +220,11 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
             config.environment = ["AMITIA_IOS_PERSISTENT_DATA_HOST": volume.path]
             var nativeError: NSError?
             guard IOSSandboxBridge.shared().start(withConfig: config, error: &nativeError) else { throw nativeError ?? unavailable() }
+            hasMountedKernel = true
             let child = IOSBusinessRuntimeProcess()
             guard child.spawn(["/opt/amitia/core/AmitiaCore"], environment: env, error: &nativeError) else { throw nativeError ?? unavailable() }
             process = child; profile = requested; token = localToken; state = "STARTING"; error = nil; startedAt = Date()
+            expectedIdentity = ["deviceId": deviceId, "runtimeId": runtimeId, "publicKey": publicKey, "platform": "ios"]
             let lease = IOSHostBridgeLease()
             hostLease = lease
             host = IOSHostBridgeEndpoint(identity: identity, generation: bridgeGeneration, descriptor: Int32(child.hostBridgeDescriptor), isCurrent: lease.isValid)
@@ -191,7 +235,14 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
             monitor.schedule(deadline: .now(), repeating: .seconds(1))
             monitor.setEventHandler { [weak self] in self?.check(current, child: child) }
             timer = monitor; monitor.resume(); emit()
-        } catch { stop(reason: nil); fail("START_FAILED", "iOS Runtime 启动失败，请检查 Runtime 安装与宿主通道") }
+        } catch {
+            stop(reason: nil)
+            let nativeError = error as NSError
+            if nativeError.domain == kAmitiaISHRuntimeErrorDomain,
+               AmitiaISHRuntime.errorCode(for: nativeError) == "LEGACY_DATA_REQUIRES_MIGRATION" {
+                fail("LEGACY_DATA_REQUIRES_MIGRATION", "检测到旧设备业务数据，请先完成安全迁移；未修改旧数据。", retryable: false)
+            } else { fail("START_FAILED", "iOS Runtime 启动失败，请检查 Runtime 安装与宿主通道") }
+        }
     }
 
     private func check(_ current: Int, child: IOSBusinessRuntimeProcess) {
@@ -199,24 +250,55 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         var nativeError: NSError?
         guard child.isRunning(&nativeError) else { stop(reason: nil); fail("CORE_EXITED", "iOS Core 已退出，当前操作状态需要重新确认"); return }
         if state == "STARTING" && Date().timeIntervalSince(startedAt) > 60 { stop(reason: nil); fail("READINESS_TIMEOUT", "iOS Core 启动超时"); return }
+        guard !probeInFlight else { return }
+        probeInFlight = true
         var request = URLRequest(url: URL(string: "http://127.0.0.1:18899/readyz")!)
         request.timeoutInterval = 2
         request.setValue(token, forHTTPHeaderField: "X-Amitia-Local-Token")
-        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+        let task = URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
             guard let self else { return }
             self.queue.async {
                 guard current == self.generation, self.process === child, self.foreground else { return }
                 if (response as? HTTPURLResponse)?.statusCode == 200 {
-                    if self.state != "READY" { self.state = "READY"; self.emit() }
-                } else if self.state == "READY" { self.state = "STARTING"; self.startedAt = Date(); self.emit() }
+                    self.verifyRunningIdentity(current, child: child)
+                } else {
+                    self.probeInFlight = false; self.probeTask = nil
+                    if self.state == "READY" { self.state = "STARTING"; self.startedAt = Date(); self.emit() }
+                }
             }
-        }.resume()
+        }
+        probeTask = task
+        task.resume()
+    }
+
+    private func verifyRunningIdentity(_ current: Int, child: IOSBusinessRuntimeProcess) {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:18899/internal/device-mesh/identity")!)
+        request.timeoutInterval = 2
+        request.setValue(token, forHTTPHeaderField: "X-Amitia-Local-Token")
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+            guard let self else { return }
+            self.queue.async {
+                guard current == self.generation, self.process === child, self.foreground else { return }
+                self.probeInFlight = false; self.probeTask = nil
+                guard (response as? HTTPURLResponse)?.statusCode == 200, let data, data.count <= 65536,
+                      let actual = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let expected = self.expectedIdentity,
+                      expected.allSatisfy({ actual[$0.key] as? String == $0.value }) else {
+                    if self.state == "READY" { self.stop(reason: nil); self.fail("IDENTITY_UNAVAILABLE", "当前 Core 的宿主身份未通过验证，已中断服务") }
+                    return
+                }
+                if self.state != "READY" { self.state = "READY"; self.emit() }
+            }
+        }
+        probeTask = task
+        task.resume()
     }
 
     private func stop(reason: String?) {
         if state == "STOPPING" { return }
         stopReason = reason
         generation += 1; state = "STOPPING"; token = nil; emit()
+        probeTask?.cancel(); probeTask = nil; probeInFlight = false; expectedIdentity = nil
         timer?.cancel(); timer = nil; hostLease?.invalidate(); hostLease = nil; host?.stop(); host = nil
         if let child = process {
             var nativeError: NSError?
@@ -234,43 +316,88 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
             if process === child { process = nil; finishStop() }
             return
         }
-        if attempts >= 100 { fail("STOP_TIMEOUT", "iOS Core 未完成退出，不能启动另一代进程"); return }
+        if attempts >= 100 {
+            fail("STOP_TIMEOUT", "iOS Core 未完成退出，不能启动另一代进程")
+            if let completion = upgradeCompletion {
+                upgradeCompletion = nil
+                completion(["accepted": false, "snapshot": snapshot(), "error": error!])
+            }
+            return
+        }
         queue.asyncAfter(deadline: .now() + .milliseconds(50)) { self.reapLater(child, attempts: attempts + 1) }
     }
 
-    private func fail(_ code: String, _ message: String) { state = "FAILED"; error = ["code": code, "message": message, "retryable": true]; emit() }
+    private func fail(_ code: String, _ message: String, retryable: Bool = true) { state = "FAILED"; error = ["code": code, "message": message, "retryable": retryable]; emit() }
     private func finishStop() {
         profile = nil
+        if let completion = upgradeCompletion {
+            upgradeCompletion = nil
+            requireHostRestart(completion)
+            return
+        }
         if state == "FAILED" { emit(); return }
         state = resolver.resolveCurrentRootfs() == nil ? "NOT_INSTALLED" : "STOPPED"
         error = stopReason.map { ["code": "BACKGROUND_INTERRUPTED", "message": $0, "retryable": true] }
         emit()
     }
 
+    private func requireHostRestart(_ completion: (Any?) -> Void) {
+        hostRestartRequired = true
+        state = "FAILED"
+        error = ["code": "RESTART_REQUIRED", "message": "Runtime 程序发生更新或需要修复，已停止当前 Core。请关闭并重新打开应用后安装更新；设备聊天和记忆保留在独立数据卷中。", "retryable": false]
+        emit()
+        completion(["accepted": false, "snapshot": snapshot(), "error": error!])
+    }
+
+    private func payloadID(_ root: RootfsDescriptor) -> String { root.rootfsURL.path + "\n" + (root.packageDigestSHA256 ?? "") }
+
     private func verifyPayload(_ root: RootfsDescriptor) throws {
         guard root.architecture == "aarch64", root.verifyISHFakeFSLayout(),
               let path = root.manifestPath,
               let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: Any],
-              manifest["guestArch"] as? String == "arm64" else { throw unavailable() }
+              manifest["guestArch"] as? String == "arm64",
+              let releaseURL = Bundle.main.url(forResource: "rootfs-release", withExtension: "json"),
+              let release = try JSONSerialization.jsonObject(with: Data(contentsOf: releaseURL)) as? [String: Any],
+              root.packageDigestSHA256 == release["sha256"] as? String else { throw unavailable() }
+        for key in ["core", "node", "qdrant", "runtimeInputs", "runtimeLibraries", "sourceManifest"] {
+            guard let actual = manifest[key], let expected = release[key],
+                  try JSONSerialization.data(withJSONObject: actual, options: [.sortedKeys, .fragmentsAllowed]) == JSONSerialization.data(withJSONObject: expected, options: [.sortedKeys, .fragmentsAllowed]) else { throw unavailable() }
+        }
+        let dataRoot = root.rootfsURL.appendingPathComponent("data").resolvingSymlinksInPath()
         for (name, required) in [("core", "/opt/amitia/core/AmitiaCore"), ("node", "/opt/amitia/node/bin/node"), ("qdrant", "/opt/amitia/qdrant/qdrant")] {
             guard let entry = manifest[name] as? [String: Any], entry["path"] as? String == required,
                   let digest = entry["sha256"] as? String, digest.count == 64,
                   let expectedSize = entry["size"] as? Int, expectedSize > 0, expectedSize <= 268435456 else { throw unavailable() }
-            let dataRoot = root.rootfsURL.appendingPathComponent("data").resolvingSymlinksInPath()
             let file = dataRoot.appendingPathComponent(String(required.dropFirst()))
-            guard file.resolvingSymlinksInPath().path == file.path else { throw unavailable() }
-            let handle = try FileHandle(forReadingFrom: file)
-            defer { try? handle.close() }
-            var hash = SHA256()
-            var count = 0
-            while let bytes = try handle.read(upToCount: 1048576), !bytes.isEmpty {
-                count += bytes.count
-                guard count <= expectedSize else { throw unavailable() }
-                hash.update(data: bytes)
-            }
-            guard count == expectedSize,
-                  hash.finalize().map({ String(format: "%02x", $0) }).joined() == digest else { throw unavailable() }
+            try verifyStoredFile(file, digest: digest, size: expectedSize)
         }
+        guard let source = manifest["sourceManifest"] as? [String: Any], source["file"] as? String == "core-source-inputs.json",
+              let sourceDigest = source["sha256"] as? String, let sourceSize = source["size"] as? Int,
+              let libraries = manifest["runtimeLibraries"] as? [[String: Any]], !libraries.isEmpty, libraries.count <= 512 else { throw unavailable() }
+        try verifyStoredFile(root.rootfsURL.appendingPathComponent("core-source-inputs.json"), digest: sourceDigest, size: sourceSize)
+        var paths = Set<String>()
+        for library in libraries {
+            guard let path = library["hostStoredPath"] as? String,
+                  path.hasPrefix("/lib/") || path.hasPrefix("/usr/lib/"),
+                  !path.split(separator: "/").contains(".."), !path.contains("\\"), paths.insert(path).inserted,
+                  let digest = library["hostStoredSha256"] as? String, let size = library["hostStoredSize"] as? Int else { throw unavailable() }
+            try verifyStoredFile(dataRoot.appendingPathComponent(String(path.dropFirst())), digest: digest, size: size)
+        }
+    }
+    private func verifyStoredFile(_ file: URL, digest: String, size: Int) throws {
+        guard digest.count == 64, digest.allSatisfy({ "0123456789abcdef".contains($0) }), size > 0, size <= 268435456,
+              file.resolvingSymlinksInPath().path == file.path,
+              try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { throw unavailable() }
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hash = SHA256()
+        var count = 0
+        while let bytes = try handle.read(upToCount: 1048576), !bytes.isEmpty {
+            count += bytes.count
+            guard count <= size else { throw unavailable() }
+            hash.update(data: bytes)
+        }
+        guard count == size, hash.finalize().map({ String(format: "%02x", $0) }).joined() == digest else { throw unavailable() }
     }
     private func unavailable() -> NSError { NSError(domain: "IOSRuntimeBridge", code: 1) }
 }

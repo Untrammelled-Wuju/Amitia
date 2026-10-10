@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/lan"
 	"github.com/u-ai/backend/internal/devicemesh/proof"
@@ -87,7 +88,7 @@ func TestSuccessorUsesIndependentIdentityAndResumesCandidateWithoutCredentialRep
 		}
 		db.SetMaxOpenConns(1)
 		t.Cleanup(func() { _ = db.Close() })
-		for _, schema := range []string{`CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT NOT NULL,trust_state TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)`, coordination.PolicySchema, coordination.ProviderSchema, coordination.ResourceSchema, coordination.InboxSchema, coordination.RemoteAuthoritySchema} {
+		for _, schema := range []string{`CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT NOT NULL,trust_state TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)`, coordination.PolicySchema, coordination.ProviderSchema, coordination.ResourceSchema, coordination.InboxSchema, coordination.RemoteAuthoritySchema, meshaudit.Schema} {
 			if _, err := db.ExecContext(t.Context(), schema); err != nil {
 				t.Fatal(err)
 			}
@@ -149,6 +150,12 @@ func TestSuccessorUsesIndependentIdentityAndResumesCandidateWithoutCredentialRep
 	})
 	cMux.HandleFunc("/api/public/device-mesh/v1/pairing/status", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"spaceId": "core-c", "providerPath": []string{"core-c"}})
+	})
+	cMux.HandleFunc("/api/device-mesh/v1/provider/successor", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "AmitiaDevice a-on-c" || r.Header.Get("X-Amitia-Device-Proof") == "" {
+			t.Error("candidate successor lookup lacks A independent proof")
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 	cMux.HandleFunc("/api/device-mesh/v1/pairing/successor-offers", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "AmitiaDevice b-on-c" || r.Header.Get("X-Amitia-Device-Proof") == "" {

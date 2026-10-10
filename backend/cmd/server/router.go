@@ -238,11 +238,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	}
 
 	var localMeshIdentity *devicemeshagent.LocalIdentity
+	var localCoreDeviceID runtimeidentity.DeviceID
 	if services.RuntimeProfile.IsCore() {
 		localMeshIdentity, err = devicemeshagent.NewIdentityStore(config.AppCfg.Storage.DataDir).Load()
 		if err != nil {
 			return nil, fmt.Errorf("initialize local mesh identity: %w", err)
 		}
+		localCoreDeviceID = localMeshIdentity.DeviceID
 		if services.DeviceMesh == nil || services.DeviceMesh.DeviceReg == nil {
 			return nil, fmt.Errorf("local mesh identity requires device registry")
 		}
@@ -812,6 +814,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}
 			if err := devicemeshserver.RegisterCloudRoutes(r, deviceMeshAuthMW, deviceMeshWebAccessMW, deviceMeshPublicWebAccessMW, &devicemeshserver.RouterDeps{
 				DB:                        meshSQLDB,
+				LocalCoreDeviceID:         localCoreDeviceID,
 				Sessions:                  services.DeviceMesh.GetSessions(),
 				BootstrapSvc:              services.DeviceMesh.BootstrapSvc,
 				CredentialSvc:             services.DeviceMesh.CredentialSvc,

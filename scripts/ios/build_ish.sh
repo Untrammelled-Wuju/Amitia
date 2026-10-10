@@ -51,7 +51,9 @@ cpu = 'aarch64'
 endian = 'little'
 CROSS
 
-meson setup "$BUILD_DIR" \
+SETUP_ARGS=()
+if [ -f "$BUILD_DIR/meson-private/coredata.dat" ]; then SETUP_ARGS+=(--reconfigure); fi
+meson setup "${SETUP_ARGS[@]}" "$BUILD_DIR" \
     --wrap-mode=nodownload \
     --cross-file "$CROSS_FILE" \
     --buildtype=release \

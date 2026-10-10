@@ -1484,6 +1484,14 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   Offset? _voiceStart;
   _VoiceGestureIntent _voiceIntent = _VoiceGestureIntent.send;
   final List<String> _selectedSkillNames = <String>[];
+  final ScrollController _slashMenuScrollController = ScrollController();
+  List<Map<String, dynamic>> _agentSkills = const <Map<String, dynamic>>[];
+  bool _skillsLoading = false;
+  bool _skillsLoaded = false;
+  bool _slashMenuOpen = false;
+  String _slashQuery = '';
+  TextRange? _slashRange;
+  int _slashActiveIndex = 0;
   bool _modelMenuOpen = false;
   bool _modelMenuTriggerHovered = false;
   _ComposerModelMenuPage _modelMenuPage = _ComposerModelMenuPage.effort;
@@ -1502,9 +1510,34 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     ).toDouble();
     _controller.addListener(_syncControllerText);
     _inputFocusNode.onKeyEvent = _handleComposerKey;
+    unawaited(_loadAgentSkills());
   }
 
   KeyEventResult _handleComposerKey(FocusNode node, KeyEvent event) {
+    if (_slashMenuOpen && event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        _moveSlashSelection(1);
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        _moveSlashSelection(-1);
+        return KeyEventResult.handled;
+      }
+      if ((event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+              event.logicalKey == LogicalKeyboardKey.tab) &&
+          !HardwareKeyboard.instance.isShiftPressed &&
+          !HardwareKeyboard.instance.isControlPressed &&
+          !HardwareKeyboard.instance.isAltPressed &&
+          !HardwareKeyboard.instance.isMetaPressed) {
+        _selectActiveSlashSkill();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        _closeSlashMenu();
+        return KeyEventResult.handled;
+      }
+    }
     if (!widget.sendOnEnter ||
         (event.logicalKey != LogicalKeyboardKey.enter &&
             event.logicalKey != LogicalKeyboardKey.numpadEnter) ||
@@ -1528,6 +1561,9 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         widget.reasoningEffort,
       ).toDouble();
     }
+    if (oldWidget.onLoadAgentSkills != widget.onLoadAgentSkills) {
+      unawaited(_loadAgentSkills(force: true));
+    }
     if (oldWidget.controller == widget.controller) return;
     _controller.removeListener(_syncControllerText);
     if (_ownsController) _controller.dispose();
@@ -1535,16 +1571,172 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     _controller = widget.controller ?? TextEditingController();
     _hasText = _controller.text.trim().isNotEmpty;
     _controller.addListener(_syncControllerText);
+    _syncControllerText();
   }
 
   void _syncControllerText() {
+    if (!mounted) return;
     final hasText = _controller.text.trim().isNotEmpty;
-    if (hasText == _hasText || !mounted) return;
-    setState(() => _hasText = hasText);
+    final slashCommand = _detectSlashCommand();
+    final slashChanged =
+        (slashCommand != null) != _slashMenuOpen ||
+        (slashCommand?.query ?? '') != _slashQuery ||
+        slashCommand?.range != _slashRange;
+    if (hasText == _hasText && !slashChanged) return;
+    setState(() {
+      _hasText = hasText;
+      _slashMenuOpen = slashCommand != null;
+      _slashQuery = slashCommand?.query ?? '';
+      _slashRange = slashCommand?.range;
+      _slashActiveIndex = 0;
+    });
+    if (slashCommand != null && !_skillsLoaded) {
+      unawaited(_loadAgentSkills());
+    }
+  }
+
+  bool _skillUsable(Map<String, dynamic> skill) {
+    final enabled =
+        skill['enabled'] == true ||
+        skill['isEnabled'] == true ||
+        skill['enabled'] == 1;
+    final status =
+        (skill['compatibilityStatus'] ?? skill['compatibility'] ?? '')
+            .toString()
+            .toLowerCase();
+    return enabled && status != 'blocked';
+  }
+
+  List<Map<String, dynamic>> get _filteredSlashSkills {
+    final query = _slashQuery.trim().toLowerCase();
+    return _agentSkills
+        .where((skill) {
+          if (query.isEmpty) return true;
+          return <dynamic>[
+                skill['name'],
+                skill['displayName'],
+                skill['description'],
+                skill['shortDescription'],
+              ]
+              .where((value) => value != null)
+              .any((value) => value.toString().toLowerCase().contains(query));
+        })
+        .take(6)
+        .toList(growable: false);
+  }
+
+  Future<void> _loadAgentSkills({
+    bool force = false,
+    bool showError = false,
+  }) async {
+    final loader = widget.onLoadAgentSkills;
+    if (loader == null) {
+      if (mounted) setState(() => _skillsLoaded = true);
+      return;
+    }
+    if (_skillsLoading || (_skillsLoaded && !force)) return;
+    setState(() => _skillsLoading = true);
+    try {
+      final loaded = await loader();
+      if (!mounted) return;
+      setState(() {
+        _agentSkills = loaded
+            .map((skill) => Map<String, dynamic>.from(skill))
+            .where(_skillUsable)
+            .toList(growable: false);
+        _skillsLoaded = true;
+      });
+    } catch (error) {
+      if (showError && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载 Agent Skill 失败：$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _skillsLoading = false);
+    }
+  }
+
+  ({String query, TextRange range})? _detectSlashCommand() {
+    final value = _controller.value;
+    final selection = value.selection;
+    if (!selection.isValid ||
+        !selection.isCollapsed ||
+        selection.start < 0 ||
+        selection.start > value.text.length) {
+      return null;
+    }
+    final beforeCaret = value.text.substring(0, selection.start);
+    final match = RegExp(r'(^|\s)/([^\s/]*)$').firstMatch(beforeCaret);
+    if (match == null) return null;
+    final slashStart = match.start + (match.group(1)?.length ?? 0);
+    return (
+      query: match.group(2) ?? '',
+      range: TextRange(start: slashStart, end: selection.start),
+    );
+  }
+
+  void _moveSlashSelection(int delta) {
+    final count = _filteredSlashSkills.length;
+    if (count == 0) return;
+    final next = (_slashActiveIndex + delta) % count;
+    setState(() => _slashActiveIndex = next < 0 ? next + count : next);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_slashMenuScrollController.hasClients) return;
+      final target = (_slashActiveIndex * 58)
+          .clamp(0.0, _slashMenuScrollController.position.maxScrollExtent)
+          .toDouble();
+      _slashMenuScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _selectActiveSlashSkill() {
+    final skills = _filteredSlashSkills;
+    if (skills.isEmpty) return;
+    final index = _slashActiveIndex.clamp(0, skills.length - 1);
+    _selectSlashSkill((skills[index]['name'] ?? '').toString());
+  }
+
+  void _selectSlashSkill(String name) {
+    final range = _slashRange;
+    if (range == null || name.trim().isEmpty) return;
+    final text = _controller.text;
+    final start = range.start.clamp(0, text.length);
+    final end = range.end.clamp(start, text.length);
+    final nextText = text.substring(0, start) + text.substring(end);
+    if (!_selectedSkillNames.contains(name)) {
+      _selectedSkillNames.add(name);
+    }
+    _controller.value = TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: start),
+    );
+    _closeSlashMenu();
+    _inputFocusNode.requestFocus();
+  }
+
+  void _closeSlashMenuState() {
+    _slashMenuOpen = false;
+    _slashQuery = '';
+    _slashRange = null;
+    _slashActiveIndex = 0;
+  }
+
+  void _closeSlashMenu() {
+    if (!mounted) {
+      _closeSlashMenuState();
+      return;
+    }
+    setState(_closeSlashMenuState);
   }
 
   void _toggleVoiceMode() {
     _inputFocusNode.unfocus();
+    _closeSlashMenu();
     setState(() {
       _voiceMode = !_voiceMode;
       _voiceIntent = _VoiceGestureIntent.send;
@@ -1618,6 +1810,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   void dispose() {
     _controller.removeListener(_syncControllerText);
     _inputFocusNode.dispose();
+    _slashMenuScrollController.dispose();
     if (_ownsController) _controller.dispose();
     super.dispose();
   }
@@ -1635,6 +1828,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     setState(() {
       _hasText = false;
       _selectedSkillNames.clear();
+      _closeSlashMenuState();
     });
   }
 
@@ -1871,28 +2065,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   Future<void> _showAgentSkillPicker() async {
     final loader = widget.onLoadAgentSkills;
     if (loader == null) return;
-    List<Map<String, dynamic>> skills;
-    try {
-      skills = await loader();
-    } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('加载 Agent Skill 失败：$error')));
-      return;
-    }
+    _closeSlashMenu();
+    await _loadAgentSkills(force: true, showError: true);
     if (!mounted) return;
-    final usable = skills.where((skill) {
-      final enabled =
-          skill['enabled'] == true ||
-          skill['isEnabled'] == true ||
-          skill['enabled'] == 1;
-      final status =
-          (skill['compatibilityStatus'] ?? skill['compatibility'] ?? '')
-              .toString()
-              .toLowerCase();
-      return enabled && status != 'blocked' && status != 'incompatible';
-    }).toList();
+    final usable = _agentSkills;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -1991,6 +2167,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   void _showComposerTools() {
+    _closeSlashMenu();
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
@@ -2117,15 +2294,219 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     );
   }
 
+  Widget _buildSlashSkillMenu(BuildContext context) {
+    final skills = _filteredSlashSkills;
+    final menuWidth = math.min(MediaQuery.sizeOf(context).width - 20, 420.0);
+    return TapRegion(
+      groupId: 'chat-composer',
+      child: SizedBox(
+        width: menuWidth,
+        child: Material(
+          key: const ValueKey('composer-slash-skill-menu'),
+          color: context.surfacePrimary,
+          elevation: 0,
+          borderRadius: AppRadius.brLarge,
+          child: Container(
+            decoration: BoxDecoration(
+              color: context.surfacePrimary,
+              borderRadius: AppRadius.brLarge,
+              border: Border.all(color: context.borderPrimary, width: 0.8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                    alpha: Theme.of(context).brightness == Brightness.dark
+                        ? 0.24
+                        : 0.09,
+                  ),
+                  blurRadius: 18,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: AppRadius.brLarge,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '使用技能',
+                            style: AppTypography.label(
+                              context,
+                            ).copyWith(color: context.textPrimary),
+                          ),
+                        ),
+                        Text(
+                          '/$_slashQuery',
+                          style: AppTypography.caption(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: context.borderSecondary),
+                  if (_skillsLoading && skills.isEmpty)
+                    SizedBox(
+                      height: 78,
+                      child: Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              '正在加载技能...',
+                              style: AppTypography.caption(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (skills.isEmpty)
+                    SizedBox(
+                      height: 78,
+                      child: Center(
+                        child: Text(
+                          _agentSkills.isEmpty ? '暂无技能' : '没有匹配的技能',
+                          style: AppTypography.caption(context),
+                        ),
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: math.min(skills.length, 6) * 58,
+                      ),
+                      child: ListView.builder(
+                        controller: _slashMenuScrollController,
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemExtent: 58,
+                        itemCount: skills.length,
+                        itemBuilder: (context, index) {
+                          final skill = skills[index];
+                          final name = (skill['name'] ?? '').toString();
+                          final displayName = (skill['displayName'] ?? name)
+                              .toString();
+                          final description =
+                              (skill['shortDescription'] ??
+                                      skill['description'] ??
+                                      '')
+                                  .toString();
+                          final selected = _selectedSkillNames.contains(name);
+                          final active = index == _slashActiveIndex;
+                          return Semantics(
+                            key: ValueKey('composer-slash-skill-$index'),
+                            button: true,
+                            selected: selected,
+                            label: '使用技能 $displayName',
+                            child: InkWell(
+                              onTap: name.isEmpty
+                                  ? null
+                                  : () => _selectSlashSkill(name),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 120),
+                                curve: Curves.easeOut,
+                                color: active
+                                    ? context.accentSoft
+                                    : Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 7,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: context.accentSoft,
+                                        borderRadius: AppRadius.brSmall,
+                                      ),
+                                      child: Icon(
+                                        Icons.auto_awesome_outlined,
+                                        size: 17,
+                                        color: context.accentPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            displayName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style:
+                                                AppTypography.bodySmall(
+                                                  context,
+                                                ).copyWith(
+                                                  color: context.textPrimary,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                          ),
+                                          if (description.trim().isNotEmpty)
+                                            Text(
+                                              description,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: AppTypography.caption(
+                                                context,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (selected)
+                                      Icon(
+                                        Icons.check_rounded,
+                                        size: 18,
+                                        color: context.accentPrimary,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final recipient = (widget.recipientName ?? '').trim();
     return SafeArea(
       top: false,
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
+          if (_slashMenuOpen && !_voiceMode)
+            Padding(
+              key: const ValueKey('composer-slash-menu-slot'),
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+              child: _buildSlashSkillMenu(context),
+            ),
           Padding(
+            key: const ValueKey('composer-main-slot'),
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
             child: Container(
               key: const ValueKey('chat-composer-surface'),
@@ -2224,7 +2605,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                         child: SizedBox(
                           width: double.infinity,
                           child: TapRegion(
-                            onTapOutside: (_) => _inputFocusNode.unfocus(),
+                            groupId: 'chat-composer',
+                            onTapOutside: (_) {
+                              _closeSlashMenu();
+                              _inputFocusNode.unfocus();
+                            },
                             child: TextField(
                               controller: _controller,
                               focusNode: _inputFocusNode,
@@ -2237,6 +2622,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                   ? TextInputAction.send
                                   : TextInputAction.newline,
                               onSubmitted: (_) {
+                                if (_slashMenuOpen) {
+                                  _selectActiveSlashSkill();
+                                  return;
+                                }
                                 if (widget.sendOnEnter &&
                                     !widget.generating &&
                                     _controller.value.composing.isCollapsed)

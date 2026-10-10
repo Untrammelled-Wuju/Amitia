@@ -41,10 +41,13 @@ typedef void(^RootfsInstallProgressBlock)(RootfsInstallStep step, double fractio
 @property (nonatomic) BOOL forceReplace;
 @property (nonatomic) int64_t maxArchiveBytes;
 @property (nonatomic, copy, nullable) NSString *packageFormat;
+@property (nonatomic) BOOL requireBusinessPrograms;
 - (instancetype)init;
 @end
 
 @interface RootfsInstaller : NSObject
+
++ (NSString *)errorCodeForError:(NSError *)error NS_SWIFT_NAME(errorCode(for:));
 
 @property (nonatomic, strong, readonly) RootfsResolver *resolver;
 @property (nonatomic, readonly) BOOL isInstalling;
@@ -55,11 +58,11 @@ typedef void(^RootfsInstallProgressBlock)(RootfsInstallStep step, double fractio
 
 - (void)installRootfsWithRequest:(RootfsInstallRequest *)request
                         progress:(nullable RootfsInstallProgressBlock)progress
-                      completion:(void(^)(BOOL success, RootfsInstallResult *_Nullable result, NSError *_Nullable error))completion;
+                      completion:(void(^)(BOOL success, RootfsInstallResult *_Nullable result, NSError *_Nullable error))completion NS_SWIFT_NAME(installRootfs(withRequest:progress:completion:));
 
 - (void)cancelInstallation;
 
-- (BOOL)verifyInstalledRootfs:(RootfsDescriptor *)descriptor error:(NSError *_Nullable *_Nullable)error;
+- (BOOL)verifyInstalledRootfs:(RootfsDescriptor *)descriptor error:(NSError *_Nullable *_Nullable)error __attribute__((swift_error(none)));
 - (BOOL)deactivateRootfsVersion:(NSString *)version architecture:(NSString *)architecture error:(NSError *_Nullable *_Nullable)error;
 - (BOOL)isRootfsActive;
 
@@ -87,7 +90,8 @@ typedef NS_ERROR_ENUM(RootfsInstallerErrorDomain, RootfsInstallerError) {
     RootfsInstallerErrorExtractedSizeExceeded,
     RootfsInstallerErrorTooManyEntries,
     RootfsInstallerErrorRemoteRedirectRejected,
-    RootfsInstallerErrorDigestMalformed
+    RootfsInstallerErrorDigestMalformed,
+    RootfsInstallerErrorRuntimeRestartRequired
 };
 
 NS_ASSUME_NONNULL_END

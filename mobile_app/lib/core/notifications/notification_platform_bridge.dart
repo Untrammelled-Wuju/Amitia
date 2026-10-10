@@ -18,6 +18,7 @@ class NotificationPlatformState {
   final String? islandProvider;
   final bool xiaomiFocusPermissionGranted;
   final bool progressStyleSupported;
+  final bool promotedNotificationsAllowed;
   final bool communicationNotificationSupported;
   final String? liveActivityPushToStartToken;
 
@@ -37,6 +38,7 @@ class NotificationPlatformState {
     this.islandProvider,
     this.xiaomiFocusPermissionGranted = false,
     this.progressStyleSupported = false,
+    this.promotedNotificationsAllowed = false,
     this.communicationNotificationSupported = false,
     this.liveActivityPushToStartToken,
   });
@@ -82,6 +84,7 @@ class NotificationPlatformState {
       islandProvider: text('islandProvider'),
       xiaomiFocusPermissionGranted: raw['xiaomiFocusPermissionGranted'] == true,
       progressStyleSupported: raw['progressStyleSupported'] == true,
+      promotedNotificationsAllowed: raw['promotedNotificationsAllowed'] == true,
       communicationNotificationSupported:
           raw['communicationNotificationSupported'] == true,
       liveActivityPushToStartToken: text('liveActivityPushToStartToken'),
@@ -195,6 +198,10 @@ class NotificationPlatformBridge {
 
   Future<void> openSettings() => _channel.invokeMethod<void>('openSettings');
 
+  Future<void> openLiveUpdateSettings() async {
+    await _channel.invokeMethod<bool>('openLiveUpdateSettings');
+  }
+
   Future<Map<String, dynamic>> floatingBubbleStatus() async =>
       Map<String, dynamic>.from(
         await _channel.invokeMethod<Map<Object?, Object?>>(
@@ -211,14 +218,15 @@ class NotificationPlatformBridge {
             {},
       );
 
-  Future<Map<String, dynamic>> configureFloatingBubble({required bool previewEnabled}) async =>
-      Map<String, dynamic>.from(
-        await _channel.invokeMethod<Map<Object?, Object?>>(
-              'floatingBubbleConfigure',
-              <String, Object>{'previewEnabled': previewEnabled},
-            ) ??
-            {},
-      );
+  Future<Map<String, dynamic>> configureFloatingBubble({
+    required bool previewEnabled,
+  }) async => Map<String, dynamic>.from(
+    await _channel.invokeMethod<Map<Object?, Object?>>(
+          'floatingBubbleConfigure',
+          <String, Object>{'previewEnabled': previewEnabled},
+        ) ??
+        {},
+  );
 
   Future<Map<String, dynamic>> disableFloatingBubble() async =>
       Map<String, dynamic>.from(

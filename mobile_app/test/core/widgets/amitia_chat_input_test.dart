@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:amitia_app/core/widgets/amitia_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -166,14 +167,9 @@ void main() {
         find.byKey(const ValueKey('composer-stop-button')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey('composer-send-button')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('composer-send-button')), findsNothing);
 
-      await tester.tap(
-        find.byKey(const ValueKey('composer-stop-button')),
-      );
+      await tester.tap(find.byKey(const ValueKey('composer-stop-button')));
       await tester.pump();
       expect(stopCount, 1);
 
@@ -183,10 +179,7 @@ void main() {
         find.byKey(const ValueKey('composer-send-button')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey('composer-stop-button')),
-        findsNothing,
-      );
+      expect(find.byKey(const ValueKey('composer-stop-button')), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('composer-send-button')));
       await tester.pump();
@@ -508,5 +501,166 @@ void main() {
     expect(find.text('选择模型'), findsOneWidget);
     expect(find.text('GPT-5'), findsOneWidget);
     expect(find.textContaining('gpt-5 · openai'), findsOneWidget);
+  });
+
+  testWidgets('slash menu filters and sends the selected skill', (
+    tester,
+  ) async {
+    final sent = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              onSend: sent.add,
+              onLoadAgentSkills: () async => <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'name': 'search',
+                  'displayName': '搜索',
+                  'shortDescription': '搜索资料',
+                  'enabled': true,
+                  'compatibilityStatus': 'ready',
+                },
+                <String, dynamic>{
+                  'name': 'writer',
+                  'displayName': '写作',
+                  'shortDescription': '整理文稿',
+                  'enabled': true,
+                  'compatibilityStatus': 'ready',
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '/搜');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-menu')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-0')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('composer-slash-skill-1')), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).focusNode?.hasFocus,
+      isTrue,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('composer-slash-skill-0')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-menu')),
+      findsNothing,
+    );
+    expect(find.text('\$search'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '天气');
+    await tester.tap(find.byKey(const ValueKey('composer-send-button')));
+    await tester.pump();
+
+    expect(sent, <String>['\$search 天气']);
+  });
+
+  testWidgets('slash menu ignores non-command slashes and supports escape', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              onSend: (_) {},
+              onLoadAgentSkills: () async => <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'name': 'search',
+                  'displayName': '搜索',
+                  'enabled': true,
+                  'compatibilityStatus': 'ready',
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'https://example.com');
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-menu')),
+      findsNothing,
+    );
+
+    await tester.enterText(find.byType(TextField), '普通 /搜');
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-menu')),
+      findsOneWidget,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-menu')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('slash menu keyboard selection keeps send action separate', (
+    tester,
+  ) async {
+    final sent = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: AmitiaChatInput(
+              sendOnEnter: true,
+              onSend: sent.add,
+              onLoadAgentSkills: () async => <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'name': 'search',
+                  'displayName': '搜索',
+                  'enabled': true,
+                  'compatibilityStatus': 'ready',
+                },
+                <String, dynamic>{
+                  'name': 'writer',
+                  'displayName': '写作',
+                  'enabled': true,
+                  'compatibilityStatus': 'ready',
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '/');
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(sent, isEmpty);
+    expect(find.text('\$writer'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('composer-slash-skill-menu')),
+      findsNothing,
+    );
   });
 }

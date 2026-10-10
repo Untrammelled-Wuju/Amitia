@@ -290,6 +290,10 @@ func (c *Container) Close() error {
 		}
 	}
 
+	if c.ExecutionKernel != nil && c.ExecutionKernel.IdempotencyGuard != nil {
+		c.ExecutionKernel.IdempotencyGuard.Close()
+	}
+
 	if c.Store != nil {
 		if err := c.Store.Close(); err != nil && firstErr == nil {
 			firstErr = err

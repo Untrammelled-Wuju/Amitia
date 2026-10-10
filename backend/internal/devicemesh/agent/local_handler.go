@@ -286,6 +286,8 @@ func (h *LocalHandler) handleSignClaim(c *gin.Context) {
 
 type BindingRequest struct {
 	expectedBindingVersion *uint64
+	expectedCandidate      *StoredCredential
+	expectedCanonical      *StoredCredential
 	CloudBaseURL           string `json:"cloudBaseUrl" binding:"required"`
 	BootstrapTicket        string `json:"bootstrapTicket" binding:"required"`
 	Fingerprint            string `json:"fingerprint"`
@@ -327,6 +329,9 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 func (h *LocalHandler) BindProvider(ctx context.Context, req BindingRequest) (gin.H, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if req.expectedBindingVersion != nil && *req.expectedBindingVersion != h.bindingVersion {
 		return nil, bindingFailure(409, gin.H{"code": "binding_changed", "message": "设备绑定已变化，旧服务切换请求已拦截"})
 	}
@@ -338,10 +343,21 @@ func (h *LocalHandler) BindProvider(ctx context.Context, req BindingRequest) (gi
 	} else if pending {
 		return nil, bindingFailure(409, gin.H{"code": "unpair_incomplete", "message": "解绑尚未完成，请先重试解绑，再添加设备"})
 	}
-	h.bindingVersion++
-	if candidate, err := h.credStore.LoadCandidate(); err != nil {
+	candidate, err := h.credStore.LoadCandidate()
+	if err != nil {
 		return nil, err
-	} else if candidate != nil {
+	}
+	if req.expectedCandidate != nil {
+		active, err := h.credStore.LoadCredential()
+		if err != nil {
+			return nil, err
+		}
+		if !sameOptionalBinding(active, req.expectedCanonical) || !sameCandidateBinding(candidate, req.expectedCandidate) {
+			return nil, bindingFailure(409, gin.H{"code": "binding_changed", "message": "候选设备绑定已变化，旧服务切换请求已拦截"})
+		}
+	}
+	h.bindingVersion++
+	if candidate != nil && req.expectedCandidate == nil {
 		if candidate.CloudBaseUrl != req.CloudBaseURL || candidate.Fingerprint != req.Fingerprint || req.CoreID != "" && candidate.SpaceID.String() != req.CoreID {
 			return nil, bindingFailure(409, gin.H{"message": "已有尚未完成的服务切换，请先完成或撤销该配对"})
 		}
@@ -413,6 +429,9 @@ func (h *LocalHandler) BindProvider(ctx context.Context, req BindingRequest) (gi
 	if resp.DeviceID != id.DeviceID.String() || resp.RuntimeID != id.RuntimeID.String() || (req.Fingerprint != "" && resp.SpaceID != req.CoreID) {
 		return nil, bindingFailure(403, gin.H{"code": "provider_identity_mismatch", "message": "配对响应与扫码身份不一致"})
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if err := h.credStore.SaveCandidate(cred); err != nil {
 		return nil, bindingFailure(500, gin.H{"code": "storage_error", "message": err.Error()})
@@ -421,9 +440,19 @@ func (h *LocalHandler) BindProvider(ctx context.Context, req BindingRequest) (gi
 }
 
 func (h *LocalHandler) ResumeProviderBinding(ctx context.Context) (bool, error) {
+	return h.resumeProviderBinding(ctx, nil, nil)
+}
+
+func (h *LocalHandler) resumeProviderBinding(ctx context.Context, expectedVersion *uint64, expectedCandidate *StoredCredential) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
 	credential, err := h.credStore.LoadCandidate()
+	if err == nil && expectedVersion != nil && (*expectedVersion != h.bindingVersion || (credential == nil) != (expectedCandidate == nil) || credential != nil && !sameCandidateBinding(credential, expectedCandidate)) {
+		return true, bindingFailure(409, gin.H{"code": "binding_changed", "message": "候选设备绑定已变化，旧服务切换请求已拦截"})
+	}
 	if err != nil || credential == nil {
 		return false, err
 	}
@@ -496,6 +525,10 @@ func (h *LocalHandler) activateProvider(ctx context.Context, cred *StoredCredent
 	if err := h.checkProviderBusiness(ctx, cred, tlsConfig); err != nil {
 		newMesh.Stop()
 		return nil, bindingFailure(503, gin.H{"code": "provider_business_not_ready", "message": err.Error()})
+	}
+	if err := ctx.Err(); err != nil {
+		newMesh.Stop()
+		return nil, err
 	}
 	if previous != nil && previous.SpaceID != cred.SpaceID && cred.ProviderChangeID == "" {
 		cred.PreviousCoreID = previous.SpaceID.String()

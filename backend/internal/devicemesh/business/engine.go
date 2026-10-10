@@ -160,6 +160,13 @@ func NewEngine(service *coordination.Service, data coordination.DataPort, model 
 	return &Engine{coordination: service, data: data, model: model, lanes: make(map[string]*lane), active: make(map[string]context.CancelCauseFunc), continuitySlots: make(chan struct{}, 4)}
 }
 
+func (e *Engine) ValidateWiring() error {
+	if e == nil || e.coordination == nil || ownedDependencyMissing(e.data) || ownedDependencyMissing(e.model) {
+		return errors.New("设备归属业务的协调、数据或计算端口未接通")
+	}
+	return nil
+}
+
 func (e *Engine) lock(key string) func() {
 	e.mu.Lock()
 	l := e.lanes[key]

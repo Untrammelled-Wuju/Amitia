@@ -223,7 +223,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Box,
@@ -285,6 +285,37 @@ const pinnedProjects = computed(() =>
 const regularProjects = computed(() =>
   chatStore.sidebar.projects.filter((project) => !project.pinnedAt),
 );
+const hasGeneratingConversations = computed(() => {
+  const rows = [
+    ...chatStore.sidebar.pinned,
+    ...chatStore.sidebar.recent,
+    ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
+  ];
+  return rows.some((conversation) => Boolean(conversation.isGenerating));
+});
+let conversationActivityTimer: number | null = null;
+let conversationActivityRefreshing = false;
+
+function syncConversationActivityPolling() {
+  if (!hasGeneratingConversations.value) {
+    if (conversationActivityTimer !== null) {
+      window.clearInterval(conversationActivityTimer);
+      conversationActivityTimer = null;
+    }
+    return;
+  }
+  if (conversationActivityTimer !== null) return;
+  conversationActivityTimer = window.setInterval(async () => {
+    if (conversationActivityRefreshing) return;
+    conversationActivityRefreshing = true;
+    try {
+      await chatStore.fetchSidebar();
+    } catch {
+    } finally {
+      conversationActivityRefreshing = false;
+    }
+  }, 2000);
+}
 
 async function handleNewChat() {
   await startDraftConversation();
@@ -461,15 +492,22 @@ function handleKeydown(event: KeyboardEvent) {
 onMounted(() => {
   isMounted = true;
   void chatStore.fetchSidebar();
+  syncConversationActivityPolling();
   window.addEventListener("click", closeProfileMenu);
   window.addEventListener("keydown", handleKeydown);
 });
 
 onUnmounted(() => {
   isMounted = false;
+  if (conversationActivityTimer !== null) {
+    window.clearInterval(conversationActivityTimer);
+    conversationActivityTimer = null;
+  }
   window.removeEventListener("click", closeProfileMenu);
   window.removeEventListener("keydown", handleKeydown);
 });
+
+watch(hasGeneratingConversations, syncConversationActivityPolling, { immediate: true });
 </script>
 
 <style scoped>

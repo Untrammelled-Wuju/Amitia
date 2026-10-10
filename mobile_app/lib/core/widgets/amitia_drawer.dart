@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -61,6 +63,36 @@ class AmitiaDrawer extends ConsumerStatefulWidget {
 }
 
 class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
+  Timer? _conversationActivityTimer;
+
+  @override
+  void dispose() {
+    _conversationActivityTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncConversationActivityPolling(
+    AsyncValue<ConversationSidebarDto> value,
+  ) {
+    final sidebar = value.valueOrNull;
+    final hasGenerating =
+        sidebar != null &&
+        [
+          ...sidebar.pinned,
+          ...sidebar.recent,
+          ...sidebar.projects.expand((project) => project.conversations),
+        ].any((conversation) => conversation.isGenerating);
+    if (!hasGenerating) {
+      _conversationActivityTimer?.cancel();
+      _conversationActivityTimer = null;
+      return;
+    }
+    _conversationActivityTimer ??= Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => ref.invalidate(conversationSidebarProvider),
+    );
+  }
+
   void _navigateTo(String route) {
     final router = GoRouter.of(context);
     final currentRoute = router.routerDelegate.currentConfiguration.uri
@@ -605,6 +637,11 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       ref.watch(uiRuntimeProvider).valueOrNull,
     );
     final conversationSidebar = ref.watch(conversationSidebarProvider);
+    ref.listen<AsyncValue<ConversationSidebarDto>>(
+      conversationSidebarProvider,
+      (_, next) => _syncConversationActivityPolling(next),
+    );
+    _syncConversationActivityPolling(conversationSidebar);
     final routeState = resolveDrawerRouteState(widget.currentRoute);
     final installedExtensions = ref.watch(_installedExtensionViewProvider);
 
@@ -967,15 +1004,48 @@ class _ConversationTile extends StatelessWidget {
       minVerticalPadding: 0,
       visualDensity: VisualDensity.compact,
       contentPadding: EdgeInsets.only(left: compact ? 12 : 20, right: 4),
-      title: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: context.textPrimary,
-          fontSize: 14.5,
-          fontWeight: FontWeight.w400,
-        ),
+      title: Row(
+        children: [
+          if (conversation.isGenerating) ...[
+            Semantics(
+              label: '正在生成',
+              child: SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.8,
+                  color: context.accentPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ] else if (conversation.hasUnread) ...[
+            Semantics(
+              label: '有未读回复',
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: context.accentPrimary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 14.5,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
       ),
       onTap: onOpen,
       onLongPress: () => _showActions(context),

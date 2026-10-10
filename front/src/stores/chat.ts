@@ -17,6 +17,10 @@ export interface ConversationItem {
   messageCount: number;
   pinnedAt?: string | null;
   archivedAt?: string | null;
+  lastReadTurnSequence?: number;
+  lastTerminalTurnSequence?: number;
+  isGenerating?: boolean;
+  hasUnread?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -218,6 +222,30 @@ export const useChatStore = defineStore("chat", () => {
     await fetchSidebar();
   }
 
+  async function markConversationRead(conversationId: string, lastTerminalTurnSequence = 0) {
+    const rows = [sidebar.value.pinned, sidebar.value.recent, ...sidebar.value.projects.map((project) => project.conversations)];
+    const conversation = rows.flat().find((row) => row.id === conversationId);
+    let terminalSequence = Math.max(0, Number(lastTerminalTurnSequence || conversation?.lastTerminalTurnSequence || 0));
+    const readSequence = Math.max(0, Number(conversation?.lastReadTurnSequence || 0));
+    if (conversation && !conversation.hasUnread && readSequence >= terminalSequence) return;
+    if (owned.enabled.value) {
+      if (terminalSequence <= 0) {
+        const role = owned.selectInitialRole();
+        if (!role) return;
+        const result = await owned.query(conversationId, role);
+        const body = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body as Record<string, any> | undefined;
+        terminalSequence = Math.max(0, Number(body?.lastTerminalTurnSequence || 0));
+      }
+      await owned.edit("conversation",conversationId,{lastReadTurnSequence:terminalSequence});
+    } else {
+      await apiClient.post(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}/read`);
+    }
+    if (conversation) {
+      conversation.hasUnread = false;
+      conversation.lastReadTurnSequence = terminalSequence;
+    }
+  }
+
   return {
     messages,
     loading,
@@ -243,5 +271,6 @@ export const useChatStore = defineStore("chat", () => {
     archiveConversation,
     restoreConversation,
     deleteConversation,
+    markConversationRead,
   };
 });

@@ -204,6 +204,11 @@ func (s *Service) ensureSchema(ctx context.Context) error {
 			last_sequence INTEGER NOT NULL DEFAULT 0,
 			updated_at DATETIME NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS extension_event_host_provenance (
+			outbox_id TEXT PRIMARY KEY,
+			provenance_json TEXT NOT NULL,
+			FOREIGN KEY(outbox_id) REFERENCES extension_event_outbox(outbox_id) ON DELETE CASCADE
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

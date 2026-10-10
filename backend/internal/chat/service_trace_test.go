@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -156,10 +157,11 @@ func TestProcessMessageCancelledBeforeModelCall(t *testing.T) {
 	}
 	var status string
 	if err := svc.db.Model(&Message{}).Select("status").Where("request_id = ? AND role = ?", "req-cancel-before-model", "user").Row().Scan(&status); err != nil {
-		t.Fatal(err)
-	}
-	if status != "failed" {
-		t.Fatalf("expected failed status, got %s", status)
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatal(err)
+		}
+	} else if status != "failed" {
+		t.Fatalf("persisted cancelled messages must be failed, got %s", status)
 	}
 	rawLogs := logs.String()
 	if strings.Contains(rawLogs, "model_call_started") {

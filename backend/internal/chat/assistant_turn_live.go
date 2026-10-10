@@ -176,6 +176,9 @@ func (p *modelEventProjector) ensureBlock(ctx context.Context, blockType, callID
 		if err := p.recorder.rememberItem(&item); err != nil {
 			return nil, err
 		}
+		if err := p.recorder.checkpointTurnItem(ctx, item); err != nil {
+			return nil, err
+		}
 	}
 	block := &liveTurnBlock{item: item, blockType: blockType, revision: 1, lastCheckpoint: time.Now()}
 	if blockType == "text" {
@@ -245,6 +248,9 @@ func (p *modelEventProjector) checkpoint(ctx context.Context, block *liveTurnBlo
 		return err
 	}
 	block.item = updated
+	if err := p.recorder.checkpointTurnItem(ctx, updated); err != nil {
+		return err
+	}
 	block.checkpointSize = block.content.Len() + block.arguments.Len()
 	block.lastCheckpoint = time.Now()
 	payload := map[string]any{
@@ -281,6 +287,9 @@ func (p *modelEventProjector) argumentsCompleted(ctx context.Context, block *liv
 			return err
 		}
 		block.item = updated
+		if err := p.recorder.checkpointTurnItem(ctx, updated); err != nil {
+			return err
+		}
 	}
 	payload := map[string]any{"blockType": block.blockType, "arguments": block.arguments.String(), "toolName": block.item.ToolName, "recoveryCheckpoint": true}
 	_, err := conversationstream.DefaultManager().Publish(ctx, p.recorder.event(block, "tool.arguments.completed", assistantTurnStatusRunning, payload), true)
@@ -310,6 +319,9 @@ func (p *modelEventProjector) completeBlock(ctx context.Context, block *liveTurn
 			return err
 		}
 		block.item = updated
+		if err := p.recorder.checkpointTurnItem(ctx, updated); err != nil {
+			return err
+		}
 	}
 	payload := map[string]any{"blockType": block.blockType, "content": block.content.String(), "recoveryCheckpoint": true}
 	if block.arguments.Len() > 0 {

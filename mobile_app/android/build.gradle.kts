@@ -17,8 +17,11 @@ val redirectedBuildRoot = providers.environmentVariable("AMITIA_ANDROID_BUILD_RO
     .get()
     .trim()
 
+val flutterBuildRoot = rootProject.file("../build").absolutePath
 if (redirectedBuildRoot.isNotEmpty()) {
     rootProject.layout.buildDirectory.set(file("$redirectedBuildRoot/root"))
+} else {
+    rootProject.layout.buildDirectory.set(file(flutterBuildRoot))
 }
 
 allprojects {
@@ -46,6 +49,8 @@ allprojects {
 subprojects {
     if (redirectedBuildRoot.isNotEmpty()) {
         layout.buildDirectory.set(file("$redirectedBuildRoot/${project.name}"))
+    } else {
+        layout.buildDirectory.set(file("$flutterBuildRoot/${project.name}"))
     }
     project.evaluationDependsOn(":app")
 }

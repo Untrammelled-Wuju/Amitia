@@ -11,16 +11,18 @@ import (
 type RuntimeDeliveryCallback func(ctx context.Context, delivery Delivery, envelope EventEnvelope, sub *ResolvedSubscription) error
 
 type RuntimeBridge struct {
-	mu               sync.RWMutex
-	service          *Service
-	extensionTypes   map[string][]EventTypeID
-	deliveryCallback RuntimeDeliveryCallback
+	mu                   sync.RWMutex
+	service              *Service
+	extensionTypes       map[string][]EventTypeID
+	extensionGenerations map[string]int64
+	deliveryCallback     RuntimeDeliveryCallback
 }
 
 func NewRuntimeBridge(service *Service) *RuntimeBridge {
 	return &RuntimeBridge{
-		service:        service,
-		extensionTypes: make(map[string][]EventTypeID),
+		service:              service,
+		extensionTypes:       make(map[string][]EventTypeID),
+		extensionGenerations: make(map[string]int64),
 	}
 }
 
@@ -35,6 +37,13 @@ func (b *RuntimeBridge) Attach() {
 }
 
 func (b *RuntimeBridge) PublishFromRuntime(ctx context.Context, extensionID string, typeID EventTypeID, version int, payload json.RawMessage, opts PublishOptions) (PublishResult, error) {
+	opts.hostProvenance = nil
+	var metadata map[string]json.RawMessage
+	if json.Unmarshal(opts.Metadata, &metadata) == nil {
+		if _, exists := metadata["amitiaSourceTaskContract"]; exists {
+			return PublishResult{}, fmt.Errorf("普通插件不能注入宿主事件来源标记")
+		}
+	}
 	if extensionID == "" {
 		return PublishResult{}, fmt.Errorf("event: extension id required")
 	}
@@ -131,6 +140,7 @@ func (b *RuntimeBridge) RegisterExtensionEvents(ctx context.Context, extensionID
 		registeredTypes = append(registeredTypes, t.EventTypeID)
 	}
 	b.extensionTypes[extensionID] = registeredTypes
+	b.extensionGenerations[extensionID] = generation
 	b.mu.Unlock()
 	return nil
 }
@@ -147,6 +157,7 @@ func (b *RuntimeBridge) UnregisterExtensionEvents(ctx context.Context, extension
 	}
 	b.mu.Lock()
 	delete(b.extensionTypes, extensionID)
+	delete(b.extensionGenerations, extensionID)
 	b.mu.Unlock()
 	return nil
 }

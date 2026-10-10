@@ -13,6 +13,10 @@ class ConversationDto {
   final String archivedAt;
   final String createdAt;
   final String updatedAt;
+  final int lastReadTurnSequence;
+  final int lastTerminalTurnSequence;
+  final bool isGenerating;
+  final bool hasUnread;
   final int modelConfigId;
   final String reasoningEffort;
   final int reasoningEnabled;
@@ -33,6 +37,10 @@ class ConversationDto {
     this.archivedAt = '',
     this.createdAt = '',
     this.updatedAt = '',
+    this.lastReadTurnSequence = 0,
+    this.lastTerminalTurnSequence = 0,
+    this.isGenerating = false,
+    this.hasUnread = false,
     this.modelConfigId = 0,
     this.reasoningEffort = '',
     this.reasoningEnabled = -1,
@@ -59,6 +67,12 @@ class ConversationDto {
       archivedAt: (json['archivedAt'] ?? '').toString(),
       createdAt: json['createdAt'] as String? ?? '',
       updatedAt: json['updatedAt'] as String? ?? '',
+      lastReadTurnSequence:
+          (json['lastReadTurnSequence'] as num?)?.toInt() ?? 0,
+      lastTerminalTurnSequence:
+          (json['lastTerminalTurnSequence'] as num?)?.toInt() ?? 0,
+      isGenerating: json['isGenerating'] == true,
+      hasUnread: json['hasUnread'] == true,
       modelConfigId: (json['modelConfigId'] as num?)?.toInt() ?? 0,
       reasoningEffort: (json['reasoningEffort'] ?? '').toString(),
       reasoningEnabled: (json['reasoningEnabled'] as num?)?.toInt() ?? -1,

@@ -160,15 +160,31 @@ func (h *LocalHandler) FollowSuccessor(ctx context.Context) error {
 }
 
 func (h *LocalHandler) followSuccessor(ctx context.Context) error {
-	if resumed, err := h.ResumeProviderBinding(ctx); resumed || err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	h.mu.RLock()
 	version := h.bindingVersion
 	previous, err := h.credStore.LoadCredential()
+	candidate, candidateErr := h.credStore.LoadCandidate()
 	h.mu.RUnlock()
-	if err != nil || previous == nil {
+	if err != nil {
 		return err
+	}
+	if candidateErr != nil {
+		return candidateErr
+	}
+	canonical := previous
+	candidateSuccessor := candidate != nil
+	if resumed, resumeErr := h.resumeProviderBinding(ctx, &version, candidate); resumed || resumeErr != nil {
+		var failure *BindingError
+		if !candidateSuccessor || !errors.As(resumeErr, &failure) || failure.Code != "provider_business_not_ready" {
+			return resumeErr
+		}
+		previous = candidate
+	}
+	if previous == nil {
+		return nil
 	}
 	var successor Successor
 	pending, err := h.credStore.LoadTransition()
@@ -176,7 +192,11 @@ func (h *LocalHandler) followSuccessor(ctx context.Context) error {
 		return err
 	}
 	if pending != nil && (pending.PreviousCoreID != previous.SpaceID.String() || pending.PreviousCredentialID != previous.CredentialID || pending.DeviceID != previous.DeviceID.String() || pending.RuntimeID != previous.RuntimeID.String()) {
-		return errors.New("服务切换记录与当前绑定不一致，请撤销配对后重新连接")
+		if candidateSuccessor && pending.DeviceID == candidate.DeviceID.String() && pending.RuntimeID == candidate.RuntimeID.String() && pending.Successor.Endpoint.CoreID == candidate.SpaceID.String() && pending.Successor.Endpoint.URL == candidate.CloudBaseUrl && pending.Successor.Endpoint.Fingerprint == candidate.Fingerprint {
+			pending = nil
+		} else {
+			return errors.New("服务切换记录与当前绑定不一致，请撤销配对后重新连接")
+		}
 	}
 	if pending != nil && time.Now().Before(pending.Successor.ExpiresAt) {
 		successor = pending.Successor
@@ -186,6 +206,9 @@ func (h *LocalHandler) followSuccessor(ctx context.Context) error {
 			return err
 		}
 		if status == http.StatusNoContent {
+			if candidateSuccessor {
+				return &BindingError{Status: 503, Code: "provider_business_not_ready", Message: "扫码设备尚未提供可用的云端服务或明确的后继配对入口，服务保持暂停"}
+			}
 			return nil
 		}
 		if status != http.StatusOK {
@@ -216,7 +239,17 @@ func (h *LocalHandler) followSuccessor(ctx context.Context) error {
 		return err
 	}
 	h.mu.Lock()
-	if version != h.bindingVersion {
+	currentCandidate, candidateErr := h.credStore.LoadCandidate()
+	active, activeErr := h.credStore.LoadCredential()
+	if err := ctx.Err(); err != nil {
+		h.mu.Unlock()
+		return err
+	}
+	if candidateErr != nil || activeErr != nil {
+		h.mu.Unlock()
+		return errors.Join(candidateErr, activeErr)
+	}
+	if version != h.bindingVersion || candidateSuccessor && (!sameOptionalBinding(active, canonical) || !sameCandidateBinding(currentCandidate, candidate)) {
 		h.mu.Unlock()
 		return errors.New("设备绑定已变化，旧服务切换请求已拦截")
 	}
@@ -261,6 +294,19 @@ func (h *LocalHandler) followSuccessor(ctx context.Context) error {
 	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 32<<10)).Decode(&accepted) != nil || accepted.Ticket == "" || accepted.SpaceID != successor.Endpoint.CoreID || accepted.DeviceID != identity.DeviceID.String() {
 		return errors.New("新服务提供者拒绝或尚未完成独立配对")
 	}
-	_, err = h.BindProvider(ctx, BindingRequest{CloudBaseURL: successor.Endpoint.URL, BootstrapTicket: accepted.Ticket, Fingerprint: successor.Endpoint.Fingerprint, CoreID: successor.Endpoint.CoreID, expectedBindingVersion: &version})
+	requestBinding := BindingRequest{CloudBaseURL: successor.Endpoint.URL, BootstrapTicket: accepted.Ticket, Fingerprint: successor.Endpoint.Fingerprint, CoreID: successor.Endpoint.CoreID, expectedBindingVersion: &version}
+	if candidateSuccessor {
+		requestBinding.expectedCandidate = candidate
+		requestBinding.expectedCanonical = canonical
+	}
+	_, err = h.BindProvider(ctx, requestBinding)
 	return err
+}
+
+func sameCandidateBinding(current, expected *StoredCredential) bool {
+	return current != nil && expected != nil && current.CredentialID == expected.CredentialID && current.Credential == expected.Credential && current.SpaceID == expected.SpaceID && current.DeviceID == expected.DeviceID && current.RuntimeID == expected.RuntimeID && current.CloudBaseUrl == expected.CloudBaseUrl && current.Fingerprint == expected.Fingerprint
+}
+
+func sameOptionalBinding(current, expected *StoredCredential) bool {
+	return current == nil && expected == nil || sameCandidateBinding(current, expected)
 }

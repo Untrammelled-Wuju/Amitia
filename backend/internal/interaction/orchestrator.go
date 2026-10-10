@@ -13,14 +13,15 @@ import (
 )
 
 var (
-	ErrOrchestratorProcessing    = errors.New("orchestrator: request still processing")
-	ErrOrchestratorNotReady      = errors.New("orchestrator: not ready")
-	ErrOrchestratorBusy          = errors.New("orchestrator: too many concurrent interactions")
-	ErrOrchestratorCancelled     = errors.New("orchestrator: cancelled")
-	ErrOrchestratorSuperseded    = errors.New("orchestrator: superseded")
-	ErrOrchestratorDuplicate     = errors.New("orchestrator: duplicate request")
-	ErrOrchestratorInvalidScope  = errors.New("orchestrator: invalid scope")
-	ErrOrchestratorSafetyBlocked = errors.New("orchestrator: safety blocked")
+	ErrOrchestratorProcessing     = errors.New("orchestrator: request still processing")
+	ErrOrchestratorNotReady       = errors.New("orchestrator: not ready")
+	ErrOrchestratorBusy           = errors.New("orchestrator: too many concurrent interactions")
+	ErrOrchestratorCancelled      = errors.New("orchestrator: cancelled")
+	ErrOrchestratorSuperseded     = errors.New("orchestrator: superseded")
+	ErrOrchestratorDuplicate      = errors.New("orchestrator: duplicate request")
+	ErrOrchestratorInvalidScope   = errors.New("orchestrator: invalid scope")
+	ErrOrchestratorSafetyBlocked  = errors.New("orchestrator: safety blocked")
+	ErrToolReconciliationRequired = errors.New("orchestrator: tool side effect requires reconciliation")
 )
 
 type ProcessRequest struct {
@@ -57,6 +58,8 @@ type ProcessRequest struct {
 	TurnID                   string                     `json:"turnId,omitempty"`
 	ExecutionID              string                     `json:"executionId,omitempty"`
 	InteractionID            string                     `json:"-"`
+	ReservedInteractionID    string                     `json:"-"`
+	RecoverExistingTurn      bool                       `json:"-"`
 	ExpectedStatusVersion    int64                      `json:"-"`
 	Runtime                  *RuntimeAssembly           `json:"-"`
 	ExecContext              *coreexec.ExecutionContext `json:"-"`

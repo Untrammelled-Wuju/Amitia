@@ -32,6 +32,16 @@ func (r *CancellationRegistry) Register(interactionID string, cancel context.Can
 	r.mu.Unlock()
 }
 
+func (r *CancellationRegistry) IsRegistered(interactionID string) bool {
+	if r == nil || interactionID == "" {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, exists := r.entries[interactionID]
+	return exists
+}
+
 func (r *CancellationRegistry) Cancel(interactionID string) bool {
 	r.mu.Lock()
 	entry, ok := r.entries[interactionID]

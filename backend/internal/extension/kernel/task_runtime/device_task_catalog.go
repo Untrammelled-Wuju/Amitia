@@ -80,7 +80,7 @@ func (s *TaskRuntimeService) installedTaskCatalog(ctx context.Context) ([]TaskDe
 		if !definition.ExecutionPlacement.Normalize().IsValid() || definition.ExecutionPlacement == TaskExecutionPlacementCloud {
 			continue
 		}
-		if err := validateSourceTaskDeclaredCapabilitiesWith(definition, s.declaredHostCapabilities()); err != nil {
+		if err := s.validateSourceHostCapabilities(ctx, definition); err != nil {
 			continue
 		}
 		if definition.TaskID == "" || len(definition.TaskID) > 256 || definition.ExtensionID == "" || len(definition.ExtensionID) > 256 || definition.ModuleID == "" || len(definition.ModuleID) > 256 || seen[definition.TaskID] || !validTaskFingerprint(strings.TrimPrefix(definition.EntryHash, "sha256:")) {

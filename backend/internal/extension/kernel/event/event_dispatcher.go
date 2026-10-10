@@ -81,6 +81,15 @@ func NewDeliveryPlanner(
 }
 
 func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecord) error {
+	if len(record.HostProvenance) > 0 && string(record.HostProvenance) != "null" {
+		return p.outboxStore.MarkDispatched(ctx, record.OutboxID)
+	}
+	var sourceContractMetadata struct {
+		Contract json.RawMessage `json:"amitiaSourceTaskContract"`
+	}
+	if json.Unmarshal(record.Metadata, &sourceContractMetadata) == nil && len(sourceContractMetadata.Contract) > 0 && string(sourceContractMetadata.Contract) != "null" {
+		return p.outboxStore.MarkDispatched(ctx, record.OutboxID)
+	}
 	envelope := outboxToEnvelope(record)
 	subs, err := p.subscriptionRegistry.ResolveForDelivery(ctx, envelope)
 	if err != nil {

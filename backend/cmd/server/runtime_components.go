@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -176,47 +177,113 @@ func (c *extensionKernelComponent) Stop(ctx context.Context) error {
 	return nil
 }
 
+func reconcileIndependentRecovery(ctx context.Context, workers, parents func(context.Context) error) error {
+	var failures []error
+	if workers != nil {
+		if err := workers(ctx); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	if parents != nil && ctx.Err() == nil {
+		if err := parents(ctx); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
 type taskRuntimeComponent struct {
-	services *AppServices
-	mu       sync.Mutex
-	started  bool
-	enabled  bool
+	services        *AppServices
+	mu              sync.Mutex
+	started         bool
+	enabled         bool
+	taskHostEnabled bool
+	reconcileCancel context.CancelFunc
+	reconcileDone   chan struct{}
+	parentRecovery  *parentTurnRecoveryRuntime
 }
 
 func newTaskRuntimeComponent(services *AppServices) *taskRuntimeComponent {
+	taskHostEnabled := config.AppCfg.Components.TaskHost.Enabled
 	return &taskRuntimeComponent{
-		services: services,
-		enabled:  config.AppCfg.Components.TaskHost.Enabled,
+		services:        services,
+		enabled:         taskHostEnabled || (services != nil && services.UnifiedEntry != nil),
+		taskHostEnabled: taskHostEnabled,
 	}
 }
 
 func (c *taskRuntimeComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
+	capabilities := []string{"interaction.parent_recovery"}
+	if c.taskHostEnabled {
+		capabilities = append(capabilities, "task.runtime")
+	}
 	return runtimeorchestrator.ComponentDescriptor{
 		ID:           runtimeorchestrator.ComponentTaskRuntime,
 		Phase:        runtimeorchestrator.PhaseApplication,
 		Enabled:      c.enabled,
 		Required:     false,
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentExtensionKernel},
-		Capabilities: []string{"task.runtime"},
+		Capabilities: capabilities,
 		Profiles:     profilesAll,
 	}
 }
 
 func (c *taskRuntimeComponent) Start(ctx context.Context) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.started {
+		c.mu.Unlock()
 		return nil
 	}
 	svc := c.services
-	if svc == nil || svc.KernelContainer == nil || svc.KernelContainer.TaskRuntimeService == nil {
-		return fmt.Errorf("task runtime service not available")
+	if svc == nil || svc.KernelContainer == nil {
+		c.mu.Unlock()
+		return fmt.Errorf("task runtime container not available")
 	}
-	if err := svc.KernelContainer.TaskRuntimeService.StartupRecovery(ctx); err != nil {
-		return fmt.Errorf("task recovery: %w", err)
+	if c.taskHostEnabled {
+		if svc.KernelContainer.TaskRuntimeService == nil {
+			c.mu.Unlock()
+			return fmt.Errorf("task runtime service not available")
+		}
+		if err := svc.KernelContainer.TaskRuntimeService.StartupRecovery(ctx); err != nil {
+			c.mu.Unlock()
+			return fmt.Errorf("task recovery: %w", err)
+		}
+		svc.KernelContainer.TaskRuntimeService.Start(ctx)
 	}
-	svc.KernelContainer.TaskRuntimeService.Start(ctx)
+	var watchCtx context.Context
+	var watchDone chan struct{}
+	if svc.UnifiedEntry != nil {
+		var cancel context.CancelFunc
+		watchCtx, cancel = context.WithCancel(context.Background())
+		watchDone = make(chan struct{})
+		c.reconcileCancel = cancel
+		c.reconcileDone = watchDone
+		c.parentRecovery = newParentTurnRecoveryRuntime()
+	}
+	parentRecovery := c.parentRecovery
 	c.started = true
+	c.mu.Unlock()
+	if watchDone != nil {
+		go func() {
+			defer close(watchDone)
+			runMultiAgentReconciliation(watchCtx, 4*time.Second, func(reconcileCtx context.Context) error {
+				if svc.UnifiedEntry == nil || !svc.UnifiedEntry.IsOrchestratorReady() {
+					return nil
+				}
+				return reconcileIndependentRecovery(reconcileCtx,
+					func(ctx context.Context) error {
+						if svc.MultiAgentCoordinator == nil {
+							return nil
+						}
+						return svc.MultiAgentCoordinator.ReconcilePendingCoordinations(ctx)
+					},
+					func(ctx context.Context) error {
+						return parentRecovery.Scan(ctx, watchCtx, svc)
+					},
+				)
+			})
+		}()
+	}
 	return nil
 }
 
@@ -224,7 +291,10 @@ func (c *taskRuntimeComponent) Ready(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	svc := c.services
-	if svc == nil || svc.KernelContainer == nil || svc.KernelContainer.TaskRuntimeService == nil {
+	if svc == nil || svc.KernelContainer == nil {
+		return fmt.Errorf("task runtime container not ready")
+	}
+	if c.taskHostEnabled && svc.KernelContainer.TaskRuntimeService == nil {
 		return fmt.Errorf("task runtime not ready")
 	}
 	return nil
@@ -232,12 +302,39 @@ func (c *taskRuntimeComponent) Ready(ctx context.Context) error {
 
 func (c *taskRuntimeComponent) Stop(ctx context.Context) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	svc := c.services
-	if svc == nil || svc.KernelContainer == nil || svc.KernelContainer.TaskRuntimeService == nil {
+	cancel, done := c.reconcileCancel, c.reconcileDone
+	recovery := c.parentRecovery
+	c.reconcileCancel, c.reconcileDone = nil, nil
+	c.parentRecovery = nil
+	c.started = false
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if recovery != nil {
+		if err := recovery.Wait(ctx); err != nil {
+			return fmt.Errorf("parent turn recovery shutdown: %w", err)
+		}
+	}
+	if svc == nil || svc.KernelContainer == nil {
 		return nil
 	}
-	svc.KernelContainer.TaskRuntimeService.Shutdown(ctx)
+	if svc.MultiAgentCoordinator != nil {
+		if err := svc.MultiAgentCoordinator.Shutdown(ctx); err != nil {
+			return fmt.Errorf("multi_agent shutdown: %w", err)
+		}
+	}
+	if c.taskHostEnabled && svc.KernelContainer.TaskRuntimeService != nil {
+		svc.KernelContainer.TaskRuntimeService.Shutdown(ctx)
+	}
 	return nil
 }
 

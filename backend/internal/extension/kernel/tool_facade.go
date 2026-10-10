@@ -773,7 +773,7 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope Invocation
 func buildModelToolsFromDefinitions(defs []capability.ToolDefinition, scope InvocationScope) []tool.Tool {
 	tools := make([]tool.Tool, 0, len(defs))
 	for _, def := range defs {
-		if !def.Enabled {
+		if !def.Enabled || def.Internal {
 			continue
 		}
 		if !workflowToolAllowedForSpace(def, scope.SpaceID) {

@@ -90,7 +90,8 @@ func TestEventTypeDefinition_Validate(t *testing.T) {
 		{"zero version", func(d *EventTypeDefinition) { d.Version = 0 }, true},
 		{"negative version", func(d *EventTypeDefinition) { d.Version = -1 }, true},
 		{"zero max payload", func(d *EventTypeDefinition) { d.MaxPayloadBytes = 0 }, true},
-		{"zero max metadata", func(d *EventTypeDefinition) { d.MaxMetadataBytes = 0 }, true},
+		{"zero max metadata", func(d *EventTypeDefinition) { d.MaxMetadataBytes = 0 }, false},
+		{"negative max metadata", func(d *EventTypeDefinition) { d.MaxMetadataBytes = -1 }, true},
 		{"higher version", func(d *EventTypeDefinition) { d.Version = 2 }, false},
 		{"larger payload", func(d *EventTypeDefinition) { d.MaxPayloadBytes = 4096 }, false},
 	}

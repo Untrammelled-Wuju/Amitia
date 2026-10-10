@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -60,6 +61,7 @@ class _NotificationSettingsPageState
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !Platform.isAndroid) return;
+    unawaited(_load());
     if (_pendingFloatingEnable) {
       _pendingFloatingEnable = false;
       _toggleFloatingBubble(true);
@@ -77,7 +79,8 @@ class _NotificationSettingsPageState
       if (!mounted) return;
       setState(() {
         _floatingPermission = status['permissionGranted'] == true;
-        _floatingPreviewEnabled = status['enabled'] == true && status['previewEnabled'] != false;
+        _floatingPreviewEnabled =
+            status['enabled'] == true && status['previewEnabled'] != false;
       });
     } catch (_) {
       if (!mounted) return;
@@ -136,9 +139,9 @@ class _NotificationSettingsPageState
       await _toggleFloatingBubble(enabled);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('消息预览设置失败：$error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('消息预览设置失败：$error')));
     }
   }
 
@@ -284,6 +287,17 @@ class _NotificationSettingsPageState
     }
   }
 
+  Future<void> _openLiveUpdateSettings() async {
+    try {
+      await ref.read(notificationCoordinatorProvider).openLiveUpdateSettings();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('无法打开实时通知授权页面：$error')));
+    }
+  }
+
   String get _previewLabel {
     return switch (_previewMode) {
       'sender_only' => '仅显示角色名',
@@ -316,7 +330,9 @@ class _NotificationSettingsPageState
                         ? '收到新消息时顶部短暂显示黑色胶囊，点击直达 App 会话；锁屏自动隐藏'
                         : '需要授权悬浮窗权限，启用后仅显示顶部消息预览',
                     value: _floatingPreviewEnabled,
-                    onChanged: _floatingBusy ? null : (value) => _toggleFloatingPreview(value),
+                    onChanged: _floatingBusy
+                        ? null
+                        : (value) => _toggleFloatingPreview(value),
                   ),
                   ListTile(
                     leading: const Icon(Icons.security_outlined),
@@ -450,6 +466,19 @@ class _NotificationSettingsPageState
                         ? null
                         : _testNotification,
                   ),
+                  if (Platform.isAndroid &&
+                      _platformState?.progressStyleSupported == true)
+                    ListTile(
+                      leading: const Icon(Icons.tips_and_updates_outlined),
+                      title: const Text('Android 16 实时通知展示'),
+                      subtitle: Text(
+                        _platformState?.promotedNotificationsAllowed == true
+                            ? '已授权；符合条件的长任务可显示实时进度'
+                            : '未授权实时展示；点击打开系统设置，普通通知仍可用',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _openLiveUpdateSettings,
+                    ),
                   ListTile(
                     leading: const Icon(Icons.settings_outlined),
                     title: const Text('系统通知设置'),
@@ -482,22 +511,26 @@ class _NotificationSettingsPageState
                         : '不支持',
                   ),
                   _CapabilityTile(
-                    title: Platform.isAndroid ? 'Agent 进度通知方式' : 'Dynamic Island',
+                    title: Platform.isAndroid
+                        ? 'Agent 进度通知方式'
+                        : 'Dynamic Island',
                     value: switch (_platformState?.islandProvider) {
                       'xiaomi_super_island' => '小米超级岛优先 · Android 16 实时通知兜底',
                       'vivo_origin_island' => 'vivo 原子岛（需厂商场景许可）',
                       'android_live_update' => 'Android 16 实时通知',
                       'standard_progress' => '通用后台进度通知',
-                      _ => _platformState?.dynamicIslandSupported == true
-                          ? '支持'
-                          : '不支持',
+                      _ =>
+                        _platformState?.dynamicIslandSupported == true
+                            ? '支持'
+                            : '不支持',
                     },
                   ),
                   if (Platform.isAndroid &&
                       _platformState?.islandProvider == 'xiaomi_super_island')
                     _CapabilityTile(
                       title: '超级岛焦点通知权限',
-                      value: _platformState?.xiaomiFocusPermissionGranted == true
+                      value:
+                          _platformState?.xiaomiFocusPermissionGranted == true
                           ? '已允许'
                           : '未允许；请在系统通知设置中开启',
                     ),
@@ -507,6 +540,15 @@ class _NotificationSettingsPageState
                         ? '支持'
                         : '当前系统回落普通进度通知',
                   ),
+                  if (Platform.isAndroid &&
+                      _platformState?.progressStyleSupported == true)
+                    _CapabilityTile(
+                      title: 'Android 实时展示权限',
+                      value:
+                          _platformState?.promotedNotificationsAllowed == true
+                          ? '已允许'
+                          : '未允许；通过上方入口开启',
+                    ),
                   _CapabilityTile(
                     title: 'Core Provider',
                     value: _providerReadinessLabel,

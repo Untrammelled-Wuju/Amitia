@@ -2,37 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package chat
 
-import (
-	"context"
-
-	"github.com/u-ai/backend/config"
-)
-
-func (s *service) trimContextWindow(ctx context.Context, convID string) {
-	if ctx.Err() != nil {
-		return
-	}
-	maxRounds := 20
-	if config.AppCfg != nil && config.AppCfg.Chat.ContextWindowMaxRounds > 0 {
-		maxRounds = config.AppCfg.Chat.ContextWindowMaxRounds
-	}
-	if maxRounds <= 0 {
-		maxRounds = 20
-	}
-	var ids []string
-	if err := s.db.WithContext(ctx).Table("messages").Select("id").Where("conversation_id = ? AND role IN ('user','assistant') AND include_in_context = 1", convID).Order("sequence DESC").Limit(maxRounds*2+100).Pluck("id", &ids).Error; err != nil {
-		return
-	}
-	if len(ids) <= maxRounds*2 {
-		return
-	}
-	cutoff := ids[maxRounds*2-1]
-	if ctx.Err() != nil {
-		return
-	}
-	s.db.WithContext(ctx).Exec("UPDATE messages SET include_in_context = 0 WHERE conversation_id = ? AND include_in_context = 1 AND sequence < (SELECT sequence FROM messages WHERE id = ?)", convID, cutoff)
-}
-
 func (s *service) loadHistory(convID string) []map[string]string {
 	return s.loadHistoryExcluding(convID, "")
 }

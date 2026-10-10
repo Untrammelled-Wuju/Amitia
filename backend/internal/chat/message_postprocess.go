@@ -45,7 +45,6 @@ func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFie
 		payload.ExecutionScope = &scope
 	}
 	data, _ := json.Marshal(payload)
-	s.appendPostProcessOutbox(convID, postProcessEventContextTrim, requestID+"|"+postProcessEventContextTrim, data)
 	s.appendPostProcessOutbox(convID, postProcessEventMoodRecovery, requestID+"|"+postProcessEventMoodRecovery, data)
 	if s.pipeline != nil {
 		s.appendPostProcessOutbox(convID, postProcessEventPipelineExecute, requestID+"|"+postProcessEventPipelineExecute, data)
@@ -85,7 +84,6 @@ func (s *service) ReplayPostProcess(eventType string, payload []byte) error {
 			s.pipeline.Execute(ctx, pp.ConversationID, pp.PipelineMessages, pp.Reply)
 		}
 	case postProcessEventContextTrim:
-		s.trimContextWindow(ctx, pp.ConversationID)
 	case postProcessEventMoodRecovery:
 		s.moodRecoveryCheck(ctx, pp.ConversationID, pp.CharacterID, pp.Source)
 	case postProcessEventCompressorMaybe:

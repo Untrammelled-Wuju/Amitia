@@ -33,16 +33,31 @@ internal object VivoOriginIslandTaskCompat {
         title: String,
         summary: String,
         progress: Int,
-        completed: Boolean,
+        terminal: Boolean,
         timeLabel: String,
+        phase: String,
+        progressKnown: Boolean,
     ) {
         if (!eligible()) return
         registerScene(context)
         val icon = Icon.createWithResource(context, R.drawable.ic_notification)
-        val percent = if (completed) 100 else progress.coerceIn(0, 100)
+        val succeeded = terminal && phase == "completed"
+        val percent = if (succeeded) 100 else progress.coerceIn(0, 100)
         val heading = "$title · $timeLabel"
-        val state = if (completed) "已完成 · 100%" else "执行中 · $percent%"
-        val inProgress = !completed && percent in 1..99
+        val state = when {
+            succeeded -> "已完成 · 100%"
+            terminal && phase == "failed" -> "执行失败"
+            terminal && phase == "cancelled" -> "已取消"
+            terminal && phase == "interrupted" -> "已中断"
+            terminal -> "已结束"
+            phase == "waiting_approval" -> "待确认"
+            phase == "waiting_tool" -> "等待工具"
+            phase == "queued" -> "排队中"
+            phase == "starting" -> "启动中"
+            progressKnown -> "执行中 · $percent%"
+            else -> "执行中"
+        }
+        val inProgress = !terminal && progressKnown && percent in 1..99
         val base = Bundle().apply {
             putParcelable("notification.superx.baseInfos.icon", icon)
             putCharSequence("notification.superx.baseInfos.title", heading.take(90))

@@ -178,6 +178,19 @@ func (t *InMemoryTracker) UpdateMetadata(ctx context.Context, id string, update 
 	if update.DeadlineAt != nil {
 		rec.DeadlineAt = *update.DeadlineAt
 	}
+	if update.RecoveryDescriptor != nil {
+		data, err := update.RecoveryDescriptor.NormalizeOnSerialize()
+		if err != nil {
+			rec.mu.Unlock()
+			return nil, err
+		}
+		descriptor, err := DescriptorFromJSON(data)
+		if err != nil {
+			rec.mu.Unlock()
+			return nil, err
+		}
+		rec.RecoveryDescriptor = descriptor
+	}
 	rec.UpdatedAt = time.Now()
 	rec.mu.Unlock()
 	snap := rec.Snapshot()

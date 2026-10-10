@@ -48,6 +48,7 @@ type OutboxRecord struct {
 	PublishedAt          *time.Time
 	Payload              json.RawMessage
 	Metadata             json.RawMessage
+	HostProvenance       json.RawMessage
 	PayloadHash          string
 	DefinitionHash       string
 	Status               OutboxStatus
@@ -128,6 +129,14 @@ func (r *OutboxRepository) NextConversationSequenceTx(ctx context.Context, tx *s
 }
 
 func (r *OutboxRepository) EnqueueTx(ctx context.Context, tx OutboxTx, record OutboxRecord) error {
+	if len(record.HostProvenance) > 0 {
+		if len(record.HostProvenance) > 16<<10 || !json.Valid(record.HostProvenance) {
+			return fmt.Errorf("event: invalid host provenance")
+		}
+		if _, ok := tx.(*sql.Tx); !ok {
+			return fmt.Errorf("event: host provenance requires atomic SQLite transaction")
+		}
+	}
 	if record.OutboxID == "" {
 		return errors.New("event: outbox id required")
 	}
@@ -164,7 +173,7 @@ func (r *OutboxRepository) EnqueueTx(ctx context.Context, tx OutboxTx, record Ou
 	if record.DispatchedAt != nil {
 		dispatchedAt = sql.NullTime{Time: *record.DispatchedAt, Valid: true}
 	}
-	_, err := tx.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_event_outbox
 		(outbox_id, event_id, event_type_id, event_version, producer_id, producer_type, producer_generation,
 		 event_domain, causation_id,
@@ -186,10 +195,34 @@ func (r *OutboxRepository) EnqueueTx(ctx context.Context, tx OutboxTx, record Ou
 		string(record.Status), record.AvailableAt, record.CreatedAt, record.UpdatedAt,
 		record.ErrorCode, record.ErrorMessage, record.LeaseOwner, leaseExpires, dispatchedAt,
 	)
+	if err != nil {
+		return err
+	}
+	if len(record.HostProvenance) > 0 {
+		count, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return rowsErr
+		}
+		if count != 1 {
+			return fmt.Errorf("event: host provenance cannot attach to an unconfirmed outbox insert")
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO extension_event_host_provenance(outbox_id,provenance_json) VALUES(?,?)`, record.OutboxID, string(record.HostProvenance))
+	}
 	return err
 }
 
 func (r *OutboxRepository) Enqueue(ctx context.Context, record OutboxRecord) error {
+	if len(record.HostProvenance) > 0 {
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if err := r.EnqueueTx(ctx, tx, record); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
 	return r.EnqueueTx(ctx, r.db, record)
 }
 
@@ -212,6 +245,7 @@ func (r *OutboxRepository) ClaimNext(ctx context.Context, owner string, leaseTTL
 		 scope_snapshot_id, permission_snapshot_id, trace_id, operation_id, parent_event_id, depth,
 		 occurred_at, published_at, payload_json, metadata_json, payload_hash, definition_hash,
 		 status, available_at, created_at, updated_at, error_code, error_message, lease_owner, lease_expires_at, dispatched_at
+		,(SELECT provenance_json FROM extension_event_host_provenance WHERE extension_event_host_provenance.outbox_id=extension_event_outbox.outbox_id)
 		FROM extension_event_outbox
 		WHERE status = ? AND (lease_expires_at IS NULL OR lease_expires_at < ?)
 		ORDER BY available_at ASC, created_at ASC
@@ -603,11 +637,25 @@ func (r *OutboxRepository) CountByStatus(ctx context.Context, status OutboxStatu
 }
 
 func (r *OutboxRepository) DeleteOlderThan(ctx context.Context, before time.Time, status OutboxStatus) (int, error) {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM extension_event_outbox WHERE status = ? AND created_at < ?`, string(status), before)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
-	affected, _ := res.RowsAffected()
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM extension_event_host_provenance WHERE outbox_id IN (SELECT outbox_id FROM extension_event_outbox WHERE status=? AND created_at<?)`, string(status), before); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM extension_event_outbox WHERE status = ? AND created_at < ?`, string(status), before)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 	return int(affected), nil
 }
 
@@ -618,6 +666,7 @@ SELECT outbox_id, event_id, event_type_id, event_version, producer_id, producer_
  scope_snapshot_id, permission_snapshot_id, trace_id, operation_id, parent_event_id, depth,
  occurred_at, published_at, payload_json, metadata_json, payload_hash, definition_hash,
  status, available_at, created_at, updated_at, error_code, error_message, lease_owner, lease_expires_at, dispatched_at
+,(SELECT provenance_json FROM extension_event_host_provenance WHERE extension_event_host_provenance.outbox_id=extension_event_outbox.outbox_id)
 FROM extension_event_outbox
 `
 
@@ -629,6 +678,7 @@ func scanOutboxRecord(rows *sql.Rows) (OutboxRecord, error) {
 	var leaseExpires sql.NullTime
 	var dispatchedAt sql.NullTime
 	var payload, metadata, defHash string
+	var hostProvenance sql.NullString
 	var status string
 	var eventTypeID string
 	var producerTypeStr string
@@ -644,6 +694,7 @@ func scanOutboxRecord(rows *sql.Rows) (OutboxRecord, error) {
 		&scopeSnapshotID, &permissionSnapshotID, &traceID, &operationID, &parentID, &rec.Depth,
 		&rec.OccurredAt, &publishedAt, &payload, &metadata, &rec.PayloadHash, &defHash,
 		&status, &rec.AvailableAt, &rec.CreatedAt, &rec.UpdatedAt, &errorCode, &errorMessage, &leaseOwner, &leaseExpires, &dispatchedAt,
+		&hostProvenance,
 	)
 	if err != nil {
 		return rec, err
@@ -653,6 +704,7 @@ func scanOutboxRecord(rows *sql.Rows) (OutboxRecord, error) {
 	rec.Domain = ParseEventDomain(domainStr)
 	rec.Payload = json.RawMessage(payload)
 	rec.Metadata = json.RawMessage(metadata)
+	rec.HostProvenance = json.RawMessage(hostProvenance.String)
 	rec.DefinitionHash = defHash
 	rec.Status = OutboxStatus(status)
 	rec.AggregateType = aggregateType.String
@@ -697,6 +749,7 @@ func scanOutboxRecordRow(row *sql.Row) (OutboxRecord, error) {
 	var leaseExpires sql.NullTime
 	var dispatchedAt sql.NullTime
 	var payload, metadata, defHash string
+	var hostProvenance sql.NullString
 	var status string
 	var eventTypeID string
 	var producerTypeStr string
@@ -711,6 +764,7 @@ func scanOutboxRecordRow(row *sql.Row) (OutboxRecord, error) {
 		&scopeSnapshotID, &permissionSnapshotID, &traceID, &operationID, &parentID, &rec.Depth,
 		&rec.OccurredAt, &publishedAt, &payload, &metadata, &rec.PayloadHash, &defHash,
 		&status, &rec.AvailableAt, &rec.CreatedAt, &rec.UpdatedAt, &errorCode, &errorMessage, &leaseOwner, &leaseExpires, &dispatchedAt,
+		&hostProvenance,
 	)
 	if err != nil {
 		return rec, fmt.Errorf("%w: %v", ErrDeliveryNotFound, err)
@@ -720,6 +774,7 @@ func scanOutboxRecordRow(row *sql.Row) (OutboxRecord, error) {
 	rec.Domain = ParseEventDomain(domainStr)
 	rec.Payload = json.RawMessage(payload)
 	rec.Metadata = json.RawMessage(metadata)
+	rec.HostProvenance = json.RawMessage(hostProvenance.String)
 	rec.DefinitionHash = defHash
 	rec.Status = OutboxStatus(status)
 	rec.AggregateType = aggregateType.String

@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -39,7 +40,7 @@ var validTransitions = map[InteractionStatus][]InteractionStatus{
 	InteractionStatusNormalized:      {InteractionStatusQueued, InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
 	InteractionStatusQueued:          {InteractionStatusProcessing, InteractionStatusCancelled, InteractionStatusSuperseded, InteractionStatusFailed},
 	InteractionStatusProcessing:      {InteractionStatusContextReady, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusCompleted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusInterrupted, InteractionStatusPausing},
-	InteractionStatusContextReady:    {InteractionStatusDecided, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusPausing},
+	InteractionStatusContextReady:    {InteractionStatusProcessing, InteractionStatusDecided, InteractionStatusGenerated, InteractionStatusCommitted, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusPausing},
 	InteractionStatusDecided:         {InteractionStatusGenerated, InteractionStatusFailed, InteractionStatusSuperseded, InteractionStatusCancelled, InteractionStatusPausing},
 	InteractionStatusPausing:         {InteractionStatusPaused},
 	InteractionStatusPaused:          {InteractionStatusResuming},
@@ -233,36 +234,43 @@ func (r *InteractionRecord) SetSupersededBy(supersederID string) {
 func (r *InteractionRecord) Snapshot() InteractionRecord {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	var recoveryCopy *RecoveryDescriptor
+	if r.RecoveryDescriptor != nil {
+		if serialized, err := json.Marshal(r.RecoveryDescriptor); err == nil {
+			_ = json.Unmarshal(serialized, &recoveryCopy)
+		}
+	}
 	return InteractionRecord{
-		ID:                r.ID,
-		Scope:             r.Scope,
-		Priority:          r.Priority,
-		PathType:          r.PathType,
-		Status:            r.Status,
-		StatusVersion:     r.StatusVersion,
-		SupersedesID:      r.SupersedesID,
-		SupersededByID:    r.SupersededByID,
-		CancelReason:      r.CancelReason,
-		ErrorCode:         r.ErrorCode,
-		ErrorMessage:      r.ErrorMessage,
-		ResultRef:         r.ResultRef,
-		CommitID:          r.CommitID,
-		ExecutorID:        r.ExecutorID,
-		OwnerInstanceID:   r.OwnerInstanceID,
-		HeartbeatAt:       r.HeartbeatAt,
-		CommitToken:       r.CommitToken,
-		CommitOwner:       r.CommitOwner,
-		CommitAcquiredAt:  r.CommitAcquiredAt,
-		ResultMessageIDs:  r.ResultMessageIDs,
-		DeliveryIntentIDs: r.DeliveryIntentIDs,
-		CorrelationID:     r.CorrelationID,
-		CausationID:       r.CausationID,
-		DeadlineAt:        r.DeadlineAt,
-		CancelRequestedAt: r.CancelRequestedAt,
-		CreatedAt:         r.CreatedAt,
-		StartedAt:         r.StartedAt,
-		CommittedAt:       r.CommittedAt,
-		CompletedAt:       r.CompletedAt,
-		UpdatedAt:         r.UpdatedAt,
+		ID:                 r.ID,
+		Scope:              r.Scope,
+		Priority:           r.Priority,
+		PathType:           r.PathType,
+		Status:             r.Status,
+		StatusVersion:      r.StatusVersion,
+		SupersedesID:       r.SupersedesID,
+		SupersededByID:     r.SupersededByID,
+		CancelReason:       r.CancelReason,
+		ErrorCode:          r.ErrorCode,
+		ErrorMessage:       r.ErrorMessage,
+		ResultRef:          r.ResultRef,
+		CommitID:           r.CommitID,
+		ExecutorID:         r.ExecutorID,
+		OwnerInstanceID:    r.OwnerInstanceID,
+		HeartbeatAt:        r.HeartbeatAt,
+		CommitToken:        r.CommitToken,
+		CommitOwner:        r.CommitOwner,
+		CommitAcquiredAt:   r.CommitAcquiredAt,
+		ResultMessageIDs:   r.ResultMessageIDs,
+		DeliveryIntentIDs:  r.DeliveryIntentIDs,
+		CorrelationID:      r.CorrelationID,
+		CausationID:        r.CausationID,
+		DeadlineAt:         r.DeadlineAt,
+		CancelRequestedAt:  r.CancelRequestedAt,
+		CreatedAt:          r.CreatedAt,
+		StartedAt:          r.StartedAt,
+		CommittedAt:        r.CommittedAt,
+		CompletedAt:        r.CompletedAt,
+		UpdatedAt:          r.UpdatedAt,
+		RecoveryDescriptor: recoveryCopy,
 	}
 }

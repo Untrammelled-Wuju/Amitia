@@ -28,23 +28,55 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	if err := scope.Validate(); err != nil {
 		return nil, err
 	}
+	var record *InteractionRecord
+	var err error
+	resuming := false
+	if req.RecoverExistingTurn && (req.ReservedInteractionID == "" || req.TurnID == "") {
+		return nil, fmt.Errorf("orchestrator: parent recovery requires the original interaction and turn IDs")
+	}
 	if existing, ok, err := o.tracker.GetByRequestID(ctx, scope.SpaceID, scope.RequestID); err != nil {
 		return nil, err
 	} else if ok {
-		return o.handleIdempotentHit(existing)
-	}
-	record := NewInteractionRecord(scope)
-	if err := o.tracker.Create(ctx, record); err != nil {
-		if errors.Is(err, ErrDuplicateRequest) {
-			if existing, ok, getErr := o.tracker.GetByRequestID(ctx, scope.SpaceID, scope.RequestID); getErr != nil {
-				return nil, getErr
-			} else if ok {
-				return o.handleIdempotentHit(existing)
-			}
+		if req.IsInternal && req.ReservedInteractionID != "" && existing.ID == req.ReservedInteractionID &&
+			existing.Status == InteractionStatusReceived && sameSupersedeScope(existing.Scope, scope) {
+			record = existing
+		} else if req.RecoverExistingTurn && req.ReservedInteractionID == existing.ID &&
+			existing.Status == InteractionStatusContextReady && sameSupersedeScope(existing.Scope, scope) &&
+			!o.cancels.IsRegistered(existing.ID) {
+			record = existing
+			resuming = true
+		} else {
+			return o.handleIdempotentHit(existing)
 		}
-		return nil, err
 	}
-	resolution, err := o.resolver.ResolveExcluding(ctx, scope, record.ID)
+	if record == nil {
+		if req.ReservedInteractionID != "" {
+			return nil, fmt.Errorf("orchestrator: reserved interaction %s is missing; refusing to run untracked side effects", req.ReservedInteractionID)
+		}
+		record = NewInteractionRecord(scope)
+		if err := o.tracker.Create(ctx, record); err != nil {
+			if errors.Is(err, ErrDuplicateRequest) {
+				if existing, ok, getErr := o.tracker.GetByRequestID(ctx, scope.SpaceID, scope.RequestID); getErr != nil {
+					return nil, getErr
+				} else if ok {
+					return o.handleIdempotentHit(existing)
+				}
+			}
+			return nil, err
+		}
+	}
+	var releaseExecution func()
+	if resuming {
+		ctx, releaseExecution, err = o.claimExecution(ctx, record)
+		if err != nil {
+			return o.buildResult(record, nil, OutcomeFailed, err), err
+		}
+		defer releaseExecution()
+	}
+	resolution := &SupersedeResolution{}
+	if !resuming {
+		resolution, err = o.resolver.ResolveExcluding(ctx, scope, record.ID)
+	}
 	if err != nil {
 		record.SetError(err.Error())
 		if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "supersede_resolve_failed", err.Error()); failErr == nil {
@@ -83,7 +115,7 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 			return o.buildResult(record, nil, OutcomeFailed, err), err
 		}
 	}
-	if o.cfg.SupersedePolicy == SupersedePolicyQueue {
+	if o.cfg.SupersedePolicy == SupersedePolicyQueue && !resuming {
 		releaseQueue := o.acquireQueueScope(scope)
 		defer releaseQueue()
 	}
@@ -96,6 +128,13 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 	record, err = o.tracker.TransitionCAS(ctx, record.ID, record.StatusVersion, InteractionStatusProcessing)
 	if err != nil {
 		return o.buildResult(record, nil, OutcomeFailed, err), err
+	}
+	if !resuming {
+		ctx, releaseExecution, err = o.claimExecution(ctx, record)
+		if err != nil {
+			return o.buildResult(record, nil, OutcomeFailed, err), err
+		}
+		defer releaseExecution()
 	}
 	var processCtx context.Context
 	var cancel context.CancelFunc
@@ -133,6 +172,17 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		return o.buildResult(record, nil, OutcomeFailed, err), err
 	}
 	req.ExpectedStatusVersion = record.StatusVersion
+	if !runtime.Safety.Blocked {
+		if checkpoint, checkpointErr := o.persistParentTurnCheckpoint(ctx, record, req); checkpointErr != nil {
+			if failed, failErr := o.tracker.Fail(ctx, record.ID, record.StatusVersion, "parent_checkpoint_failed", checkpointErr.Error()); failErr == nil {
+				record = failed
+			}
+			o.releaseRelationshipClaimIfUncommitted(ctx, record.ID, "parent_checkpoint_failed")
+			return o.buildResult(record, nil, OutcomeFailed, checkpointErr), checkpointErr
+		} else {
+			record = checkpoint
+		}
+	}
 	if runtime.Safety.Blocked {
 		blockErr := error(ErrOrchestratorSafetyBlocked)
 		if len(runtime.Safety.Reasons) > 0 {
@@ -194,6 +244,9 @@ func (o *Orchestrator) releaseExecutionSlot() {
 }
 
 func (o *Orchestrator) handleProcessorError(ctx context.Context, record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, duration time.Duration, procErr error) (*OrchestrationResult, error) {
+	cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancelCleanup()
+	ctx = cleanupCtx
 	if fresh, ok, getErr := o.tracker.Get(ctx, record.ID); getErr == nil && ok {
 		record = fresh
 	}
@@ -208,6 +261,10 @@ func (o *Orchestrator) handleProcessorError(ctx context.Context, record *Interac
 			result.Events = resp.Events
 		}
 		return result, nil
+	}
+	if errors.Is(procErr, ErrToolReconciliationRequired) {
+		log.Printf("[orchestrator] interaction %s requires durable tool reconciliation: %v", record.ID, procErr)
+		return o.buildResult(record, nil, OutcomeDeliveryUnknown, procErr), procErr
 	}
 	if errors.Is(procErr, context.Canceled) || errors.Is(procErr, context.DeadlineExceeded) {
 		record.CancelReason = procErr.Error()

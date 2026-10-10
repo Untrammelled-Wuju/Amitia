@@ -13,7 +13,8 @@ import (
 )
 
 type chatToolRuntimeAdapter struct {
-	facade *kernel.ToolFacade
+	facade     *kernel.ToolFacade
+	multiAgent *chatMultiAgentRuntime
 }
 
 var _ chat.ModelToolRuntime = (*chatToolRuntimeAdapter)(nil)
@@ -118,10 +119,17 @@ func (a *chatToolRuntimeAdapter) BeforePrompt(ctx context.Context, scope chat.Sk
 }
 
 func (a *chatToolRuntimeAdapter) ModelTools(ctx context.Context, scope chat.SkillScope) ([]tool.Tool, error) {
-	return a.facade.ModelTools(ctx, a.toInvocationScope(scope))
+	defs, err := a.facade.ModelTools(ctx, a.toInvocationScope(scope))
+	if err != nil {
+		return nil, err
+	}
+	return a.appendMultiAgentTools(ctx, defs, scope), nil
 }
 
 func (a *chatToolRuntimeAdapter) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope chat.SkillScope, idempotencyKey string) (chat.ToolResult, bool) {
+	if isChatMultiAgentTool(modelName) {
+		return a.executeMultiAgentTool(ctx, modelName, input, scope), true
+	}
 	result, found := a.facade.ExecuteModelTool(ctx, modelName, input, a.toInvocationScope(scope), idempotencyKey)
 	return a.toChatResult(result), found
 }
@@ -143,6 +151,9 @@ func (s chatToolProgressSink) Emit(ctx context.Context, event capability.ToolStr
 }
 
 func (a *chatToolRuntimeAdapter) ExecuteModelToolWithProgress(ctx context.Context, modelName string, input json.RawMessage, scope chat.SkillScope, idempotencyKey string, emit func(context.Context, chat.ToolProgressEvent) error) (chat.ToolResult, bool, error) {
+	if isChatMultiAgentTool(modelName) {
+		return a.executeMultiAgentTool(ctx, modelName, input, scope), true, nil
+	}
 	result, streamed, err := a.facade.ExecuteModelToolStream(ctx, modelName, input, a.toInvocationScope(scope), idempotencyKey, chatToolProgressSink{emit: emit})
 	found := streamed
 	if !found && (result.Error == nil || result.Error.Code != "TOOL_NOT_FOUND") {
@@ -152,6 +163,9 @@ func (a *chatToolRuntimeAdapter) ExecuteModelToolWithProgress(ctx context.Contex
 }
 
 func (a *chatToolRuntimeAdapter) IsModelToolParallelSafe(ctx context.Context, modelName string, scope chat.SkillScope) bool {
+	if isChatMultiAgentTool(modelName) {
+		return false
+	}
 	return a.facade.IsModelToolParallelSafe(ctx, modelName, a.toInvocationScope(scope))
 }
 

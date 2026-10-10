@@ -21,20 +21,21 @@ const (
 )
 
 type mutationPayload struct {
-	Title          string                 `json:"title"`
-	Name           string                 `json:"name,omitempty"`
-	Content        string                 `json:"content"`
-	Meta           map[string]interface{} `json:"meta,omitempty"`
-	ConversationID string                 `json:"conversationId,omitempty"`
-	CharacterID    string                 `json:"characterId,omitempty"`
-	Channel        string                 `json:"channel,omitempty"`
-	Source         string                 `json:"source,omitempty"`
-	PeerID         string                 `json:"peerId,omitempty"`
-	Role           string                 `json:"role,omitempty"`
-	Sequence       int64                  `json:"sequence,omitempty"`
-	MsgType        string                 `json:"msgType,omitempty"`
-	Key            string                 `json:"key,omitempty"`
-	Value          string                 `json:"value,omitempty"`
+	Title                string                 `json:"title"`
+	Name                 string                 `json:"name,omitempty"`
+	Content              string                 `json:"content"`
+	Meta                 map[string]interface{} `json:"meta,omitempty"`
+	ConversationID       string                 `json:"conversationId,omitempty"`
+	CharacterID          string                 `json:"characterId,omitempty"`
+	Channel              string                 `json:"channel,omitempty"`
+	Source               string                 `json:"source,omitempty"`
+	PeerID               string                 `json:"peerId,omitempty"`
+	Role                 string                 `json:"role,omitempty"`
+	Sequence             int64                  `json:"sequence,omitempty"`
+	MsgType              string                 `json:"msgType,omitempty"`
+	Key                  string                 `json:"key,omitempty"`
+	Value                string                 `json:"value,omitempty"`
+	LastReadTurnSequence *int64                 `json:"lastReadTurnSequence,omitempty"`
 }
 
 type businessApplier struct {
@@ -194,6 +195,9 @@ func (a *businessApplier) applyConversation(tx *gorm.DB, spaceID string, mutatio
 			"updated_at":   a.now(),
 			"revision":     1,
 		}
+		if payload.LastReadTurnSequence != nil {
+			record["last_read_turn_sequence"] = *payload.LastReadTurnSequence
+		}
 		if err := tx.Table("conversations").Create(record).Error; err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "create conversation: " + err.Error()}
 		}
@@ -217,6 +221,9 @@ func (a *businessApplier) applyConversation(tx *gorm.DB, spaceID string, mutatio
 		}
 		if payload.PeerID != "" {
 			updates["peer_id"] = payload.PeerID
+		}
+		if payload.LastReadTurnSequence != nil {
+			updates["last_read_turn_sequence"] = *payload.LastReadTurnSequence
 		}
 		q := tx.Table("conversations").Where("id = ? AND revision = ? AND deleted_at IS NULL", mutation.EntityID, mutation.BaseRevision)
 		q = syncOwnerScope(q, "space_id", spaceID)

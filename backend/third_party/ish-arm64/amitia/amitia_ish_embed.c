@@ -32,6 +32,7 @@ struct amitia_process {
     bool completed;
     bool cancelled;
     int exit_code;
+    struct amitia_bridge_fd *bridge;
     struct amitia_process *next;
 };
 
@@ -51,16 +52,17 @@ static struct amitia_process *find_process(uint64_t generation);
 struct amitia_bridge_fd {
     uint64_t generation;
     pid_t_ owner;
+    atomic_bool active;
+    atomic_uint references;
 };
 
 static bool bridge_authorized(struct fd *fd) {
     struct amitia_bridge_fd *bridge = fd->fs_data;
-    if (!current || !bridge || current->tgid != bridge->owner) return false;
-    lock(&pids_lock);
-    struct amitia_process *process = find_process(bridge->generation);
-    bool permitted = process && process->pid == bridge->owner && !process->completed && !process->cancelled;
-    unlock(&pids_lock);
-    return permitted;
+    return current && bridge && bridge->generation && current->tgid == bridge->owner && atomic_load_explicit(&bridge->active, memory_order_acquire);
+}
+
+static void bridge_release(struct amitia_bridge_fd *bridge) {
+    if (bridge && atomic_fetch_sub_explicit(&bridge->references, 1, memory_order_acq_rel) == 1) free(bridge);
 }
 
 static ssize_t bridge_read(struct fd *fd, void *bytes, size_t count) {
@@ -76,7 +78,7 @@ static int bridge_poll(struct fd *fd) {
 }
 
 static int bridge_close(struct fd *fd) {
-    free(fd->fs_data);
+    bridge_release(fd->fs_data);
     return realfs_fdops.close(fd);
 }
 
@@ -99,15 +101,13 @@ static struct amitia_process *find_process(uint64_t generation) {
     return NULL;
 }
 
-static int install_bridge_fd(int descriptor, pid_t_ owner, uint64_t generation, int flags) {
-    struct amitia_bridge_fd *bridge = malloc(sizeof(*bridge));
-    if (!bridge) return _ENOMEM;
+static int install_bridge_fd(int descriptor, struct amitia_bridge_fd *bridge, int flags) {
     struct fd *fd = adhoc_fd_create(&bridge_operations);
-    if (!fd) { free(bridge); return _ENOMEM; }
+    if (!fd) return _ENOMEM;
     fd->real_fd = dup(descriptor);
-    if (fd->real_fd < 0) { fd_close(fd); free(bridge); return _EIO; }
+    if (fd->real_fd < 0) { fd_close(fd); return _EIO; }
     fcntl(fd->real_fd, F_SETFD, FD_CLOEXEC);
-    *bridge = (struct amitia_bridge_fd){.generation = generation, .owner = owner};
+    atomic_fetch_add_explicit(&bridge->references, 1, memory_order_relaxed);
     fd->fs_data = bridge;
     fd->flags = flags;
     fd->stat.mode = S_IFIFO | 0600;
@@ -119,6 +119,7 @@ static void process_exit(struct task *task, int status) {
         if (item->pid == task->tgid) {
             item->exit_code = (status & 0x7f) ? 128 + (status & 0x7f) : (status >> 8) & 0xff;
             item->completed = true;
+            if (item->bridge) atomic_store_explicit(&item->bridge->active, false, memory_order_release);
             break;
         }
     }
@@ -266,7 +267,10 @@ static bool empty_directory_tree(const char *path) {
     if (!directory) return errno == ENOENT;
     bool empty = true;
     struct dirent *entry;
-    while (empty && (entry = readdir(directory))) {
+    while (empty) {
+        errno = 0;
+        entry = readdir(directory);
+        if (!entry) { if (errno) empty = false; break; }
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
         char child[MAX_PATH + 1];
         struct stat state;
@@ -331,6 +335,8 @@ int amitia_ish_start(const char *rootfs_path, const char *workdir, const char **
     if (business_host) {
         struct stat state;
         if (*business_host != '/' || lstat(business_host, &state) || !S_ISDIR(state.st_mode) || !realpath(business_host, business_volume)) return AMITIA_ISH_ERR_ROOTFS_NOT_READY;
+        size_t root_length = strlen(root), volume_length = strlen(business_volume);
+        if ((!strncmp(root, business_volume, root_length) && (business_volume[root_length] == '/' || business_volume[root_length] == 0)) || (!strncmp(root, business_volume, volume_length) && (root[volume_length] == '/' || root[volume_length] == 0))) return AMITIA_ISH_ERR_INVALID_ARGUMENT;
     }
     char *defaults = string_blob(default_environment, sizeof(default_environment) / sizeof(default_environment[0]));
     if (!defaults) return AMITIA_ISH_ERR_INTERNAL;
@@ -348,20 +354,23 @@ int amitia_ish_start(const char *rootfs_path, const char *workdir, const char **
         pthread_mutex_unlock(&runtime_lock);
         return AMITIA_ISH_ERR_ROOTFS_FORMAT_UNSUPPORTED;
     }
-    if (init_task && (!kernel_ready || atomic_load(&runtime_state) == AMITIA_ISH_ERROR)) {
+    if ((mounted_root && !init_task) || (init_task && (!kernel_ready || atomic_load(&runtime_state) == AMITIA_ISH_ERROR))) {
         free(environment);
         pthread_mutex_unlock(&runtime_lock);
         return AMITIA_ISH_ERR_INTERNAL;
     }
     struct task *saved = current;
     int error = 0;
+    bool legacy_data_requires_migration = false;
     if (!init_task) {
         atomic_store(&runtime_state, AMITIA_ISH_STARTING);
-        error = mount_root(&fakefs, root);
+        char *root_copy = strdup(root);
+        error = root_copy ? mount_root(&fakefs, root) : _ENOMEM;
+        if (error >= 0) mounted_root = root_copy;
+        else free(root_copy);
         if (error >= 0) error = become_first_process();
         if (error >= 0) {
             init_task = current;
-            mounted_root = strdup(root);
             error = prepare_devices();
             if (error >= 0) error = do_mount(&procfs, "proc", "/proc", "", 0);
             if (error >= 0) error = do_mount(&devptsfs, "devpts", "/dev/pts", "", 0);
@@ -380,7 +389,8 @@ int amitia_ish_start(const char *rootfs_path, const char *workdir, const char **
     current = init_task;
     if (error >= 0 && init_task && business_host && !mounted_business_volume) {
         char old_data[MAX_PATH + 1], data[MAX_PATH + 1];
-        if (snprintf(old_data, sizeof(old_data), "%s/var/lib/amitia", root) >= (int)sizeof(old_data) || !empty_directory_tree(old_data)) error = _EEXIST;
+        if (snprintf(old_data, sizeof(old_data), "%s/var/lib/amitia", root) >= (int)sizeof(old_data)) error = _EINVAL;
+        else if (!empty_directory_tree(old_data)) { error = _EEXIST; legacy_data_requires_migration = true; }
         if (error >= 0) error = prepare_business_volume(business_volume);
         if (error >= 0 && snprintf(data, sizeof(data), "%s/data", business_volume) >= (int)sizeof(data)) error = _EINVAL;
         if (error >= 0) error = do_mount(&fakefs, data, "/var/lib/amitia", "", 0);
@@ -394,7 +404,7 @@ int amitia_ish_start(const char *rootfs_path, const char *workdir, const char **
         atomic_store(&runtime_state, AMITIA_ISH_ERROR);
         free(environment);
         pthread_mutex_unlock(&runtime_lock);
-        return AMITIA_ISH_ERR_ROOTFS_NOT_READY;
+        return legacy_data_requires_migration ? AMITIA_ISH_ERR_LEGACY_DATA_REQUIRES_MIGRATION : AMITIA_ISH_ERR_ROOTFS_NOT_READY;
     }
     free(runtime_environment);
     runtime_environment = environment;
@@ -469,7 +479,15 @@ int amitia_ish_spawn(const amitia_ish_command_t *command, amitia_ish_process_t *
     record->generation = next_generation++;
     record->pid = child->pid;
     record->exit_code = -1;
-    if (command->enable_host_bridge && (install_bridge_fd(bridge[1], child->tgid, record->generation, O_RDONLY_) != 3 || install_bridge_fd(bridge[1], child->tgid, record->generation, O_WRONLY_) != 4)) goto failed;
+    if (command->enable_host_bridge) {
+        record->bridge = calloc(1, sizeof(*record->bridge));
+        if (!record->bridge) goto failed;
+        record->bridge->generation = record->generation;
+        record->bridge->owner = child->tgid;
+        atomic_init(&record->bridge->active, true);
+        atomic_init(&record->bridge->references, 1);
+        if (install_bridge_fd(bridge[1], record->bridge, O_RDONLY_) != 3 || install_bridge_fd(bridge[1], record->bridge, O_WRONLY_) != 4) goto failed;
+    }
     lock(&pids_lock);
     record->next = processes;
     processes = record;
@@ -499,6 +517,7 @@ failed:
         for (int end = 0; end < 2; end++) if (pipes[index][end] >= 0) close(pipes[index][end]);
     if (bridge[0] >= 0) close(bridge[0]);
     if (bridge[1] >= 0) close(bridge[1]);
+    if (record) bridge_release(record->bridge);
     free(record); free(arguments); free(environment);
     pthread_mutex_unlock(&runtime_lock);
     return error;
@@ -509,10 +528,33 @@ int amitia_ish_poll(uint64_t generation, bool *running, int *exit_code) {
     lock(&pids_lock);
     struct amitia_process *item = find_process(generation);
     if (!item) { unlock(&pids_lock); return AMITIA_ISH_ERR_INVALID_ARGUMENT; }
+    struct task *leader = pid_get_task_zombie(item->pid);
+    if (!item->completed && leader && leader->zombie) {
+        int status = leader->group->doing_group_exit ? leader->group->group_exit_code : leader->exit_code;
+        item->exit_code = (status & 0x7f) ? 128 + (status & 0x7f) : (status >> 8) & 0xff;
+        item->completed = true;
+        if (item->bridge) atomic_store_explicit(&item->bridge->active, false, memory_order_release);
+    }
     *running = !item->completed;
     *exit_code = item->completed ? item->exit_code : -1;
     unlock(&pids_lock);
     return AMITIA_ISH_OK;
+}
+
+static void reap_untracked_children(void) {
+    if (!init_task) return;
+    struct task *saved = current;
+    current = init_task;
+    for (int pid = 2; pid < MAX_PID; pid++) {
+        lock(&pids_lock);
+        struct task *task = pid_get_task_zombie(pid);
+        bool orphan = task && task->zombie && task->parent && task->parent->group == init_task->group;
+        for (struct amitia_process *item = processes; item && orphan; item = item->next)
+            if (item->pid == pid) orphan = false;
+        unlock(&pids_lock);
+        if (orphan) sys_wait4(pid, 0, AMITIA_WNOHANG, 0);
+    }
+    current = saved;
 }
 
 int amitia_ish_reap(uint64_t generation, int *exit_code) {
@@ -539,9 +581,10 @@ int amitia_ish_reap(uint64_t generation, int *exit_code) {
     lock(&pids_lock);
     struct amitia_process **link = &processes;
     while (*link && (*link)->generation != generation) link = &(*link)->next;
-    if (*link) { item = *link; *link = item->next; free(item); }
+    if (*link) { item = *link; *link = item->next; bridge_release(item->bridge); free(item); }
     unlock(&pids_lock);
     *exit_code = code;
+    reap_untracked_children();
     pthread_mutex_unlock(&runtime_lock);
     return AMITIA_ISH_OK;
 }
@@ -551,12 +594,24 @@ static void signal_process(uint64_t generation, int signal) {
     struct amitia_process *item = find_process(generation);
     if (item) {
         item->cancelled = true;
+        if (item->bridge) atomic_store_explicit(&item->bridge->active, false, memory_order_release);
         struct task *leader = pid_get_task_zombie(item->pid);
         if (leader) {
             pid_t_ group = leader->group->pgid;
+            if (item->bridge) {
+                for (struct amitia_process *other = processes; other; other = other->next) {
+                    other->cancelled = true;
+                    if (other->bridge) atomic_store_explicit(&other->bridge->active, false, memory_order_release);
+                }
+            }
             for (int pid = 2; pid < MAX_PID; pid++) {
                 struct task *task = pid_get_task(pid);
-                if (task && task->group->pgid == group) send_signal(task, signal, SIGINFO_NIL);
+                if (!task) continue;
+                bool child = false;
+                for (struct task *ancestor = task; ancestor && ancestor->pid > 1; ancestor = ancestor->parent) {
+                    if (ancestor->tgid == item->pid) { child = true; break; }
+                }
+                if (item->bridge || child || task->group->pgid == group) send_signal(task, signal, SIGINFO_NIL);
             }
         }
     }
@@ -565,9 +620,15 @@ static void signal_process(uint64_t generation, int signal) {
 
 int amitia_ish_cancel(uint64_t generation) {
     if (!generation) return AMITIA_ISH_ERR_INVALID_ARGUMENT;
+    pthread_mutex_lock(&runtime_lock);
+    lock(&pids_lock);
+    bool present = find_process(generation) != NULL;
+    unlock(&pids_lock);
+    if (!present) { pthread_mutex_unlock(&runtime_lock); return AMITIA_ISH_ERR_INVALID_ARGUMENT; }
     signal_process(generation, SIGTERM_);
     usleep(100000);
     signal_process(generation, SIGKILL_);
+    pthread_mutex_unlock(&runtime_lock);
     return AMITIA_ISH_OK;
 }
 
@@ -623,6 +684,11 @@ int amitia_ish_execute(const amitia_ish_command_t *command, amitia_ish_result_t 
             ssize_t count = read(fds[index].fd, bytes, sizeof(bytes));
             if (!count || (count < 0 && errno != EAGAIN && errno != EINTR)) {
                 if (index) error_open = false; else output_open = false;
+                if (count < 0 && !exit_deadline) {
+                    error = AMITIA_ISH_ERR_INTERNAL;
+                    amitia_ish_cancel(process.generation);
+                    exit_deadline = monotonic_ms() + 5000;
+                }
             } else if (count > 0 && append_output(index ? &errors : &output, index ? &result->stderr_size : &result->stdout_size, bytes, count) != AMITIA_ISH_OK) {
                 error = AMITIA_ISH_ERR_INTERNAL;
                 amitia_ish_cancel(process.generation);
@@ -634,7 +700,7 @@ int amitia_ish_execute(const amitia_ish_command_t *command, amitia_ish_result_t 
             if (count > 0) written += count;
             else if (count < 0 && errno != EAGAIN && errno != EINTR) { close(process.stdin_fd); process.stdin_fd = -1; }
         }
-        if (amitia_ish_poll(process.generation, &running, &result->exit_code) != AMITIA_ISH_OK) { error = AMITIA_ISH_ERR_INTERNAL; break; }
+        if (amitia_ish_poll(process.generation, &running, &result->exit_code) != AMITIA_ISH_OK) { error = AMITIA_ISH_ERR_INTERNAL; result->fatal = true; break; }
         lock(&pids_lock);
         struct amitia_process *record = find_process(process.generation);
         bool cancelled = record && record->cancelled;
@@ -642,12 +708,13 @@ int amitia_ish_execute(const amitia_ish_command_t *command, amitia_ish_result_t 
         if (cancelled && error == AMITIA_ISH_OK) { error = AMITIA_ISH_ERR_EXEC_CANCELLED; exit_deadline = monotonic_ms() + 5000; }
         if (!running && !exit_deadline) exit_deadline = monotonic_ms() + 1000;
     }
+    if (!running) signal_process(process.generation, SIGKILL_);
     if (process.stdin_fd >= 0) close(process.stdin_fd);
     close(process.stdout_fd); close(process.stderr_fd);
     if (!running && amitia_ish_reap(process.generation, &result->exit_code) != AMITIA_ISH_OK) error = AMITIA_ISH_ERR_INTERNAL;
     result->stdout_data = output; result->stderr_data = errors; result->error_code = error;
     if (error != AMITIA_ISH_OK) result->error_message = strdup(error == AMITIA_ISH_ERR_EXEC_TIMEOUT ? "guest execution timed out" : error == AMITIA_ISH_ERR_EXEC_CANCELLED ? "guest execution cancelled" : "guest execution failed or exceeded output budget");
-    if (result->fatal) atomic_store(&runtime_state, AMITIA_ISH_ERROR);
+    if (result->fatal) { amitia_ish_stop(); atomic_store(&runtime_state, AMITIA_ISH_ERROR); }
     pthread_mutex_unlock(&short_execution_lock);
     return error;
 }
@@ -656,7 +723,10 @@ void amitia_ish_stop(void) {
     pthread_mutex_lock(&runtime_lock);
     atomic_store(&runtime_state, AMITIA_ISH_UNAVAILABLE);
     lock(&pids_lock);
-    for (struct amitia_process *item = processes; item; item = item->next) item->cancelled = true;
+    for (struct amitia_process *item = processes; item; item = item->next) {
+        item->cancelled = true;
+        if (item->bridge) atomic_store_explicit(&item->bridge->active, false, memory_order_release);
+    }
     for (int pid = 2; pid < MAX_PID; pid++) {
         struct task *task = pid_get_task(pid);
         if (task) send_signal(task, SIGKILL_, SIGINFO_NIL);
@@ -672,10 +742,18 @@ void amitia_ish_stop(void) {
         if (live) usleep(10000);
     }
     if (live) atomic_store(&runtime_state, AMITIA_ISH_ERROR);
+    else reap_untracked_children();
     pthread_mutex_unlock(&runtime_lock);
 }
 
 amitia_ish_state_t amitia_ish_state(void) { return atomic_load(&runtime_state); }
+
+bool amitia_ish_root_mounted(void) {
+    pthread_mutex_lock(&runtime_lock);
+    bool mounted = mounted_root != NULL;
+    pthread_mutex_unlock(&runtime_lock);
+    return mounted;
+}
 
 void amitia_ish_result_free(amitia_ish_result_t *result) {
     if (!result) return;

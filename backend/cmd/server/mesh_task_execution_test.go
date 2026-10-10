@@ -118,6 +118,7 @@ return {success:true,output:{private:saved.value,initial,binary:binary.artifactI
 	t.Cleanup(func() { _ = broker.Close() })
 	config.SourcePermissionGuard = task_runtime.NewSourceTaskPermissionGuard(broker)
 	config.SourceApprovalRecorder = broker
+	config.ProcessDiagnostics = os.Stderr
 	config.InstalledDefinitionValidator = func(_ context.Context, current *task_runtime.TaskDefinition) error {
 		if current == nil || current.TaskID != definition.TaskID || current.InstalledGeneration != definition.InstalledGeneration || current.EntryHash != definition.EntryHash {
 			return coordination.ErrScopeExpired

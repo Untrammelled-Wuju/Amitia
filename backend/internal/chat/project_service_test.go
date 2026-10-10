@@ -22,7 +22,7 @@ func newProjectTestService(t *testing.T) *service {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	if err := db.AutoMigrate(&Project{}, &Conversation{}, &Message{}); err != nil {
+	if err := db.AutoMigrate(&Project{}, &Conversation{}, &Message{}, &AssistantTurn{}, &AssistantTurnItem{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`CREATE TABLE workspace_mounts (

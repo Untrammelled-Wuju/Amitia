@@ -275,7 +275,7 @@ val validateReleaseSigning by tasks.registering {
     }
 }
 
-tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+tasks.matching { it.name in setOf("packageRelease", "assembleRelease", "bundleRelease") }.configureEach {
     dependsOn(validateReleaseSigning)
 }
 
@@ -416,7 +416,6 @@ tasks.register("validateBundledRuntimePackage") {
 
 tasks.named("preBuild").configure {
     dependsOn("validateBundledRuntimePackage")
-    dependsOn("copyAccessibilityProviderAsset")
 }
 
 flutter {
@@ -449,11 +448,68 @@ dependencies {
 
 val accessibilityProviderProject = project(":amitia-accessibility")
 
+val releaseLintOnly = gradle.startParameter.taskNames.isNotEmpty() &&
+    gradle.startParameter.taskNames.all { it.substringAfterLast(":").startsWith("lint", ignoreCase = true) }
+
 tasks.register<Copy>("copyAccessibilityProviderAsset") {
-    dependsOn(":amitia-accessibility:assembleRelease")
+    if (!releaseLintOnly) {
+        dependsOn(":amitia-accessibility:assembleRelease")
+    }
+    onlyIf { !releaseLintOnly }
     from(accessibilityProviderProject.layout.buildDirectory.dir("outputs/apk/release")) {
         include("*.apk")
         rename { "amitia-accessibility.apk" }
     }
     into(layout.buildDirectory.dir("generated/accessibility-provider/assets/accessibility"))
+}
+
+tasks.register<Copy>("copyAccessibilityProviderDebugAsset") {
+    dependsOn(":amitia-accessibility:assembleDebug")
+    from(accessibilityProviderProject.layout.buildDirectory.dir("outputs/apk/debug")) {
+        include("*.apk")
+        rename { "amitia-accessibility.apk" }
+    }
+    into(layout.buildDirectory.dir("generated/accessibility-provider/assets/accessibility"))
+}
+
+tasks.matching { it.name == "mergeDebugAssets" }.configureEach {
+    dependsOn("copyAccessibilityProviderDebugAsset")
+}
+tasks.matching { it.name == "mergeReleaseAssets" }.configureEach {
+    dependsOn("copyAccessibilityProviderAsset")
+}
+tasks.matching { it.name == "mergeProfileAssets" }.configureEach {
+    dependsOn("copyAccessibilityProviderDebugAsset")
+}
+
+val expectedFlutterApkOutput = rootProject.file("../build/app/outputs/flutter-apk")
+val nativeFlutterApkOutputs = listOf(
+    layout.buildDirectory.get().asFile.resolve("outputs/flutter-apk"),
+    project.file("build/outputs/flutter-apk")
+).distinctBy { it.absolutePath }
+
+listOf("Debug", "Profile", "Release").forEach { variant ->
+    val apkName = "app-${variant.lowercase()}.apk"
+    val expectedApk = expectedFlutterApkOutput.resolve(apkName)
+    val sourceApk = {
+        nativeFlutterApkOutputs.map { it.resolve(apkName) }
+            .filter { it.isFile && it.absolutePath != expectedApk.absolutePath }
+            .maxByOrNull { it.lastModified() }
+    }
+    val stageTask = tasks.register<Copy>("stage${variant}FlutterApk") {
+        from(providers.provider {
+            sourceApk()?.parentFile ?: nativeFlutterApkOutputs.first()
+        }) {
+            include(apkName)
+        }
+        into(expectedFlutterApkOutput)
+        onlyIf {
+            val inputApk = sourceApk()
+            inputApk != null && (!expectedApk.isFile ||
+                inputApk.lastModified() > expectedApk.lastModified())
+        }
+    }
+    tasks.matching { it.name == "assemble${variant}" }.configureEach {
+        finalizedBy(stageTask)
+    }
 }

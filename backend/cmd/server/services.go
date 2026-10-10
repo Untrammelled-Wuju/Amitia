@@ -38,6 +38,7 @@ import (
 	installationprojection "github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
 	"github.com/u-ai/backend/internal/runtimeidentity"
+	"github.com/u-ai/backend/pkg/platform"
 
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
@@ -579,7 +580,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		baseURL := "http://" + config.AppCfg.Server.Addr()
 		toolFacade.SetSkillResourceHandler(extension.NewSkillResourceAdapter(extensionRuntime.AgentSkills, baseURL))
 	}
-	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
+	chatToolRuntime := newChatToolRuntimeAdapter(toolFacade)
+	chatSvc.SetToolRuntime(chatToolRuntime)
 	extensionContextProvider := newKernelExtensionContextProvider(toolFacade)
 	if setter, ok := interface{}(chatSvc).(interface {
 		SetExtensionContextProvider(extensioncontext.Provider)
@@ -748,8 +750,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	backgroundTaskCoordinator := interaction.NewBackgroundTaskCoordinator(tracker, recoveryDescriptor, kernelContainer.TaskRuntimeService)
 	_ = backgroundTaskCoordinator
 	_ = pauseResumeService
-	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewUnifiedEntryWorkerRunner(entry), pauseResumeService, interaction.DefaultMultiAgentPolicy())
-	_ = multiAgentCoordinator
+	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewAsyncUnifiedEntryWorkerRunner(entry, tracker), pauseResumeService, interaction.DefaultMultiAgentPolicy())
+	chatToolRuntime.ConfigureMultiAgent(multiAgentCoordinator, tracker, goalRegistry)
 	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer, recoveryDescriptor)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
@@ -1352,7 +1354,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			localRuntimeDispatcher.RegisterCancellable(gameHostManagementInvokeHandler, newGameHostManagementInvokeHandler(services))
 		}
 		deviceDispatcher := devicemeshagent.NewChainedRuntimeDispatcher(localRuntimeDispatcher, dispatcher)
-		if err := deviceMeshRuntime.AttachDeviceAgent(mcpDataDirectory(ctx), platformFromGOOS(goruntime.GOOS), deviceDispatcher, func(cred *devicemeshagent.StoredCredential) error {
+		if err := deviceMeshRuntime.AttachDeviceAgent(mcpDataDirectory(ctx), devicePlatformFromDescriptor(platform.Get().Descriptor(), goruntime.GOOS), deviceDispatcher, func(cred *devicemeshagent.StoredCredential) error {
 			auditContext := meshaudit.WithActor(context.Background(), meshaudit.Actor{SpaceID: localSpace.SpaceID(), DeviceID: physicalIdentity.DeviceID.String(), PrincipalType: "device_runtime", AuthMethod: "local_provider_authority", Realm: "local"})
 			if cred == nil {
 				_, _, err := deviceMeshRuntime.Coordination.BindProvider(auditContext, localSpace.SpaceID())
@@ -1498,6 +1500,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
+	}
+	if err := validateMeshBusinessWiring(services); err != nil {
+		return nil, fmt.Errorf("device coordination wiring failed: %w", err)
+	}
+	if services.RuntimeProfile.IsCore() {
+		services.DeviceMesh.BusinessCoordinationReady = true
 	}
 	return services, nil
 }

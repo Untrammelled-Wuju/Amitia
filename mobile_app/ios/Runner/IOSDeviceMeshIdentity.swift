@@ -18,6 +18,7 @@ final class IOSDeviceMeshIdentity {
     private let account = "primary"
     private var channel: FlutterMethodChannel?
     private let lock = NSRecursiveLock()
+    var willReset: (() -> Void)?
 
     func hostIdentity() throws -> [String: Any] {
         lock.lock()
@@ -76,6 +77,7 @@ final class IOSDeviceMeshIdentity {
                 }
                 result(try hostSign(data))
             case "reset":
+                willReset?()
                 lock.lock()
                 defer { lock.unlock() }
                 try deleteIdentity()

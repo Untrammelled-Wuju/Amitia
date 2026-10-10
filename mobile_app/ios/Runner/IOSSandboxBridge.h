@@ -103,6 +103,9 @@ extern NSString * const kRootfsActiveVersionDidChangeNotification;
 @property (nonatomic, strong, readonly, nullable) RootfsResolver *resolver;
 
 + (instancetype)shared;
++ (NSString *)nameForLifecycleState:(ISHSandboxLifecycleState)state NS_SWIFT_NAME(lifecycleName(for:));
++ (NSString *)lifecycleErrorCodeForError:(NSError *)error NS_SWIFT_NAME(lifecycleErrorCode(for:));
++ (NSString *)executionErrorCodeForError:(NSError *)error NS_SWIFT_NAME(executionErrorCode(for:));
 + (instancetype)sharedWithResolver:(nullable RootfsResolver *)resolver;
 
 - (ISHAvailability)availability;
@@ -117,7 +120,7 @@ extern NSString * const kRootfsActiveVersionDidChangeNotification;
 - (void)restartWithReason:(nullable NSString *)reason
                completion:(void (^)(BOOL success, NSError *_Nullable error))completion;
 
-- (ISHBridgeResult *)executeCommand:(ISHBridgeCommand *)command error:(NSError *_Nullable *_Nullable)error;
+- (ISHBridgeResult *)executeCommand:(ISHBridgeCommand *)command error:(NSError *_Nullable *_Nullable)error __attribute__((swift_error(none)));
 
 - (void)applicationDidEnterBackground;
 - (void)applicationWillEnterForeground;

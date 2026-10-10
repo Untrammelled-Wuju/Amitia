@@ -3,12 +3,14 @@ import { createPinia, setActivePinia } from "pinia";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
   put: vi.fn(),
 }));
 
 vi.mock("@/composables/useApi", () => ({
   apiClient: {
     get: mocks.get,
+    post: mocks.post,
     put: mocks.put,
   },
 }));
@@ -19,6 +21,7 @@ describe("chat store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     mocks.get.mockReset();
+    mocks.post.mockReset();
     mocks.put.mockReset();
   });
 
@@ -72,5 +75,34 @@ describe("chat store", () => {
       { archived: true },
     );
     expect(store.archivedRevision).toBe(1);
+  });
+
+  it("marks an unread conversation as read without changing its order", async () => {
+    const conversation = {
+      id: "conversation-3",
+      projectId: "",
+      title: "Unread",
+      channel: "web",
+      source: "web",
+      messageCount: 2,
+      isGenerating: false,
+      hasUnread: true,
+      lastReadTurnSequence: 0,
+      lastTerminalTurnSequence: 2,
+      createdAt: "2026-09-19T00:00:00Z",
+      updatedAt: "2026-09-19T00:00:00Z",
+    };
+    mocks.post.mockResolvedValueOnce({ data: { conversationId: conversation.id } });
+
+    const store = useChatStore();
+    store.sidebar.recent = [conversation];
+    await store.markConversationRead(conversation.id, 2);
+
+    expect(mocks.post).toHaveBeenCalledWith(
+      `/api/web-chat/conversations/${conversation.id}/read`,
+    );
+    expect(conversation.hasUnread).toBe(false);
+    expect(conversation.lastReadTurnSequence).toBe(2);
+    expect(store.sidebar.recent).toEqual([conversation]);
   });
 });

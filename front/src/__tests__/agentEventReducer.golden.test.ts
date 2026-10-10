@@ -117,3 +117,32 @@ describe("Agent Runtime v1 golden fixtures", () => {
     });
   }
 });
+
+describe("agent recovery waiting state", () => {
+  it("preserves reconciliation across tool events and snapshot reconnect", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([], 0, null);
+    const base: AgentUIEvent = {
+      version: 1, eventId: "start", eventSequence: 1,
+      conversationId: "conversation-1", requestId: "request-1",
+      executionId: "exec-1", turnId: "turn-1", turnSequence: 1,
+      type: "turn.started", status: "running",
+    };
+    expect(reducer.apply(base)).toBe("applied");
+    expect(reducer.apply({
+      ...base, eventId: "wait", eventSequence: 2,
+      type: "turn.waiting", status: "needs_reconciliation",
+    })).toBe("applied");
+    expect(reducer.turn("turn-1")?.status).toBe("needs_reconciliation");
+    expect(reducer.apply({
+      ...base, eventId: "tool", eventSequence: 3,
+      type: "tool.running", blockId: "tool-1", blockSequence: 1,
+      status: "running", payload: { blockType: "tool_call" },
+    })).toBe("applied");
+    expect(reducer.turn("turn-1")?.status).toBe("needs_reconciliation");
+    const recovered = new AgentEventReducer();
+    recovered.reset(reducer.turns, reducer.lastEventSequence, null);
+    expect(recovered.activeTurnId).toBe("turn-1");
+    expect(recovered.turn("turn-1")?.status).toBe("needs_reconciliation");
+  });
+});

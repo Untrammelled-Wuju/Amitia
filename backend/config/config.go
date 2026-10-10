@@ -205,7 +205,6 @@ type ChatConfig struct {
 	EventReplayRingSize     int `mapstructure:"eventReplayRingSize"`
 	ContextWindowMaxRounds  int `mapstructure:"contextWindowMaxRounds"`
 	AgentTurnTimeoutSeconds int `mapstructure:"agentTurnTimeoutSeconds"`
-	AgentMaxRounds          int `mapstructure:"agentMaxRounds"`
 	AgentToolRepeatLimit    int `mapstructure:"agentToolRepeatLimit"`
 	AgentMaxParallelTools   int `mapstructure:"agentMaxParallelTools"`
 	AgentMaxParallelTurns   int `mapstructure:"agentMaxParallelTurns"`

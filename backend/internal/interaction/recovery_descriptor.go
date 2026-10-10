@@ -141,20 +141,64 @@ type RecoveryMindRef struct {
 }
 
 type MultiAgentRecoveryRef struct {
-	CoordinationID       string                         `json:"coordinationId"`
-	ParentGoalID         string                         `json:"parentGoalId"`
-	ParentGoalRevision   int64                          `json:"parentGoalRevision"`
-	Status               string                         `json:"status"`
-	AssignmentRefs       []AssignmentRecoveryRef        `json:"assignmentRefs,omitempty"`
-	DeriveAssignmentRefs func() []AssignmentRecoveryRef `json:"-"`
+	CoordinationID           string                         `json:"coordinationId"`
+	ParentGoalID             string                         `json:"parentGoalId"`
+	ParentGoalRevision       int64                          `json:"parentGoalRevision"`
+	ParentGoalSpaceID        string                         `json:"parentGoalSpaceId,omitempty"`
+	ParentGoalCharacterID    string                         `json:"parentGoalCharacterId,omitempty"`
+	ParentGoalConversationID string                         `json:"parentGoalConversationId,omitempty"`
+	ParentGoalDescription    string                         `json:"parentGoalDescription,omitempty"`
+	Status                   string                         `json:"status"`
+	Strategy                 CoordinationStrategy           `json:"strategy,omitempty"`
+	CompletionPlan           CoordinationCompletionPolicy   `json:"completionPlan,omitempty"`
+	Depth                    int                            `json:"depth,omitempty"`
+	DeadlineAt               *time.Time                     `json:"deadlineAt,omitempty"`
+	WorkspaceID              string                         `json:"workspaceId,omitempty"`
+	PermissionMode           string                         `json:"permissionMode,omitempty"`
+	WorkspaceDeviceID        string                         `json:"workspaceDeviceId,omitempty"`
+	WorkspaceName            string                         `json:"workspaceName,omitempty"`
+	WorkspaceKind            string                         `json:"workspaceKind,omitempty"`
+	WorkspaceRootURI         string                         `json:"workspaceRootUri,omitempty"`
+	AssignmentRefs           []AssignmentRecoveryRef        `json:"assignmentRefs,omitempty"`
+	DeriveAssignmentRefs     func() []AssignmentRecoveryRef `json:"-"`
 }
 
 type AssignmentRecoveryRef struct {
-	AssignmentID       string `json:"assignmentId"`
-	WorkerID           string `json:"workerId"`
-	ChildInteractionID string `json:"childInteractionId,omitempty"`
-	ChildGoalID        string `json:"childGoalId,omitempty"`
-	Status             string `json:"status"`
+	AssignmentID       string   `json:"assignmentId"`
+	WorkerID           string   `json:"workerId"`
+	CharacterID        string   `json:"characterId,omitempty"`
+	Role               string   `json:"role,omitempty"`
+	Objective          string   `json:"objective,omitempty"`
+	ExpectedOutcome    string   `json:"expectedOutcome,omitempty"`
+	Constraints        []string `json:"constraints,omitempty"`
+	Dependencies       []string `json:"dependencies,omitempty"`
+	ChildInteractionID string   `json:"childInteractionId,omitempty"`
+	ChildGoalID        string   `json:"childGoalId,omitempty"`
+	Status             string   `json:"status"`
+	Error              string   `json:"error,omitempty"`
+}
+
+type ParentTurnConversationSnapshot struct {
+	ModelConfigID     int    `json:"modelConfigId"`
+	ReasoningEffort   string `json:"reasoningEffort"`
+	ReasoningEnabled  int    `json:"reasoningEnabled"`
+	PermissionMode    string `json:"permissionMode"`
+	WorkspaceID       string `json:"workspaceId"`
+	WorkspaceDeviceID string `json:"workspaceDeviceId"`
+}
+
+type ParentTurnRecoveryRef struct {
+	ConversationSnapshot *ParentTurnConversationSnapshot `json:"conversationSnapshot,omitempty"`
+	ThreadID             string                          `json:"threadId,omitempty"`
+	MessageStyle         string                          `json:"messageStyle,omitempty"`
+	WorkspaceID          string                          `json:"workspaceId,omitempty"`
+	WorkspaceDeviceID    string                          `json:"workspaceDeviceId,omitempty"`
+	WorkspaceName        string                          `json:"workspaceName,omitempty"`
+	WorkspaceKind        string                          `json:"workspaceKind,omitempty"`
+	WorkspaceRootURI     string                          `json:"workspaceRootUri,omitempty"`
+	PermissionMode       string                          `json:"permissionMode,omitempty"`
+	ModelConfigID        int                             `json:"modelConfigId,omitempty"`
+	ReasoningEffort      string                          `json:"reasoningEffort,omitempty"`
 }
 
 type RecoveryDescriptor struct {
@@ -173,6 +217,7 @@ type RecoveryDescriptor struct {
 	Pipeline      *RecoveryPipelineCheckpointRef `json:"pipeline,omitempty"`
 	Mind          *RecoveryMindRef               `json:"mind,omitempty"`
 	MultiAgent    *MultiAgentRecoveryRef         `json:"multiAgent,omitempty"`
+	ParentTurn    *ParentTurnRecoveryRef         `json:"parentTurn,omitempty"`
 	State         RecoveryDescriptorState        `json:"state"`
 	Fingerprint   string                         `json:"fingerprint"`
 	CreatedAt     time.Time                      `json:"createdAt"`
@@ -273,7 +318,43 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 		writeKV("multiAgent.coordId", d.MultiAgent.CoordinationID)
 		writeKV("multiAgent.parentGoalId", d.MultiAgent.ParentGoalID)
 		writeKVI("multiAgent.parentGoalRev", d.MultiAgent.ParentGoalRevision)
+		if d.MultiAgent.ParentGoalSpaceID != "" {
+			writeKV("multiAgent.parentGoalSpaceId", d.MultiAgent.ParentGoalSpaceID)
+		}
+		if d.MultiAgent.ParentGoalCharacterID != "" {
+			writeKV("multiAgent.parentGoalCharacterId", d.MultiAgent.ParentGoalCharacterID)
+		}
+		if d.MultiAgent.ParentGoalConversationID != "" {
+			writeKV("multiAgent.parentGoalConversationId", d.MultiAgent.ParentGoalConversationID)
+		}
+		if d.MultiAgent.ParentGoalDescription != "" {
+			writeKV("multiAgent.parentGoalDescription", d.MultiAgent.ParentGoalDescription)
+		}
 		writeKV("multiAgent.status", d.MultiAgent.Status)
+		if d.MultiAgent.Strategy != "" {
+			writeKV("multiAgent.strategy", string(d.MultiAgent.Strategy))
+		}
+		if d.MultiAgent.CompletionPlan != "" {
+			writeKV("multiAgent.completionPlan", string(d.MultiAgent.CompletionPlan))
+		}
+		if d.MultiAgent.Depth != 0 {
+			writeKVI("multiAgent.depth", int64(d.MultiAgent.Depth))
+		}
+		if d.MultiAgent.DeadlineAt != nil {
+			writeKV("multiAgent.deadlineAt", d.MultiAgent.DeadlineAt.UTC().Format(time.RFC3339Nano))
+		}
+		for _, attribute := range []struct{ name, value string }{
+			{"workspaceId", d.MultiAgent.WorkspaceID},
+			{"permissionMode", d.MultiAgent.PermissionMode},
+			{"workspaceDeviceId", d.MultiAgent.WorkspaceDeviceID},
+			{"workspaceName", d.MultiAgent.WorkspaceName},
+			{"workspaceKind", d.MultiAgent.WorkspaceKind},
+			{"workspaceRootUri", d.MultiAgent.WorkspaceRootURI},
+		} {
+			if attribute.value != "" {
+				writeKV("multiAgent."+attribute.name, attribute.value)
+			}
+		}
 		writeKVI("multiAgent.assignmentCount", int64(len(d.MultiAgent.AssignmentRefs)))
 		for i, a := range d.MultiAgent.AssignmentRefs {
 			prefix := fmt.Sprintf("multiAgent.assignment.%d.", i)
@@ -282,7 +363,53 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 			writeKV(prefix+"childInteractionId", a.ChildInteractionID)
 			writeKV(prefix+"childGoalId", a.ChildGoalID)
 			writeKV(prefix+"status", a.Status)
+			if a.Error != "" {
+				writeKV(prefix+"error", a.Error)
+			}
+			if a.CharacterID != "" {
+				writeKV(prefix+"characterId", a.CharacterID)
+			}
+			if a.Role != "" {
+				writeKV(prefix+"role", a.Role)
+			}
+			if a.Objective != "" {
+				writeKV(prefix+"objective", a.Objective)
+			}
+			if a.ExpectedOutcome != "" {
+				writeKV(prefix+"expectedOutcome", a.ExpectedOutcome)
+			}
+			for _, dependency := range a.Dependencies {
+				writeKV(prefix+"dependency", dependency)
+			}
+			for _, constraint := range a.Constraints {
+				writeKV(prefix+"constraint", constraint)
+			}
 		}
+	}
+	if d.ParentTurn != nil {
+		if s := d.ParentTurn.ConversationSnapshot; s != nil {
+			writeKVI("parentTurn.baselineModel", int64(s.ModelConfigID))
+			writeKV("parentTurn.baselineEffort", s.ReasoningEffort)
+			writeKVI("parentTurn.baselineReasoning", int64(s.ReasoningEnabled))
+			writeKV("parentTurn.baselinePermission", s.PermissionMode)
+			writeKV("parentTurn.baselineWorkspace", s.WorkspaceID)
+			writeKV("parentTurn.baselineDevice", s.WorkspaceDeviceID)
+		}
+		writeKV("parentTurn.threadId", d.ParentTurn.ThreadID)
+		writeKV("parentTurn.messageStyle", d.ParentTurn.MessageStyle)
+		writeKV("parentTurn.workspaceId", d.ParentTurn.WorkspaceID)
+		writeKV("parentTurn.deviceId", d.ParentTurn.WorkspaceDeviceID)
+		writeKV("parentTurn.workspaceName", d.ParentTurn.WorkspaceName)
+		writeKV("parentTurn.workspaceKind", d.ParentTurn.WorkspaceKind)
+		writeKV("parentTurn.workspaceRootUri", d.ParentTurn.WorkspaceRootURI)
+		writeKV("parentTurn.scope.spaceId", d.Scope.SpaceID)
+		writeKV("parentTurn.scope.characterId", d.Scope.CharacterID)
+		writeKV("parentTurn.scope.conversationId", d.Scope.ConversationID)
+		writeKV("parentTurn.scope.channel", d.Scope.Channel)
+		writeKV("parentTurn.interaction.requestId", d.Interaction.RequestID)
+		writeKV("parentTurn.permissionMode", d.ParentTurn.PermissionMode)
+		writeKVI("parentTurn.modelConfigId", int64(d.ParentTurn.ModelConfigID))
+		writeKV("parentTurn.reasoningEffort", d.ParentTurn.ReasoningEffort)
 	}
 	writeKV("state", string(d.State))
 	d.Fingerprint = "fp:" + hex.EncodeToString(h.Sum(nil))[:32]

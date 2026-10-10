@@ -388,12 +388,14 @@ object NotificationRenderer {
         val runId = data["runId"].orEmpty()
         if (runId.isBlank()) return
         val revision = data["revision"]?.toLongOrNull() ?: 0L
-        if (!acceptRevision(context, runId, revision)) return
+        if (!acceptRevision(context, runId, revision, terminal)) return
         val phase = data["phase"].orEmpty()
         val finishedSuccessfully = terminal && phase == "completed"
+        val detail = data["summary"].orEmpty().trim()
         val summary = when {
-            finishedSuccessfully -> "已完成 · 100% · " + data["summary"].orEmpty().ifBlank { "Agent 任务执行成功" }
-            else -> data["summary"].orEmpty().ifBlank { if (terminal) "已结束" else "正在执行" }
+            finishedSuccessfully && (detail.isBlank() || detail == "已完成") -> "已完成 · 100%"
+            finishedSuccessfully -> "已完成 · 100% · $detail"
+            else -> detail.ifBlank { if (terminal) "已结束" else "正在执行" }
         }
         val title = data["title"].orEmpty().ifBlank {
             data["agentId"].orEmpty().ifBlank { "Amitia" }
@@ -500,12 +502,12 @@ object NotificationRenderer {
         if (islandRoute == AgentTaskIslandRouting.Route.XIAOMI_SUPER_ISLAND) {
             XiaomiIslandTaskCompat.attach(
                 context, builder, conversationTitle, summary, progress, revision, terminal,
-                timeLabel,
+                timeLabel, phase, showPercent,
             )
         } else if (islandRoute == AgentTaskIslandRouting.Route.VIVO_ORIGIN_ISLAND) {
             VivoOriginIslandTaskCompat.attach(
-                context, builder, conversationTitle, summary, progress, finishedSuccessfully,
-                timeLabel,
+                context, builder, conversationTitle, summary, progress, terminal,
+                timeLabel, phase, showPercent,
             )
         }
 
@@ -521,7 +523,6 @@ object NotificationRenderer {
             val dismiss = Runnable {
                 manager.cancel(notificationId)
                 timestamps.edit().remove(startKey).apply()
-                clearRevision(context, runId)
             }
             if (dismissalDelayMs == 0L) {
                 dismiss.run()
@@ -538,15 +539,17 @@ object NotificationRenderer {
         val runId = data["runId"].orEmpty().trim()
         if (runId.isEmpty()) return
         NotificationManagerCompat.from(context).cancel(stableId("run:$runId"))
-        clearRevision(context, runId)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong("run_terminal:$runId", System.currentTimeMillis())
+            .apply()
     }
 
     fun clearAllExecution(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val runIds = prefs.all.keys
             .asSequence()
-            .filter { it.startsWith("run_revision:") }
-            .map { it.removePrefix("run_revision:").trim() }
+            .filter { it.startsWith("run_revision:") || it.startsWith("run_terminal:") }
+            .map { it.substringAfter(':').trim() }
             .filter { it.isNotEmpty() }
             .toList()
         val manager = NotificationManagerCompat.from(context)
@@ -555,7 +558,11 @@ object NotificationRenderer {
         }
         if (runIds.isNotEmpty()) {
             val editor = prefs.edit()
-            runIds.forEach { runId -> editor.remove("run_revision:$runId") }
+            runIds.forEach { runId ->
+                editor.remove("run_revision:$runId")
+                editor.remove("run_terminal:$runId")
+                editor.remove("run_started_at:$runId")
+            }
             editor.apply()
         }
     }
@@ -574,12 +581,21 @@ object NotificationRenderer {
         )
     }
 
-    private fun acceptRevision(context: Context, runId: String, revision: Long): Boolean {
+    private fun acceptRevision(context: Context, runId: String, revision: Long, terminal: Boolean): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val key = "run_revision:$runId"
+        val terminalKey = "run_terminal:$runId"
+        val now = System.currentTimeMillis()
+        val terminalAt = prefs.getLong(terminalKey, 0L)
+        if (terminalAt > 0L && now - terminalAt in 0L..86_400_000L) return false
+        if (terminalAt > 0L) {
+            prefs.edit().remove(key).remove(terminalKey).apply()
+        }
         val previous = prefs.getLong(key, -1L)
         if (revision > 0 && revision <= previous) return false
-        prefs.edit().putLong(key, revision.coerceAtLeast(previous + 1)).apply()
+        val editor = prefs.edit().putLong(key, revision.coerceAtLeast(previous + 1))
+        if (terminal) editor.putLong(terminalKey, now)
+        editor.apply()
         return true
     }
 

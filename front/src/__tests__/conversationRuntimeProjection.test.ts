@@ -50,6 +50,22 @@ function event(
 }
 
 describe("conversation runtime projection", () => {
+
+  it("holds an unconfirmed side effect without a false success notification or active sending spinner", async () => {
+    mocks.notifyReplyCompleted.mockClear();
+    const sending = ref(false);
+    const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), sending, () => undefined);
+    await runtime.applyEvent(event(1, "turn.started", { status: "running" }));
+    expect(sending.value).toBe(true);
+    await runtime.applyEvent(event(2, "turn.waiting", {
+      status: "needs_reconciliation",
+      payload: { errorCode: "tool_requires_reconciliation", recoveryCheckpoint: true },
+    }));
+    expect(sending.value).toBe(false);
+    expect(runtime.activeTurnId.value).toBe("turn-1");
+    expect(mocks.notifyReplyCompleted).not.toHaveBeenCalled();
+    runtime.cleanup();
+  });
   it("updates automation indication from live tool events and clears on completion or navigation", async () => {
     const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
     await runtime.applyEvent(event(1, "turn.started", { status: "running" }));

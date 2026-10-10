@@ -59,6 +59,28 @@ func (s *ExecutionService) StartExecution(ctx context.Context, rootID, spaceID s
 	return execCtx
 }
 
+func (s *ExecutionService) ResumeExecutionIdentity(ctx context.Context, rootID, spaceID, executionID string) ExecutionContext {
+	if executionID == "" {
+		return s.StartExecution(ctx, rootID, spaceID)
+	}
+	s.mu.Lock()
+	if existing, ok := s.activeContexts[executionID]; ok {
+		s.mu.Unlock()
+		return existing
+	}
+	execCtx := NewExecutionContext(rootID, spaceID)
+	execCtx.ExecutionID = executionID
+	s.activeContexts[executionID] = execCtx
+	s.mu.Unlock()
+	s.journal.Record(JournalEntry{
+		RootExecutionID: rootID,
+		ExecutionID:     executionID,
+		Kind:            JournalEntryExecutionStarted,
+		TraceID:         execCtx.TraceID,
+	})
+	return execCtx
+}
+
 func (s *ExecutionService) CreateChildExecution(parent ExecutionContext, source string) ExecutionContext {
 	child := NewChildExecution(parent, source)
 	s.mu.Lock()

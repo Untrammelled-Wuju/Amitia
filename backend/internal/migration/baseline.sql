@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     state_version TEXT DEFAULT '',
     pinned_at TEXT NOT NULL DEFAULT '',
     archived_at TEXT NOT NULL DEFAULT '',
+    last_read_turn_sequence INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
@@ -223,6 +224,15 @@ CREATE TABLE IF NOT EXISTS tool_call_intents (
     args_json TEXT DEFAULT '',
     idempotency_key TEXT DEFAULT '',
     status TEXT DEFAULT 'PENDING',
+    attempt_id TEXT NOT NULL DEFAULT '',
+    turn_id TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
+    input_hash TEXT NOT NULL DEFAULT '',
+    owner_instance_id TEXT NOT NULL DEFAULT '',
+    result_ref TEXT NOT NULL DEFAULT '',
+    error_class TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL DEFAULT '',
+    finished_at TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
@@ -246,6 +256,10 @@ CREATE TABLE IF NOT EXISTS tool_call_results (
     audit_json TEXT DEFAULT '{}',
     confidence REAL DEFAULT 0,
     force_voice INTEGER DEFAULT 0,
+    attempt_id TEXT NOT NULL DEFAULT '',
+    turn_id TEXT NOT NULL DEFAULT '',
+    execution_id TEXT NOT NULL DEFAULT '',
+    input_hash TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT ''
 );
 

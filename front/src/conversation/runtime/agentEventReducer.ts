@@ -80,6 +80,7 @@ function initialTurnStatus(event: AgentUIEvent): string {
   switch (event.type) {
     case "turn.queued": return "queued";
     case "turn.started": return "running";
+    case "turn.waiting": return normalizedTurnStatus(event.status || "needs_reconciliation");
     case "turn.cancelling": return "cancelling";
     case "turn.completed": return "completed";
     case "turn.failed": return "failed";
@@ -196,10 +197,11 @@ export class AgentEventReducer {
     let turn = this.byTurnId.get(turnId) || this.newTurn(event);
     const type = String(event.type || "").trim();
 
-    if (["turn.queued", "turn.started", "turn.cancelling", "turn.steered", "approval.requested", "approval.approved", "approval.denied", "approval.expired"].includes(type)) {
+    if (["turn.queued", "turn.started", "turn.waiting", "turn.cancelling", "turn.steered", "approval.requested", "approval.approved", "approval.denied", "approval.expired"].includes(type)) {
       let nextStatus = normalizedTurnStatus(event.status || turn.status);
       if (type === "turn.queued") nextStatus = "queued";
       if (type === "turn.started") nextStatus = "running";
+      if (type === "turn.waiting") nextStatus = normalizedTurnStatus(event.status || "needs_reconciliation");
       if (type === "turn.cancelling") nextStatus = "cancelling";
       if (type === "approval.requested") nextStatus = "waiting_approval";
       if (type === "approval.approved" || type === "approval.denied" || type === "approval.expired") nextStatus = "running";
@@ -228,7 +230,7 @@ export class AgentEventReducer {
         }
         return copy;
       });
-      if (terminalStatus === "failed" && !items.some((item) => item.type === "error")) {
+      if (terminalStatus === "failed" && String(event.payload?.userMessage || "").trim() && !items.some((item) => item.type === "error")) {
         items.push({
           id: `turn-error:${turnId}`,
           turnId,
@@ -324,7 +326,7 @@ export class AgentEventReducer {
     items.sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
 
     let nextTurnStatus = turn.status;
-    if (!isTerminalTurn(nextTurnStatus) && nextTurnStatus !== "waiting_approval" && nextTurnStatus !== "cancelling") {
+    if (!isTerminalTurn(nextTurnStatus) && nextTurnStatus !== "waiting_approval" && nextTurnStatus !== "cancelling" && nextTurnStatus !== "needs_reconciliation") {
       const hasRunningTool = items.some((candidate) => candidate.type === "tool_call" && !["completed", "failed", "interrupted"].includes(normalizedTurnStatus(candidate.status)));
       if (hasRunningTool) nextTurnStatus = "waiting_tool";
       else if (nextTurnStatus === "waiting_tool") nextTurnStatus = "running";

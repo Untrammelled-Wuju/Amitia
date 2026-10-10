@@ -140,13 +140,41 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 		out.HasError = true
 	}
 	switch strings.ToUpper(strings.TrimSpace(r.Status)) {
-	case "FAILED", "FAILURE", "ERROR", "DENIED", "REJECTED", "CANCELLED", "CANCELED", "TIMED_OUT", "TIMEOUT", "NOT_AVAILABLE", "UNAVAILABLE":
+	case "FAILED", "FAILURE", "ERROR", "DENIED", "REJECTED", "CANCELLED", "CANCELED", "TIMED_OUT", "TIMEOUT", "NOT_AVAILABLE", "UNAVAILABLE", "UNKNOWN", "UNCERTAIN":
 		out.HasError = true
 		if out.ErrorCode == "" {
 			out.ErrorCode = "TOOL_" + strings.ToUpper(strings.TrimSpace(r.Status))
 		}
 		if out.ErrorMessage == "" {
 			out.ErrorMessage = strings.TrimSpace(r.VisibleText)
+		}
+	}
+	if found && len(r.Output) > 0 {
+		var evidence struct {
+			ExitCode *int   `json:"exitCode"`
+			TimedOut bool   `json:"timedOut"`
+			Stderr   string `json:"stderr"`
+		}
+		if json.Unmarshal(r.Output, &evidence) == nil {
+			if evidence.ExitCode != nil && *evidence.ExitCode != 0 {
+				out.HasError = true
+				if out.ErrorCode == "" {
+					out.ErrorCode = "TOOL_NONZERO_EXIT"
+				}
+				if out.ErrorMessage == "" {
+					out.ErrorMessage = strings.TrimSpace(evidence.Stderr)
+					if out.ErrorMessage == "" {
+						out.ErrorMessage = "command exited with nonzero status"
+					}
+				}
+			}
+			if evidence.TimedOut {
+				out.HasError = true
+				out.ErrorCode = "TOOL_TIMED_OUT"
+				if out.ErrorMessage == "" {
+					out.ErrorMessage = "command exceeded its time limit"
+				}
+			}
 		}
 	}
 	if !found {
@@ -159,7 +187,24 @@ func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {
 }
 
 func toolResultContent(toolName string, outcome toolExecOutcome) string {
-	if !outcome.HasError && outcome.Found && structuredToolResult(toolName) {
+	if outcome.HasError || !outcome.Found {
+		code := strings.TrimSpace(outcome.ErrorCode)
+		message := strings.TrimSpace(outcome.ErrorMessage)
+		if message == "" {
+			message = strings.TrimSpace(outcome.VisibleText)
+		}
+		if code == "" && message == "" {
+			return "工具执行失败"
+		}
+		if code == "" {
+			return "工具执行失败：" + message
+		}
+		if message == "" {
+			return "工具执行失败：" + code
+		}
+		return "工具执行失败：" + code + ": " + message
+	}
+	if structuredToolResult(toolName) {
 		if payload := strings.TrimSpace(string(outcome.Output)); payload != "" {
 			return payload
 		}
@@ -183,6 +228,12 @@ func structuredToolResult(toolName string) bool {
 	switch toolName {
 	case "web_run",
 		"web.run",
+		"harness_multi_agent_delegate",
+		"harness_multi_agent_status",
+		"harness_multi_agent_wait",
+		"execute_host_command",
+		"execute_terminal",
+		"execute_in_terminal_session_streaming",
 		"media_image_generate",
 		"media.image.generate",
 		"send_attachment",

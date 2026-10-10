@@ -39,12 +39,12 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ ! "$ALPINE_SHA256" =~ ^[
     echo "[prepare_rootfs] ERROR: valid Alpine, ARM64 musl Node and ARM64 static/musl Qdrant archive/hash required" >&2
     exit 1
 fi
-for tool in python3 curl shasum; do
+for tool in python3 curl; do
     command -v "$tool" >/dev/null || { echo "[prepare_rootfs] Missing $tool" >&2; exit 1; }
 done
 command -v "$GO_BIN" >/dev/null || { echo "[prepare_rootfs] Go source compiler missing" >&2; exit 1; }
-echo "$NODE_SHA256  $NODE_ARCHIVE" | shasum -a 256 -c -
-echo "$QDRANT_SHA256  $QDRANT_ARCHIVE" | shasum -a 256 -c -
+python3 "$SCRIPT_DIR/rootfs_inputs.py" verify-input "$NODE_ARCHIVE" "$NODE_SHA256"
+python3 "$SCRIPT_DIR/rootfs_inputs.py" verify-input "$QDRANT_ARCHIVE" "$QDRANT_SHA256"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 NODE_ARCHIVE="$(cd "$(dirname "$NODE_ARCHIVE")" && pwd)/$(basename "$NODE_ARCHIVE")"
@@ -56,14 +56,16 @@ trap 'if [ "$KEEP_WORK" = "0" ]; then rm -rf "$WORK"; fi' EXIT
 RELEASE="${VERSION%.*}"
 MINIROOTFS_FILE="$WORK/alpine-minirootfs.tar.gz"
 curl -fsSL --retry 3 -o "$MINIROOTFS_FILE" "https://dl-cdn.alpinelinux.org/alpine/v${RELEASE}/releases/aarch64/alpine-minirootfs-${VERSION}-aarch64.tar.gz"
-echo "$ALPINE_SHA256  $MINIROOTFS_FILE" | shasum -a 256 -c -
+python3 "$SCRIPT_DIR/rootfs_inputs.py" verify-input "$MINIROOTFS_FILE" "$ALPINE_SHA256"
 
 if [ -z "$FAKEFSIFY_BIN" ]; then
     FAKEFSIFY_BIN="$ISH_SRC/build-native/tools/fakefsify"
 fi
 if [ ! -x "$FAKEFSIFY_BIN" ]; then
     command -v meson >/dev/null && command -v ninja >/dev/null || { echo "[prepare_rootfs] Host meson/ninja missing" >&2; exit 1; }
-    meson setup "$ISH_SRC/build-native" "$ISH_SRC" --wrap-mode=nodownload --buildtype=release -Dkernel=ish -Dengine=asbestos -Dguest_arch=arm64
+    SETUP_ARGS=()
+    if [ -f "$ISH_SRC/build-native/meson-private/coredata.dat" ]; then SETUP_ARGS+=(--reconfigure); fi
+    meson setup "${SETUP_ARGS[@]}" "$ISH_SRC/build-native" "$ISH_SRC" --wrap-mode=nodownload --buildtype=release -Dc_args=-fblocks -Dkernel=ish -Dengine=asbestos -Dguest_arch=arm64
     ninja -C "$ISH_SRC/build-native" tools/fakefsify
 fi
 if [ ! -x "$FAKEFSIFY_BIN" ]; then

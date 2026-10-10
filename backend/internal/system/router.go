@@ -219,6 +219,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/proactive-sse", sse.SSEHandler)
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)
+	r.POST("/web-chat/conversations/:id/read", handler.WebChatMarkConversationRead)
 	r.GET("/web-chat/conversations/:id", handler.WebChatGetConv)
 	r.GET("/web-chat/conversations/:id/turns", handler.WebChatListAssistantTurns)
 	r.GET("/web-chat/conversations/:id/snapshot", handler.WebChatConversationSnapshot)

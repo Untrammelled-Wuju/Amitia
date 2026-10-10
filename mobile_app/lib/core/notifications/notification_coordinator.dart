@@ -104,14 +104,17 @@ class NotificationCoordinator with WidgetsBindingObserver {
 
   Future<void> openSystemSettings() => _platform.openSettings();
 
+  Future<void> openLiveUpdateSettings() => _platform.openLiveUpdateSettings();
+
   Future<Map<String, dynamic>> floatingBubbleStatus() =>
       _platform.floatingBubbleStatus();
 
   Future<Map<String, dynamic>> enableFloatingBubble() =>
       _platform.enableFloatingBubble();
 
-  Future<Map<String, dynamic>> configureFloatingBubble({required bool previewEnabled}) =>
-      _platform.configureFloatingBubble(previewEnabled: previewEnabled);
+  Future<Map<String, dynamic>> configureFloatingBubble({
+    required bool previewEnabled,
+  }) => _platform.configureFloatingBubble(previewEnabled: previewEnabled);
 
   Future<Map<String, dynamic>> disableFloatingBubble() =>
       _platform.disableFloatingBubble();

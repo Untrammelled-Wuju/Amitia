@@ -26,15 +26,16 @@ func (s *service) recordConversationChangeTx(tx *gorm.DB, c *Conversation, op sy
 		c.SpaceID = normalizeChangeSpaceID(spaceID)
 	}
 	payload, err := json.Marshal(map[string]interface{}{
-		"id":         c.ID,
-		"spaceId":    c.SpaceID,
-		"projectId":  c.ProjectID,
-		"title":      c.Title,
-		"channel":    c.Channel,
-		"source":     c.Source,
-		"peerId":     c.PeerID,
-		"pinnedAt":   c.PinnedAt,
-		"archivedAt": c.ArchivedAt,
+		"id":                   c.ID,
+		"spaceId":              c.SpaceID,
+		"projectId":            c.ProjectID,
+		"title":                c.Title,
+		"channel":              c.Channel,
+		"source":               c.Source,
+		"peerId":               c.PeerID,
+		"pinnedAt":             c.PinnedAt,
+		"archivedAt":           c.ArchivedAt,
+		"lastReadTurnSequence": c.LastReadTurnSequence,
 	})
 	if err != nil {
 		return err

@@ -430,6 +430,39 @@ void main() {
   });
 
   group('Stale snapshot race', () {
+    test('不可重试校验失败后旧代次 READY 不能恢复服务或自动启动', () async {
+      final bridge = FakeRuntimeBridge(
+        initial: _makeSnapshot(state: RuntimeBridgeState.ready, generation: 5),
+      );
+      final snapshots = <RuntimeBootstrapSnapshot>[];
+      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
+      final sub = bootstrap.snapshots.listen(snapshots.add);
+      await bootstrap.initialize();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      bridge.emit(
+        _makeSnapshot(
+          state: RuntimeBridgeState.failed,
+          generation: 6,
+          error: const RuntimeBridgeError(
+            code: 'VERIFY_FAILED',
+            message: '请关闭重开后修复',
+            retryable: false,
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      bridge.emit(
+        _makeSnapshot(state: RuntimeBridgeState.ready, generation: 5),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(snapshots.last.runtime.generation, 6);
+      expect(snapshots.last.runtime.state, RuntimeBridgeState.failed);
+      expect(snapshots.last.runtime.runtimeAvailable, isFalse);
+      expect(bridge.startCallCount, 0);
+      await sub.cancel();
+      await bootstrap.dispose();
+    });
+
     test('old generation snapshot does not override new event', () async {
       final bridge = FakeRuntimeBridge(
         initial: _makeSnapshot(state: RuntimeBridgeState.ready, generation: 5),

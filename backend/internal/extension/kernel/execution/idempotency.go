@@ -92,7 +92,8 @@ type IdempotencyGuard struct {
 	cleanupIntervalNano int64
 	takeoverGraceNano   int64
 
-	cleanupStop chan struct{}
+	cleanupStop     chan struct{}
+	cleanupStopOnce sync.Once
 }
 
 type IdempotencyHook interface {
@@ -377,12 +378,15 @@ func (g *IdempotencyGuard) InstanceID() string {
 	return g.nodeID
 }
 
-func (g *IdempotencyGuard) stopCleanup() {
-	select {
-	case <-g.cleanupStop:
-	default:
-		close(g.cleanupStop)
+func (g *IdempotencyGuard) Close() {
+	if g == nil {
+		return
 	}
+	g.stopCleanup()
+}
+
+func (g *IdempotencyGuard) stopCleanup() {
+	g.cleanupStopOnce.Do(func() { close(g.cleanupStop) })
 }
 
 func (g *IdempotencyGuard) cleanupLoop() {

@@ -141,6 +141,8 @@ type UnifiedEntryRequest struct {
 	IsInternal               bool            `json:"-"`
 	SuppressReplyPersistence bool            `json:"-"`
 	ForceRegenerate          bool            `json:"-"`
+	ReservedInteractionID    string          `json:"-"`
+	RecoverExistingTurn      bool            `json:"-"`
 }
 
 type UnifiedEntry struct {
@@ -247,7 +249,12 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		if spaceID == "" {
 			spaceID = resolution.Scope.SpaceID
 		}
-		created := execService.StartExecution(ctx, rootID, spaceID)
+		var created coreexec.ExecutionContext
+		if req.RecoverExistingTurn {
+			created = execService.ResumeExecutionIdentity(ctx, rootID, spaceID, strings.TrimSpace(req.ExecutionID))
+		} else {
+			created = execService.StartExecution(ctx, rootID, spaceID)
+		}
 		created.ConversationID = resolution.Scope.ConversationID
 		if strings.TrimSpace(req.ExecutionID) == "" {
 			req.ExecutionID = created.ExecutionID
@@ -294,6 +301,8 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		DeviceTimezone:           req.DeviceTimezone,
 		SessionID:                resolution.Scope.SessionID,
 		RequestID:                requestID,
+		ReservedInteractionID:    req.ReservedInteractionID,
+		RecoverExistingTurn:      req.RecoverExistingTurn,
 		TurnID:                   req.TurnID,
 		ExecutionID:              req.ExecutionID,
 		AudioUrl:                 req.AudioUrl,
@@ -350,6 +359,13 @@ func (e *UnifiedEntry) IsOrchestratorReady() bool {
 		return false
 	}
 	return e.orchestrator.IsReady()
+}
+
+func (e *UnifiedEntry) IsInteractionActive(interactionID string) bool {
+	if e == nil || e.orchestrator == nil || e.orchestrator.cancels == nil {
+		return false
+	}
+	return e.orchestrator.cancels.IsRegistered(interactionID)
 }
 
 func (e *UnifiedEntry) SetBackpressureConfig(cfg BackpressureConfig) {

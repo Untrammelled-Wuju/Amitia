@@ -3,6 +3,20 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
+    AmitiaISHRuntimeErrorCodeUnavailable = 2000,
+    AmitiaISHRuntimeErrorCodeNotInitialized,
+    AmitiaISHRuntimeErrorCodeRootfsNotReady,
+    AmitiaISHRuntimeErrorCodeRootfsUnsupported,
+    AmitiaISHRuntimeErrorCodeInvalidArgument,
+    AmitiaISHRuntimeErrorCodeExecFailed,
+    AmitiaISHRuntimeErrorCodeExecTimeout,
+    AmitiaISHRuntimeErrorCodeExecCancelled,
+    AmitiaISHRuntimeErrorCodeExecBusy,
+    AmitiaISHRuntimeErrorCodeInternal,
+    AmitiaISHRuntimeErrorCodeLegacyDataRequiresMigration,
+};
+
 typedef NS_ENUM(NSInteger, AmitiaISHState) {
     AmitiaISHStateUnavailable = 0,
     AmitiaISHStateAvailable,
@@ -22,6 +36,7 @@ typedef NS_ENUM(NSInteger, AmitiaISHNativeError) {
     AmitiaISHNativeErrorExecCancelled = -7,
     AmitiaISHNativeErrorExecBusy = -8,
     AmitiaISHNativeErrorInternal = -9,
+    AmitiaISHNativeErrorLegacyDataRequiresMigration = -10,
 };
 
 @interface AmitiaISHExecutionResult : NSObject
@@ -49,13 +64,15 @@ typedef NS_ENUM(NSInteger, AmitiaISHNativeError) {
 @property (nonatomic, readonly) AmitiaISHState state;
 @property (nonatomic, readonly) uint64_t currentGeneration;
 @property (nonatomic, copy, readonly, nullable) NSString *currentRootfsPath;
+@property (nonatomic, readonly) BOOL rootMounted;
 
 + (instancetype)shared;
++ (NSString *)errorCodeForError:(NSError *)error NS_SWIFT_NAME(errorCode(for:));
 
 - (BOOL)startWithRootfsPath:(NSString *)rootfsPath
                    workdir:(nullable NSString *)workdir
                 environment:(nullable NSDictionary<NSString *, NSString *> *)env
-                      error:(NSError *_Nullable *_Nullable)error;
+                      error:(NSError *_Nullable *_Nullable)error __attribute__((swift_error(none)));
 
 - (nullable AmitiaISHExecutionResult *)executeCommand:(NSArray<NSString *> *)argv
                                                  stdin:(nullable NSString *)stdin

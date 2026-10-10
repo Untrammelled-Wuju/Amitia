@@ -5,13 +5,13 @@ NSString * const kIOSSandboxBridgeErrorDomain = @"com.amitia.IOSSandboxBridge";
 NSString * const kRootfsActiveVersionDidChangeNotification = @"com.amitia.RootfsActiveVersionDidChange";
 
 NSString * const kIOSSandboxLifecycleStateName[] = {
-    [ISHSandboxLifecycleIdle] = "idle",
-    [ISHSandboxLifecycleStarting] = "starting",
-    [ISHSandboxLifecycleRunning] = "running",
-    [ISHSandboxLifecycleQuiescing] = "quiescing",
-    [ISHSandboxLifecycleQuiesced] = "quiesced",
-    [ISHSandboxLifecycleStopping] = "stopping",
-    [ISHSandboxLifecycleFailed] = "failed",
+    [ISHSandboxLifecycleIdle] = @"idle",
+    [ISHSandboxLifecycleStarting] = @"starting",
+    [ISHSandboxLifecycleRunning] = @"running",
+    [ISHSandboxLifecycleQuiescing] = @"quiescing",
+    [ISHSandboxLifecycleQuiesced] = @"quiesced",
+    [ISHSandboxLifecycleStopping] = @"stopping",
+    [ISHSandboxLifecycleFailed] = @"failed",
 };
 
 static const uint64_t kRecoveryMaxAttempts = 3;
@@ -71,6 +71,38 @@ typedef NS_ENUM(NSInteger, LifecycleStopResult) {
 @end
 
 @implementation IOSSandboxBridge
+
++ (NSString *)nameForLifecycleState:(ISHSandboxLifecycleState)state {
+    if (state < ISHSandboxLifecycleIdle || state > ISHSandboxLifecycleFailed) return @"failed";
+    return kIOSSandboxLifecycleStateName[state];
+}
+
++ (NSString *)lifecycleErrorCodeForError:(NSError *)error {
+    if ([error.domain isEqualToString:kAmitiaISHRuntimeErrorDomain]) return @"RUNTIME_FAILED";
+    if (![error.domain isEqualToString:kIOSSandboxBridgeErrorDomain]) return @"START_FAILED";
+    switch (error.code) {
+        case IOSSandboxBridgeErrorRestartRequired: return @"RESTART_REQUIRED";
+        case IOSSandboxBridgeErrorLifecycleStarting: return @"START_IN_PROGRESS";
+        case IOSSandboxBridgeErrorLifecycleStopping: return @"STOP_IN_PROGRESS";
+        case IOSSandboxBridgeErrorLifecycleNotRunning: return @"LIFECYCLE_NOT_RUNNING";
+        case IOSSandboxBridgeErrorLifecycleQuiesced: return @"LIFECYCLE_QUIESCED";
+        case IOSSandboxBridgeErrorRuntimeFailed: return @"RUNTIME_FAILED";
+        default: return @"START_FAILED";
+    }
+}
+
++ (NSString *)executionErrorCodeForError:(NSError *)error {
+    if ([error.domain isEqualToString:kAmitiaISHRuntimeErrorDomain]) return [AmitiaISHRuntime errorCodeForError:error];
+    if (![error.domain isEqualToString:kIOSSandboxBridgeErrorDomain]) return @"EXECUTE_FAILED";
+    switch (error.code) {
+        case IOSSandboxBridgeErrorStaleExecutionResult: return @"STALE_EXECUTION_RESULT";
+        case IOSSandboxBridgeErrorLifecycleStarting: return @"LIFECYCLE_STARTING";
+        case IOSSandboxBridgeErrorLifecycleStopping: return @"LIFECYCLE_STOPPING";
+        case IOSSandboxBridgeErrorLifecycleQuiesced: return @"LIFECYCLE_QUIESCED";
+        case IOSSandboxBridgeErrorRuntimeFailed: return @"RUNTIME_FAILED";
+        default: return @"EXECUTE_FAILED";
+    }
+}
 
 + (instancetype)shared {
     return [self sharedWithResolver:nil];

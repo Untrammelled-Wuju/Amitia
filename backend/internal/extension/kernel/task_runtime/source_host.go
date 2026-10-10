@@ -12,12 +12,14 @@ import (
 type TaskHostToolRequirements func(context.Context, string) ([]permission.PermissionRequirement, error)
 
 type TaskHostSourceEventRequest struct {
-	Scope      coordination.ExecutionScope `json:"executionScope"`
-	TaskRunID  string                      `json:"taskRunId"`
-	Generation int64                       `json:"generation"`
-	AttemptID  string                      `json:"attemptId"`
-	RequestID  string                      `json:"requestId"`
-	Call       TaskHostNativeCall          `json:"call"`
+	Scope        coordination.ExecutionScope `json:"executionScope"`
+	TaskRunID    string                      `json:"taskRunId"`
+	Generation   int64                       `json:"generation"`
+	AttemptID    string                      `json:"attemptId"`
+	RequestID    string                      `json:"requestId"`
+	Call         TaskHostNativeCall          `json:"call"`
+	ContractOnly bool                        `json:"contractOnly,omitempty"`
+	PayloadBytes []byte                      `json:"payloadBytes,omitempty"`
 }
 
 type TaskHostSourceEventPort interface {
@@ -74,6 +76,23 @@ func NewSourceTaskHostPermissionGuard(evaluator TaskPermissionEvaluator, resolve
 		for index := range required {
 			required[index].Scope = permission.ScopeForExtension(definition.ExtensionID)
 		}
+		actualIDs := make(map[string]bool, len(required))
+		for _, value := range required {
+			actualIDs[value.PermissionID] = true
+			if err := permission.ValidateInputConditions(value.Conditions, input); err != nil {
+				return NewTaskError(ErrTaskPermissionDenied, "Native实际输入不符合工具权限条件："+err.Error())
+			}
+		}
+		for _, value := range declared {
+			if !actualIDs[value.PermissionID] {
+				continue
+			}
+			if err := permission.ValidateInputConditions(value.Conditions, input); err != nil {
+				return NewTaskError(ErrTaskPermissionDenied, "Native实际输入不符合原任务批准的权限条件："+err.Error())
+			}
+			value.Optional = false
+			required = append(required, value)
+		}
 		copy := CloneTaskRun(run)
 		if copy.ExecutionTarget.SourceTaskDefinitionID != "" {
 			copy.TaskDefinitionID = copy.ExecutionTarget.SourceTaskDefinitionID
@@ -92,7 +111,7 @@ func NewSourceTaskHostPermissionGuard(evaluator TaskPermissionEvaluator, resolve
 	}
 }
 
-func (s *TaskRuntimeService) BindNativeHost(data coordination.DataPort, executor TaskHostNativeExecutor, guard func(context.Context, *TaskRun, *TaskDefinition, string, TaskHostNativeCall) error, publish func(context.Context, *TaskRun, *TaskDefinition, string, TaskHostNativeCall) (json.RawMessage, error)) error {
+func (s *TaskRuntimeService) BindNativeHost(data coordination.DataPort, executor TaskHostNativeExecutor, guard func(context.Context, *TaskRun, *TaskDefinition, string, TaskHostNativeCall) error, publish func(context.Context, *TaskRun, *TaskDefinition, string, TaskHostNativeCall) (json.RawMessage, error), contracts ...TaskHostEventContractsResolver) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed || s.dispatchCtx != nil || s.config.OwnedHost != nil || guard == nil || executor == nil || data == nil {
@@ -102,10 +121,19 @@ func (s *TaskRuntimeService) BindNativeHost(data coordination.DataPort, executor
 	s.config.SourceHostPermissionGuard = guard
 	s.config.SourceHostCapabilities = SourceTaskCapabilities{ExecuteTool: true, EmitEvent: publish != nil}
 	s.sourceEventPublisher = publish
+	if len(contracts) == 1 {
+		s.config.SourceEventContracts = contracts[0]
+	}
 	return nil
 }
 
 func (s *TaskRuntimeService) PublishSourceTaskNativeEvent(ctx context.Context, request TaskHostSourceEventRequest) (json.RawMessage, error) {
+	if request.ContractOnly || len(request.PayloadBytes) > 0 {
+		if len(request.PayloadBytes) == 0 || len(request.PayloadBytes) > 64<<10 || !json.Valid(request.PayloadBytes) {
+			return nil, NewTaskError(ErrTaskInputInvalid, "设备事件契约缺少原始正文或正文超过上限")
+		}
+		request.Call.Payload = append(json.RawMessage(nil), request.PayloadBytes...)
+	}
 	value, exists := s.sourceHosts.Load(request.TaskRunID)
 	if !exists || s.sourceEventPublisher == nil || request.RequestID == "" || len(request.RequestID) > 256 {
 		return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "设备任务事件缺少当前实际执行进程")
@@ -114,7 +142,7 @@ func (s *TaskRuntimeService) PublishSourceTaskNativeEvent(ctx context.Context, r
 	dispatch := binding.dispatch
 	scope, inherited := coordination.FromContext(ctx)
 	expected, active := coordination.FromContext(binding.ctx)
-	if !inherited || !active || scope != expected || scope != request.Scope || scope.Coordinated || scope.ResourceOwnerID != scope.TargetDeviceID || dispatch.TaskGeneration != request.Generation || dispatch.AttemptID != request.AttemptID || request.Call.TaskRunID != dispatch.TaskRunID {
+	if !inherited || !active || scope != expected || scope != request.Scope || !request.ContractOnly && (scope.Coordinated || scope.ResourceOwnerID != scope.TargetDeviceID) || dispatch.TaskGeneration != request.Generation || dispatch.AttemptID != request.AttemptID || request.Call.TaskRunID != dispatch.TaskRunID {
 		return nil, NewTaskError(ErrTaskScopeDenied, "设备事件与原执行范围或数据所有者不一致")
 	}
 	var run TaskRun
@@ -132,6 +160,9 @@ func (s *TaskRuntimeService) PublishSourceTaskNativeEvent(ctx context.Context, r
 	guarded := coordination.WithAdditionalGuard(merged, func(context.Context) error { return coordination.ValidateCurrent(ctx) })
 	if err := s.config.SourceHostPermissionGuard(guarded, &run, definition, "task.host.emitEvent", request.Call); err != nil {
 		return nil, err
+	}
+	if request.ContractOnly {
+		return s.sourceTaskEventContract(guarded, &run, definition, request)
 	}
 	return s.sourceEventPublisher(guarded, &run, definition, request.RequestID, request.Call)
 }

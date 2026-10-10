@@ -111,7 +111,7 @@ class IOSSandboxMethodHandler: NSObject {
             "ishInitialized": health.ishInitialized,
             "rootfsInstalled": health.rootfsInstalled,
             "lifecycleState": Int(health.lifecycleState.rawValue),
-            "lifecycleStateName": kIOSSandboxLifecycleStateName[health.lifecycleState],
+            "lifecycleStateName": IOSSandboxBridge.lifecycleName(for: health.lifecycleState),
             "generation": health.generation,
             "desiredRunning": health.desiredRunning,
             "restartRequired": health.restartRequired,
@@ -125,7 +125,7 @@ class IOSSandboxMethodHandler: NSObject {
 
     private func serializeLifecycle(_ health: ISHBridgeHealth) -> [String: Any] {
         return [
-            "state": kIOSSandboxLifecycleStateName[health.lifecycleState],
+            "state": IOSSandboxBridge.lifecycleName(for: health.lifecycleState),
             "generation": health.generation,
             "desiredRunning": health.desiredRunning,
             "restartRequired": health.restartRequired,
@@ -138,41 +138,10 @@ class IOSSandboxMethodHandler: NSObject {
 
     private func mapLifecycleErrorCode(_ err: NSError?) -> String {
         guard let err = err else { return "UNKNOWN" }
-        if err.domain == kIOSSandboxBridgeErrorDomain {
-            switch err.code {
-            case IOSSandboxBridgeErrorRestartRequired: return "RESTART_REQUIRED"
-            case IOSSandboxBridgeErrorLifecycleStarting: return "START_IN_PROGRESS"
-            case IOSSandboxBridgeErrorLifecycleStopping: return "STOP_IN_PROGRESS"
-            case IOSSandboxBridgeErrorLifecycleNotRunning: return "LIFECYCLE_NOT_RUNNING"
-            case IOSSandboxBridgeErrorLifecycleQuiesced: return "LIFECYCLE_QUIESCED"
-            case IOSSandboxBridgeErrorRuntimeFailed: return "RUNTIME_FAILED"
-            default: return "START_FAILED"
-            }
-        }
-        if err.domain == kAmitiaISHRuntimeErrorDomain {
-            return "RUNTIME_FAILED"
-        }
-        return "START_FAILED"
+        return IOSSandboxBridge.lifecycleErrorCode(for: err)
     }
 
     private func mapExecErrorCode(_ err: NSError) -> String {
-        if err.domain == kIOSSandboxBridgeErrorDomain {
-            switch err.code {
-            case IOSSandboxBridgeErrorStaleExecutionResult: return "STALE_EXECUTION_RESULT"
-            case IOSSandboxBridgeErrorLifecycleStarting: return "LIFECYCLE_STARTING"
-            case IOSSandboxBridgeErrorLifecycleStopping: return "LIFECYCLE_STOPPING"
-            case IOSSandboxBridgeErrorLifecycleQuiesced: return "LIFECYCLE_QUIESCED"
-            case IOSSandboxBridgeErrorRuntimeFailed: return "RUNTIME_FAILED"
-            default: return "EXECUTE_FAILED"
-            }
-        }
-        if err.domain == kAmitiaISHRuntimeErrorDomain {
-            switch err.code {
-            case AmitiaISHRuntimeErrorCodeExecTimeout: return "EXEC_TIMEOUT"
-            case AmitiaISHRuntimeErrorCodeExecCancelled: return "EXEC_CANCELLED"
-            default: return "EXECUTE_FAILED"
-            }
-        }
-        return "EXECUTE_FAILED"
+        return IOSSandboxBridge.executionErrorCode(for: err)
     }
 }

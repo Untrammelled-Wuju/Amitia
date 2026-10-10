@@ -15,17 +15,19 @@ import (
 	"github.com/u-ai/backend/internal/conversationstream"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/interaction"
 	promptir "github.com/u-ai/backend/internal/prompt"
 	applog "github.com/u-ai/backend/log"
 )
 
 type agentToolCall struct {
-	ID          string
-	Name        string
-	Arguments   string
-	Scope       SkillScope
-	Fingerprint string
-	Duplicate   bool
+	ID            string
+	Name          string
+	Arguments     string
+	Scope         SkillScope
+	Fingerprint   string
+	Duplicate     bool
+	InvalidReason string
 }
 
 type agentToolExecution struct {
@@ -49,22 +51,40 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 	baseMessageCount := len(messages)
 	fingerprints := map[string]int{}
 	modelTools, toolAliases := prepareAgentModelTools(toolDefs)
-	maxRounds := 128
-	if config.AppCfg != nil && config.AppCfg.Chat.AgentMaxRounds > 0 {
-		maxRounds = config.AppCfg.Chat.AgentMaxRounds
+	verificationGate := agentVerificationGate{}
+	workspaceVerification := workspaceAgentBound(execCtx)
+
+	if saved := turnRecorder.snapshotItems(); len(saved) > 0 {
+		recovered, recoveryErr := restoreAgentToolMessages(saved, toolAliases)
+		if recoveryErr != nil {
+			return "", "", false, 0, 0, fmt.Errorf("restore agent tool checkpoint: %w", recoveryErr)
+		}
+		messages = append(messages, recovered...)
+		if workspaceVerification {
+			verificationGate.Restore(saved)
+		}
+		if len(recovered) > 0 {
+			applog.TraceInfo(trace.WithStage("agent_checkpoint_restored"), applog.Fields{
+				"turn_id": turnRecorder.TurnID, "restored_messages": len(recovered),
+			}, "agent tool results restored from persisted turn journal")
+		}
 	}
 
 	for round := 0; ; round++ {
-		if round >= maxRounds {
-			return "", strings.Join(reasoningParts, "\n\n"), false, totalTokens, reasoningDurationMS, fmt.Errorf("agent execution exhausted the maximum of %d model rounds without a verified final response", maxRounds)
-		}
 		if steers := conversationstream.DefaultManager().ConsumeSteer(convID, turnRecorder.TurnID); len(steers) > 0 {
 			for _, steer := range steers {
 				messages = append(messages, map[string]interface{}{"role": "user", "content": steer})
 			}
 			_, _ = conversationstream.DefaultManager().Publish(context.Background(), conversationstream.AgentUIEvent{ConversationID: convID, RequestID: requestID, ExecutionID: turnRecorder.ExecutionID, TurnID: turnRecorder.TurnID, TurnSequence: turnRecorder.TurnSequence, Type: "turn.steered", Status: assistantTurnStatusRunning, Payload: map[string]any{"inputs": steers}}, true)
 		}
-		messages = s.compactAgentMessages(ctx, cfg, messages, baseMessageCount)
+		messages = s.compactAgentMessagesWithToolBudget(ctx, cfg, messages, baseMessageCount, modelTools)
+		if cfg != nil && cfg.ContextWindow >= 4096 {
+			used := agentCompactionMessageTokens(messages, agentToolDefinitionTokens(modelTools))
+			if used > agentCompactionHardInputLimit(cfg) {
+				return "", strings.Join(reasoningParts, "\n\n"), false, totalTokens, reasoningDurationMS,
+					fmt.Errorf("agent context requires approximately %d input tokens; usable context is %d after reserving output; reduce tool exposure or prompt size", used, agentCompactionHardInputLimit(cfg))
+			}
+		}
 		applog.TraceInfo(trace.WithStage("model_call_started"), applog.Fields{"round": round, "message_count": len(messages)}, "process message model call started")
 		callStartedAt := time.Now()
 		projector := newModelEventProjector(turnRecorder)
@@ -114,6 +134,24 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				_ = projector.Complete(context.Background(), assistantTurnStatusFailed)
 				return "", strings.Join(reasoningParts, "\n\n"), false, totalTokens, reasoningDurationMS, fmt.Errorf("model returned neither a response nor tool calls; task completion was not verified")
 			}
+			if workspaceVerification && verificationGate.PendingDelegation() {
+				if verificationGate.ShouldRequestDelegationStatus() {
+					messages = append(messages, map[string]interface{}{"role": "system", "content": "【子任务完成门禁】有已分派的子 Agent 尚未返回终态。必须调用 harness_multi_agent_wait 或 harness_multi_agent_status 查询协调任务 " + verificationGate.activeDelegation + " 的实际状态；只有协调任务结束后才能进行父任务验收。不能把运行中或等待中的 Worker 称为完成。"})
+					continue
+				}
+				return "", strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS, fmt.Errorf("multi-agent coordination %s has not reached a terminal state; parent turn cannot claim task completion", verificationGate.activeDelegation)
+			}
+			if workspaceVerification && verificationGate.Pending() {
+				if agentVerificationToolAvailable(modelTools) && verificationGate.ShouldRequestVerification() {
+					instruction := "【执行验收门禁】本次工作区文件修改已有实际工具结果，但尚无修改后的成功测试、构建或静态检查证据。请使用已暴露的命令工具执行最小相关验证，检查退出码并修复发现的问题。不得将未验证的修改称为已完成。若无法验证，明确报告阻碍。"
+					if verificationGate.verificationAttempt > 0 {
+						instruction = "【执行验收门禁·失败修复】刚才执行过验证，但最新的工作区修改仍没有成功的测试、构建或静态检查证据。请检查上一个验证工具结果的错误信息和退出码，定位根因，实际修复后重新运行相关验证。不得只重复声称已完成；若当前环境或权限阻止修复，必须说明阻碍。"
+					}
+					messages = append(messages, map[string]interface{}{"role": "system", "content": instruction})
+					continue
+				}
+				return "", strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS, fmt.Errorf("workspace changes were applied but no successful build or test evidence was recorded after the latest edit")
+			}
 			reply = aiContent
 			break
 		}
@@ -131,10 +169,21 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			break
 		}
 		executions := s.executeAgentToolCalls(toolExecCtx, cfg, calls, trace, round, turnRecorder)
+		roundHasMutation := false
+		for _, call := range calls {
+			if agentToolMutatesWorkspace(call.Name, call.Arguments) {
+				roundHasMutation = true
+				break
+			}
+		}
 		roundFingerprints := map[string]struct{}{}
 		for index, call := range calls {
 			execution := executions[index]
 			outcome := execution.Outcome
+			if outcome.ErrorCode == "TOOL_REQUIRES_RECONCILIATION" || outcome.ErrorCode == "TOOL_RESULT_NOT_DURABLE" {
+				return "", strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS,
+					fmt.Errorf("%w: tool %s: %s", interaction.ErrToolReconciliationRequired, call.ID, outcome.ErrorMessage)
+			}
 			roundFingerprints[call.Fingerprint] = struct{}{}
 			if outcome.ForceVoice {
 				forceVoice = true
@@ -149,8 +198,13 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				toolStatus = assistantTurnStatusFailed
 			}
 			toolContent := toolResultContent(call.Name, outcome)
+			if workspaceVerification {
+				if !roundHasMutation || agentToolMutatesWorkspace(call.Name, call.Arguments) {
+					verificationGate.Observe(call.Name, call.Arguments, outcome)
+				}
+			}
 			if err := turnRecorder.AddToolResult(ctx, call.ID, call.Name, toolContent, toolStatus, outcome.ErrorCode, execution.DurationMS); err != nil {
-				return "", "", false, 0, 0, err
+				return "", "", false, 0, 0, fmt.Errorf("%w: tool %s result checkpoint failed: %v", interaction.ErrToolReconciliationRequired, call.ID, err)
 			}
 			applog.TraceInfo(trace.WithStage("tool_call_completed"), applog.Fields{"round": round, "tool_name": call.Name, "tool_call_id": call.ID, "ok": outcome.Found, "status": outcome.Status, "error_code": outcome.ErrorCode, "result_size": len(toolContent), "force_voice": outcome.ForceVoice}, "process message tool call completed")
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": toolContent})
@@ -185,8 +239,8 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 				}
 			}
 			if allRepeated {
-				reply = aiContent
-				break
+				return "", strings.Join(reasoningParts, "\n\n"), forceVoice, totalTokens, reasoningDurationMS,
+					fmt.Errorf("agent tool execution stalled: repeated identical calls without verifiable progress; task is not complete")
 			}
 		}
 	}
@@ -220,11 +274,25 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 }
 
 func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[string]interface{}, toolAliases map[string]string, seenTools map[string]bool, convID, charID, channel, requestID, spaceID, sessionID, permissionMode string, trace applog.TraceFields, execCtx *coreexec.ExecutionContext, turnRecorder *assistantTurnRecorder, fingerprints map[string]int) ([]agentToolCall, error) {
+	seenCallIDs := make(map[string]bool, len(toolCalls))
+	for _, tc := range toolCalls {
+		id, _ := tc["id"].(string)
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return nil, fmt.Errorf("model tool call is missing a required id")
+		}
+		if seenCallIDs[id] {
+			return nil, fmt.Errorf("model emitted duplicate tool call id %q in one response", id)
+		}
+		seenCallIDs[id] = true
+	}
 	result := make([]agentToolCall, 0, len(toolCalls))
 	for _, tc := range toolCalls {
 		function, _ := tc["function"].(map[string]interface{})
-		name, _ := function["name"].(string)
-		if original, exists := toolAliases[name]; exists {
+		modelName, _ := function["name"].(string)
+		name := modelName
+		original, advertised := toolAliases[modelName]
+		if advertised {
 			name = original
 		}
 		args, _ := function["arguments"].(string)
@@ -232,14 +300,13 @@ func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[str
 		if strings.TrimSpace(name) == "" || strings.TrimSpace(toolCallID) == "" {
 			return nil, fmt.Errorf("model tool call is missing a required name or id")
 		}
-		if strings.TrimSpace(args) == "" {
-			args = "{}"
-		}
-		if !json.Valid([]byte(args)) {
-			return nil, fmt.Errorf("model tool %s returned malformed JSON arguments", name)
+		var invalidReason string
+		args, invalidReason = validateAgentToolArguments(args)
+		if !advertised {
+			invalidReason = "tool was not advertised to this model turn"
 		}
 		duplicate := false
-		if name == "create_schedule" {
+		if name == "create_schedule" && invalidReason == "" {
 			dedupKey := name + "|" + args
 			duplicate = seenTools[dedupKey]
 			seenTools[dedupKey] = true
@@ -265,7 +332,7 @@ func (s *service) prepareAgentToolCalls(ctx context.Context, toolCalls []map[str
 			return nil, err
 		}
 		s.emitDesktopPetTool(ctx, scope, toolCallID, name, "started", "", fingerprints[fingerprint])
-		result = append(result, agentToolCall{ID: toolCallID, Name: name, Arguments: args, Scope: scope, Fingerprint: fingerprint, Duplicate: duplicate})
+		result = append(result, agentToolCall{ID: toolCallID, Name: name, Arguments: args, Scope: scope, Fingerprint: fingerprint, Duplicate: duplicate, InvalidReason: invalidReason})
 	}
 	return result, nil
 }
@@ -316,6 +383,9 @@ func (s *service) executeAgentToolCalls(ctx context.Context, cfg *ModelConfig, c
 
 func (s *service) executeAgentToolCall(ctx context.Context, call agentToolCall, trace applog.TraceFields, round int, turnRecorder *assistantTurnRecorder) agentToolExecution {
 	startedAt := time.Now()
+	if call.InvalidReason != "" {
+		return agentToolExecution{Outcome: toolExecOutcome{VisibleText: call.InvalidReason, Status: "FAILED", ErrorCode: "INVALID_TOOL_CALL", ErrorMessage: call.InvalidReason, HasError: true, Found: true}, DurationMS: 0}
+	}
 	if call.Duplicate {
 		return agentToolExecution{Outcome: toolExecOutcome{VisibleText: "重复的定时任务创建请求已拒绝", Status: "FAILED", ErrorCode: "DUPLICATE_TOOL_CALL", HasError: true, Found: true}, DurationMS: 0}
 	}
@@ -323,24 +393,27 @@ func (s *service) executeAgentToolCall(ctx context.Context, call agentToolCall, 
 	if s.toolRuntime == nil {
 		return agentToolExecution{Outcome: toolExecOutcome{VisibleText: "工具运行时不可用", Status: "FAILED", ErrorCode: extension.ErrSkillExecutionFailed, HasError: true, Found: false}, DurationMS: time.Since(startedAt).Milliseconds()}
 	}
-	if streamingRuntime, ok := s.toolRuntime.(ModelToolProgressRuntime); ok {
-		toolResult, found, err := streamingRuntime.ExecuteModelToolWithProgress(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, idempotencyKey, func(progressCtx context.Context, event ToolProgressEvent) error {
-			if turnRecorder == nil {
-				return nil
+	run := func() agentToolExecution {
+		if streamingRuntime, ok := s.toolRuntime.(ModelToolProgressRuntime); ok {
+			toolResult, found, err := streamingRuntime.ExecuteModelToolWithProgress(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, idempotencyKey, func(progressCtx context.Context, event ToolProgressEvent) error {
+				if turnRecorder == nil {
+					return nil
+				}
+				return turnRecorder.AddToolProgress(progressCtx, call.ID, call.Name, event)
+			})
+			if err != nil {
+				if toolResult.Error == nil {
+					toolResult.Status = "FAILED"
+					toolResult.VisibleText = "工具流式执行失败"
+					toolResult.Error = &ToolError{Code: "TOOL_STREAM_FAILED", Message: err.Error(), Detail: err.Error(), Retryable: false}
+				}
 			}
-			return turnRecorder.AddToolProgress(progressCtx, call.ID, call.Name, event)
-		})
-		if err != nil {
-			if toolResult.Error == nil {
-				toolResult.Status = "FAILED"
-				toolResult.VisibleText = "工具流式执行失败"
-				toolResult.Error = &ToolError{Code: "TOOL_STREAM_FAILED", Message: err.Error(), Detail: err.Error(), Retryable: false}
-			}
+			return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}
 		}
+		toolResult, found := s.toolRuntime.ExecuteModelTool(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, idempotencyKey)
 		return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}
 	}
-	toolResult, found := s.toolRuntime.ExecuteModelTool(ctx, call.Name, json.RawMessage(call.Arguments), call.Scope, idempotencyKey)
-	return agentToolExecution{Outcome: toolResultToOutcome(toolResult, found), DurationMS: time.Since(startedAt).Milliseconds()}
+	return newAgentToolLedger(turnRecorder, call).execution(ctx, run)
 }
 
 func agentSkillTraceFromOutcome(promptTrace *promptir.PromptTrace, name, arguments string, outcome toolExecOutcome) (string, *promptir.AgentSkillTrace) {
@@ -392,57 +465,7 @@ func agentSkillTraceFromOutcome(promptTrace *promptir.PromptTrace, name, argumen
 }
 
 func (s *service) compactAgentMessages(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, baseMessageCount int) []map[string]interface{} {
-	if len(messages) <= baseMessageCount+5 {
-		return messages
-	}
-	contextWindow := 128000
-	if cfg != nil && cfg.ContextWindow > 0 {
-		contextWindow = cfg.ContextWindow
-	}
-	if estimateModelMessagesTokens(messages) <= int(float64(contextWindow)*0.82) {
-		return messages
-	}
-	tailCount := 6
-	if len(messages)-baseMessageCount <= tailCount {
-		return messages
-	}
-	middleEnd := len(messages) - tailCount
-	for middleEnd > baseMessageCount && fmt.Sprint(messages[middleEnd]["role"]) == "tool" {
-		middleEnd--
-	}
-	if middleEnd <= baseMessageCount {
-		return messages
-	}
-	var text strings.Builder
-	for _, message := range messages[baseMessageCount:middleEnd] {
-		content, _ := message["content"].(string)
-		if strings.TrimSpace(content) == "" {
-			continue
-		}
-		text.WriteString(fmt.Sprint(message["role"]))
-		text.WriteString(": ")
-		text.WriteString(content)
-		text.WriteByte('\n')
-	}
-	summary := ""
-	if s.compressor != nil && text.Len() > 0 {
-		summary = strings.TrimSpace(s.compressor.generateSummary(ctx, text.String(), ""))
-	}
-	if summary == "" {
-		raw := text.String()
-		if len(raw) > 12000 {
-			raw = raw[len(raw)-12000:]
-		}
-		summary = raw
-	}
-	if strings.TrimSpace(summary) == "" {
-		return messages
-	}
-	compacted := make([]map[string]interface{}, 0, baseMessageCount+1+tailCount)
-	compacted = append(compacted, messages[:baseMessageCount]...)
-	compacted = append(compacted, map[string]interface{}{"role": "system", "content": "【本轮工具执行摘要】\n" + summary})
-	compacted = append(compacted, messages[middleEnd:]...)
-	return compacted
+	return s.compactAgentMessagesWithToolBudget(ctx, cfg, messages, baseMessageCount, nil)
 }
 
 func estimateModelMessagesTokens(messages []map[string]interface{}) int {
@@ -451,6 +474,28 @@ func estimateModelMessagesTokens(messages []map[string]interface{}) int {
 		total += 8
 		if content, ok := message["content"].(string); ok {
 			total += estimateTextTokens(content)
+		}
+		if parts, ok := message["parts"].([]ModelContentPart); ok {
+			for _, part := range parts {
+				total += estimateTextTokens(part.Text) + estimateTextTokens(part.Filename) + 12
+				switch part.Type {
+				case ContentTypeImage:
+					switch strings.ToLower(part.Detail) {
+					case "low":
+						total += 100
+					case "high":
+						total += 2048
+					default:
+						total += 1536
+					}
+				case ContentTypeAudio:
+					total += 4096
+				case ContentTypeVideo:
+					total += 8192
+				case ContentTypeFile:
+					total += 2048
+				}
+			}
 		}
 		if toolCalls, ok := message["tool_calls"]; ok {
 			encoded, err := json.Marshal(toolCalls)

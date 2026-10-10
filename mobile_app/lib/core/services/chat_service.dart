@@ -648,6 +648,41 @@ class ChatService {
     );
   }
 
+  Future<void> markConversationRead(
+    String id, {
+    int lastTerminalTurnSequence = 0,
+    String? characterId,
+  }) async {
+    if (owned.enabled) {
+      var terminalSequence = lastTerminalTurnSequence;
+      if (terminalSequence <= 0) {
+        final role = owned.selectRole(characterId);
+        final result = await owned.query(id, characterId: role);
+        final snapshot = result['snapshot'];
+        if (snapshot is Map) {
+          for (final row
+              in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
+            if (row['kind'] != 'conversation' || row['body'] is! Map) continue;
+            final body = Map<String, dynamic>.from(row['body'] as Map);
+            terminalSequence =
+                (body['lastTerminalTurnSequence'] as num?)?.toInt() ?? 0;
+            break;
+          }
+        }
+      }
+      await owned.edit(
+        'conversation',
+        id,
+        changes: {'lastReadTurnSequence': terminalSequence},
+      );
+      return;
+    }
+    await _api.post<Map<String, dynamic>>(
+      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/read',
+      data: const <String, dynamic>{},
+    );
+  }
+
   Future<void> archiveConversation(String id) async {
     if (owned.enabled) {
       await owned.edit('conversation', id, changes: {'archived': true});

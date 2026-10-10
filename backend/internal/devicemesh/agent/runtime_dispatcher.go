@@ -85,6 +85,8 @@ func (d *defaultRuntimeDispatcher) Register(handlerName string, handler RuntimeI
 	if d == nil || handlerName == "" || handler == nil {
 		return
 	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.handlers[handlerName] = handler
 }
 

@@ -468,6 +468,7 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 	}
 	req := ModelRequest{
 		Model:           cfg.ModelName,
+		Instructions:    instructions,
 		Messages:        msgs,
 		Stream:          false,
 		ReasoningEffort: cfg.ReasoningEffort,

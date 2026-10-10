@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -78,7 +79,7 @@ func TestAgentLoopDispatchesMappedWorkspaceToolWithIdempotency(t *testing.T) {
 	reply, _, _, tokens, _, err := svc.invokeLLMWithTools(
 		context.Background(), &ModelConfig{}, nil, applog.TraceFields{}, nil,
 		"", "conv", "char", "web", "req-123", "", "", "request_approval",
-		nil, definitions, map[string]bool{}, context.Background(), nil,
+		nil, definitions, map[string]bool{}, context.Background(), testAgentLoopRecorder(t, "conv", "char", "req-123"),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -135,5 +136,33 @@ func TestAgentCompactionKeepsToolCallsAndResultsTogether(t *testing.T) {
 	}
 	if len(compacted) > 2 && compacted[2]["role"] == "tool" {
 		t.Fatal("compacted tail cannot begin with an orphan tool result")
+	}
+}
+
+func TestAgentContinuesBeyondFormerRoundLimit(t *testing.T) {
+	runtime := &agentRegressionRuntime{}
+	svc := &service{toolRuntime: runtime}
+	modelCalls := 0
+	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		modelCalls++
+		if modelCalls <= 130 {
+			return "", "", []map[string]interface{}{{
+				"id":       "long-call-" + strconv.Itoa(modelCalls),
+				"type":     "function",
+				"function": map[string]interface{}{"name": "read_file", "arguments": "{}"},
+			}}, 1, nil
+		}
+		return "持续任务已完成", "", nil, 1, nil
+	}
+	reply, _, _, tokens, _, err := svc.invokeLLMWithTools(
+		context.Background(), &ModelConfig{ContextWindow: 500000}, nil, applog.TraceFields{}, nil,
+		"", "long-running", "char", "web", "long-run", "", "", "request_approval",
+		nil, []tool.Tool{{Function: tool.Function{Name: "read_file"}}}, map[string]bool{}, context.Background(), testAgentLoopRecorder(t, "long-running", "char", "long-run"),
+	)
+	if err != nil {
+		t.Fatalf("agent must be able to continue without a fixed round cap: %v", err)
+	}
+	if reply != "持续任务已完成" || modelCalls != 131 || tokens != 131 {
+		t.Fatalf("reply = %q, model rounds = %d, tokens = %d", reply, modelCalls, tokens)
 	}
 }

@@ -16,7 +16,19 @@ A 使用 B，B 转接 C 时，A 申请 C 独立授权并直接连接 C。禁止�
 
 参考规范：[设备授权 RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html)、[OAuth 安全 RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html)、[DPoP RFC 9449](https://www.rfc-editor.org/rfc/rfc9449.html)、[OWASP 授权指南](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)、[事务 Outbox](https://learn.microsoft.com/en-sg/azure/architecture/databases/guide/transactional-outbox-cosmos)。上述资料提供基础机制，统筹模式与历史数据归属是 Amitia 的产品规则。
 
-## 当前完成范围
+## 当前验收状态（2026-10-09）
+
+配对、重复设备拦截、角色选择、按设备控制统筹模式、当前 Core 管理员权限、数据归属确认及三 Core 切换已有源码和定向联测。业务就绪门禁已接入生产构造校验；当前运行的旧 Core 仍关闭该门禁，新 Core 的完整重启验收尚未完成。
+
+来源任务 Native 权限按实际输入判断，保留原审批范围与条件。统筹模式的来源插件事件使用原设备固定安装代次的只读契约、原执行身份及输入摘要，在 Core 的同一份 canonical outbox 保存，不向 Core 全局目录注册来源插件，也不隐式激活同名订阅。宿主来源审计只保存设备、执行身份、安装代次与哈希引用，与事件在同一事务中写入独立表，不复制事件正文或完整契约，不占用插件元数据额度。字段类型、非法引用、契约伪造、执行身份变更、旧库升级与宿主来源事务检查通过定向竞态测试。实际 Node 与 TLS 链路已验证统筹开启和关闭时的正确数据归属、零元数据额度、60000 字节正文及保存正文哈希；该测试中的所有者端口适配不等同实际手机硬件操作。
+
+新增三 Core 真链路测试发现：B 先绑定 C 后，全新 A 扫描 B，会停留在尚未业务就绪的 B 候选，旧轮询无法继续申请 C。该入口正在补齐候选向明确继任者申请的路径，仍要求 C 独立批准及就绪确认，不能提前激活 B 或继承 B 管理员权限。
+
+iOS 已接入同一套 Go Linux ARM64 Core、宿主 Keychain、局域网地址、Native 通道和独立持久业务卷。Dart 接线、打包输入、C 持久卷与异常退出检查，以及相关 Go ARM64 编译检查已通过；没有构建或安装正式应用。完整 Apple 原生编译、物理 iPhone/iPad 上的 Core、Node、Qdrant 和生命周期仍未验收。iSH 不视为不可信任务的强隔离器，旧程序卷内异常业务数据目前安全拒绝并保留，尚未提供迁移工具。
+
+以下为按实施阶段保留的记录；其中早期“尚未完成”和门禁状态应以本节及后续日期记录为准。真实媒体解析依赖与正式设备验证的未验收项继续保留，不能以源码或模拟测试代替。
+
+## 阶段实施记录
 
 凭证交换客户端使用后端实际公共接口。配对领取将设备登记、票据签发及 Offer 消费放进同一事务，失败回滚。服务端拒绝自扫、已添加设备及同设备并发领取，并提供稳定错误码和中文提示。撤销事务同时处理设备信任、访问凭证、未使用票据及该设备生成的 Offer。本地认证接入持久 Device Mesh 身份，使本地 Core 能生成 Offer。
 
@@ -268,3 +280,9 @@ PDF 后续真实解析验证使用机器已有解析程序作为测试 Core 配�
 iOS 纳入与 Android 相同的业务能力范围，使用 iSH ARM64 承载现有 Go Linux ARM64 Core，通过 Swift/C 宿主管理生命周期，不另建角色、记忆或配对协议。原 vendored iSH 是 x86 源码，不能用 ARM64 构建参数宣称兼容；现以 HTTP 源码归档引入 OpenMinis/ish-arm64，固定提交 e6521d9cfe9cd48f19917fc3b23aea622ba358b4，归档 SHA-256 记录在 backend/third_party/ish-arm64/amitia-source-lock.json，并保留原许可证。没有执行 Git 拉取或手机正式构建。
 
 iOS 设备身份与密钥由宿主 Keychain 管理。Core 通过专用管道、原启动代次和单调请求编号请求身份签名及安全存储确认；通道缺失、响应代次不符或中断时拒绝使用缓存身份和 guest 数据目录中的凭证副本。配对凭证的删除也必须等待宿主确认；内核凭证库的加密主密钥不落入 guest 文件。Go 安全通道、身份、凭证存储与内核密钥保护定向竞态测试通过，Linux ARM64 相关包编译检查通过。Swift/C 宿主接线及真实 iPhone/iPad Runtime 运行仍在开发和验证，不能据此宣称 iOS 已完成验收。
+
+2026-10-09 iOS C 与 rootfs 源码验收：C 使用固定 ARM64 fork 的真实进程、文件描述符和等待接口，Core 独占宿主桥且按进程组身份、启动代次和原子撤销状态校验；普通短工具使用 uid/gid 1000。桥轮询不持内核进程锁，避免退出唤醒与轮询之间的锁顺序冲突。Core 取消串行阻止新启动，并清理 guest 子服务；短命令采用有界标准输入输出、超时取消和退出回收。根文件系统已挂载后，即使初始化失败或服务停止也禁止同宿主进程替换，版本变化需要重新启动宿主。
+
+业务数据使用独立的持久 fakefs 卷及其 meta.db，新根文件系统不更换该卷。可信初始化创建 root0 私有目录；发现旧根内非空业务数据返回专属待迁移错误，缺失元数据且已有数据或异常链接均拒绝，不删除或自动搬迁旧数据。真实 POSIX 和 SQLite 的 C 定向检查、AddressSanitizer 与 UndefinedBehaviorSanitizer 检查通过，覆盖持久卷首次初始化、原数据重开、权限元数据、异常卷保留，以及宿主桥身份、代次、撤销和强制退出状态；ARM64 fork 真实头文件的 C 语法检查通过。这些检查没有运行完整 iSH guest 进程，不替代真机生命周期验收。
+
+rootfs 输入从当前 Go 源码构建 Linux ARM64 Core，比较构建前后依赖与嵌入文件清单；Node 必须为 ARM64 musl，Qdrant 必须为 ARM64 静态或 musl。显式 SHA-256、有效 ELF 加载段、真实 musl loader、实际库位置及递归动态依赖均校验，缺失依赖或 glibc、错架构输入拒绝打包。内外清单包含输入包哈希、程序哈希、源文件清单及运行库字节哈希；fakefs 链接占位字节与解析后的库字节分别记录。九项 Python 定向测试及 Bash 语法检查通过，没有正式构建或安装 iOS、Android 应用。物理 iPhone/iPad 上的长期 Core、Node、Qdrant、配对、后台中断及强隔离仍未验证，不能据此声明 iOS 全量功能已完成。

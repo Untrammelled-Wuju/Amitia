@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ func TestSourceTaskNativeEventPersistsRealOwnerOutboxAndRejectsCancelledScope(t 
 		t.Fatal(err)
 	}
 	bridge := event.NewRuntimeBridge(service)
-	definition := event.EventTypeDefinition{EventTypeID: "extension.fixture.updated", Version: 1, MaxPayloadBytes: 64 << 10, MaxMetadataBytes: 32 << 10, RiskLevel: event.RiskLevelLow, OrderingPolicy: event.OrderingNone, ProducerPolicy: event.EventProducerPolicy{AllowedProducers: []string{"extension"}, MaxPayloadBytes: 64 << 10, MaxMetadataBytes: 32 << 10, RateLimitPerSecond: 100}}
+	definition := event.EventTypeDefinition{EventTypeID: "extension.fixture.updated", Version: 1, PayloadSchema: json.RawMessage(`{"type":"object","required":["private"],"additionalProperties":false,"properties":{"private":{"type":"string"}}}`), MaxPayloadBytes: 64 << 10, MaxMetadataBytes: 32 << 10, RiskLevel: event.RiskLevelLow, OrderingPolicy: event.OrderingNone, ProducerPolicy: event.EventProducerPolicy{AllowedProducers: []string{"extension"}, MaxPayloadBytes: 64 << 10, MaxMetadataBytes: 32 << 10, RateLimitPerSecond: 100}}
 	if err := bridge.RegisterExtensionEvents(t.Context(), "fixture", 2, []event.EventTypeDefinition{definition}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -43,19 +44,39 @@ func TestSourceTaskNativeEventPersistsRealOwnerOutboxAndRejectsCancelledScope(t 
 	if json.Unmarshal(result, &ack) != nil || !ack.Confirmed || ack.EventID == "" || ack.OutboxID == "" {
 		t.Fatalf("event did not return real durable ACK: %s", result)
 	}
-	var payload, producer, module string
+	var payload, producer, module, metadata string
 	var generation int64
-	if err := db.QueryRowContext(ctx, "SELECT payload_json,producer_id,producer_generation FROM extension_event_outbox WHERE outbox_id=? AND event_id=?", ack.OutboxID, ack.EventID).Scan(&payload, &producer, &generation); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT payload_json,producer_id,producer_generation,COALESCE(metadata_json,'') FROM extension_event_outbox WHERE outbox_id=? AND event_id=?", ack.OutboxID, ack.EventID).Scan(&payload, &producer, &generation, &metadata); err != nil {
 		t.Fatal(err)
 	}
 	var decoded struct{ Private string }
 	if json.Unmarshal([]byte(payload), &decoded) != nil || decoded.Private != "<>&中文" || producer != "fixture" || generation != 2 {
 		t.Fatalf("durable Source event identity/private payload changed: %s %s %d %s", payload, producer, generation, module)
 	}
+	if strings.Contains(metadata, "amitiaSourceTaskContract") {
+		t.Fatal("Source local authorized subscriptions were disabled by an ON-only cross-device marker")
+	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, err := host.publish(cancelled, run, task, "cancelled", call); err == nil {
 		t.Fatal("cancelled event scope committed durable event")
+	}
+	for _, invalid := range []json.RawMessage{json.RawMessage(`{"private":4}`), json.RawMessage(`{"private":"ok","undeclared":true}`)} {
+		changed := call
+		changed.Payload = invalid
+		if _, err := host.publish(ctx, run, task, "invalid-schema", changed); err == nil {
+			t.Fatal("OFF Native event bypassed complete schema validation")
+		}
+	}
+	oldGeneration := *task
+	oldGeneration.InstalledGeneration--
+	if _, err := host.publish(ctx, run, &oldGeneration, "old-install", call); err == nil {
+		t.Fatal("OFF Native event borrowed another installed generation")
+	}
+	foreign := call
+	foreign.Type = "extension.fixture.undeclared"
+	if _, err := host.publish(ctx, run, task, "undeclared-type", foreign); err == nil {
+		t.Fatal("OFF Native event used undeclared installed event type")
 	}
 	var count int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM extension_event_outbox").Scan(&count); err != nil || count != 1 {

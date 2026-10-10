@@ -32,10 +32,11 @@ type Runtime struct {
 }
 
 type activeRun struct {
-	state    ExecutionState
-	spaceID  string
-	notified bool
-	timer    *time.Timer
+	state          ExecutionState
+	spaceID        string
+	notified       bool
+	timer          *time.Timer
+	lastProgressAt time.Time
 }
 
 type deliveryJob struct {
@@ -331,7 +332,8 @@ func parsePersistedNotificationTime(raw string) time.Time {
 
 func interestingEvent(eventType string) bool {
 	switch eventType {
-	case "turn.queued", "turn.started", "turn.cancelling", "turn.completed", "turn.failed", "turn.interrupted",
+	case "turn.queued", "turn.started", "turn.waiting", "turn.cancelling", "turn.completed", "turn.failed", "turn.interrupted",
+		"tool.started", "tool.progress", "tool.running", "tool.completed", "tool.failed", "tool.cancelled", "tool.interrupted",
 		"tool_call.started", "tool_call.completed", "tool_call.failed", "tool_call.cancelled",
 		"approval.requested", "approval.approved", "approval.denied", "approval.expired",
 		"agent.tool.started", "agent.tool.progress", "agent.tool.completed", "agent.tool.failed", "agent.tool.cancelled":
@@ -409,6 +411,9 @@ func (r *Runtime) handleEvent(ctx context.Context, event conversationstream.Agen
 	immediate := executionEventNeedsSurface(event.Type)
 	if immediate && !run.notified {
 		run.notified = true
+		if event.Type == "tool.progress" || event.Type == "agent.tool.progress" {
+			run.lastProgressAt = now
+		}
 		if run.timer != nil {
 			run.timer.Stop()
 			run.timer = nil
@@ -420,6 +425,13 @@ func (r *Runtime) handleEvent(ctx context.Context, event conversationstream.Agen
 		return
 	}
 	if run.notified && event.Type != "turn.queued" && event.Type != "turn.started" {
+		if event.Type == "tool.progress" || event.Type == "agent.tool.progress" {
+			if now.Sub(run.lastProgressAt) < 3*time.Second {
+				r.mu.Unlock()
+				return
+			}
+			run.lastProgressAt = now
+		}
 		state := run.state
 		spaceID := run.spaceID
 		r.mu.Unlock()
@@ -449,7 +461,7 @@ func (r *Runtime) promoteRun(runID string) {
 
 func executionEventNeedsSurface(eventType string) bool {
 	switch eventType {
-	case "tool_call.started", "agent.tool.started", "approval.requested":
+	case "tool.started", "tool.progress", "tool_call.started", "agent.tool.started", "agent.tool.progress", "approval.requested":
 		return true
 	default:
 		return false
@@ -457,6 +469,9 @@ func executionEventNeedsSurface(eventType string) bool {
 }
 
 func updateExecutionState(state *ExecutionState, event conversationstream.AgentUIEvent) {
+	if state.Phase == "needs_reconciliation" && event.Type != "turn.started" && !terminalEvent(event.Type) {
+		return
+	}
 	switch event.Type {
 	case "turn.queued":
 		state.Phase = "queued"
@@ -464,23 +479,42 @@ func updateExecutionState(state *ExecutionState, event conversationstream.AgentU
 	case "turn.started":
 		state.Phase = "running"
 		state.Summary = "正在运行"
+	case "turn.waiting":
+		state.Phase = fallback(event.Status, "waiting_tool")
+		if state.Phase == "needs_reconciliation" {
+			state.Summary = "工具执行状态待对账，已停止自动重试"
+		} else {
+			state.Summary = "等待执行条件恢复"
+		}
 	case "turn.cancelling":
 		state.Phase = "cancelling"
 		state.Summary = "正在取消"
-	case "tool_call.started", "agent.tool.started":
+	case "tool.started", "tool_call.started", "agent.tool.started":
 		state.Phase = "running"
-		state.CurrentStep++
 		name := payloadString(event.Payload, "toolName")
 		if name == "" {
 			name = payloadString(event.Payload, "name")
 		}
 		state.Summary = fallback(name, "正在调用工具")
-	case "tool_call.completed", "agent.tool.completed":
+	case "tool.progress", "agent.tool.progress":
+		state.Phase = "running"
+		state.Summary = fallback(payloadString(event.Payload, "content"), "正在调用工具")
+	case "tool.running":
+		state.Phase = "running"
+		if event.Status == "completed" {
+			state.Summary = "工具执行完成"
+		} else {
+			state.Summary = fallback(payloadString(event.Payload, "toolName"), "正在调用工具")
+		}
+	case "tool.completed", "tool_call.completed", "agent.tool.completed":
 		state.Phase = "running"
 		state.Summary = "工具执行完成"
-	case "tool_call.failed", "agent.tool.failed":
+	case "tool.failed", "tool_call.failed", "agent.tool.failed":
 		state.Phase = "running"
 		state.Summary = "工具执行失败，正在处理"
+	case "tool.cancelled", "tool.interrupted":
+		state.Phase = "running"
+		state.Summary = "工具执行已中断"
 	case "approval.requested":
 		state.Phase = "waiting_approval"
 		state.Summary = "等待你的确认"
@@ -515,6 +549,10 @@ func updateExecutionState(state *ExecutionState, event conversationstream.AgentU
 		if state.Progress > 1 {
 			state.Progress = 1
 		}
+	}
+	if event.Type == "turn.completed" {
+		state.CurrentStep = state.TotalSteps
+		state.Progress = 1
 	}
 }
 

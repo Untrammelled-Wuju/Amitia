@@ -3,6 +3,7 @@ import io
 import json
 import pathlib
 import posixpath
+import re
 import struct
 import sys
 import tarfile
@@ -18,9 +19,35 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def verify_input(path, expected):
+    if not re.fullmatch(r"[a-fA-F0-9]{64}", expected):
+        raise ValueError("explicit SHA256 required")
+    data = pathlib.Path(path).read_bytes()
+    if digest(data) != expected.lower():
+        raise ValueError("runtime input SHA256 mismatch")
+
+
 def verify_elf(data, musl=False):
     if len(data) < 64 or data[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", data, 18)[0] != 183:
         raise ValueError("required Linux ELF64 little endian ARM64 binary")
+    if struct.unpack_from("<H", data, 16)[0] not in (2, 3) or struct.unpack_from("<I", data, 20)[0] != 1 or struct.unpack_from("<H", data, 52)[0] != 64:
+        raise ValueError("invalid ELF executable header")
+    offset = struct.unpack_from("<Q", data, 32)[0]
+    entry_size, count = struct.unpack_from("<HH", data, 54)
+    if offset < 64 or entry_size < 56 or not 1 <= count <= 256 or offset + entry_size * count > len(data):
+        raise ValueError("invalid ELF program headers")
+    executable_load = False
+    for index in range(count):
+        header = offset + index * entry_size
+        kind, flags = struct.unpack_from("<II", data, header)
+        start = struct.unpack_from("<Q", data, header + 8)[0]
+        size = struct.unpack_from("<Q", data, header + 32)[0]
+        memory = struct.unpack_from("<Q", data, header + 40)[0]
+        if start + size > len(data) or kind == 1 and memory < size:
+            raise ValueError("ELF segment outside binary")
+        executable_load |= kind == 1 and bool(flags & 1) and size > 0
+    if not executable_load:
+        raise ValueError("ELF executable load segment missing")
     if musl:
         offset = struct.unpack_from("<Q", data, 32)[0]
         entry_size, count = struct.unpack_from("<HH", data, 54)
@@ -117,7 +144,7 @@ def safe_path(name):
     path = posixpath.normpath(name)
     if name.startswith("/") or path == ".." or path.startswith("../") or "\x00" in name:
         raise ValueError("unsafe archive path")
-    return path.lstrip("./")
+    return "" if path == "." else path
 
 
 def add_bytes(archive, name, data, mode=0o644, uid=0):
@@ -155,6 +182,9 @@ def prepare(alpine_path, node_path, core_path, sources_path, version, output_pat
             if not (item.isfile() or item.isdir() or item.issym() or item.islnk()):
                 raise ValueError("unsupported Node archive entry")
             data = archive.extractfile(item).read() if item.isfile() else None
+            if relative.startswith("lib/") and ".so" in posixpath.basename(relative) and item.isfile():
+                verify_elf(data)
+                item.name = "usr/lib/" + posixpath.basename(relative)
             item.uid = item.gid = 0
             if relative == "bin/node" and item.isfile():
                 node_binary = data
@@ -196,12 +226,46 @@ def prepare(alpine_path, node_path, core_path, sources_path, version, output_pat
     fixed["tmp"] = (0, 0o1777)
     text = {}
     with tarfile.open(alpine_path) as archive:
-        available = {posixpath.basename(safe_path(item.name)) for item in archive if item.isfile() or item.issym() or item.islnk()}
-    available.update(posixpath.basename(item.name) for item, _ in node_files + qdrant_files)
+        libraries = {}
+        stored_libraries = {}
+        for item in archive:
+            name = safe_path(item.name)
+            if name.startswith(("lib/", "usr/lib/")) and ".so" in posixpath.basename(name):
+                if item.isfile():
+                    libraries[name] = archive.extractfile(item).read()
+                    stored_libraries[name] = libraries[name]
+                elif item.issym() or item.islnk():
+                    target = item.linkname.lstrip("/") if item.linkname.startswith("/") or item.islnk() else posixpath.join(posixpath.dirname(name), item.linkname)
+                    libraries[name] = safe_path(target)
+                    stored_libraries[name] = item.linkname.encode("utf-8") if item.issym() else None
+    for item, data in node_files + qdrant_files:
+        if item.name.startswith(("lib/", "usr/lib/")) and ".so" in posixpath.basename(item.name):
+            if item.name in libraries and libraries[item.name] != data:
+                raise ValueError("runtime library would overwrite Alpine library")
+            libraries[item.name] = data
+            stored_libraries[item.name] = data
+    def library_bytes(path, visited=None):
+        visited = set() if visited is None else visited
+        if path in visited or len(visited) > 40 or path not in libraries:
+            raise ValueError("runtime library missing or invalid link: " + path)
+        visited.add(path)
+        value = libraries[path]
+        return library_bytes(value, visited) if isinstance(value, str) else value
+    verify_elf(library_bytes("lib/ld-musl-aarch64.so.1"))
+    checked = set()
+    def check_dependencies(binary):
+        for name in elf_dependencies(binary):
+            if name in checked:
+                continue
+            path = next((prefix + name for prefix in ("lib/", "usr/lib/") if prefix + name in libraries), None)
+            if path is None:
+                raise ValueError("runtime ELF dependency missing: " + name)
+            checked.add(name)
+            dependency = library_bytes(path)
+            verify_elf(dependency)
+            check_dependencies(dependency)
     for _, binary in [(None, node_binary), (None, qdrant_binary)] + [(item, data) for item, data in node_files + qdrant_files if item.isfile() and data and data[:4] == b"\x7fELF"]:
-        missing = set(elf_dependencies(binary)) - available
-        if missing:
-            raise ValueError("runtime ELF dependencies missing: " + ",".join(sorted(missing)))
+        check_dependencies(binary)
     with tarfile.open(alpine_path) as original, tarfile.open(output_path, "w:gz") as archive:
         seen = set()
         for item in original:
@@ -237,6 +301,9 @@ def prepare(alpine_path, node_path, core_path, sources_path, version, output_pat
     source_data = pathlib.Path(sources_path).read_bytes()
     manifest = {"schemaVersion": 1, "format": "ish_fakefs", "formatVersion": "1", "distribution": "alpine", "version": version, "architecture": "aarch64", "guestArch": "arm64", "sourceType": "bundled", "core": {"path": CORE_PATH, "sha256": digest(core), "size": len(core)}, "node": {"path": NODE_PATH, "sha256": digest(node_binary), "size": len(node_binary)}, "sourceManifest": {"file": "core-source-inputs.json", "sha256": digest(source_data)}}
     manifest["qdrant"] = {"path": QDRANT_PATH, "sha256": digest(qdrant_binary), "size": len(qdrant_binary)}
+    manifest["runtimeInputs"] = {"alpineSha256": digest(pathlib.Path(alpine_path).read_bytes()), "nodeArchiveSha256": digest(pathlib.Path(node_path).read_bytes()), "qdrantArchiveSha256": digest(pathlib.Path(qdrant_path).read_bytes())}
+    manifest["sourceManifest"]["size"] = len(source_data)
+    manifest["runtimeLibraries"] = [{"path": "/" + path, "sha256": digest(library_bytes(path)), "size": len(library_bytes(path)), "hostStoredPath": "/" + path, "hostStoredSha256": digest(stored_libraries[path] if stored_libraries[path] is not None else library_bytes(path)), "hostStoredSize": len(stored_libraries[path] if stored_libraries[path] is not None else library_bytes(path))} for path in sorted(libraries)]
     pathlib.Path(manifest_path).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
@@ -244,7 +311,7 @@ def package(fakefs_path, manifest_path, sources_path, output_path, release_path)
     root = pathlib.Path(fakefs_path)
     if not (root / "data").is_dir() or not (root / "meta.db").is_file():
         raise ValueError("fakefs output incomplete")
-    files = sorted(path for path in root.rglob("*") if path.is_file())
+    files = sorted(path for path in root.rglob("*") if path.is_file() or path.is_dir())
     temporary = pathlib.Path(output_path + ".pending")
     with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in files:
@@ -266,6 +333,8 @@ def main():
         verify_elf(pathlib.Path(args[0]).read_bytes())
     elif action == "sources":
         source_manifest(*args)
+    elif action == "verify-input":
+        verify_input(*args)
     elif action == "prepare":
         prepare(*args)
     elif action == "package":

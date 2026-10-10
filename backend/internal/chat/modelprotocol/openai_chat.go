@@ -3,6 +3,7 @@
 package modelprotocol
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -120,7 +121,63 @@ func (a *OpenAIChatAdapter) Stream(ctx context.Context, cfg ProviderConfig, req 
 		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
 	}
 
-	return a.parseStream(ctx, resp.Body, sink)
+	reader := bufio.NewReader(resp.Body)
+	var firstByte byte
+	for {
+		prefix, peekErr := reader.Peek(1)
+		if peekErr != nil {
+			return nil, fmt.Errorf("read model stream: %w", peekErr)
+		}
+		firstByte = prefix[0]
+		if firstByte != ' ' && firstByte != '\n' && firstByte != '\r' && firstByte != '\t' {
+			break
+		}
+		_, _ = reader.ReadByte()
+	}
+	if firstByte == '{' || firstByte == '[' {
+		responseBytes, readErr := io.ReadAll(io.LimitReader(reader, 16*1024*1024+1))
+		if readErr != nil {
+			return nil, readErr
+		}
+		if len(responseBytes) > 16*1024*1024 {
+			return nil, fmt.Errorf("model response exceeds the 16 MiB limit")
+		}
+		result, parseErr := a.parseResponse(responseBytes)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		if sink != nil {
+			if result.Text != "" {
+				if err := sink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: result.Text}); err != nil {
+					return nil, err
+				}
+				if err := sink.Emit(ctx, ModelEvent{Type: ModelEventTextDone}); err != nil {
+					return nil, err
+				}
+			}
+			for _, call := range result.ToolCalls {
+				if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallStarted, ToolCallID: call.ID, ToolName: call.Name}); err != nil {
+					return nil, err
+				}
+				if call.ArgumentsJSON != "" {
+					if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallArgumentsDelta, ToolCallID: call.ID, ToolName: call.Name, ArgumentsDelta: call.ArgumentsJSON}); err != nil {
+						return nil, err
+					}
+				}
+				if err := sink.Emit(ctx, ModelEvent{Type: ModelEventToolCallDone, ToolCallID: call.ID, ToolName: call.Name}); err != nil {
+					return nil, err
+				}
+			}
+			if err := sink.Emit(ctx, ModelEvent{Type: ModelEventUsage, Usage: &result.Usage}); err != nil {
+				return nil, err
+			}
+			if err := sink.Emit(ctx, ModelEvent{Type: ModelEventCompleted}); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
+	}
+	return a.parseStream(ctx, reader, sink)
 }
 
 func applyOpenAIChatControls(requestBody map[string]interface{}, cfg ProviderConfig, req ModelRequest) {

@@ -142,10 +142,10 @@ func TestInvokeLLMWithToolsContinuesUntilFinalAnswer(t *testing.T) {
 		"",
 		"request_approval",
 		nil,
-		nil,
+		[]tool.Tool{{Function: tool.Function{Name: "read_file"}}},
 		map[string]bool{},
 		context.Background(),
-		nil,
+		testAgentLoopRecorder(t, "conv", "char", "req"),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -158,5 +158,22 @@ func TestInvokeLLMWithToolsContinuesUntilFinalAnswer(t *testing.T) {
 	}
 	if runtime.calls.Load() != 4 {
 		t.Fatalf("expected four tool executions, got %d", runtime.calls.Load())
+	}
+}
+
+func TestMessagesToModelRequestPreservesSystemInstructions(t *testing.T) {
+	cfg := &ModelConfig{APIType: "openai-compatible", ModelName: "test-model"}
+	messages := []map[string]interface{}{
+		{"role": "system", "content": "系统安全与工具执行规则"},
+		{"role": "user", "content": "执行检查"},
+		{"role": "system", "content": "工作区运行时约束"},
+		{"role": "assistant", "content": "执行完毕"},
+	}
+	request := messagesToModelRequest(cfg, messages, nil, false)
+	if len(request.Instructions) != 2 || request.Instructions[0] != "系统安全与工具执行规则" || request.Instructions[1] != "工作区运行时约束" {
+		t.Fatalf("model request discarded authoritative system instructions: %#v", request.Instructions)
+	}
+	if len(request.Messages) != 2 || request.Messages[0].Role != "user" || request.Messages[1].Role != "assistant" {
+		t.Fatalf("model conversation messages changed unexpectedly: %#v", request.Messages)
 	}
 }

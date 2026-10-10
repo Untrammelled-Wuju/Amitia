@@ -16,14 +16,34 @@ type bindingGate struct {
 }
 
 func (g *bindingGate) Resolve(name string) RuntimeInvokeHandler {
-	if g.dispatcher == nil {
-		return nil
-	}
-	handler := g.dispatcher.Resolve(name)
+	handler := g.ResolveContext(name)
 	if handler == nil {
 		return nil
 	}
 	return func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+		return handler(context.Background(), invoke)
+	}
+}
+
+func (g *bindingGate) ResolveContext(name string) CancellableRuntimeInvokeHandler {
+	if g.dispatcher == nil {
+		return nil
+	}
+	var handler CancellableRuntimeInvokeHandler
+	if contextual, ok := g.dispatcher.(RuntimeContextDispatcher); ok {
+		handler = contextual.ResolveContext(name)
+	} else if legacy := g.dispatcher.Resolve(name); legacy != nil {
+		handler = func(_ context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+			return legacy(invoke)
+		}
+	}
+	if handler == nil {
+		return nil
+	}
+	return func(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, context.Cause(ctx)
+		}
 		var preflight struct {
 			Operation string `json:"operation"`
 		}
@@ -31,7 +51,7 @@ func (g *bindingGate) Resolve(name string) RuntimeInvokeHandler {
 		if !g.active.Load() && !rolePreflight {
 			return nil, errors.New("服务提供者切换尚未完成")
 		}
-		return handler(invoke)
+		return handler(ctx, invoke)
 	}
 }
 

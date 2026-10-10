@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
 	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/devicemesh/proof"
@@ -89,6 +90,35 @@ func NewService(db *sql.DB, dataDir string, spaceID runtimeidentity.SpaceID, dev
 }
 
 func (s *Service) SpaceID() runtimeidentity.SpaceID { return s.spaceID }
+
+func (s *Service) RecoverLocalDevice(ctx context.Context, coreDeviceID runtimeidentity.DeviceID) error {
+	actor, ok := auth.FromContext(ctx)
+	if !ok || actor == nil || !actor.IsLocalTrusted || actor.PrincipalType != auth.PrincipalLocalUI || !actor.HasPermission(auth.PermSystemAdmin) || (actor.AuthMethod != "desktop_session" && actor.AuthMethod != "local_token") || coreDeviceID == "" || actor.DeviceID != coreDeviceID || actor.SpaceID != s.spaceID {
+		return errors.New("只有本机 Core 所有者可以恢复本机配对权限")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	device, err := s.devices.GetDeviceTx(ctx, tx, coreDeviceID)
+	if err != nil {
+		return err
+	}
+	if device == nil || device.SpaceID != s.spaceID {
+		return host_registry.ErrDeviceOwnedByOther
+	}
+	if device.TrustState == host_registry.DeviceTrustTrusted {
+		return nil
+	}
+	if err := s.devices.MarkDeviceTrustedTx(ctx, tx, coreDeviceID); err != nil {
+		return err
+	}
+	if err := meshaudit.QueueTx(ctx, tx, s.spaceID.String(), coreDeviceID.String(), "device_mesh.local_core_trust_recovered", meshaudit.Details{}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 func (s *Service) CreateOffer(ctx context.Context, creator runtimeidentity.DeviceID, ttl time.Duration, requireApproval ...bool) (*Offer, string, error) {
 	required := len(requireApproval) > 0 && requireApproval[0]

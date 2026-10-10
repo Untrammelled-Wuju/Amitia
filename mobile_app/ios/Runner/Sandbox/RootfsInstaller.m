@@ -1,6 +1,7 @@
 #import "RootfsInstaller.h"
 #import "RootfsIntegrityVerifier.h"
 #import "RootfsArchiveExtractor.h"
+#import "AmitiaISHRuntime.h"
 #import <sys/statvfs.h>
 #import <sys/errno.h>
 
@@ -56,6 +57,27 @@ static NSCharacterSet *kSafeRootfsChars = nil;
 
 @implementation RootfsInstaller
 
++ (NSString *)errorCodeForError:(NSError *)error {
+    if (![error.domain isEqualToString:RootfsInstallerErrorDomain]) return @"INSTALL_FAILED";
+    switch (error.code) {
+        case RootfsInstallerErrorRuntimeRestartRequired: return @"RESTART_REQUIRED";
+        case RootfsInstallerErrorInvalidRequest: return @"INVALID_REQUEST";
+        case RootfsInstallerErrorSourceUnavailable: return @"SOURCE_UNAVAILABLE";
+        case RootfsInstallerErrorIntegrityMismatch: return @"INTEGRITY_MISMATCH";
+        case RootfsInstallerErrorExtractionFailed: return @"EXTRACTION_FAILED";
+        case RootfsInstallerErrorTraversalDetected: return @"TRAVERSAL_DETECTED";
+        case RootfsInstallerErrorSymlinkEscapeDetected: return @"SYMLINK_ESCAPE";
+        case RootfsInstallerErrorLayoutInvalid: return @"ROOTFS_INVALID";
+        case RootfsInstallerErrorArchitectureMismatch: return @"ARCHITECTURE_MISMATCH";
+        case RootfsInstallerErrorInsufficientStorage: return @"INSUFFICIENT_STORAGE";
+        case RootfsInstallerErrorActivationFailed: return @"ACTIVATION_FAILED";
+        case RootfsInstallerErrorCancelled: return @"CANCELLED";
+        case RootfsInstallerErrorConcurrentInstallation: return @"CONCURRENT_INSTALLATION";
+        case RootfsInstallerErrorVersionConflict: return @"VERSION_CONFLICT";
+        default: return @"INSTALL_FAILED";
+    }
+}
+
 + (void)initialize {
     if (self == [RootfsInstaller class]) {
         kSafeRootfsChars = [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"];
@@ -97,7 +119,14 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         self.currentInstallID = [[NSUUID UUID] UUIDString];
 
         NSError *flowErr = nil;
-        RootfsInstallResult *result = [self executeInstallFlow:request progress:progress error:&flowErr];
+        RootfsInstallResult *result = nil;
+        @synchronized ([AmitiaISHRuntime shared]) {
+            if ([AmitiaISHRuntime shared].rootMounted) {
+                flowErr = [NSError errorWithDomain:RootfsInstallerErrorDomain code:RootfsInstallerErrorRuntimeRestartRequired userInfo:@{NSLocalizedDescriptionKey: @"Runtime 曾挂载当前程序卷，请关闭并重新打开应用后再安装或修复。"}];
+            } else {
+                result = [self executeInstallFlow:request progress:progress error:&flowErr];
+            }
+        }
 
         self.isInstalling = NO;
         self.cancellationRequested = NO;
@@ -134,6 +163,11 @@ static NSCharacterSet *kSafeRootfsChars = nil;
 }
 
 - (BOOL)deactivateRootfsVersion:(NSString *)version architecture:(NSString *)architecture error:(NSError **)error {
+    @synchronized ([AmitiaISHRuntime shared]) {
+    if ([AmitiaISHRuntime shared].rootMounted) {
+        if (error) *error = [NSError errorWithDomain:RootfsInstallerErrorDomain code:RootfsInstallerErrorRuntimeRestartRequired userInfo:@{NSLocalizedDescriptionKey: @"Runtime 程序卷已挂载，请重新打开应用后再修改。"}];
+        return NO;
+    }
     RootfsDescriptor *active = [self.resolver resolveCurrentRootfs];
     if (!active) return YES;
 
@@ -143,6 +177,7 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         return ok;
     }
     return YES;
+}
 }
 
 - (BOOL)isRootfsActive {
@@ -279,15 +314,26 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         if (error) *error = pkgErr;
         return nil;
     }
+    if (request.requireBusinessPrograms && ![self verifyBusinessProgramsAtURL:stagingDir error:error]) {
+        [self cleanupStaging:stagingDir];
+        return nil;
+    }
+    stagedDesc = [[RootfsDescriptor alloc] initWithVersion:version architecture:arch
+        digestSHA256:request.expectedDigestSHA256 rootfsURL:stagingDir
+        mountURL:[stagingDir URLByAppendingPathComponent:@"data"] sourceType:RootfsSourceTypeBundled
+        format:RootfsFormatISHFakeFS packageDigestSHA256:request.expectedDigestSHA256
+        formatVersion:kVersionSchemaVersion manifestPath:[stagingDir.path stringByAppendingPathComponent:kVersionManifestName]
+        state:RootfsStateInstalled];
 
     if ([self checkCancelled:error]) { [self cleanupStaging:stagingDir]; return nil; }
 
     if (progress) progress(RootfsInstallStepPreparingTarget, 0.75, @"Preparing target directory");
 
     NSURL *targetURL = [self.resolver rootfsURLForVersion:version architecture:arch];
+    NSURL *rollbackURL = nil;
     if (targetURL && [[NSFileManager defaultManager] fileExistsAtPath:targetURL.path]) {
         RootfsDescriptor *existing = [self.resolver resolveInstalledRootfsVersion:version architecture:arch];
-        if (existing && existing.packageDigestSHA256 && stagedDesc.packageDigestSHA256 && [existing.packageDigestSHA256 isEqualToString:stagedDesc.packageDigestSHA256]) {
+        if (!request.forceReplace && existing && existing.packageDigestSHA256 && stagedDesc.packageDigestSHA256 && [existing.packageDigestSHA256 isEqualToString:stagedDesc.packageDigestSHA256]) {
             [self cleanupStaging:stagingDir];
             BOOL activated = [self isVersionActive:version architecture:arch];
             if (!activated) {
@@ -305,7 +351,13 @@ static NSCharacterSet *kSafeRootfsChars = nil;
             if (error) *error = [NSError errorWithDomain:RootfsInstallerErrorDomain code:RootfsInstallerErrorVersionConflict userInfo:@{NSLocalizedDescriptionKey: @"Version already exists with different digest. Use forceReplace."}];
             return nil;
         }
-        [[NSFileManager defaultManager] removeItemAtURL:targetURL error:nil];
+        rollbackURL = [[targetURL URLByDeletingLastPathComponent] URLByAppendingPathComponent:[@".rollback-" stringByAppendingString:self.currentInstallID]];
+        NSError *backupError = nil;
+        if (![[NSFileManager defaultManager] moveItemAtURL:targetURL toURL:rollbackURL error:&backupError]) {
+            [self cleanupStaging:stagingDir];
+            if (error) *error = backupError;
+            return nil;
+        }
     }
 
     if (progress) progress(RootfsInstallStepAtomicMove, 0.85, @"Moving to final location");
@@ -317,12 +369,17 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         if (![fm copyItemAtURL:stagingDir toURL:targetURL error:&copyErr]) {
             [self cleanupStaging:stagingDir];
             if ([fm fileExistsAtPath:targetURL.path]) [fm removeItemAtURL:targetURL error:nil];
+            if (rollbackURL) [fm moveItemAtURL:rollbackURL toURL:targetURL error:nil];
             if (error) *error = copyErr ?: moveErr;
             return nil;
         }
     }
 
-    if ([self checkCancelled:error]) { [self cleanupStaging:stagingDir]; return nil; }
+    if ([self checkCancelled:error]) {
+        [fm removeItemAtURL:targetURL error:nil];
+        if (rollbackURL) [fm moveItemAtURL:rollbackURL toURL:targetURL error:nil];
+        [self cleanupStaging:stagingDir]; return nil;
+    }
 
     if (progress) progress(RootfsInstallStepWritingManifest, 0.90, @"Writing version manifest");
 
@@ -335,18 +392,24 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         state:RootfsStateInstalled];
     if (![self writeVersionManifestForDescriptor:targetDescriptor error:&manifestErr]) {
         [fm removeItemAtURL:targetURL error:nil];
+        if (rollbackURL) [fm moveItemAtURL:rollbackURL toURL:targetURL error:nil];
         [self cleanupStaging:stagingDir];
         if (error) *error = manifestErr;
         return nil;
     }
 
-    if ([self checkCancelled:error]) { return nil; }
+    if ([self checkCancelled:error]) {
+        [fm removeItemAtURL:targetURL error:nil];
+        if (rollbackURL) [fm moveItemAtURL:rollbackURL toURL:targetURL error:nil];
+        return nil;
+    }
 
     if (progress) progress(RootfsInstallStepAtomicActivation, 0.95, @"Activating rootfs");
 
     NSError *actErr = nil;
     if (![self writeActiveManifestVersion:version architecture:arch error:&actErr]) {
         [fm removeItemAtURL:targetURL error:nil];
+        if (rollbackURL) [fm moveItemAtURL:rollbackURL toURL:targetURL error:nil];
         [self cleanupStaging:stagingDir];
         if (error) *error = actErr;
         return nil;
@@ -354,6 +417,7 @@ static NSCharacterSet *kSafeRootfsChars = nil;
 
     if (progress) progress(RootfsInstallStepCleanup, 0.98, @"Cleaning up");
     [self cleanupStaging:stagingDir];
+    if (rollbackURL) [fm removeItemAtURL:rollbackURL error:nil];
 
     if (progress) progress(RootfsInstallStepComplete, 1.0, @"Rootfs installation complete");
 
@@ -496,6 +560,34 @@ static NSCharacterSet *kSafeRootfsChars = nil;
         [fm removeItemAtPath:tempPath error:nil];
         if (error) *error = replaceErr;
         return NO;
+    }
+    return YES;
+}
+
+- (BOOL)verifyBusinessProgramsAtURL:(NSURL *)root error:(NSError **)error {
+    NSData *bytes = [NSData dataWithContentsOfURL:[root URLByAppendingPathComponent:kVersionManifestName]];
+    NSDictionary *manifest = bytes ? [NSJSONSerialization JSONObjectWithData:bytes options:0 error:nil] : nil;
+    if (![manifest isKindOfClass:[NSDictionary class]] || ![manifest[@"guestArch"] isEqual:@"arm64"] || ![manifest[@"architecture"] isEqual:@"aarch64"]) {
+        if (error) *error = [NSError errorWithDomain:RootfsInstallerErrorDomain code:RootfsInstallerErrorManifestInvalid userInfo:nil];
+        return NO;
+    }
+    NSDictionary *required = @{@"core": @"/opt/amitia/core/AmitiaCore", @"node": @"/opt/amitia/node/bin/node", @"qdrant": @"/opt/amitia/qdrant/qdrant"};
+    for (NSString *name in required) {
+        NSDictionary *entry = manifest[name];
+        if (![entry isKindOfClass:[NSDictionary class]] || ![entry[@"path"] isEqual:required[name]] ||
+            ![entry[@"sha256"] isKindOfClass:[NSString class]] || ![entry[@"size"] isKindOfClass:[NSNumber class]]) {
+            if (error) *error = [NSError errorWithDomain:RootfsInstallerErrorDomain code:RootfsInstallerErrorManifestInvalid userInfo:nil];
+            return NO;
+        }
+        NSURL *file = [[root URLByAppendingPathComponent:@"data"] URLByAppendingPathComponent:[required[name] substringFromIndex:1]];
+        NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:file.path error:error];
+        int64_t size = [entry[@"size"] longLongValue];
+        if (![file.URLByResolvingSymlinksInPath.path isEqual:file.path] || ![attributes[NSFileType] isEqual:NSFileTypeRegular] ||
+            size <= 0 || size > 268435456 || [attributes[NSFileSize] longLongValue] != size ||
+            [RootfsIntegrityVerifier verifySHA256OfFileAtURL:file againstExpected:entry[@"sha256"] error:error] != RootfsIntegrityResultMatch) {
+            if (error && !*error) *error = [NSError errorWithDomain:RootfsInstallerErrorDomain code:RootfsInstallerErrorIntegrityMismatch userInfo:nil];
+            return NO;
+        }
     }
     return YES;
 }

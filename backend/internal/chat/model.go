@@ -68,27 +68,31 @@ type ModelEventSink = modelprotocol.ModelEventSink
 type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
-	ID                string  `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID           string  `gorm:"column:space_id;not null;index" json:"-"`
-	ProjectID         string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
-	WorkspaceID       string  `gorm:"column:workspace_id;not null;default:'';index" json:"workspaceId,omitempty"`
-	WorkspaceDeviceID string  `gorm:"column:workspace_device_id;not null;default:''" json:"workspaceDeviceId,omitempty"`
-	Title             string  `gorm:"column:title" json:"title"`
-	Channel           string  `gorm:"column:channel;default:web" json:"channel"`
-	Source            string  `gorm:"column:source;default:manual" json:"source"`
-	PeerID            string  `gorm:"column:peer_id" json:"peerId"`
-	ModelConfigID     int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
-	ReasoningEffort   string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
-	ReasoningEnabled  int     `gorm:"column:reasoning_enabled;not null;default:-1" json:"reasoningEnabled"`
-	PermissionMode    string  `gorm:"column:permission_mode;not null;default:'request_approval'" json:"permissionMode"`
-	MessageCount      int     `gorm:"column:message_count;default:0" json:"messageCount"`
-	StateVersion      string  `gorm:"column:state_version" json:"stateVersion"`
-	PinnedAt          string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
-	ArchivedAt        string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
-	CreatedAt         string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt         string  `gorm:"column:updated_at" json:"updatedAt"`
-	Revision          int64   `gorm:"column:revision;not null;default:1" json:"revision"`
-	DeletedAt         *string `gorm:"column:deleted_at" json:"-"`
+	ID                       string  `gorm:"column:id;primaryKey" json:"id"`
+	SpaceID                  string  `gorm:"column:space_id;not null;index" json:"-"`
+	ProjectID                string  `gorm:"column:project_id;not null;default:'';index" json:"projectId"`
+	WorkspaceID              string  `gorm:"column:workspace_id;not null;default:'';index" json:"workspaceId,omitempty"`
+	WorkspaceDeviceID        string  `gorm:"column:workspace_device_id;not null;default:''" json:"workspaceDeviceId,omitempty"`
+	Title                    string  `gorm:"column:title" json:"title"`
+	Channel                  string  `gorm:"column:channel;default:web" json:"channel"`
+	Source                   string  `gorm:"column:source;default:manual" json:"source"`
+	PeerID                   string  `gorm:"column:peer_id" json:"peerId"`
+	ModelConfigID            int     `gorm:"column:model_config_id;not null;default:0" json:"modelConfigId"`
+	ReasoningEffort          string  `gorm:"column:reasoning_effort;not null;default:''" json:"reasoningEffort"`
+	ReasoningEnabled         int     `gorm:"column:reasoning_enabled;not null;default:-1" json:"reasoningEnabled"`
+	PermissionMode           string  `gorm:"column:permission_mode;not null;default:'request_approval'" json:"permissionMode"`
+	MessageCount             int     `gorm:"column:message_count;default:0" json:"messageCount"`
+	StateVersion             string  `gorm:"column:state_version" json:"stateVersion"`
+	PinnedAt                 string  `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
+	ArchivedAt               string  `gorm:"column:archived_at;not null;default:''" json:"archivedAt,omitempty"`
+	LastReadTurnSequence     int64   `gorm:"column:last_read_turn_sequence;not null;default:0" json:"lastReadTurnSequence"`
+	LastTerminalTurnSequence int64   `gorm:"-" json:"lastTerminalTurnSequence"`
+	IsGenerating             bool    `gorm:"-" json:"isGenerating"`
+	HasUnread                bool    `gorm:"-" json:"hasUnread"`
+	CreatedAt                string  `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt                string  `gorm:"column:updated_at" json:"updatedAt"`
+	Revision                 int64   `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt                *string `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Conversation) TableName() string { return "conversations" }

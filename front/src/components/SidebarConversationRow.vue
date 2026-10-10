@@ -12,7 +12,17 @@
       @keydown.enter.prevent="emit('select', conversation)"
       @keydown.space.prevent="emit('select', conversation)"
     >
-      <el-icon v-if="!compact"><ChatLineRound /></el-icon>
+      <el-icon v-if="!compact && activityState === 'idle'"><ChatLineRound /></el-icon>
+      <span
+        v-else-if="activityState !== 'idle'"
+        class="conversation-activity"
+        :class="`is-${activityState}`"
+        :aria-label="activityState === 'generating' ? '正在生成' : '有未读回复'"
+        role="status"
+      >
+        <span v-if="activityState === 'generating'" class="conversation-activity__spinner"></span>
+        <span v-else class="conversation-activity__dot"></span>
+      </span>
       <input
         v-if="editing"
         ref="inputRef"
@@ -23,7 +33,7 @@
         @keydown.esc.prevent="cancelRename"
         @blur="saveRename"
       />
-      <span v-else :title="conversation.title || '新对话'" @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
+      <span v-else class="thread-title" :title="conversation.title || '新对话'" @dblclick.stop.prevent="beginRename">{{ conversation.title || "新对话" }}</span>
     </div>
     <button
       type="button"
@@ -83,6 +93,7 @@ const editing = ref(false);
 const draftTitle = ref("");
 const inputRef = ref<HTMLInputElement | null>(null);
 const isPinned = computed(() => Boolean(props.conversation.pinnedAt));
+const activityState = computed(() => props.conversation.isGenerating ? "generating" : props.conversation.hasUnread ? "unread" : "idle");
 
 async function beginRename() {
   editing.value = true;
@@ -143,12 +154,43 @@ function cancelRename() {
   outline: 2px solid var(--ac-color-primary);
   outline-offset: -2px;
 }
-.thread-main span {
+.thread-main .thread-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.conversation-activity {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+.conversation-activity__spinner {
+  width: 13px;
+  height: 13px;
+  border: 1.6px solid color-mix(in srgb, var(--ac-color-primary) 28%, transparent);
+  border-top-color: var(--ac-color-primary);
+  border-radius: 50%;
+  animation: conversation-activity-spin 0.75s linear infinite;
+}
+.conversation-activity__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ac-color-primary);
+}
+@keyframes conversation-activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation-activity__spinner {
+    animation-duration: 1.6s;
+  }
 }
 .thread-name-input {
   flex: 1;

@@ -165,7 +165,7 @@ func (d EventTypeDefinition) Validate() error {
 	if d.MaxPayloadBytes == 0 {
 		return errors.New("event: max payload bytes required")
 	}
-	if d.MaxMetadataBytes == 0 {
+	if d.MaxMetadataBytes < 0 {
 		return errors.New("event: max metadata bytes required")
 	}
 	return nil

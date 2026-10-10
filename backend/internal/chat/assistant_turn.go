@@ -18,13 +18,14 @@ import (
 )
 
 const (
-	assistantTurnStatusQueued      = "queued"
-	assistantTurnStatusStarting    = "starting"
-	assistantTurnStatusRunning     = "running"
-	assistantTurnStatusWaitingTool = "waiting_tool"
-	assistantTurnStatusCompleted   = "completed"
-	assistantTurnStatusFailed      = "failed"
-	assistantTurnStatusInterrupted = "interrupted"
+	assistantTurnStatusQueued              = "queued"
+	assistantTurnStatusStarting            = "starting"
+	assistantTurnStatusRunning             = "running"
+	assistantTurnStatusWaitingTool         = "waiting_tool"
+	assistantTurnStatusCompleted           = "completed"
+	assistantTurnStatusFailed              = "failed"
+	assistantTurnStatusInterrupted         = "interrupted"
+	assistantTurnStatusNeedsReconciliation = "needs_reconciliation"
 
 	assistantTurnItemReasoning  = "reasoning"
 	assistantTurnItemToolCall   = "tool_call"
@@ -144,8 +145,17 @@ func (r *assistantTurnRecorder) Start(ctx context.Context) error {
 		var existing AssistantTurn
 		err := tx.Where("id = ?", r.TurnID).First(&existing).Error
 		if err == nil {
+			if existing.ConversationID != r.ConversationID ||
+				(existing.CharacterID != "" && existing.CharacterID != r.CharacterID) ||
+				(existing.UserMessageID != "" && existing.UserMessageID != r.UserMessageID) ||
+				(existing.RequestID != "" && existing.RequestID != r.RequestID) {
+				return fmt.Errorf("assistant turn identity mismatch during recovery")
+			}
+			if existing.Status == assistantTurnStatusCompleted {
+				return fmt.Errorf("completed assistant turn cannot be restarted")
+			}
 			r.TurnSequence = existing.Sequence
-			if r.ExecutionID == "" {
+			if existing.ExecutionID != "" {
 				r.ExecutionID = existing.ExecutionID
 			}
 			updates := map[string]any{"status": assistantTurnStatusRunning, "updated_at": now}
@@ -225,6 +235,10 @@ func (r *assistantTurnRecorder) AddToolCall(ctx context.Context, callID, toolNam
 	}
 	if r.db != nil && r.enabled && callID != "" {
 		if existing, ok := r.toolCall(callID); ok {
+			switch existing.Status {
+			case assistantTurnStatusCompleted, assistantTurnStatusFailed, assistantTurnStatusInterrupted:
+				return fmt.Errorf("tool call %q already reached terminal state; refusing duplicate side effect", callID)
+			}
 			revision := existing.Revision + 1
 			if revision < 2 {
 				revision = 2
@@ -238,6 +252,9 @@ func (r *assistantTurnRecorder) AddToolCall(ctx context.Context, callID, toolNam
 				item.UpdatedAt = nowString()
 			})
 			if err != nil {
+				return err
+			}
+			if err := r.checkpointTurnItem(ctx, updated); err != nil {
 				return err
 			}
 			_, err = conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
@@ -332,6 +349,10 @@ func (r *assistantTurnRecorder) AddToolResult(ctx context.Context, callID, toolN
 	if !ok {
 		return fmt.Errorf("tool call item not found: %s", callID)
 	}
+	switch toolCallItem.Status {
+	case assistantTurnStatusCompleted, assistantTurnStatusFailed, assistantTurnStatusInterrupted:
+		return fmt.Errorf("tool call %q already has a terminal outcome; refusing duplicate result", callID)
+	}
 	toolRevision := toolCallItem.Revision + 1
 	if toolRevision < 2 {
 		toolRevision = 2
@@ -345,7 +366,10 @@ func (r *assistantTurnRecorder) AddToolResult(ctx context.Context, callID, toolN
 	if err != nil {
 		return err
 	}
-	if err := r.addItem(ctx, resultItem); err != nil {
+	if err := r.rememberItem(&resultItem); err != nil {
+		return err
+	}
+	if err := r.checkpointToolOutcome(ctx, toolCallItem, resultItem); err != nil {
 		return err
 	}
 	eventType := "tool.completed"
@@ -762,6 +786,30 @@ func (r *assistantTurnRecorder) Finalize(ctx context.Context, status string) err
 	return r.finalize(ctx, status, nil)
 }
 
+func (r *assistantTurnRecorder) RequireReconciliation(ctx context.Context, cause error) error {
+	if r == nil || r.db == nil || !r.enabled {
+		return nil
+	}
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := r.db.WithContext(checkCtx).Model(&AssistantTurn{}).
+		Where("id = ? AND status NOT IN ?", r.TurnID, []string{assistantTurnStatusCompleted, assistantTurnStatusFailed}).
+		Updates(map[string]any{"status": assistantTurnStatusNeedsReconciliation, "updated_at": nowString()}).Error; err != nil {
+		return err
+	}
+	message := ""
+	if cause != nil {
+		message = cause.Error()
+	}
+	_, _ = conversationstream.DefaultManager().Publish(checkCtx, conversationstream.AgentUIEvent{
+		ConversationID: r.ConversationID, RequestID: r.RequestID, ExecutionID: r.ExecutionID,
+		TurnID: r.TurnID, TurnSequence: r.TurnSequence,
+		Type: "turn.waiting", Status: assistantTurnStatusNeedsReconciliation,
+		Payload: map[string]any{"errorCode": "tool_requires_reconciliation", "internalMessage": message, "recoveryCheckpoint": true},
+	}, true)
+	return nil
+}
+
 func (r *assistantTurnRecorder) FinalizeFailure(ctx context.Context, status string, cause error) error {
 	payload := map[string]any{
 		"errorCode":          "runtime_error",
@@ -921,7 +969,38 @@ func (r *assistantTurnRecorder) addItem(ctx context.Context, item AssistantTurnI
 	if err := r.rememberItem(&item); err != nil {
 		return err
 	}
+	if item.ItemType == assistantTurnItemToolCall || item.ItemType == assistantTurnItemToolResult {
+		if err := r.checkpointTurnItem(ctx, item); err != nil {
+			return err
+		}
+	}
 	return r.publishItemEvents(ctx, item)
+}
+
+func (r *assistantTurnRecorder) checkpointTurnItem(ctx context.Context, item AssistantTurnItem) error {
+	if r == nil || r.db == nil || !r.enabled {
+		return nil
+	}
+	if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.TurnID) == "" {
+		return fmt.Errorf("tool checkpoint requires item and turn identifiers")
+	}
+	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	return r.db.WithContext(persistCtx).Save(&item).Error
+}
+
+func (r *assistantTurnRecorder) checkpointToolOutcome(ctx context.Context, call, result AssistantTurnItem) error {
+	if r == nil || r.db == nil || !r.enabled {
+		return nil
+	}
+	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	return r.db.WithContext(persistCtx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&call).Error; err != nil {
+			return err
+		}
+		return tx.Save(&result).Error
+	})
 }
 
 func (r *assistantTurnRecorder) publishItemEvents(ctx context.Context, item AssistantTurnItem) error {
@@ -1027,6 +1106,11 @@ func (r *assistantTurnRecorder) rememberItem(item *AssistantTurnItem) error {
 	}
 	if strings.TrimSpace(item.ID) == "" {
 		item.ID = uuid.NewString()
+	}
+	if item.ItemType == assistantTurnItemToolCall && strings.TrimSpace(item.CallID) != "" {
+		if prior, exists := r.toolCallByID[item.CallID]; exists && r.items[prior].ID != item.ID {
+			return fmt.Errorf("duplicate tool call ID %q in assistant turn", item.CallID)
+		}
 	}
 	if existingIndex, exists := r.itemByID[item.ID]; exists {
 		r.items[existingIndex] = *item

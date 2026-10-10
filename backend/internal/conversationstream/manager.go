@@ -509,6 +509,11 @@ func reduceActiveTurn(active *ActiveTurnState, event AgentUIEvent) (*ActiveTurnS
 	case "turn.started", "turn.steered":
 		active.Status = "running"
 		return active, false
+	case "turn.waiting":
+		if status := strings.TrimSpace(event.Status); status != "" {
+			active.Status = status
+		}
+		return active, false
 	case "turn.cancelling":
 		active.Status = "cancelling"
 		return active, false
@@ -542,7 +547,7 @@ func reduceActiveTurn(active *ActiveTurnState, event AgentUIEvent) (*ActiveTurnS
 		return active, false
 	}
 	reduceBlock(active, event)
-	if active.Status != "waiting_approval" && active.Status != "cancelling" {
+	if active.Status != "waiting_approval" && active.Status != "cancelling" && active.Status != "needs_reconciliation" {
 		hasRunningTool := false
 		for _, block := range active.Blocks {
 			if block.Type != "tool_call" {

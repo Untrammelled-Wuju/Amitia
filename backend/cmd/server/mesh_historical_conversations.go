@@ -152,5 +152,10 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 		}
 		result.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
+	enriched, err := chat.EnrichConversationActivityBodies(p.services.DB, result.Conversations)
+	if err != nil {
+		return result, err
+	}
+	result.Conversations = enriched
 	return result, ctx.Err()
 }

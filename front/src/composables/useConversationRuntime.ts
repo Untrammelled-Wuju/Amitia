@@ -51,6 +51,7 @@ export function useConversationRuntime(
     workspace?: Record<string, any> | null,
     snapshot?: ConversationSnapshot,
   ) => void | Promise<void>,
+  onConversationActivityChanged?: (conversationId: string) => void | Promise<void>,
 ) {
   const { get } = useApi();
   const owned = useDeviceOwnedConversation();
@@ -285,11 +286,15 @@ export function useConversationRuntime(
     }
 
     const turn = event.turnId ? reducer.turn(event.turnId) : undefined;
+    if (event.type === "turn.waiting" && event.status === "needs_reconciliation") {
+      sending.value = false;
+    }
     if (event.type === "turn.queued" || event.type === "turn.started") {
       sending.value = true;
       if (event.type === "turn.started") {
         notifyDesktopPetChatState("assistant_thinking", event.requestId || turn?.id || "");
       }
+      void onConversationActivityChanged?.(event.conversationId);
     }
     if (event.type === "text.delta" || event.type === "text.started") {
       notifyDesktopPetChatState("assistant_speaking", event.requestId || turn?.id || "");
@@ -311,6 +316,7 @@ export function useConversationRuntime(
       }
       scheduleProjection();
       await loadSnapshot();
+      await onConversationActivityChanged?.(event.conversationId);
       return;
     }
     scheduleProjection();
@@ -322,7 +328,8 @@ export function useConversationRuntime(
     turnHistoryBefore.value = Number(snapshot.turnHistory?.nextBefore || 0);
     hasMoreTurnHistory.value = snapshot.turnHistory?.hasMore === true;
     syncReducerState();
-    sending.value = !!reducer.activeTurnId;
+    const active = reducer.turn(reducer.activeTurnId);
+    sending.value = !!active && active.status !== "needs_reconciliation";
     publishApprovalState({ action: "reset", conversationId: conversationId.value });
     for (const approval of snapshot.approvals || []) publishApprovalState({ action: "requested", ...approval });
     persistedMessages.value = (snapshot.messages || []).map((message) => normalizeRealtimeMessage(message));

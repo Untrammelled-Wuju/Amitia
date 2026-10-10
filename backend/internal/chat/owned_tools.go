@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -39,11 +38,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	partial := func(err error) (business.Generation, error) {
 		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens, Partial: true}, err
 	}
-	maxRounds := 128
-	if config.AppCfg != nil && config.AppCfg.Chat.AgentMaxRounds > 0 {
-		maxRounds = config.AppCfg.Chat.AgentMaxRounds
-	}
-	for round := 0; round < maxRounds; round++ {
+	for {
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return partial(err)
 		}
@@ -108,5 +103,4 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": output})
 		}
 	}
-	return partial(fmt.Errorf("能力调用已达到 %d 轮上限，请核查已完成的动作后再继续", maxRounds))
 }

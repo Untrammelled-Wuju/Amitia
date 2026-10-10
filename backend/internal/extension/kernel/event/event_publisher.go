@@ -31,6 +31,7 @@ type PublishOptions struct {
 	ParentEventID        string
 	ParentDepth          int
 	Metadata             json.RawMessage
+	hostProvenance       json.RawMessage
 }
 
 type PublishResult struct {
@@ -150,6 +151,7 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 		PublishedAt:          &now,
 		Payload:              envelope.Payload,
 		Metadata:             envelope.Metadata,
+		HostProvenance:       append(json.RawMessage(nil), opts.hostProvenance...),
 		PayloadHash:          envelope.PayloadHash,
 		DefinitionHash:       envelope.DefinitionHash,
 		Status:               OutboxStatusPending,
@@ -250,6 +252,7 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 		PublishedAt:          &now,
 		Payload:              envelope.Payload,
 		Metadata:             envelope.Metadata,
+		HostProvenance:       append(json.RawMessage(nil), opts.hostProvenance...),
 		PayloadHash:          envelope.PayloadHash,
 		DefinitionHash:       envelope.DefinitionHash,
 		Status:               OutboxStatusPending,

@@ -127,7 +127,7 @@ class RootfsInstallMethodHandler: NSObject {
             return
         }
 
-        self.installer.installRootfsWithRequest(request, progress: nil) { [weak self] success, res, err in
+        self.installer.installRootfs(withRequest: request, progress: nil) { [weak self] success, res, err in
             if success, let r = res {
                 result([
                     "version": r.descriptor.version,
@@ -145,22 +145,7 @@ class RootfsInstallMethodHandler: NSObject {
 
     private func errorCode(_ err: NSError?) -> String {
         guard let err = err else { return "INSTALL_FAILED" }
-        switch err.code {
-        case RootfsInstallerErrorInvalidRequest.rawValue: return "INVALID_REQUEST"
-        case RootfsInstallerErrorSourceUnavailable.rawValue: return "SOURCE_UNAVAILABLE"
-        case RootfsInstallerErrorIntegrityMismatch.rawValue: return "INTEGRITY_MISMATCH"
-        case RootfsInstallerErrorExtractionFailed.rawValue: return "EXTRACTION_FAILED"
-        case RootfsInstallerErrorTraversalDetected.rawValue: return "TRAVERSAL_DETECTED"
-        case RootfsInstallerErrorSymlinkEscapeDetected.rawValue: return "SYMLINK_ESCAPE"
-        case RootfsInstallerErrorLayoutInvalid.rawValue: return "ROOTFS_INVALID"
-        case RootfsInstallerErrorArchitectureMismatch.rawValue: return "ARCHITECTURE_MISMATCH"
-        case RootfsInstallerErrorInsufficientStorage.rawValue: return "INSUFFICIENT_STORAGE"
-        case RootfsInstallerErrorActivationFailed.rawValue: return "ACTIVATION_FAILED"
-        case RootfsInstallerErrorCancelled.rawValue: return "CANCELLED"
-        case RootfsInstallerErrorConcurrentInstallation.rawValue: return "CONCURRENT_INSTALLATION"
-        case RootfsInstallerErrorVersionConflict.rawValue: return "VERSION_CONFLICT"
-        default: return "INSTALL_FAILED"
-        }
+        return RootfsInstaller.errorCode(for: err)
     }
 
     private func safeDetails(_ err: NSError?) -> [String: String]? {

@@ -35,6 +35,12 @@ func (s *service) ListConversationSidebarForSpace(spaceID string, recentLimit, p
 	for i := range recent {
 		recent[i].MessageCount = int(s.repo.CountMessagesByConv(recent[i].ID))
 	}
+	if err := EnrichConversationActivity(s.db, pinned); err != nil {
+		return nil, err
+	}
+	if err := EnrichConversationActivity(s.db, recent); err != nil {
+		return nil, err
+	}
 
 	var projects []Project
 	projectQuery := s.db.Where("space_id = ?", owner).Order("updated_at DESC")
@@ -104,6 +110,9 @@ func (s *service) ListConversationSidebarForSpace(spaceID string, recentLimit, p
 		}
 		for i := range summary.Conversations {
 			summary.Conversations[i].MessageCount = int(s.repo.CountMessagesByConv(summary.Conversations[i].ID))
+		}
+		if err := EnrichConversationActivity(s.db, summary.Conversations); err != nil {
+			return nil, err
 		}
 		result.Projects = append(result.Projects, summary)
 	}

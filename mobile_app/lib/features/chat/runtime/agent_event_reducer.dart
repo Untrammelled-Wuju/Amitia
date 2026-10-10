@@ -167,6 +167,7 @@ class AgentEventReducer {
     final type = event.type.trim();
     if (type == 'turn.queued' ||
         type == 'turn.started' ||
+        type == 'turn.waiting' ||
         type == 'turn.cancelling' ||
         type == 'turn.steered' ||
         type == 'approval.requested' ||
@@ -176,6 +177,7 @@ class AgentEventReducer {
       var nextStatus = _normalizeStatus(event.status.isNotEmpty ? event.status : turn.status);
       if (type == 'turn.queued') nextStatus = 'queued';
       if (type == 'turn.started') nextStatus = 'running';
+      if (type == 'turn.waiting') nextStatus = _normalizeStatus(event.status.isNotEmpty ? event.status : 'needs_reconciliation');
       if (type == 'turn.cancelling') nextStatus = 'cancelling';
       if (type == 'approval.requested') nextStatus = 'waiting_approval';
       if (type == 'approval.approved' || type == 'approval.denied' || type == 'approval.expired') {
@@ -213,6 +215,7 @@ class AgentEventReducer {
         return item;
       }).toList();
       if (terminalStatus == 'failed' &&
+          (event.payload['userMessage'] ?? '').toString().trim().isNotEmpty &&
           !items.any((item) => item.type == 'error')) {
         items.add(
           AssistantTurnItemDto(
@@ -327,7 +330,7 @@ class AgentEventReducer {
       items.sort((left, right) => left.sequence.compareTo(right.sequence));
     }
     var nextTurnStatus = turn.status;
-    if (!_isTerminal(nextTurnStatus) && nextTurnStatus != 'waiting_approval' && nextTurnStatus != 'cancelling') {
+    if (!_isTerminal(nextTurnStatus) && nextTurnStatus != 'waiting_approval' && nextTurnStatus != 'cancelling' && nextTurnStatus != 'needs_reconciliation') {
       final hasRunningTool = items.any((candidate) =>
           candidate.type == 'tool_call' &&
           candidate.status != 'completed' &&
@@ -361,6 +364,7 @@ class AgentEventReducer {
     final status = switch (type) {
       'turn.queued' => 'queued',
       'turn.started' => 'running',
+      'turn.waiting' => event.status.isNotEmpty ? event.status : 'needs_reconciliation',
       'turn.cancelling' => 'cancelling',
       'turn.completed' => 'completed',
       'turn.failed' => 'failed',

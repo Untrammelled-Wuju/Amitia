@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -139,6 +140,12 @@ type WorkerRunRequest struct {
 	ConversationID       string `json:"conversationId"`
 	Source               string `json:"source"`
 	SpaceID              string `json:"spaceId"`
+	PermissionMode       string `json:"permissionMode,omitempty"`
+	WorkspaceID          string `json:"workspaceId,omitempty"`
+	WorkspaceDeviceID    string `json:"workspaceDeviceId,omitempty"`
+	WorkspaceName        string `json:"workspaceName,omitempty"`
+	WorkspaceKind        string `json:"workspaceKind,omitempty"`
+	WorkspaceRootURI     string `json:"workspaceRootUri,omitempty"`
 	Objective            string `json:"objective"`
 	ExpectedOutcome      string `json:"expectedOutcome"`
 	CoordinationDepth    int    `json:"coordinationDepth"`
@@ -171,10 +178,18 @@ type MultiAgentCoordinator struct {
 }
 
 type activeCoordination struct {
+	dispatchMu          sync.Mutex
+	persistMu           sync.Mutex
 	id                  CoordinationID
 	parentGoalID        string
 	parentGoalRev       int64
 	parentInteractionID string
+	workspaceID         string
+	permissionMode      string
+	workspaceDeviceID   string
+	workspaceName       string
+	workspaceKind       string
+	workspaceRootURI    string
 	status              CoordinationStatus
 	strategy            CoordinationStrategy
 	completionPlan      CoordinationCompletionPolicy
@@ -212,6 +227,12 @@ type StartCoordinationRequest struct {
 	ParentInteractionID string
 	ParentGoalID        string
 	ParentGoalRevision  int64
+	PermissionMode      string
+	WorkspaceID         string
+	WorkspaceDeviceID   string
+	WorkspaceName       string
+	WorkspaceKind       string
+	WorkspaceRootURI    string
 	WorkerRefs          []AgentWorkerRef
 	Objectives          []AssignmentObjective
 	Strategy            CoordinationStrategy
@@ -243,6 +264,9 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 	if req.Depth > c.policy.MaxDepth {
 		return nil, fmt.Errorf("multi_agent_depth_exceeded: %d > %d", req.Depth, c.policy.MaxDepth)
 	}
+	if c.goals == nil || c.starter == nil || (req.ParentInteractionID != "" && c.tracker == nil) {
+		return nil, fmt.Errorf("multi_agent: goal registry, interaction tracker and worker starter are required")
+	}
 
 	parentGoal, ok := c.goals.Get(req.ParentGoalID)
 	if !ok {
@@ -268,6 +292,12 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 		parentGoalID:        req.ParentGoalID,
 		parentGoalRev:       req.ParentGoalRevision,
 		parentInteractionID: req.ParentInteractionID,
+		workspaceID:         req.WorkspaceID,
+		permissionMode:      req.PermissionMode,
+		workspaceDeviceID:   req.WorkspaceDeviceID,
+		workspaceName:       req.WorkspaceName,
+		workspaceKind:       req.WorkspaceKind,
+		workspaceRootURI:    req.WorkspaceRootURI,
 		status:              CoordinationPlanning,
 		strategy:            strategy,
 		completionPlan:      plan,
@@ -276,27 +306,6 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 		assignments:         make([]*AgentAssignment, 0, len(req.Objectives)),
 		createdAt:           now,
 		updatedAt:           now,
-	}
-
-	multiRef := &MultiAgentRecoveryRef{
-		CoordinationID:     string(coordID),
-		ParentGoalID:       req.ParentGoalID,
-		ParentGoalRevision: req.ParentGoalRevision,
-		Status:             string(CoordinationPlanning),
-		AssignmentRefs:     make([]AssignmentRecoveryRef, 0, len(req.Objectives)),
-	}
-	multiRef.DeriveAssignmentRefs = func() []AssignmentRecoveryRef {
-		refs := make([]AssignmentRecoveryRef, 0, len(ac.assignments))
-		for _, a := range ac.assignments {
-			refs = append(refs, AssignmentRecoveryRef{
-				AssignmentID:       a.ID,
-				WorkerID:           a.WorkerRef.WorkerID,
-				ChildInteractionID: a.ChildInteractionID,
-				ChildGoalID:        a.ChildGoalID,
-				Status:             string(a.Status),
-			})
-		}
-		return refs
 	}
 
 	assignmentIDs := make([]string, 0, len(req.Objectives))
@@ -320,31 +329,23 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 			UpdatedAt:          now,
 		}
 		ac.assignments = append(ac.assignments, a)
-		multiRef.AssignmentRefs = append(multiRef.AssignmentRefs, AssignmentRecoveryRef{
-			AssignmentID: a.ID,
-			WorkerID:     wref.WorkerID,
-			Status:       string(AssignmentPending),
-		})
 		assignmentIDs = append(assignmentIDs, a.ID)
 	}
 
-	if req.ParentInteractionID != "" {
-		if err := c.attachRecoveryDescriptor(ctx, req.ParentInteractionID, multiRef); err != nil {
-			return nil, fmt.Errorf("multi_agent: persist coordination descriptor: %w", err)
-		}
+	ac.status = CoordinationRunning
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		return nil, fmt.Errorf("multi_agent: persist full worker plan before dispatch: %w", err)
 	}
-
 	c.mu.Lock()
 	c.coordinations[string(coordID)] = ac
 	c.mu.Unlock()
 
-	ac.status = CoordinationRunning
-	multiRef.Status = string(CoordinationRunning)
-
 	if err := c.launchReadyAssignments(ctx, ac); err != nil {
 		return nil, fmt.Errorf("multi_agent: launch initial assignments: %w", err)
 	}
-
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		return nil, fmt.Errorf("multi_agent: persist launched workers: %w", err)
+	}
 	return &StartCoordinationResult{
 		CoordinationID: coordID,
 		AssignmentIDs:  assignmentIDs,
@@ -386,44 +387,52 @@ func (c *MultiAgentCoordinator) attachRecoveryDescriptor(ctx context.Context, pa
 }
 
 func (c *MultiAgentCoordinator) launchReadyAssignments(ctx context.Context, ac *activeCoordination) error {
-	if ac.strategy == CoordinationSequential {
-		hasRunning := false
-		for _, a := range ac.assignments {
-			if a.Status == AssignmentRunning {
-				hasRunning = true
+	ac.dispatchMu.Lock()
+	defer ac.dispatchMu.Unlock()
+	if c.goals == nil {
+		return fmt.Errorf("multi_agent: parent goal registry unavailable")
+	}
+	parentGoal, exists := c.goals.Get(ac.parentGoalID)
+	if !exists || parentGoal.Revision != ac.parentGoalRev {
+		return fmt.Errorf("multi_agent: parent goal revision unavailable or changed; refusing to dispatch workers")
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		c.mu.Lock()
+		if ac.status != CoordinationRunning {
+			c.mu.Unlock()
+			return nil
+		}
+		activeCount := 0
+		for _, assignment := range ac.assignments {
+			if assignment.Status == AssignmentRunning {
+				activeCount++
+			}
+		}
+		if (ac.strategy == CoordinationSequential && activeCount > 0) || activeCount >= c.policy.MaxWorkers {
+			c.mu.Unlock()
+			return nil
+		}
+		var next *AgentAssignment
+		for _, assignment := range ac.assignments {
+			if assignment.Status == AssignmentPending && c.dependenciesSatisfied(ac, assignment) {
+				next = assignment
 				break
 			}
 		}
-		if hasRunning {
+		c.mu.Unlock()
+		if next == nil {
 			return nil
 		}
-		for _, a := range ac.assignments {
-			if a.Status == AssignmentPending && c.dependenciesSatisfied(ac, a) {
-				return c.startOneAssignment(ctx, ac, a)
-			}
+		if err := c.startOneAssignment(ctx, ac, next); err != nil {
+			return err
 		}
-		return nil
-	}
-
-	activeCount := 0
-	for _, a := range ac.assignments {
-		if a.Status == AssignmentRunning {
-			activeCount++
+		if ac.strategy == CoordinationSequential {
+			return nil
 		}
 	}
-
-	for _, a := range ac.assignments {
-		if activeCount >= c.policy.MaxWorkers {
-			break
-		}
-		if a.Status == AssignmentPending && c.dependenciesSatisfied(ac, a) {
-			if err := c.startOneAssignment(ctx, ac, a); err != nil {
-				return err
-			}
-			activeCount++
-		}
-	}
-	return nil
 }
 
 func (c *MultiAgentCoordinator) dependenciesSatisfied(ac *activeCoordination, a *AgentAssignment) bool {
@@ -452,10 +461,11 @@ func (c *MultiAgentCoordinator) startOneAssignment(ctx context.Context, ac *acti
 	if c.starter == nil {
 		return fmt.Errorf("multi_agent: no worker starter configured")
 	}
+	spaceID, conversationID, err := c.resolveWorkerScope(ctx, ac)
+	if err != nil {
+		return err
+	}
 	now := c.clock.Now()
-	a.Status = AssignmentRunning
-	a.UpdatedAt = now
-
 	addr := WorkerRunRequest{
 		CoordinationID:      string(ac.id),
 		AssignmentID:        a.ID,
@@ -463,23 +473,65 @@ func (c *MultiAgentCoordinator) startOneAssignment(ctx context.Context, ac *acti
 		ParentGoalID:        ac.parentGoalID,
 		ParentGoalRevision:  ac.parentGoalRev,
 		CharacterID:         a.WorkerRef.CharacterID,
+		ConversationID:      conversationID,
+		SpaceID:             spaceID,
+		WorkspaceID:         ac.workspaceID,
+		PermissionMode:      ac.permissionMode,
+		WorkspaceDeviceID:   ac.workspaceDeviceID,
+		WorkspaceName:       ac.workspaceName,
+		WorkspaceKind:       ac.workspaceKind,
+		WorkspaceRootURI:    ac.workspaceRootURI,
 		Source:              "multi_agent",
 		Objective:           a.Objective,
 		ExpectedOutcome:     a.ExpectedOutcome,
 		CoordinationDepth:   ac.depth + 1,
 	}
-
+	c.mu.Lock()
+	if reserved, ok := c.starter.(interface{ WorkerInteractionID(WorkerRunRequest) string }); ok {
+		a.ChildInteractionID = reserved.WorkerInteractionID(addr)
+	}
+	a.Status = AssignmentRunning
+	a.UpdatedAt = now
+	c.mu.Unlock()
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		c.mu.Lock()
+		a.Status = AssignmentPending
+		a.ChildInteractionID = ""
+		c.mu.Unlock()
+		return fmt.Errorf("multi_agent: persist worker intent before dispatch: %w", err)
+	}
 	childID, err := c.starter.StartWorker(ctx, addr)
-	if err != nil {
+	c.mu.Lock()
+	if childID != "" && a.ChildInteractionID != "" && childID != a.ChildInteractionID {
+		c.mu.Unlock()
+		return fmt.Errorf("multi_agent: reserved worker identity mismatch; refusing to attach unexpected child")
+	}
+	if childID != "" {
+		a.ChildInteractionID = childID
+	}
+	if err != nil && childID == "" {
 		a.Status = AssignmentFailed
 		a.Error = err.Error()
 		a.UpdatedAt = c.clock.Now()
+		c.mu.Unlock()
+		if saveErr := c.persistCoordinationSnapshot(ctx, ac); saveErr != nil {
+			return fmt.Errorf("multi_agent: worker failed and checkpoint failed: %w", saveErr)
+		}
 		return err
 	}
-	a.ChildInteractionID = childID
+	if childID == "" {
+		a.Status = AssignmentFailed
+		a.Error = "worker returned no durable child interaction ID"
+		a.UpdatedAt = c.clock.Now()
+		c.mu.Unlock()
+		if saveErr := c.persistCoordinationSnapshot(ctx, ac); saveErr != nil {
+			return saveErr
+		}
+		return fmt.Errorf("multi_agent: worker returned no child interaction ID")
+	}
 	a.UpdatedAt = c.clock.Now()
-	_ = now
-	return nil
+	c.mu.Unlock()
+	return c.persistCoordinationSnapshot(ctx, ac)
 }
 
 func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assignmentID string, result AgentAssignmentResult) error {
@@ -556,9 +608,10 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 
 	shouldAggregate := ac.status == CoordinationAggregating
 
-	if !allTerminal && !shouldAggregate {
+	var dispatchErr error
+	if !allTerminal && !shouldAggregate && ac.status != CoordinationPaused {
 		c.mu.Unlock()
-		_ = c.launchReadyAssignments(ctx, ac)
+		dispatchErr = c.launchReadyAssignments(ctx, ac)
 		c.mu.Lock()
 	}
 
@@ -566,17 +619,21 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 	_ = anySucceeded
 	_ = anyCancelled
 
-	if shouldAggregate {
-		c.mu.Unlock()
-		_ = c.aggregate(ctx, ac)
-		return nil
-	}
-
 	c.mu.Unlock()
-	return nil
+	if dispatchErr != nil {
+		return fmt.Errorf("multi_agent: launch next assignment: %w", dispatchErr)
+	}
+	if shouldAggregate {
+		if err := c.aggregate(ctx, ac); err != nil {
+			return err
+		}
+	}
+	return c.persistCoordinationSnapshot(ctx, ac)
 }
 
 func (c *MultiAgentCoordinator) aggregate(ctx context.Context, ac *activeCoordination) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if ac.status == CoordinationSucceeded || ac.status == CoordinationFailed || ac.status == CoordinationCancelled {
 		return nil
 	}
@@ -585,10 +642,6 @@ func (c *MultiAgentCoordinator) aggregate(ctx context.Context, ac *activeCoordin
 	succeeded := 0
 	failed := 0
 	cancelled := 0
-
-	sort.Slice(ac.assignments, func(i, j int) bool {
-		return ac.assignments[i].ID < ac.assignments[j].ID
-	})
 
 	for _, a := range ac.assignments {
 		switch a.Status {
@@ -701,36 +754,89 @@ func (c *MultiAgentCoordinator) deriveCoordinationOutcome(ac *activeCoordination
 func (c *MultiAgentCoordinator) Reconcile(ctx context.Context, coordinationID string) error {
 	c.mu.Lock()
 	ac, ok := c.coordinations[coordinationID]
-	c.mu.Unlock()
-	if !ok {
+	if !ok || ac.status.IsTerminal() {
+		c.mu.Unlock()
 		return nil
 	}
-	if ac.status.IsTerminal() {
-		return nil
+	if ac.status == CoordinationAggregating {
+		c.mu.Unlock()
+		if err := c.aggregate(ctx, ac); err != nil {
+			return err
+		}
+		return c.persistCoordinationSnapshot(ctx, ac)
 	}
-
-	now := c.clock.Now()
-	changed := false
-	for _, a := range ac.assignments {
-		if a.Status == AssignmentRunning && a.ChildInteractionID != "" {
-			record, found, err := c.tracker.Get(ctx, a.ChildInteractionID)
-			if err != nil || !found {
-				continue
-			}
-			if record.IsTerminal() && !a.Status.IsTerminal() {
-				changed = true
-			}
-			_ = record
-			_ = now
+	pending := make([]AgentAssignment, 0, len(ac.assignments))
+	for _, assignment := range ac.assignments {
+		if (assignment.Status == AssignmentRunning || assignment.Status == AssignmentPaused || assignment.Status == AssignmentWaiting) && assignment.ChildInteractionID != "" {
+			pending = append(pending, *assignment)
 		}
 	}
+	c.mu.Unlock()
 
-	if changed {
-		if allTerminal(ac) {
-			ac.status = CoordinationAggregating
-			_ = c.aggregate(ctx, ac)
-		} else {
-			_ = c.launchReadyAssignments(ctx, ac)
+	if c.tracker == nil {
+		return fmt.Errorf("multi_agent: tracker unavailable for reconciliation")
+	}
+	for _, assignment := range pending {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		record, found, err := c.tracker.Get(ctx, assignment.ChildInteractionID)
+		if err != nil {
+			return fmt.Errorf("multi_agent: fetch child interaction %s: %w", assignment.ChildInteractionID, err)
+		}
+		if !found || record == nil || record.Status == InteractionStatusReceived {
+			if err := c.resumeReservedWorker(ctx, ac, assignment); err != nil {
+				return fmt.Errorf("multi_agent: resume child %s: %w", assignment.ChildInteractionID, err)
+			}
+			continue
+		}
+		if !record.IsTerminal() {
+			if owner, ok := c.starter.(interface{ WorkerIsActive(string) bool }); ok && !owner.WorkerIsActive(assignment.ChildInteractionID) {
+				c.mu.Lock()
+				var changed bool
+				for _, live := range ac.assignments {
+					if live.ID == assignment.ID && live.Status != AssignmentWaiting && !live.Status.IsTerminal() {
+						live.Status = AssignmentWaiting
+						live.Error = "execution state indeterminate: worker entered processing but is not owned by this runtime; manual reconciliation required before retry"
+						live.UpdatedAt = c.clock.Now()
+						ac.status = CoordinationWaiting
+						ac.updatedAt = live.UpdatedAt
+						changed = true
+						break
+					}
+				}
+				c.mu.Unlock()
+				if changed {
+					if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+						return fmt.Errorf("multi_agent: persist indeterminate child %s: %w", assignment.ChildInteractionID, err)
+					}
+				}
+			}
+			continue
+		}
+		result := AgentAssignmentResult{AssignmentID: assignment.ID, ChildInteractionID: assignment.ChildInteractionID, Summary: record.ResultRef}
+		switch record.Status {
+		case InteractionStatusCompleted:
+			result.Status = AssignmentSucceeded
+		case InteractionStatusCancelled, InteractionStatusSuperseded:
+			result.Status = AssignmentCancelled
+		default:
+			result.Status = AssignmentFailed
+			result.Error = &AssignmentError{Code: record.ErrorCode, Message: record.ErrorMessage}
+			if result.Error.Code == "" {
+				result.Error.Code = string(record.Status)
+			}
+		}
+		if err := c.OnAssignmentTerminal(ctx, assignment.ID, result); err != nil {
+			return fmt.Errorf("multi_agent: reconcile assignment %s: %w", assignment.ID, err)
+		}
+	}
+	c.mu.Lock()
+	shouldDispatch := ac.status == CoordinationRunning
+	c.mu.Unlock()
+	if shouldDispatch {
+		if err := c.launchReadyAssignments(ctx, ac); err != nil {
+			return fmt.Errorf("multi_agent: reconcile pending assignments: %w", err)
 		}
 	}
 	return nil
@@ -746,17 +852,34 @@ func allTerminal(ac *activeCoordination) bool {
 }
 
 func (c *MultiAgentCoordinator) ReconcilePendingCoordinations(ctx context.Context) error {
-	return c.tracker.Range(ctx, func(record *InteractionRecord) bool {
-		if record.RecoveryDescriptor == nil || record.RecoveryDescriptor.MultiAgent == nil {
-			return true
+	if c.tracker == nil {
+		return fmt.Errorf("multi_agent: tracker unavailable")
+	}
+	var records []*InteractionRecord
+	if err := c.tracker.Range(ctx, func(record *InteractionRecord) bool {
+		if record != nil && record.RecoveryDescriptor != nil && record.RecoveryDescriptor.MultiAgent != nil {
+			if !CoordinationStatus(record.RecoveryDescriptor.MultiAgent.Status).IsTerminal() {
+				records = append(records, record)
+			}
 		}
-		multiRef := record.RecoveryDescriptor.MultiAgent
-		if CoordinationStatus(multiRef.Status).IsTerminal() {
-			return true
-		}
-		_ = c.Reconcile(ctx, multiRef.CoordinationID)
 		return true
-	})
+	}); err != nil {
+		return err
+	}
+	var failures []error
+	for _, record := range records {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := c.restoreCoordinationFromRecord(record); err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if err := c.Reconcile(ctx, record.RecoveryDescriptor.MultiAgent.CoordinationID); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
 }
 
 func (c *MultiAgentCoordinator) Cancel(ctx context.Context, coordinationID string) error {
@@ -785,7 +908,7 @@ func (c *MultiAgentCoordinator) Cancel(ctx context.Context, coordinationID strin
 			a.UpdatedAt = now
 		}
 	}
-	return nil
+	return c.persistCoordinationSnapshot(ctx, ac)
 }
 
 func (c *MultiAgentCoordinator) Pause(ctx context.Context, coordinationID string) error {
@@ -833,7 +956,7 @@ func (c *MultiAgentCoordinator) Pause(ctx context.Context, coordinationID string
 		ac.status = CoordinationRunning
 		ac.updatedAt = now
 	}
-	return nil
+	return c.persistCoordinationSnapshot(ctx, ac)
 }
 
 func (c *MultiAgentCoordinator) Resume(ctx context.Context, coordinationID string) error {
@@ -872,8 +995,10 @@ func (c *MultiAgentCoordinator) Resume(ctx context.Context, coordinationID strin
 		}
 	}
 
-	_ = c.launchReadyAssignments(ctx, ac)
-	return nil
+	if err := c.launchReadyAssignments(ctx, ac); err != nil {
+		return err
+	}
+	return c.persistCoordinationSnapshot(ctx, ac)
 }
 
 func (c *MultiAgentCoordinator) DetectConflicts(ac *activeCoordination) []CoordinationConflict {
@@ -1016,19 +1141,35 @@ func NewUnifiedEntryWorkerRunner(entry *UnifiedEntry) AgentWorkerRunner {
 	return &unifiedEntryWorkerRunner{entry: entry}
 }
 
+func workerConversationID(req WorkerRunRequest) string {
+	return "multi-agent-worker-" + req.AssignmentID
+}
+
 func (r *unifiedEntryWorkerRunner) StartWorker(ctx context.Context, req WorkerRunRequest) (string, error) {
+	if r == nil || r.entry == nil || req.AssignmentID == "" {
+		return "", fmt.Errorf("multi_agent: worker entry or assignment ID unavailable")
+	}
 	res, err := r.entry.Handle(ctx, &UnifiedEntryRequest{
-		Channel:        "web",
-		Message:        req.Objective,
-		SpaceID:        req.SpaceID,
-		CharacterID:    req.CharacterID,
-		ConversationID: req.ConversationID,
-		Source:         req.Source,
-		RequestID:      "ma-" + req.AssignmentID,
-		IsInternal:     true,
+		Channel:           "web",
+		Message:           req.Objective,
+		SpaceID:           req.SpaceID,
+		CharacterID:       req.CharacterID,
+		ConversationID:    workerConversationID(req),
+		WorkspaceID:       req.WorkspaceID,
+		PermissionMode:    req.PermissionMode,
+		WorkspaceDeviceID: req.WorkspaceDeviceID,
+		WorkspaceName:     req.WorkspaceName,
+		WorkspaceKind:     req.WorkspaceKind,
+		WorkspaceRootURI:  req.WorkspaceRootURI,
+		Source:            req.Source,
+		RequestID:         "ma-" + req.AssignmentID,
+		IsInternal:        true,
 	})
+	if res != nil && res.InteractionID != "" {
+		return res.InteractionID, nil
+	}
 	if err != nil {
 		return "", err
 	}
-	return res.InteractionID, nil
+	return "", fmt.Errorf("multi_agent: worker returned no durable interaction record")
 }

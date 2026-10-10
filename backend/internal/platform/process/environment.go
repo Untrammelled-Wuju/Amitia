@@ -26,6 +26,17 @@ func (b *EnvironmentBuilder) addSystemMinimum() {
 	b.vars["TMP"] = os.Getenv("TMP")
 	b.vars["TEMP"] = os.Getenv("TEMP")
 	if runtime.GOOS == "windows" {
+		temp := strings.TrimSpace(b.vars["TMP"])
+		if temp == "" {
+			temp = strings.TrimSpace(b.vars["TEMP"])
+		}
+		if temp == "" {
+			temp = os.TempDir()
+		}
+		b.vars["TMP"] = temp
+		if strings.TrimSpace(b.vars["TEMP"]) == "" {
+			b.vars["TEMP"] = temp
+		}
 		b.vars["SystemRoot"] = os.Getenv("SystemRoot")
 		b.vars["USERPROFILE"] = os.Getenv("USERPROFILE")
 		b.vars["LOCALAPPDATA"] = os.Getenv("LOCALAPPDATA")

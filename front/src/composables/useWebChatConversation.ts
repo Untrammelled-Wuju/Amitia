@@ -90,6 +90,7 @@ export function useWebChatConversation(
       applySnapshotWorkspace(null, grouped?.projectId && owner ? ownedProjectReference(owner, grouped.projectId) : "");
       convTitle.value = conversation?.title || "历史对话";
       hasMoreHistory.value = owned.hasMore(conversationID, characterId.value);
+      await chatStore.markConversationRead(conversationID, Number(grouped?.lastTerminalTurnSequence || 0)).catch(() => undefined);
       return;
     }
     connectSSE();

@@ -367,7 +367,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
 		MessageStyle:              req.MessageStyle,
-		BaseIdentity:              promptir.BaseIdentitySection(),
+		BaseIdentity:              agentBaseIdentity(req.ExecContext),
 		CharacterBase:             runtimeProfile.CharacterBase,
 		CharacterConfig:           sys1Result.CharacterConfig,
 		PersonalityConfig:         sys2Result.SystemInstruction,
@@ -447,7 +447,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		}
 	}
 
-	if hasActionDirective && actionDirective.Kind == decision.ActionDirectiveWait {
+	if hasActionDirective && actionDirective.Kind == decision.ActionDirectiveWait && !workspaceAgentBound(req.ExecContext) {
 		s.db.Model(&Message{}).Where("id = ?", userMsgID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
 		return &ComputeResult{
 			RequestID:            requestID,
@@ -470,7 +470,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 	if req.Runtime != nil && req.Runtime.ExpressionPlan != nil {
 		ep := req.Runtime.ExpressionPlan
-		if ep.SafetyBlocked || ep.DoNotSend {
+		if ep.SafetyBlocked || (ep.DoNotSend && !workspaceAgentBound(req.ExecContext)) {
 			applog.TraceWarn(trace.WithStage("expression_blocked"), applog.Fields{
 				"safety_blocked": ep.SafetyBlocked,
 				"do_not_send":    ep.DoNotSend,
@@ -502,6 +502,12 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 	reply, reasoning, forceVoice, totalTokens, reasoningDurationMS, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.SpaceID, req.SessionID, normalizePermissionMode(req.PermissionMode), req.ExecContext, toolDefs, seenTools, toolExecCtx, turnRecorder)
 	if llmErr != nil {
+		if errors.Is(llmErr, interaction.ErrToolReconciliationRequired) {
+			if holdErr := turnRecorder.RequireReconciliation(context.Background(), llmErr); holdErr != nil {
+				return nil, fmt.Errorf("record reconciliation state: %w (original: %v)", holdErr, llmErr)
+			}
+			return nil, llmErr
+		}
 		turnStatus := assistantTurnStatusFailed
 		if errors.Is(llmErr, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 			turnStatus = assistantTurnStatusInterrupted

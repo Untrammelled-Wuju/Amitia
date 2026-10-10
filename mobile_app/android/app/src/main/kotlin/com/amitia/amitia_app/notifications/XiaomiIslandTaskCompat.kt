@@ -42,10 +42,28 @@ internal object XiaomiIslandTaskCompat {
         revision: Long,
         terminal: Boolean,
         timeLabel: String,
+        phase: String,
+        progressKnown: Boolean,
     ) {
         if (!supported(context)) return
-        val percent = progress.coerceIn(0, 100)
-        val percentText = "$percent%"
+        val succeeded = terminal && phase == "completed"
+        val percent = if (succeeded) 100 else progress.coerceIn(0, 100)
+        val percentText = if (progressKnown || succeeded) "$percent%" else "执行中"
+        val terminalText = when (phase) {
+            "completed" -> "已完成"
+            "failed" -> "执行失败"
+            "cancelled" -> "已取消"
+            "interrupted" -> "已中断"
+            else -> "已结束"
+        }
+        val statusText = when {
+            terminal -> terminalText
+            phase == "waiting_approval" -> "待确认"
+            phase == "waiting_tool" -> "等待工具"
+            phase == "queued" -> "排队中"
+            phase == "starting" -> "启动中"
+            else -> percentText
+        }
         val heading = "$title · $timeLabel"
         val icon = JSONObject()
             .put("type", 1)
@@ -71,8 +89,8 @@ internal object XiaomiIslandTaskCompat {
                                 "textInfo",
                                 JSONObject()
                                     .put("frontTitle", heading.take(34))
-                                    .put("title", if (terminal) "已完成" else percentText)
-                                    .put("content", if (terminal) "100%" else "执行中")
+                                    .put("title", statusText)
+                                    .put("content", if (succeeded) "100%" else if (terminal) "已结束" else "执行中")
                                     .put("showHighlightColor", false),
                             ),
                     )
@@ -89,8 +107,8 @@ internal object XiaomiIslandTaskCompat {
                             .put(
                                 "textInfo",
                                 JSONObject()
-                                    .put("frontTitle", "执行进度")
-                                    .put("title", percentText),
+                                    .put("frontTitle", if (progressKnown || succeeded) "执行进度" else "任务状态")
+                                    .put("title", statusText),
                             ),
                     ),
             )
@@ -121,8 +139,8 @@ internal object XiaomiIslandTaskCompat {
                 .put("enableFloat", terminal)
                 .put("updatable", true)
                 .put("sequence", revision.coerceAtLeast(1L))
-                .put("aodTitle", if (terminal) "$heading · 已完成 100%" else "$heading · $percentText")
-                .put("ticker", if (terminal) "$heading · 已完成 100%" else "$heading · $percentText")
+                .put("aodTitle", "$heading · $statusText")
+                .put("ticker", "$heading · $statusText")
                 .put("param_island", paramIsland)
                 .put(
                     "baseInfo",

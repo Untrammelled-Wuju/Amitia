@@ -1486,7 +1486,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if eventBridge != nil {
 			publish = bridge.publish
 		}
-		if err := taskRuntimeService.BindNativeHost(b.taskOwnershipBinding, bridge, task_runtime.NewSourceTaskHostPermissionGuard(permBroker, bridge.toolRequirements), publish); err != nil {
+		if err := taskRuntimeService.BindNativeHost(b.taskOwnershipBinding, bridge, task_runtime.NewSourceTaskHostPermissionGuard(permBroker, bridge.toolRequirements), publish, bridge.eventContracts); err != nil {
 			return nil, fmt.Errorf("kernel: bind scoped task native host: %w", err)
 		}
 	}

@@ -236,6 +236,24 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			snapshot.Resources = append(snapshot.Resources, resource)
 		}
 	}
+	conversationIndexes := make([]int, 0)
+	conversationBodies := make([]json.RawMessage, 0)
+	for index := range snapshot.Resources {
+		if snapshot.Resources[index].Kind != "conversation" {
+			continue
+		}
+		conversationIndexes = append(conversationIndexes, index)
+		conversationBodies = append(conversationBodies, snapshot.Resources[index].Body)
+	}
+	if len(conversationBodies) > 0 {
+		enriched, err := chat.EnrichConversationActivityBodies(p.services.DB, conversationBodies)
+		if err != nil {
+			return snapshot, err
+		}
+		for index, resourceIndex := range conversationIndexes {
+			snapshot.Resources[resourceIndex].Body = enriched[index]
+		}
+	}
 	if query.ResourceKind == "" && len(query.Vector) > 0 {
 		relevant, err := p.semanticSearch(ctx, scope.RoleID, query)
 		if err != nil {
@@ -441,7 +459,7 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 		}
 		result = append(result, encoded)
 	}
-	return result, nil
+	return chat.EnrichConversationActivityBodies(p.services.DB, result)
 }
 
 func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (*coordination.DataSnapshot, error) {

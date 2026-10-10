@@ -436,6 +436,7 @@ type TaskRuntimeConfig struct {
 	OwnedHost                    OwnedTaskHostPort
 	SourceHostPermissionGuard    func(context.Context, *TaskRun, *TaskDefinition, string, TaskHostNativeCall) error
 	SourceHostCapabilities       SourceTaskCapabilities
+	SourceEventContracts         TaskHostEventContractsResolver
 	OwnedTargetDefinitions       OwnedTaskTargetDefinitionPort
 	OwnedTargetPermissions       OwnedTaskPermissionPort
 	InstalledDefinitionValidator func(context.Context, *TaskDefinition) error

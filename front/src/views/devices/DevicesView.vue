@@ -131,7 +131,7 @@
                 <el-button v-if="device.trustState === 'trusted' && (canAdminister || device.deviceId === localIdentity?.deviceId)" size="small" @click="grantDevice = device; grantsOpen = true">能力授权</el-button>
                 <el-button v-if="canAdminister && device.coordination" size="small" :disabled="!device.coordination.coordinated || device.trustState !== 'trusted'" :loading="busy === device.deviceId" @click="changeAdministrator(device)">{{ device.coordination.administrator ? '撤销管理员' : '授予管理员' }}</el-button>
                 <el-button size="small" :disabled="device.trustState !== 'trusted'" @click="loadSync(device.deviceId)">刷新同步状态</el-button>
-                <el-button v-if="canAdminister || device.deviceId === localIdentity?.deviceId" size="small" type="danger" plain :loading="busy === device.deviceId" @click="revoke(device)">移除设备</el-button>
+                <el-button v-if="(canAdminister || device.deviceId === localIdentity?.deviceId) && device.deviceId !== coreConsoleDeviceId" size="small" type="danger" plain :loading="busy === device.deviceId" @click="revoke(device)">移除设备</el-button>
               </div>
             </div>
           </details>
@@ -190,6 +190,7 @@ const localMeshStatus = ref<Record<string, any>>({});
 const deploymentMode = ref("local");
 const currentPolicy = ref<Policy | null>(null);
 const canAdminister = ref(false);
+const coreConsoleDeviceId = ref("");
 const coordinationAvailable = ref(false);
 const policyBusy = ref(false);
 const desktopAvailable = computed(() => Boolean(window.amitiaDesktop));
@@ -200,6 +201,7 @@ const management = useDeviceManagementIntent(() => {
   devices.value = [];
   syncStatus.value = {};
   canAdminister.value = false;
+  coreConsoleDeviceId.value = "";
   error.value = "Core或原设备管理权限已变化，请刷新";
 });
 
@@ -235,6 +237,7 @@ async function refresh() {
     const state = intent.state;
     currentPolicy.value = { ...state.policy, selectedRole: state.policy.selectedRole || "" };
     canAdminister.value = state.canAdminister;
+    coreConsoleDeviceId.value = state.coreConsoleDeviceId || "";
     coordinationAvailable.value = state.coordinationAvailable === true;
     await refreshPairingApprovals();
     await Promise.all(devices.value.map((device) => loadSync(device.deviceId, false)));
@@ -377,6 +380,15 @@ async function pairScanned(raw: string) { await joinCurrentDevice(raw); }
 async function generatePairingOffer() {
   offerBusy.value = true;
   try {
+    const intent = managementIntent;
+    const currentDevice = devices.value.find((device) => device.deviceId === localIdentity.value?.deviceId);
+    if (deploymentMode.value === "local" && intent && intent.state.coreConsoleDeviceId === localIdentity.value?.deviceId && currentDevice && currentDevice.trustState !== "trusted") {
+      await ElMessageBox.confirm("当前 Core 主机的配对权限已失效。是否使用本机所有者身份恢复权限并生成配对二维码？其他设备的撤销状态不会改变。", "恢复本机配对权限", { type: "warning", confirmButtonText: "恢复并生成", cancelButtonText: "取消" });
+      if (intent !== managementIntent || intent.controller.signal.aborted) throw new Error("本机 Core 已变化，请刷新后重试");
+      await management.validate(intent);
+      await api.post("/api/device-mesh/v1/pairing/recover-local-device", { coreId: intent.state.coreId, deviceId: intent.state.coreConsoleDeviceId }, deviceManagementRequestConfig(intent));
+      await refresh();
+    }
     const connection = await getRuntimeConnection();
     const offer = await createCurrentDevicePairingOffer(connection.apiBaseURL, 600);
     pairingOffer.value = String(offer.qrPayload || offer.offerToken || "").trim();
@@ -384,6 +396,7 @@ async function generatePairingOffer() {
     if (!pairingOffer.value) throw new Error("Cloud Core 未返回配对 Offer");
     ElMessage.success("一次性配对 Offer 已生成");
   } catch (err: any) {
+    if (err === "cancel" || err === "close") return;
     ElMessage.error(err?.message || "生成配对 Offer 失败");
   } finally {
     offerBusy.value = false;

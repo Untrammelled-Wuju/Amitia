@@ -73,7 +73,7 @@ func (s *TaskRuntimeService) DescribeInstalledTask(ctx context.Context, taskID, 
 	if definition == nil || definition.InstalledGeneration < 1 || !validTaskFingerprint(strings.TrimPrefix(definition.EntryHash, "sha256:")) {
 		return TargetTaskDefinitionPin{}, NewTaskError(ErrTaskDefinitionInvalid, "目标任务缺少安装版本或入口指纹")
 	}
-	if err := validateSourceTaskDeclaredCapabilitiesWith(definition, s.declaredHostCapabilities()); err != nil {
+	if err := s.validateSourceHostCapabilities(ctx, definition); err != nil {
 		return TargetTaskDefinitionPin{}, err
 	}
 	if err := s.config.InstalledDefinitionValidator(ctx, definition); err != nil {

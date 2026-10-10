@@ -25,6 +25,13 @@ type sourceTaskHostBridge struct {
 	providers *capability.ProviderRegistry
 }
 
+func (b *sourceTaskHostBridge) eventContracts(ctx context.Context, definition *task_runtime.TaskDefinition) ([]event.EventTypeDefinition, error) {
+	if b.events == nil || definition == nil || definition.RemoteSource != nil {
+		return nil, errors.New("原设备插件事件契约目录尚未就绪")
+	}
+	return b.events.InstalledEventContracts(ctx, definition.ExtensionID, definition.InstalledGeneration)
+}
+
 func (b *sourceTaskHostBridge) nativeTarget(tool capability.ToolDefinition, target task_runtime.TaskExecutionTarget) (capability.InvocationExecutionTarget, error) {
 	if b.providers == nil || tool.CapabilityID == "" {
 		return capability.InvocationExecutionTarget{}, errors.New("任务Native设备能力目录未就绪")
@@ -148,22 +155,49 @@ func (b *sourceTaskHostBridge) Execute(ctx context.Context, run *task_runtime.Ta
 }
 
 func (b *sourceTaskHostBridge) publish(ctx context.Context, run *task_runtime.TaskRun, definition *task_runtime.TaskDefinition, requestID string, call task_runtime.TaskHostNativeCall) (json.RawMessage, error) {
+	call.Payload = append(json.RawMessage(nil), call.Payload...)
+	payloadHash := sha256.Sum256(call.Payload)
 	scope, owned := coordination.FromContext(ctx)
 	if !owned || b.events == nil || !strings.HasPrefix(call.Type, "extension."+definition.ExtensionID+".") {
 		return nil, errors.New("任务事件发布依赖未就绪或命名空间越权")
 	}
 	generation := definition.InstalledGeneration
+	var contract *task_runtime.TaskHostEventContract
 	if definition.RemoteSource != nil {
 		pin, err := b.owner.TargetTaskDefinition(ctx, scope, task_runtime.SourceTaskDefinitionID(definition))
 		if err != nil {
 			return nil, err
 		}
 		generation = pin.InstalledGeneration
+		if err := task_runtime.ValidateTargetTaskDefinition(scope.TargetDeviceID, definition, pin); err != nil {
+			return nil, err
+		}
+		actual, err := b.owner.SourceTaskEventContract(ctx, run, definition, requestID, call)
+		if err != nil {
+			return nil, err
+		}
+		if actual.Scope != scope || actual.TaskRunID != run.TaskRunID || actual.Generation != run.Generation || actual.AttemptID != run.ExecutionAttemptID.String() || actual.RequestID != requestID || actual.PayloadHash != hex.EncodeToString(payloadHash[:]) || actual.Target != pin || string(actual.Definition.EventTypeID) != call.Type || actual.Definition.Version != 1 || actual.Definition.DefinitionHash != actual.Definition.Hash() {
+			return nil, errors.New("原设备事件契约与固定任务版本或执行范围不一致")
+		}
+		contract = &actual
+		current, err := b.owner.TargetTaskDefinition(ctx, scope, task_runtime.SourceTaskDefinitionID(definition))
+		if err != nil {
+			return nil, err
+		}
+		if current != pin {
+			return nil, errors.New("原设备安装代次在事件契约确认后发生变化")
+		}
 	}
 	var result event.PublishResult
 	err := coordination.CommitCurrent(ctx, func() error {
 		var err error
-		result, err = b.events.PublishFromRuntime(ctx, definition.ExtensionID, event.EventTypeID(call.Type), 1, call.Payload, event.PublishOptions{ProducerGeneration: generation, ProducerModuleID: definition.ModuleID, AggregateType: "source-task", AggregateID: run.TaskRunID, PartitionKey: scope.SpaceID, OrderingKey: run.TaskRunID, ScopeSnapshotID: run.ScopeSnapshotID, TraceID: requestID, OperationID: scope.RequestID})
+		opts := event.PublishOptions{ProducerGeneration: generation, ProducerModuleID: definition.ModuleID, AggregateType: "source-task", AggregateID: run.TaskRunID, PartitionKey: scope.SpaceID, OrderingKey: run.TaskRunID, ScopeSnapshotID: run.ScopeSnapshotID, TraceID: requestID, OperationID: scope.RequestID}
+		if contract != nil {
+			provenance := event.SourceEventProvenance{ScopeSnapshotID: run.ScopeSnapshotID, SourceDeviceID: scope.TargetDeviceID, TaskRunID: run.TaskRunID, TaskGeneration: run.Generation, AttemptID: run.ExecutionAttemptID.String(), RequestID: requestID, InstalledGeneration: contract.Target.InstalledGeneration, DefinitionFingerprint: contract.Target.DefinitionFingerprint, EntryHash: contract.Target.EntryHash, BundleHash: definition.BundleHash, SchemaHash: contract.Definition.DefinitionHash, PayloadHash: contract.PayloadHash}
+			result, err = b.events.PublishSourceContract(ctx, contract.Definition, definition.ExtensionID, call.Payload, opts, provenance)
+		} else {
+			result, err = b.events.PublishInstalledSourceEvent(ctx, definition.ExtensionID, generation, event.EventTypeID(call.Type), call.Payload, opts)
+		}
 		return err
 	})
 	if err != nil {

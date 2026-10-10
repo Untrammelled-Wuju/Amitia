@@ -1,20 +1,7 @@
 #import "AmitiaISHRuntime.h"
 #import "amitia_ish_embed.h"
 
-static const NSErrorDomain kAmitiaISHRuntimeErrorDomain = @"com.amitia.AmitiaISHRuntime";
-
-typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
-    AmitiaISHRuntimeErrorCodeUnavailable = 2000,
-    AmitiaISHRuntimeErrorCodeNotInitialized,
-    AmitiaISHRuntimeErrorCodeRootfsNotReady,
-    AmitiaISHRuntimeErrorCodeRootfsUnsupported,
-    AmitiaISHRuntimeErrorCodeInvalidArgument,
-    AmitiaISHRuntimeErrorCodeExecFailed,
-    AmitiaISHRuntimeErrorCodeExecTimeout,
-    AmitiaISHRuntimeErrorCodeExecCancelled,
-    AmitiaISHRuntimeErrorCodeExecBusy,
-    AmitiaISHRuntimeErrorCodeInternal,
-};
+NSErrorDomain const kAmitiaISHRuntimeErrorDomain = @"com.amitia.AmitiaISHRuntime";
 
 @implementation AmitiaISHExecutionResult
 @end
@@ -30,10 +17,18 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
 @property (nonatomic, copy, nullable) NSString *activeExecutionID;
 @property (nonatomic) BOOL fatal;
 @property (nonatomic, copy, nullable) NSString *fatalCode;
-@property (nonatomic, strong, nullable) dispatch_cleanup_t executionCleanup;
 @end
 
 @implementation AmitiaISHRuntime
+
++ (NSString *)errorCodeForError:(NSError *)error {
+    switch (error.code) {
+        case AmitiaISHRuntimeErrorCodeLegacyDataRequiresMigration: return @"LEGACY_DATA_REQUIRES_MIGRATION";
+        case AmitiaISHRuntimeErrorCodeExecTimeout: return @"EXEC_TIMEOUT";
+        case AmitiaISHRuntimeErrorCodeExecCancelled: return @"EXEC_CANCELLED";
+        default: return @"EXECUTE_FAILED";
+    }
+}
 
 + (instancetype)shared {
     static AmitiaISHRuntime *instance;
@@ -58,6 +53,8 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
 - (uint64_t)currentGeneration {
     return self.generation;
 }
+
+- (BOOL)rootMounted { return amitia_ish_root_mounted(); }
 
 - (AmitiaISHState)state {
     return (AmitiaISHState)amitia_ish_state();
@@ -89,15 +86,18 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
     __block BOOL success = NO;
 
     dispatch_sync(self.executionQueue, ^{
+        @synchronized (self) {
         int currentState = amitia_ish_state();
         if (currentState == AMITIA_ISH_RUNNING) {
-            if ([self.currentRootfsPath isEqualToString:rootfsPath]) {
+            if ([self.currentRootfsPath isEqualToString:rootfsPath] && env.count == 0) {
                 success = YES;
                 return;
             }
-            amitia_ish_stop();
-            self.generation = 0;
-            self.currentRootfsPath = nil;
+            if (![self.currentRootfsPath isEqualToString:rootfsPath]) {
+                amitia_ish_stop();
+                self.generation = 0;
+                self.currentRootfsPath = nil;
+            }
         }
 
         size_t envCount = env.count;
@@ -125,6 +125,7 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
             self.fatal = NO;
             self.fatalCode = nil;
             self.activeExecutionID = nil;
+        }
         }
     });
 
@@ -339,6 +340,7 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
         case AMITIA_ISH_OK: return @"OK";
         case AMITIA_ISH_ERR_NOT_INITIALIZED: return @"iSH kernel not initialized";
         case AMITIA_ISH_ERR_ROOTFS_NOT_READY: return @"rootfs not ready";
+        case AMITIA_ISH_ERR_LEGACY_DATA_REQUIRES_MIGRATION: return @"检测到旧设备业务数据，请先完成安全迁移；未修改旧数据。";
         case AMITIA_ISH_ERR_ROOTFS_FORMAT_UNSUPPORTED: return @"rootfs format unsupported";
         case AMITIA_ISH_ERR_INVALID_ARGUMENT: return @"invalid argument";
         case AMITIA_ISH_ERR_EXEC_FAILED: return @"execution failed";
@@ -355,6 +357,7 @@ typedef NS_ENUM(NSInteger, AmitiaISHRuntimeErrorCode) {
         case AMITIA_ISH_OK: return 0;
         case AMITIA_ISH_ERR_NOT_INITIALIZED: return AmitiaISHRuntimeErrorCodeNotInitialized;
         case AMITIA_ISH_ERR_ROOTFS_NOT_READY: return AmitiaISHRuntimeErrorCodeRootfsNotReady;
+        case AMITIA_ISH_ERR_LEGACY_DATA_REQUIRES_MIGRATION: return AmitiaISHRuntimeErrorCodeLegacyDataRequiresMigration;
         case AMITIA_ISH_ERR_ROOTFS_FORMAT_UNSUPPORTED: return AmitiaISHRuntimeErrorCodeRootfsUnsupported;
         case AMITIA_ISH_ERR_INVALID_ARGUMENT: return AmitiaISHRuntimeErrorCodeInvalidArgument;
         case AMITIA_ISH_ERR_EXEC_FAILED: return AmitiaISHRuntimeErrorCodeExecFailed;

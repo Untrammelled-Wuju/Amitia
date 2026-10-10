@@ -2,7 +2,7 @@ import { onUnmounted } from "vue";
 import { getRuntimeConnection } from "../runtime/runtime-adapter";
 import { useApi } from "./useApi";
 
-export type DeviceManagementState = { coreId: string; canAdminister: boolean; coordinationAvailable?: boolean; policy: { deviceId: string; coordinated: boolean; administrator: boolean; providerEpoch: number; modeRevision: number; permissionRevision: number; selectedRole?: string } };
+export type DeviceManagementState = { coreId: string; coreConsoleDeviceId?: string; canAdminister: boolean; coordinationAvailable?: boolean; policy: { deviceId: string; coordinated: boolean; administrator: boolean; providerEpoch: number; modeRevision: number; permissionRevision: number; selectedRole?: string } };
 export type DeviceManagementIntent = { state: DeviceManagementState; apiBaseURL: string; controller: AbortController };
 const changed = "Core、统筹模式或设备权限已变化，请刷新后重新操作";
 

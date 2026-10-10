@@ -716,7 +716,17 @@ class ConversationRuntimeController extends ChangeNotifier {
         _ownedRequestId = '';
         if (!_disposed) {
           _sending = false;
-          if (completed) _conversationUpdateEpoch++;
+          if (completed) {
+            _conversationUpdateEpoch++;
+            final id = _conversationId?.trim() ?? '';
+            if (id.isNotEmpty) {
+              unawaited(
+                _chatService
+                    .markConversationRead(id, characterId: _characterId)
+                    .catchError((Object _) {}),
+              );
+            }
+          }
           notifyListeners();
         }
       }
@@ -788,7 +798,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         ? snapshot.turnNextBefore
         : (snapshot.turns.isEmpty ? 0 : snapshot.turns.first.sequence);
     _hasMoreTurnHistory = snapshot.hasMoreTurns;
-    _sending = _agentReducer.activeTurnId.isNotEmpty;
+    final active = _agentReducer.turn(_agentReducer.activeTurnId);
+    _sending = active != null && active.status != 'needs_reconciliation';
     _projectTurns();
     notifyListeners();
   }
@@ -891,6 +902,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
     if (type == 'turn.queued' || type == 'turn.started') {
       _sending = true;
+      _conversationUpdateEpoch++;
+    }
+    if (type == 'turn.waiting' && event.status == 'needs_reconciliation') {
+      _sending = false;
     }
     final terminal =
         type == 'turn.completed' ||
@@ -902,7 +917,14 @@ class ConversationRuntimeController extends ChangeNotifier {
       _streamScheduler.schedule(_flushStreamingProjection);
       _streamScheduler.flush();
       final id = _conversationId?.trim() ?? '';
-      if (id.isNotEmpty) unawaited(_refreshSnapshot(id));
+      if (id.isNotEmpty) {
+        unawaited(
+          _chatService
+              .markConversationRead(id, characterId: _characterId)
+              .catchError((Object _) {}),
+        );
+        unawaited(_refreshSnapshot(id));
+      }
       return;
     }
     _streamScheduler.schedule(_flushStreamingProjection);
@@ -1383,12 +1405,24 @@ class ConversationRuntimeController extends ChangeNotifier {
         );
         _hasMoreTurnHistory = false;
         _sending = false;
+        await _chatService
+            .markConversationRead(id, characterId: _characterId)
+            .catchError((Object _) {});
         notifyListeners();
         return;
       }
       final snapshot = await _chatService.conversationSnapshot(id);
       if (_disposed || _conversationId != id) return;
       _applySnapshot(snapshot);
+      await _chatService
+          .markConversationRead(
+            id,
+            lastTerminalTurnSequence:
+                snapshot.conversation?.lastTerminalTurnSequence ?? 0,
+            characterId: _characterId,
+          )
+          .catchError((Object _) {});
+      _conversationUpdateEpoch++;
       _connectEventStream(id);
     } catch (error) {
       _lastError = error;

@@ -224,6 +224,8 @@ func DefaultMigrations() []Migration {
 		NotificationOutboxMigration(),
 		SearchCredentialCleanupMigration(),
 		WebChatRequestIdempotencyMigration(),
+		ToolExecutionLedgerMigration(),
+		ConversationReadStateMigration(),
 	}
 }
 

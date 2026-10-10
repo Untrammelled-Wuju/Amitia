@@ -1,5 +1,6 @@
 package com.amitia.amitia_app.notifications
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ShortcutManager
@@ -257,6 +258,31 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
                     }
                 }
             }
+            "openLiveUpdateSettings" -> {
+                val fallback = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, appContext.packageName)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val opened = if (Build.VERSION.SDK_INT >= 36) {
+                    runCatching {
+                        appContext.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, appContext.packageName)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                        true
+                    }.getOrDefault(false)
+                } else false
+                if (!opened) {
+                    val fallbackError = runCatching {
+                        appContext.startActivity(fallback)
+                    }.exceptionOrNull()
+                    if (fallbackError != null) {
+                        result.error("NOTIFICATION_SETTINGS_UNAVAILABLE", fallbackError.message, null)
+                        return
+                    }
+                }
+                result.success(opened)
+            }
             "openSettings" -> {
                 val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                     .putExtra(Settings.EXTRA_APP_PACKAGE, appContext.packageName)
@@ -369,6 +395,12 @@ class NotificationPlatformPlugin : FlutterPlugin, MethodChannel.MethodCallHandle
             "pushToken" to token,
             "notificationsEnabled" to NotificationManagerCompat.from(appContext).areNotificationsEnabled(),
             "progressStyleSupported" to (Build.VERSION.SDK_INT >= 36),
+            "promotedNotificationsAllowed" to (
+                Build.VERSION.SDK_INT >= 36 && runCatching {
+                    (appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                        .canPostPromotedNotifications()
+                }.getOrDefault(false)
+            ),
             "liveActivitySupported" to false,
             "dynamicIslandSupported" to (
                 AgentTaskIslandRouting.choose(appContext) ==

@@ -36,7 +36,7 @@ func makePolicyHandler(deps *RouterDeps) gin.HandlerFunc {
 			c.JSON(503, gin.H{"code": "mesh.policy_unavailable", "message": err.Error()})
 			return
 		}
-		c.JSON(200, gin.H{"policy": policy, "canAdminister": actor.HasPermission(auth.PermSystemAdmin), "aiProvider": "core", "coreId": actor.SpaceID.String(), "coordinationAvailable": deps.BusinessCoordinationReady})
+		c.JSON(200, gin.H{"policy": policy, "canAdminister": actor.HasPermission(auth.PermSystemAdmin), "aiProvider": "core", "coreId": actor.SpaceID.String(), "coreConsoleDeviceId": deps.LocalCoreDeviceID.String(), "coordinationAvailable": deps.BusinessCoordinationReady})
 	}
 }
 

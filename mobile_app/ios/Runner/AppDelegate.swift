@@ -78,6 +78,7 @@ import UIKit
     let installer = RootfsInstaller(resolver: resolver)
     if let identity = self.deviceMeshIdentity {
       let runtime = IOSRuntimeBridge(resolver: resolver, installer: installer, identity: identity)
+      identity.willReset = { [weak runtime] in runtime?.invalidateIdentity() }
       runtime.register(messenger: self.registrar(forPlugin: "IOSRuntimeBridge")!.messenger())
       self.runtimeBridge = runtime
     }

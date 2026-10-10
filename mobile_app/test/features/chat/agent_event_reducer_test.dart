@@ -37,6 +37,27 @@ AgentUIEvent _event({
 }
 
 void main() {
+
+  test('崩溃恢复等待对账状态不能被工具增量覆盖或误报完成', () {
+    final reducer = AgentEventReducer();
+    reducer.reset(turns: const [], lastEventSequence: 0);
+    reducer.apply(_event(sequence: 1, id: 'recovery-start', type: 'turn.started', status: 'running'));
+    reducer.apply(_event(
+      sequence: 2, id: 'recovery-unknown', type: 'turn.waiting', status: 'needs_reconciliation',
+      payload: const <String, dynamic>{'errorCode': 'tool_requires_reconciliation'},
+    ));
+    expect(reducer.turn('turn-1')!.status, 'needs_reconciliation');
+    reducer.apply(_event(
+      sequence: 3, id: 'recovery-tool', type: 'tool.running', blockId: 'tool-1',
+      blockSequence: 1, status: 'running',
+      payload: const <String, dynamic>{'blockType': 'tool_call'},
+    ));
+    expect(reducer.turn('turn-1')!.status, 'needs_reconciliation');
+    final reloaded = AgentEventReducer();
+    reloaded.reset(turns: reducer.turns, lastEventSequence: reducer.lastEventSequence);
+    expect(reloaded.turn('turn-1')!.status, 'needs_reconciliation');
+    expect(reloaded.activeTurnId, 'turn-1');
+  });
   test('唯一 v1 流将 queued、text delta 和 terminal 归入同一 Turn', () {
     final reducer = AgentEventReducer();
     reducer.reset(turns: const [], lastEventSequence: 0);

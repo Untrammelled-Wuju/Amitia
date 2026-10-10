@@ -754,6 +754,12 @@ const {
     applyConversationSettings(conversation);
     applySnapshotWorkspace(workspace, String(conversation?.projectId || ""));
     applyHistorySnapshot(snapshot?.messageHistory);
+    if (conversation?.id) {
+      await chatStore.markConversationRead(String(conversation.id), Number(conversation.lastTerminalTurnSequence || 0)).catch(() => undefined);
+    }
+  },
+  async () => {
+    await chatStore.fetchSidebar();
   },
 );
 

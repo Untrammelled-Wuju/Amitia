@@ -26,7 +26,8 @@ typedef enum {
     AMITIA_ISH_ERR_EXEC_TIMEOUT = -6,
     AMITIA_ISH_ERR_EXEC_CANCELLED = -7,
     AMITIA_ISH_ERR_EXEC_BUSY = -8,
-    AMITIA_ISH_ERR_INTERNAL = -9
+    AMITIA_ISH_ERR_INTERNAL = -9,
+    AMITIA_ISH_ERR_LEGACY_DATA_REQUIRES_MIGRATION = -10
 } amitia_ish_error_t;
 
 typedef struct {
@@ -70,6 +71,7 @@ int amitia_ish_reap(uint64_t generation, int *exit_code);
 int amitia_ish_cancel(uint64_t generation);
 void amitia_ish_stop(void);
 amitia_ish_state_t amitia_ish_state(void);
+bool amitia_ish_root_mounted(void);
 void amitia_ish_result_free(amitia_ish_result_t *result);
 
 #ifdef __cplusplus

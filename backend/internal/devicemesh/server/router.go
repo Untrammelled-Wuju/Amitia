@@ -65,6 +65,7 @@ type RouterDeps struct {
 	Handler                      *Handler
 	Probe                        *ProbeService
 	DeviceReg                    *host_registry.Registry
+	LocalCoreDeviceID            runtimeidentity.DeviceID
 	PairingSvc                   *pairing.Service
 	Coordination                 *coordination.Service
 	BusinessCoordinationReady    bool
@@ -152,6 +153,7 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 		authorized.Use(webAccessMW)
 	}
 	authorized.POST("/pairing/offers", makePairingOfferHandler(deps))
+	authorized.POST("/pairing/recover-local-device", makeLocalDeviceRecoveryHandler(deps))
 	authorized.GET("/provider/successor", func(c *gin.Context) {
 		device, ok := deps.GetDeviceID(c)
 		if !ok || device == "" {
@@ -365,6 +367,30 @@ func makePairingOfferHandler(deps *RouterDeps) gin.HandlerFunc {
 	}
 }
 
+func makeLocalDeviceRecoveryHandler(deps *RouterDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || !actor.IsLocalTrusted || actor.DeviceID != deps.LocalCoreDeviceID || deps.LocalCoreDeviceID == "" {
+			c.JSON(403, gin.H{"code": "mesh.local_owner_required", "message": "请通过本机 Core 管理会话恢复配对权限"})
+			return
+		}
+		var request struct {
+			CoreID   string `json:"coreId" binding:"required"`
+			DeviceID string `json:"deviceId" binding:"required"`
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+		if c.ShouldBindJSON(&request) != nil || request.CoreID != actor.SpaceID.String() || request.DeviceID != deps.LocalCoreDeviceID.String() || (c.GetHeader(security.ExpectedCoreHeader) != "" && c.GetHeader(security.ExpectedCoreHeader) != request.CoreID) {
+			c.JSON(409, gin.H{"code": "mesh.management_scope_changed", "message": "本机 Core 或设备身份已变化，请刷新后重试"})
+			return
+		}
+		if err := deps.PairingSvc.RecoverLocalDevice(c.Request.Context(), deps.LocalCoreDeviceID); err != nil {
+			c.JSON(403, gin.H{"code": "mesh.local_recovery_failed", "message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"ok": true, "deviceId": deps.LocalCoreDeviceID.String()})
+	}
+}
+
 func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req pairingClaimRequest
@@ -573,6 +599,10 @@ func makeRevokeDeviceHandler(deps *RouterDeps) gin.HandlerFunc {
 		}
 
 		deviceID := runtimeidentity.ParseDeviceID(c.Param("deviceId"))
+		if deps.LocalCoreDeviceID != "" && deviceID == deps.LocalCoreDeviceID {
+			c.JSON(409, gin.H{"code": "mesh.core_device_protected", "message": "当前 Core 主机不能通过移除设备撤销"})
+			return
+		}
 		if !canManageDevice(c, deviceID.String()) {
 			return
 		}

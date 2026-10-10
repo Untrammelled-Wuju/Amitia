@@ -32,6 +32,9 @@ func (s *service) ListConversations(q ConversationQuery) (*ConversationListRespo
 	for i := range convs {
 		convs[i].MessageCount = int(s.repo.CountMessagesByConv(convs[i].ID))
 	}
+	if err := EnrichConversationActivity(s.db, convs); err != nil {
+		return nil, err
+	}
 	totalPages := int((total + int64(q.PageSize) - 1) / int64(q.PageSize))
 	return &ConversationListResponse{Items: convs, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
 }
@@ -55,7 +58,29 @@ func (s *service) GetConversationForSpace(id, spaceID string) (*Conversation, er
 	if err != nil {
 		return nil, fmt.Errorf("对话不存在")
 	}
+	items := []Conversation{*c}
+	if err := EnrichConversationActivity(s.db, items); err != nil {
+		return nil, err
+	}
+	*c = items[0]
 	return c, nil
+}
+
+func (s *service) MarkConversationReadForSpace(conversationID, spaceID string) error {
+	conversation, err := s.requireConversationOwner(conversationID, spaceID)
+	if err != nil {
+		return fmt.Errorf("对话不存在")
+	}
+	var lastSequence int64
+	if err := s.db.Model(&AssistantTurn{}).
+		Where("conversation_id = ? AND status IN ?", conversation.ID, terminalConversationTurnStatuses).
+		Select("COALESCE(MAX(sequence), 0)").
+		Scan(&lastSequence).Error; err != nil {
+		return err
+	}
+	return s.db.Model(&Conversation{}).
+		Where("id = ? AND deleted_at IS NULL", conversation.ID).
+		UpdateColumn("last_read_turn_sequence", lastSequence).Error
 }
 
 func (s *service) CreateConversation(req *CreateConversationRequest) (*Conversation, error) {

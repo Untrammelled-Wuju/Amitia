@@ -14,7 +14,7 @@ func registerSourceTaskHostEventDispatcher(dispatcher interface {
 	RegisterCancellable(string, agent.CancellableRuntimeInvokeHandler)
 }, services *AppServices) {
 	dispatcher.RegisterCancellable("task.host.source-event", func(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
-		if services == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil || len(invoke.Input) > 80<<10 {
+		if services == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil || len(invoke.Input) > 128<<10 {
 			return nil, fmt.Errorf("Source任务事件服务未就绪或请求过大")
 		}
 		var request task_runtime.TaskHostSourceEventRequest

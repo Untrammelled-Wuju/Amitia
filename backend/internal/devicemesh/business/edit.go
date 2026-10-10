@@ -33,7 +33,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	allowed := map[string]bool{}
 	switch edit.Kind {
 	case "conversation":
-		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "projectId": true}
+		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "projectId": true, "lastReadTurnSequence": true}
 	case "project":
 		if edit.ExpectedScope == nil {
 			return coordination.Acknowledgement{}, errors.New("项目修改缺少原数据归属，请重新加载")
@@ -82,6 +82,12 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 				if _, err := time.Parse(time.RFC3339Nano, text); err != nil {
 					return coordination.Acknowledgement{}, errors.New("时间参数无效")
 				}
+			}
+		}
+		if key == "lastReadTurnSequence" {
+			var sequence int64
+			if json.Unmarshal(value, &sequence) != nil || sequence < 0 {
+				return coordination.Acknowledgement{}, errors.New("已读位置无效")
 			}
 		}
 	}
@@ -199,7 +205,10 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	if edit.Clear {
 		document["clearRevision"] = body(resource.Revision + 1)
 	}
-	document["updatedAt"] = body(time.Now().UTC().Format(time.RFC3339Nano))
+	readStateOnly := len(edit.Changes) == 1 && edit.Changes["lastReadTurnSequence"] != nil && !edit.Deleted && !edit.Clear
+	if !readStateOnly {
+		document["updatedAt"] = body(time.Now().UTC().Format(time.RFC3339Nano))
+	}
 	ack := coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{edit.Kind + "/" + edit.ID: resource.Revision + 1, "checkpoint/" + receiptID: 1}}
 	proof := body(map[string]any{"hash": fingerprint, "roleRevision": scope.RoleRevision, "acknowledgement": ack})
 	return e.commit(ctx, coordination.Commit{Scope: scope, Dependencies: dependencies, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: scope.RoleID, SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
