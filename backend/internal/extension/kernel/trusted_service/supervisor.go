@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/serviceauth"
@@ -1558,14 +1557,7 @@ func (m *HealthMonitor) check(ctx context.Context, inst *ServiceInstance, def *S
 }
 
 func procIsAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
+	return process.IsProcessAlive(pid)
 }
 
 func defaultLogLevel(level string) string {

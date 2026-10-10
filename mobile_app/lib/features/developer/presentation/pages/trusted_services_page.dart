@@ -10,6 +10,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/services/trusted_service_path.dart';
 
 class TrustedServicesPage extends ConsumerStatefulWidget {
   const TrustedServicesPage({super.key});
@@ -326,7 +327,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     try {
       final action = newStatus == '已启动' ? 'start' : 'stop';
       await ref.read(backendServiceProvider).post(
-        '/api/extensions/services/$id/$action',
+        trustedServicePath(id, operation: action),
         data: action == 'stop' ? {'reason': 'mobile_user', 'force': false} : <String, dynamic>{},
       );
       await _load();
@@ -344,7 +345,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     final id = (service['id'] ?? '').toString();
     try {
       final result = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
-        '/api/extensions/services/$id/health',
+        trustedServicePath(id, operation: 'health'),
         fromJson: (e) => Map<String, dynamic>.from(e as Map),
       );
       if (!context.mounted) return;
@@ -391,7 +392,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
               onPressed: () async {
                 final id = (service['id'] ?? '').toString();
                 try {
-                  await ref.read(backendServiceProvider).delete('/api/extensions/services/$id');
+                  await ref.read(backendServiceProvider).delete(trustedServicePath(id));
                   if (!context.mounted) return;
                   Navigator.pop(context);
                   await _load();
@@ -426,7 +427,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
                 final id = (service['id'] ?? '').toString();
                 try {
                   await ref.read(backendServiceProvider).post(
-                    '/api/extensions/services/quarantine/$id/release',
+                    trustedServicePath(id, operation: 'quarantine/release'),
                     data: {'reason': 'mobile_user'},
                   );
                   if (!context.mounted) return;

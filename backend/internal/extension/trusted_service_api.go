@@ -20,17 +20,24 @@ func NewTrustedServiceAPI(runtime *Runtime) *TrustedServiceAPI {
 
 func (api *TrustedServiceAPI) RegisterRoutes(group *gin.RouterGroup) {
 	svc := group.Group("/services")
-	svc.GET("", api.listServices)
+	svc.GET("", api.serviceListOrGet)
 	svc.POST("", api.registerService)
-	svc.GET("/:serviceId", api.getService)
-	svc.DELETE("/:serviceId", api.unregisterService)
-	svc.POST("/:serviceId/start", api.startService)
-	svc.POST("/:serviceId/stop", api.stopService)
-	svc.GET("/:serviceId/status", api.getServiceStatus)
-	svc.GET("/:serviceId/health", api.healthCheck)
-	svc.POST("/:serviceId/invoke", api.invokeService)
+	svc.DELETE("", trustedServiceReference(api.unregisterService))
+	svc.POST("/start", trustedServiceReference(api.startService))
+	svc.POST("/stop", trustedServiceReference(api.stopService))
+	svc.POST("/invoke", trustedServiceReference(api.invokeService))
+	svc.GET("/status", api.serviceOperationAlias(api.getServiceStatus, "status"))
+	svc.GET("/health", api.serviceOperationAlias(api.healthCheck, "health"))
+	svc.GET("/:serviceId", trustedServiceReference(api.getService))
+	svc.DELETE("/:serviceId", trustedServiceReference(api.unregisterService))
+	svc.POST("/:serviceId/start", trustedServiceReference(api.startService))
+	svc.POST("/:serviceId/stop", trustedServiceReference(api.stopService))
+	svc.GET("/:serviceId/status", trustedServiceReference(api.getServiceStatus))
+	svc.GET("/:serviceId/health", trustedServiceReference(api.healthCheck))
+	svc.POST("/:serviceId/invoke", trustedServiceReference(api.invokeService))
 	svc.GET("/quarantine/list", api.listQuarantined)
-	svc.POST("/quarantine/:serviceId/release", api.releaseQuarantine)
+	svc.POST("/quarantine/release", trustedServiceReference(api.releaseQuarantine))
+	svc.POST("/quarantine/:serviceId/release", trustedServiceReference(api.releaseQuarantine))
 }
 
 func (api *TrustedServiceAPI) getSupervisor() (*trusted_service.ProcessSupervisor, bool) {

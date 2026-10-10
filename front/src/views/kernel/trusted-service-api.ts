@@ -1,4 +1,5 @@
 import { apiClient } from "@/composables/useApi";
+import { trustedServicePath } from "./trusted-service-path";
 
 const BASE = "/api/extensions/services";
 
@@ -182,7 +183,7 @@ export async function listServices(): Promise<{ services: TrustedServiceInstance
 }
 
 export async function getService(serviceId: string): Promise<TrustedServiceInstance> {
-  const res = await apiClient.get(`${BASE}/${encodeURIComponent(serviceId)}`);
+  const res = await apiClient.get(trustedServicePath(serviceId));
   return res.data;
 }
 
@@ -192,32 +193,32 @@ export async function registerService(def: Partial<ServiceRuntimeDefinition>): P
 }
 
 export async function unregisterService(serviceId: string): Promise<{ service_id: string; status: string }> {
-  const res = await apiClient.delete(`${BASE}/${encodeURIComponent(serviceId)}`);
+  const res = await apiClient.delete(trustedServicePath(serviceId));
   return res.data;
 }
 
 export async function startService(serviceId: string, body: StartRequestBody): Promise<StartResult> {
-  const res = await apiClient.post(`${BASE}/${encodeURIComponent(serviceId)}/start`, body);
+  const res = await apiClient.post(trustedServicePath(serviceId, "start"), body);
   return res.data;
 }
 
 export async function stopService(serviceId: string, body: StopRequestBody): Promise<StopResult> {
-  const res = await apiClient.post(`${BASE}/${encodeURIComponent(serviceId)}/stop`, body);
+  const res = await apiClient.post(trustedServicePath(serviceId, "stop"), body);
   return res.data;
 }
 
 export async function getServiceStatus(serviceId: string): Promise<TrustedServiceInstance> {
-  const res = await apiClient.get(`${BASE}/${encodeURIComponent(serviceId)}/status`);
+  const res = await apiClient.get(trustedServicePath(serviceId, "status"));
   return res.data;
 }
 
 export async function healthCheck(serviceId: string): Promise<HealthResult> {
-  const res = await apiClient.get(`${BASE}/${encodeURIComponent(serviceId)}/health`);
+  const res = await apiClient.get(trustedServicePath(serviceId, "health"));
   return res.data;
 }
 
 export async function invokeService(serviceId: string, body: InvokeRequestBody): Promise<InvokeResult> {
-  const res = await apiClient.post(`${BASE}/${encodeURIComponent(serviceId)}/invoke`, body);
+  const res = await apiClient.post(trustedServicePath(serviceId, "invoke"), body);
   return res.data;
 }
 
@@ -227,6 +228,6 @@ export async function listQuarantined(): Promise<QuarantineListResult> {
 }
 
 export async function releaseQuarantine(serviceId: string, reason?: string): Promise<{ service_id: string; status: string }> {
-  const res = await apiClient.post(`${BASE}/quarantine/${encodeURIComponent(serviceId)}/release`, { reason: reason || "manual_release" });
+  const res = await apiClient.post(trustedServicePath(serviceId, "quarantine/release"), { reason: reason || "manual_release" });
   return res.data;
 }
