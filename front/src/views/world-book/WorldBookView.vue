@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="worldbook-page">
     <div class="page-header">
       <h2>世界书</h2>
-      <div class="header-actions">
+      <div v-if="canConfigure && loadedContext" class="header-actions">
         <el-button
           size="small"
           :type="testPanelOpen ? 'warning' : 'success'"
@@ -21,7 +21,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
       </div>
     </div>
-
+    <el-alert v-if="!canConfigure" title="世界书由 Core 管理，只有本机或开启统筹模式的当前 Core 管理员可以查看和配置。" type="info" :closable="false" show-icon />
+    <template v-if="canConfigure && loadedContext">
     <div class="filter-bar">
       <el-select
         v-model="filterType"
@@ -324,11 +325,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       />
     </div>
 
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, onMounted } from "vue";
+import { computed, ref, reactive, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { DocumentCopy, UploadFilled } from "@element-plus/icons-vue";
 import { useWorldBook, type WorldBookEntry } from "@/composables/useWorldBook";
@@ -339,6 +341,8 @@ import {
 } from "./worldBookImport";
 
 const {
+  access,
+  loadedContext,
   rules,
   loading,
   total,
@@ -353,6 +357,16 @@ const {
   matchTypeLabel,
   scopeLabel,
 } = useWorldBook();
+const { canConfigure } = access;
+const editorContext = ref("");
+watch(loadedContext, (current) => {
+  if (current !== editorContext.value) {
+    showAddForm.value = false;
+    editVisible.value = false;
+    importDialogVisible.value = false;
+    testResults.value = [];
+  }
+});
 
 const filterType = ref("");
 const testPanelOpen = ref(false);
@@ -360,6 +374,7 @@ const testText = ref("");
 const testResults = ref<any[]>([]);
 const tested = ref(false);
 const showAddForm = ref(false);
+watch(showAddForm, (open) => { if (open) editorContext.value = loadedContext.value; });
 const editVisible = ref(false);
 const editingEntry = ref<any>(null);
 const importInput = ref<HTMLInputElement | null>(null);
@@ -413,7 +428,7 @@ async function runTest() {
 }
 
 async function handleCreate() {
-  await createRule(form);
+  await createRule(form, editorContext.value);
   showAddForm.value = false;
   form.matchType = "keyword";
   form.matchPattern = "";
@@ -423,6 +438,7 @@ async function handleCreate() {
 }
 
 function startEdit(rule: any) {
+  editorContext.value = loadedContext.value;
   editingEntry.value = rule;
   editForm.matchType = rule.matchType;
   editForm.matchPattern = rule.matchPattern;
@@ -433,19 +449,20 @@ function startEdit(rule: any) {
 }
 
 async function handleUpdate() {
-  await updateRule(editingEntry.value.id, { ...editForm });
+  await updateRule(editingEntry.value.id, { ...editForm }, editorContext.value);
   editVisible.value = false;
   editingEntry.value = null;
 }
 
 async function handleDelete(id: string) {
+  const context = loadedContext.value;
   try {
     await ElMessageBox.confirm("确定删除这条规则？", "删除确认", {
       confirmButtonText: "确定",
       cancelButtonText: "取消",
       type: "warning",
     });
-    await deleteRule(id);
+    await deleteRule(id, context);
   } catch {}
 }
 
@@ -462,6 +479,7 @@ function highlightMatch(text: string, pattern: string): string {
 }
 
 function openImportDialog() {
+  editorContext.value = loadedContext.value;
   resetImportState();
   importDialogVisible.value = true;
 }
@@ -518,7 +536,7 @@ async function confirmImport() {
     .map((row) => row.item as Partial<WorldBookEntry>);
   importLoading.value = true;
   try {
-    await createRules(items);
+    await createRules(items, editorContext.value);
     ElMessage.success(`导入完成：成功 ${items.length} 条`);
     importDialogVisible.value = false;
   } catch (error: any) {
@@ -537,7 +555,9 @@ async function copyImportExample() {
   }
 }
 
-function exportRules() {
+async function exportRules() {
+  const context = loadedContext.value;
+  await access.requireAccess(context);
   const data = rules.value.map((r) => ({
     matchType: r.matchType,
     matchPattern: r.matchPattern,

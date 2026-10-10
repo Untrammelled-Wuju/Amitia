@@ -565,8 +565,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			notificationruntime.RegisterRoutes(apiGroup, services.NotificationRuntime)
 		}
 		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
-		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
-		apiGroup.GET("/memory/pipeline/status", func(c *gin.Context) {
+		apiGroup.GET("/memory/retrieval/stats", security.SharedCoreAdminOnly(), memHandler.RetrieveStats)
+		apiGroup.GET("/memory/pipeline/status", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 			c.JSON(200, gin.H{"code": 200, "data": services.Chat.GetPipelineStatus(), "msg": "\u64cd\u4f5c\u6210\u529f"})
 		})
 		profile.RegisterProfileRouter(apiGroup, services.Profile)

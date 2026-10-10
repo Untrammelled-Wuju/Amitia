@@ -4,9 +4,11 @@ package episodic
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 )
 
 func RegisterEpisodicRouter(r *gin.RouterGroup, svc Service) {
+	r = r.Group("", security.SharedCoreAdminOnly())
 	handler := NewHandler(svc)
 
 	r.GET("/episodic", handler.List)

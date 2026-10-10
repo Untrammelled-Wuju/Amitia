@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/device_owned_memory_service.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import 'owned_memory_timeline.dart';
 
 Widget? ownedMemoryGate(
   WidgetRef ref, {
   String kind = 'memory',
   String? characterId,
+  bool timeline = false,
 }) {
   final ownership = ref.watch(ownedMemoryModeProvider);
   if (ownership.isLoading) {
@@ -32,7 +34,11 @@ Widget? ownedMemoryGate(
     );
   }
   if (ownership.value == true)
-    return OwnedMemoryPage(initialKind: kind, characterId: characterId);
+    return OwnedMemoryPage(
+      initialKind: kind,
+      characterId: characterId,
+      timeline: timeline,
+    );
   return null;
 }
 
@@ -41,9 +47,11 @@ class OwnedMemoryPage extends ConsumerStatefulWidget {
     super.key,
     this.initialKind = 'memory',
     this.characterId,
+    this.timeline = false,
   });
   final String initialKind;
   final String? characterId;
+  final bool timeline;
 
   @override
   ConsumerState<OwnedMemoryPage> createState() => _OwnedMemoryPageState();
@@ -589,7 +597,10 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   Widget build(BuildContext context) {
     final owned = ref.watch(chatServiceProvider).owned;
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '记忆与数据归属', showBackButton: true),
+      appBar: AmitiaAppBar(
+        title: widget.timeline ? '记忆时间线' : '记忆与数据归属',
+        showBackButton: true,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -821,7 +832,17 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
             Expanded(
               child: ListView(
                 children: [
-                  for (final row in _rows.values)
+                  if (widget.timeline)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        '按当前已加载资源的真实保存时间排列；可继续加载更多数据。此视图展示记忆快照，不代表完整修改历史。',
+                      ),
+                    ),
+                  for (final row
+                      in widget.timeline
+                          ? ownedMemoryTimelineRows(_rows.values)
+                          : _rows.values)
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -833,6 +854,13 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                               style: Theme.of(context).textTheme.titleSmall,
                             ),
                             const SizedBox(height: 8),
+                            if (widget.timeline)
+                              Text(
+                                ownedMemoryResourceTime(
+                                      row,
+                                    )?.toLocal().toString() ??
+                                    '该记录未保存时间',
+                              ),
                             SelectableText(_content(row)),
                             Text(
                               '版本 ${row['revision']}${row['body']?['allowContextUse'] == false ? ' · 已停用' : ''}',

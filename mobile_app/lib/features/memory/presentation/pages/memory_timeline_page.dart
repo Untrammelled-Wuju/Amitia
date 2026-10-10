@@ -9,6 +9,7 @@ import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import 'owned_memory_page.dart';
 
 class MemoryTimelinePage extends ConsumerStatefulWidget {
   const MemoryTimelinePage({super.key});
@@ -44,6 +45,8 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
 
   @override
   Widget build(BuildContext context) {
+    final ownedPage = ownedMemoryGate(ref, timeline: true);
+    if (ownedPage != null) return ownedPage;
     final timelineAsync = ref.watch(_timelineProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(

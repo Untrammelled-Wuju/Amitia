@@ -76,16 +76,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/onboarding/reset", sharedCoreAdminOnly(), handler.OnboardingReset)
 	r.GET("/runtime/capabilities", handler.RuntimeCapabilities)
 
-	r.GET("/continuity/threads", handler.ContinuityListThreads)
-	r.POST("/continuity/threads", handler.ContinuityCreateThread)
-	r.GET("/continuity/threads/:id", handler.ContinuityGetThread)
-	r.PATCH("/continuity/threads/:id", handler.ContinuityUpdateThread)
-	r.GET("/continuity/threads/:id/events", handler.ContinuityListEvents)
-	r.GET("/continuity/threads/:id/waits", handler.ContinuityListWaits)
-	r.POST("/continuity/threads/:id/waits", handler.ContinuityCreateWait)
-	r.POST("/continuity/threads/:id/waits/:waitId/resolve", handler.ContinuityResolveWait)
-	r.POST("/continuity/threads/:id/waits/:waitId/cancel", handler.ContinuityCancelWait)
-	r.POST("/continuity/signals", handler.ContinuitySignal)
+	registerContinuityRoutes(r, handler)
 
 	r.GET("/config", sharedCoreAdminOnly(), handler.AppConfig)
 	r.PUT("/config", sharedCoreAdminOnly(), handler.UpdateConfig)

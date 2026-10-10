@@ -11,7 +11,13 @@ import (
 func RegisterRouter(r *gin.RouterGroup, db *gorm.DB, dispatcher Dispatcher) *Handler {
 	service := NewService(db, dispatcher)
 	handler := NewHandler(service)
-	group := r.Group("/reminders")
+	registerReminderRoutes(r, handler)
+	service.Start(context.Background())
+	return handler
+}
+
+func registerReminderRoutes(r *gin.RouterGroup, handler *Handler) {
+	group := r.Group("/reminders", security.SharedCoreAdminOnly())
 	group.GET("", handler.List)
 	group.POST("", handler.Create)
 	group.PUT("/:id", handler.Update)
@@ -23,9 +29,7 @@ func RegisterRouter(r *gin.RouterGroup, db *gorm.DB, dispatcher Dispatcher) *Han
 	group.GET("/trigger-history", handler.History)
 	group.GET("/prospective", handler.Prospective)
 	group.GET("/queue-summary", handler.QueueSummary)
-	group.GET("/cleanup-config", security.SharedCoreAdminOnly(), handler.GetCleanupConfig)
-	group.PUT("/cleanup-config", security.SharedCoreAdminOnly(), handler.SetCleanupConfig)
-	group.POST("/clear-backpressure", security.SharedCoreAdminOnly(), handler.ClearBackpressure)
-	service.Start(context.Background())
-	return handler
+	group.GET("/cleanup-config", handler.GetCleanupConfig)
+	group.PUT("/cleanup-config", handler.SetCleanupConfig)
+	group.POST("/clear-backpressure", handler.ClearBackpressure)
 }

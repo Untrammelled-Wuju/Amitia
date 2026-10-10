@@ -5,6 +5,7 @@ package graph
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/log"
 )
 
@@ -18,8 +19,11 @@ func RegisterGraphRouter(r *gin.RouterGroup, cfg config.SurrealConfig) {
 		svc = NewService(client)
 	}
 	handler := NewHandler(svc)
+	registerGraphRoutes(r, handler)
+}
 
-	g := r.Group("/graph")
+func registerGraphRoutes(r *gin.RouterGroup, handler *Handler) {
+	g := r.Group("/graph", security.SharedCoreAdminOnly())
 	{
 		g.GET("/node/:id/neighbors", handler.Neighbors)
 		g.GET("/path", handler.FindPath)
