@@ -193,7 +193,15 @@ func (s *Service) fenceAuthorityLocked(ctx context.Context, space, device string
 	if s.authorityBarrier == nil {
 		return ErrAuthorityUnconfirmed
 	}
-	s.cancelLocked(space, device)
+	excluded, _ := ctx.Value(managementExecutionKey{}).(activeExecution)
+	key := space + "\x00" + device
+	for id, cancel := range s.active[key] {
+		if excluded.service == s && excluded.id == id {
+			continue
+		}
+		cancel(ErrScopeExpired)
+		delete(s.active[key], id)
+	}
 	if err := s.authorityBarrier(ctx, space, device, closedRevision, sources); err != nil {
 		return errors.Join(ErrAuthorityUnconfirmed, err)
 	}

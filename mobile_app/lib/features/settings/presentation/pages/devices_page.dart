@@ -203,11 +203,13 @@ class DevicesPage extends ConsumerWidget {
                               : null,
                           onLoadSync: () async {
                             final service = ref.read(deviceMeshServiceProvider);
+                            items[i].intent.requireTarget(items[i].deviceId);
                             items[i].intent.validate(
                               await service.coordination(),
                             );
                             final result = await service.syncStatus(
                               items[i].deviceId,
+                              headers: items[i].intent.headers,
                             );
                             items[i].intent.validate(
                               await service.coordination(),

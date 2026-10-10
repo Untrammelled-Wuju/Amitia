@@ -57,6 +57,13 @@ type ExecutionScope struct {
 
 type scopeKey struct{}
 type authorityServiceKey struct{}
+type activeExecutionKey struct{}
+type managementExecutionKey struct{}
+
+type activeExecution struct {
+	service *Service
+	id      uint64
+}
 type guardKey struct{}
 type commitKey struct{}
 type additionalGuardKey struct{}
@@ -391,6 +398,7 @@ func (s *Service) Begin(ctx context.Context, space, device, target, core, role, 
 	key := space + "\x00" + device
 	s.next++
 	id := s.next
+	child = context.WithValue(child, activeExecutionKey{}, activeExecution{service: s, id: id})
 	if s.active[key] == nil {
 		s.active[key] = make(map[uint64]context.CancelCauseFunc)
 	}

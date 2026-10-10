@@ -80,6 +80,7 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 }
 
 func RegisterVoiceEntryRouter(r *gin.RouterGroup, db *gorm.DB, voiceEntry *interaction.VoiceEntry, ttsService tts.Service, deliveryStore *delivery.SQLiteDeliveryStore) {
+	r = r.Group("", security.SharedCoreAdminOnly())
 	r.POST("/voice/session", func(c *gin.Context) {
 		var body struct {
 			SessionID      string `json:"sessionId"`

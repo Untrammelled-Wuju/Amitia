@@ -54,7 +54,7 @@ func BeginDeviceManagementIntent(c *gin.Context, service *coordination.Service) 
 		finish()
 		return reject("原设备管理状态已变化")
 	}
-	guarded, err := coordination.WithRequestAuthority(ctx, ctx)
+	guarded, err := coordination.WithManagementRequestAuthority(ctx)
 	if err != nil {
 		finish()
 		return reject("设备管理授权已变化")

@@ -790,7 +790,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			if services.KernelContainer == nil || services.KernelContainer.DeviceRegistry == nil {
 				return nil, fmt.Errorf("sync: kernel device registry is required")
 			}
-			syncHandler := sync.NewHandler(services.Sync, services.KernelContainer.DeviceRegistry)
+			if services.DeviceMesh == nil || services.DeviceMesh.Coordination == nil {
+				return nil, fmt.Errorf("sync: authoritative device coordination is required")
+			}
+			syncHandler := sync.NewHandler(services.Sync, services.KernelContainer.DeviceRegistry, services.DeviceMesh.Coordination)
 			syncHandler.RegisterRoutes(apiGroup, security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
 		}
 

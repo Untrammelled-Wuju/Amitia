@@ -5,6 +5,8 @@ import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 
 class _DeviceManagementApi implements BackendServiceApi {
   final List<String> requests = [];
+  Map<String, String>? syncHeaders;
+  Map<String, dynamic>? syncQuery;
 
   @override
   Future<T?> get<T>(
@@ -14,6 +16,11 @@ class _DeviceManagementApi implements BackendServiceApi {
     T Function(dynamic)? fromJson,
   }) async {
     requests.add(path);
+    if (path.endsWith('/sync/status')) {
+      syncHeaders = headers;
+      syncQuery = queryParameters;
+      return <String, dynamic>{'deviceId': queryParameters?['deviceId']} as T;
+    }
     if (path.endsWith('/coordination/me')) return state(available: false) as T;
     if (path.endsWith('/devices'))
       return {
@@ -49,6 +56,14 @@ Map<String, dynamic> state({
 };
 
 void main() {
+  test('同步状态请求保留原 Core 和权限版本意图', () async {
+    final api = _DeviceManagementApi();
+    final service = DeviceMeshService(api);
+    final intent = DeviceManagementIntent(state(), isCurrent: () => true);
+    await service.syncStatus('device-c', headers: intent.headers);
+    expect(api.syncHeaders, intent.headers);
+    expect(api.syncQuery, {'deviceId': 'device-c'});
+  });
   test('设备列表加载链路在统筹业务未就绪时仍能完成', () async {
     final api = _DeviceManagementApi();
     final service = DeviceMeshService(api);

@@ -20,9 +20,9 @@ func RegisterChatRouterWithDelivery(r *gin.RouterGroup, ctx *app.AppContext, svc
 }
 
 func registerChatRoutes(r *gin.RouterGroup, handler *Handler) {
-	r.POST("/chat", handler.Chat)
+	r.POST("/chat", security.SharedCoreAdminOnly(), handler.Chat)
 
-	chatsGroup := r.Group("/chats")
+	chatsGroup := r.Group("/chats", security.SharedCoreAdminOnly())
 	{
 		chatsGroup.GET("/stats", handler.Stats)
 		chatsGroup.GET("/conversations", handler.ListConversations)

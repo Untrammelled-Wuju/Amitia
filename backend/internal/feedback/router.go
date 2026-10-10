@@ -9,13 +9,14 @@ import (
 )
 
 func RegisterFeedbackRouter(r *gin.RouterGroup, ctx *app.AppContext) {
+	r = r.Group("", security.SharedCoreAdminOnly())
 	repo := NewRepository(ctx)
 	svc := NewService(repo, ctx)
 	handler := NewHandler(svc)
 
 	r.POST("/messages/:id/feedback", handler.Create)
 	r.GET("/messages/:id/feedback", handler.GetByMessage)
-	r.GET("/messages/feedback/stats", security.SharedCoreAdminOnly(), handler.Stats)
-	r.GET("/messages/feedback/recent", security.SharedCoreAdminOnly(), handler.Recent)
+	r.GET("/messages/feedback/stats", handler.Stats)
+	r.GET("/messages/feedback/recent", handler.Recent)
 	r.DELETE("/messages/feedback/:id", handler.Delete)
 }

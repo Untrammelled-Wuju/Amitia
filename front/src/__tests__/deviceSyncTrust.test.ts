@@ -28,7 +28,7 @@ describe("设备同步信任状态", () => {
   beforeEach(() => {
     window.amitiaDesktop = { getMeshIdentity: async () => ({ deviceId: "trusted" }), getMeshStatus: async () => ({}) } as any;
     mocks.devices = ["trusted", "revoked", "pending"].map(trustState => ({ deviceId: trustState, trustState, platform: "windows" }));
-    mocks.state = { policy: {}, canAdminister: false };
+    mocks.state = { policy: { deviceId: "trusted" }, canAdminister: false };
     mocks.post.mockReset().mockImplementation(async () => { mocks.devices = mocks.devices.map(device => device.deviceId === "trusted" ? { ...device, trustState: "trusted" } : device); return { ok: true }; });
     mocks.confirm.mockReset().mockResolvedValue("confirm");
     mocks.offer.mockReset().mockResolvedValue({ qrPayload: "amitia://pair?offer=test", qrImage: "test-image" });
@@ -51,6 +51,14 @@ describe("设备同步信任状态", () => {
     await (wrapper.vm as any).refresh();
     expect((wrapper.vm as any).syncLabel("trusted")).toBe("已撤销，不再同步");
     expect(mocks.get.mock.calls.filter(call => call[0].endsWith("/sync/status"))).toHaveLength(1);
+    wrapper.unmount();
+  });
+  it("普通设备不查询其他可信设备的同步状态", async () => {
+    mocks.devices.push({ deviceId: "other-device", trustState: "trusted" });
+    const wrapper = mountDevices();
+    await flushPromises();
+    await (wrapper.vm as any).loadSync("other-device");
+    expect(mocks.get.mock.calls.filter(call => call[0].endsWith("/sync/status")).map(call => call[1].deviceId)).toEqual(["trusted"]);
     wrapper.unmount();
   });
   it("本机所有者确认恢复后才生成配对二维码", async () => {

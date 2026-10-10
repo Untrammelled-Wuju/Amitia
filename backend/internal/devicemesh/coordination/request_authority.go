@@ -49,6 +49,20 @@ func ValidateRequestAuthorityTx(ctx context.Context, tx *sql.Tx) error {
 
 type requestAuthoritiesKey struct{}
 
+func WithManagementRequestAuthority(ctx context.Context) (context.Context, error) {
+	active, ok := ctx.Value(activeExecutionKey{}).(activeExecution)
+	service, serviceOK := ctx.Value(authorityServiceKey{}).(*Service)
+	scope, owned := FromContext(ctx)
+	if !ok || !serviceOK || service == nil || active.service != service || active.id == 0 || !owned || scope.InitiatorDeviceID != scope.TargetDeviceID || scope.RoleID != "" {
+		return ctx, ErrWrongOwner
+	}
+	guarded, err := WithRequestAuthority(ctx, ctx)
+	if err != nil {
+		return ctx, err
+	}
+	return context.WithValue(guarded, managementExecutionKey{}, active), nil
+}
+
 func CommitRequestCurrent(ctx context.Context, commit func() error) error {
 	if _, _, readOnly := TaskReadAuthority(ctx); readOnly {
 		return ErrWrongOwner

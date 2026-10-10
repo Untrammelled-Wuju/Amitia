@@ -130,7 +130,7 @@
                 <el-button v-if="device.trustState === 'trusted'" size="small" :disabled="!coordinationAvailable" @click="callDevice = device; callOpen = true">通过 Core 调用</el-button>
                 <el-button v-if="device.trustState === 'trusted' && (canAdminister || device.deviceId === localIdentity?.deviceId)" size="small" @click="grantDevice = device; grantsOpen = true">能力授权</el-button>
                 <el-button v-if="canAdminister && device.coordination" size="small" :disabled="!device.coordination.coordinated || device.trustState !== 'trusted'" :loading="busy === device.deviceId" @click="changeAdministrator(device)">{{ device.coordination.administrator ? '撤销管理员' : '授予管理员' }}</el-button>
-                <el-button size="small" :disabled="device.trustState !== 'trusted'" @click="loadSync(device.deviceId)">刷新同步状态</el-button>
+                <el-button size="small" :disabled="device.trustState !== 'trusted' || (!canAdminister && device.deviceId !== managementIntent?.state.policy.deviceId)" @click="loadSync(device.deviceId)">刷新同步状态</el-button>
                 <el-button v-if="(canAdminister || device.deviceId === localIdentity?.deviceId) && device.deviceId !== coreConsoleDeviceId" size="small" type="danger" plain :loading="busy === device.deviceId" @click="revoke(device)">移除设备</el-button>
               </div>
             </div>
@@ -442,6 +442,7 @@ async function leaveCurrentDeviceMesh() {
 async function loadSync(deviceId: string, notify = true) {
   const intent = managementIntent;
   if (!intent) return;
+  if (!intent.state.canAdminister && intent.state.policy.deviceId !== deviceId) return;
   if (devices.value.find((device) => device.deviceId === deviceId)?.trustState !== "trusted") return;
   try {
     const result = await api.get<Record<string, any>>("/api/v1/sync/status", { deviceId }, deviceManagementRequestConfig(intent));

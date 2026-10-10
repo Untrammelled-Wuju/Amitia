@@ -236,10 +236,14 @@ class DeviceMeshService {
     );
   }
 
-  Future<Map<String, dynamic>?> syncStatus(String deviceId) async {
+  Future<Map<String, dynamic>?> syncStatus(
+    String deviceId, {
+    Map<String, String>? headers,
+  }) async {
     return _api.get<Map<String, dynamic>>(
       '/api/v1/sync/status',
       queryParameters: <String, dynamic>{'deviceId': deviceId},
+      headers: headers,
     );
   }
 }

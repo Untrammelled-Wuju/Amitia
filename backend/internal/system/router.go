@@ -207,6 +207,12 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/release-check/export", sharedCoreAdminOnly(), handler.ReleaseCheckExport)
 	r.POST("/release-check/run", sharedCoreAdminOnly(), handler.ReleaseCheckRun)
 
+	registerLegacyWebChatRoutes(r, handler)
+	RegisterShadowRouter(r, handler)
+}
+
+func registerLegacyWebChatRoutes(r *gin.RouterGroup, handler *Handler) {
+	r = r.Group("", sharedCoreAdminOnly())
 	r.GET("/proactive-sse", sse.SSEHandler)
 
 	r.GET("/web-chat/conversations", handler.WebChatListConversations)
@@ -238,7 +244,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/video/upload", handler.VideoUpload)
 	r.POST("/voice/transcribe", handler.VoiceTranscribe)
 
-	RegisterShadowRouter(r, handler)
 }
 
 func RegisterShadowRouter(r *gin.RouterGroup, handler *Handler) {
