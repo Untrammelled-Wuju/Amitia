@@ -13,6 +13,7 @@ class ContinuityService {
 
   String selectedRole = '';
   String memoryView = 'all';
+  String dataSource = 'current';
   final _threadRoles = <String, String>{};
   Map<String, dynamic>? _coordination;
   String _providerStamp = '';
@@ -39,6 +40,8 @@ class ContinuityService {
     if (_providerStamp.isNotEmpty && stamp != _providerStamp) {
       _threadRoles.clear();
       selectedRole = '';
+      dataSource = 'current';
+      memoryView = 'all';
     }
     _providerStamp = stamp;
     _coordination = current;
@@ -61,6 +64,20 @@ class ContinuityService {
       selectedRole = roles.first['id'].toString();
     }
     return roles;
+  }
+
+  bool get coordinated => _coordination?['policy']?['coordinated'] == true;
+
+  Future<List<Map<String, dynamic>>> availableHistoricalRoles() async {
+    if (!coordinated || selectedRole.isEmpty) return [];
+    final history = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/historical-roles',
+      queryParameters: {'characterId': selectedRole},
+    );
+    return (history?['roles'] as List? ?? [])
+        .whereType<Map>()
+        .map((role) => Map<String, dynamic>.from(role))
+        .toList();
   }
 
   Future<String?> _ownedRole([String? requested]) async {
@@ -224,91 +241,109 @@ class ContinuityService {
       final cursors = <String>{};
       var cursor = '';
       var scope = '';
-      do {
-        final page = await _api.get<Map<String, dynamic>>(
-          '/api/device-mesh/v1/business/continuity',
-          queryParameters: {
-            'characterId': role,
-            'pagination': '1',
-            'cursor': cursor,
-            'memoryView': memoryView,
-          },
-        );
-        if (page == null ||
-            page['documents'] is! List ||
-            page['executionScope'] is! Map) {
-          throw StateError('持续事项分页数据无效');
-        }
-        final currentScope =
-            Map<String, dynamic>.from(page['executionScope'] as Map)
-              ..remove('requestId')
-              ..remove('turnId')
-              ..remove('executionId');
-        final stamp = _scopeStamp(currentScope);
-        if (scope.isNotEmpty && scope != stamp) {
-          throw StateError('持续事项的数据归属已变化，请重新加载');
-        }
-        scope = stamp;
-        for (final document in page['documents'] as List) {
-          if (document is! Map || document['thread'] is! Map) {
-            throw StateError('持续事项数据无效');
+      if (dataSource == 'current') {
+        do {
+          final page = await _api.get<Map<String, dynamic>>(
+            '/api/device-mesh/v1/business/continuity',
+            queryParameters: {
+              'characterId': role,
+              'pagination': '1',
+              'cursor': cursor,
+              'memoryView': memoryView,
+            },
+          );
+          if (page == null ||
+              page['documents'] is! List ||
+              page['executionScope'] is! Map) {
+            throw StateError('持续事项分页数据无效');
           }
-          documents['${document['ownerId']}/${document['thread']['id']}'] =
-              _managementDocument(document, page['executionScope'] as Map);
-        }
-        if (documents.length > 32768) throw StateError('持续事项数量超过加载上限，请缩小查询范围');
-        cursor = (page['nextCursor'] ?? '').toString();
-        if (cursor.isNotEmpty && !cursors.add(cursor)) {
-          throw StateError('持续事项分页游标重复');
-        }
-      } while (cursor.isNotEmpty);
-      final result = <ContinuityThreadDto>[];
-      if (_coordination?['policy']?['coordinated'] == true) {
-        final history = await _api.get<Map<String, dynamic>>(
-          '/api/device-mesh/v1/business/historical-roles',
-          queryParameters: {'characterId': role},
-        );
-        for (final oldRole
-            in (history?['roles'] as List? ?? []).whereType<Map>()) {
-          var historicalCursor = '';
-          final visited = <String>{};
-          do {
-            final page = await _api.get<Map<String, dynamic>>(
-              '/api/device-mesh/v1/business/data',
-              queryParameters: {
-                'kind': 'continuity',
-                'management': '1',
-                'characterId': role,
-                'historicalRoleId': oldRole['id'],
-                'historicalCursor': historicalCursor,
-              },
-            );
-            final snapshot = page?['historicalSnapshot'];
-            if (page?['executionScope'] is! Map ||
-                snapshot is! Map ||
-                _scopeStamp(page!['executionScope'] as Map) != scope)
-              throw StateError('历史持续事项归属不可用');
-            for (final resource
-                in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
-              if (resource['kind'] != 'continuity' ||
-                  resource['body'] is! Map ||
-                  resource['deleted'] == true)
-                continue;
-              final document = Map<String, dynamic>.from(
-                resource['body'] as Map,
-              );
-              document['readOnly'] = true;
-              document['ownerId'] = snapshot['ownerId'];
-              documents['historical/${snapshot['ownerId']}/${resource['id']}'] =
-                  document;
+          final currentScope =
+              Map<String, dynamic>.from(page['executionScope'] as Map)
+                ..remove('requestId')
+                ..remove('turnId')
+                ..remove('executionId');
+          final stamp = _scopeStamp(currentScope);
+          if (scope.isNotEmpty && scope != stamp) {
+            throw StateError('持续事项的数据归属已变化，请重新加载');
+          }
+          scope = stamp;
+          for (final document in page['documents'] as List) {
+            if (document is! Map || document['thread'] is! Map) {
+              throw StateError('持续事项数据无效');
             }
-            historicalCursor = (snapshot['nextCursors']?['continuity'] ?? '')
-                .toString();
-            if (historicalCursor.isNotEmpty && !visited.add(historicalCursor))
-              throw StateError('历史持续事项分页游标重复');
-            if (documents.length > 32768) throw StateError('历史持续事项超过加载上限');
-          } while (historicalCursor.isNotEmpty);
+            documents['${document['ownerId']}/${document['thread']['id']}'] =
+                _managementDocument(document, page['executionScope'] as Map);
+          }
+          if (documents.length > 32768)
+            throw StateError('持续事项数量超过加载上限，请缩小查询范围');
+          cursor = (page['nextCursor'] ?? '').toString();
+          if (cursor.isNotEmpty && !cursors.add(cursor)) {
+            throw StateError('持续事项分页游标重复');
+          }
+        } while (cursor.isNotEmpty);
+      }
+      final result = <ContinuityThreadDto>[];
+      if (dataSource != 'current') {
+        final historicalId = dataSource.startsWith('history:')
+            ? dataSource.substring(8)
+            : '';
+        final history = await availableHistoricalRoles();
+        if (historicalId.isEmpty ||
+            !history.any((role) => role['id'] == historicalId)) {
+          throw StateError('旧设备事项来源已变化，请重新选择');
         }
+        var historicalCursor = '';
+        final visited = <String>{};
+        do {
+          final page = await _api.get<Map<String, dynamic>>(
+            '/api/device-mesh/v1/business/data',
+            queryParameters: {
+              'kind': 'continuity',
+              'management': '1',
+              'characterId': role,
+              'historicalRoleId': historicalId,
+              'historicalCursor': historicalCursor,
+            },
+          );
+          final snapshot = page?['historicalSnapshot'];
+          if (page?['executionScope'] is! Map ||
+              snapshot is! Map ||
+              scope.isNotEmpty &&
+                  _scopeStamp(page!['executionScope'] as Map) != scope)
+            throw StateError('历史持续事项归属不可用');
+          final execution = page!['executionScope'] as Map;
+          final policy = _coordination?['policy'] as Map?;
+          if (execution['coreId'] != _coordination?['coreId'] ||
+              execution['roleId'] != role ||
+              execution['providerEpoch'] != policy?['providerEpoch'] ||
+              execution['modeRevision'] != policy?['modeRevision'] ||
+              execution['permissionRevision'] !=
+                  policy?['permissionRevision']) {
+            throw StateError('历史持续事项的数据归属已变化，请重新加载');
+          }
+          scope = _scopeStamp(execution);
+          for (final resource
+              in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
+            if (resource['kind'] != 'continuity' ||
+                resource['body'] is! Map ||
+                resource['deleted'] == true)
+              continue;
+            if (resource['ownerId'] != snapshot['ownerId'] ||
+                resource['roleId'] != historicalId) {
+              throw StateError('旧设备事项归属无效');
+            }
+            final document = Map<String, dynamic>.from(resource['body'] as Map);
+            document['readOnly'] = true;
+            document['ownerId'] = snapshot['ownerId'];
+            documents['historical/${snapshot['ownerId']}/${resource['id']}'] =
+                document;
+          }
+          historicalCursor = (snapshot['nextCursors']?['continuity'] ?? '')
+              .toString();
+          if (historicalCursor.isNotEmpty && !visited.add(historicalCursor))
+            throw StateError('历史持续事项分页游标重复');
+          if (documents.length > 32768) throw StateError('历史持续事项超过加载上限');
+        } while (historicalCursor.isNotEmpty);
       }
       for (final document in documents.values) {
         if (document['thread'] is! Map) {

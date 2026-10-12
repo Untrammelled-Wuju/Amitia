@@ -7,17 +7,17 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/device_owned_memory_service.dart';
 import '../../../../core/services/owned_memory_scope.dart';
+import '../../../../core/services/owned_memory_view_options.dart';
 import '../../../../core/services/memory_scope_transfer_service.dart';
 import '../widgets/memory_scope_transfer_dialog.dart';
 import '../widgets/owned_memory_graph.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import 'owned_memory_timeline.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
-import '../../../../app/theme/app_typography.dart';
+import '../historical_memory_style.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../owned_memory_format.dart';
+import '../widgets/historical_memory_card.dart';
 
 Widget? ownedMemoryGate(
   WidgetRef ref, {
@@ -123,6 +123,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   void initState() {
     super.initState();
     _kind = widget.initialKind;
+    if (_kind == 'profile') _memoryView = 'global';
     final owned = ref.read(memoryDataSourceProvider);
     try {
       _role = owned.selectRole(widget.characterId);
@@ -224,7 +225,11 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         historicalRoleId: historical ? _source.substring(8) : '',
         historicalCursor: historical && older ? _next : '',
         historicalLegacyCursor: historical && older ? _nextLegacy : '',
-        memoryView: _kind == 'profile' ? 'global' : _memoryView,
+        memoryView: historical
+            ? ''
+            : _kind == 'profile'
+            ? 'global'
+            : _memoryView,
       );
       if (!mounted || ticket != _generation) return;
       final scope = Map<String, dynamic>.from(result['executionScope'] as Map)
@@ -432,15 +437,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
           .toString();
     }
     return jsonEncode(body);
-  }
-
-  String _historicalRoleLabel() {
-    if (!_source.startsWith('history:')) return '原设备历史';
-    final id = _source.substring(8);
-    for (final row in _historicalRoles) {
-      if (row['id'] == id) return '原设备历史 · ${row['name'] ?? id}';
-    }
-    return '原设备历史';
   }
 
   Future<void> _openCreateProfile() async {
@@ -829,11 +825,14 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     );
     final content = original['body']?['content'];
     final field = content is Map
-        ? (content.containsKey('value')
-              ? 'value'
-              : content.containsKey('text')
-              ? 'text'
-              : 'summary')
+        ? const [
+            'value',
+            'text',
+            'summary',
+            'attributeValue',
+            'fieldValue',
+            'event',
+          ].firstWhere(content.containsKey, orElse: () => 'value')
         : '';
     final value = await _textInput(
       '编辑记忆内容',
@@ -917,473 +916,199 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final owned = ref.watch(memoryDataSourceProvider);
     final rows = widget.timeline
         ? ownedMemoryTimelineRows(_rows.values)
         : _rows.values.toList();
+    final categorized = _kind == 'profile' && _profileCategory != '全部'
+        ? rows
+              .where((row) => historicalMemoryCategory(row) == _profileCategory)
+              .toList()
+        : rows;
+    final visible = _query.isEmpty
+        ? categorized
+        : categorized
+              .where(
+                (row) =>
+                    '${ownedMemoryTitle(row)} ${ownedMemoryText(row, kind: _kind)}'
+                        .toLowerCase()
+                        .contains(_query.toLowerCase()),
+              )
+              .toList();
+    final manager = !widget.showTools && !widget.timeline && _kind == 'memory';
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: _pageTitle,
+        title: _kind == 'graph' ? '记忆图谱' : _pageTitle,
         showBackButton: true,
         fallbackRoute: widget.characterId != null
             ? AppRoutes.characters
             : AppRoutes.memory,
         actions: [
-          if (_source == 'current' &&
-              const ['memory', 'candidate'].contains(_kind))
+          if (const ['memory', 'candidate'].contains(_kind))
             AmitiaIconButton(
               icon: _searchVisible ? Icons.close : Icons.search,
-              tooltip: _searchVisible ? '收起搜索' : '搜索记忆',
-              onPressed: () => setState(() => _searchVisible = !_searchVisible),
+              tooltip: _searchVisible ? '退出搜索' : '搜索记忆',
+              onPressed: () {
+                setState(() {
+                  _searchVisible = !_searchVisible;
+                  if (!_searchVisible && _query.isNotEmpty) {
+                    _searchController.clear();
+                    _query = '';
+                    _load();
+                  }
+                });
+              },
+            ),
+          if (_kind == 'profile')
+            AmitiaIconButton(
+              icon: Icons.add,
+              tooltip: '新增画像',
+              onPressed: _loading || _source != 'current'
+                  ? null
+                  : _openCreateProfile,
             ),
           AmitiaIconButton(
-            icon: Icons.refresh,
-            tooltip: '刷新',
-            onPressed: _loading || _role.isEmpty ? null : () => _load(),
+            icon: Icons.tune,
+            tooltip: '筛选与管理',
+            onPressed: _showControls,
           ),
+          if (manager)
+            AmitiaIconButton(
+              icon: Icons.account_tree_outlined,
+              tooltip: '记忆图谱',
+              onPressed: () => context.push(AppRoutes.memoryGraph),
+            ),
+          if (_kind == 'graph' || widget.timeline || _kind == 'episodic')
+            AmitiaIconButton(
+              icon: Icons.refresh,
+              tooltip: '刷新',
+              onPressed: _loading || _role.isEmpty ? null : () => _load(),
+            ),
         ],
       ),
+      floatingActionButton: manager && _source == 'current'
+          ? FloatingActionButton(
+              onPressed: _loading || _managing || _managementPage == null
+                  ? null
+                  : _createMemory,
+              backgroundColor: context.accentPrimary,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
       body: SafeArea(
         top: false,
         child: Column(
           children: [
-            if (_loading) const LinearProgressIndicator(),
+            if (widget.showTools) _buildTools(context),
+            if (_searchVisible)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.sm,
+                  AppSpacing.pagePadding,
+                  AppSpacing.xs,
+                ),
+                child: AmitiaSearchField(
+                  key: ValueKey('search/$_kind'),
+                  hintText: '搜索记忆',
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value.trim()),
+                ),
+              ),
+            if (widget.showTools && _kind == 'memory' || _kind == 'profile')
+              _buildCategoryTabs(context),
+            if (manager || widget.timeline)
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.pagePadding,
+                  vertical: AppSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    _historicalFilterChip(
+                      context,
+                      '类型：${_memoryType.isEmpty ? '全部' : _memoryType}',
+                    ),
+                    SizedBox(width: AppSpacing.sm),
+                    _historicalFilterChip(
+                      context,
+                      _memoryView == 'all' ? '全部记忆' : '查看范围',
+                    ),
+                  ],
+                ),
+              ),
+            if (_loading && rows.isNotEmpty) const LinearProgressIndicator(),
+            SizedBox(height: AppSpacing.sm),
             Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.pagePadding),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (widget.showTools) ...[
-                            _buildTools(context),
-                            SizedBox(height: AppSpacing.lg),
-                          ],
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (owned.policy?['coordinated'] == true &&
-                                  _kind != 'candidate')
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    key: ValueKey('source/$_source'),
-                                    isExpanded: true,
-                                    initialValue: _source,
-                                    decoration: const InputDecoration(
-                                      labelText: '数据来源',
-                                    ),
-                                    items: [
-                                      const DropdownMenuItem(
-                                        value: 'current',
-                                        child: Text('当前 Core 的数据'),
-                                      ),
-                                      ...(_kind == 'profile'
-                                              ? _historicalRoles.take(1)
-                                              : _historicalRoles)
-                                          .map(
-                                            (row) => DropdownMenuItem(
-                                              value: 'history:${row['id']}',
-                                              child: Text(
-                                                _kind == 'profile'
-                                                    ? '原设备历史'
-                                                    : '原设备历史 · ${row['name'] ?? row['id']}',
-                                              ),
-                                            ),
-                                          ),
-                                    ],
-                                    onChanged: _loading
-                                        ? null
-                                        : (value) {
-                                            _source = value ?? 'current';
-                                            _memoryView = 'all';
-                                            if (_role.isNotEmpty) _load();
-                                          },
-                                  ),
-                                ),
-                              if (_kind != 'profile') ...[
-                                if (owned.policy?['coordinated'] == true &&
-                                    _kind != 'candidate')
-                                  const SizedBox(width: 12),
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    key: ValueKey('view/$_memoryView/$_source'),
-                                    isExpanded: true,
-                                    initialValue: _memoryView,
-                                    decoration: const InputDecoration(
-                                      labelText: '查看范围',
-                                    ),
-                                    items: _source == 'current'
-                                        ? [
-                                            const DropdownMenuItem(
-                                              value: 'all',
-                                              child: Text('全部记忆'),
-                                            ),
-                                            const DropdownMenuItem(
-                                              value: 'global',
-                                              child: Text('全局记忆'),
-                                            ),
-                                            ...owned.roles.map(
-                                              (row) => DropdownMenuItem(
-                                                value: 'role:${row['id']}',
-                                                child: Text(
-                                                  (row['name'] ?? row['id'])
-                                                      .toString(),
-                                                ),
-                                              ),
-                                            ),
-                                          ]
-                                        : [
-                                            DropdownMenuItem(
-                                              value: 'all',
-                                              child: Text(
-                                                _historicalRoleLabel(),
-                                              ),
-                                            ),
-                                          ],
-                                    onChanged: _loading
-                                        ? null
-                                        : (value) {
-                                            _memoryView = value ?? 'all';
-                                            if (_memoryView.startsWith('role:'))
-                                              _role = _memoryView.substring(5);
-                                            _historicalRoles = [];
-                                            _source = 'current';
-                                            if (_role.isNotEmpty) _load();
-                                          },
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          if (_kind == 'profile') ...[
-                            SizedBox(height: AppSpacing.sm),
-                            Text(
-                              '用户画像全局共享',
-                              style: AppTypography.caption(context),
-                            ),
-                          ],
-                          if (_source != 'current') ...[
-                            SizedBox(height: AppSpacing.sm),
-                            Text(
-                              '原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。',
-                              style: AppTypography.caption(context),
-                            ),
-                          ],
-                          if (_searchVisible &&
-                              _source == 'current' &&
-                              const [
-                                'memory',
-                                'candidate',
-                              ].contains(_kind)) ...[
-                            SizedBox(height: AppSpacing.md),
-                            TextFormField(
-                              key: ValueKey('search/$_kind'),
-                              initialValue: _query,
-                              decoration: const InputDecoration(
-                                hintText: '搜索记忆',
-                                prefixIcon: Icon(Icons.search),
-                                border: OutlineInputBorder(),
-                              ),
-                              textInputAction: TextInputAction.search,
-                              onFieldSubmitted: (value) {
-                                _query = value.trim();
-                                _load();
-                              },
-                            ),
-                          ],
-                          if (_source == 'current' && _kind == 'memory') ...[
-                            SizedBox(height: AppSpacing.sm),
-                            AmitiaCard(
-                              padding: EdgeInsets.zero,
-                              child: ExpansionTile(
-                                key: const ValueKey('memory-filters'),
-                                leading: Icon(
-                                  Icons.tune,
-                                  color: context.accentPrimary,
-                                ),
-                                title: Text(
-                                  '筛选记忆',
-                                  style: AppTypography.body(context),
-                                ),
-                                subtitle: Text(
-                                  '类型、来源与检索方式',
-                                  style: AppTypography.caption(context),
-                                ),
-                                childrenPadding: EdgeInsets.all(AppSpacing.md),
-                                children: [
-                                  if (_kind == 'memory') ...[
-                                    TextFormField(
-                                      initialValue: _memoryType,
-                                      decoration: const InputDecoration(
-                                        labelText: '按类型过滤（留空为全部）',
-                                      ),
-                                      onFieldSubmitted: (value) {
-                                        _memoryType = value.trim();
-                                        _load();
-                                      },
-                                    ),
-                                    TextFormField(
-                                      initialValue: _memorySource,
-                                      decoration: const InputDecoration(
-                                        labelText: '按来源过滤（留空为全部）',
-                                      ),
-                                      onFieldSubmitted: (value) {
-                                        _memorySource = value.trim();
-                                        _load();
-                                      },
-                                    ),
-                                    DropdownButtonFormField<String>(
-                                      initialValue: _memorySort,
-                                      decoration: const InputDecoration(
-                                        labelText: '排序',
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: '',
-                                          child: Text('默认顺序'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'importance_desc',
-                                          child: Text('重要程度优先'),
-                                        ),
-                                      ],
-                                      onChanged: _loading || _managing
-                                          ? null
-                                          : (value) {
-                                              _memorySort = value ?? '';
-                                              _load();
-                                            },
-                                    ),
-                                  ],
-                                  if (_kind == 'memory')
-                                    DropdownButtonFormField<String>(
-                                      initialValue: _searchMode,
-                                      decoration: const InputDecoration(
-                                        labelText: '检索方式',
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: 'keyword',
-                                          child: Text('关键词'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'hybrid',
-                                          child: Text('混合检索'),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: 'vector',
-                                          child: Text('语义检索'),
-                                        ),
-                                      ],
-                                      onChanged: _loading || _managing
-                                          ? null
-                                          : (value) {
-                                              _searchMode = value ?? 'keyword';
-                                              _load();
-                                            },
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
+              child: _loading && rows.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error.isNotEmpty && rows.isEmpty
+                  ? AmitiaErrorState(
+                      message: _error,
+                      onRetry: _role.isEmpty ? null : () => _load(),
+                    )
+                  : visible.isEmpty
+                  ? AmitiaEmptyState(
+                      icon: _pageIcon,
+                      title: _kind == 'profile'
+                          ? '暂无画像'
+                          : _kind == 'episodic'
+                          ? '暂无情景记忆'
+                          : '暂无记忆',
+                      subtitle: '与角色对话后，记忆会自动生成',
+                    )
+                  : widget.timeline
+                  ? _buildTimeline(context, visible)
+                  : ListView.separated(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.pagePadding,
+                      ),
+                      itemCount:
+                          visible.length +
+                          (_kind == 'graph' ? 1 : 0) +
+                          (_next.isNotEmpty || _nextLegacy.isNotEmpty ? 1 : 0),
+                      separatorBuilder: (_, _) =>
                           SizedBox(height: AppSpacing.sm),
-                          if (_kind == 'profile' &&
-                              _source == 'current' &&
-                              _role.isNotEmpty)
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                onPressed: _loading ? null : _openCreateProfile,
-                                icon: const Icon(Icons.add),
-                                label: const Text('新增画像'),
-                              ),
-                            ),
-                          if (_source == 'current' &&
-                              const ['memory', 'candidate'].contains(_kind))
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                TextButton(
-                                  onPressed:
-                                      _managementPage == null ||
-                                          _loading ||
-                                          _managing
-                                      ? null
-                                      : _kind == 'candidate'
-                                      ? _generateCandidates
-                                      : _createMemory,
-                                  child: Text(
-                                    _kind == 'candidate'
-                                        ? '从已保存对话生成候选'
-                                        : '新增记忆',
-                                  ),
-                                ),
-                                if (_kind == 'memory')
-                                  Wrap(
-                                    children: [
-                                      TextButton(
-                                        onPressed: _loading || _managing
-                                            ? null
-                                            : _generateCandidates,
-                                        child: const Text('从对话生成候选'),
-                                      ),
-                                      TextButton(
-                                        onPressed: _loading || _managing
-                                            ? null
-                                            : () {
-                                                setState(
-                                                  () => _kind = 'candidate',
-                                                );
-                                                _load();
-                                              },
-                                        child: const Text('待审核候选'),
-                                      ),
-                                    ],
-                                  ),
-                                if (_kind == 'candidate')
-                                  TextButton(
-                                    onPressed: _loading || _managing
-                                        ? null
-                                        : () {
-                                            setState(() => _kind = 'memory');
-                                            _load();
-                                          },
-                                    child: const Text('返回记忆总览'),
-                                  ),
-                                if (_managing) const Text('等待数据所有者确认保存'),
-                                if (_pendingMemory != null &&
-                                    _pendingMemory!.generation == _generation &&
-                                    !_managing)
-                                  TextButton(
-                                    onPressed: () {
-                                      final pending = _pendingMemory!;
-                                      _manage(
-                                        pending.original,
-                                        pending.input,
-                                        candidates: pending.candidates,
-                                        operationId: pending.id,
-                                      );
-                                    },
-                                    child: const Text('使用原请求重试保存'),
-                                  ),
-                              ],
-                            ),
-                          if (_source == 'current' &&
-                              _memoryView != 'all' &&
-                              const ['vector', 'graph'].contains(_kind)) ...[
-                            for (final layer
-                                in (_projection?['status']?['layers']
-                                            as List? ??
-                                        [])
-                                    .whereType<Map>())
-                              Text(
-                                '${layer['kind'] == 'vector' ? '向量' : '图谱'}：已处理 ${layer['current']}/${layer['total']} · 待更新 ${layer['pending']} · 重试 ${layer['retrying']}',
-                              ),
-                            if (_projectionNotice.isNotEmpty)
-                              Text(_projectionNotice),
-                            TextButton(
-                              onPressed:
-                                  _projection == null || _loading || _rebuilding
-                                  ? null
-                                  : _rebuild,
-                              child: Text(_rebuilding ? '正在提交' : '重建当前范围索引'),
-                            ),
-                          ],
-                          if (_error.isNotEmpty) ...[
-                            SizedBox(height: AppSpacing.sm),
-                            AmitiaCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _error,
-                                    style: AppTypography.body(
-                                      context,
-                                    ).copyWith(color: context.error),
-                                  ),
-                                  TextButton.icon(
-                                    onPressed: _loading || _role.isEmpty
-                                        ? null
-                                        : () => _load(),
-                                    icon: const Icon(Icons.refresh),
-                                    label: const Text('重试加载'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          if (widget.timeline) ...[
-                            SizedBox(height: AppSpacing.sm),
-                            Text(
-                              '按保存时间回顾记忆，加载更多可查看更早的记录。',
-                              style: AppTypography.caption(context),
-                            ),
-                          ],
-                          if (_kind == 'graph') ...[
-                            SizedBox(height: AppSpacing.md),
-                            AmitiaCard(
-                              padding: EdgeInsets.zero,
-                              child: OwnedMemoryGraph(rows: rows),
-                            ),
-                          ],
-                          SizedBox(height: AppSpacing.md),
-                          if (_kind == 'memory' && _source == 'current') ...[
-                            _buildCategoryTabs(context),
-                            SizedBox(height: AppSpacing.md),
-                          ],
-                          Text(
-                            '${widget.timeline ? '记忆时间线' : _layers[_kind] ?? '记忆'} · ${rows.length}',
-                            style: AppTypography.sectionTitle(context),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (!_loading && rows.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: AmitiaEmptyState(
-                        icon: _pageIcon,
-                        title: _role.isEmpty
-                            ? '暂无可用角色'
-                            : '暂无${_layers[_kind] ?? '记忆'}',
-                        subtitle: _role.isEmpty
-                            ? '创建角色后即可查看记忆'
-                            : '当前查看范围内还没有记录',
-                      ),
-                    ),
-                  SliverPadding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppSpacing.pagePadding,
-                    ),
-                    sliver: SliverList.builder(
-                      itemCount: rows.length,
-                      itemBuilder: (context, index) => Padding(
-                        padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: _buildRecordCard(context, rows[index]),
-                      ),
-                    ),
-                  ),
-                  if (_next.isNotEmpty || _nextLegacy.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.all(AppSpacing.md),
-                        child: Center(
-                          child: AmitiaButtonOutline(
-                            label: _loading ? '正在加载' : '加载更多',
+                      itemBuilder: (context, index) {
+                        if (_kind == 'graph' && index == 0)
+                          return OwnedMemoryGraph(rows: rows);
+                        final rowIndex = index - (_kind == 'graph' ? 1 : 0);
+                        if (rowIndex >= visible.length)
+                          return TextButton(
                             onPressed: _loading
                                 ? null
                                 : () => _load(older: true),
-                          ),
-                        ),
-                      ),
+                            child: const Text('加载更多'),
+                          );
+                        final row = visible[rowIndex];
+                        final current =
+                            _source == 'current' && !_loading && !_managing;
+                        final card = HistoricalMemoryCard(
+                          key: ValueKey('owned-memory/${row['id']}'),
+                          row: row,
+                          kind: _kind,
+                          manager: manager,
+                          timeline: widget.timeline,
+                          onDetail: () => _showRecordDetail(row),
+                          onEdit: current && (row['revision'] as num? ?? 0) > 0
+                              ? _kind == 'candidate'
+                                    ? () => _candidate(row, 'update')
+                                    : () => _editContent(row)
+                              : null,
+                          onDelete:
+                              current &&
+                                  const [
+                                    'memory',
+                                    'summary',
+                                    'profile',
+                                    'episodic',
+                                  ].contains(_kind) &&
+                                  (row['revision'] as num? ?? 0) > 0
+                              ? () => _edit(row, deleted: true)
+                              : null,
+                        );
+                        return card;
+                      },
                     ),
-                  SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
-                ],
-              ),
             ),
           ],
         ),
@@ -1391,122 +1116,75 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     );
   }
 
-  Widget _buildCategoryTabs(BuildContext context) {
-    const categories = {
-      '': '全部',
-      'fact': '事实',
-      'personal_info': '个人信息',
-      'hobby': '兴趣',
-      'preference': '偏好',
-      'habit': '习惯',
-      'relationship': '关系',
-      'plan': '计划',
-      'custom': '其他',
-    };
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final category in categories.entries)
-            Padding(
-              padding: EdgeInsets.only(right: AppSpacing.sm),
-              child: ChoiceChip(
-                label: Text(category.value),
-                selected: _memoryType == category.key,
-                selectedColor: context.accentSoft,
-                labelStyle: AppTypography.body(context).copyWith(
-                  color: _memoryType == category.key
-                      ? context.accentPrimary
-                      : context.textSecondary,
-                ),
-                materialTapTargetSize: MaterialTapTargetSize.padded,
-                onSelected: _loading || _managing
-                    ? null
-                    : (_) {
-                        setState(() => _memoryType = category.key);
-                        _load();
-                      },
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTools(BuildContext context) {
-    const tools = [
-      (
-        '记忆管理',
-        '查看与管理全部记忆',
-        Icons.folder_special_outlined,
-        AppRoutes.memoryManager,
-      ),
-      ('情景记忆', '回顾情景与事件', Icons.event_note_outlined, AppRoutes.memoryEpisodic),
-      ('记忆图谱', '可视化记忆关联', Icons.account_tree_outlined, AppRoutes.memoryGraph),
-      ('记忆时间线', '按时间浏览记忆', Icons.timeline, AppRoutes.memoryTimeline),
-      ('用户画像', '用户偏好与特征', Icons.person_outline, AppRoutes.memoryProfiles),
-      ('世界书', '世界观与设定', Icons.menu_book_outlined, AppRoutes.memoryWorldBook),
-    ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns =
-            constraints.maxWidth < 320 ||
-                MediaQuery.textScalerOf(context).scale(14) > 20
-            ? 1
-            : 2;
-        final width =
-            (constraints.maxWidth - AppSpacing.sm * (columns - 1)) / columns;
+  Widget _buildTimeline(BuildContext context, List<Map<String, dynamic>> rows) {
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final row in rows) {
+      final time = ownedMemoryResourceTime(row)?.toLocal();
+      final date = time == null
+          ? '未保存时间'
+          : '${time.year}年${time.month}月${time.day}日';
+      groups.putIfAbsent(date, () => []).add(row);
+    }
+    final entries = groups.entries.toList();
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      itemCount:
+          entries.length + (_next.isNotEmpty || _nextLegacy.isNotEmpty ? 1 : 0),
+      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
+      itemBuilder: (context, index) {
+        if (index == entries.length)
+          return TextButton(
+            onPressed: _loading ? null : () => _load(older: true),
+            child: const Text('加载更多'),
+          );
+        final group = entries[index];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('记忆工具', style: AppTypography.sectionTitle(context)),
-            SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                for (final tool in tools)
-                  SizedBox(
-                    width: width,
-                    child: AmitiaCard(
-                      onTap: () => context.push(tool.$4),
-                      padding: EdgeInsets.all(AppSpacing.sm),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: context.accentSoft,
-                              borderRadius: AppRadius.brSmall,
-                            ),
-                            child: Icon(
-                              tool.$3,
-                              size: 20,
-                              color: context.accentPrimary,
-                            ),
-                          ),
-                          SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  tool.$1,
-                                  style: AppTypography.body(context),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  tool.$2,
-                                  style: AppTypography.caption(context),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+            Padding(
+              padding: EdgeInsets.only(
+                bottom: AppSpacing.sm,
+                top: AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: context.accentSoft,
+                      borderRadius: AppRadius.brTag,
+                    ),
+                    child: Text(
+                      group.key,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: context.accentPrimary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
+                ],
+              ),
+            ),
+            Stack(
+              children: [
+                Positioned(
+                  left: 20,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(width: 1.5, color: context.borderPrimary),
+                ),
+                Column(
+                  children: [
+                    for (final row in group.value)
+                      HistoricalMemoryCard(
+                        row: row,
+                        kind: (row['kind'] ?? 'memory').toString(),
+                        timeline: true,
+                        onDetail: () => _showRecordDetail(row),
+                      ),
+                  ],
+                ),
               ],
             ),
           ],
@@ -1515,77 +1193,576 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     );
   }
 
-  Widget _buildRecordCard(BuildContext context, Map<String, dynamic> row) {
-    final body = ownedMemoryBody(row);
-    final time = ownedMemoryResourceTime(row)?.toLocal();
-    return AmitiaCard(
-      onTap: () => _showRecordDetail(row),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: context.accentSoft,
-                  borderRadius: AppRadius.brSmall,
+  Widget _historicalFilterChip(BuildContext context, String label) {
+    return GestureDetector(
+      onTap: _showControls,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: context.surfaceSecondary,
+          borderRadius: AppRadius.brTag,
+          border: Border.all(color: context.borderPrimary, width: .5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: context.textSecondary),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 16, color: context.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showControls() async {
+    final owned = ref.read(memoryDataSourceProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: context.surfacePrimary,
+      builder: (sheetContext) => SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.pagePadding,
+          AppSpacing.sm,
+          AppSpacing.pagePadding,
+          AppSpacing.xl + MediaQuery.viewInsetsOf(sheetContext).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '筛选与管理',
+                    style: AppTypography.sectionTitle(context),
+                  ),
                 ),
-                child: Icon(_pageIcon, size: 22, color: context.accentPrimary),
-              ),
-              SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ownedMemoryTitle(row),
-                      style: AppTypography.cardTitle(context),
+                AmitiaIconButton(
+                  icon: Icons.close,
+                  tooltip: '关闭筛选',
+                  onPressed: () => Navigator.pop(sheetContext),
+                ),
+              ],
+            ),
+            SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (owned.policy?['coordinated'] == true &&
+                    _kind != 'candidate')
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('source/$_source'),
+                      isExpanded: true,
+                      initialValue: _source,
+                      decoration: const InputDecoration(labelText: '数据来源'),
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'current',
+                          child: Text('当前 Core 的数据'),
+                        ),
+                        ...(_kind == 'profile'
+                                ? _historicalRoles.take(1)
+                                : _historicalRoles)
+                            .map(
+                              (row) => DropdownMenuItem(
+                                value: 'history:${row['id']}',
+                                child: Text(
+                                  _kind == 'profile'
+                                      ? '原设备历史'
+                                      : '原设备历史 · ${row['name'] ?? row['id']}',
+                                ),
+                              ),
+                            ),
+                      ],
+                      onChanged: _loading
+                          ? null
+                          : (value) {
+                              _source = value ?? 'current';
+                              final options = ownedMemoryViewOptions(
+                                _source,
+                                owned.roles,
+                                _historicalRoles,
+                                kind: _kind,
+                              );
+                              if (!options.any(
+                                (option) => option.value == _memoryView,
+                              )) {
+                                _memoryView = options.first.value;
+                              }
+                              if (_role.isNotEmpty) Navigator.pop(sheetContext);
+                              _load();
+                            },
                     ),
-                    if (time != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '${time.year}年${time.month}月${time.day}日 ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
-                        style: AppTypography.caption(context),
+                  ),
+                ...[
+                  if (owned.policy?['coordinated'] == true &&
+                      _kind != 'candidate')
+                    const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('view/$_memoryView/$_source'),
+                      isExpanded: true,
+                      initialValue: _memoryView,
+                      decoration: const InputDecoration(labelText: '查看范围'),
+                      items:
+                          ownedMemoryViewOptions(
+                                _source,
+                                owned.roles,
+                                _historicalRoles,
+                                kind: _kind,
+                              )
+                              .map(
+                                (option) => DropdownMenuItem(
+                                  value: option.value,
+                                  child: Text(option.label),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: _loading
+                          ? null
+                          : (value) {
+                              _memoryView = value ?? 'all';
+                              if (_memoryView.startsWith('role:'))
+                                _role = _memoryView.substring(5);
+                              if (_source == 'current') _historicalRoles = [];
+                              if (_role.isNotEmpty) Navigator.pop(sheetContext);
+                              _load();
+                            },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (_kind == 'profile') ...[
+              SizedBox(height: AppSpacing.sm),
+              Text('用户画像全局共享', style: AppTypography.caption(context)),
+            ],
+            if (_source != 'current') ...[
+              SizedBox(height: AppSpacing.sm),
+              Text(
+                '原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。',
+                style: AppTypography.caption(context),
+              ),
+            ],
+            if (_searchVisible &&
+                _source == 'current' &&
+                const ['memory', 'candidate'].contains(_kind)) ...[
+              SizedBox(height: AppSpacing.md),
+              TextFormField(
+                key: ValueKey('search/$_kind'),
+                initialValue: _query,
+                decoration: const InputDecoration(
+                  hintText: '搜索记忆',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.search,
+                onFieldSubmitted: (value) {
+                  _query = value.trim();
+                  Navigator.pop(sheetContext);
+                  _load();
+                },
+              ),
+            ],
+            if (_source == 'current' && _kind == 'memory') ...[
+              SizedBox(height: AppSpacing.sm),
+              HistoricalMemorySurface(
+                padding: EdgeInsets.zero,
+                child: ExpansionTile(
+                  key: const ValueKey('memory-filters'),
+                  leading: Icon(Icons.tune, color: context.accentPrimary),
+                  title: Text('筛选记忆', style: AppTypography.body(context)),
+                  subtitle: Text(
+                    '类型、来源与检索方式',
+                    style: AppTypography.caption(context),
+                  ),
+                  childrenPadding: EdgeInsets.all(AppSpacing.md),
+                  children: [
+                    if (_kind == 'memory') ...[
+                      TextFormField(
+                        initialValue: _memoryType,
+                        decoration: const InputDecoration(
+                          labelText: '按类型过滤（留空为全部）',
+                        ),
+                        onFieldSubmitted: (value) {
+                          _memoryType = value.trim();
+                          Navigator.pop(sheetContext);
+                          _load();
+                        },
+                      ),
+                      TextFormField(
+                        initialValue: _memorySource,
+                        decoration: const InputDecoration(
+                          labelText: '按来源过滤（留空为全部）',
+                        ),
+                        onFieldSubmitted: (value) {
+                          _memorySource = value.trim();
+                          Navigator.pop(sheetContext);
+                          _load();
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: _memorySort,
+                        decoration: const InputDecoration(labelText: '排序'),
+                        items: const [
+                          DropdownMenuItem(value: '', child: Text('默认顺序')),
+                          DropdownMenuItem(
+                            value: 'importance_desc',
+                            child: Text('重要程度优先'),
+                          ),
+                        ],
+                        onChanged: _loading || _managing
+                            ? null
+                            : (value) {
+                                _memorySort = value ?? '';
+                                Navigator.pop(sheetContext);
+                                _load();
+                              },
                       ),
                     ],
+                    if (_kind == 'memory')
+                      DropdownButtonFormField<String>(
+                        initialValue: _searchMode,
+                        decoration: const InputDecoration(labelText: '检索方式'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'keyword',
+                            child: Text('关键词'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'hybrid',
+                            child: Text('混合检索'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'vector',
+                            child: Text('语义检索'),
+                          ),
+                        ],
+                        onChanged: _loading || _managing
+                            ? null
+                            : (value) {
+                                _searchMode = value ?? 'keyword';
+                                Navigator.pop(sheetContext);
+                                _load();
+                              },
+                      ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
             ],
-          ),
-          SizedBox(height: AppSpacing.sm),
-          Text(
-            ownedMemoryText(row, kind: _kind),
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.body(context),
-          ),
-          SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.xs,
-            children: [
-              AmitiaStatusBadge(
-                label: row['roleId'] == globalMemoryRole ? '全局记忆' : '角色记忆',
-                type: BadgeType.accent,
-              ),
-              if (body['importance'] != null)
-                AmitiaStatusBadge(
-                  label: '重要度 ${body['importance']}',
-                  type: BadgeType.neutral,
+            SizedBox(height: AppSpacing.sm),
+            if (_kind == 'profile' && _source == 'current' && _role.isNotEmpty)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _loading ? null : _openCreateProfile,
+                  icon: const Icon(Icons.add),
+                  label: const Text('新增画像'),
                 ),
-              if (body['allowContextUse'] == false)
-                const AmitiaStatusBadge(label: '已停用', type: BadgeType.warning),
-              if (body['archivedAt'] != null)
-                const AmitiaStatusBadge(label: '已归档', type: BadgeType.neutral),
+              ),
+            if (_source == 'current' &&
+                const ['memory', 'candidate'].contains(_kind))
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: _managementPage == null || _loading || _managing
+                        ? null
+                        : _kind == 'candidate'
+                        ? _generateCandidates
+                        : _createMemory,
+                    child: Text(_kind == 'candidate' ? '从已保存对话生成候选' : '新增记忆'),
+                  ),
+                  if (_kind == 'memory')
+                    Wrap(
+                      children: [
+                        TextButton(
+                          onPressed: _loading || _managing
+                              ? null
+                              : _generateCandidates,
+                          child: const Text('从对话生成候选'),
+                        ),
+                        TextButton(
+                          onPressed: _loading || _managing
+                              ? null
+                              : () {
+                                  setState(() => _kind = 'candidate');
+                                  Navigator.pop(sheetContext);
+                                  _load();
+                                },
+                          child: const Text('待审核候选'),
+                        ),
+                      ],
+                    ),
+                  if (_kind == 'candidate')
+                    TextButton(
+                      onPressed: _loading || _managing
+                          ? null
+                          : () {
+                              setState(() => _kind = 'memory');
+                              Navigator.pop(sheetContext);
+                              _load();
+                            },
+                      child: const Text('返回记忆总览'),
+                    ),
+                  if (_managing) const Text('等待数据所有者确认保存'),
+                  if (_pendingMemory != null &&
+                      _pendingMemory!.generation == _generation &&
+                      !_managing)
+                    TextButton(
+                      onPressed: () {
+                        final pending = _pendingMemory!;
+                        _manage(
+                          pending.original,
+                          pending.input,
+                          candidates: pending.candidates,
+                          operationId: pending.id,
+                        );
+                      },
+                      child: const Text('使用原请求重试保存'),
+                    ),
+                ],
+              ),
+            if (_source == 'current' &&
+                _memoryView != 'all' &&
+                const ['vector', 'graph'].contains(_kind)) ...[
+              for (final layer
+                  in (_projection?['status']?['layers'] as List? ?? [])
+                      .whereType<Map>())
+                Text(
+                  '${layer['kind'] == 'vector' ? '向量' : '图谱'}：已处理 ${layer['current']}/${layer['total']} · 待更新 ${layer['pending']} · 重试 ${layer['retrying']}',
+                ),
+              if (_projectionNotice.isNotEmpty) Text(_projectionNotice),
+              TextButton(
+                onPressed: _projection == null || _loading || _rebuilding
+                    ? null
+                    : _rebuild,
+                child: Text(_rebuilding ? '正在提交' : '重建当前范围索引'),
+              ),
             ],
-          ),
-        ],
+
+            if (_error.isNotEmpty)
+              Text(
+                _error,
+                style: AppTypography.body(
+                  context,
+                ).copyWith(color: context.error),
+              ),
+          ],
+        ),
       ),
+    );
+  }
+
+  String _profileCategory = '全部';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildCategoryTabs(BuildContext context) {
+    final categories = _kind == 'profile'
+        ? const {
+            '全部': '',
+            '事实': 'fact',
+            '偏好': 'preference',
+            '习惯': 'habit',
+            '关系': 'relationship',
+          }
+        : const {
+            '全部': '',
+            '长期记忆': 'fact',
+            '个人信息': 'personal_info',
+            '偏好记忆': 'preference',
+            '关系记忆': 'relationship',
+            '计划': 'plan',
+          };
+    return SizedBox(
+      height: MediaQuery.textScalerOf(context).scale(13) + 25,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        itemCount: categories.length,
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
+        itemBuilder: (context, index) {
+          final category = categories.entries.elementAt(index);
+          final selected = _kind == 'profile'
+              ? _profileCategory == category.key
+              : _memoryType == category.value;
+          return GestureDetector(
+            onTap: _loading
+                ? null
+                : () {
+                    setState(() {
+                      if (_kind == 'profile') {
+                        _profileCategory = category.key;
+                      } else {
+                        _memoryType = category.value;
+                      }
+                    });
+                    if (_kind != 'profile') _load();
+                  },
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: selected
+                    ? context.accentPrimary
+                    : context.surfaceSecondary,
+                borderRadius: AppRadius.brTag,
+                border: Border.all(
+                  color: selected ? context.accentPrimary : Colors.transparent,
+                  width: .5,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  category.key,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+                    color: selected ? Colors.white : context.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTools(BuildContext context) {
+    final tools = <_ToolEntry>[
+      _ToolEntry(
+        title: '记忆管理',
+        subtitle: '查看与管理全部记忆',
+        icon: Icons.folder_special_outlined,
+        route: AppRoutes.memoryManager,
+      ),
+      _ToolEntry(
+        title: '情景记忆',
+        subtitle: '回顾情景与事件',
+        icon: Icons.event_note_outlined,
+        route: AppRoutes.memoryEpisodic,
+      ),
+      _ToolEntry(
+        title: '记忆图谱',
+        subtitle: '可视化记忆关联',
+        icon: Icons.account_tree_outlined,
+        route: AppRoutes.memoryGraph,
+      ),
+      _ToolEntry(
+        title: '记忆时间线',
+        subtitle: '按时间浏览记忆',
+        icon: Icons.timeline,
+        route: AppRoutes.memoryTimeline,
+      ),
+      _ToolEntry(
+        title: '用户画像',
+        subtitle: '用户偏好与特征',
+        icon: Icons.person_outline,
+        route: AppRoutes.memoryProfiles,
+      ),
+      _ToolEntry(
+        title: '世界书',
+        subtitle: '世界观与设定',
+        icon: Icons.menu_book_outlined,
+        route: AppRoutes.memoryWorldBook,
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: AppSpacing.sm),
+        const HistoricalMemorySectionHeader(title: '记忆工具'),
+        SizedBox(height: AppSpacing.sm),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: AppSpacing.sm,
+              crossAxisSpacing: AppSpacing.sm,
+              childAspectRatio: MediaQuery.textScalerOf(context).scale(14) > 20
+                  ? 1.7
+                  : 3.0,
+            ),
+            itemCount: tools.length,
+            itemBuilder: (context, index) {
+              final t = tools[index];
+              return GestureDetector(
+                onTap: () => context.push(t.route),
+                child: HistoricalMemorySurface(
+                  borderRadius: AppRadius.brMedium,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: context.accentSoft,
+                          borderRadius: AppRadius.brSmall,
+                        ),
+                        child: Icon(
+                          t.icon,
+                          size: 18,
+                          color: context.accentPrimary,
+                        ),
+                      ),
+                      SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              t.title,
+                              style: AppTypography.body(context),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              t.subtitle,
+                              style: AppTypography.label(context),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        SizedBox(height: AppSpacing.md),
+      ],
     );
   }
 
@@ -1605,193 +1782,208 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         builder: (context, ref, child) {
           final body = ownedMemoryBody(row);
           final fields = ownedMemoryFields(row, kind: _kind);
-          return FractionallySizedBox(
-            heightFactor: .8,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.sm,
-                AppSpacing.pagePadding,
-                AppSpacing.lg + MediaQuery.viewInsetsOf(context).bottom,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          ownedMemoryTitle(row),
-                          style: AppTypography.sectionTitle(context),
-                        ),
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+              AppSpacing.pagePadding,
+              AppSpacing.lg + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        ownedMemoryTitle(row),
+                        style: AppTypography.sectionTitle(context),
                       ),
-                      AmitiaIconButton(
-                        icon: Icons.close,
-                        tooltip: '关闭详情',
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: AppSpacing.md),
-                  if (fields.isEmpty)
-                    SelectableText(
-                      _content(row),
-                      style: AppTypography.body(context),
                     ),
-                  for (final field in fields) ...[
-                    Text(field.label, style: AppTypography.caption(context)),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      field.value,
-                      style: AppTypography.body(context),
+                    AmitiaIconButton(
+                      icon: Icons.close,
+                      tooltip: '关闭详情',
+                      onPressed: () => Navigator.pop(sheetContext),
                     ),
-                    SizedBox(height: AppSpacing.md),
                   ],
-                  Text(
-                    '版本 ${row['revision'] ?? 0}${body['allowContextUse'] == false ? ' · 已停用' : ''}',
-                    style: AppTypography.caption(context),
+                ),
+                SizedBox(height: AppSpacing.md),
+                if (fields.isEmpty)
+                  SelectableText(
+                    _content(row),
+                    style: AppTypography.body(context),
+                  ),
+                for (final field in fields) ...[
+                  Text(field.label, style: AppTypography.caption(context)),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    field.value,
+                    style: AppTypography.body(context),
                   ),
                   SizedBox(height: AppSpacing.md),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (_source == 'current' &&
-                          const [
-                            'memory',
-                            'legacy',
-                            'episodic',
-                            'fact',
-                            'graph',
-                            'vector',
-                          ].contains(_kind) &&
-                          row['executionScope'] is Map)
-                        TextButton(
-                          onPressed: _loading || _managing
-                              ? null
-                              : () => _detailAction(
-                                  sheetContext,
-                                  () => _transferScope(row),
-                                ),
-                          child: Text(
-                            row['roleId'] == globalMemoryRole
-                                ? '降级为角色记忆'
-                                : '提升为全局记忆',
-                          ),
-                        ),
-                      if (_kind == 'candidate' && _source == 'current')
-                        Wrap(
-                          children: [
-                            TextButton(
-                              onPressed: _loading || _managing
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _candidate(row, 'update'),
-                                    ),
-                              child: const Text('编辑'),
-                            ),
-                            TextButton(
-                              onPressed: _loading || _managing
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _candidate(row, 'accept'),
-                                    ),
-                              child: const Text('接受并保存'),
-                            ),
-                            TextButton(
-                              onPressed: _loading || _managing
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _candidate(row, 'reject'),
-                                    ),
-                              child: const Text('拒绝'),
-                            ),
-                          ],
-                        ),
-                      if (const ['memory', 'summary'].contains(_kind) &&
-                          _source == 'current' &&
-                          (row['revision'] as num? ?? 0) > 0)
-                        Wrap(
-                          children: [
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _editContent(row),
-                                    ),
-                              child: const Text('编辑'),
-                            ),
-                            if (_kind == 'memory') ...[
-                              TextButton(
-                                onPressed: _loading
-                                    ? null
-                                    : () => _detailAction(
-                                        sheetContext,
-                                        () => _setExpiry(row),
-                                      ),
-                                child: const Text('到期时间'),
-                              ),
-                              TextButton(
-                                onPressed: _loading
-                                    ? null
-                                    : () => _detailAction(
-                                        sheetContext,
-                                        () => _edit(
-                                          row,
-                                          changes: {
-                                            'archivedAt':
-                                                row['body']?['archivedAt'] ==
-                                                    null
-                                                ? DateTime.now()
-                                                      .toUtc()
-                                                      .toIso8601String()
-                                                : null,
-                                          },
-                                        ),
-                                      ),
-                                child: Text(
-                                  row['body']?['archivedAt'] == null
-                                      ? '归档'
-                                      : '取消归档',
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: _loading
-                                    ? null
-                                    : () => _detailAction(
-                                        sheetContext,
-                                        () => _edit(row),
-                                      ),
-                                child: Text(
-                                  row['body']?['allowContextUse'] == false
-                                      ? '允许用于对话'
-                                      : '停用',
-                                ),
-                              ),
-                            ],
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () => _detailAction(
-                                      sheetContext,
-                                      () => _edit(row, deleted: true),
-                                    ),
-                              child: const Text('删除'),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
                 ],
-              ),
+                Text(
+                  '版本 ${row['revision'] ?? 0}${body['allowContextUse'] == false ? ' · 已停用' : ''}',
+                  style: AppTypography.caption(context),
+                ),
+                SizedBox(height: AppSpacing.md),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (_source == 'current' &&
+                        const [
+                          'memory',
+                          'legacy',
+                          'episodic',
+                          'fact',
+                          'graph',
+                          'vector',
+                        ].contains(_kind) &&
+                        row['executionScope'] is Map)
+                      TextButton(
+                        onPressed: _loading || _managing
+                            ? null
+                            : () => _detailAction(
+                                sheetContext,
+                                () => _transferScope(row),
+                              ),
+                        child: Text(
+                          row['roleId'] == globalMemoryRole
+                              ? '降级为角色记忆'
+                              : '提升为全局记忆',
+                        ),
+                      ),
+                    if (_kind == 'candidate' && _source == 'current')
+                      Wrap(
+                        children: [
+                          TextButton(
+                            onPressed: _loading || _managing
+                                ? null
+                                : () => _detailAction(
+                                    sheetContext,
+                                    () => _candidate(row, 'update'),
+                                  ),
+                            child: const Text('编辑'),
+                          ),
+                          TextButton(
+                            onPressed: _loading || _managing
+                                ? null
+                                : () => _detailAction(
+                                    sheetContext,
+                                    () => _candidate(row, 'accept'),
+                                  ),
+                            child: const Text('接受并保存'),
+                          ),
+                          TextButton(
+                            onPressed: _loading || _managing
+                                ? null
+                                : () => _detailAction(
+                                    sheetContext,
+                                    () => _candidate(row, 'reject'),
+                                  ),
+                            child: const Text('拒绝'),
+                          ),
+                        ],
+                      ),
+                    if (const [
+                          'memory',
+                          'summary',
+                          'profile',
+                          'episodic',
+                        ].contains(_kind) &&
+                        _source == 'current' &&
+                        (row['revision'] as num? ?? 0) > 0)
+                      Wrap(
+                        children: [
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () => _detailAction(
+                                    sheetContext,
+                                    () => _editContent(row),
+                                  ),
+                            child: const Text('编辑'),
+                          ),
+                          if (_kind == 'memory') ...[
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _setExpiry(row),
+                                    ),
+                              child: const Text('到期时间'),
+                            ),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _edit(
+                                        row,
+                                        changes: {
+                                          'archivedAt':
+                                              row['body']?['archivedAt'] == null
+                                              ? DateTime.now()
+                                                    .toUtc()
+                                                    .toIso8601String()
+                                              : null,
+                                        },
+                                      ),
+                                    ),
+                              child: Text(
+                                row['body']?['archivedAt'] == null
+                                    ? '归档'
+                                    : '取消归档',
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _edit(row),
+                                    ),
+                              child: Text(
+                                row['body']?['allowContextUse'] == false
+                                    ? '允许用于对话'
+                                    : '停用',
+                              ),
+                            ),
+                          ],
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () => _detailAction(
+                                    sheetContext,
+                                    () => _edit(row, deleted: true),
+                                  ),
+                            child: const Text('删除'),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ],
             ),
           );
         },
       ),
     );
   }
+}
+
+class _ToolEntry {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final String route;
+
+  _ToolEntry({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.route,
+  });
 }

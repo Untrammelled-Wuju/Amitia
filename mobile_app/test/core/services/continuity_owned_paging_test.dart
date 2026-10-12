@@ -131,7 +131,7 @@ Map<String, dynamic> _page(String id, {String cursor = '', int mode = 1}) {
 }
 
 void main() {
-  test('历史 Source 持续事项同 ID 保留独立只读快照且不能恢复执行', () async {
+  test('选择历史 Source 只读取独立只读快照且不能恢复执行', () async {
     final page = _page('same');
     (page['executionScope'] as Map)['coordinated'] = true;
     ((page['documents'] as List).single as Map)['managementExecutionScope'] =
@@ -145,14 +145,21 @@ void main() {
         'historicalSnapshot': {
           'ownerId': 'source',
           'resources': [
-            {'kind': 'continuity', 'id': 'same', 'body': original},
+            {
+              'kind': 'continuity',
+              'id': 'same',
+              'ownerId': 'source',
+              'roleId': 'old-role',
+              'body': original,
+            },
           ],
           'nextCursors': {},
         },
       });
-    final service = ContinuityService(api);
+    final service = ContinuityService(api)..dataSource = 'history:old-role';
     final rows = await service.list();
-    expect(rows.length, 2);
+    expect(rows.length, 1);
+    expect(api.cursors, isEmpty);
     final old = rows.last.sourceDocument!;
     expect(old['readOnly'], isTrue);
     final detail = await service.get('same', expectedDocument: old);
@@ -182,7 +189,10 @@ void main() {
           'nextCursors': {},
         },
       });
-    await expectLater(ContinuityService(api).list(), throwsStateError);
+    await expectLater(
+      (ContinuityService(api)..dataSource = 'history:old-role').list(),
+      throwsStateError,
+    );
   });
   test('重新打开旧授权事项使用当前管理范围并保留原执行范围', () async {
     final api = _PagingApi()

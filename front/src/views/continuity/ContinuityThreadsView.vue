@@ -18,16 +18,15 @@
           <el-option v-for="role in historicalRoles" :key="role.id" :label="`原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
         </el-select>
       </div>
-      <div class="toolbar-field search-field">
-        <label :for="`${controlId}-search`">搜索事项</label>
-        <el-input :id="`${controlId}-search`" v-model="query" clearable placeholder="搜索标题、目标或当前状态" aria-label="搜索事项" @keyup.enter="refresh" />
-      </div>
       <div v-if="mesh.enabled.value" class="toolbar-field">
         <label :for="`${controlId}-scope`">查看范围</label>
         <el-select :id="`${controlId}-scope`" v-model="memoryView" aria-label="事项查看范围" @change="refresh">
-          <el-option label="全部事项" value="all" /><el-option label="全局事项" value="global" />
-          <el-option v-for="role in mesh.roles.value" :key="role.id" :label="role.name" :value="`role:${role.id}`" />
+          <el-option v-for="option in viewOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
+      </div>
+      <div class="toolbar-field search-field">
+        <label :for="`${controlId}-search`">搜索事项</label>
+        <el-input :id="`${controlId}-search`" v-model="query" clearable placeholder="搜索标题、目标或当前状态" aria-label="搜索事项" @keyup.enter="refresh" />
       </div>
       <div class="toolbar-field">
         <label :for="`${controlId}-status`">状态</label>
@@ -164,11 +163,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref, watch, useId } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch, useId } from "vue";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { GLOBAL_MEMORY_ROLE } from "@/runtime/owned-memory-scope";
+import { ownedMemoryViewOptions } from "@/runtime/owned-memory-view-options";
 import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 import {
   cancelContinuityWait,
@@ -219,6 +219,10 @@ async function confirmScopeTransfer() {
   finally { scopeSaving.value = false; }
 }
 const historicalRoles = ref<Array<{ id: string; name: string }>>([]);
+const viewOptions = computed(() => ownedMemoryViewOptions(source.value, mesh.roles.value, historicalRoles.value, "continuity"));
+watch(viewOptions, options => {
+  if (!options.some(option => option.value === memoryView.value)) memoryView.value = options[0].value;
+}, { flush: "sync" });
 let generation = 0;
 let providerTimer: ReturnType<typeof setInterval> | undefined;
 const detailOpen = ref(false);
@@ -262,7 +266,7 @@ async function refresh() {
   loading.value = true;
   try {
     if (await mesh.refresh()) {
-      const selected = memoryView.value.startsWith("role:") ? memoryView.value.slice(5) : "";
+      const selected = source.value === "current" && memoryView.value.startsWith("role:") ? memoryView.value.slice(5) : "";
       if (selected && mesh.roles.value.some(role => role.id === selected)) characterId.value = selected;
       else if (!mesh.roles.value.some((role) => role.id === characterId.value)) characterId.value = mesh.selectInitialRole() || mesh.roles.value[0]?.id || "";
       if (!characterId.value) { threads.value = []; return; }
@@ -270,7 +274,7 @@ async function refresh() {
     ticket = ++generation;
     loading.value = true;
     const roles = mesh.coordinated.value ? await mesh.historicalRoles(characterId.value) : [];
-    const items = await listContinuityThreads({ characterId: characterId.value || undefined, memoryView: memoryView.value || undefined, historicalRoleId: source.value.startsWith("history:") ? source.value.slice(8) : undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
+    const items = await listContinuityThreads({ characterId: characterId.value || undefined, memoryView: source.value === "current" ? memoryView.value || undefined : undefined, historicalRoleId: source.value.startsWith("history:") ? source.value.slice(8) : undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
     if (ticket === generation) { historicalRoles.value = roles; threads.value = items; }
   } catch (error) {
     if (ticket === generation) { threads.value = []; ElMessage.error(error instanceof Error ? error.message : "持续事项加载失败"); }
@@ -408,8 +412,9 @@ onUnmounted(() => {
 .page-header p { margin: 0; color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.6; }
 .header-actions { display: flex; align-items: flex-end; gap: 12px; min-width: 0; max-width: 100%; }
 .role-field { width: 240px; }
-.toolbar, .toolbar.has-source { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; gap: 16px; padding: 16px; margin-bottom: 20px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); }
-.toolbar-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.toolbar, .toolbar.has-source { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding: 16px; margin-bottom: 20px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); }
+.toolbar-field { display: flex; flex: 0 1 200px; flex-direction: column; gap: 8px; min-width: 0; }
+.search-field { flex: 1 1 280px; }
 .toolbar-field label { color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.5; }
 .toolbar-field :deep(.el-select), .toolbar-field :deep(.el-input) { width: 100%; min-width: 0; }
 .header-actions > .el-button, .refresh-button { margin-left: 0; }
@@ -426,10 +431,11 @@ onUnmounted(() => {
 .detail-section h3 { margin: 0 0 12px; }
 .event-summary { margin-top: 4px; color: var(--el-text-color-secondary); line-height: 1.5; }
 @media (max-width: 1024px) {
-  .toolbar.has-source { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .toolbar-field { flex-grow: 1; }
 }
 @media (max-width: 720px) {
-  .toolbar, .toolbar.has-source { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .toolbar, .toolbar.has-source { flex-direction: column; align-items: stretch; gap: 12px; }
+  .toolbar-field { flex: auto; }
   .page-header { align-items: stretch; flex-direction: column; }
   .header-actions { align-items: stretch; flex-direction: column; }
   .role-field { width: 100%; }

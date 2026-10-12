@@ -1,7 +1,7 @@
 <template>
   <section class="memory-graph" aria-label="记忆关系图谱">
     <div class="graph-toolbar">
-      <el-input v-model="keyword" clearable placeholder="搜索图谱节点" aria-label="搜索图谱节点" class="graph-search" />
+      <el-input v-if="!hideSearch" v-model="keyword" clearable placeholder="搜索图谱节点" aria-label="搜索图谱节点" class="graph-search" />
       <span class="graph-count">{{ graph.nodes.length }} 个节点 · {{ graph.links.length }} 条关系</span>
       <el-button :disabled="!graph.nodes.length" @click="resetView">重置视图</el-button>
     </div>
@@ -23,7 +23,7 @@ import { buildOwnedMemoryGraph } from "@/runtime/owned-memory-graph";
 import { useTheme } from "@/composables/useTheme";
 
 use([GraphChart, TooltipComponent, SVGRenderer]);
-const props = defineProps<{ resources: any[]; loading: boolean; error: string }>();
+const props = defineProps<{ resources: any[]; loading: boolean; error: string; hideSearch?: boolean }>();
 const keyword = ref("");
 const viewRevision = ref(0);
 const { resolvedMode } = useTheme();

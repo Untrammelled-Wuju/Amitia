@@ -1,12 +1,14 @@
 <template>
   <section class="owned-management">
     <div class="management-toolbar">
-      <el-input v-model="query" clearable placeholder="检索当前查看范围的记忆" @keyup.enter="search()" />
+      <el-input v-if="props.search === undefined" v-model="query" clearable placeholder="检索当前查看范围的记忆" @keyup.enter="search()" />
       <el-select v-model="mode" aria-label="记忆检索方式"><el-option label="关键词" value="keyword" /><el-option label="混合检索" value="hybrid" /><el-option label="向量检索" value="vector" /></el-select>
       <el-select v-model="memoryType" clearable placeholder="全部记忆类型"><el-option label="全部类型" value="" /><el-option v-for="type in types" :key="type.value" :label="type.label" :value="type.value" /></el-select>
       <el-select v-model="sourceFilter" clearable placeholder="全部来源"><el-option label="全部来源" value="" /><el-option label="手动新增" value="manual" /><el-option label="审核保存" value="reviewed" /></el-select>
       <el-select v-model="sort" aria-label="记忆排序"><el-option label="默认排序" value="" /><el-option label="重要程度优先" value="importance_desc" /></el-select>
       <el-button :loading="loading" @click="search()">检索</el-button>
+    </div>
+    <div class="management-actions">
       <el-button :disabled="loading" @click="openCreate">新增记忆</el-button>
       <el-button :disabled="loading" @click="openGenerate">从对话生成候选</el-button>
       <el-button :disabled="loading" @click="loadCandidates">待审核候选</el-button>
@@ -36,18 +38,19 @@
   </section>
 </template>
 <script setup lang="ts">
-import { onUnmounted, reactive, ref, watch } from "vue";
+import { computed, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { useOwnedMemoryManagement, ownedMemoryAuthority, type OwnedMemoryManagementResource } from "@/composables/useOwnedMemoryManagement";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 
-const props = defineProps<{ executionScope: OwnedExecutionScope }>();
+const props = defineProps<{ executionScope: OwnedExecutionScope; search?: string }>();
 const emit = defineEmits<{ saved: [] }>();
 const owned = useDeviceOwnedConversation();
 const api = useOwnedMemoryManagement();
-const query = ref("");
+const internalQuery = ref("");
+const query = computed({ get: () => props.search ?? internalQuery.value, set: value => { internalQuery.value = value; } });
 const mode = ref("keyword");
 const memoryType = ref("");
 const sourceFilter = ref("");
@@ -150,6 +153,8 @@ async function generate() {
 <style scoped>
 .owned-management { margin: 16px 0; }
 .management-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.management-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.management-actions :deep(.el-button) { margin-left: 0; }
 .management-toolbar :deep(.el-input) { width: 220px; }
 .management-toolbar :deep(.el-select) { width: 130px; }
 .management-row { padding: 12px; margin-top: 10px; background: var(--ac-color-bg-secondary); border-radius: var(--ac-radius-sm); }

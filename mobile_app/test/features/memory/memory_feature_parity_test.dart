@@ -1,4 +1,9 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +15,7 @@ import 'package:amitia_app/core/services/device_owned_memory_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/features/memory/presentation/pages/owned_memory_page.dart';
 import 'package:amitia_app/features/memory/presentation/widgets/owned_memory_graph.dart';
+import 'package:amitia_app/app/theme/app_theme.dart';
 import '../../core/services/owned_task_submission_test.dart' show TaskTransport;
 import '../../core/services/owned_memory_management_test.dart' as fixture;
 
@@ -45,6 +51,12 @@ class MemorySource extends DeviceOwnedChatService {
   }
   List<Map> edits = [];
   @override
+  Future<List<Map<String, dynamic>>> historicalRoles(
+    String characterId,
+  ) async => [
+    {'id': 'old-role', 'name': '旧角色'},
+  ];
+  @override
   Future<bool> refresh() async => true;
   @override
   Future<Map<String, dynamic>> data(
@@ -75,6 +87,12 @@ class MemorySource extends DeviceOwnedChatService {
           : [],
       'nextCursors': {},
     },
+    if (historicalRoleId.isNotEmpty)
+      'historicalSnapshot': {
+        'ownerId': 'phone',
+        'resources': [],
+        'nextCursors': {},
+      },
   };
   @override
   Future<void> edit(
@@ -121,6 +139,29 @@ class MemoryManagement extends DeviceOwnedMemoryService {
 }
 
 void main() {
+  var previewKey = GlobalKey();
+  setUpAll(() async {
+    final fontPath = Platform.environment['MEMORY_UI_PREVIEW_FONT'];
+    final iconsPath = Platform.environment['MEMORY_UI_PREVIEW_ICONS'];
+    if (fontPath != null) {
+      final loader = FontLoader('AmitiaPreview')
+        ..addFont(
+          Future.value(
+            ByteData.sublistView(await File(fontPath).readAsBytes()),
+          ),
+        );
+      await loader.load();
+    }
+    if (iconsPath != null) {
+      final loader = FontLoader('MaterialIcons')
+        ..addFont(
+          Future.value(
+            ByteData.sublistView(await File(iconsPath).readAsBytes()),
+          ),
+        );
+      await loader.load();
+    }
+  });
   test('手机本机模式使用同一记忆通道，不依赖云端绑定', () async {
     SharedPreferences.setMockInitialValues({});
     final transport = TaskTransport([
@@ -186,15 +227,22 @@ void main() {
     bool showTools = false,
     double textScale = 1,
     Brightness brightness = Brightness.light,
+    bool timeline = false,
+    bool coordinated = false,
   }) async {
+    previewKey = GlobalKey();
     final api = BackendServiceApi(TaskTransport([]), 1),
         source = MemorySource(BackendServiceApi(TaskTransport([]), 1));
+    source.policy = {...source.policy!, 'coordinated': coordinated};
     final router = GoRouter(
       routes: [
         GoRoute(
           path: '/',
-          builder: (context, state) =>
-              OwnedMemoryPage(initialKind: kind, showTools: showTools),
+          builder: (context, state) => OwnedMemoryPage(
+            initialKind: kind,
+            showTools: showTools,
+            timeline: timeline,
+          ),
         ),
       ],
     );
@@ -208,14 +256,35 @@ void main() {
             MemoryManagement(api),
           ),
         ],
-        child: MaterialApp.router(
-          routerConfig: router,
-          theme: ThemeData(brightness: brightness),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(textScale)),
-            child: child!,
+        child: RepaintBoundary(
+          key: previewKey,
+          child: MaterialApp.router(
+            debugShowCheckedModeBanner: false,
+            routerConfig: router,
+            theme:
+                (brightness == Brightness.dark
+                        ? AppTheme.darkTheme()
+                        : AppTheme.lightTheme())
+                    .copyWith(
+                      textTheme:
+                          (brightness == Brightness.dark
+                                  ? AppTheme.darkTheme()
+                                  : AppTheme.lightTheme())
+                              .textTheme
+                              .apply(
+                                fontFamily:
+                                    Platform.environment['MEMORY_UI_PREVIEW_FONT'] ==
+                                        null
+                                    ? null
+                                    : 'AmitiaPreview',
+                              ),
+                    ),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
           ),
         ),
       ),
@@ -226,27 +295,40 @@ void main() {
 
   testWidgets('记忆页面保留历史数据、默认全部、无重复分类并补齐操作', (tester) async {
     final source = await render(tester, 'memory');
-    expect(find.text('查看范围'), findsOneWidget);
+    expect(find.text('查看范围'), findsNothing);
     expect(find.text('全部记忆'), findsOneWidget);
     expect(find.text('记忆层'), findsNothing);
     expect(find.text('工作角色'), findsNothing);
-    for (final text in ['待审核候选', '从对话生成候选']) {
+    await tester.tap(find.byTooltip('筛选与管理'));
+    await tester.pumpAndSettle();
+    for (final text in ['待审核候选', '从对话生成候选', '查看范围']) {
       expect(find.text(text), findsOneWidget);
     }
-    expect(find.text('编辑'), findsNothing);
-    expect(find.text('筛选记忆'), findsOneWidget);
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.tap(find.byTooltip('关闭筛选'));
     await tester.pumpAndSettle();
-    expect(find.text('历史'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('owned-memory/legacy/old')),
+      findsOneWidget,
+    );
     expect(find.textContaining('保留内容'), findsOneWidget);
-    await tester.ensureVisible(find.text('饮品'));
-    await tester.tap(find.text('饮品'));
+    await tester.tap(find.byKey(const ValueKey('owned-memory/record')));
     await tester.pumpAndSettle();
     for (final text in ['编辑', '到期时间', '归档']) {
-      expect(find.text(text), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text(text),
+        ),
+        findsOneWidget,
+      );
     }
     await tester.ensureVisible(find.text('到期时间'));
-    await tester.tap(find.text('到期时间'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('到期时间'),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '2027-01-01');
     await tester.tap(find.text('保存'));
@@ -255,15 +337,55 @@ void main() {
     expect(source.edits.single['characterId'], 'role');
     expect(find.byType(BottomSheet), findsNothing);
   });
-  testWidgets('用户画像无角色范围选项，图谱页显示真实画布', (tester) async {
+  testWidgets('用户画像只提供全局范围，图谱页显示真实画布', (tester) async {
     await render(tester, 'profile');
-    expect(find.text('查看范围'), findsNothing);
+    await tester.tap(find.byTooltip('筛选与管理'));
+    await tester.pumpAndSettle();
+    expect(find.text('查看范围'), findsOneWidget);
+    expect(find.text('全局用户画像'), findsOneWidget);
     expect(find.text('记忆层'), findsNothing);
     expect(find.textContaining('全局共享'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭筛选'));
+    await tester.pumpAndSettle();
     await render(tester, 'graph');
     expect(find.byType(OwnedMemoryGraph), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);
   });
+  for (final kind in ['memory', 'profile', 'episodic', 'graph', 'timeline']) {
+    testWidgets('$kind 历史来源的范围不混入当前角色', (tester) async {
+      await render(
+        tester,
+        kind == 'timeline' ? 'memory' : kind,
+        timeline: kind == 'timeline',
+        coordinated: true,
+      );
+      await tester.tap(find.byTooltip('筛选与管理'));
+      await tester.pumpAndSettle();
+      final source = tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const ValueKey('source/current')),
+      );
+      source.onChanged!('history:old-role');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('筛选与管理'));
+      await tester.pumpAndSettle();
+      final scope = tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const ValueKey('view/all/history:old-role')),
+      );
+      expect(scope.initialValue, 'all');
+      expect(
+        find.text(kind == 'profile' ? '原设备用户画像' : '原设备历史 · 旧角色'),
+        findsWidgets,
+      );
+      scope.onChanged!('all');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('筛选与管理'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('source/history:old-role')),
+        findsOneWidget,
+      );
+    });
+  }
   testWidgets('历史工具卡片在窄屏、大字体和深色下保持可用', (tester) async {
     tester.view.physicalSize = const Size(375, 812);
     tester.view.devicePixelRatio = 1;
@@ -279,7 +401,7 @@ void main() {
     for (final title in ['记忆管理', '情景记忆', '记忆图谱', '记忆时间线', '用户画像', '世界书']) {
       expect(find.text(title), findsOneWidget);
     }
-    expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(find.byType(GridView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('搜索和筛选可以展开，手机横屏不溢出', (tester) async {
@@ -291,10 +413,44 @@ void main() {
     await tester.tap(find.byTooltip('搜索记忆'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('search/memory')), findsOneWidget);
+    await tester.tap(find.byTooltip('筛选与管理'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('筛选记忆'));
     await tester.tap(find.text('筛选记忆'));
     await tester.pumpAndSettle();
     expect(find.text('检索方式'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('历史页面布局在正常字号下保留原网格比例和页面样式', (tester) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final kind in ['memory', 'profile', 'episodic']) {
+      await render(tester, kind, showTools: kind == 'memory');
+      if (kind == 'memory') {
+        final grid = tester.widget<GridView>(find.byType(GridView));
+        final delegate =
+            grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+        expect(delegate.crossAxisCount, 2);
+        expect(delegate.childAspectRatio, 3);
+      }
+      expect(tester.takeException(), isNull);
+      final directory = Platform.environment['MEMORY_UI_PREVIEW_DIR'];
+      if (directory != null) {
+        final boundary =
+            previewKey.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary;
+        await tester.runAsync(() async {
+          final image = await boundary.toImage();
+          final data = await image.toByteData(format: ui.ImageByteFormat.png);
+          await Directory(directory).create(recursive: true);
+          await File(
+            '$directory/$kind.png',
+          ).writeAsBytes(data!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
+    }
   });
 }

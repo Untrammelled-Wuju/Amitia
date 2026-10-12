@@ -6,8 +6,11 @@ import DeviceOwnedDataView from "../components/DeviceOwnedDataView.vue";
 import MemoryInjectPanel from "../views/web-chat/components/MemoryInjectPanel.vue";
 import ProfileSummaryPanel from "../views/web-chat/components/ProfileSummaryPanel.vue";
 import MemoryTimeline from "../views/memory-timeline/MemoryTimeline.vue";
+import ContinuityThreadsView from "../views/continuity/ContinuityThreadsView.vue";
+import OwnedMemoryGraph from "../components/OwnedMemoryGraph.vue";
 
-const mocks = vi.hoisted(() => ({ data: vi.fn(), historicalRoles: vi.fn(), edit: vi.fn(), projections: vi.fn(), refresh: vi.fn(), legacy: vi.fn(), profiles: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), deployment: vi.fn(), owned: null as any }));
+const mocks = vi.hoisted(() => ({ data: vi.fn(), historicalRoles: vi.fn(), edit: vi.fn(), projections: vi.fn(), refresh: vi.fn(), legacy: vi.fn(), profiles: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), deployment: vi.fn(), listThreads: vi.fn(), owned: null as any }));
+vi.mock("../views/continuity/api", () => ({ listContinuityThreads: mocks.listThreads }));
 vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => mocks.owned }));
 vi.mock("vue-echarts", () => ({ default: { name: "VChart", props: ["option"], template: '<div data-graph-canvas />' } }));
 vi.mock("../composables/useApi", () => ({ apiClient: {}, useApi: () => ({ get: mocks.legacy, post: mocks.legacy, put: mocks.legacy, del: mocks.legacy }) }));
@@ -16,6 +19,7 @@ vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: mocks.deploy
 vi.mock("element-plus", async () => ({ ...await vi.importActual<any>("element-plus"), ElMessageBox: { confirm: mocks.confirm, prompt: mocks.prompt } }));
 const global = { directives: { loading: () => {} }, stubs: {
   DeviceOwnedMemoryManagement: true,
+  ElForm: { template: "<div><slot /></div>" }, ElFormItem: { template: "<div><slot /></div>" }, ElDrawer: true, ElDatePicker: true,
   ElDialog: { props: ["modelValue"], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },
   ElInput: { props: ["modelValue"], emits: ["update:modelValue"], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   ElSelect: { props: ["modelValue"], emits: ["update:modelValue"], template: "<select :value='modelValue' @change='$emit(\"update:modelValue\", $event.target.value)'><slot /></select>" },
@@ -41,6 +45,8 @@ describe("网页六层记忆的数据归属入口", () => {
     mocks.historicalRoles.mockResolvedValue([{ id: "old-role", name: "旧角色" }]);
     mocks.data.mockImplementation(async (kind, role) => ({ executionScope: { ...scope, roleId: role }, snapshot: { ownerId: scope.resourceOwnerId, resources: [{ kind, id: "same-id", roleId: role, ownerId: scope.resourceOwnerId, revision: 1, body: { key: "记录", content: "原始内容", allowContextUse: true } }] } }));
     mocks.confirm.mockResolvedValue(true);
+    mocks.listThreads.mockResolvedValue([]);
+    mocks.owned.notice = ref("");
   });
   afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()); vi.useRealTimers(); });
 
@@ -120,10 +126,48 @@ describe("网页六层记忆的数据归属入口", () => {
     await selector.setValue("role:other"); await flushPromises();
     expect(mocks.data.mock.calls.at(-1)).toEqual(["memory", "other", "", "", { legacyCursor: "", memoryView: "role:other" }]);
   });
-  it("用户画像全局共享，不提供角色或范围选择", async () => {
+  it("用户画像全局共享，范围只提供全局画像", async () => {
     const wrapper = open(DeviceOwnedDataView, { title: "用户画像", initialKind: "profile" }); await flushPromises();
-    expect(wrapper.find('select[aria-label="记忆查看范围"]').exists()).toBe(false);
+    expect(wrapper.find('select[aria-label="记忆查看范围"]').findAll("option").map(option => option.text())).toEqual(["全局用户画像"]);
     expect(mocks.data).toHaveBeenCalledWith("profile", "role", "", "", { legacyCursor: "", memoryView: "global" });
+  });
+  it.each(["memory", "episodic", "graph", "profile", "timeline"])("%s 页面来源切换后只展示对应范围，搜索入口唯一", async (kind) => {
+    mocks.owned.coordinated.value = true;
+    const wrapper = open(DeviceOwnedDataView, { title: "记忆", initialKind: kind === "timeline" ? "memory" : kind, mode: kind });
+    await flushPromises();
+    expect(wrapper.findAll('input[aria-label="搜索记忆"]')).toHaveLength(1);
+    const source = wrapper.find('select[aria-label="记忆数据来源"]');
+    const selection = wrapper.find('select[aria-label="记忆查看范围"]');
+    await source.setValue("history:old-role"); await flushPromises();
+    expect(selection.findAll("option").map(option => option.text())).toEqual([kind === "profile" ? "原设备用户画像" : "原设备历史 · 旧角色"]);
+    expect((selection.element as HTMLSelectElement).value).toBe("all");
+    expect(mocks.data.mock.calls.at(-1)?.[4]).toMatchObject({ historicalRoleId: "old-role" });
+    await source.setValue("current"); await flushPromises();
+    expect(selection.findAll("option").map(option => option.text())).toEqual(kind === "profile" ? ["全局用户画像"] : ["全部记忆", "全局记忆", "角色"]);
+    expect((selection.element as HTMLSelectElement).value).toBe(kind === "profile" ? "global" : "all");
+  });
+  it("关系图谱的统一搜索框筛选实际画布资源", async () => {
+    const wrapper = open(DeviceOwnedDataView, { title: "关系图谱", initialKind: "graph" });
+    await flushPromises();
+    expect(wrapper.findComponent(OwnedMemoryGraph).props("resources")).toHaveLength(1);
+    await wrapper.find('input[aria-label="搜索记忆"]').setValue("不存在的关键词");
+    expect(wrapper.findComponent(OwnedMemoryGraph).props("resources")).toHaveLength(0);
+    await wrapper.find('input[aria-label="搜索记忆"]').setValue("原始内容");
+    expect(wrapper.findComponent(OwnedMemoryGraph).props("resources")).toHaveLength(1);
+  });
+  it("持续事项的历史范围不携带当前角色分区，并能切回当前范围", async () => {
+    mocks.owned.coordinated.value = true;
+    const wrapper = open(ContinuityThreadsView);
+    await flushPromises();
+    const selection = wrapper.find('select[aria-label="事项查看范围"]');
+    await selection.setValue("role:role");
+    await wrapper.find('select[aria-label="事项数据来源"]').setValue("history:old-role");
+    await wrapper.findAll("button").find(button => button.text() === "刷新")!.trigger("click");
+    await flushPromises();
+    expect(selection.findAll("option").map(option => option.text())).toEqual(["原设备历史 · 旧角色"]);
+    expect(mocks.listThreads.mock.calls.at(-1)?.[0]).toMatchObject({ historicalRoleId: "old-role", memoryView: undefined });
+    await wrapper.find('select[aria-label="事项数据来源"]').setValue("current");
+    expect(selection.findAll("option").map(option => option.text())).toEqual(["全部事项", "全局事项", "角色"]);
   });
   it("旧格式图谱仍在同一画布显示，并保留源记忆以供分区迁移", async () => {
     mocks.data.mockResolvedValue({executionScope:{...scope,memoryRoleId:'@global-memory',memoryViewAll:true},snapshot:{ownerId:'source',resources:[],legacyGraphs:[{kind:'graph',id:'legacy/old',ownerId:'source',roleId:'role',revision:0,body:{key:'旧关系',legacyMemory:{id:'old',characterId:'role',scope:'character'},content:{nodes:[{id:'a',label:'用户'},{id:'b',label:'茶'}],edges:[{source:'a',target:'b',relation:'喜欢'}]}}}]}});

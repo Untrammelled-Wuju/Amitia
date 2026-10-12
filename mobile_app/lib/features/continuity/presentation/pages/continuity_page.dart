@@ -10,6 +10,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/continuity.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/owned_memory_view_options.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../widgets/continuity_editors.dart';
@@ -33,6 +34,7 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
   String? _searchError;
   String? _statusFilter;
   List<Map<String, dynamic>> _roles = [];
+  List<Map<String, dynamic>> _historicalRoles = [];
   Timer? _refreshTimer;
   Timer? _searchDebounce;
   int _searchRevision = 0;
@@ -66,9 +68,20 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
     try {
       final service = ref.read(continuityServiceProvider);
       final roles = await service.availableRoles();
+      final historicalRoles = await service.availableHistoricalRoles();
+      final options = ownedMemoryViewOptions(
+        service.dataSource,
+        roles,
+        historicalRoles,
+        kind: 'continuity',
+      );
+      if (!options.any((option) => option.value == service.memoryView)) {
+        service.memoryView = options.first.value;
+      }
       if (!mounted) return;
       setState(() {
         _roles = roles;
+        _historicalRoles = historicalRoles;
       });
       final values = await ref
           .read(continuityServiceProvider)
@@ -203,7 +216,10 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
           AmitiaIconButton(
             icon: Icons.add,
             tooltip: '新建持续事项',
-            onPressed: _create,
+            onPressed:
+                ref.read(continuityServiceProvider).dataSource == 'current'
+                ? _create
+                : null,
           ),
         ],
       ),
@@ -215,8 +231,56 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
   }
 
   Widget _buildBrowseView() {
+    final service = ref.read(continuityServiceProvider);
     return Column(
       children: [
+        if (service.coordinated)
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpacing.pagePadding,
+              vertical: AppSpacing.sm,
+            ),
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('continuity-source/${service.dataSource}'),
+              isExpanded: true,
+              initialValue: service.dataSource,
+              decoration: const InputDecoration(labelText: '数据来源'),
+              items: [
+                const DropdownMenuItem(
+                  value: 'current',
+                  child: Text('当前 Core 的数据'),
+                ),
+                ..._historicalRoles.map(
+                  (role) => DropdownMenuItem(
+                    value: 'history:${role['id']}',
+                    child: Text('原设备历史 · ${role['name'] ?? role['id']}'),
+                  ),
+                ),
+              ],
+              onChanged: _refreshing
+                  ? null
+                  : (value) {
+                      setState(() {
+                        service.dataSource = value ?? 'current';
+                        final options = ownedMemoryViewOptions(
+                          service.dataSource,
+                          _roles,
+                          _historicalRoles,
+                          kind: 'continuity',
+                        );
+                        if (!options.any(
+                          (option) => option.value == service.memoryView,
+                        )) {
+                          service.memoryView = options.first.value;
+                        }
+                        _items = const [];
+                        _searchResults = const [];
+                        _searchRevision++;
+                      });
+                      unawaited(_load());
+                    },
+            ),
+          ),
         if (_roles.isNotEmpty)
           Padding(
             padding: EdgeInsets.symmetric(
@@ -224,25 +288,43 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
               vertical: AppSpacing.sm,
             ),
             child: DropdownButtonFormField<String>(
-              initialValue: ref.read(continuityServiceProvider).memoryView,
+              key: ValueKey(
+                'continuity-view/${service.dataSource}/${service.memoryView}',
+              ),
+              isExpanded: true,
+              initialValue: service.memoryView,
               decoration: const InputDecoration(labelText: '查看范围'),
-              items: [
-                const DropdownMenuItem(value: 'all', child: Text('全部事项')),
-                const DropdownMenuItem(value: 'global', child: Text('全局事项')),
-                ..._roles.map(
-                  (role) => DropdownMenuItem(
-                    value: 'role:${role['id']}',
-                    child: Text((role['name'] ?? role['id']).toString()),
-                  ),
-                ),
-              ],
-              onChanged: (value) {
-                final service = ref.read(continuityServiceProvider);
-                service.memoryView = value ?? 'all';
-                if (service.memoryView.startsWith('role:'))
-                  service.selectedRole = service.memoryView.substring(5);
-                unawaited(_load());
-              },
+              items:
+                  ownedMemoryViewOptions(
+                        service.dataSource,
+                        _roles,
+                        _historicalRoles,
+                        kind: 'continuity',
+                      )
+                      .map(
+                        (option) => DropdownMenuItem(
+                          value: option.value,
+                          child: Text(option.label),
+                        ),
+                      )
+                      .toList(),
+              onChanged: _refreshing
+                  ? null
+                  : (value) {
+                      final service = ref.read(continuityServiceProvider);
+                      service.memoryView = value ?? 'all';
+                      if (service.memoryView.startsWith('role:'))
+                        service.selectedRole = service.memoryView.substring(5);
+                      unawaited(_load());
+                    },
+            ),
+          ),
+        if (service.dataSource != 'current')
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: Text(
+              '旧设备持续事项仅供读取，请在原设备管理。',
+              style: AppTypography.caption(context),
             ),
           ),
         Padding(
