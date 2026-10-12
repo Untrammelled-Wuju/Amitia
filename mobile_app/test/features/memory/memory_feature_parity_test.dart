@@ -15,6 +15,7 @@ import 'package:amitia_app/core/services/device_owned_memory_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/features/memory/presentation/pages/owned_memory_page.dart';
 import 'package:amitia_app/features/memory/presentation/widgets/owned_memory_graph.dart';
+import 'package:amitia_app/features/memory/presentation/widgets/historical_memory_card.dart';
 import 'package:amitia_app/app/theme/app_theme.dart';
 import '../../core/services/owned_task_submission_test.dart' show TaskTransport;
 import '../../core/services/owned_memory_management_test.dart' as fixture;
@@ -139,6 +140,41 @@ class MemoryManagement extends DeviceOwnedMemoryService {
 }
 
 void main() {
+  test('兼容记录的卡片只展示正文，不拼接内部字段', () {
+    final row = {
+      ...record('memory'),
+      'body': {
+        'content': {
+          'value': '用户喜欢喝茶',
+          'spaceId': 'internal-space',
+          'characterId': 'internal-role',
+          'sourceConvId': 'internal-conversation',
+          'confidence': 60,
+        },
+      },
+    };
+    expect(historicalMemoryPreview(row, kind: 'memory'), '用户喜欢喝茶');
+    expect(
+      historicalMemoryPreview({
+        'body': {
+          'content': {
+            'attributeName': '饮品',
+            'attributeValue': '茶',
+            'spaceId': 'internal-space',
+          },
+        },
+      }, kind: 'profile'),
+      '茶',
+    );
+    expect(
+      historicalMemoryPreview({
+        'body': {
+          'content': {'event': '一起散步', 'characterId': 'internal-role'},
+        },
+      }, kind: 'episodic'),
+      '一起散步',
+    );
+  });
   var previewKey = GlobalKey();
   setUpAll(() async {
     final fontPath = Platform.environment['MEMORY_UI_PREVIEW_FONT'];

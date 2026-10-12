@@ -755,7 +755,7 @@ class _HistoricalRecord {
   final String kind;
   Map<String, dynamic> get body => ownedMemoryBody(row);
   Map get data => body['content'] is Map ? body['content'] as Map : body;
-  String get content => ownedMemoryText(row, kind: kind);
+  String get content => historicalMemoryPreview(row, kind: kind);
   String get title => ownedMemoryTitle(row);
   String get summary => (data['summary'] ?? '').toString();
   String get description => content;
@@ -802,3 +802,18 @@ class _HistoricalRecord {
 
 String historicalMemoryCategory(Map<String, dynamic> row) =>
     _HistoricalRecord(row, "profile").category;
+
+String historicalMemoryPreview(Map<String, dynamic> row, {String? kind}) {
+  final content = ownedMemoryContent(row);
+  if (content is String) return content.trim();
+  if (content is Map) {
+    final keys = kind == 'profile'
+        ? const ['attributeValue', 'fieldValue', 'value', 'text', 'summary']
+        : const ['value', 'text', 'event', 'summary', 'content'];
+    for (final key in keys) {
+      final value = content[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+  }
+  return ownedMemoryText(row, kind: kind);
+}
