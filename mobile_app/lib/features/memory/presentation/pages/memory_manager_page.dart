@@ -535,14 +535,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.analytics_outlined),
-                title: const Text('向量与检索诊断'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showDiagnostics();
-                },
-              ),
-              ListTile(
                 leading: const Icon(Icons.pending_actions_outlined),
                 title: const Text('候选记忆管理'),
                 onTap: () {
@@ -790,42 +782,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     );
   }
 
-  Future<void> _showDiagnostics() async {
-    try {
-      final svc = ref.read(memoryServiceProvider);
-      final status = await svc.vectorStatus() ?? <String, dynamic>{};
-      final stats = await svc.retrievalStats();
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('记忆诊断'),
-          content: SingleChildScrollView(
-            child: SelectableText(
-              '向量状态\n${_prettyMap(status)}\n\n检索统计\n${_prettyMap(stats)}',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('诊断加载失败: $e')));
-    }
-  }
-
   Future<void> _showRanked() async {
     try {
       final rows = await ref
           .read(memoryServiceProvider)
-          .ranked(query: _searchController.text.trim(), limit: 30);
+          .search(_searchController.text.trim(), limit: 30);
       if (!mounted) return;
       showDialog(
         context: context,
@@ -841,18 +802,15 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (_, i) {
                       final row = rows[i];
-                      final memory = row['memory'] is Map
-                          ? Map<String, dynamic>.from(row['memory'] as Map)
-                          : <String, dynamic>{};
                       return ListTile(
                         dense: true,
                         title: Text(
-                          (memory['value'] ?? memory['key'] ?? '').toString(),
+                          row.value.isEmpty ? row.key : row.value,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          'score=${row['finalScore'] ?? '-'} · vector=${row['vectorScore'] ?? '-'} · keyword=${row['keywordScore'] ?? '-'}',
+                          '${row.memoryType} · ${row.source}',
                         ),
                       );
                     },
@@ -1174,22 +1132,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     }
   }
 
-  Future<void> _batchVerifySelected() async {
-    try {
-      await ref.read(memoryServiceProvider).batchVerify(_selected.toList());
-      ref.invalidate(memoryListProvider);
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已确认选中记忆')));
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('批量确认失败: $e')));
-    }
-  }
-
   Future<void> _showBatchImportance(BuildContext context) async {
     final picked = await showModalBottomSheet<int>(
       context: context,
@@ -1424,10 +1366,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
           ),
           const Spacer(),
           if (_selected.isNotEmpty) ...[
-            TextButton(
-              onPressed: _batchVerifySelected,
-              child: const Text('确认'),
-            ),
             TextButton(
               onPressed: () => _showBatchImportance(context),
               child: const Text('重要度'),
