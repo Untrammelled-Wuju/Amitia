@@ -966,6 +966,18 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   ? null
                   : _openCreateProfile,
             ),
+          if (widget.showTools && !widget.timeline && _kind == 'memory')
+            AmitiaIconButton(
+              icon: Icons.add,
+              tooltip: '新增记忆',
+              onPressed:
+                  _loading ||
+                      _managing ||
+                      _source != 'current' ||
+                      _managementPage == null
+                  ? null
+                  : _createMemory,
+            ),
           AmitiaIconButton(
             icon: Icons.tune,
             tooltip: '筛选与管理',
@@ -1475,14 +1487,16 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  TextButton(
-                    onPressed: _managementPage == null || _loading || _managing
-                        ? null
-                        : _kind == 'candidate'
-                        ? _generateCandidates
-                        : _createMemory,
-                    child: Text(_kind == 'candidate' ? '从已保存对话生成候选' : '新增记忆'),
-                  ),
+                  if (_kind != 'memory' || !widget.showTools || widget.timeline)
+                    TextButton(
+                      onPressed:
+                          _managementPage == null || _loading || _managing
+                          ? null
+                          : _kind == 'candidate'
+                          ? _generateCandidates
+                          : _createMemory,
+                      child: Text(_kind == 'candidate' ? '从已保存对话生成候选' : '新增记忆'),
+                    ),
                   if (_kind == 'memory')
                     Wrap(
                       children: [
