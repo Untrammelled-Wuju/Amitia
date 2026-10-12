@@ -209,7 +209,8 @@ describe("网页六层记忆的数据归属入口", () => {
     expect(timeline.text()).not.toContain("记忆分类");
     expect(timeline.findAll('select[aria-label="记忆查看范围"]')).toHaveLength(1);
     expect((timeline.find('select[aria-label="记忆查看范围"]').element as HTMLSelectElement).value).toBe("all");
-    expect(mocks.data).toHaveBeenCalledWith("memory", "role", "", "", { legacyCursor: "", memoryView: "all" });
+    expect(mocks.data).toHaveBeenCalledWith("memory", "role", "", "", { memoryView: "all" });
+    expect(mocks.data).toHaveBeenCalledWith("episodic", "role", "", "", { memoryView: "all" });
     expect(mocks.legacy).not.toHaveBeenCalled();
     timeline.unmount();
     wrappers.pop();

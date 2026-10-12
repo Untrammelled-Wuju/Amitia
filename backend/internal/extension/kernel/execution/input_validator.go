@@ -59,6 +59,7 @@ func (v *InputValidator) Validate(ctx context.Context, tool capability.ToolDefin
 			ToolID: tool.ID,
 			Role:   capability.ToolSchemaInput,
 			Kind:   "instance_mismatch",
+			Detail: capability.DescribeSchemaViolation(err),
 			Cause:  err,
 		}
 	}

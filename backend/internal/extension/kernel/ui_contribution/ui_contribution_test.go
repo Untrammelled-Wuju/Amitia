@@ -407,7 +407,7 @@ func TestBridgeHandleActionInvokeUnknown(t *testing.T) {
 
 func TestBridgeHandleActionInvokeDeclared(t *testing.T) {
 	h := NewUIHost()
-	h.Bridge().SetHandlers(func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error) {
+	h.Bridge().SetHandlers(func(context.Context, *BridgeSession, *UIActionDefinition, UIActionInvocation) (json.RawMessage, error) {
 		return json.RawMessage(`{"saved":true}`), nil
 	}, nil)
 	def := makeValidDefinition()
@@ -433,6 +433,67 @@ func TestBridgeHandleActionInvokeDeclared(t *testing.T) {
 	})
 	if !resp.OK {
 		t.Fatalf("action invoke failed: %v", resp.Error)
+	}
+}
+
+func TestBridgeHandleActionInvokeForwardsRendererMeta(t *testing.T) {
+	h := NewUIHost()
+	var captured UIActionInvocation
+	h.Bridge().SetHandlers(func(_ context.Context, _ *BridgeSession, _ *UIActionDefinition, invocation UIActionInvocation) (json.RawMessage, error) {
+		captured = invocation
+		return json.RawMessage(`{"saved":true}`), nil
+	}, nil)
+	def := makeValidDefinition()
+	def.Actions = []UIActionDefinition{{
+		ActionID:  "save",
+		Title:     LocalizedText{Default: "Save"},
+		Target:    UIActionTarget{Type: ActionTargetHostCommand, Command: "save"},
+		RiskLevel: RiskLevelLow,
+	}}
+	if err := h.RegisterContribution(def); err != nil {
+		t.Fatalf("register contribution: %v", err)
+	}
+	sess, err := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "", "", time.Hour)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"action_id": "save",
+		"input":     map[string]any{"action": "ui.dashboard"},
+		"meta":      map[string]any{"node_id": "lifecycle:command", "form_state": map[string]any{"category": "sticker"}},
+	})
+	resp := h.Bridge().Handle(context.Background(), BridgeMessage{
+		Method:          BridgeUIActionInvoke,
+		SessionID:       sess.SessionID,
+		ContributionID:  "contrib-1",
+		Origin:          "amitia://ext-1",
+		ContractVersion: 1,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           "nonce-action-meta",
+		Payload:         payload,
+	})
+	if !resp.OK {
+		t.Fatalf("action invoke failed: %v", resp.Error)
+	}
+
+	var input map[string]any
+	if err := json.Unmarshal(captured.Input, &input); err != nil {
+		t.Fatal(err)
+	}
+	if input["action"] != "ui.dashboard" {
+		t.Fatalf("unexpected input: %v", input)
+	}
+	if _, exists := input["node_id"]; exists {
+		t.Fatalf("renderer meta must stay out of tool input: %v", input)
+	}
+
+	var meta map[string]any
+	if err := json.Unmarshal(captured.Meta, &meta); err != nil {
+		t.Fatal(err)
+	}
+	if meta["node_id"] != "lifecycle:command" {
+		t.Fatalf("unexpected meta: %v", meta)
 	}
 }
 
@@ -546,7 +607,7 @@ func TestBridgeRevokeSessionWaitsForInFlightRequestBeforeReleasingSnapshots(t *t
 		released <- struct{}{}
 		return nil
 	})
-	h.Bridge().SetHandlers(func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error) {
+	h.Bridge().SetHandlers(func(context.Context, *BridgeSession, *UIActionDefinition, UIActionInvocation) (json.RawMessage, error) {
 		close(started)
 		<-finish
 		return json.RawMessage(`{"saved":true}`), nil

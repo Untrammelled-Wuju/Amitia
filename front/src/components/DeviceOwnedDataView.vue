@@ -13,10 +13,10 @@
         </el-select>
       </div>
     </header>
-    <DeviceOwnedMemoryPanel v-if="role" :key="`${owned.coreId.value}/${role}`" embedded fixed-kind :requested-memory-view="initialKind === 'profile' ? 'global' : viewSelection" :visible="true" :character-id="role" conversation-id="" :initial-kind="initialKind" />
+    <DeviceOwnedMemoryPanel v-if="role" :key="`${owned.coreId.value}/${role}/${mode || initialKind}`" embedded fixed-kind :requested-memory-view="initialKind === 'profile' ? 'global' : viewSelection" :visible="true" :character-id="role" conversation-id="" :initial-kind="initialKind" :mode="mode" :kinds="kinds" />
     <el-empty v-else description="选择角色后查看其数据；未配置角色时不能调用服务" />
   </section>
-  <slot v-else />
+  <el-alert v-else title="当前 Core 的设备数据服务尚未就绪，请恢复服务后重试" type="warning" :closable="false" />
 </template>
 
 <script setup lang="ts">
@@ -25,7 +25,7 @@ import DeviceOwnedMemoryPanel from "./DeviceOwnedMemoryPanel.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { getDeploymentConfig } from "@/runtime/runtime-adapter";
 
-const props = defineProps<{ title: string; initialKind: string; semanticTarget?: string }>();
+const props = defineProps<{ title: string; initialKind: string; semanticTarget?: string; mode?: string; kinds?: string[] }>();
 const owned = useDeviceOwnedConversation();
 const loading = ref(true);
 const error = ref("");

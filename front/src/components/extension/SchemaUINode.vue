@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import ExtensionSlot from "./ExtensionSlot.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
@@ -35,9 +35,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "action", payload: { action: SchemaUIActionBinding; node: SchemaUINode; item?: Record<string, unknown>; files?: Array<Record<string, unknown>> }): void;
+  (e: "action", payload: { action: SchemaUIActionBinding; node: SchemaUINode; item?: Record<string, unknown>; files?: Array<Record<string, unknown>>; followUpActions?: SchemaUIActionBinding[] }): void;
   (e: "error", payload: { nodeId: string; message: string }): void;
 }>();
+
+const busyNodeIds = inject<Set<string> | undefined>("schema-ui-busy-node-ids", undefined);
 
 const uiStore = useExtensionUIStore();
 const nodeType = computed(() => props.node.type);
@@ -301,6 +303,8 @@ function openFilePicker() {
   filePickerInput.value?.click();
 }
 
+const filePickerBusy = computed(() => busyNodeIds?.has(props.node.id) === true);
+
 async function onFilePicked(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
@@ -320,17 +324,19 @@ async function onFilePicked(event: Event) {
       reader.readAsDataURL(file);
     }),
   })));
-  for (const action of props.node.actions ?? []) {
-    emit("action", {
-      action,
-      node: props.node,
+  const actions = props.node.actions ?? [];
+  if (actions.length === 0) return;
+  const [primary, ...followUpActions] = actions;
+  emit("action", {
+    action: primary,
+    node: props.node,
+    files: payload,
+    item: {
+      input: resolveActionInput(primary.input, props.formState, props.context, { files: payload }),
       files: payload,
-      item: {
-        input: resolveActionInput(action.input, props.formState, props.context, { files: payload }),
-        files: payload,
-      },
-    });
-  }
+    },
+    followUpActions,
+  });
 }
 
 function onActionFromChild(payload: { action: SchemaUIActionBinding; node: SchemaUINode; item?: Record<string, unknown>; files?: Array<Record<string, unknown>> }) {
@@ -824,7 +830,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       <el-button
         class="schema-ui-file-picker__button"
         :type="(mergedProps.type as any) || 'primary'"
-        :disabled="disabled || mergedProps.disabled === true"
+        :loading="filePickerBusy"
+        :disabled="disabled || mergedProps.disabled === true || filePickerBusy"
         @click="openFilePicker"
       >
         {{ mergedProps.text ?? mergedProps.label ?? "选择文件" }}

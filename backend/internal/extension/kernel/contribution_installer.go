@@ -1641,7 +1641,18 @@ func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib dom
 		uiDef.ModuleID = ui_contribution.ModuleID(contrib.ModuleID)
 	}
 	if i.container.UIHost != nil {
-		if _, err := i.container.UIHost.GetContribution(uiDef.ContributionID); err != nil {
+		existing, existingErr := i.container.UIHost.GetContribution(uiDef.ContributionID)
+		staleContent := existingErr == nil && existing.Entry.ContentHash != "" && uiDef.Entry.ContentHash != "" && existing.Entry.ContentHash != uiDef.Entry.ContentHash
+		if existingErr != nil || staleContent {
+			if staleContent {
+				_ = i.container.UIHost.UnregisterContribution(uiDef.ContributionID)
+				if i.container.PageHost != nil {
+					_ = i.container.PageHost.UnregisterPage(ctx, extension_page_host.ContributionID(uiDef.ContributionID))
+				}
+				if i.container.UIContributionRepo != nil {
+					_ = i.container.UIContributionRepo.DeleteContribution(ctx, string(uiDef.ContributionID))
+				}
+			}
 			op, buildErr := i.buildUIContributionOp(ctx, contrib, defData, generation)
 			if buildErr != nil {
 				return fmt.Errorf("restore ui contribution %s: %w", uiDef.ContributionID, buildErr)

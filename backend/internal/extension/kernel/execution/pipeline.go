@@ -167,7 +167,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		if err := p.InputValidator.Validate(timeoutCtx, tool, request.Input); err != nil {
 			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:    capability.ErrorCodeInvalidInput,
-				Message: "input validation failed",
+				Message: fmt.Sprintf("input validation failed: %s", err.Error()),
 			}))), nil
 		}
 	}

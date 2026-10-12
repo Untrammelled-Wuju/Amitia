@@ -163,6 +163,12 @@ export interface PackageUninstallPreview {
   cleanup: string[];
   preserved: string[];
 }
+export interface PackagePermission {
+  name: string;
+  reason?: string;
+  scope?: string;
+  required: boolean;
+}
 export interface PackageImportPreview {
   sessionId: string;
   format: PackageFormat;
@@ -186,6 +192,7 @@ export interface PackageImportPreview {
   compatible: boolean;
   compatibility: string;
   capabilities: string[];
+  newPermissions?: PackagePermission[];
   highRiskCapabilities: string[];
   capabilityConfirmations: string[];
   triggers: SkillTrigger[];

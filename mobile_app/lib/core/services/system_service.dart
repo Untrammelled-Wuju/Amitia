@@ -164,33 +164,147 @@ class SystemService {
   }
 
   Future<Map<String, dynamic>?> graphStats() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/graph/stats');
-    return resp;
+    final resources = await _ownedGraphResources();
+    var nodes = 0;
+    var edges = 0;
+    for (final resource in resources) {
+      final body = resource['body'];
+      final content = body is Map ? body['content'] : null;
+      if (content is Map) {
+        if (content['nodes'] is List) nodes += (content['nodes'] as List).length;
+        if (content['edges'] is List) edges += (content['edges'] as List).length;
+      }
+    }
+    return <String, dynamic>{
+      'nodeCount': nodes,
+      'edgeCount': edges,
+      'nodes': nodes,
+      'edges': edges,
+    };
   }
 
   Future<List<Map<String, dynamic>>> graphNodes() async {
-    final resp = await _api.get<List<dynamic>>('/api/graph/nodes');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    final nodes = <Map<String, dynamic>>[];
+    for (final resource in await _ownedGraphResources()) {
+      final body = resource['body'];
+      final content = body is Map ? body['content'] : null;
+      if (content is! Map || content['nodes'] is! List) continue;
+      for (final item in content['nodes'] as List) {
+        if (item is Map) {
+          nodes.add(<String, dynamic>{
+            'id': item['id']?.toString() ?? '',
+            'label': (item['label'] ?? item['name'] ?? item['id'] ?? '')
+                .toString(),
+            'type': (item['type'] ?? 'entity').toString(),
+          });
+        } else if (item != null) {
+          nodes.add(<String, dynamic>{
+            'id': item.toString(),
+            'label': item.toString(),
+            'type': 'entity',
+          });
+        }
+      }
+    }
+    return nodes;
   }
 
   Future<List<Map<String, dynamic>>> graphEdges() async {
-    final resp = await _api.get<List<dynamic>>('/api/graph/edges');
-    if (resp == null) return [];
-    return resp
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+    final edges = <Map<String, dynamic>>[];
+    for (final resource in await _ownedGraphResources()) {
+      final body = resource['body'];
+      final content = body is Map ? body['content'] : null;
+      if (content is! Map) continue;
+      final list = content['edges'] ?? content['links'] ?? content['relations'];
+      if (list is List) {
+        for (final item in list) {
+          if (item is! Map) continue;
+          edges.add(<String, dynamic>{
+            'source': (item['source'] ?? item['subject'] ?? item['from'] ?? '')
+                .toString(),
+            'target': (item['target'] ?? item['object'] ?? item['to'] ?? '')
+                .toString(),
+            'relation': (item['relation'] ??
+                    item['predicate'] ??
+                    item['label'] ??
+                    '')
+                .toString(),
+          });
+        }
+      } else {
+        final target = content['target'] ?? content['object'] ?? content['to'];
+        if (target != null) {
+          edges.add(<String, dynamic>{
+            'source': (content['source'] ??
+                    content['subject'] ??
+                    content['from'] ??
+                    '')
+                .toString(),
+            'target': target.toString(),
+            'relation':
+                (content['relation'] ?? content['predicate'] ?? '').toString(),
+          });
+        }
+      }
+    }
+    return edges;
   }
 
   Future<Map<String, dynamic>?> graphNeighbors(
     String nodeId, {
     int depth = 2,
   }) async {
-    return _api.get<Map<String, dynamic>>(
-      '/api/graph/node/${Uri.encodeComponent(nodeId)}/neighbors',
-      queryParameters: {'depth': depth},
+    final nodes = await graphNodes();
+    final edges = await graphEdges();
+    final visible = <String>{nodeId};
+    for (var round = 0; round < depth; round++) {
+      for (final edge in edges) {
+        final source = edge['source']?.toString() ?? '';
+        final target = edge['target']?.toString() ?? '';
+        if (visible.contains(source)) visible.add(target);
+        if (visible.contains(target)) visible.add(source);
+      }
+    }
+    return <String, dynamic>{
+      'nodes': nodes
+          .where((node) => visible.contains(node['id']?.toString() ?? ''))
+          .toList(growable: false),
+      'edges': edges
+          .where((edge) =>
+              visible.contains(edge['source']?.toString() ?? '') &&
+              visible.contains(edge['target']?.toString() ?? ''))
+          .toList(growable: false),
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> _ownedGraphResources() async {
+    final roles = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/roles',
     );
+    final list = roles?['roles'];
+    final characterId = list is List && list.isNotEmpty && list.first is Map
+        ? ((list.first as Map)['id'] ?? '').toString()
+        : '';
+    if (characterId.isEmpty) return const [];
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/data',
+      queryParameters: <String, dynamic>{
+        'kind': 'graph',
+        'characterId': characterId,
+        'memoryView': 'all',
+      },
+    );
+    final nested = resp?['data'];
+    final payload = nested is Map ? nested : resp;
+    final snapshot = payload is Map ? payload['snapshot'] : null;
+    final resources = snapshot is Map && snapshot['resources'] is List
+        ? snapshot['resources'] as List
+        : const [];
+    return resources
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['kind'] == 'graph')
+        .toList(growable: false);
   }
 
   Future<List<Map<String, dynamic>>> graphPath(

@@ -509,6 +509,11 @@ type BridgeSession struct {
 type PermissionSnapshotFactory func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error)
 type SnapshotReleaser func(scopeSnapshotID, permissionSnapshotID string) error
 
+type UIActionInvocation struct {
+	Input json.RawMessage
+	Meta  json.RawMessage
+}
+
 type UIBridge struct {
 	host                      *UIHost
 	mu                        sync.RWMutex
@@ -516,7 +521,7 @@ type UIBridge struct {
 	scopeSnapshotFactory      func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
 	permissionSnapshotFactory PermissionSnapshotFactory
 	snapshotReleaser          SnapshotReleaser
-	actionHandler             func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error)
+	actionHandler             func(context.Context, *BridgeSession, *UIActionDefinition, UIActionInvocation) (json.RawMessage, error)
 	dataHandler               func(context.Context, *BridgeSession, string, json.RawMessage) (json.RawMessage, error)
 }
 
@@ -543,7 +548,7 @@ func (b *UIBridge) SetScopeSnapshotFactory(fn func(extensionID, moduleID string,
 }
 
 func (b *UIBridge) SetHandlers(
-	actionHandler func(context.Context, *BridgeSession, *UIActionDefinition, json.RawMessage) (json.RawMessage, error),
+	actionHandler func(context.Context, *BridgeSession, *UIActionDefinition, UIActionInvocation) (json.RawMessage, error),
 	dataHandler func(context.Context, *BridgeSession, string, json.RawMessage) (json.RawMessage, error),
 ) {
 	b.mu.Lock()
@@ -836,6 +841,7 @@ func (b *UIBridge) handleActionInvoke(ctx context.Context, sess *BridgeSession, 
 	var p struct {
 		ActionID string          `json:"action_id"`
 		Input    json.RawMessage `json:"input"`
+		Meta     json.RawMessage `json:"meta"`
 	}
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrPayloadInvalid, err.Error(), nil)}
@@ -854,7 +860,7 @@ func (b *UIBridge) handleActionInvoke(ctx context.Context, sess *BridgeSession, 
 	if handler == nil {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, "action handler unavailable", nil)}
 	}
-	result, err := handler(ctx, sess, action, p.Input)
+	result, err := handler(ctx, sess, action, UIActionInvocation{Input: p.Input, Meta: p.Meta})
 	if err != nil {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, err.Error(), nil)}
 	}

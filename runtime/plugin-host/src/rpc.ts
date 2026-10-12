@@ -17,6 +17,14 @@ export interface RpcErrorData {
 
 export type MessageHandler = (message: JsonRpcMessage) => void;
 
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+
+interface PendingCall {
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 export class RpcError extends Error {
   public code: number;
   public data: any;
@@ -31,7 +39,7 @@ export class RpcError extends Error {
 export class RpcConnection {
   private rl: readline.Interface;
   private handlers: Map<string, MessageHandler> = new Map();
-  private pending: Map<number, (response: JsonRpcMessage) => void> = new Map();
+  private pending: Map<number, PendingCall> = new Map();
   private nextId: number = 1;
   private closed: boolean = false;
 
@@ -40,6 +48,7 @@ export class RpcConnection {
     this.rl.on("line", (line: string) => this.handleLine(line));
     this.rl.on("close", () => {
       this.closed = true;
+      this.rejectAllPending(new Error("rpc connection closed"));
     });
   }
 
@@ -55,16 +64,19 @@ export class RpcConnection {
     this.write(msg);
   }
 
-  public sendRequest(method: string, params?: any): Promise<any> {
+  public sendRequest(method: string, params?: any, timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS): Promise<any> {
     return new Promise((resolve, reject) => {
       const id = this.nextId++;
-      this.pending.set(id, (response: JsonRpcMessage) => {
-        if (response.error) {
-          reject(new RpcError(response.error.code, response.error.message, response.error.data));
-        } else {
-          resolve(response.result);
+      const timer = setTimeout(() => {
+        if (!this.pending.delete(id)) {
+          return;
         }
-      });
+        reject(new Error(`rpc request timeout: ${method} (${timeoutMs}ms)`));
+      }, timeoutMs);
+      if (typeof (timer as any).unref === "function") {
+        (timer as any).unref();
+      }
+      this.pending.set(id, { resolve, reject, timer });
       const msg: any = { jsonrpc: "2.0", id, method };
       if (params !== undefined) {
         msg.params = params;
@@ -91,6 +103,18 @@ export class RpcConnection {
 
   public close(): void {
     this.rl.close();
+    this.rejectAllPending(new Error("rpc connection closed"));
+  }
+
+  private rejectAllPending(error: Error): void {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      this.pending.delete(id);
+      try {
+        pending.reject(error);
+      } catch (e) {
+      }
+    }
   }
 
   private write(message: any): void {
@@ -118,11 +142,16 @@ export class RpcConnection {
     if (!message || message.jsonrpc !== "2.0") {
       return;
     }
-    if (message.id !== undefined && (message.result !== undefined || message.error !== undefined)) {
-      const handler = this.pending.get(message.id as number);
-      if (handler) {
+    if (message.id !== undefined && message.method === undefined && (message.result !== undefined || message.error !== undefined)) {
+      const pending = this.pending.get(message.id as number);
+      if (pending) {
         this.pending.delete(message.id as number);
-        handler(message);
+        clearTimeout(pending.timer);
+        if (message.error) {
+          pending.reject(new RpcError(message.error.code, message.error.message, message.error.data));
+        } else {
+          pending.resolve(message.result);
+        }
       }
       return;
     }

@@ -94,6 +94,7 @@ type InstallPreview struct {
 	Modules                   []PreviewModule                         `json:"modules"`
 	MissingDependencies       []PreviewDependency                     `json:"missingDependencies"`
 	RequiredPermissions       []PreviewPermission                     `json:"requiredPermissions"`
+	AddedPermissions          []PreviewPermission                     `json:"addedPermissions,omitempty"`
 	RequiredScopes            []PreviewScope                          `json:"requiredScopes"`
 	MigrationPreview          *migration.ReversiblePreflight          `json:"migrationPreview,omitempty"`
 	MigrationPlanHash         string                                  `json:"migrationPlanHash,omitempty"`

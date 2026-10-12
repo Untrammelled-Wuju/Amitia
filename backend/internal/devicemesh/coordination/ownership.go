@@ -41,6 +41,7 @@ type Resource struct {
 	SourceID string          `json:"sourceId,omitempty"`
 	Revision int64           `json:"revision"`
 	Deleted  bool            `json:"deleted"`
+	UpdatedAt string         `json:"updatedAt,omitempty"`
 	Body     json.RawMessage `json:"body"`
 }
 
@@ -368,7 +369,7 @@ func (s *OwnershipStore) List(ctx context.Context, kind, role string, includeDel
 	if !validKind(kind) || role == "" {
 		return nil, ErrWrongOwner
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT resource_id,source_id,revision,deleted,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND role_id=? AND (? OR deleted=0) ORDER BY updated_at,resource_id LIMIT 1000`, s.ownerID, kind, role, includeDeleted)
+	rows, err := s.db.QueryContext(ctx, `SELECT resource_id,source_id,revision,deleted,body,updated_at FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND role_id=? AND (? OR deleted=0) ORDER BY updated_at,resource_id LIMIT 1000`, s.ownerID, kind, role, includeDeleted)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +377,7 @@ func (s *OwnershipStore) List(ctx context.Context, kind, role string, includeDel
 	resources := make([]Resource, 0)
 	for rows.Next() {
 		resource := Resource{OwnerID: s.ownerID, Kind: kind, RoleID: role}
-		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body); err != nil {
+		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body, &resource.UpdatedAt); err != nil {
 			return nil, err
 		}
 		resources = append(resources, resource)
@@ -505,6 +506,7 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body, &resource.RoleID, &ordered); err != nil {
 			return nil, "", err
 		}
+		resource.UpdatedAt = ordered
 		if kind == "message" {
 			encoded, err := json.Marshal(resource)
 			if err != nil {

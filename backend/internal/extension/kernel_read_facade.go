@@ -63,6 +63,15 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 			result.Capabilities = append(result.Capabilities, permission.Name)
 		}
 	}
+	for _, permission := range preview.AddedPermissions {
+		if permission.Name == "" {
+			continue
+		}
+		result.NewPermissions = append(result.NewPermissions, PackagePermissionView{
+			Name: permission.Name, Reason: permission.Reason,
+			Scope: permission.Scope, Required: permission.Required,
+		})
+	}
 	for _, dependency := range preview.MissingDependencies {
 		result.Dependencies = append(result.Dependencies, PackageDependencyView{ID: dependency.ID,
 			VersionConstraint: dependency.Version, Required: !dependency.Optional, Installed: !dependency.Missing})

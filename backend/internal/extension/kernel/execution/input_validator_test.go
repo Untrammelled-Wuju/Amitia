@@ -144,6 +144,40 @@ func TestB18InputValidatorRejectsAdditionalProperties(t *testing.T) {
 	}
 }
 
+func TestInputValidatorReportsSchemaDetailWithoutValues(t *testing.T) {
+	v := NewInputValidator()
+
+	schema := json.RawMessage(`{
+		"type": "object",
+		"additionalProperties": false,
+		"properties": {
+			"action": {"type": "string"}
+		}
+	}`)
+
+	tool := capability.ToolDefinition{
+		ID:          "com.amitia/proactive/command",
+		ModelName:   "proactive_command",
+		InputSchema: schema,
+		Source:      capability.ToolSourcePlugin,
+	}
+
+	input := json.RawMessage(`{"action": "ui.dashboard", "node_id": "SECRET_NODE_VALUE"}`)
+
+	err := v.Validate(context.Background(), tool, input)
+	if err == nil {
+		t.Fatal("expected validation error for additional properties")
+	}
+
+	message := err.Error()
+	if !strings.Contains(message, "additionalProperties(node_id)") {
+		t.Fatalf("error should name the offending property: %s", message)
+	}
+	if strings.Contains(message, "SECRET_NODE_VALUE") {
+		t.Fatalf("error should not leak input values: %s", message)
+	}
+}
+
 func TestB18InputValidatorRejectsInvalidJSON(t *testing.T) {
 	v := NewInputValidator()
 

@@ -4,8 +4,20 @@ const STATE_KEY = "emote-state";
 const VECTOR_COLLECTION = "emotes";
 const MAX_SEND_RECORDS = 5000;
 const MIN_SIMILARITY = 0.35;
+const FILE_WRITE_CHUNK_CHARS = 256 * 1024;
+const MAX_IMPORT_FILE_BYTES = 32 * 1024 * 1024;
 
 const uploadSessions = new Map();
+let commandQueue = Promise.resolve();
+
+function enqueueCommand(task) {
+  const run = commandQueue.then(task, task);
+  commandQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 function nowISO() {
   return new Date().toISOString();
@@ -178,7 +190,9 @@ async function closeResource(host, handleId) {
 async function writeBase64File(host, path, base64Data) {
   const opened = await openResource(host, path, "w");
   try {
-    await writeChunk(host, opened.handleId, base64Data);
+    for (let offset = 0; offset < base64Data.length; offset += FILE_WRITE_CHUNK_CHARS) {
+      await writeChunk(host, opened.handleId, base64Data.slice(offset, offset + FILE_WRITE_CHUNK_CHARS));
+    }
   } finally {
     await closeResource(host, opened.handleId);
   }
@@ -430,9 +444,19 @@ async function command(host, input) {
       const files = Array.isArray(input && input.files) ? input.files : [];
       let imported = 0;
       let duplicate = 0;
+      let rejected = 0;
       for (const file of files) {
         const dataBase64 = text(file && file.dataBase64);
-        if (!dataBase64) continue;
+        if (!dataBase64) {
+          rejected += 1;
+          continue;
+        }
+        const declaredSize = Math.max(0, number(file && file.size));
+        const estimatedBytes = Math.floor((dataBase64.length * 3) / 4);
+        if (Math.max(declaredSize, estimatedBytes) > MAX_IMPORT_FILE_BYTES) {
+          rejected += 1;
+          continue;
+        }
         const extension = safeSegment(text(file && file.name).split(".").pop() || "png", "png").toLowerCase();
         const uploadId = crypto.randomUUID();
         const paths = {
@@ -494,7 +518,17 @@ async function command(host, input) {
         });
         imported += 1;
       }
-      return { imported, duplicate, total: files.length };
+      const parts = [];
+      if (imported > 0) parts.push(`已导入 ${imported} 张`);
+      if (duplicate > 0) parts.push(`已存在 ${duplicate} 张`);
+      if (rejected > 0) parts.push(`${rejected} 张因格式或体积超限(${Math.round(MAX_IMPORT_FILE_BYTES / 1024 / 1024)}MB)被跳过`);
+      return {
+        imported,
+        duplicate,
+        rejected,
+        total: files.length,
+        message: parts.length > 0 ? parts.join("，") : "没有可导入的图片",
+      };
     }
     case "emotes.list": {
       const snapshot = await readState(host);
@@ -891,7 +925,7 @@ async function output(host, input) {
 
 const emoteExtension = {
   async activate(context) {
-    context.handlers.bindTool("command", (input) => command(context.host, input));
+    context.handlers.bindTool("command", (input) => enqueueCommand(() => command(context.host, input)));
     context.handlers.bindTool("output", (input) => output(context.host, input));
   },
   async deactivate() {

@@ -116,6 +116,12 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	for _, validationError := range validation.Errors {
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: validationError.Code, Message: validationError.Message, Path: validationError.Path})
 	}
+	for _, permission := range pkg.Manifest.Permissions {
+		preview.RequiredPermissions = append(preview.RequiredPermissions, PreviewPermission{
+			Name: permission.Name, Reason: permission.Reason,
+			Required: permission.Required, Scope: permission.Scope,
+		})
+	}
 	if r.container != nil && r.container.PermissionDefinitions != nil {
 		permIssues := validateManifestPermissions(pkg.Manifest, r.container.PermissionDefinitions)
 		for _, issue := range permIssues {
@@ -333,6 +339,11 @@ func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *Insta
 		return
 	}
 	preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.update", PackageConfirmationSnapshotExempt)
+	preview.AddedPermissions = r.packageAddedPermissions(ctx, preview)
+	if len(preview.AddedPermissions) > 0 {
+		preview.RiskFlags = append(preview.RiskFlags, "new_permissions")
+		preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.new_permissions")
+	}
 	currentArtifact, artifactErr := r.container.PackageRepository.GetArtifact(ctx, current.PackageID)
 	if artifactErr == nil {
 		if current.InstalledVersion.String() == preview.Version && currentArtifact.ArchiveHash != preview.ArchiveHash {
@@ -349,6 +360,49 @@ func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *Insta
 		preview.RiskFlags = append(preview.RiskFlags, "downgrade")
 		preview.RequiredConfirmations = append(preview.RequiredConfirmations, "confirm.downgrade")
 	}
+}
+
+// packageAddedPermissions lists the manifest permissions that the installed
+// generation does not declare yet, so the host can ask the user to authorize
+// them before the new generation starts using them.
+func (r *Runtime) packageAddedPermissions(ctx context.Context, preview *InstallPreview) []PreviewPermission {
+	if r.container == nil || r.container.PermissionRepository == nil {
+		return nil
+	}
+	installed, err := r.container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(preview.ExtensionID))
+	if err != nil {
+		return nil
+	}
+	installedNames := make(map[string]struct{}, len(installed))
+	for _, requirement := range installed {
+		if name := strings.TrimSpace(requirement.PermissionName); name != "" {
+			installedNames[name] = struct{}{}
+		}
+	}
+	declared := preview.RequiredPermissions
+	if len(declared) == 0 {
+		declared = make([]PreviewPermission, 0, len(preview.Manifest.Permissions))
+		for _, permission := range preview.Manifest.Permissions {
+			declared = append(declared, PreviewPermission{
+				Name: permission.Name, Reason: permission.Reason,
+				Required: permission.Required, Scope: permission.Scope,
+			})
+		}
+	}
+	added := make([]PreviewPermission, 0, len(declared))
+	for _, permission := range declared {
+		name := strings.TrimSpace(permission.Name)
+		if name == "" {
+			continue
+		}
+		if _, exists := installedNames[name]; exists {
+			continue
+		}
+		permission.Name = name
+		added = append(added, permission)
+	}
+	sort.Slice(added, func(i, j int) bool { return added[i].Name < added[j].Name })
+	return added
 }
 
 func (r *Runtime) evaluatePackageCompatibilityAndDependencies(ctx context.Context, pkg *amitiax.Package, preview *InstallPreview) {

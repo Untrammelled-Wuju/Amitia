@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -155,5 +156,101 @@ func TestUIActionSnapshotDeriverSwitchesModuleWithinExtension(t *testing.T) {
 	cleanup()
 	if _, err := permissionStore.GetSnapshot(ctx, permissionID); err == nil {
 		t.Fatal("derived permission snapshot was not cleaned up")
+	}
+}
+
+func TestUIActionToolInputDropsUndeclaredRendererMeta(t *testing.T) {
+	ctx := context.Background()
+	registry := capability.NewToolRegistry()
+	if err := registry.Register(ctx, capability.ToolDefinition{
+		ID:          "com.amitia/proactive/command",
+		ExtensionID: "com.amitia/proactive",
+		Name:        "Proactive Command",
+		Enabled:     true,
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"payload":{"type":"object"}},"additionalProperties":false}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	executor := &UIActionExecutor{toolRegistry: registry}
+
+	got, err := executor.normalizeToolInput(
+		ctx,
+		"com.amitia/proactive/command",
+		json.RawMessage(`{"action":"ui.dashboard","node_id":"lifecycle:command","form_state":{"enabled":true}}`),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(got, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if string(payload["action"]) != `"ui.dashboard"` {
+		t.Fatalf("expected action to survive, got %s", got)
+	}
+	if _, exists := payload["node_id"]; exists {
+		t.Fatalf("undeclared node_id should be stripped, got %s", got)
+	}
+	if _, exists := payload["form_state"]; exists {
+		t.Fatalf("undeclared form_state should be stripped, got %s", got)
+	}
+}
+
+func TestUIActionToolInputMergesDeclaredRendererMetaFromMetaChannel(t *testing.T) {
+	ctx := context.Background()
+	registry := capability.NewToolRegistry()
+	if err := registry.Register(ctx, capability.ToolDefinition{
+		ID:          "com.amitia/emote/command",
+		ExtensionID: "com.amitia/emote",
+		Name:        "Emote Command",
+		Enabled:     true,
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"payload":{"type":"object"},"node_id":{"type":"string"},"form_state":{"type":"object"}},"additionalProperties":false}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	executor := &UIActionExecutor{toolRegistry: registry}
+
+	got, err := executor.normalizeToolInput(
+		ctx,
+		"com.amitia/emote/command",
+		json.RawMessage(`{"action":"ui.composer"}`),
+		json.RawMessage(`{"node_id":"lifecycle:command","form_state":{"category":"sticker"},"local_state":{"ignored":true}}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(got, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if string(payload["node_id"]) != `"lifecycle:command"` {
+		t.Fatalf("declared node_id should be merged from meta, got %s", got)
+	}
+	if string(payload["form_state"]) != `{"category":"sticker"}` {
+		t.Fatalf("declared form_state should be merged from meta, got %s", got)
+	}
+	if _, exists := payload["local_state"]; exists {
+		t.Fatalf("undeclared local_state should stay out of tool input, got %s", got)
+	}
+}
+
+func TestUIActionToolInputKeepsMetaWhenSchemaUnavailable(t *testing.T) {
+	ctx := context.Background()
+	executor := &UIActionExecutor{}
+	input := json.RawMessage(`{"action":"ui.dashboard","node_id":"lifecycle:command","form_state":{}}`)
+
+	got, err := executor.normalizeToolInput(ctx, "com.amitia/unknown/command", input, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(got, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload) != 3 || string(payload["node_id"]) != `"lifecycle:command"` || string(payload["action"]) != `"ui.dashboard"` {
+		t.Fatalf("input should pass through when no schema is known, got %s", got)
 	}
 }

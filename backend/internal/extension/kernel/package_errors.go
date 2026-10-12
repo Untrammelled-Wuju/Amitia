@@ -121,6 +121,7 @@ const (
 	PackageErrCodeRollbackSnapshotIncomplete           = "PACKAGE_ROLLBACK_SNAPSHOT_INCOMPLETE"
 	PackageErrCodeVersionHistoryCorrupted              = "PACKAGE_VERSION_HISTORY_CORRUPTED"
 	PackageErrCodeFinalGateFailed                      = "PACKAGE_FINAL_GATE_FAILED"
+	PackageErrCodeUpdateActivationFailed               = "PACKAGE_UPDATE_ACTIVATION_FAILED"
 	PackageErrCodeVersionActivateTargetNotFound        = "PACKAGE_VERSION_ACTIVATE_TARGET_NOT_FOUND"
 	PackageErrCodeInstallationNotFound                 = "PACKAGE_INSTALLATION_NOT_FOUND"
 	PackageErrCodeVersionRepositoryUnavailable         = "PACKAGE_VERSION_REPOSITORY_UNAVAILABLE"

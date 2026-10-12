@@ -31,6 +31,13 @@ import (
 type HostState string
 
 const (
+	pluginHostOutboundQueueSize = 512
+	pluginHostMaxMessageBytes   = 64 * 1024 * 1024
+	pluginHostWriteTimeout      = 60 * time.Second
+	pluginHostEnqueueTimeout    = 30 * time.Second
+)
+
+const (
 	HostStateCreated   HostState = "created"
 	HostStateStarting  HostState = "starting"
 	HostStateReady     HostState = "ready"
@@ -77,6 +84,9 @@ type PluginHost struct {
 	procCtx         context.Context
 	procCancel      context.CancelFunc
 	writeMu         sync.Mutex
+	outbound        chan []byte
+	writerOnce      sync.Once
+	writerErr       error
 	pending         map[string]chan *jsonrpc.Response
 	pendingMu       sync.Mutex
 	reqCounter      int64
@@ -164,6 +174,7 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 		watchdog:            NewWatchdog(cfg.InstanceID),
 		shutdownCoordinator: NewShutdownCoordinator(),
 		pending:             make(map[string]chan *jsonrpc.Response),
+		outbound:            make(chan []byte, pluginHostOutboundQueueSize),
 		done:                make(chan struct{}),
 	}
 	return host, nil
@@ -358,6 +369,7 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 	h.mu.Unlock()
 
 	go h.readLoop()
+	h.startWriter()
 	h.stderrWG.Add(1)
 	go func() {
 		defer h.stderrWG.Done()
@@ -365,6 +377,75 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 	}()
 
 	return nil
+}
+
+// startWriter decouples stdout reading from stdin writing. A dedicated
+// goroutine drains the outbound queue so the read loop can never stall behind
+// a slow or wedged plugin process.
+func (h *PluginHost) startWriter() {
+	h.writerOnce.Do(func() {
+		go func() {
+			for {
+				select {
+				case <-h.done:
+					return
+				case payload := <-h.outbound:
+					if err := h.writeToProcess(payload); err != nil {
+						h.mu.Lock()
+						if h.writerErr == nil {
+							h.writerErr = err
+						}
+						h.mu.Unlock()
+						fmt.Fprintf(os.Stderr, "[js-runtime:%s] stdin write failed: %v\n", h.instanceID, err)
+						h.terminateProcess("stdin write failed")
+						return
+					}
+				}
+			}
+		}()
+	})
+}
+
+func (h *PluginHost) writeToProcess(payload []byte) error {
+	h.mu.RLock()
+	stdin := h.stdin
+	h.mu.RUnlock()
+	if stdin == nil {
+		return errors.New("javascript_main: stdin closed")
+	}
+
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+
+	written := make(chan error, 1)
+	go func() {
+		_, err := stdin.Write(payload)
+		written <- err
+	}()
+
+	select {
+	case err := <-written:
+		return err
+	case <-time.After(pluginHostWriteTimeout):
+		return fmt.Errorf("javascript_main: stdin write timeout after %s", pluginHostWriteTimeout)
+	}
+}
+
+func (h *PluginHost) terminateProcess(reason string) {
+	h.mu.RLock()
+	proc := h.cmd
+	cancel := h.procCancel
+	h.mu.RUnlock()
+
+	if reason != "" {
+		fmt.Fprintf(os.Stderr, "[js-runtime:%s] terminating runtime: %s\n", h.instanceID, reason)
+	}
+	if proc != nil && proc.Process != nil {
+		_ = proc.Process.Kill()
+	}
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func (h *PluginHost) buildProcessEnvironment() []string {
@@ -399,12 +480,16 @@ func (h *PluginHost) readLoop() {
 		return
 	}
 	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
+	scanner.Buffer(make([]byte, 0, 1024*1024), pluginHostMaxMessageBytes)
 	for scanner.Scan() {
-		data := scanner.Bytes()
-		if len(data) == 0 {
+		frame := scanner.Bytes()
+		if len(frame) == 0 {
 			continue
 		}
+		// The scanner reuses its buffer, so copy before dispatching work that
+		// may outlive this iteration.
+		data := make([]byte, len(frame))
+		copy(data, frame)
 		env, err := jsonrpc.DecodeEnvelope(data)
 		if err != nil {
 			continue
@@ -415,8 +500,18 @@ func (h *PluginHost) readLoop() {
 		case jsonrpc.KindNotification:
 			h.handleNotification(env.Notification)
 		case jsonrpc.KindRequest:
-			h.handleRequest(env.Request)
+			req := env.Request
+			go h.handleRequest(req)
 		}
+	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		h.mu.Lock()
+		if h.exitErr == nil {
+			h.exitErr = scanErr
+		}
+		h.mu.Unlock()
+		fmt.Fprintf(os.Stderr, "[js-runtime:%s] stdout read failed: %v\n", h.instanceID, scanErr)
+		h.terminateProcess("stdout read failed")
 	}
 	h.mu.RLock()
 	cmd := h.cmd
@@ -707,7 +802,11 @@ func (h *PluginHost) sendRequest(ctx context.Context, method string, params inte
 		h.pendingMu.Lock()
 		delete(h.pending, reqID.String())
 		h.pendingMu.Unlock()
-		_ = h.sendNotification("runtime.cancel", map[string]interface{}{"requestId": reqID.String(), "reason": ctx.Err().Error()})
+		_ = h.sendNotification("runtime.cancel", map[string]interface{}{
+			"invocationId": reqID.String(),
+			"requestId":    reqID.String(),
+			"reason":       ctx.Err().Error(),
+		})
 		return nil, ctx.Err()
 	case <-h.done:
 		h.pendingMu.Lock()
@@ -733,16 +832,22 @@ func (h *PluginHost) writeMessage(msg interface{}) error {
 	if err != nil {
 		return err
 	}
-	h.writeMu.Lock()
-	defer h.writeMu.Unlock()
-	if h.stdin == nil {
-		return errors.New("javascript_main: stdin closed")
+	if len(data) > pluginHostMaxMessageBytes {
+		return fmt.Errorf("javascript_main: outbound message too large: %d bytes (limit %d)", len(data), pluginHostMaxMessageBytes)
 	}
-	if _, err := h.stdin.Write(data); err != nil {
-		return err
+
+	payload := make([]byte, 0, len(data)+1)
+	payload = append(payload, data...)
+	payload = append(payload, '\n')
+
+	select {
+	case h.outbound <- payload:
+		return nil
+	case <-time.After(pluginHostEnqueueTimeout):
+		return errors.New("javascript_main: outbound queue saturated")
+	case <-h.done:
+		return errors.New("javascript_main: runtime exiting")
 	}
-	_, err = h.stdin.Write([]byte("\n"))
-	return err
 }
 
 func (h *PluginHost) Invoke(ctx context.Context, contributionID string, input interface{}) (interface{}, error) {

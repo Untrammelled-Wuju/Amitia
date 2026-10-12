@@ -260,6 +260,20 @@
           </div>
         </div>
 
+        <div v-if="newPermissions.length" class="preview-block">
+          <span class="preview-label">本次更新新增权限</span>
+          <ul class="new-permission-list">
+            <li v-for="permission in newPermissions" :key="permission.name">
+              <strong>{{ permission.name }}</strong>
+              <em v-if="permission.required">必需</em>
+              <span v-if="permission.reason">{{ permission.reason }}</span>
+            </li>
+          </ul>
+          <el-checkbox v-model="newPermissionAcknowledged" class="install-confirmation">
+            我同意本次更新为 {{ installPreview.name }} 新增以上权限
+          </el-checkbox>
+        </div>
+
         <div v-if="installPreview.dependencies?.length" class="preview-block">
           <span class="preview-label">依赖</span>
           <div class="dependency-list">
@@ -583,6 +597,9 @@ const previewLoading = ref(false);
 const installLoading = ref(false);
 const uploadProgress = ref(0);
 const installAcknowledged = ref(false);
+const newPermissionAcknowledged = ref(false);
+
+const newPermissions = computed(() => installPreview.value?.newPermissions ?? []);
 
 const needsInstallAcknowledgement = computed(() => {
   const preview = installPreview.value;
@@ -591,6 +608,7 @@ const needsInstallAcknowledgement = computed(() => {
     || preview.scripts > 0
     || (preview.highRiskCapabilities?.length || 0) > 0
     || (preview.capabilityConfirmations?.length || 0) > 0
+    || (preview.newPermissions?.length || 0) > 0
     || (preview.warnings?.length || 0) > 0;
 });
 
@@ -606,6 +624,7 @@ const canInstallPreview = computed(() => {
   if (!preview || previewLoading.value || installLoading.value) return false;
   if (!preview.compatible || (preview.errors?.length || 0) > 0) return false;
   if (previewMatchesInstalledVersion.value) return false;
+  if (newPermissions.value.length > 0 && !newPermissionAcknowledged.value) return false;
   return !needsInstallAcknowledgement.value || installAcknowledged.value;
 });
 
@@ -717,6 +736,7 @@ async function setPackageFile(file: File) {
   installFile.value = file;
   installPreview.value = null;
   installAcknowledged.value = false;
+  newPermissionAcknowledged.value = false;
   installMode.value = "install";
   installDialogVisible.value = true;
   await buildPackagePreview();
@@ -802,6 +822,7 @@ function resetInstallState() {
   installLoading.value = false;
   uploadProgress.value = 0;
   installAcknowledged.value = false;
+  newPermissionAcknowledged.value = false;
 }
 
 function signatureLabel(status?: string) {

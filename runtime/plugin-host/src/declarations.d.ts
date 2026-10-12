@@ -16,6 +16,9 @@ declare var process: {
 
 declare var module: any;
 
+declare function setTimeout(handler: (...args: any[]) => void, timeout?: number): any;
+declare function clearTimeout(handle: any): void;
+
 declare var Buffer: {
   from(data: any, encoding?: string): Buffer;
   isBuffer(obj: any): obj is Buffer;

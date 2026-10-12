@@ -14,6 +14,8 @@ const (
 	StepCommitKernelRepositories      = "install.commit_kernel_repositories"
 	StepReconcileCapabilityProviders  = "install.reconcile_capability_providers"
 	StepCommitUpdateState             = "update.commit_update_state"
+	StepQuiescePreviousGeneration     = "update.quiesce_previous_generation"
+	StepActivateTargetGeneration      = "update.activate_target_generation"
 	StepMarkInstallationDisabled      = "install.mark_installation_disabled"
 	StepExecuteMigrations             = "update.execute_migrations"
 	StepValidateAndDiff               = "update.validate_and_diff"
@@ -45,6 +47,8 @@ const (
 	StepRemoveFiles                   = "remove_files"
 	StepRemoveCurrentQuarantine       = "remove_current_quarantine"
 	StepRecordRestoreCompletion       = "record_restore_completion"
+	StepQuiesceTargetGeneration       = "rollback.quiesce_target_generation"
+	StepActivateRestoredGeneration    = "rollback.activate_restored_generation"
 )
 
 const (

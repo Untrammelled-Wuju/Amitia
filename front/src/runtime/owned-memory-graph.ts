@@ -1,3 +1,5 @@
+import { ownedMemoryTitle } from "./owned-memory-format";
+
 export interface MemoryGraphNode { id: string; name: string; symbolSize: number }
 export interface MemoryGraphLink { source: string; target: string; name: string }
 
@@ -42,7 +44,7 @@ export function buildOwnedMemoryGraph(resources: any[]) {
       edge(content.source ?? content.subject ?? content.from ?? row.body.key, content.target ?? content.object ?? content.to, content.relation ?? content.predicate ?? content.type);
     }
     if (!content || typeof content !== "object" || (!content.target && !content.object && !content.to && !Array.isArray(content.nodes) && !Array.isArray(content.edges) && !Array.isArray(content.links) && !Array.isArray(content.relations))) {
-      node(row.id, row.body?.key || row.body?.title || text(content) || row.id);
+      node(row.id, ownedMemoryTitle(row));
     }
   }
   return { nodes: Array.from(nodes.values()), links: Array.from(links.values()) };

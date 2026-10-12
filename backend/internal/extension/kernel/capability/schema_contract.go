@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 )
 
 type ToolSchemaRole string
@@ -23,6 +25,7 @@ type SchemaContractError struct {
 	ToolID string
 	Role   ToolSchemaRole
 	Kind   string
+	Detail string
 	Cause  error
 }
 
@@ -31,12 +34,16 @@ func (e *SchemaContractError) Error() string {
 		return "tool schema validation failed"
 	}
 
-	return fmt.Sprintf(
+	message := fmt.Sprintf(
 		"tool %s %s schema %s",
 		e.ToolID,
 		e.Role,
 		e.Kind,
 	)
+	if detail := strings.TrimSpace(e.Detail); detail != "" {
+		message = message + ": " + detail
+	}
+	return message
 }
 
 func (e *SchemaContractError) Unwrap() error {
@@ -45,6 +52,72 @@ func (e *SchemaContractError) Unwrap() error {
 	}
 
 	return e.Cause
+}
+
+const maxSchemaViolationEntries = 3
+
+// DescribeSchemaViolation summarises a JSON Schema validation failure using
+// instance locations and keywords only, so diagnostics never leak input values.
+func DescribeSchemaViolation(err error) string {
+	var validationErr *jsonschema.ValidationError
+	if !errors.As(err, &validationErr) {
+		return ""
+	}
+
+	entries := make([]string, 0, maxSchemaViolationEntries)
+	collectSchemaViolations(validationErr, &entries)
+	return strings.Join(entries, "; ")
+}
+
+func collectSchemaViolations(err *jsonschema.ValidationError, entries *[]string) {
+	if err == nil || len(*entries) >= maxSchemaViolationEntries {
+		return
+	}
+
+	if len(err.Causes) == 0 {
+		location := "/" + strings.Join(err.InstanceLocation, "/")
+		*entries = append(*entries, fmt.Sprintf("%s %s", location, describeSchemaErrorKind(err.ErrorKind)))
+		return
+	}
+
+	for _, cause := range err.Causes {
+		collectSchemaViolations(cause, entries)
+		if len(*entries) >= maxSchemaViolationEntries {
+			return
+		}
+	}
+}
+
+func describeSchemaErrorKind(errorKind jsonschema.ErrorKind) string {
+	if errorKind == nil {
+		return "constraint"
+	}
+
+	keyword := strings.Join(errorKind.KeywordPath(), "/")
+	if keyword == "" {
+		keyword = "constraint"
+	}
+
+	switch k := errorKind.(type) {
+	case *kind.AdditionalProperties:
+		if len(k.Properties) > 0 {
+			return fmt.Sprintf("%s(%s)", keyword, strings.Join(k.Properties, ","))
+		}
+	case *kind.Required:
+		if len(k.Missing) > 0 {
+			return fmt.Sprintf("%s(%s)", keyword, strings.Join(k.Missing, ","))
+		}
+	case *kind.PropertyNames:
+		if k.Property != "" {
+			return fmt.Sprintf("%s(%s)", keyword, k.Property)
+		}
+	case *kind.Type:
+		if len(k.Want) > 0 {
+			return fmt.Sprintf("%s(want=%s)", keyword, strings.Join(k.Want, "|"))
+		}
+	}
+
+	return keyword
 }
 
 type JSONSchemaCache struct {

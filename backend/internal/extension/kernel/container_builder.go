@@ -1788,7 +1788,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	sandboxBridge := sandbox_webui.NewBridge(sandboxHost, sandboxDispatcher, sandboxDataProvider, sandboxNavigator)
 	sandboxHost.SetBridge(sandboxBridge)
 	uiHost.Bridge().SetHandlers(
-		func(ctx context.Context, session *ui_contribution.BridgeSession, action *ui_contribution.UIActionDefinition, input json.RawMessage) (json.RawMessage, error) {
+		func(ctx context.Context, session *ui_contribution.BridgeSession, action *ui_contribution.UIActionDefinition, invocation ui_contribution.UIActionInvocation) (json.RawMessage, error) {
 			return actionExecutor.Execute(ctx, UIActionExecContext{
 				SessionID:            session.SessionID,
 				ContributionID:       session.ContributionID,
@@ -1801,7 +1801,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				ConversationID:       session.ConversationID,
 				SpaceID:              session.SpaceID,
 				DeviceID:             session.DeviceID,
-			}, action, input)
+				Meta:                 invocation.Meta,
+			}, action, invocation.Input)
 		},
 		func(ctx context.Context, session *ui_contribution.BridgeSession, sourceID string, params json.RawMessage) (json.RawMessage, error) {
 			return dataSourceProvider.Query(ctx, session.SessionID, session.ExtensionID, session.ModuleID, sourceID, session.ScopeSnapshotID, session.PermissionSnapshotID, params)

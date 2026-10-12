@@ -21,6 +21,7 @@ type MemoryManagementInput struct {
 	Key                      string `json:"key"`
 	Value                    string `json:"value"`
 	MemoryType               string `json:"memoryType"`
+	Partition                string `json:"partition,omitempty"`
 	Importance               int    `json:"importance"`
 	ConflictID               string `json:"conflictId,omitempty"`
 	ExpectedConflictRevision int64  `json:"expectedConflictRevision,omitempty"`
@@ -283,6 +284,9 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 	if input.Action != "create" && input.Action != "resolve" || input.Key == "" || input.Value == "" || len(input.Key) > 512 || len(input.Value) > 128<<10 || !utf8.ValidString(input.Key+input.Value) || strings.ContainsRune(input.Key+input.Value, 0) || input.Importance < 0 || input.Importance > 10 || len(input.MemoryType) > 64 {
 		return MemoryManagementResponse{}, errors.New("记忆内容或管理操作参数无效")
 	}
+	if input.Partition != "" && input.Partition != "memory" && input.Partition != "profile" {
+		return MemoryManagementResponse{}, errors.New("记忆分区参数无效")
+	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, true)
 	if err != nil {
 		return MemoryManagementResponse{}, err
@@ -338,7 +342,11 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 	if err != nil {
 		return MemoryManagementResponse{}, err
 	}
-	identity := sha256.Sum256([]byte(coordination.StorageRole(scope, "memory") + "\x00memory\x00fact/" + input.Key))
+	derivedKind := "fact"
+	if input.Partition == "profile" {
+		derivedKind = "profile"
+	}
+	identity := sha256.Sum256([]byte(coordination.StorageRole(scope, "memory") + "\x00memory\x00" + derivedKind + "/" + input.Key))
 	memoryID := hex.EncodeToString(identity[:16])
 	existing, err := port.Resource(ctx, scope, "memory", memoryID)
 	if err != nil {
@@ -376,7 +384,7 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 		return MemoryManagementResponse{}, coordination.ErrResourceVersion
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	derived := []DerivedMemory{{Kind: "fact", Key: input.Key, Body: body(map[string]any{"value": input.Value, "memoryType": input.MemoryType, "importance": input.Importance, "source": "manual", "createdAt": now})}}
+	derived := []DerivedMemory{{Kind: derivedKind, Key: input.Key, Body: body(map[string]any{"value": input.Value, "memoryType": input.MemoryType, "importance": input.Importance, "source": "manual", "createdAt": now})}}
 	mutations, err := e.prepareMemoryMutations(ctx, scope, "", derived, &snapshot)
 	if err != nil {
 		return MemoryManagementResponse{}, err

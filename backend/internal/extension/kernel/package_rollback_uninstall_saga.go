@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 )
 
 type PackageUninstallPreviewResult struct {
@@ -318,6 +319,13 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if err := leaseGuard.AssertAlive(ctx); err != nil {
 		return KernelInstallResult{}, r.failPackageRollbackWithForwardRecovery(op.OperationID, forwardPoint, "renew_lease", err, guard)
 	}
+	wasEnabled := current.EnablementState == domain.EnablementEnabled
+	if err := r.quiesceExtensionForPackageSwap(ctx, current.ExtensionID, runtime_supervisor.StopReasonRollback); err != nil {
+		return KernelInstallResult{}, r.failPackageRollbackWithForwardRecovery(op.OperationID, forwardPoint, StepQuiesceTargetGeneration, err, guard)
+	}
+	if err := r.completeSimplePackageStep(ctx, op.OperationID, StepQuiesceTargetGeneration, 25, guard); err != nil {
+		return KernelInstallResult{}, r.failPackageRollbackWithForwardRecovery(op.OperationID, forwardPoint, StepQuiesceTargetGeneration, err, guard)
+	}
 	if err := r.switchPackageGeneration(ctx, stableGeneration, targetGeneration); err != nil {
 		if compErr := r.compensatePackageGeneration(context.Background(), stableGeneration, targetGeneration, false); compErr != nil {
 			return KernelInstallResult{}, r.failPackageRollbackWithForwardRecovery(op.OperationID, forwardPoint, "switch_current_pointer", errors.Join(err, fmt.Errorf("generation compensation failed: %w", compErr)), guard)
@@ -469,6 +477,13 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	}
 	if err := r.prepareGameHostExtensionAfterPackageGenerationChange(ctx, extensionID); err != nil {
 		return KernelInstallResult{}, compensateRollback("prepare_game_host_generation", err)
+	}
+	if err := r.restoreExtensionAfterPackageSwap(ctx, current.ExtensionID, wasEnabled); err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", StepActivateRestoredGeneration, PackageErrCodeUpdateActivationFailed, err.Error(), true, guard)
+		return KernelInstallResult{}, errors.Join(err, persistErr)
+	}
+	if err := r.completeSimplePackageStep(ctx, op.OperationID, StepActivateRestoredGeneration, 65, guard); err != nil {
+		return KernelInstallResult{}, err
 	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, extensionID, leaseGuard, guard); err != nil {
 		compErr := r.compensatePackageGeneration(context.Background(), stableGeneration, targetGeneration, true)
@@ -1098,6 +1113,10 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "uninstall_runtime_contributions", "PACKAGE_RUNTIME_CONTRIBUTION_UNINSTALL_FAILED", err.Error(), true, uninstallGuard)
 			return op, errors.Join(fmt.Errorf("kernel: uninstall runtime contributions: %w", err), persistErr)
 		}
+	}
+	if err := r.stopExtensionRuntimeInstances(ctx, domain.ExtensionID(extensionID), runtime_supervisor.StopReasonUninstall); err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "stop_extension_runtime", "PACKAGE_RUNTIME_STOP_FAILED", err.Error(), true, uninstallGuard)
+		return op, errors.Join(fmt.Errorf("kernel: stop extension runtime before uninstall: %w", err), persistErr)
 	}
 	if err := leaseGuard.AssertAlive(ctx); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "renew_lease", "PACKAGE_LEASE_LOST", err.Error(), false, uninstallGuard)

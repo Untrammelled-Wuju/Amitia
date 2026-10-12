@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import '../backend_transport/backend_service_api.dart';
 import '../models/memory.dart';
@@ -20,30 +21,32 @@ class MemoryService {
     int page = 1,
     int pageSize = 200,
   }) async {
-    final resp = await _api.get<dynamic>(
-      '/api/memories',
-      queryParameters: <String, dynamic>{
-        'page': page,
-        'pageSize': pageSize,
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-        if (keyword != null && keyword.trim().isNotEmpty)
-          'keyword': keyword.trim(),
-        if (memoryType != null && memoryType.isNotEmpty)
-          'memoryType': memoryType,
-        if (verifiedStatus != null && verifiedStatus.isNotEmpty)
-          'verifiedStatus': verifiedStatus,
-        if (retentionLevel != null &&
-            retentionLevel >= 1 &&
-            retentionLevel <= 5)
-          'retentionLevel': retentionLevel,
-        if (decayState != null && decayState.isNotEmpty)
-          'decayState': decayState,
-        if (sort != null && sort.trim().isNotEmpty) 'sort': sort.trim(),
-        if (pinned != null) 'pinned': pinned,
-      },
-    );
-    return _memoryList(resp);
+    final resources = await _ownedResources(characterId, 'memory');
+    final search = (keyword ?? '').trim().toLowerCase();
+    final rows = <MemoryDto>[];
+    for (final resource in resources) {
+      final body = resource['body'] is Map
+          ? Map<String, dynamic>.from(resource['body'] as Map)
+          : <String, dynamic>{};
+      final content = body['content'];
+      final key = (body['key'] ?? '').toString();
+      final value = content is Map
+          ? (content['value'] ??
+                    content['text'] ??
+                    content['summary'] ??
+                    jsonEncode(content))
+                .toString()
+          : (content ?? '').toString();
+      final type = content is Map ? (content['memoryType'] ?? '').toString() : '';
+      if (search.isNotEmpty && !'$key $value'.toLowerCase().contains(search)) {
+        continue;
+      }
+      if (memoryType != null && memoryType.isNotEmpty && type != memoryType) {
+        continue;
+      }
+      rows.add(_memoryFromResource(resource, body, content, key, value, type));
+    }
+    return rows;
   }
 
   Future<MemoryDto?> create(Map<String, dynamic> data) async {
@@ -58,24 +61,33 @@ class MemoryService {
 
   Future<MemoryDto?> update(String id, Map<String, dynamic> data) async {
     final normalized = _normalizeWritePayload(data, isCreate: false);
-    final resp = await _api.put<Map<String, dynamic>>(
-      '/api/memories/$id',
-      data: normalized,
+    final characterId = (data['characterId'] ?? '').toString();
+    await _ownedEdit(
+      id,
+      characterId,
+      changes: <String, dynamic>{
+        'content': <String, dynamic>{'value': normalized['value']},
+      },
     );
-    if (resp == null) return null;
-    return MemoryDto.fromJson(resp);
+    return MemoryDto(
+      id: id,
+      characterId: characterId,
+      key: (normalized['key'] ?? '').toString(),
+      value: (normalized['value'] ?? '').toString(),
+      memoryType: (normalized['memoryType'] ?? 'custom').toString(),
+      importance: normalized['importance'] is num
+          ? (normalized['importance'] as num).toInt()
+          : 0,
+    );
   }
 
   Future<MemoryDto?> restore(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/memories/$id/restore',
-    );
-    if (resp == null) return null;
-    return MemoryDto.fromJson(resp);
+    await _ownedEdit(id, '', deleted: false);
+    return MemoryDto(id: id);
   }
 
   Future<bool> delete(String id) async {
-    await _api.delete('/api/memories/$id');
+    await _ownedEdit(id, '', deleted: true);
     return true;
   }
 
@@ -498,4 +510,123 @@ class MemoryService {
         .map((e) => Map<String, dynamic>.from(e))
         .toList(growable: false);
   }
+
+  Future<List<Map<String, dynamic>>> _ownedResources(
+    String? characterId,
+    String kind, {
+    String memoryView = 'all',
+  }) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/data',
+      queryParameters: <String, dynamic>{
+        'kind': kind,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+        'memoryView': memoryView,
+      },
+    );
+    final nested = resp?['data'];
+    final payload = nested is Map ? nested : resp;
+    final snapshot = payload is Map ? payload['snapshot'] : null;
+    final resources = snapshot is Map && snapshot['resources'] is List
+        ? snapshot['resources'] as List
+        : const [];
+    return resources
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['kind'] == kind)
+        .toList(growable: false);
+  }
+
+  MemoryDto _memoryFromResource(
+    Map<String, dynamic> resource,
+    Map<String, dynamic> body,
+    Object? content,
+    String key,
+    String value,
+    String type,
+  ) {
+    final roleId = (resource['roleId'] ?? '').toString();
+    final stamp = (resource['updatedAt'] ?? '').toString();
+    return MemoryDto(
+      id: resource['id']?.toString() ?? '',
+      characterId: roleId,
+      memoryType: type.isEmpty ? 'custom' : type,
+      source: content is Map ? (content['source'] ?? 'auto').toString() : 'auto',
+      scope: roleId.startsWith('@') ? 'user' : 'character',
+      key: key,
+      value: value,
+      importance: content is Map && content['importance'] is num
+          ? (content['importance'] as num).toInt()
+          : 0,
+      verifiedStatus: 'verified',
+      decayState: (body['decayState'] ?? 'active').toString(),
+      archivedAt: body['archivedAt']?.toString(),
+      allowContextUse: body['allowContextUse'] != false,
+      createdAt: content is Map
+          ? (content['createdAt'] ?? stamp).toString()
+          : stamp,
+      updatedAt: stamp,
+    );
+  }
+
+  Future<Map<String, dynamic>> _ownedResourceById(
+    String id,
+    String kind,
+    String characterId,
+  ) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/resources',
+      queryParameters: <String, dynamic>{
+        'kind': kind,
+        'id': id,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+      },
+    );
+    final nested = resp?['data'];
+    final payload = nested is Map ? nested : resp;
+    return payload is Map
+        ? Map<String, dynamic>.from(payload)
+        : <String, dynamic>{};
+  }
+
+  Future<void> _ownedEdit(
+    String id,
+    String characterId, {
+    Map<String, dynamic>? changes,
+    bool? deleted,
+  }) async {
+    final payload = await _ownedResourceById(id, 'memory', characterId);
+    final resource = payload['resource'];
+    final scope = payload['executionScope'];
+    if (resource is! Map || scope is! Map) {
+      throw StateError('该记忆不在当前数据来源中');
+    }
+    await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/resources/edit',
+      data: <String, dynamic>{
+        'requestId': _requestId(),
+        'kind': 'memory',
+        'id': id,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+        'expectedRevision': resource['revision'],
+        'expectedExecutionScope': scope,
+        if (deleted != null) 'deleted': deleted,
+        if (changes != null) 'changes': changes,
+      },
+    );
+  }
+
+  static String _requestId() {
+    final values = List<int>.generate(16, (_) => Random.secure().nextInt(256));
+    values[6] = (values[6] & 15) | 64;
+    values[8] = (values[8] & 63) | 128;
+    final value = values
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${value.substring(0, 8)}-${value.substring(8, 12)}-'
+        '${value.substring(12, 16)}-${value.substring(16, 20)}-'
+        '${value.substring(20)}';
+  }
 }
+

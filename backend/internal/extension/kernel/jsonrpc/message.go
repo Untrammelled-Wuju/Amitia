@@ -227,6 +227,11 @@ func EncodeResponse(id RequestID, result any) (*Response, error) {
 		}
 		raw = b
 	}
+	if len(raw) == 0 {
+		// Always emit an explicit `result` field so peers can reliably tell a
+		// response apart from a notification, even for void results.
+		raw = json.RawMessage("null")
+	}
 	return &Response{JSONRPC: ProtocolVersion, ID: id, Result: raw}, nil
 }
 

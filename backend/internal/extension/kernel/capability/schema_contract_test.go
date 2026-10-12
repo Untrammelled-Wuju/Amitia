@@ -216,6 +216,49 @@ func TestB18SchemaContractErrorDoesNotLeakInput(t *testing.T) {
 	}
 }
 
+func TestDescribeSchemaViolationNamesOffendingPropertiesWithoutValues(t *testing.T) {
+	cache := NewJSONSchemaCache()
+
+	schema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"action": {"type": "string"}
+		},
+		"additionalProperties": false
+	}`)
+
+	input := json.RawMessage(`{"action": "ui.dashboard", "node_id": "SECRET_NODE_VALUE", "form_state": {}}`)
+
+	err := cache.Validate(schema, input)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	detail := DescribeSchemaViolation(err)
+	if !strings.Contains(detail, "additionalProperties") {
+		t.Fatalf("detail should name the failing keyword: %s", detail)
+	}
+	if !strings.Contains(detail, "node_id") || !strings.Contains(detail, "form_state") {
+		t.Fatalf("detail should name the offending properties: %s", detail)
+	}
+	if strings.Contains(detail, "SECRET_NODE_VALUE") {
+		t.Fatalf("detail should not leak input values: %s", detail)
+	}
+}
+
+func TestSchemaContractErrorIncludesDetail(t *testing.T) {
+	err := (&SchemaContractError{
+		ToolID: "com.amitia/proactive/command",
+		Role:   ToolSchemaInput,
+		Kind:   "instance_mismatch",
+		Detail: "/ additionalProperties(node_id)",
+	}).Error()
+
+	if !strings.Contains(err, "instance_mismatch") || !strings.Contains(err, "additionalProperties(node_id)") {
+		t.Fatalf("unexpected error message: %s", err)
+	}
+}
+
 func TestB18RegistryRejectsInvalidInputSchema(t *testing.T) {
 	reg := NewToolRegistry()
 

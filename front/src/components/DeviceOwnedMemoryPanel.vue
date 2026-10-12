@@ -49,17 +49,52 @@
       <el-button :disabled="!projection || loading" :loading="rebuilding" @click="rebuild">重建当前范围索引</el-button>
     </div>
     <div v-loading="loading">
-      <OwnedMemoryGraph v-if="kind === 'graph'" :resources="rows" :loading="loading" :error="error" />
-      <div v-if="kind === 'graph' && source === 'current' && rows.length" class="record-actions">
+      <OwnedMemoryGraph v-if="view === 'graph'" :resources="rows" :loading="loading" :error="error" />
+      <div v-if="view === 'graph' && source === 'current' && rows.length" class="record-actions">
         <el-select v-model="graphTransferId" filterable placeholder="选择要迁移的图谱关系" aria-label="待迁移图谱关系">
-          <el-option v-for="row in rows" :key="row.id" :label="row.body.key || row.id" :value="row.id" />
+          <el-option v-for="row in rows" :key="row.id" :label="ownedMemoryTitle(row)" :value="row.id" />
         </el-select>
         <el-button :disabled="loading || !graphTransferId" @click="openTransfer(rows.find(row => row.id === graphTransferId))">调整所属分区</el-button>
       </div>
+      <div v-else-if="view === 'timeline'" class="timeline-view">
+        <div class="timeline-toolbar">
+          <el-input v-model="timelineKeyword" clearable placeholder="搜索标题或内容" class="tl-search" />
+          <el-select v-model="timelineLayers" multiple collapse-tags clearable placeholder="记忆层" class="tl-layers">
+            <el-option v-for="layer in timelineLayerOptions" :key="layer.id" :label="layer.label" :value="layer.id" />
+          </el-select>
+          <el-button :disabled="timelineRows.length === 0" @click="exportTimelineCSV">CSV 导出</el-button>
+          <span class="tl-count">共 {{ timelineRows.length }} 条</span>
+        </div>
+        <div class="timeline">
+          <div v-for="row in timelineRows" :key="`${row.ownerId}/${row.kind}/${row.id}`" class="tl-item">
+            <span class="tl-dot" :class="`layer-${row.kind}`" />
+            <div class="tl-card">
+              <div class="tl-header">
+                <el-tag size="small">{{ timelineLayerLabel(row.kind) }}</el-tag>
+                <span class="tl-time">{{ timelineTime(row) }}</span>
+                <span class="tl-role">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '全局记忆' : '角色记忆' }}</span>
+              </div>
+              <div class="card-title">{{ ownedMemoryTitle(row) }}</div>
+              <div class="record-text">
+                <div v-for="(field, index) in ownedMemoryFields(row)" :key="index" class="record-field">
+                  <span class="record-field-label">{{ field.label }}</span>
+                  <span class="record-field-value">{{ field.value }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <el-empty v-if="!loading && timelineRows.length === 0" description="当前筛选下没有记忆记录" />
+        </div>
+      </div>
       <template v-else>
       <article v-for="row in rows" :key="`${row.ownerId}/${row.kind}/${row.id}`" class="owned-memory-card">
-        <div class="card-title">{{ row.body.key || row.body.title || row.id }}</div>
-        <div class="record-text">{{ content(row) }}</div>
+        <div class="card-title">{{ ownedMemoryTitle(row) }}</div>
+        <div class="record-text">
+          <div v-for="(field, index) in ownedMemoryFields(row)" :key="index" class="record-field">
+            <span class="record-field-label">{{ field.label }}</span>
+            <span class="record-field-value">{{ field.value }}</span>
+          </div>
+        </div>
         <div class="record-state">
           <el-tag v-if="['memory', 'episodic', 'graph', 'fact', 'vector'].includes(row.kind)" size="small">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '全局记忆' : '角色记忆' }}</el-tag>
           <el-tag size="small">版本 {{ row.revision }}</el-tag>
@@ -98,16 +133,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, useId } from "vue";
+import { computed, ref, watch, onMounted, onUnmounted, useId } from "vue";
 import { ElDrawer, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { useOwnedMemoryManagement } from "@/composables/useOwnedMemoryManagement";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import DeviceOwnedMemoryManagement from "./DeviceOwnedMemoryManagement.vue";
 import OwnedMemoryGraph from "./OwnedMemoryGraph.vue";
 import { GLOBAL_MEMORY_ROLE, memoryStorageRole, memoryRecordScope } from "@/runtime/owned-memory-scope";
+import { ownedMemoryTitle, ownedMemoryFields, ownedMemoryEditableText } from "@/runtime/owned-memory-format";
 import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 
-const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string }>();
+const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string; mode?: string; kinds?: string[] }>();
 defineEmits<{ "update:visible": [value: boolean] }>();
 const owned = useDeviceOwnedConversation();
 const controlId = useId();
@@ -160,13 +197,123 @@ let authorityInvalidated = false;
 let providerTimer: ReturnType<typeof setInterval> | undefined;
 
 function content(row: any): string {
-  const value = row.body.content;
-  if (row.kind === "vector") return `${value?.values?.length || 0} 维 · 模型 ${String(value?.modelFingerprint || "待重建").slice(0, 16)}`;
-  if (typeof value === "string") return value;
-  return String(value?.value || value?.text || value?.summary || JSON.stringify(value || row.body));
+  return ownedMemoryEditableText(row);
+}
+
+const view = computed(() => {
+  if (props.mode) return props.mode;
+  const current = props.fixedKind ? props.initialKind || "memory" : kind.value;
+  return ["graph", "profile", "episodic", "timeline"].includes(current) ? current : "list";
+});
+
+const timelineLayerOptions = [
+  { id: "memory", label: "原始记忆" },
+  { id: "working", label: "工作记忆" },
+  { id: "episodic", label: "情景记忆" },
+  { id: "fact", label: "事实记忆" },
+  { id: "profile", label: "用户画像" },
+  { id: "graph", label: "关系图谱" },
+  { id: "summary", label: "对话摘要" },
+];
+const timelineKeyword = ref("");
+const timelineLayers = ref<string[]>([]);
+
+function timelineLayerLabel(kindValue: string) {
+  return timelineLayerOptions.find((layer) => layer.id === kindValue)?.label || kindValue || "记忆";
+}
+
+function timelineStamp(row: any): number {
+  const parsed = Date.parse(String(row?.updatedAt || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function timelineTime(row: any) {
+  const value = String(row?.updatedAt || "");
+  if (!value) return "时间未知";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("zh-CN");
+}
+
+const timelineRows = computed(() => {
+  const search = timelineKeyword.value.trim().toLowerCase();
+  return rows.value
+    .filter((row) => !row.deleted)
+    .filter((row) => timelineLayers.value.length === 0 || timelineLayers.value.includes(row.kind))
+    .filter((row) => {
+      if (!search) return true;
+      const text = [ownedMemoryTitle(row), ...ownedMemoryFields(row).map((field) => `${field.label}${field.value}`)].join(" ").toLowerCase();
+      return text.includes(search);
+    })
+    .slice()
+    .sort((left, right) => timelineStamp(right) - timelineStamp(left));
+});
+
+function exportTimelineCSV() {
+  const cell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const lines = [["时间", "记忆层", "分区", "标题", "正文", "版本"].map(cell).join(",")];
+  for (const row of timelineRows.value) {
+    const body = ownedMemoryFields(row).map((field) => `${field.label}：${field.value}`).join(" | ");
+    lines.push([timelineTime(row), timelineLayerLabel(row.kind), row.roleId === GLOBAL_MEMORY_ROLE ? "全局记忆" : "角色记忆", ownedMemoryTitle(row), body, row.revision ?? ""].map(cell).join(","));
+  }
+  const blob = new Blob([`\ufeff${lines.join("\r\n")}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `记忆时间线-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+const loadKinds = computed(() => (props.kinds && props.kinds.length > 0 ? props.kinds : [kind.value]));
+
+async function loadAggregate() {
+  const ticket = ++generation;
+  rows.value = [];
+  next.value = "";
+  nextLegacy.value = "";
+  error.value = "";
+  loading.value = true;
+  try {
+    if (owned.coordinated.value && historicalRoles.value.length === 0) {
+      historicalRoles.value = await owned.historicalRoles(props.characterId);
+      if (ticket !== generation || !props.visible) return;
+    }
+    const historical = source.value.startsWith("history:");
+    const collected: any[] = [];
+    for (const currentKind of loadKinds.value) {
+      const result = await owned.data(currentKind, props.characterId, historical ? "" : props.conversationId, "", historical ? { historicalRoleId: source.value.slice(8) } : { ...(memoryView.value ? { memoryView: memoryView.value } : {}) });
+      if (ticket !== generation || !props.visible) return;
+      const snapshot = historical ? result.historicalSnapshot : result.snapshot;
+      if (!snapshot) continue;
+      for (const row of snapshot.resources.filter((item: any) => item.kind === currentKind)) {
+        if (row.ownerId !== snapshot.ownerId || !row.roleId) continue;
+        if (!result.executionScope.memoryViewAll && row.roleId !== (historical ? source.value.slice(8) : memoryStorageRole(result.executionScope, currentKind))) continue;
+        const recordScope = result.executionScope.memoryViewAll ? memoryRecordScope(result.executionScope, row.roleId) : result.executionScope;
+        collected.push({ ...row, executionScope: recordScope });
+      }
+      owner.value = snapshot.ownerId;
+      loadedScope.value = result.executionScope;
+    }
+    rows.value = collected;
+  } catch (cause) {
+    if (ticket === generation) error.value = cause instanceof Error ? cause.message : "记忆加载失败";
+  } finally {
+    if (ticket === generation) loading.value = false;
+  }
+}
+
+async function createProfile(payload: { key: string; value: string; memoryType: string }) {
+  const scope = loadedScope.value;
+  if (!scope || scope.memoryViewAll) { error.value = "请先选择具体记忆分区后再新增画像"; return; }
+  try {
+    const api = useOwnedMemoryManagement();
+    await api.write(scope, crypto.randomUUID(), { action: "create", key: payload.key, value: payload.value, memoryType: payload.memoryType, importance: 5, partition: "profile" });
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : "画像保存失败"; }
 }
 
 async function load(older = false) {
+  if (props.kinds && props.kinds.length > 0) return loadAggregate();
   authorityInvalidated = false;
   const ticket = ++generation;
   const currentKind = kind.value;
@@ -358,5 +505,34 @@ onUnmounted(() => {
 .owned-memory-card { padding: 14px; margin-bottom: 10px; border-radius: var(--ac-radius-sm); background: var(--ac-color-bg-secondary); }
 .card-title { font-weight: 500; overflow-wrap: anywhere; }
 .record-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0; }
+.record-field { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.record-field-label { flex: 0 0 auto; color: var(--ac-color-text-secondary); font-size: 12px; }
+.record-field-value { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+.timeline-view { min-width: 0; }
+.timeline-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.tl-search { width: 220px; max-width: 100%; }
+.tl-layers { width: 260px; max-width: 100%; }
+.tl-count { color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); }
+.timeline { position: relative; padding-left: 24px; }
+.timeline::before { content: ""; position: absolute; left: 7px; top: 0; bottom: 0; width: 2px; background: var(--ac-color-border); }
+.tl-item { position: relative; margin-bottom: 16px; }
+.tl-dot {
+  position: absolute; left: -20px; top: 14px; width: 12px; height: 12px;
+  border-radius: 50%; border: 2px solid var(--ac-color-bg); z-index: 1;
+  background: var(--ac-color-primary);
+}
+.tl-dot.layer-working { background: var(--ac-color-info); }
+.tl-dot.layer-episodic { background: var(--ac-color-success); }
+.tl-dot.layer-fact { background: var(--ac-color-warning); }
+.tl-dot.layer-graph { background: var(--ac-color-danger); }
+.tl-dot.layer-summary { background: var(--ac-color-text-muted); }
+.tl-card {
+  background: var(--ac-color-surface); border: 1px solid var(--ac-color-border-light);
+  border-radius: var(--ac-radius-md); padding: 12px 14px;
+}
+.tl-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.tl-time { font-size: 12px; color: var(--ac-color-text-muted); }
+.tl-role { font-size: 12px; color: var(--ac-color-text-secondary); margin-left: auto; }
 .record-state, .record-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 </style>

@@ -125,6 +125,13 @@ type PackageDependencyView struct {
 	Version           string `json:"version,omitempty"`
 }
 
+type PackagePermissionView struct {
+	Name     string `json:"name"`
+	Reason   string `json:"reason,omitempty"`
+	Scope    string `json:"scope,omitempty"`
+	Required bool   `json:"required"`
+}
+
 type PackageUninstallPreview struct {
 	ExtensionID             string                  `json:"extensionId"`
 	CurrentVersion          string                  `json:"currentVersion"`
@@ -175,6 +182,7 @@ type PackageImportPreview struct {
 	Compatible              bool                     `json:"compatible"`
 	Compatibility           string                   `json:"compatibility"`
 	Capabilities            []string                 `json:"capabilities"`
+	NewPermissions          []PackagePermissionView  `json:"newPermissions,omitempty"`
 	HighRisk                []string                 `json:"highRiskCapabilities"`
 	CapabilityConfirmations []string                 `json:"capabilityConfirmations"`
 	Triggers                []SkillTrigger           `json:"triggers"`

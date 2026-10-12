@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 )
 
 type PackageUpdateDiff struct {
@@ -283,6 +284,13 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.completePackageUpdateStep(ctx, op.OperationID, 4, StepExecuteMigrations, packageJSON(map[string]string{"migrationOperationId": migrationOperation, "migrationPlanHash": confirmed.preview.MigrationPlanHash}), guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepExecuteMigrations, err, compensation, guard)
 	}
+	wasEnabled := current.EnablementState == domain.EnablementEnabled
+	if err := r.quiesceExtensionForPackageSwap(ctx, current.ExtensionID, runtime_supervisor.StopReasonUpdate); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepQuiescePreviousGeneration, err, compensation, guard)
+	}
+	if err := r.completePackageUpdateStep(ctx, op.OperationID, 45, StepQuiescePreviousGeneration, packageJSON(map[string]any{"extensionId": string(current.ExtensionID), "wasEnabled": wasEnabled, "generation": current.Generation}), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepQuiescePreviousGeneration, err, compensation, guard)
+	}
 	if err := r.switchPackageGeneration(ctx, stableGeneration, targetGeneration); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepUpdateSwitchCurrentPointer, err, compensation, guard)
 	}
@@ -400,6 +408,13 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 		failErr := r.failPackageUpdateOperation(op.OperationID, "prepare_game_host_generation", err, compensation, guard)
 		_ = r.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), confirmed.session.ExtensionID)
 		return KernelInstallResult{}, failErr
+	}
+	if err := r.restoreExtensionAfterPackageSwap(ctx, current.ExtensionID, wasEnabled); err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", StepActivateTargetGeneration, PackageErrCodeUpdateActivationFailed, err.Error(), true, guard)
+		return KernelInstallResult{}, errors.Join(err, persistErr)
+	}
+	if err := r.completePackageUpdateStep(ctx, op.OperationID, 65, StepActivateTargetGeneration, packageJSON(map[string]any{"extensionId": confirmed.session.ExtensionID, "version": confirmed.session.Version, "enabled": wasEnabled}), guard); err != nil {
+		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, StepActivateTargetGeneration, err, compensation, guard)
 	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, confirmed.session.ExtensionID, leaseGuard, guard); err != nil {
 		if compensation != nil {

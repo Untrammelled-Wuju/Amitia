@@ -952,6 +952,8 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					flags := os.O_RDWR | os.O_CREATE
 					if strings.EqualFold(strings.TrimSpace(p.Mode), "a") || strings.EqualFold(strings.TrimSpace(p.Mode), "append") {
 						flags |= os.O_APPEND
+					} else {
+						flags |= os.O_TRUNC
 					}
 					f, err = os.OpenFile(realPath, flags, 0644)
 				}

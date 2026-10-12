@@ -43,7 +43,6 @@ import (
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/embedding_config"
-	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -55,17 +54,14 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/management"
-	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
 	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/mcpapi"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/notificationruntime"
-	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/realtime"
 	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -564,21 +560,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.NotificationRuntime != nil {
 			notificationruntime.RegisterRoutes(apiGroup, services.NotificationRuntime)
 		}
-		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
-		apiGroup.GET("/memory/retrieval/stats", security.SharedCoreAdminOnly(), memHandler.RetrieveStats)
-		apiGroup.GET("/memory/pipeline/status", security.SharedCoreAdminOnly(), func(c *gin.Context) {
-			c.JSON(200, gin.H{"code": 200, "data": services.Chat.GetPipelineStatus(), "msg": "\u64cd\u4f5c\u6210\u529f"})
-		})
-		profile.RegisterProfileRouter(apiGroup, services.Profile)
 		var agentToolFacade *extensionkernel.ToolFacade
 		if services.KernelContainer != nil {
 			agentToolFacade = services.KernelContainer.ToolFacade
 		}
-		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		reminder.RegisterRouter(apiGroup, ctx.DB, services.Chat)
-		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		channelAccess := system.ChannelAvailabilityFunc(func(channelID string) bool {
 			if services.KernelContainer == nil || services.KernelContainer.ChannelResolver == nil {

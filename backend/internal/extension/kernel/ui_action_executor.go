@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -34,6 +35,7 @@ type UIActionExecContext struct {
 	SpaceID              string
 	DeviceID             string
 	TraceID              string
+	Meta                 json.RawMessage
 }
 
 type UIActionExecutor struct {
@@ -118,7 +120,7 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 		execCtx.ModuleID = targetModule
 		identity.ModuleID = domain.ModuleID(targetModule)
 	}
-	toolInputPayload, err := normalizeUIActionInput(input)
+	toolInputPayload, err := e.normalizeToolInput(ctx, toolID, input, execCtx.Meta)
 	if err != nil {
 		return nil, err
 	}
@@ -187,15 +189,83 @@ func (e *UIActionExecutor) resolveToolModule(ctx context.Context, extensionID, t
 	return definition.ModuleID
 }
 
-func normalizeUIActionInput(input json.RawMessage) (json.RawMessage, error) {
-	if len(input) == 0 {
+var uiActionRenderMetaKeys = []string{"node_id", "form_state", "local_state"}
+
+// normalizeToolInput keeps renderer-scoped metadata out of tool input unless the
+// tool schema declares the property. Legacy clients still send node_id and
+// form_state inside input; both transports are accepted and normalised here.
+func (e *UIActionExecutor) normalizeToolInput(ctx context.Context, toolID string, input, meta json.RawMessage) (json.RawMessage, error) {
+	if len(bytes.TrimSpace(input)) == 0 && len(bytes.TrimSpace(meta)) == 0 {
 		return json.RawMessage(`{}`), nil
 	}
-	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(input, &payload); err != nil {
-		return nil, fmt.Errorf("tool action input invalid: %w", err)
+
+	fields := map[string]json.RawMessage{}
+	if len(bytes.TrimSpace(input)) > 0 {
+		if err := json.Unmarshal(input, &fields); err != nil {
+			return nil, fmt.Errorf("tool action input invalid: %w", err)
+		}
+		if fields == nil {
+			fields = map[string]json.RawMessage{}
+		}
 	}
-	return input, nil
+
+	metaFields := map[string]json.RawMessage{}
+	if len(bytes.TrimSpace(meta)) > 0 {
+		if err := json.Unmarshal(meta, &metaFields); err != nil {
+			return nil, fmt.Errorf("tool action meta invalid: %w", err)
+		}
+		if metaFields == nil {
+			metaFields = map[string]json.RawMessage{}
+		}
+	}
+
+	declared, ok := e.declaredToolInputProperties(ctx, toolID)
+	if !ok {
+		return json.Marshal(fields)
+	}
+
+	renderMeta := map[string]json.RawMessage{}
+	for _, key := range uiActionRenderMetaKeys {
+		if value, exists := fields[key]; exists {
+			renderMeta[key] = value
+			delete(fields, key)
+		}
+		if value, exists := metaFields[key]; exists {
+			renderMeta[key] = value
+		}
+	}
+	for key, value := range renderMeta {
+		if declared[key] {
+			fields[key] = value
+		}
+	}
+
+	return json.Marshal(fields)
+}
+
+func (e *UIActionExecutor) declaredToolInputProperties(ctx context.Context, toolID string) (map[string]bool, bool) {
+	if e.toolRegistry == nil || toolID == "" {
+		return nil, false
+	}
+	definition, ok := e.toolRegistry.Get(ctx, toolID)
+	if !ok {
+		return nil, false
+	}
+	raw := bytes.TrimSpace(definition.InputSchema)
+	if len(raw) == 0 {
+		return nil, false
+	}
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil, false
+	}
+	declared := make(map[string]bool, len(schema.Properties))
+	for key := range schema.Properties {
+		declared[key] = true
+	}
+	return declared, true
 }
 
 func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) permission.PermissionExecutionContext {

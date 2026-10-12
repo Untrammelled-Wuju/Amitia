@@ -43,6 +43,10 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 		allowed = map[string]bool{"content": true}
 	case "memory":
 		allowed = map[string]bool{"content": true, "allowContextUse": true, "expiresAt": true, "archivedAt": true}
+	case "profile":
+		allowed = map[string]bool{"content": true}
+	case "episodic":
+		allowed = map[string]bool{"content": true, "archivedAt": true}
 	case "summary":
 		allowed = map[string]bool{"content": true}
 	default:

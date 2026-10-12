@@ -54,6 +54,8 @@ const isLoading = computed(() => !error.value && !capturedError.value && (loadin
 const formState = reactive<Record<string, unknown>>({});
 const localContextOverride = reactive<Record<string, unknown>>({});
 const dataSourceState = reactive<Record<string, unknown>>({});
+const busyNodeIds = reactive(new Set<string>());
+provide("schema-ui-busy-node-ids", busyNodeIds);
 
 const sessionScopeKey = computed(() =>
   `${props.contribution.contributionId}:${props.contribution.generation}:${props.context?.characterId || ""}:${props.context?.conversationId || ""}`
@@ -419,9 +421,13 @@ async function postBridge(method: string, payload: Record<string, unknown>): Pro
   if (!sessionId.value || !sessionReady.value) {
     const token = ++restartToken;
     await createSession(token);
-    if (token !== restartToken) return undefined;
+    if (token !== restartToken) {
+      throw new BridgeError("插件会话已重建，请重试", "session_restarted");
+    }
   }
-  if (!sessionId.value || !sessionReady.value) return undefined;
+  if (!sessionId.value || !sessionReady.value) {
+    throw new BridgeError("插件会话不可用，请重试", "session_unavailable");
+  }
   const response = await apiClient.post<{ ok?: boolean; result?: unknown; error?: { code?: string; message?: string } | string }>(
     `/api/extensions/ui/sessions/${sessionId.value}/bridge`,
     {
@@ -471,8 +477,8 @@ async function loadDataSources() {
   }
 }
 
-async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType; item?: Record<string, unknown>; files?: Array<Record<string, unknown>> }, reportFailure = true) {
-  const { action, node, item, files } = payload;
+async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType; item?: Record<string, unknown>; files?: Array<Record<string, unknown>>; followUpActions?: SchemaUIActionBinding[] }, reportFailure = true) {
+  const { action, node, item, files, followUpActions } = payload;
   if (!action?.action_id) {
     ElMessage.warning("操作缺少 action_id");
     return;
@@ -489,11 +495,17 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
     }
   }
   actionLoading[action.action_id] = true;
+  const nodeId = typeof node?.id === "string" ? node.id : "";
+  if (nodeId) busyNodeIds.add(nodeId);
   try {
     const resolvedInput = asRecord(resolveActionInput(action.input ?? {}, formState, mergedContext.value, item));
+    const renderMeta = {
+      node_id: node.id,
+      form_state: { ...formState },
+    };
     const localAction = props.hostActions?.[action.action_id];
     if (localAction) {
-      const result = await localAction({ ...resolvedInput, ...(files ? { files } : {}), node_id: node.id, form_state: { ...formState } });
+      const result = await localAction({ ...resolvedInput, ...(files ? { files } : {}), ...renderMeta });
       if (result && typeof result === "object") {
         const data = result as Record<string, unknown>;
         if (data.form_state && typeof data.form_state === "object") Object.assign(formState, data.form_state);
@@ -507,12 +519,11 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
     const actionInput = {
       ...resolvedInput,
       ...(files ? { files } : {}),
-      node_id: node.id,
-      form_state: { ...formState },
     } as Record<string, unknown>;
     const bridgeResult = await postBridge("ui.action.invoke", {
       action_id: action.action_id,
       input: actionInput,
+      meta: renderMeta,
     });
     const data = unwrapActionResult(bridgeResult);
     if (data && typeof data === "object") {
@@ -570,6 +581,15 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
     }
   } finally {
     actionLoading[action.action_id] = false;
+    if (nodeId) busyNodeIds.delete(nodeId);
+    // Follow-up actions (for example refreshing a list after an import) run
+    // serially after the primary action, without the file payload.
+    for (const next of followUpActions ?? []) {
+      try {
+        await invokeAction({ action: next, node }, reportFailure);
+      } catch {
+      }
+    }
   }
 }
 

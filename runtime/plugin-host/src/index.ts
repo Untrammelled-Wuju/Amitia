@@ -23,6 +23,7 @@ async function main(): Promise<void> {
   const rpc = new RpcConnection();
   const registry = new HandlerRegistry();
   const invocations = new Map<string, InvocationState>();
+  const invokeQueues = new Map<string, Promise<void>>();
   let extension: LoadedExtension | null = null;
 
   const instanceId = process.env.AMITIA_RUNTIME_INSTANCE_ID || randomBytes(8).toString("hex");
@@ -58,42 +59,60 @@ async function main(): Promise<void> {
       return;
     }
     const params = message.params || {};
-    const contributionId = params.contributionId;
-    const input = params.input;
-    const invocationId = String(message.id);
-    const state: InvocationState = { canceled: false, cancelHandlers: [] };
-    invocations.set(invocationId, state);
+    const contributionId = String(params.contributionId ?? "");
 
-    const handler = registry.get(contributionId);
-    if (!handler) {
-      invocations.delete(invocationId);
-      rpc.sendError(message.id, -32601, "Tool not found: " + contributionId);
-      return;
-    }
+    // One invocation at a time per contribution: plugin runtimes expose shared
+    // state and file handles, so overlapping calls can deadlock the host.
+    const queueKey = contributionId || "__default__";
+    const previous = invokeQueues.get(queueKey) ?? Promise.resolve();
+    const run = previous
+      .catch(() => {
+      })
+      .then(async () => {
+        const input = params.input;
+        const invocationId = String(message.id);
+        const state: InvocationState = { canceled: false, cancelHandlers: [] };
+        invocations.set(invocationId, state);
 
-    const invocation: InvocationContext = {
-      invocationId,
-      get isCanceled() {
-        return state.canceled;
-      },
-      onCancel: (h: () => void) => {
-        state.cancelHandlers.push(h);
-      },
-    };
+        const handler = registry.get(contributionId);
+        if (!handler) {
+          invocations.delete(invocationId);
+          rpc.sendError(message.id as string | number, -32601, "Tool not found: " + contributionId);
+          return;
+        }
 
-    try {
-      const result = await handler(input, invocation);
-      rpc.sendResult(message.id, result);
-    } catch (e) {
-      rpc.sendError(message.id, -32603, (e as Error).message || "Internal error");
-    } finally {
-      invocations.delete(invocationId);
+        const invocation: InvocationContext = {
+          invocationId,
+          get isCanceled() {
+            return state.canceled;
+          },
+          onCancel: (h: () => void) => {
+            state.cancelHandlers.push(h);
+          },
+        };
+
+        try {
+          const result = await handler(input, invocation);
+          rpc.sendResult(message.id as string | number, result);
+        } catch (e) {
+          rpc.sendError(message.id as string | number, -32603, (e as Error).message || "Internal error");
+        } finally {
+          invocations.delete(invocationId);
+        }
+      });
+    invokeQueues.set(queueKey, run);
+    await run;
+    if (invokeQueues.get(queueKey) === run) {
+      invokeQueues.delete(queueKey);
     }
   });
 
   rpc.on("runtime.cancel", (message: JsonRpcMessage) => {
     const params = message.params || {};
-    const invocationId = String(params.invocationId);
+    const invocationId = String(params.invocationId ?? params.requestId ?? "");
+    if (!invocationId) {
+      return;
+    }
     const state = invocations.get(invocationId);
     if (state) {
       state.canceled = true;
