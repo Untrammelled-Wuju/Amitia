@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../app/theme/app_colors.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../../../../core/ui_runtime/renderers/sandbox_web_provider_host.dart';
 import '../../../../core/ui_runtime/renderers/schema_provider_host.dart';
 import '../../../../core/ui_runtime/ui_provider.dart';
@@ -23,7 +23,8 @@ class ExtensionPageHostPage extends ConsumerStatefulWidget {
   final String extensionId;
 
   @override
-  ConsumerState<ExtensionPageHostPage> createState() => _ExtensionPageHostPageState();
+  ConsumerState<ExtensionPageHostPage> createState() =>
+      _ExtensionPageHostPageState();
 }
 
 class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
@@ -33,17 +34,26 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
   String? _error;
   List<String> _missingPermissions = const [];
   Timer? _pollTimer;
+  String? _registeredStyleTarget;
+
+  String get _pageStyleTarget {
+    return 'plugin.page.${_styleTargetSegment(widget.extensionId)}.'
+        '${_styleTargetSegment(widget.pageId)}';
+  }
 
   @override
   void initState() {
     super.initState();
+    _registerStyleTarget();
     Future.microtask(_open);
   }
 
   @override
   void didUpdateWidget(covariant ExtensionPageHostPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.pageId != widget.pageId || oldWidget.extensionId != widget.extensionId) {
+    if (oldWidget.pageId != widget.pageId ||
+        oldWidget.extensionId != widget.extensionId) {
+      _registerStyleTarget();
       _restart();
     }
   }
@@ -71,15 +81,17 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
       _missingPermissions = const [];
     });
     try {
-      final result = await ref.read(extensionServiceProvider).openExtensionPage(
-        widget.extensionId,
-        widget.pageId,
-        scopeSnapshot: jsonEncode({
-          'platform': currentUIPlatform(),
-          'host': 'mobile',
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        }),
-      );
+      final result = await ref
+          .read(extensionServiceProvider)
+          .openExtensionPage(
+            widget.extensionId,
+            widget.pageId,
+            scopeSnapshot: jsonEncode({
+              'platform': currentUIPlatform(),
+              'host': 'mobile',
+              'timestamp': DateTime.now().millisecondsSinceEpoch,
+            }),
+          );
       if (!mounted) return;
       if (result != null) _applyResult(result);
       if (_state == 'loading' || _state == 'runtime_starting') _schedulePoll();
@@ -100,9 +112,10 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
       if (rawDefinition is Map) {
         _definition = rawDefinition.cast<String, dynamic>();
       }
-      _missingPermissions = ((result['missingPermissions'] as List?) ?? const [])
-          .map((item) => item.toString())
-          .toList(growable: false);
+      _missingPermissions =
+          ((result['missingPermissions'] as List?) ?? const [])
+              .map((item) => item.toString())
+              .toList(growable: false);
       _error = result['reason']?.toString();
     });
   }
@@ -116,7 +129,9 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
     final sessionId = _sessionId;
     if (sessionId == null || sessionId.isEmpty || !mounted) return;
     try {
-      final result = await ref.read(extensionServiceProvider).getExtensionPageSessionStatus(sessionId);
+      final result = await ref
+          .read(extensionServiceProvider)
+          .getExtensionPageSessionStatus(sessionId);
       if (!mounted) return;
       if (result == null) return;
       final preserved = _definition;
@@ -141,18 +156,104 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
     _sessionId = null;
     if (sessionId == null || sessionId.isEmpty) return;
     try {
-      await ref.read(extensionServiceProvider).closeExtensionPageSession(sessionId);
+      await ref
+          .read(extensionServiceProvider)
+          .closeExtensionPageSession(sessionId);
     } catch (_) {}
   }
 
   @override
   void dispose() {
+    final target = _registeredStyleTarget;
+    if (target != null) AmitiaStyleTargetRegistry.unregister(target);
     _pollTimer?.cancel();
     final sessionId = _sessionId;
     if (sessionId != null && sessionId.isNotEmpty) {
-      unawaited(ref.read(extensionServiceProvider).closeExtensionPageSession(sessionId));
+      unawaited(
+        ref.read(extensionServiceProvider).closeExtensionPageSession(sessionId),
+      );
     }
     super.dispose();
+  }
+
+  void _registerStyleTarget() {
+    final previous = _registeredStyleTarget;
+    if (previous != null) AmitiaStyleTargetRegistry.unregister(previous);
+    final target = _pageStyleTarget;
+    _registeredStyleTarget = target;
+    AmitiaStyleTargetRegistry.register(
+      AmitiaStyleTargetDescriptor(
+        target: target,
+        page:
+            'plugin.${_styleTargetSegment(widget.extensionId)}.'
+            '${_styleTargetSegment(widget.pageId)}',
+        properties: const <String, String>{
+          'backgroundColor': 'color',
+          'foregroundColor': 'color',
+          'borderColor': 'color',
+          'borderWidth': 'number',
+          'borderRadius': 'length',
+          'padding': 'insets',
+          'margin': 'insets',
+          'opacity': 'number',
+          'width': 'length',
+          'height': 'length',
+        },
+      ),
+    );
+  }
+
+  String _styleTargetSegment(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return 'root';
+    return normalized.replaceAll(RegExp(r'[^a-z0-9_-]+'), '-');
+  }
+
+  Widget _applyPageStyle(
+    BuildContext context,
+    AmitiaResolvedStyle style,
+    Widget child,
+  ) {
+    if (style.properties.isEmpty) return child;
+    final hasBoxStyle =
+        style.has('backgroundColor') ||
+        style.has('background') ||
+        style.has('borderColor') ||
+        style.has('borderWidth') ||
+        style.has('borderRadius') ||
+        style.has('boxShadow') ||
+        style.has('boxShadows') ||
+        style.has('shadow') ||
+        style.has('gradient');
+    final padding = style.edgeInsets('padding');
+    final margin = style.edgeInsets('margin');
+    final width = style.number('width');
+    final height = style.number('height');
+    Widget result = child;
+    if (hasBoxStyle ||
+        padding != null ||
+        margin != null ||
+        width != null ||
+        height != null) {
+      result = Container(
+        width: width,
+        height: height,
+        padding: padding,
+        margin: margin,
+        decoration: hasBoxStyle
+            ? style.applyBoxDecoration(const BoxDecoration())
+            : null,
+        child: result,
+      );
+    }
+    final opacity = style.number('opacity');
+    if (opacity != null) {
+      result = Opacity(
+        opacity: opacity.clamp(0.0, 1.0).toDouble(),
+        child: result,
+      );
+    }
+    return result;
   }
 
   UIProviderDefinition? _runtimeProvider() {
@@ -162,15 +263,15 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
     final contributionId = widget.pageId;
     final entry = switch (kind) {
       'schema_page' => UIProviderEntry(
-          contributionId: contributionId,
-          type: UIProviderEntryType.schemaRenderer,
-          schemaPath: definition['schemaPath']?.toString(),
-        ),
+        contributionId: contributionId,
+        type: UIProviderEntryType.schemaRenderer,
+        schemaPath: definition['schemaPath']?.toString(),
+      ),
       'web_page' => UIProviderEntry(
-          contributionId: contributionId,
-          type: UIProviderEntryType.webRestricted,
-          path: definition['entryPath']?.toString(),
-        ),
+        contributionId: contributionId,
+        type: UIProviderEntryType.webRestricted,
+        path: definition['entryPath']?.toString(),
+      ),
       _ => null,
     };
     if (entry == null) return null;
@@ -195,16 +296,29 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = ((_definition?['title'] as Map?)?['default'] ?? widget.pageId).toString();
+    final title = ((_definition?['title'] as Map?)?['default'] ?? widget.pageId)
+        .toString();
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: title,
         showBackButton: true,
         actions: [
-          AmitiaIconButton(icon: Icons.refresh, onPressed: _restart, tooltip: '刷新'),
+          AmitiaIconButton(
+            icon: Icons.refresh,
+            onPressed: _restart,
+            tooltip: '刷新',
+          ),
         ],
       ),
-      body: SafeArea(top: false, child: _buildBody(context)),
+      body: SafeArea(
+        top: false,
+        child: AmitiaStyleTarget(
+          target: _pageStyleTarget,
+          builder: (context, style) =>
+              _applyPageStyle(context, style, _buildBody(context)),
+          child: const SizedBox.shrink(),
+        ),
+      ),
     );
   }
 
@@ -225,7 +339,8 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
       );
     }
     if (_state != 'ready') {
-      final label = _state == 'permission_check' && _missingPermissions.isNotEmpty
+      final label =
+          _state == 'permission_check' && _missingPermissions.isNotEmpty
           ? '等待权限：${_missingPermissions.join(', ')}'
           : '正在加载扩展页面…';
       return AmitiaLoadingState(message: label);

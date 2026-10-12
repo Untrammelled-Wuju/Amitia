@@ -11,7 +11,6 @@ import { useConversationWorkspace } from "./useConversationWorkspace";
 import { useChatAppearancePreference } from "./useChatAppearancePreference";
 import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAttachment, ownedAttachmentURL, type OwnedAttachment } from "@/runtime/device-owned-attachments";
-import { parseOwnedProjectReference } from "@/runtime/owned-project-reference";
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 
@@ -163,7 +162,7 @@ export function useWebChatSend(
     const originalRole = characterId.value;
     const originalReply = replyTarget?.value ? JSON.parse(JSON.stringify(replyTarget.value)) : undefined;
     let activeConversation = originalConversation;
-    const draftProject = !convId.value && currentWorkspace.value?.workspaceKind === "logical" ? { ...currentWorkspace.value } : null;
+    const draftProjectId = !convId.value ? String(currentWorkspace.value?.projectId || "").trim() : "";
     const safeText = typeof text === "string" ? text : "";
     if (isSubmitting.value || sending.value) return;
     isSubmitting.value = true;
@@ -238,7 +237,7 @@ export function useWebChatSend(
           const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(originalReply.fullContent))), (value) => value.toString(16).padStart(2, "0")).join("");
           quote = { ownerId: originalReply.ownerId, characterId: originalReply.characterId, conversationId: source?.id || originalReply.sourceConversationId, messageId: originalReply.id, expectedRevision: originalReply.sourceRevision, contentHash, expectedExecutionScope: originalReply.executionScope };
         }
-        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, characterId: expectedExecutionScope.roleId, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
+        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, ...(draftProjectId ? { projectId: draftProjectId } : {}), characterId: expectedExecutionScope.roleId, permissionMode: permissionMode?.value || undefined, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
           if (convId.value !== activeConversation || characterId.value !== originalRole) return;
           if (event.type === "started") {
             const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
@@ -269,16 +268,6 @@ export function useWebChatSend(
         sending.value = false;
         notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
         if (replyTarget) replyTarget.value = null;
-        if (draftProject?.projectId && draftProject.executionScope) {
-          try {
-            const project = parseOwnedProjectReference(draftProject.projectId);
-            if (!project || project.ownerId !== response.executionScope.resourceOwnerId) throw new Error("项目数据所有者已变化，请重新选择项目");
-            await owned.query(response.conversationId, response.executionScope.roleId);
-            await owned.edit("conversation", response.conversationId, { projectId: project.id }, { characterId: response.executionScope.roleId, expectedExecutionScope: draftProject.executionScope, expectedOwnerId: response.executionScope.resourceOwnerId });
-          } catch (error: any) {
-            ElMessage.warning(error?.message || "对话已保存，但尚未确认移入项目，请重新加载后处理");
-          }
-        }
         await onConversationCreated?.(response.conversationId);
         return;
       }

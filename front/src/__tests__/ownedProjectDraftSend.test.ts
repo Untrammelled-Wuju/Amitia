@@ -10,17 +10,18 @@ vi.mock("../composables/useApi", () => ({ useApi: () => ({ post: mocks.post, del
 vi.mock("element-plus", () => ({ ElMessage: { warning: mocks.warning, error: vi.fn(), success: vi.fn() }, ElMessageBox: { confirm: vi.fn() } }));
 vi.mock("../runtime/desktop-pet-chat-state", () => ({ notifyDesktopPetChatState: vi.fn() }));
 
-describe("逻辑项目中首次对话的保存确认", () => {
+describe("项目中首次对话的保存确认", () => {
   let scope: any;
   beforeEach(() => {
     vi.clearAllMocks();
-    scope = { coreId: "core", roleId: "role", roleRevision: 1, resourceOwnerId: "source", modeRevision: 1 };
+    scope = { coreId: "core", roleId: "role", roleRevision: 1, resourceOwnerId: "source", targetDeviceId: "source", modeRevision: 1 };
     mocks.owned = { enabled: ref(true), coreId: ref("core"), refresh: vi.fn().mockResolvedValue(true), data: vi.fn().mockResolvedValue({ executionScope: scope }), send: mocks.send, query: mocks.query, edit: mocks.edit, previousSummary: vi.fn() };
-    mocks.workspace = ref({ projectId: ownedProjectReference("source", "group"), workspaceKind: "logical", executionScope: scope });
+    mocks.workspace = ref({ projectId: ownedProjectReference("source", "project"), workspaceId: "workspace-a", primaryWorkspaceId: "workspace-a", workspaces: [{ id: "workspace-a", deviceId: "source", name: "A", kind: "local", rootUri: "amitia://workspace/@workspace-a/" }], executionScope: scope });
     mocks.send.mockResolvedValue({ conversationId: "conversation", requestId: "request", executionScope: scope, saved: true, reply: "回答" });
     mocks.query.mockResolvedValue({});
     mocks.edit.mockResolvedValue({});
   });
+
   function sender() {
     const messages = ref<any[]>([]);
     const convId = ref("");
@@ -29,38 +30,28 @@ describe("逻辑项目中首次对话的保存确认", () => {
     return { send, messages, convId, onCreated };
   }
 
-  it("发送期间选择其他项目仍按发起时的原项目及执行归属提交", async () => {
+  it("发送时携带发起项目的 projectId，且后续界面切换不改写本次请求", async () => {
     let finish!: (response: any) => void;
     mocks.send.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const state = sender();
     const pending = state.send.doActualSend("开始对话");
     await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
-    mocks.workspace.value = { projectId: ownedProjectReference("source", "another"), workspaceKind: "logical", executionScope: { ...scope, modeRevision: 2 } };
+    expect(mocks.send.mock.calls[0][0]).toMatchObject({ projectId: ownedProjectReference("source", "project"), characterId: "role" });
+    mocks.workspace.value = { projectId: ownedProjectReference("source", "other"), workspaceId: "workspace-b", primaryWorkspaceId: "workspace-b", workspaces: [], executionScope: { ...scope, modeRevision: 2 } };
     finish({ conversationId: "conversation", requestId: "request", executionScope: scope, saved: true, reply: "回答" });
     await pending;
-    expect(mocks.query).toHaveBeenCalledWith("conversation", "role");
-    expect(mocks.edit).toHaveBeenCalledWith("conversation", "conversation", { projectId: "group" }, { characterId: "role", expectedExecutionScope: scope, expectedOwnerId: "source" });
+    expect(mocks.query).not.toHaveBeenCalled();
+    expect(mocks.edit).not.toHaveBeenCalled();
     expect(state.onCreated).toHaveBeenCalledWith("conversation");
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
-  it("分组 ACK 失败保留已保存对话并提示，不能把对话标记为发送失败", async () => {
-    mocks.edit.mockRejectedValue(new Error("项目版本已变化"));
+  it("项目内首次回答失败时不会伪造成功状态", async () => {
+    mocks.send.mockRejectedValue(new Error("首次回答失败"));
     const state = sender();
     await state.send.doActualSend("开始对话");
-    expect(state.messages.value.at(-1)).toMatchObject({ status: "completed", saved: true, content: "回答" });
-    expect(state.convId.value).toBe("conversation");
-    expect(mocks.warning).toHaveBeenCalledWith("项目版本已变化");
-    expect(state.onCreated).toHaveBeenCalledWith("conversation");
-  });
-
-  it("首次回答所属设备已变化时拒绝将同 ID 分组写入新 Owner", async () => {
-    mocks.send.mockResolvedValue({ conversationId: "conversation", requestId: "request", executionScope: { ...scope, coreId: "core-c", resourceOwnerId: "core-c" }, saved: true, reply: "回答" });
-    const state = sender();
-    await state.send.doActualSend("开始对话");
+    expect(state.convId.value).toBe("");
+    expect(state.messages.value.at(-1)?.status).toBe("failed");
     expect(mocks.edit).not.toHaveBeenCalled();
-    expect(mocks.query).not.toHaveBeenCalled();
-    expect(mocks.warning).toHaveBeenCalledWith("项目数据所有者已变化，请重新选择项目");
-    expect(state.messages.value.at(-1).saved).toBe(true);
   });
 });

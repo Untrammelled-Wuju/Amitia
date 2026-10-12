@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="logs-page">
+  <div class="logs-page" data-amitia-ui="logs.page">
     <div class="page-header">
       <div>
         <h2 class="page-title">系统运行日志</h2>
@@ -12,7 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-button :loading="loading" @click="refreshCurrent">刷新</el-button>
     </div>
 
-    <el-tabs v-model="activeTab" @tab-change="refreshCurrent">
+    <el-tabs v-model="activeTab" data-amitia-ui="component.tab" @tab-change="refreshCurrent">
       <el-tab-pane label="最近日志" name="recent">
         <div class="log-toolbar">
           <span class="log-count">{{ recentLogs.length }} 条</span>

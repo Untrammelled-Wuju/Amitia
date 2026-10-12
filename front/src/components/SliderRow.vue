@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="slider-row">
+  <div class="slider-row" data-amitia-ui="component.slider">
     <div class="sr-header">
       <span class="sr-label">{{ label }}</span>
     </div>

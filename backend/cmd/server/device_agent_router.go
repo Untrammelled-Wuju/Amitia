@@ -90,7 +90,6 @@ func setupDeviceAgentRouter(ctx *app.AppContext, services *AppServices) (*gin.En
 		setupNativeBridgeRelayRoutes(services.NativeBridgeRelay, localNativeBridge)
 		setupNativeBridgeBackendActionRoutes(services, localNativeBridge)
 	}
-
 	if err := registerDeviceAgentDesktopPetRoutes(r, ctx, services, localStore); err != nil {
 		return nil, err
 	}

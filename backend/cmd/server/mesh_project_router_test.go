@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
@@ -10,12 +11,17 @@ import (
 
 type projectListing struct {
 	Projects []struct {
-		ID       string `json:"id"`
-		Title    string `json:"title"`
-		OwnerID  string `json:"ownerId"`
-		RoleID   string `json:"roleId"`
-		Revision int64  `json:"revision"`
-		ReadOnly bool   `json:"readOnly"`
+		ID         string `json:"id"`
+		Title      string `json:"title"`
+		OwnerID    string `json:"ownerId"`
+		RoleID     string `json:"roleId"`
+		Revision   int64  `json:"revision"`
+		ReadOnly   bool   `json:"readOnly"`
+		Workspaces []struct {
+			ID       string `json:"id"`
+			DeviceID string `json:"deviceId"`
+		} `json:"workspaces"`
+		PrimaryWorkspaceID string `json:"primaryWorkspaceId"`
 	} `json:"projects"`
 	HistoricalProjects []struct {
 		ID       string `json:"id"`
@@ -33,19 +39,19 @@ func TestActualTLSProjectAPIPreservesSourceHistoryAndRejectsChangedOwnership(t *
 	if len(query.Projects) != 0 || query.Scope.ResourceOwnerID != a.device.DeviceID.String() {
 		t.Fatal("new device projects have wrong owner")
 	}
-	payload := map[string]any{"requestId": "source-project", "title": "设备分组", "characterId": "one", "expectedExecutionScope": query.Scope}
+	payload := map[string]any{"requestId": "source-project", "title": "设备分组", "characterId": "one", "expectedExecutionScope": query.Scope, "workspaces": []business.ProjectWorkspace{{ID: "workspace-source", DeviceID: query.Scope.TargetDeviceID, Name: "设备分组", Kind: "local", RootURI: "amitia://workspace/@workspace-source/"}}, "primaryWorkspaceId": "workspace-source"}
 	created := decodeThreeCoreMemoryResponse[business.ProjectResponse](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/projects", payload, 200))
 	if !created.Saved || created.Acknowledgement.OwnerID != a.device.DeviceID.String() {
 		t.Fatal("Source did not confirm project")
 	}
 	for i := 0; i < 2; i++ {
 		replayed := decodeThreeCoreMemoryResponse[business.ProjectResponse](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/projects", payload, 200))
-		if replayed.Project != created.Project {
+		if !reflect.DeepEqual(replayed.Project, created.Project) {
 			t.Fatal("project retry changed identity")
 		}
 	}
 	query = decodeThreeCoreMemoryResponse[projectListing](t, b.request(t, a, http.MethodGet, "/api/device-mesh/v1/business/projects?characterId=one", nil, 200))
-	if len(query.Projects) != 1 || query.Projects[0].OwnerID != a.device.DeviceID.String() || query.Projects[0].ReadOnly {
+	if len(query.Projects) != 1 || query.Projects[0].OwnerID != a.device.DeviceID.String() || query.Projects[0].ReadOnly || len(query.Projects[0].Workspaces) != 1 || query.Projects[0].PrimaryWorkspaceID != "workspace-source" {
 		t.Fatal("Source project list is incorrect")
 	}
 	read := decodeThreeCoreMemoryResponse[struct {
@@ -67,6 +73,8 @@ func TestActualTLSProjectAPIPreservesSourceHistoryAndRejectsChangedOwnership(t *
 		t.Fatal("old device project was migrated or became unavailable")
 	}
 	payload["requestId"], payload["title"], payload["expectedExecutionScope"] = "core-project", "云端分组", query.Scope
+	payload["workspaces"] = []business.ProjectWorkspace{{ID: "workspace-core", DeviceID: query.Scope.TargetDeviceID, Name: "云端分组", Kind: "local", RootURI: "amitia://workspace/@workspace-core/"}}
+	payload["primaryWorkspaceId"] = "workspace-core"
 	current := decodeThreeCoreMemoryResponse[business.ProjectResponse](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/projects", payload, 200))
 	if current.Acknowledgement.OwnerID != b.core {
 		t.Fatal("coordinated project not stored at Core")

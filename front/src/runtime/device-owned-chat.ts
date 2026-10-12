@@ -5,6 +5,9 @@ import type { OwnedConversationOrigin } from "./device-owned-conversation-refere
 import { sameOwnedAuthority } from "./owned-speech-result";
 
 export interface OwnedExecutionScope {
+  memoryRoleId?: string;
+  memoryViewAll?: boolean;
+  continuityRoleId?: string;
   authorizationRealm?: string;
   spaceId: string;
   initiatorDeviceId: string;
@@ -61,9 +64,11 @@ export interface OwnedChatRequest {
   context?: { previousCoreId: string; conversationId: string; summary?: string; messages: Array<{ id: string; ownerId?: string; role: string; content: string; status?: string }> };
   requestId: string;
   conversationId?: string;
+  projectId?: string;
   characterId?: string;
   historicalRoleId?: string;
   targetDeviceId?: string;
+  permissionMode?: string;
   message: string;
 }
 

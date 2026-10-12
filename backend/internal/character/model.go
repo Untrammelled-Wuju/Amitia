@@ -5,6 +5,7 @@ package character
 import "encoding/json"
 
 type Character struct {
+	GlobalMemoryEnabled bool    `gorm:"column:global_memory_enabled;not null" json:"globalMemoryEnabled"`
 	RoleAuthority       string  `gorm:"-" json:"roleAuthority,omitempty"`
 	ID                  string  `gorm:"column:id;primaryKey" json:"id"`
 	SpaceID             string  `gorm:"column:space_id;not null;index" json:"-"`
@@ -67,70 +68,72 @@ type CharacterTemplate struct {
 func (CharacterTemplate) TableName() string { return "character_templates" }
 
 type CreateCharacterRequest struct {
-	VoiceConfigID     string          `json:"voiceConfigId"`
-	VoiceType         string          `json:"voiceType"`
-	VoiceSpeed        float64         `json:"voiceSpeed"`
-	VoicePitch        float64         `json:"voicePitch"`
-	VoiceVolume       float64         `json:"voiceVolume"`
-	CustomVoiceID     string          `json:"customVoiceId"`
-	VoiceMode         string          `json:"voiceMode"`
-	Emotion           string          `json:"emotion"`
-	EmotionScale      int             `json:"emotionScale"`
-	SilenceDuration   int             `json:"silenceDuration"`
-	IsDefault         bool            `json:"isDefault"`
-	Name              string          `json:"name"`
-	Identity          string          `json:"identity"`
-	Personality       string          `json:"personality"`
-	Avatar            string          `json:"avatar"`
-	SpeakingStyle     string          `json:"speakingStyle"`
-	RelationshipStyle string          `json:"relationshipStyle"`
-	CharacterBase     string          `json:"characterBase"`
-	BoundaryRules     string          `json:"boundaryRules"`
-	Description       string          `json:"description"`
-	BasePrompt        string          `json:"basePrompt"`
-	Gender            string          `json:"gender"`
-	Pronoun           string          `json:"pronoun"`
-	SelfReference     string          `json:"selfReference"`
-	GenderExpression  int             `json:"genderExpression"`
-	LifeIdentity      string          `json:"lifeIdentity"`
-	PersonalityConfig json.RawMessage `json:"personalityConfig"`
-	ChatStyleConfig   string          `json:"chatStyleConfig"`
-	SceneRules        string          `json:"sceneRules"`
+	GlobalMemoryEnabled *bool           `json:"globalMemoryEnabled"`
+	VoiceConfigID       string          `json:"voiceConfigId"`
+	VoiceType           string          `json:"voiceType"`
+	VoiceSpeed          float64         `json:"voiceSpeed"`
+	VoicePitch          float64         `json:"voicePitch"`
+	VoiceVolume         float64         `json:"voiceVolume"`
+	CustomVoiceID       string          `json:"customVoiceId"`
+	VoiceMode           string          `json:"voiceMode"`
+	Emotion             string          `json:"emotion"`
+	EmotionScale        int             `json:"emotionScale"`
+	SilenceDuration     int             `json:"silenceDuration"`
+	IsDefault           bool            `json:"isDefault"`
+	Name                string          `json:"name"`
+	Identity            string          `json:"identity"`
+	Personality         string          `json:"personality"`
+	Avatar              string          `json:"avatar"`
+	SpeakingStyle       string          `json:"speakingStyle"`
+	RelationshipStyle   string          `json:"relationshipStyle"`
+	CharacterBase       string          `json:"characterBase"`
+	BoundaryRules       string          `json:"boundaryRules"`
+	Description         string          `json:"description"`
+	BasePrompt          string          `json:"basePrompt"`
+	Gender              string          `json:"gender"`
+	Pronoun             string          `json:"pronoun"`
+	SelfReference       string          `json:"selfReference"`
+	GenderExpression    int             `json:"genderExpression"`
+	LifeIdentity        string          `json:"lifeIdentity"`
+	PersonalityConfig   json.RawMessage `json:"personalityConfig"`
+	ChatStyleConfig     string          `json:"chatStyleConfig"`
+	SceneRules          string          `json:"sceneRules"`
 }
 
 type UpdateCharacterRequest struct {
-	IsDefault         *bool            `json:"isDefault"`
-	Name              *string          `json:"name"`
-	Identity          *string          `json:"identity"`
-	Personality       *string          `json:"personality"`
-	SpeakingStyle     *string          `json:"speakingStyle"`
-	RelationshipStyle *string          `json:"relationshipStyle"`
-	CharacterBase     *string          `json:"characterBase"`
-	BoundaryRules     *string          `json:"boundaryRules"`
-	Description       *string          `json:"description"`
-	BasePrompt        *string          `json:"basePrompt"`
-	Status            *string          `json:"status"`
-	IsActive          *int             `json:"isActive"`
-	SortOrder         *int             `json:"sortOrder"`
-	Gender            *string          `json:"gender"`
-	Pronoun           *string          `json:"pronoun"`
-	SelfReference     *string          `json:"selfReference"`
-	GenderExpression  *int             `json:"genderExpression"`
-	LifeIdentity      *string          `json:"lifeIdentity"`
-	VoiceConfigID     *string          `json:"voiceConfigId"`
-	VoiceType         *string          `json:"voiceType"`
-	VoiceSpeed        *float64         `json:"voiceSpeed"`
-	VoicePitch        *float64         `json:"voicePitch"`
-	VoiceVolume       *float64         `json:"voiceVolume"`
-	CustomVoiceID     *string          `json:"customVoiceId"`
-	VoiceMode         *string          `json:"voiceMode"`
-	Emotion           *string          `json:"emotion"`
-	EmotionScale      *int             `json:"emotionScale"`
-	SilenceDuration   *int             `json:"silenceDuration"`
-	PersonalityConfig *json.RawMessage `json:"personalityConfig"`
-	ChatStyleConfig   *string          `json:"chatStyleConfig"`
-	SceneRules        *string          `json:"sceneRules"`
-	Avatar            *string          `json:"avatar"`
+	GlobalMemoryEnabled *bool            `json:"globalMemoryEnabled"`
+	IsDefault           *bool            `json:"isDefault"`
+	Name                *string          `json:"name"`
+	Identity            *string          `json:"identity"`
+	Personality         *string          `json:"personality"`
+	SpeakingStyle       *string          `json:"speakingStyle"`
+	RelationshipStyle   *string          `json:"relationshipStyle"`
+	CharacterBase       *string          `json:"characterBase"`
+	BoundaryRules       *string          `json:"boundaryRules"`
+	Description         *string          `json:"description"`
+	BasePrompt          *string          `json:"basePrompt"`
+	Status              *string          `json:"status"`
+	IsActive            *int             `json:"isActive"`
+	SortOrder           *int             `json:"sortOrder"`
+	Gender              *string          `json:"gender"`
+	Pronoun             *string          `json:"pronoun"`
+	SelfReference       *string          `json:"selfReference"`
+	GenderExpression    *int             `json:"genderExpression"`
+	LifeIdentity        *string          `json:"lifeIdentity"`
+	VoiceConfigID       *string          `json:"voiceConfigId"`
+	VoiceType           *string          `json:"voiceType"`
+	VoiceSpeed          *float64         `json:"voiceSpeed"`
+	VoicePitch          *float64         `json:"voicePitch"`
+	VoiceVolume         *float64         `json:"voiceVolume"`
+	CustomVoiceID       *string          `json:"customVoiceId"`
+	VoiceMode           *string          `json:"voiceMode"`
+	Emotion             *string          `json:"emotion"`
+	EmotionScale        *int             `json:"emotionScale"`
+	SilenceDuration     *int             `json:"silenceDuration"`
+	PersonalityConfig   *json.RawMessage `json:"personalityConfig"`
+	ChatStyleConfig     *string          `json:"chatStyleConfig"`
+	SceneRules          *string          `json:"sceneRules"`
+	Avatar              *string          `json:"avatar"`
 }
 
 type RoleProfileResponse struct {
@@ -148,6 +151,7 @@ type RoleProfileResponse struct {
 }
 
 type RoleRuntimeProfile struct {
+	GlobalMemoryEnabled bool                   `json:"globalMemoryEnabled"`
 	CharacterID         string                 `json:"characterId"`
 	Name                string                 `json:"name"`
 	Identity            string                 `json:"identity"`

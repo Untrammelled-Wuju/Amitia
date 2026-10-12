@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/memorypolicy"
 	"strings"
 	"time"
 
@@ -283,6 +284,12 @@ func applyMemoryScopeQuery(query *gorm.DB, characterID, spaceID string) *gorm.DB
 		}
 	}
 	if characterID != "" {
+		if mode, known := memorypolicy.ForCharacter(query, characterID); known {
+			if mode == "global" {
+				return query.Where("scope IN (?, ?)", "user", "user_global")
+			}
+			return query.Where("character_id=? AND scope NOT IN (?, ?)", characterID, "user", "user_global")
+		}
 		return query.Where("(scope IN (?, ?) OR character_id = ?)", "user", "user_global", characterID)
 	}
 	return query

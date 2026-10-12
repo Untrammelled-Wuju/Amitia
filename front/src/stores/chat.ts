@@ -6,7 +6,7 @@ import type { Message } from "@/types";
 import { apiClient } from "@/composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
-import { ownedProjectReference, parseOwnedProjectReference } from "@/runtime/owned-project-reference";
+import { ownedProjectReference } from "@/runtime/owned-project-reference";
 
 export interface ConversationItem {
   id: string;
@@ -29,7 +29,6 @@ export interface ProjectItem {
   resourceId?: string;
   roleId?: string;
   readOnly?: boolean;
-  logical?: boolean;
   ownerId?: string;
   revision?: number;
   executionScope?: OwnedExecutionScope;
@@ -38,6 +37,9 @@ export interface ProjectItem {
   workspaceId: string;
   deviceId: string;
   rootUri: string;
+  workspaces: ProjectWorkspace[];
+  primaryWorkspaceId: string;
+  hiddenAt?: string | null;
   available: boolean;
   status: string;
   statusReason?: string;
@@ -46,10 +48,20 @@ export interface ProjectItem {
   pinnedAt?: string | null;
 }
 
+export interface ProjectWorkspace {
+  id: string;
+  deviceId: string;
+  name: string;
+  kind: string;
+  rootUri: string;
+  readOnly?: boolean;
+}
+
 export interface SidebarData {
   pinned: ConversationItem[];
   recent: ConversationItem[];
   projects: ProjectItem[];
+  removedProjects?: ProjectItem[];
 }
 
 export const useChatStore = defineStore("chat", () => {
@@ -58,7 +70,7 @@ export const useChatStore = defineStore("chat", () => {
   const loading = ref(false);
   const currentConversationId = ref<string | null>(null);
   const currentProjectId = ref("");
-  const sidebar = ref<SidebarData>({ pinned: [], recent: [], projects: [] });
+  const sidebar = ref<SidebarData>({ pinned: [], recent: [], projects: [], removedProjects: [] });
   const archivedRevision = ref(0);
   const projectIntent = ref<OwnedExecutionScope | null>(null);
   const historicalProjectRoles = ref<Array<{ id: string; name: string }>>([]);
@@ -69,11 +81,22 @@ export const useChatStore = defineStore("chat", () => {
     projectIntent.value = null;
     historicalProjectRoles.value = [];
     historicalProjectRole.value = "";
-    sidebar.value = { pinned: [], recent: [], projects: [] };
+    sidebar.value = { pinned: [], recent: [], projects: [], removedProjects: [] };
     currentProjectId.value = "";
   }, { flush: "sync" });
   function projectRow(value: any, conversations: ConversationItem[] = []): ProjectItem {
-    return { id: ownedProjectReference(value.ownerId, value.id), resourceId: value.id, roleId: value.roleId, readOnly: value.readOnly, name: value.title, logical: true, ownerId: value.ownerId, revision: value.revision, executionScope: value.executionScope, workspaceId: "", deviceId: "", rootUri: "", available: true, status: "logical", pinnedAt: value.pinnedAt, conversationCount: conversations.length, conversations };
+    const rawWorkspaces: any[] = Array.isArray(value.workspaces) ? value.workspaces : [];
+    const workspaces: ProjectWorkspace[] = rawWorkspaces.map((workspace: any): ProjectWorkspace => ({ id: String(workspace.id || ""), deviceId: String(workspace.deviceId || ""), name: String(workspace.name || ""), kind: String(workspace.kind || "local"), rootUri: String(workspace.rootUri || ""), readOnly: workspace.readOnly === true })).filter((workspace: ProjectWorkspace) => Boolean(workspace.id && workspace.rootUri));
+    const primaryWorkspaceId = String(value.primaryWorkspaceId || workspaces[0]?.id || "");
+    const primary = workspaces.find((workspace) => workspace.id === primaryWorkspaceId) || workspaces[0];
+    return { id: ownedProjectReference(value.ownerId, value.id), resourceId: value.id, roleId: value.roleId, readOnly: value.readOnly, ownerId: value.ownerId, revision: value.revision, executionScope: value.executionScope, name: value.title, workspaces, primaryWorkspaceId, hiddenAt: value.hiddenAt || null, workspaceId: primary?.id || "", deviceId: primary?.deviceId || "", rootUri: primary?.rootUri || "", available: workspaces.length > 0, status: workspaces.length > 0 ? "available" : "unavailable", pinnedAt: value.pinnedAt, conversationCount: conversations.length, conversations };
+  }
+
+  function normalizeProjectRow(project: ProjectItem): ProjectItem {
+    const workspaces = Array.isArray(project.workspaces) ? project.workspaces : [];
+    if (workspaces.length || !project.workspaceId || !project.rootUri) return { ...project, workspaces };
+    const workspace = { id: project.workspaceId, deviceId: project.deviceId || "", name: project.name, kind: project.rootUri.startsWith("content://") ? "saf" : "local", rootUri: project.rootUri, readOnly: project.readOnly };
+    return { ...project, workspaces: [workspace], primaryWorkspaceId: project.primaryWorkspaceId || workspace.id };
   }
 
   function setMessages(msgs: Message[]) {
@@ -94,7 +117,7 @@ export const useChatStore = defineStore("chat", () => {
     if (owned.enabled.value) {
       const generation = ++sidebarGeneration;
       const role=owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
-      if (!role) { sidebar.value={pinned:[],recent:[],projects:[]};return; }
+      if (!role) { sidebar.value={pinned:[],recent:[],projects:[],removedProjects:[]};return; }
       const conversations=await owned.conversations(role);
       const projectPage = await owned.projects(role, historicalProjectRole.value);
       if (generation !== sidebarGeneration) throw new Error("服务已变化，旧项目列表已丢弃");
@@ -106,18 +129,21 @@ export const useChatStore = defineStore("chat", () => {
         if (value?.id) rows.set(value.id,{...value,channel:"web",projectId:value.projectId && value.ownerId ? ownedProjectReference(value.ownerId, value.projectId) : "",source:value.source || "device-mesh",messageCount:value.messageCount || 0});
       }
       const visible=[...rows.values()].filter((row)=>!row.archivedAt).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
-      const projects = [...projectPage.projects, ...projectPage.historicalProjects].map((project) => projectRow(project, visible.filter((row) => row.projectId === ownedProjectReference(project.ownerId, project.id))));
+      const projects = projectPage.projects.map((project) => projectRow(project, visible.filter((row) => row.projectId === ownedProjectReference(project.ownerId, project.id))));
+      const visibleProjects = projects.filter((project) => !project.hiddenAt);
+      const removedProjects = projects.filter((project) => project.hiddenAt);
       const projectIds = new Set(projects.map((project) => project.id));
       const ungrouped = visible.filter((row) => !projectIds.has(row.projectId));
-      sidebar.value={pinned:ungrouped.filter((row)=>Boolean(row.pinnedAt)),recent:ungrouped.filter((row)=>!row.pinnedAt),projects};
+      sidebar.value={pinned:ungrouped.filter((row)=>Boolean(row.pinnedAt)),recent:ungrouped.filter((row)=>!row.pinnedAt),projects:visibleProjects,removedProjects};
       return;
     }
     const response = await apiClient.get<SidebarData>("/api/web-chat/sidebar");
-    const data = response.data || { pinned: [], recent: [], projects: [] };
+    const data = response.data || { pinned: [], recent: [], projects: [], removedProjects: [] };
     sidebar.value = {
       pinned: (data.pinned || []).filter((item) => item.channel === "web"),
       recent: (data.recent || []).filter((item) => item.channel === "web"),
-      projects: data.projects || [],
+      projects: (data.projects || []).map(normalizeProjectRow),
+      removedProjects: data.removedProjects || [],
     };
   }
 
@@ -127,13 +153,15 @@ export const useChatStore = defineStore("chat", () => {
     workspaceId?: string;
     deviceId?: string;
     rootUri?: string;
+    workspaces?: ProjectWorkspace[];
+    primaryWorkspaceId?: string;
     expectedExecutionScope?: OwnedExecutionScope;
   }): Promise<ProjectItem> {
     if (owned.enabled.value) {
-      if (input.workspaceId || input.deviceId || input.rootUri) throw new Error("设备项目仅用于对话分组，文件访问需单独授权");
       const expected = input.expectedExecutionScope || projectIntent.value;
       if (!expected) throw new Error("请先加载项目列表，确认数据所属设备");
-      const created = await owned.createProject(input.name, expected);
+      const workspaces = input.workspaces || (input.workspaceId && input.rootUri ? [{ id: input.workspaceId, deviceId: input.deviceId || expected.targetDeviceId, name: input.name, kind: input.rootUri.startsWith("content://") ? "saf" : "local", rootUri: input.rootUri }] : []);
+      const created = await owned.createProject(input.name, expected, workspaces, input.primaryWorkspaceId || workspaces[0]?.id || "");
       await fetchSidebar();
       return projectRow(created);
     }
@@ -142,13 +170,12 @@ export const useChatStore = defineStore("chat", () => {
     return response.data;
   }
 
-  async function updateProject(projectId: string, input: Partial<Pick<ProjectItem, "name" | "workspaceId" | "deviceId" | "rootUri">> & { pinned?: boolean }, intent?: ProjectItem) {
+  async function updateProject(projectId: string, input: Partial<Pick<ProjectItem, "name" | "workspaces" | "primaryWorkspaceId">> & { pinned?: boolean; hidden?: boolean }, intent?: ProjectItem) {
     if (owned.enabled.value) {
       const project = intent || sidebar.value.projects.find((row) => row.id === projectId);
       if (project?.readOnly) throw new Error("旧项目为只读，请在原设备管理");
       if (!project?.executionScope || !project.ownerId || !project.revision || !project.resourceId) throw new Error("请重新加载项目后修改");
-      if (input.workspaceId || input.deviceId || input.rootUri) throw new Error("对话分组不能绑定文件目录");
-      await owned.edit("project", project.resourceId, { ...(input.name !== undefined ? { title: input.name } : {}), ...(input.pinned !== undefined ? { pinned: input.pinned } : {}) }, { characterId: project.executionScope.roleId, expectedExecutionScope: project.executionScope, expectedOwnerId: project.ownerId, expectedRevision: project.revision });
+      await owned.edit("project", project.resourceId, { ...(input.name !== undefined ? { title: input.name } : {}), ...(input.pinned !== undefined ? { pinned: input.pinned } : {}), ...(input.hidden !== undefined ? { hidden: input.hidden } : {}), ...(input.workspaces !== undefined ? { workspaces: input.workspaces } : {}), ...(input.primaryWorkspaceId !== undefined ? { primaryWorkspaceId: input.primaryWorkspaceId } : {}) }, { characterId: project.executionScope.roleId, expectedExecutionScope: project.executionScope, expectedOwnerId: project.ownerId, expectedRevision: project.revision });
       await fetchSidebar();
       return;
     }
@@ -156,30 +183,17 @@ export const useChatStore = defineStore("chat", () => {
     await fetchSidebar();
   }
 
-  async function deleteProject(projectId: string, intent?: ProjectItem) {
-    if (owned.enabled.value) {
-      const project = intent || sidebar.value.projects.find((row) => row.id === projectId);
-      if (project?.readOnly) throw new Error("旧项目为只读，请在原设备管理");
-      if (!project?.executionScope || !project.ownerId || !project.revision || !project.resourceId) throw new Error("请重新加载项目后删除");
-      await owned.edit("project", project.resourceId, {}, { deleted: true, characterId: project.executionScope.roleId, expectedExecutionScope: project.executionScope, expectedOwnerId: project.ownerId, expectedRevision: project.revision });
-      if (currentProjectId.value === projectId) currentProjectId.value = "";
-      await fetchSidebar();
-      return;
-    }
-    await apiClient.delete(`/api/web-chat/projects/${encodeURIComponent(projectId)}`);
-    await fetchSidebar();
+  async function hideProject(projectId: string, intent?: ProjectItem) {
+    await updateProject(projectId, { hidden: true }, intent);
+    if (currentProjectId.value === projectId) currentProjectId.value = "";
+  }
+
+  async function restoreProject(projectId: string, intent?: ProjectItem) {
+    await updateProject(projectId, { hidden: false }, intent);
   }
 
   async function moveConversation(conversationId: string, projectId: string) {
-    if (owned.enabled.value) {
-      const origin = projectId ? parseOwnedProjectReference(projectId) : undefined;
-      const project = projectId ? sidebar.value.projects.find((row) => row.id === projectId) : undefined;
-      if (projectId && (!origin || !project || project.readOnly || origin.ownerId !== projectIntent.value?.resourceOwnerId)) throw new Error("只能移入当前角色和数据所有者的项目");
-      await owned.edit("conversation", conversationId, { projectId: origin?.id || "" }, project?.executionScope ? { expectedExecutionScope: project.executionScope, expectedOwnerId: project.ownerId } : {});
-    }
-    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { projectId });
-    currentProjectId.value = projectId;
-    await fetchSidebar();
+    throw new Error("现有对话不能手动移入或移出项目");
   }
 
   async function renameConversation(conversationId: string, title: string) {
@@ -264,7 +278,8 @@ export const useChatStore = defineStore("chat", () => {
     fetchSidebar,
     createProject,
     updateProject,
-    deleteProject,
+    hideProject,
+    restoreProject,
     moveConversation,
     renameConversation,
     setConversationPinned,

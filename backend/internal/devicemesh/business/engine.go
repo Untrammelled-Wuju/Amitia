@@ -19,18 +19,23 @@ var ErrUncertainExecution = errors.New("上次执行的结果尚未确认，请�
 var ErrInterrupted = errors.New("当前回复已主动停止")
 
 type Request struct {
+	MemoryView         string                       `json:"memoryView,omitempty"`
 	Quote              *QuoteReference              `json:"quote,omitempty"`
 	ConversationOrigin *ConversationOrigin          `json:"conversationOrigin,omitempty"`
 	Attachments        []Attachment                 `json:"attachments,omitempty"`
 	ExpectedScope      *coordination.ExecutionScope `json:"expectedExecutionScope,omitempty"`
 	Context            *ForwardedContext            `json:"context,omitempty"`
+	ProjectID          string                       `json:"projectId,omitempty"`
 	SpaceID            string                       `json:"-"`
 	DeviceID           string                       `json:"-"`
 	CoreID             string                       `json:"-"`
+	ProjectWorkspaces  []ProjectWorkspace           `json:"-"`
+	PrimaryWorkspaceID string                       `json:"-"`
 	TargetDeviceID     string                       `json:"targetDeviceId,omitempty"`
 	RoleID             string                       `json:"characterId,omitempty"`
 	HistoricalRoleID   string                       `json:"historicalRoleId,omitempty"`
 	ConversationID     string                       `json:"conversationId,omitempty"`
+	PermissionMode     string                       `json:"permissionMode,omitempty"`
 	RequestID          string                       `json:"requestId"`
 	Message            string                       `json:"message"`
 }
@@ -90,9 +95,13 @@ type Inference struct {
 	Context            *ForwardedContext
 	Scope              coordination.ExecutionScope
 	ConversationID     string
+	ProjectID          string
+	Workspaces         []ProjectWorkspace
+	PrimaryWorkspaceID string
 	Snapshot           coordination.DataSnapshot
 	HistoricalSnapshot *coordination.DataSnapshot
 	Emit               func(Event) error `json:"-"`
+	PermissionMode     string
 	Message            string
 }
 
@@ -236,6 +245,59 @@ func (e *Engine) submit(ctx context.Context, scope coordination.ExecutionScope, 
 	return err
 }
 
+func conversationProjectID(snapshot coordination.DataSnapshot, conversationID string) string {
+	for _, row := range snapshot.Resources {
+		if row.Kind != "conversation" || row.ID != conversationID {
+			continue
+		}
+		var document struct {
+			ProjectID string `json:"projectId"`
+		}
+		if json.Unmarshal(row.Body, &document) != nil {
+			return ""
+		}
+		return strings.TrimSpace(document.ProjectID)
+	}
+	return ""
+}
+
+func (e *Engine) resolveRunProject(ctx context.Context, scope coordination.ExecutionScope, request Request, snapshot coordination.DataSnapshot) (string, []ProjectWorkspace, string, error) {
+	conversationProject := conversationProjectID(snapshot, request.ConversationID)
+	projectID := strings.TrimSpace(request.ProjectID)
+	if projectID == "" {
+		projectID = conversationProject
+	}
+	if projectID == "" {
+		return "", nil, "", nil
+	}
+	if conversationProject != "" && conversationProject != projectID {
+		return "", nil, "", errors.New("现有对话不能移入或移出项目")
+	}
+	port, ok := e.data.(coordination.ResourcePort)
+	if !ok {
+		return "", nil, "", errors.New("数据来源不支持项目工作区解析")
+	}
+	resource, err := port.Resource(ctx, scope, "project", projectID)
+	if err != nil {
+		return "", nil, "", err
+	}
+	if resource == nil || resource.Deleted || resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != scope.RoleID {
+		return "", nil, "", coordination.ErrWrongOwner
+	}
+	var project Project
+	if json.Unmarshal(resource.Body, &project) != nil || project.ID != projectID {
+		return "", nil, "", errors.New("项目数据格式无效")
+	}
+	if project.HiddenAt != nil {
+		return "", nil, "", errors.New("该项目已从侧边栏移除")
+	}
+	workspaces, primaryID, err := normalizeProjectWorkspaces(project.Workspaces, project.PrimaryWorkspaceID)
+	if err != nil || !projectWorkspacesBelongToDevice(workspaces, scope.TargetDeviceID) {
+		return "", nil, "", errors.New("项目工作区无效或不属于当前执行设备")
+	}
+	return projectID, workspaces, primaryID, nil
+}
+
 func (e *Engine) Run(ctx context.Context, request Request) (Response, error) {
 	return e.RunEvents(ctx, request, nil)
 }
@@ -298,6 +360,15 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	}
 	scope.RoleID = role.ID
 	scope.RoleRevision = role.Revision
+	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+		return Response{}, err
+	}
+	if request.ExpectedScope != nil && request.ExpectedScope.ContinuityRoleID != "" {
+		if coordination.CommitLease(ctx) == nil {
+			return Response{}, coordination.ErrWrongOwner
+		}
+		scope.ContinuityRoleID = request.ExpectedScope.ContinuityRoleID
+	}
 	if request.ExpectedScope != nil {
 		expected := *request.ExpectedScope
 		expected.RequestID, expected.TurnID, expected.ExecutionID = scope.RequestID, scope.TurnID, scope.ExecutionID
@@ -353,7 +424,12 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if err := rejectAmbiguousConversation(conversationRoute, snapshot, historicalSnapshot); err != nil {
 		return Response{}, err
 	}
-	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context}
+	projectID, workspaces, primaryWorkspaceID, err := e.resolveRunProject(ctx, scope, request, snapshot)
+	if err != nil {
+		return Response{}, err
+	}
+	request.ProjectID, request.ProjectWorkspaces, request.PrimaryWorkspaceID = projectID, workspaces, primaryWorkspaceID
+	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context, "projectId": projectID, "workspaces": workspaces, "primaryWorkspaceId": primaryWorkspaceID}
 	if request.Quote != nil {
 		fingerprintData["quote"] = request.Quote
 	}
@@ -390,7 +466,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 				if recorded.Response.Transcription != "" {
 					message = recorded.Response.Transcription
 				}
-				inference := Inference{Context: request.Context, Scope: recorded.Response.Scope, ConversationID: request.ConversationID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, Message: message}
+				inference := Inference{Context: request.Context, Scope: recorded.Response.Scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: message}
 				return e.completeMemory(coordination.WithScope(ctx, recorded.Response.Scope), inference, fingerprint, *recorded.Response, row.Revision)
 			}
 			return *recorded.Response, nil
@@ -406,6 +482,9 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	conversation := map[string]any{"id": request.ConversationID, "conversationId": request.ConversationID, "title": request.Message, "characterId": role.ID, "createdAt": now, "ownerId": scope.ResourceOwnerID, "coreId": scope.CoreID}
+	if projectID != "" {
+		conversation["projectId"] = projectID
+	}
 	if conversationRoute.Origin != nil {
 		conversation["conversationOrigin"] = conversationRoute.Origin
 	}
@@ -465,7 +544,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		}
 		return nil
 	}
-	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, Message: request.Message, Emit: emitCurrent}
+	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent}
 	if err := emitCurrent(Event{Type: "started"}); err != nil {
 		cancel(err)
 	}
@@ -652,10 +731,10 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		if sources[key] != "" {
 			return nil, coordination.ErrRequestConflict
 		}
-		digest := sha256.Sum256([]byte(scope.RoleID + "\x00memory\x00" + key))
+		digest := sha256.Sum256([]byte(coordination.StorageRole(scope, "memory") + "\x00memory\x00" + key))
 		id := hex.EncodeToString(digest[:16])
 		sources[key] = id
-		result = append(result, coordination.Mutation{Kind: "memory", ID: id, RoleID: scope.RoleID, ExpectedRevision: version(snapshot, "memory", id), Body: body(map[string]any{"conversationId": conversation, "key": item.Key, "kind": item.Kind, "content": item.Body, "executionScope": scope})})
+		result = append(result, coordination.Mutation{Kind: "memory", ID: id, RoleID: coordination.StorageRole(scope, "memory"), ExpectedRevision: version(snapshot, "memory", id), Body: body(map[string]any{"conversationId": conversation, "key": item.Key, "kind": item.Kind, "content": item.Body, "executionScope": scope})})
 	}
 	for _, item := range derived {
 		if item.Key == "" || !json.Valid(item.Body) {
@@ -666,7 +745,7 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		default:
 			return nil, errors.New("记忆计算结果类型无效")
 		}
-		digest := sha256.Sum256([]byte(scope.RoleID + "\x00" + item.Kind + "\x00" + item.Key))
+		digest := sha256.Sum256([]byte(coordination.StorageRole(scope, item.Kind) + "\x00" + item.Kind + "\x00" + item.Key))
 		id := hex.EncodeToString(digest[:16])
 		if item.Kind == "working" || item.Kind == "summary" {
 			id = conversation + "/" + item.Kind
@@ -676,7 +755,7 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		}
 		seen[item.Kind+"/"+id] = true
 		wrapped := body(map[string]any{"conversationId": conversation, "key": item.Key, "content": item.Body, "executionScope": scope})
-		mutation := coordination.Mutation{Kind: item.Kind, ID: id, RoleID: scope.RoleID, ExpectedRevision: version(snapshot, item.Kind, id), Body: wrapped}
+		mutation := coordination.Mutation{Kind: item.Kind, ID: id, RoleID: coordination.StorageRole(scope, item.Kind), ExpectedRevision: version(snapshot, item.Kind, id), Body: wrapped}
 		if item.Kind == "fact" || item.Kind == "profile" || item.Kind == "episodic" {
 			mutation.SourceID = sources[item.Kind+"/"+item.Key]
 		}

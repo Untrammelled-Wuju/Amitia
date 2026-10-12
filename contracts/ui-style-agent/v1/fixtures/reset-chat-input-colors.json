@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "reset": {
+    "scope": {
+      "platform": "desktop",
+      "page": "chat"
+    },
+    "target": "chat.composer.input",
+    "states": ["default", "focus"],
+    "properties": [
+      "backgroundColor",
+      "foregroundColor",
+      "placeholderColor"
+    ],
+    "source": "ai"
+  }
+}

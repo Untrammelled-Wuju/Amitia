@@ -101,6 +101,18 @@ function loadStoredAppearance(): StoredAppearance {
 
 const storedAppearance = loadStoredAppearance();
 
+function defaultThemeState(): ThemeState {
+  return {
+    customPalette: normalizeCustomPalette({}),
+    preset: DEFAULT_THEME,
+    accentColor: DEFAULT_ACCENT,
+    fontScale: 1,
+    cornerStyle: 1,
+    dynamicEffect: true,
+    reduceAnimation: false,
+  };
+}
+
 const state = ref<ThemeState>({
   customPalette: normalizeCustomPalette(storedAppearance.customPalette),
   preset: normalizePreset(localStorage.getItem(STORAGE_KEY)),
@@ -371,6 +383,32 @@ export function useTheme() {
     }
   }
 
+  function replaceState(value: Partial<ThemeState>) {
+    const defaults = defaultThemeState();
+    state.value = {
+      preset: normalizePreset(value.preset ?? defaults.preset),
+      accentColor: normalizeAccentColor(value.accentColor ?? defaults.accentColor),
+      fontScale: normalizeFontScale(value.fontScale ?? defaults.fontScale),
+      cornerStyle: normalizeCornerStyle(value.cornerStyle ?? defaults.cornerStyle),
+      dynamicEffect: typeof value.dynamicEffect === "boolean" ? value.dynamicEffect : defaults.dynamicEffect,
+      reduceAnimation: typeof value.reduceAnimation === "boolean" ? value.reduceAnimation : defaults.reduceAnimation,
+      customPalette: normalizeCustomPalette(value.customPalette ?? defaults.customPalette),
+    };
+    localStorage.setItem(STORAGE_KEY, state.value.preset);
+    applyAppearance();
+  }
+
+  function reset() {
+    replaceState(defaultThemeState());
+  }
+
+  function snapshot(): ThemeState {
+    return {
+      ...state.value,
+      customPalette: { ...state.value.customPalette },
+    };
+  }
+
   return {
     state,
     setCustomPalette,
@@ -389,5 +427,8 @@ export function useTheme() {
     toggleLightDark,
     preferredLight,
     loadFromServer,
+    replaceState,
+    reset,
+    snapshot,
   };
 }

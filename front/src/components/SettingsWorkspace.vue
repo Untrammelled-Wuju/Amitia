@@ -1,9 +1,9 @@
 <template>
-  <SecondaryWorkspace :title="title" :return-to="returnTo" :class="{ 'settings-refined': refinedAppearance }">
+  <SecondaryWorkspace :title="title" :return-to="returnTo" :class="{ 'settings-refined': refinedAppearance }" data-amitia-ui="settings.section">
     <template #navigation>
       <div class="settings-compact-navigation">
         <label for="settings-section">设置分类</label>
-        <select id="settings-section" :value="currentEntry" @change="navigateToSetting">
+        <select id="settings-section" data-amitia-ui="settings.input" :value="currentEntry" @change="navigateToSetting">
           <option value="" disabled>选择设置项目</option>
           <optgroup v-for="group in settingsGroups" :key="group.title" :label="group.title">
             <option v-for="item in group.items" :key="item.path" :value="item.path">{{ item.label }}</option>
@@ -15,6 +15,7 @@
           <h2 :id="`settings-group-${index}`">{{ group.title }}</h2>
           <router-link v-for="item in group.items" :key="item.path" :to="item.path"
             class="settings-navigation-item"
+            data-amitia-ui="settings.tab"
             :aria-current="currentEntry === item.path ? 'page' : undefined">
             {{ item.label }}
           </router-link>

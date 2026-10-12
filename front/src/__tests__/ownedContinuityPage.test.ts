@@ -34,6 +34,13 @@ describe("持续事项页面的原始详情意图", () => {
     mocks.update.mockResolvedValue(document.thread);
   });
   afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
+  it("只保留查看范围并默认全部事项", async () => {
+    const wrapper=open(); await flushPromises();
+    expect(wrapper.findAll('select[aria-label="事项查看范围"]')).toHaveLength(1);
+    expect(wrapper.find('select[aria-label="工作角色"]').exists()).toBe(false);
+    expect((wrapper.find('select[aria-label="事项查看范围"]').element as HTMLSelectElement).value).toBe("all");
+    expect(mocks.list.mock.calls[0][0].memoryView).toBe("all");
+  });
   it("详情修改使用被打开记录的原 scope，而非提交时刷新另一份详情", async () => {
     const wrapper = open(); await flushPromises();
     await wrapper.get(".thread-card").trigger("click"); await flushPromises();

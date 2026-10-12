@@ -20,8 +20,8 @@ Map<String, dynamic> _providerTokens(
   final raw = _map(meta['tokens']).isNotEmpty
       ? _map(meta['tokens'])
       : _map(meta['theme']).isNotEmpty
-          ? _map(meta['theme'])
-          : _map(meta['cssVariables']);
+      ? _map(meta['theme'])
+      : _map(meta['cssVariables']);
   final brightnessKey = brightness == Brightness.dark ? 'dark' : 'light';
   final scoped = _map(raw[brightnessKey]);
   return scoped.isEmpty ? raw : <String, dynamic>{...raw, ...scoped};
@@ -35,8 +35,8 @@ Map<String, dynamic> _globalProviderTokens(UIProviderDefinition? provider) {
   final raw = _map(meta['tokens']).isNotEmpty
       ? _map(meta['tokens'])
       : _map(meta['theme']).isNotEmpty
-          ? _map(meta['theme'])
-          : _map(meta['cssVariables']);
+      ? _map(meta['theme'])
+      : _map(meta['cssVariables']);
   // Layout is intentionally brightness-independent. Prefer an explicit layout
   // namespace, then the root token object. Light/dark maps only affect visual
   // tokens such as colors and typography.
@@ -51,12 +51,11 @@ double _double(Map<String, dynamic> source, String key, double fallback) {
   return value is num ? value.toDouble() : fallback;
 }
 
-int _int(Map<String, dynamic> source, String key, int fallback) {
-  final value = source[key];
-  return value is num ? value.toInt() : fallback;
-}
-
-double _doubleAlias(Map<String, dynamic> source, List<String> keys, double fallback) {
+double _doubleAlias(
+  Map<String, dynamic> source,
+  List<String> keys,
+  double fallback,
+) {
   for (final key in keys) {
     final value = source[key];
     if (value is num) return value.toDouble();
@@ -86,10 +85,16 @@ AmitiaLayoutTokens mergeLayoutTokens(
   if (source.isEmpty) return defaults;
   final spacing = _map(source['spacing']);
   final radius = _map(source['radius']);
-  double spacingValue(String key, double fallback) =>
-      _double(spacing.isEmpty ? source : spacing, key, _double(source, key, fallback));
-  double radiusValue(String key, String legacyKey, double fallback) =>
-      _double(radius.isEmpty ? source : radius, key, _double(source, legacyKey, fallback));
+  double spacingValue(String key, double fallback) => _double(
+    spacing.isEmpty ? source : spacing,
+    key,
+    _double(source, key, fallback),
+  );
+  double radiusValue(String key, String legacyKey, double fallback) => _double(
+    radius.isEmpty ? source : radius,
+    key,
+    _double(source, legacyKey, fallback),
+  );
   return AmitiaLayoutTokens(
     xs: spacingValue('xs', defaults.xs),
     sm: spacingValue('sm', defaults.sm),
@@ -98,11 +103,26 @@ AmitiaLayoutTokens mergeLayoutTokens(
     xl: spacingValue('xl', defaults.xl),
     xxl: spacingValue('xxl', defaults.xxl),
     xxxl: spacingValue('xxxl', defaults.xxxl),
-    pagePadding: spacingValue('page', _double(source, 'pagePadding', defaults.pagePadding)),
-    cardPadding: spacingValue('card', _double(source, 'cardPadding', defaults.cardPadding)),
-    sectionGap: spacingValue('section', _double(source, 'sectionGap', defaults.sectionGap)),
-    componentGap: spacingValue('component', _double(source, 'componentGap', defaults.componentGap)),
-    tightGap: spacingValue('tight', _double(source, 'tightGap', defaults.tightGap)),
+    pagePadding: spacingValue(
+      'page',
+      _double(source, 'pagePadding', defaults.pagePadding),
+    ),
+    cardPadding: spacingValue(
+      'card',
+      _double(source, 'cardPadding', defaults.cardPadding),
+    ),
+    sectionGap: spacingValue(
+      'section',
+      _double(source, 'sectionGap', defaults.sectionGap),
+    ),
+    componentGap: spacingValue(
+      'component',
+      _double(source, 'componentGap', defaults.componentGap),
+    ),
+    tightGap: spacingValue(
+      'tight',
+      _double(source, 'tightGap', defaults.tightGap),
+    ),
     listItemMinHeight: _double(
       source,
       'listItemMinHeight',
@@ -114,12 +134,12 @@ AmitiaLayoutTokens mergeLayoutTokens(
       defaults.listItemMaxHeight,
     ),
     buttonHeight: _double(source, 'buttonHeight', defaults.buttonHeight),
-    inputMinHeight: _double(
-      source,
-      'inputMinHeight',
-      defaults.inputMinHeight,
+    inputMinHeight: _double(source, 'inputMinHeight', defaults.inputMinHeight),
+    radiusExtraSmall: radiusValue(
+      'xs',
+      'radiusExtraSmall',
+      defaults.radiusExtraSmall,
     ),
-    radiusExtraSmall: radiusValue('xs', 'radiusExtraSmall', defaults.radiusExtraSmall),
     radiusSmall: radiusValue('sm', 'radiusSmall', defaults.radiusSmall),
     radiusMedium: radiusValue('md', 'radiusMedium', defaults.radiusMedium),
     radiusLarge: radiusValue('lg', 'radiusLarge', defaults.radiusLarge),
@@ -134,10 +154,15 @@ AmitiaTypographyTokens _mergeTypography(
   Map<String, dynamic> source,
 ) {
   final typography = _map(source['typography']);
-  final values = typography.isEmpty ? source : <String, dynamic>{...source, ...typography};
+  final values = typography.isEmpty
+      ? source
+      : <String, dynamic>{...source, ...typography};
   return AmitiaTypographyTokens(
     fontFamily: _string(values, 'fontFamily', defaults.fontFamily),
-    pageTitleSize: _doubleAlias(values, const ['pageTitleSize', 'titleSize'], defaults.pageTitleSize),
+    pageTitleSize: _doubleAlias(values, const [
+      'pageTitleSize',
+      'titleSize',
+    ], defaults.pageTitleSize),
     pageLargeTitleSize: _double(
       values,
       'pageLargeTitleSize',
@@ -150,7 +175,10 @@ AmitiaTypographyTokens _mergeTypography(
     ),
     cardTitleSize: _double(values, 'cardTitleSize', defaults.cardTitleSize),
     bodySize: _double(values, 'bodySize', defaults.bodySize),
-    bodySmallSize: _doubleAlias(values, const ['bodySmallSize', 'smallBodySize'], defaults.bodySmallSize),
+    bodySmallSize: _doubleAlias(values, const [
+      'bodySmallSize',
+      'smallBodySize',
+    ], defaults.bodySmallSize),
     captionSize: _double(values, 'captionSize', defaults.captionSize),
     labelSize: _double(values, 'labelSize', defaults.labelSize),
     statusLabelSize: _double(
@@ -159,12 +187,30 @@ AmitiaTypographyTokens _mergeTypography(
       defaults.statusLabelSize,
     ),
     buttonSize: _double(values, 'buttonSize', defaults.buttonSize),
-    pageTitleWeight: _intAlias(values, const ['pageTitleWeight', 'weightBold'], defaults.pageTitleWeight),
-    sectionTitleWeight: _intAlias(values, const ['sectionTitleWeight', 'weightMedium'], defaults.sectionTitleWeight),
-    cardTitleWeight: _intAlias(values, const ['cardTitleWeight', 'weightMedium'], defaults.cardTitleWeight),
-    bodyWeight: _intAlias(values, const ['bodyWeight', 'weightRegular'], defaults.bodyWeight),
-    labelWeight: _intAlias(values, const ['labelWeight', 'weightRegular'], defaults.labelWeight),
-    buttonWeight: _intAlias(values, const ['buttonWeight', 'weightMedium'], defaults.buttonWeight),
+    pageTitleWeight: _intAlias(values, const [
+      'pageTitleWeight',
+      'weightBold',
+    ], defaults.pageTitleWeight),
+    sectionTitleWeight: _intAlias(values, const [
+      'sectionTitleWeight',
+      'weightMedium',
+    ], defaults.sectionTitleWeight),
+    cardTitleWeight: _intAlias(values, const [
+      'cardTitleWeight',
+      'weightMedium',
+    ], defaults.cardTitleWeight),
+    bodyWeight: _intAlias(values, const [
+      'bodyWeight',
+      'weightRegular',
+    ], defaults.bodyWeight),
+    labelWeight: _intAlias(values, const [
+      'labelWeight',
+      'weightRegular',
+    ], defaults.labelWeight),
+    buttonWeight: _intAlias(values, const [
+      'buttonWeight',
+      'weightMedium',
+    ], defaults.buttonWeight),
   );
 }
 
@@ -173,13 +219,26 @@ AmitiaIconTokens _mergeIcons(
   Map<String, dynamic> source,
 ) {
   final icons = _map(source['icons']);
-  final values = icons.isEmpty ? source : <String, dynamic>{...source, ...icons};
+  final values = icons.isEmpty
+      ? source
+      : <String, dynamic>{...source, ...icons};
   return AmitiaIconTokens(
-    extraSmall: _doubleAlias(values, const ['extraSmall', 'iconExtraSmall'], defaults.extraSmall),
+    extraSmall: _doubleAlias(values, const [
+      'extraSmall',
+      'iconExtraSmall',
+    ], defaults.extraSmall),
     small: _doubleAlias(values, const ['small', 'iconSmall'], defaults.small),
-    medium: _doubleAlias(values, const ['medium', 'size', 'iconMedium'], defaults.medium),
+    medium: _doubleAlias(values, const [
+      'medium',
+      'size',
+      'iconMedium',
+    ], defaults.medium),
     large: _doubleAlias(values, const ['large', 'iconLarge'], defaults.large),
-    navigation: _doubleAlias(values, const ['navigation', 'navigationSize', 'iconNavigation'], defaults.navigation),
+    navigation: _doubleAlias(values, const [
+      'navigation',
+      'navigationSize',
+      'iconNavigation',
+    ], defaults.navigation),
   );
 }
 
@@ -193,7 +252,10 @@ AmitiaComponentTokens _mergeComponents(
       : <String, dynamic>{...source, ...components};
   return AmitiaComponentTokens(
     toolbarHeight: _double(values, 'toolbarHeight', defaults.toolbarHeight),
-    drawerMaxWidth: _doubleAlias(values, const ['drawerWidth', 'drawerMaxWidth'], defaults.drawerMaxWidth),
+    drawerMaxWidth: _doubleAlias(values, const [
+      'drawerWidth',
+      'drawerMaxWidth',
+    ], defaults.drawerMaxWidth),
     borderWidth: _double(values, 'borderWidth', defaults.borderWidth),
     controlHeight: _double(values, 'controlHeight', defaults.controlHeight),
     compactControlHeight: _double(
@@ -243,31 +305,48 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
   final iconDefault =
       base.extension<AmitiaIconTokens>() ?? const AmitiaIconTokens();
   final componentDefault =
-      base.extension<AmitiaComponentTokens>() ??
-      const AmitiaComponentTokens();
+      base.extension<AmitiaComponentTokens>() ?? const AmitiaComponentTokens();
   final componentVariantsDefault =
       base.extension<AmitiaComponentVariants>() ??
       const AmitiaComponentVariants();
 
   final colorSource = _map(source['colors']);
-  final colorValues = colorSource.isEmpty ? source : <String, dynamic>{...source, ...colorSource};
+  final colorValues = colorSource.isEmpty
+      ? source
+      : <String, dynamic>{...source, ...colorSource};
   Color c(String key, Color fallback, [String? semanticKey]) =>
-      parseDesignColor(colorValues[key] ?? (semanticKey == null ? null : colorValues[semanticKey])) ?? fallback;
+      parseDesignColor(
+        colorValues[key] ??
+            (semanticKey == null ? null : colorValues[semanticKey]),
+      ) ??
+      fallback;
 
   final colors = AmitiaColorTokens(
-    backgroundPrimary: c('backgroundPrimary', colorsDefault.backgroundPrimary, 'background'),
+    backgroundPrimary: c(
+      'backgroundPrimary',
+      colorsDefault.backgroundPrimary,
+      'background',
+    ),
     backgroundSecondary: c(
       'backgroundSecondary',
       colorsDefault.backgroundSecondary,
     ),
-    surfacePrimary: c('surfacePrimary', colorsDefault.surfacePrimary, 'surface'),
+    surfacePrimary: c(
+      'surfacePrimary',
+      colorsDefault.surfacePrimary,
+      'surface',
+    ),
     surfaceSecondary: c('surfaceSecondary', colorsDefault.surfaceSecondary),
     accentPrimary: c('accentPrimary', colorsDefault.accentPrimary, 'primary'),
     accentSecondary: c('accentSecondary', colorsDefault.accentSecondary),
     accentSoft: c('accentSoft', colorsDefault.accentSoft),
     accentPressed: c('accentPressed', colorsDefault.accentPressed),
     textPrimary: c('textPrimary', colorsDefault.textPrimary, 'textPrimary'),
-    textSecondary: c('textSecondary', colorsDefault.textSecondary, 'textSecondary'),
+    textSecondary: c(
+      'textSecondary',
+      colorsDefault.textSecondary,
+      'textSecondary',
+    ),
     textTertiary: c('textTertiary', colorsDefault.textTertiary, 'textMuted'),
     textDisabled: c('textDisabled', colorsDefault.textDisabled),
     borderPrimary: c('borderPrimary', colorsDefault.borderPrimary, 'border'),
@@ -284,8 +363,15 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
   final typography = _mergeTypography(typographyDefault, source);
   final icons = _mergeIcons(iconDefault, source);
   final components = _mergeComponents(componentDefault, source);
-  final componentVariants = _mergeComponentVariants(componentVariantsDefault, provider);
-  Object? componentValue(String component, String key, {String? fallbackComponent}) {
+  final componentVariants = _mergeComponentVariants(
+    componentVariantsDefault,
+    provider,
+  );
+  Object? componentValue(
+    String component,
+    String key, {
+    String? fallbackComponent,
+  }) {
     final primary = componentVariants.variant(component)[key];
     if (primary != null) return primary;
     if (fallbackComponent != null) {
@@ -293,24 +379,35 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
     }
     return null;
   }
+
   double componentNumber(
     String component,
     String key,
     double fallback, {
     String? fallbackComponent,
   }) {
-    final value = componentValue(component, key, fallbackComponent: fallbackComponent);
+    final value = componentValue(
+      component,
+      key,
+      fallbackComponent: fallbackComponent,
+    );
     return value is num ? value.toDouble() : fallback;
   }
+
   int componentWeight(
     String component,
     String key,
     int fallback, {
     String? fallbackComponent,
   }) {
-    final value = componentValue(component, key, fallbackComponent: fallbackComponent);
+    final value = componentValue(
+      component,
+      key,
+      fallbackComponent: fallbackComponent,
+    );
     return value is num ? value.toInt() : fallback;
   }
+
   Color componentColor(
     String component,
     String key,
@@ -322,6 +419,7 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
         ) ??
         fallback;
   }
+
   DesignTokenRuntime.activate(
     layout: layout,
     typography: typography,
@@ -393,7 +491,10 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
         minimumSize: WidgetStatePropertyAll(
-          Size(0, componentNumber('button', 'minHeight', components.controlHeight)),
+          Size(
+            0,
+            componentNumber('button', 'minHeight', components.controlHeight),
+          ),
         ),
         padding: WidgetStatePropertyAll(
           EdgeInsets.symmetric(
@@ -410,7 +511,11 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
         ),
         textStyle: WidgetStatePropertyAll(
           TextStyle(
-            fontSize: componentNumber('button', 'fontSize', typography.buttonSize),
+            fontSize: componentNumber(
+              'button',
+              'fontSize',
+              typography.buttonSize,
+            ),
             fontWeight: designFontWeight(
               componentWeight('button', 'fontWeight', typography.buttonWeight),
             ),
@@ -508,9 +613,7 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
           ),
         ),
         padding: WidgetStatePropertyAll(
-          EdgeInsets.all(
-            componentNumber('iconButton', 'padding', layout.sm),
-          ),
+          EdgeInsets.all(componentNumber('iconButton', 'padding', layout.sm)),
         ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
@@ -535,7 +638,11 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
         if (states.contains(WidgetState.selected)) {
           return componentColor('switch', 'thumbColor', Colors.white);
         }
-        return componentColor('switch', 'inactiveThumbColor', colors.textTertiary);
+        return componentColor(
+          'switch',
+          'inactiveThumbColor',
+          colors.textTertiary,
+        );
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.disabled)) {
@@ -544,18 +651,34 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
         if (states.contains(WidgetState.selected)) {
           return componentColor('switch', 'activeColor', colors.accentPrimary);
         }
-        return componentColor('switch', 'inactiveTrackColor', colors.borderSecondary);
+        return componentColor(
+          'switch',
+          'inactiveTrackColor',
+          colors.borderSecondary,
+        );
       }),
       trackOutlineColor: WidgetStatePropertyAll(
         componentColor('switch', 'borderColor', Colors.transparent),
       ),
     ),
     sliderTheme: base.sliderTheme.copyWith(
-      activeTrackColor: componentColor('slider', 'activeColor', colors.accentPrimary),
-      inactiveTrackColor: componentColor('slider', 'inactiveColor', colors.borderSecondary),
+      activeTrackColor: componentColor(
+        'slider',
+        'activeColor',
+        colors.accentPrimary,
+      ),
+      inactiveTrackColor: componentColor(
+        'slider',
+        'inactiveColor',
+        colors.borderSecondary,
+      ),
       thumbColor: componentColor('slider', 'thumbColor', colors.accentPrimary),
       overlayColor: componentColor('slider', 'overlayColor', colors.accentSoft),
-      trackHeight: componentNumber('slider', 'trackHeight', base.sliderTheme.trackHeight ?? 4),
+      trackHeight: componentNumber(
+        'slider',
+        'trackHeight',
+        base.sliderTheme.trackHeight ?? 4,
+      ),
       thumbShape: RoundSliderThumbShape(
         enabledThumbRadius: componentNumber('slider', 'thumbRadius', 10),
       ),
@@ -563,7 +686,14 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
     textButtonTheme: TextButtonThemeData(
       style: ButtonStyle(
         minimumSize: WidgetStatePropertyAll(
-          Size(0, componentNumber('button', 'minHeight', components.compactControlHeight)),
+          Size(
+            0,
+            componentNumber(
+              'button',
+              'minHeight',
+              components.compactControlHeight,
+            ),
+          ),
         ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
@@ -607,8 +737,69 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
         ? base.textTheme
         : base.textTheme.apply(fontFamily: typography.fontFamily),
     iconTheme: base.iconTheme.copyWith(size: icons.medium),
-    extensions: _buildThemeExtensions(base, colors, layout, typography, icons, components, componentVariants),
+    extensions: _buildThemeExtensions(
+      base,
+      colors,
+      layout,
+      typography,
+      icons,
+      components,
+      componentVariants,
+    ),
   );
+}
+
+ThemeData applyUIStylePatch(ThemeData base, Map<String, dynamic> patch) {
+  if (patch.isEmpty) return base;
+  final tokens = <String, dynamic>{};
+  Map<String, dynamic> mapValue(String key) {
+    final value = patch[key];
+    return value is Map ? value.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
+  final palette = mapValue('palette');
+  if (palette.isNotEmpty) tokens['colors'] = palette;
+  final typography = mapValue('typography');
+  if (typography.isNotEmpty) tokens['typography'] = typography;
+  final layout = mapValue('layout');
+  final spacing = layout['spacing'];
+  if (spacing is Map) tokens['spacing'] = spacing.cast<String, dynamic>();
+  final radius = layout['radius'];
+  if (radius is Map) tokens['radius'] = radius.cast<String, dynamic>();
+  for (final key in const <String>[
+    'density',
+    'listItemMinHeight',
+    'listItemMaxHeight',
+    'buttonHeight',
+    'inputMinHeight',
+  ]) {
+    if (layout.containsKey(key)) tokens[key] = layout[key];
+  }
+  final icons = mapValue('icons');
+  if (icons.isNotEmpty) tokens['icons'] = icons;
+  final components = mapValue('components');
+  if (components.isNotEmpty) tokens['components'] = components;
+  final variants = mapValue('componentVariants');
+  if (tokens.isEmpty && variants.isEmpty) return base;
+  final provider = UIProviderDefinition(
+    providerId: 'local.style.patch',
+    extensionId: 'local.ui.style',
+    capability: UICapability.tokens,
+    mode: UIProviderMode.replace,
+    priority: 1,
+    platforms: const <String>['*'],
+    entries: const <String, UIProviderEntry>{},
+    permissions: const <String>[],
+    placement: UIProviderPlacement.any,
+    generation: 1,
+    enabled: true,
+    builtin: false,
+    metadata: <String, dynamic>{
+      'tokens': tokens,
+      if (variants.isNotEmpty) 'componentVariants': variants,
+    },
+  );
+  return applyUIThemeProvider(base, provider);
 }
 
 Iterable<ThemeExtension<dynamic>> _buildThemeExtensions(

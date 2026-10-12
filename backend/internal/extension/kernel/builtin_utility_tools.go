@@ -103,7 +103,7 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 		{
 			id: "builtin.execute_host_command", modelName: "execute_host_command", name: "Execute Host Command",
 			description: "Run a bounded command in a bound local workspace on Windows, Linux, or macOS. Requires explicit high-risk command approval; use for builds, tests, and code verification.",
-			input:       `{"type":"object","required":["command"],"additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":131072},"cwd":{"type":"string"},"workingDir":{"type":"string"},"timeoutMs":{"type":"integer","minimum":100,"maximum":300000},"maxOutputBytes":{"type":"integer","minimum":1,"maximum":1048576}}}`,
+			input:       `{"type":"object","required":["command"],"additionalProperties":false,"properties":{"workspaceId":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":131072},"cwd":{"type":"string"},"workingDir":{"type":"string"},"timeoutMs":{"type":"integer","minimum":100,"maximum":300000},"maxOutputBytes":{"type":"integer","minimum":1,"maximum":1048576}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "runtime.host.command.execute", Risk: "high"}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, idempotent: false, timeout: 305 * time.Second, maxOutput: 2 * 1024 * 1024, category: "terminal",
 		},
 		{
@@ -145,8 +145,14 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 		if _, exists := registry.GetByModelName(ctx, spec.modelName); exists {
 			continue
 		}
+		capabilityID := builtinUtilityCapabilityID(spec.id)
+		runtimeMetadata := map[string]any(nil)
+		if capabilityID != "" {
+			runtimeMetadata = map[string]any{"modulePlacement": "device"}
+		}
 		def := capability.ToolDefinition{
 			ID:             spec.id,
+			CapabilityID:   capabilityID,
 			ModelName:      spec.modelName,
 			Source:         capability.ToolSourceBuiltin,
 			Name:           spec.name,
@@ -180,6 +186,7 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 				RuntimeType: capability.RuntimeTypeBuiltin,
 				RuntimeID:   "builtin",
 				HandlerName: spec.modelName,
+				Metadata:    runtimeMetadata,
 			},
 		}
 		if err := registry.Register(ctx, def); err != nil {
@@ -187,4 +194,15 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 		}
 	}
 	return nil
+}
+
+func builtinUtilityCapabilityID(toolID string) capability.CapabilityID {
+	switch toolID {
+	case "builtin.list_files", "builtin.read_file_part", "builtin.send_attachment":
+		return "workspace.read"
+	case "builtin.apply_file", "builtin.execute_host_command":
+		return "workspace.write"
+	default:
+		return ""
+	}
 }

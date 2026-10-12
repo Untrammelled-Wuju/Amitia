@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/artifact/artifact_service.dart';
+import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../../../../core/widgets/conversation_media_image.dart';
 import '../../../../core/services/owned_audio_source.dart';
 import '../amitia_message_theme.dart';
@@ -383,17 +384,23 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
+    final style = context.amitiaStyleFor('attachment');
     final extension = RegExp(
       r'\.([A-Za-z0-9]+)$',
     ).firstMatch(widget.block.name)?.group(1)?.toUpperCase();
     final card = Container(
+      width: style.number('width'),
       constraints: const BoxConstraints(maxWidth: 560),
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border.all(color: tokens.line),
-        borderRadius: BorderRadius.circular(tokens.codeRadius),
+      margin: style.edgeInsets('margin') ?? const EdgeInsets.only(bottom: 10),
+      padding:
+          style.edgeInsets('padding') ??
+          const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: style.applyBoxDecoration(
+        BoxDecoration(
+          color: tokens.surface,
+          border: Border.all(color: tokens.line),
+          borderRadius: BorderRadius.circular(tokens.codeRadius),
+        ),
       ),
       child: Row(
         children: [
@@ -429,10 +436,12 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
                   widget.block.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: tokens.text,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
+                  style: style.applyTextStyle(
+                    TextStyle(
+                      color: tokens.text,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -447,13 +456,26 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
                           _formatBytes(widget.block.size),
                           widget.block.mimeType,
                         ].where((value) => value.isNotEmpty).join(' · '),
-                  style: TextStyle(color: tokens.muted, fontSize: 10.5),
+                  style: style.applyTextStyle(
+                    TextStyle(color: tokens.muted, fontSize: 10.5),
+                  ),
                 ),
               ],
             ),
           ),
-          if (widget.block.url.isNotEmpty && (widget.block.mimeType.contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(widget.block.name) || widget.block.mimeType.startsWith('image/')))
-            TextButton(onPressed: () => setState(() { _preview = !_preview; }), child: Text(_preview ? '收起' : '预览')),
+          if (widget.block.url.isNotEmpty &&
+              (widget.block.mimeType.contains('html') ||
+                  RegExp(
+                    r'\.html?$',
+                    caseSensitive: false,
+                  ).hasMatch(widget.block.name) ||
+                  widget.block.mimeType.startsWith('image/')))
+            TextButton(
+              onPressed: () => setState(() {
+                _preview = !_preview;
+              }),
+              child: Text(_preview ? '收起' : '预览'),
+            ),
           if (_status == AmrpAssetStatus.failed)
             TextButton(
               onPressed: () => setState(
@@ -471,13 +493,32 @@ class _AmitiaFileBlockState extends State<AmitiaFileBlock> {
         ],
       ),
     );
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      card,
-      if (_preview && (widget.block.mimeType.contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(widget.block.name)))
-        AmitiaHtmlPreview(source: '', url: widget.block.url, filename: widget.block.name)
-      else if (_preview)
-        ConversationMediaImage(url: widget.block.url, alt: widget.block.name),
-    ]);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        card,
+        if (_preview &&
+            (widget.block.mimeType.contains('html') ||
+                RegExp(
+                  r'\.html?$',
+                  caseSensitive: false,
+                ).hasMatch(widget.block.name)))
+          AmitiaHtmlPreview(
+            source: '',
+            url: widget.block.url,
+            filename: widget.block.name,
+          )
+        else if (_preview)
+          ConversationMediaImage(url: widget.block.url, alt: widget.block.name),
+      ],
+    );
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? content
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: content,
+          );
   }
 
   String _formatBytes(int value) {
@@ -651,10 +692,14 @@ class _ImageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(tokens.codeRadius),
+    final style = context.amitiaStyleFor('attachment');
+    final radius =
+        style.borderRadius('borderRadius') ??
+        BorderRadius.circular(tokens.codeRadius);
+    final card = ClipRRect(
+      borderRadius: radius,
       child: Material(
-        color: tokens.surface,
+        color: style.color('backgroundColor') ?? tokens.surface,
         child: InkWell(
           onTap: onPreview,
           child: Stack(
@@ -688,6 +733,19 @@ class _ImageCard extends StatelessWidget {
         ),
       ),
     );
+    final result = Container(
+      margin: style.edgeInsets('margin'),
+      padding: style.edgeInsets('padding'),
+      decoration: style.applyBoxDecoration(BoxDecoration(borderRadius: radius)),
+      child: card,
+    );
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? result
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: result,
+          );
   }
 }
 
@@ -713,7 +771,9 @@ class _ResolvedImageState extends State<_ResolvedImage> {
   @override
   void didUpdateWidget(covariant _ResolvedImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.image.url != widget.image.url) _future = _resolveMediaUri(context, widget.image.url);
+    if (oldWidget.image.url != widget.image.url) {
+      _future = _resolveMediaUri(context, widget.image.url);
+    }
   }
 
   @override
@@ -736,8 +796,9 @@ class _ResolvedImageState extends State<_ResolvedImage> {
                   'image/jpeg',
                   'image/gif',
                 ].contains(data.mimeType) ||
-                uri.toString().length > 1400000)
+                uri.toString().length > 1400000) {
               return _ImageFailure(alt: widget.image.alt);
+            }
             return Image.memory(
               data.contentAsBytes(),
               fit: widget.fit,
@@ -842,15 +903,21 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
+    final style = context.amitiaStyleFor('attachment');
     final duration = _player.duration ?? widget.block.duration;
-    return Container(
+    final card = Container(
+      width: style.number('width'),
       constraints: const BoxConstraints(maxWidth: 460),
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border.all(color: tokens.line),
-        borderRadius: BorderRadius.circular(tokens.codeRadius),
+      margin: style.edgeInsets('margin') ?? const EdgeInsets.only(bottom: 10),
+      padding:
+          style.edgeInsets('padding') ??
+          const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: style.applyBoxDecoration(
+        BoxDecoration(
+          color: tokens.surface,
+          border: Border.all(color: tokens.line),
+          borderRadius: BorderRadius.circular(tokens.codeRadius),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -860,7 +927,9 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
               Expanded(
                 child: Text(
                   widget.block.title,
-                  style: TextStyle(color: tokens.text, fontSize: 11.5),
+                  style: style.applyTextStyle(
+                    TextStyle(color: tokens.text, fontSize: 11.5),
+                  ),
                 ),
               ),
               Text(
@@ -979,6 +1048,13 @@ class _AmitiaAudioBlockState extends State<AmitiaAudioBlock> {
         ],
       ),
     );
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? card
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: card,
+          );
   }
 
   String _formatDuration(Duration? value) {
@@ -1056,14 +1132,19 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
-    return Container(
+    final style = context.amitiaStyleFor('attachment');
+    final card = Container(
+      width: style.number('width'),
       constraints: const BoxConstraints(maxWidth: 700),
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: style.edgeInsets('margin') ?? const EdgeInsets.only(bottom: 16),
+      padding: style.edgeInsets('padding'),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border.all(color: tokens.line),
-        borderRadius: BorderRadius.circular(tokens.codeRadius),
+      decoration: style.applyBoxDecoration(
+        BoxDecoration(
+          color: tokens.surface,
+          border: Border.all(color: tokens.line),
+          borderRadius: BorderRadius.circular(tokens.codeRadius),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1077,7 +1158,9 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
                 Expanded(
                   child: Text(
                     widget.block.title,
-                    style: TextStyle(color: tokens.text, fontSize: 11.5),
+                    style: style.applyTextStyle(
+                      TextStyle(color: tokens.text, fontSize: 11.5),
+                    ),
                   ),
                 ),
                 Text(
@@ -1183,6 +1266,13 @@ class _AmitiaVideoBlockState extends State<AmitiaVideoBlock> {
         ],
       ),
     );
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? card
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: card,
+          );
   }
 
   String _formatDuration(Duration value) {
@@ -1528,7 +1618,8 @@ class AmitiaArtifactBlock extends StatelessWidget {
             ),
           ),
           if (block.artifactKind.toLowerCase().contains('html') ||
-                  block.mimeType.toLowerCase().contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(block.title))
+              block.mimeType.toLowerCase().contains('html') ||
+              RegExp(r'\.html?$', caseSensitive: false).hasMatch(block.title))
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: AmitiaHtmlPreview(
@@ -1581,7 +1672,11 @@ class AmitiaArtifactBlock extends StatelessWidget {
               Expanded(
                 child:
                     block.artifactKind.toLowerCase().contains('html') ||
-                        block.mimeType.toLowerCase().contains('html') || RegExp(r'\.html?$', caseSensitive: false).hasMatch(block.title)
+                        block.mimeType.toLowerCase().contains('html') ||
+                        RegExp(
+                          r'\.html?$',
+                          caseSensitive: false,
+                        ).hasMatch(block.title)
                     ? AmitiaHtmlPreview(
                         source: block.content,
                         url: block.url,
@@ -1621,7 +1716,11 @@ class AmitiaArtifactBlock extends StatelessWidget {
       final uri = await _resolveMediaUri(context, block.url);
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (error) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('文件打开失败：$error')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('文件打开失败：$error')));
+      }
     }
   }
 

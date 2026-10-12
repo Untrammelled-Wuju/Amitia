@@ -10,9 +10,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
@@ -313,6 +315,10 @@ func (h *Handler) WebChatRetryTurn(c *gin.Context) {
 		return
 	}
 	binding := h.workspaceBindingForConversation(*conversation, spaceID)
+	originActor := security.GetActor(c)
+	if originActor == nil {
+		originActor, _ = auth.FromContext(c.Request.Context())
+	}
 	go func() {
 		defer cancel()
 		defer conversationstream.DefaultManager().ClearExecution(conversationID, newTurn.ID)
@@ -322,6 +328,7 @@ func (h *Handler) WebChatRetryTurn(c *gin.Context) {
 			ReplyToMessageID: userMessage.ReplyToMessageID, ModelConfigID: conversation.ModelConfigID, ReasoningEffort: conversation.ReasoningEffort, PermissionMode: conversation.PermissionMode,
 			TurnID: newTurn.ID, ExecutionID: newTurn.ExecutionID, ForceRegenerate: true,
 			MessageStyle: messageStyle,
+			OriginActor:  originActor,
 		}, binding)
 		if runErr != nil {
 			if genCtx.Err() != nil {

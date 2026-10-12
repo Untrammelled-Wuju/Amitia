@@ -11,6 +11,8 @@ import (
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/agentpermission"
+	"github.com/u-ai/backend/internal/auth"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
@@ -54,6 +56,7 @@ type ToolFacade struct {
 	recoveryService       *acquisition.RecoveryService
 	counters              *ToolFacadeCounters
 	config                ToolFacadeConfig
+	localDeviceID         runtimeidentity.DeviceID
 }
 
 func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, args ...any) *ToolFacade {
@@ -384,46 +387,95 @@ func (f *ToolFacade) BeforePrompt(ctx context.Context, scope InvocationScope) []
 }
 
 func workspacePromptContribution(scope InvocationScope) (ContextContribution, bool) {
-	if scope.ExecContext == nil || strings.TrimSpace(scope.ExecContext.WorkspaceID) == "" {
+	if scope.ExecContext == nil {
 		return ContextContribution{}, false
 	}
-	workspaceID := strings.TrimSpace(scope.ExecContext.WorkspaceID)
-	rootURI := "amitia://workspace/@" + workspaceID + "/"
-	name := ""
-	kind := ""
-	deviceID := ""
-	if metadata := scope.ExecContext.Metadata; metadata != nil {
-		if value, ok := metadata["workspaceRootUri"].(string); ok && strings.TrimSpace(value) != "" {
-			rootURI = strings.TrimSpace(value)
+	bindings := append([]coreexec.WorkspaceBinding(nil), scope.ExecContext.WorkspaceBindings...)
+	if len(bindings) == 0 && strings.TrimSpace(scope.ExecContext.WorkspaceID) != "" {
+		binding := coreexec.WorkspaceBinding{ID: strings.TrimSpace(scope.ExecContext.WorkspaceID), RootURI: "amitia://workspace/@" + strings.TrimSpace(scope.ExecContext.WorkspaceID) + "/"}
+		if metadata := scope.ExecContext.Metadata; metadata != nil {
+			binding.RootURI = stringMetadata(metadata, "workspaceRootUri", binding.RootURI)
+			binding.Name = stringMetadata(metadata, "workspaceName", "")
+			binding.Kind = stringMetadata(metadata, "workspaceKind", "")
+			binding.DeviceID = stringMetadata(metadata, "workspaceDeviceId", "")
 		}
-		if value, ok := metadata["workspaceName"].(string); ok {
-			name = strings.TrimSpace(value)
-		}
-		if value, ok := metadata["workspaceKind"].(string); ok {
-			kind = strings.TrimSpace(value)
-		}
-		if value, ok := metadata["workspaceDeviceId"].(string); ok {
-			deviceID = strings.TrimSpace(value)
-		}
+		bindings = append(bindings, binding)
 	}
-	content := fmt.Sprintf("Current conversation workspace is bound to workspaceId=%s, rootUri=%s.", workspaceID, rootURI)
-	if name != "" {
-		content += " Display name: " + name + "."
+	if len(bindings) == 0 {
+		return ContextContribution{}, false
 	}
-	content += " Treat relative project paths as relative to this workspace. Use this workspace for file/search/edit operations unless the user explicitly changes the chat workspace. Do not access another workspace ID."
+	primaryID := strings.TrimSpace(scope.ExecContext.PrimaryWorkspaceID)
+	if primaryID == "" {
+		primaryID = strings.TrimSpace(scope.ExecContext.WorkspaceID)
+	}
+	if primaryID == "" {
+		primaryID = bindings[0].ID
+	}
+	parts := make([]string, 0, len(bindings))
+	var primary coreexec.WorkspaceBinding
+	for _, binding := range bindings {
+		if binding.ID == "" {
+			continue
+		}
+		if binding.ID == primaryID {
+			primary = binding
+		}
+		label := "workspaceId=" + binding.ID
+		if binding.Name != "" {
+			label += ", name=" + binding.Name
+		}
+		if binding.Kind != "" {
+			label += ", kind=" + binding.Kind
+		}
+		if binding.RootURI != "" {
+			label += ", rootUri=" + binding.RootURI
+		}
+		if binding.ReadOnly {
+			label += ", readOnly=true"
+		}
+		parts = append(parts, label)
+	}
+	if len(parts) == 0 {
+		return ContextContribution{}, false
+	}
+	if primary.ID == "" {
+		primary = bindings[0]
+		primaryID = primary.ID
+	}
+	content := fmt.Sprintf("The current project has %d simultaneously accessible workspaces. Primary workspaceId=%s.", len(parts), primaryID)
+	if primary.Name != "" {
+		content += " Primary name=" + primary.Name + "."
+	}
+	if primary.RootURI != "" {
+		content += " Primary rootUri=" + primary.RootURI + "."
+	}
+	content += " Resolve relative paths and default writes against the primary workspace. Other listed workspaces are also authorized for read, search and edit operations; pass their workspaceId explicitly. Results and paths must state their workspaceId when more than one workspace is available. Do not access workspaces outside this list."
+	content += " Workspaces: " + strings.Join(parts, "; ") + "."
 	return ContextContribution{
 		Source:     "conversation_workspace",
 		Priority:   95,
 		Content:    content,
-		TokenLimit: 220,
+		TokenLimit: 700,
 		Metadata: map[string]string{
-			"workspaceId": workspaceID,
-			"rootUri":     rootURI,
-			"name":        name,
-			"kind":        kind,
-			"deviceId":    deviceID,
+			"workspaceId":        primaryID,
+			"rootUri":            primary.RootURI,
+			"name":               primary.Name,
+			"kind":               primary.Kind,
+			"deviceId":           primary.DeviceID,
+			"workspaceCount":     fmt.Sprintf("%d", len(parts)),
+			"workspacePrimaryId": primaryID,
 		},
 	}, true
+}
+
+func stringMetadata(metadata map[string]any, key, fallback string) string {
+	if metadata == nil {
+		return fallback
+	}
+	if value, ok := metadata[key].(string); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	return fallback
 }
 
 func (f *ToolFacade) ModelTools(ctx context.Context, scope InvocationScope) ([]tool.Tool, error) {
@@ -817,6 +869,12 @@ func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
 	}
 }
 
+func (f *ToolFacade) SetLocalDeviceID(deviceID runtimeidentity.DeviceID) {
+	if f != nil {
+		f.localDeviceID = deviceID
+	}
+}
+
 func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition, scope InvocationScope) resolvedExecution {
 	owned := false
 	if scope.ExecContext != nil {
@@ -835,6 +893,14 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	if capID == "" {
 		capID = capability.CapabilityID(def.ID)
 	}
+	if def.CapabilityID == "" && def.Runtime.RuntimeType == capability.RuntimeTypeBuiltin {
+		return resolvedExecution{}
+	}
+	targetDeviceID := runtimeidentity.DeviceID("")
+	if scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
+		targetDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+	}
+	targetIsLocal := targetDeviceID != "" && f.localDeviceID != "" && targetDeviceID == f.localDeviceID
 	req := capability.CapabilityResolutionRequest{
 		SpaceID:            runtimeidentity.SpaceID(scope.SpaceID),
 		CapabilityID:       capID,
@@ -846,7 +912,7 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	}
 	if def.ExtensionID == "com.amitia.builtin.workspace" && scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
 		deviceID := scope.ExecContext.RuntimeTarget.DeviceID
-		if deviceID != "" && strings.EqualFold(strings.TrimSpace(scope.ExecContext.RuntimeTarget.Placement), "device") {
+		if deviceID != "" && !targetIsLocal && strings.EqualFold(strings.TrimSpace(scope.ExecContext.RuntimeTarget.Placement), "device") {
 			req.ModuleID = ""
 			req.RequiredPlacement = capability.ProviderPlacementDevice
 			req.PreferredPlacement = capability.ProviderPlacementDevice
@@ -868,11 +934,19 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 			if scope.ExecContext.RuntimeTarget == nil || scope.ExecContext.RuntimeTarget.DeviceID == "" {
 				return resolvedExecution{missingCapability: capID, resolutionCode: "CAPABILITY_DEVICE_TARGET_REQUIRED", resolutionDetail: "设备能力缺少明确的目标设备"}
 			}
-			req.RequiredPlacement = capability.ProviderPlacementDevice
-			req.PreferredPlacement = capability.ProviderPlacementDevice
-			req.RequiredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
-			req.PreferredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
-			req.AllowCore = false
+			if targetIsLocal {
+				req.RequiredPlacement = capability.ProviderPlacementCore
+				req.PreferredPlacement = capability.ProviderPlacementCore
+				req.RequiredDeviceID = ""
+				req.PreferredDeviceID = ""
+				req.AllowDevice = false
+			} else {
+				req.RequiredPlacement = capability.ProviderPlacementDevice
+				req.PreferredPlacement = capability.ProviderPlacementDevice
+				req.RequiredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+				req.PreferredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+				req.AllowCore = false
+			}
 		} else if placement == "cloud" {
 			req.RequiredPlacement = capability.ProviderPlacementCore
 			req.AllowDevice = false
@@ -896,6 +970,9 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 		if err != nil {
 			detail = err.Error()
 		}
+		if detail == "" && len(result.ReasonCodes) > 0 {
+			detail = "capability resolution reasons: " + strings.Join(result.ReasonCodes, ", ")
+		}
 		if detail == "" {
 			detail = fmt.Sprintf("capability %s has no executable provider", capID)
 		}
@@ -911,6 +988,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	if f.executionKernel == nil {
 		return ToolDispatchResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &ToolDispatchError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
+	ctx = withInvocationOriginActor(ctx, scope)
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
 	resolved := f.resolveExecutionTarget(ctx, def, scope)
 	if resolved.resolverUnavailable {
@@ -1028,6 +1106,34 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	}
 	result := f.executionKernel.Execute(ctx, req)
 	return unifiedResultToDispatch(result)
+}
+
+func withInvocationOriginActor(ctx context.Context, scope InvocationScope) context.Context {
+	if actor, ok := auth.FromContext(ctx); ok && actor != nil {
+		return ctx
+	}
+	if scope.ExecContext == nil || scope.ExecContext.Metadata == nil {
+		return ctx
+	}
+	metadata := scope.ExecContext.Metadata
+	principalType, _ := metadata[coreexec.MetadataOriginPrincipalType].(string)
+	deviceID, _ := metadata[coreexec.MetadataOriginDeviceID].(string)
+	runtimeID, _ := metadata[coreexec.MetadataOriginRuntimeID].(string)
+	sessionID, _ := metadata[coreexec.MetadataOriginSessionID].(string)
+	runtimeSessionID, _ := metadata[coreexec.MetadataOriginRuntimeSessionID].(string)
+	if strings.TrimSpace(principalType) == "" || strings.TrimSpace(deviceID) == "" ||
+		(strings.TrimSpace(sessionID) == "" && strings.TrimSpace(runtimeSessionID) == "") {
+		return ctx
+	}
+	actor := &auth.ActorContext{
+		PrincipalType:    auth.PrincipalType(principalType),
+		SpaceID:          runtimeidentity.SpaceID(scope.SpaceID),
+		DeviceID:         runtimeidentity.DeviceID(deviceID),
+		RuntimeID:        runtimeidentity.RuntimeID(runtimeID),
+		SessionID:        sessionID,
+		RuntimeSessionID: runtimeidentity.RuntimeSessionID(runtimeSessionID),
+	}
+	return auth.WithActor(ctx, actor)
 }
 
 func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName string, input json.RawMessage, scope InvocationScope, idempotencyKey string, sink capability.ToolStreamSink) (ToolDispatchResult, bool, error) {

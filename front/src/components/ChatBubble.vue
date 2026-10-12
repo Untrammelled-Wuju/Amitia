@@ -4,6 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <AIMessageRenderer
+    :data-amitia-ui="messageSemanticTarget"
     :message="message"
     :char-name="charName"
     :char-avatar="charAvatar"
@@ -30,9 +31,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import AIMessageRenderer from "@/conversation/rendering/AIMessageRenderer.vue";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     message: Record<string, any>;
     charName?: string;
@@ -66,5 +68,15 @@ defineEmits<{
   edit: [message: Record<string, any>];
   "scroll-to-message": [id: string];
 }>();
+
+const messageSemanticTarget = computed(() => {
+  const messageType = String(props.message?.msgType || props.message?.msg_type || props.message?.type || "").toLowerCase();
+  if (messageType.includes("tool") || props.message?.assistantTurn?.items?.some((item: any) => String(item?.type || "").toLowerCase().includes("tool"))) {
+    return "chat.message.tool";
+  }
+  if (messageType.includes("code")) return "chat.message.code";
+  if (Array.isArray(props.message?.attachments) && props.message.attachments.length > 0) return "chat.attachment";
+  return props.message?.role === "user" ? "chat.message.user" : "chat.message.assistant";
+});
 
 </script>

@@ -18,7 +18,7 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
   let currentProjects: any[];
   let oldProjects: any[];
   const owned = useDeviceOwnedConversation();
-  const project = (ownerId: string, roleId = "role", readOnly = false) => ({ id: "same-project", title: `${ownerId}的分组`, ownerId, roleId, revision: 1, readOnly, createdAt: "2026-10-07T00:00:00Z", updatedAt: "2026-10-07T00:00:00Z" });
+  const project = (ownerId: string, roleId = "role", readOnly = false) => ({ id: "same-project", title: `${ownerId}的项目`, workspaces: [{ id: `workspace-${ownerId}`, deviceId: ownerId, name: `${ownerId}工作区`, kind: "local", rootUri: `amitia://workspace/@workspace-${ownerId}/` }], primaryWorkspaceId: `workspace-${ownerId}`, ownerId, roleId, revision: 1, readOnly, createdAt: "2026-10-07T00:00:00Z", updatedAt: "2026-10-07T00:00:00Z" });
   beforeEach(() => {
     vi.stubGlobal("crypto", webcrypto);
     Object.values(mocks).forEach((mock) => mock.mockReset());
@@ -43,24 +43,23 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
       if (path.endsWith("/projects")) {
         const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${scope.coreId}\0${scope.initiatorDeviceId}\0${payload.requestId}`))), (value) => value.toString(16).padStart(2, "0")).join("");
         const id = `project-${hash}`;
-        return { data: { project: { id, title: payload.title }, saved: true, executionScope: { ...scope, requestId: payload.requestId }, acknowledgement: { ownerId: scope.resourceOwnerId, requestId: payload.requestId, versions: { [`project/${id}`]: 1, [`checkpoint/project/${payload.requestId}`]: 1 } } } };
+        return { data: { project: { id, title: payload.title, workspaces: payload.workspaces, primaryWorkspaceId: payload.primaryWorkspaceId }, saved: true, executionScope: { ...scope, requestId: payload.requestId }, acknowledgement: { ownerId: scope.resourceOwnerId, requestId: payload.requestId, versions: { [`project/${id}`]: 1, [`checkpoint/project/${payload.requestId}`]: 1 } } } };
       }
       return { data: { ownerId: scope.resourceOwnerId, versions: { [`${payload.kind}/${payload.id}`]: payload.expectedRevision + 1 } } };
     });
   });
 
-  it("OFF 项目仅由 Source 保存，逻辑分组不调用工作区或旧项目接口", async () => {
+  it("OFF 项目由 Source 保存，并携带多工作区集合", async () => {
     const store = useChatStore();
     await store.fetchSidebar();
-    expect(store.sidebar.projects[0]).toMatchObject({ id: ownedProjectReference("source", "same-project"), logical: true, ownerId: "source", rootUri: "", workspaceId: "", conversationCount: 1 });
+    expect(store.sidebar.projects[0]).toMatchObject({ id: ownedProjectReference("source", "same-project"), ownerId: "source", rootUri: "amitia://workspace/@workspace-source/", workspaceId: "workspace-source", primaryWorkspaceId: "workspace-source", conversationCount: 1 });
     expect(store.sidebar.recent).toHaveLength(0);
-    await store.createProject({ name: "新分组", expectedExecutionScope: store.projectIntent! });
-    expect(mocks.post.mock.calls[0][1]).toMatchObject({ title: "新分组", characterId: "role", expectedExecutionScope: scope });
+    await store.createProject({ name: "新项目", expectedExecutionScope: store.projectIntent!, workspaces: [{ id: "workspace-new", deviceId: "source", name: "新项目", kind: "local", rootUri: "amitia://workspace/@workspace-new/" }], primaryWorkspaceId: "workspace-new" });
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({ title: "新项目", primaryWorkspaceId: "workspace-new", characterId: "role", expectedExecutionScope: scope });
     expect(mocks.get.mock.calls.every(([path]) => !path.includes("web-chat") && !path.includes("workspaces"))).toBe(true);
-    await expect(store.createProject({ name: "非法文件目录", workspaceId: "private-workspace" })).rejects.toThrow("文件访问需单独授权");
   });
 
-  it("ON 当前 Core 与旧 Source 同 ID 项目及聊天分别归组，旧项目只读", async () => {
+  it("ON 只展示当前 Core 项目，旧逻辑项目不再展示", async () => {
     scope.coordinated = true;
     scope.roleOwnerId = "core";
     scope.resourceOwnerId = "core";
@@ -70,15 +69,12 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     oldProjects = [project("source", "old-role", true)];
     const store = useChatStore();
     await store.fetchSidebar();
-    expect(store.sidebar.projects.map((row) => row.id)).toEqual([ownedProjectReference("core", "same-project"), ownedProjectReference("source", "same-project")]);
+    expect(store.sidebar.projects.map((row) => row.id)).toEqual([ownedProjectReference("core", "same-project")]);
     expect(store.sidebar.projects[0].conversations[0].title).toBe("当前对话");
-    expect(store.sidebar.projects[1].conversations[0].title).toBe("原设备对话");
-    await expect(store.updateProject(store.sidebar.projects[1].id, { name: "改旧设备" })).rejects.toThrow("旧项目为只读");
-    await expect(store.deleteProject(store.sidebar.projects[1].id)).rejects.toThrow("旧项目为只读");
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
-  it("旧设备多个角色时不猜测 Core 同 ID 角色，显式选择后才加载旧分组", async () => {
+  it("旧设备历史项目不再接入侧边栏查询", async () => {
     scope.coordinated = true;
     scope.roleOwnerId = "core";
     scope.resourceOwnerId = "core";
@@ -89,26 +85,41 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     const store = useChatStore();
     await store.fetchSidebar();
     expect(mocks.get.mock.calls.find(([path]) => path.endsWith("/projects"))?.[1].params).not.toHaveProperty("historicalRoleId");
-    expect(store.historicalProjectRoles).toHaveLength(2);
-    store.historicalProjectRole = "old-role";
-    await store.fetchSidebar();
-    expect(mocks.get.mock.calls.filter(([path]) => path.endsWith("/projects")).at(-1)?.[1].params.historicalRoleId).toBe("old-role");
-    expect(store.sidebar.projects).toHaveLength(2);
+    expect(store.sidebar.projects).toHaveLength(1);
   });
 
-  it("重命名、置顶、删除使用原 Owner 和项目 CAS 版本，对话移动发送裸资源ID", async () => {
+  it("重命名、置顶、隐藏使用原 Owner 和项目 CAS 版本，现有对话禁止移动", async () => {
     const store = useChatStore();
     await store.fetchSidebar();
     const target = store.sidebar.projects[0];
     await store.updateProject(target.id, { name: "新名称", pinned: true }, target);
     expect(mocks.post.mock.calls[0][1]).toMatchObject({ kind: "project", id: "same-project", expectedRevision: 1, expectedExecutionScope: scope, changes: { title: "新名称", pinned: true } });
-    await store.moveConversation(store.sidebar.projects[0].conversations[0].id, target.id);
-    expect(mocks.post.mock.calls[1][1]).toMatchObject({ kind: "conversation", id: "chat", changes: { projectId: "same-project" } });
-    await store.deleteProject(target.id, target);
-    expect(mocks.post.mock.calls[2][1]).toMatchObject({ kind: "project", id: "same-project", deleted: true, expectedRevision: 1 });
+    await expect(store.moveConversation(store.sidebar.projects[0].conversations[0].id, target.id)).rejects.toThrow("不能手动移入或移出");
+    await store.hideProject(target.id, target);
+    expect(mocks.post.mock.calls[1][1]).toMatchObject({ kind: "project", id: "same-project", changes: { hidden: true }, expectedRevision: 1 });
     expect(mocks.put).not.toHaveBeenCalled();
     expect(mocks.patch).not.toHaveBeenCalled();
     expect(mocks.del).not.toHaveBeenCalled();
+  });
+
+  it("添加工作区和切换主根使用同一项目版本提交", async () => {
+    const store = useChatStore();
+    await store.fetchSidebar();
+    const target = store.sidebar.projects[0];
+    const workspaces = [
+      ...target.workspaces,
+      { id: "workspace-b", deviceId: "source", name: "B", kind: "local", rootUri: "amitia://workspace/@workspace-b/" },
+    ];
+    await store.updateProject(target.id, { workspaces, primaryWorkspaceId: "workspace-b" }, target);
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({
+      kind: "project",
+      id: "same-project",
+      expectedRevision: 1,
+      changes: {
+        workspaces,
+        primaryWorkspaceId: "workspace-b",
+      },
+    });
   });
 
   it("B→C 后旧同 ID 项目操作被拦截，原项目列表立即失效", async () => {
@@ -124,11 +135,11 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
-  it("逻辑及历史项目菜单不暴露目录访问，历史项目不暴露写操作", () => {
-    const logical = { ...project("source", "old-role", true), name: "旧设备分组", logical: true, available: true, status: "logical", workspaceId: "", deviceId: "", rootUri: "", conversationCount: 0, conversations: [] };
-    const wrapper = mount(SidebarProjectBlock, { props: { project: logical, active: false, activeConversationId: "" }, global: { stubs: { ElIcon: { template: "<span><slot /></span>" }, ElDropdown: { template: "<div><slot /><slot name='dropdown' /></div>" }, ElDropdownMenu: { template: "<div><slot /></div>" }, ElDropdownItem: { template: "<span><slot /></span>" } } } });
+  it("只读项目保留原有菜单限制", () => {
+    const readOnly = { ...project("source", "old-role", true), name: "只读项目", available: true, status: "available", workspaceId: "workspace-source", deviceId: "source", rootUri: "amitia://workspace/@workspace-source/", conversationCount: 0, conversations: [] };
+    const wrapper = mount(SidebarProjectBlock, { props: { project: readOnly, active: false, activeConversationId: "" }, global: { stubs: { ElIcon: { template: "<span><slot /></span>" }, ElDropdown: { template: "<div><slot /><slot name='dropdown' /></div>" }, ElDropdownMenu: { template: "<div><slot /></div>" }, ElDropdownItem: { template: "<span><slot /></span>" } } } });
     expect(wrapper.text()).toContain("只读");
-    for (const text of ["更换根目录", "资源管理器", "重命名项目", "移除项目", "置顶"]) expect(wrapper.text()).not.toContain(text);
+    for (const text of ["重命名项目", "添加文件夹工作区", "置顶", "从侧边栏移除"]) expect(wrapper.text()).not.toContain(text);
     expect(wrapper.get(".project-create-action").attributes("disabled")).toBeDefined();
     wrapper.unmount();
   });
@@ -179,15 +190,13 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     expect(store.projectIntent).toBeNull();
   });
 
-  it("逻辑项目草稿只携带执行归属，目录入口拦截且 Core 切换清空旧草稿", async () => {
+  it("项目草稿携带完整工作区集合，Core 切换清空旧草稿", async () => {
     const store = useChatStore();
     const workspace = useConversationWorkspace();
     await workspace.startDraftConversation(ownedProjectReference("source", "same-project"));
-    expect(workspace.currentWorkspace.value).toMatchObject({ workspaceKind: "logical", rootUri: "", executionScope: scope });
-    expect(workspace.getWorkspaceRequestFields()).toEqual({});
-    expect(await workspace.chooseWorkspaceDirectory()).toBeNull();
-    expect(mocks.post).not.toHaveBeenCalled();
-    expect(mocks.get.mock.calls.some(([path]) => path.includes("workspaces"))).toBe(false);
+    expect(workspace.currentWorkspace.value).toMatchObject({ projectId: ownedProjectReference("source", "same-project"), workspaceId: "workspace-source", primaryWorkspaceId: "workspace-source", executionScope: scope });
+    expect(workspace.currentWorkspace.value?.workspaces).toHaveLength(1);
+    expect(workspace.getWorkspaceRequestFields()).toEqual({ workspaceId: "workspace-source", workspaceDeviceId: "source" });
     owned.stopLocal("提供者已切换");
     owned.coreId.value = "core-c";
     expect(store.currentProjectId).toBe("");
@@ -203,6 +212,6 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
       if (invalid === "realm") response.data.executionScope.authorizationRealm = "other-realm";
       return response;
     });
-    await expect(owned.createProject("新分组", scope)).rejects.toThrow("尚未获得数据所有者保存确认");
+    await expect(owned.createProject("新项目", scope, [{ id: "workspace-new", deviceId: "source", name: "新项目", kind: "local", rootUri: "amitia://workspace/@workspace-new/" }], "workspace-new")).rejects.toThrow("尚未获得数据所有者保存确认");
   });
 });

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ExtensionLoadingOverlay from "./ExtensionLoadingOverlay.vue";
 defineProps<{
   state: "loading" | "error" | "empty" | "suspended";
   detail?: string;
@@ -8,9 +9,10 @@ defineEmits<{ retry: [] }>();
 </script>
 
 <template>
-  <div class="extension-render-state" :data-state="state" role="status">
+  <ExtensionLoadingOverlay v-if="state === 'loading'" />
+  <div v-else class="extension-render-state" :data-state="state" role="status">
     <span class="extension-render-state__title">
-      {{ state === "loading" ? "加载扩展界面" : state === "error" ? "扩展界面加载失败" : state === "suspended" ? "扩展已暂停" : "暂无扩展内容" }}
+      {{ state === "error" ? "扩展界面加载失败" : state === "suspended" ? "扩展已暂停" : "暂无扩展内容" }}
     </span>
     <span v-if="detail" class="extension-render-state__detail">{{ detail }}</span>
     <button v-if="state === 'error'" type="button" @click="$emit('retry')">重试</button>

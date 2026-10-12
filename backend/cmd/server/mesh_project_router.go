@@ -42,7 +42,7 @@ func registerMeshProjectRouter(mesh *gin.RouterGroup, services *AppServices, cor
 					c.JSON(503, gin.H{"message": "项目数据格式无效"})
 					return
 				}
-				collections[index] = append(collections[index], gin.H{"id": project.ID, "title": project.Title, "createdAt": project.CreatedAt, "updatedAt": project.UpdatedAt, "pinnedAt": project.PinnedAt, "revision": row.Revision, "ownerId": row.OwnerID, "roleId": row.RoleID, "readOnly": index == 1})
+				collections[index] = append(collections[index], gin.H{"id": project.ID, "title": project.Title, "workspaces": project.Workspaces, "primaryWorkspaceId": project.PrimaryWorkspaceID, "hiddenAt": project.HiddenAt, "createdAt": project.CreatedAt, "updatedAt": project.UpdatedAt, "pinnedAt": project.PinnedAt, "revision": row.Revision, "ownerId": row.OwnerID, "roleId": row.RoleID, "readOnly": index == 1})
 			}
 		}
 		nextHistoricalCursor := ""
@@ -59,17 +59,19 @@ func registerMeshProjectRouter(mesh *gin.RouterGroup, services *AppServices, cor
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 		var payload struct {
-			RequestID      string                       `json:"requestId"`
-			RoleID         string                       `json:"characterId"`
-			TargetDeviceID string                       `json:"targetDeviceId"`
-			Title          string                       `json:"title"`
-			ExpectedScope  *coordination.ExecutionScope `json:"expectedExecutionScope"`
+			RequestID          string                       `json:"requestId"`
+			RoleID             string                       `json:"characterId"`
+			TargetDeviceID     string                       `json:"targetDeviceId"`
+			Title              string                       `json:"title"`
+			Workspaces         []business.ProjectWorkspace  `json:"workspaces"`
+			PrimaryWorkspaceID string                       `json:"primaryWorkspaceId"`
+			ExpectedScope      *coordination.ExecutionScope `json:"expectedExecutionScope"`
 		}
 		if c.ShouldBindJSON(&payload) != nil {
 			c.JSON(400, gin.H{"message": "项目参数无效"})
 			return
 		}
-		result, err := services.OwnedBusiness.CreateProject(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, payload.Title)
+		result, err := services.OwnedBusiness.CreateProject(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, business.CreateProjectInput{Title: payload.Title, Workspaces: payload.Workspaces, PrimaryWorkspaceID: payload.PrimaryWorkspaceID})
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return

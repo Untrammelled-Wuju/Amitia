@@ -257,6 +257,7 @@ func (h *Handler) Chat(c *gin.Context) {
 		if deviceTimezone == "" {
 			deviceTimezone = strings.TrimSpace(c.GetHeader("X-Device-Timezone"))
 		}
+		originActor, _ := auth.FromContext(c.Request.Context())
 		orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
 			CharacterID:    req.CharacterID,
 			Message:        req.Message,
@@ -269,6 +270,7 @@ func (h *Handler) Chat(c *gin.Context) {
 			DeviceTimezone: deviceTimezone,
 			SessionID:      req.SessionID,
 			RequestID:      req.RequestID,
+			OriginActor:    originActor,
 		})
 		if err != nil {
 			h.writeUnifiedEntryError(c, err)

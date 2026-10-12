@@ -61,6 +61,7 @@ const (
 	EndpointFeatureUINotify       EndpointFeature = "ui.notify"
 	EndpointFeatureUIDialog       EndpointFeature = "ui.dialog"
 	EndpointFeatureUINavigate     EndpointFeature = "ui.navigate"
+	EndpointFeatureUIStyle        EndpointFeature = "ui.style"
 	EndpointFeatureClipboardWrite EndpointFeature = "clipboard.write"
 	EndpointFeatureClipboardRead  EndpointFeature = "clipboard.read"
 	EndpointFeatureDesktopMenu    EndpointFeature = "desktop.menu"
@@ -73,6 +74,7 @@ const (
 	CapUINotify       = EndpointFeatureUINotify
 	CapUIDialog       = EndpointFeatureUIDialog
 	CapUINavigate     = EndpointFeatureUINavigate
+	CapUIStyle        = EndpointFeatureUIStyle
 	CapClipboardWrite = EndpointFeatureClipboardWrite
 	CapClipboardRead  = EndpointFeatureClipboardRead
 	CapDesktopMenu    = EndpointFeatureDesktopMenu

@@ -63,6 +63,10 @@ func (f *FakeSAFBridge) RemoveGrant(grantID string) {
 	delete(f.trees, grantID)
 }
 
+func (f *FakeSAFBridge) PickDirectory(context.Context) (string, string, bool, bool, error) {
+	return "picked", "picked", false, false, nil
+}
+
 func (f *FakeSAFBridge) GrantStatus(ctx context.Context, grantID string) (SAFGrantStatus, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()

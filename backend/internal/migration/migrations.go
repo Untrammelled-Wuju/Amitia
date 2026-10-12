@@ -226,6 +226,7 @@ func DefaultMigrations() []Migration {
 		WebChatRequestIdempotencyMigration(),
 		ToolExecutionLedgerMigration(),
 		ConversationReadStateMigration(),
+		GlobalMemoryPolicyMigration(),
 	}
 }
 

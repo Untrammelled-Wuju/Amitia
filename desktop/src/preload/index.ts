@@ -158,6 +158,15 @@ const api = {
     return () =>
       ipcRenderer.removeListener(IPC_CHANNELS.uiNavigate, listener);
   },
+  onUIStyleCommand(callback: (data: string) => void): () => void {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: string,
+    ) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.uiStyleCommand, listener);
+    return () =>
+      ipcRenderer.removeListener(IPC_CHANNELS.uiStyleCommand, listener);
+  },
   onRuntimeStatusChanged(
     callback: (status: RuntimeStatus) => void,
   ): () => void {

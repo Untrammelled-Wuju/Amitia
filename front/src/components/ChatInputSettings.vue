@@ -1,9 +1,9 @@
 <template>
-  <el-card shadow="never" class="section-card">
+  <el-card shadow="never" class="section-card" data-amitia-ui="component.card">
     <template #header>对话输入</template>
     <div class="input-setting">
       <div><div>回车发送</div><p>开启时 Enter 发送，Shift + Enter 换行；关闭时 Enter 换行。发送按钮始终可用。</p></div>
-      <el-switch :model-value="sendOnEnter" aria-label="回车发送" @update:model-value="update" />
+      <el-switch data-amitia-ui="component.switch" :model-value="sendOnEnter" aria-label="回车发送" @update:model-value="update" />
     </div>
   </el-card>
 </template>

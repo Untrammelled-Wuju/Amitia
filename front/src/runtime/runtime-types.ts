@@ -167,6 +167,7 @@ export interface AmitiaDesktopAPI {
   provisionMesh(cloudBaseUrl: string, pairing?: { offerToken?: string; setupCode?: string; fingerprint?: string; coreId?: string }): Promise<{ ok: boolean }>;
   deprovisionMesh(): Promise<{ ok: boolean }>;
   onUINavigate(callback: (target: string) => void): () => void;
+  onUIStyleCommand(callback: (data: string) => void): () => void;
 }
 
 export interface RuntimeConnection {

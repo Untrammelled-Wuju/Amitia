@@ -1,14 +1,16 @@
 import { apiClient } from "@/composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { memoryStorageRole, continuityViewForScope } from "@/runtime/owned-memory-scope";
 import { getDeploymentConfig } from "@/runtime/runtime-adapter";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 
-export interface OwnedContinuityDocument { thread: ContinuityThread; waits: ContinuityWait[]; events: ContinuityEvent[]; ownerId: string; coreId: string; modeRevision: number; executionScope: OwnedExecutionScope; managementExecutionScope?: OwnedExecutionScope; persistedExecutionScope?: OwnedExecutionScope; readOnly?: boolean; pausedReason?: string; lease?: { id: string; state: string } }
+export interface OwnedContinuityDocument { memoryPartition?: string; thread: ContinuityThread; waits: ContinuityWait[]; events: ContinuityEvent[]; ownerId: string; coreId: string; modeRevision: number; executionScope: OwnedExecutionScope; managementExecutionScope?: OwnedExecutionScope; persistedExecutionScope?: OwnedExecutionScope; readOnly?: boolean; pausedReason?: string; lease?: { id: string; state: string } }
 const authority = (scope: OwnedExecutionScope) => JSON.stringify(Object.entries(scope).filter(([key]) => !["requestId", "turnId", "executionId"].includes(key)).sort(([left], [right]) => left.localeCompare(right)));
 function ownedData<T>(response: any): T { return response.data?.code === 200 ? response.data.data : response.data; }
 function managementDocument(document: OwnedContinuityDocument, expected?: OwnedExecutionScope): OwnedContinuityDocument {
   const scope = document.managementExecutionScope;
-  if (!scope || document.ownerId !== scope.resourceOwnerId || document.thread?.characterId !== scope.roleId || (expected && authority(scope) !== authority(expected))) throw new Error("持续事项的管理范围或数据归属无效，请重新加载");
+  const frame = (value: OwnedExecutionScope) => JSON.stringify(Object.entries(value).filter(([key]) => !["requestId", "turnId", "executionId", "roleId", "roleRevision", "memoryRoleId", "memoryViewAll", "continuityRoleId"].includes(key)).sort(([a], [b]) => a.localeCompare(b)));
+  if (!scope || document.ownerId !== scope.resourceOwnerId || (document.memoryPartition || document.thread?.characterId) !== memoryStorageRole(scope, "continuity") || (expected && (document.memoryPartition ? frame(scope) !== frame(expected) : authority(scope) !== authority(expected))) || scope.continuityRoleId && !document.readOnly && scope.roleId !== document.thread.characterId) throw new Error("持续事项的管理范围或数据归属无效，请重新加载");
   return { ...document, persistedExecutionScope: document.executionScope, executionScope: scope };
 }
 async function ownedRole(characterId?: unknown): Promise<string | null> {
@@ -26,7 +28,7 @@ async function ownedDocument(id: string, intent?: OwnedContinuityDocument): Prom
   if (!characterId) { if (intent) throw new Error("持续事项服务已变化，请重新加载"); return null; }
   if (!intent?.executionScope || intent.thread.id !== id) throw new Error("请先加载持续事项并确认原始数据归属");
   if (intent.readOnly) return intent;
-  const result = managementDocument(ownedData<OwnedContinuityDocument>(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { id, characterId } })));
+  const result = managementDocument(ownedData<OwnedContinuityDocument>(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { id, characterId, ...(continuityViewForScope(intent.executionScope) ? { memoryView: continuityViewForScope(intent.executionScope) } : {}) } })));
   if (result.thread.id !== id || result.ownerId !== intent.ownerId || authority(result.executionScope) !== authority(intent.executionScope)) throw new Error("持续事项所属设备或角色已变化，请重新加载");
   return result;
 }
@@ -95,6 +97,7 @@ export interface ContinuityEvent {
 }
 
 export interface ContinuityDetail {
+  memoryPartition?: string;
   executionScope?: OwnedExecutionScope;
   ownerId?: string;
   coreId?: string;
@@ -142,7 +145,7 @@ export async function listContinuityThreads(params: Record<string, unknown> = {}
     let cursor = "";
     let scope = "";
     do {
-      const page: { documents: OwnedContinuityDocument[]; executionScope: OwnedExecutionScope; nextCursor?: string } = ownedData(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { characterId, pagination: "1", cursor } }));
+      const page: { documents: OwnedContinuityDocument[]; executionScope: OwnedExecutionScope; nextCursor?: string } = ownedData(await apiClient.get("/api/device-mesh/v1/business/continuity", { params: { characterId, pagination: "1", cursor, memoryView: params.memoryView } }));
       const currentScope = authority(page.executionScope);
       if (scope && scope !== currentScope) throw new Error("持续事项的数据归属已变化，请重新加载");
       scope = currentScope;

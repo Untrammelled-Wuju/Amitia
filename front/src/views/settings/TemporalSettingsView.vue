@@ -1,11 +1,11 @@
 <template>
-  <div class="temporal-settings">
+  <div class="temporal-settings" data-amitia-ui="settings.section">
     <div class="page-header">
       <div>
         <h2>时间与地区</h2>
         <p>管理用户当地时间、安静时段、节日地区和可被角色感知的日期。</p>
       </div>
-      <el-button type="primary" :loading="saving" @click="saveProfile"
+      <el-button type="primary" data-amitia-ui="settings.button" :loading="saving" @click="saveProfile"
         >保存设置</el-button
       >
     </div>
@@ -21,22 +21,23 @@
         >检测到设备时区变为 {{ profile.pendingTimezoneSuggestion }}</template
       >
       <div class="suggestion-actions">
-        <el-button size="small" type="primary" @click="resolveSuggestion(true)"
+        <el-button size="small" type="primary" data-amitia-ui="settings.button" @click="resolveSuggestion(true)"
           >接受变更</el-button
         >
-        <el-button size="small" @click="resolveSuggestion(false)"
+        <el-button size="small" data-amitia-ui="settings.button" @click="resolveSuggestion(false)"
           >暂不变更</el-button
         >
       </div>
     </el-alert>
 
-    <el-tabs v-model="activeTab">
+    <el-tabs v-model="activeTab" data-amitia-ui="settings.tab">
       <el-tab-pane label="时间与地区" name="profile">
-        <el-card shadow="never" class="settings-card" v-loading="loading">
+        <el-card shadow="never" class="settings-card" data-amitia-ui="settings.card" v-loading="loading">
           <el-form label-position="top" :model="profile" class="form-grid">
             <el-form-item label="时间感知">
               <el-switch
                 v-model="profile.enabled"
+                data-amitia-ui="component.switch"
                 active-text="开启"
                 inactive-text="关闭"
               />
@@ -55,6 +56,7 @@
             <el-form-item label="IANA 时区" required>
               <el-select
                 v-model="profile.timezone"
+                data-amitia-ui="component.input"
                 filterable
                 allow-create
                 default-first-option
@@ -73,8 +75,8 @@
               </div>
             </el-form-item>
             <el-form-item label="自动检测设备时区">
-              <el-switch v-model="profile.autoDetectTimezone" />
-              <el-button class="detect-button" @click="detectDeviceTimezone"
+              <el-switch v-model="profile.autoDetectTimezone" data-amitia-ui="component.switch" />
+              <el-button class="detect-button" data-amitia-ui="settings.button" @click="detectDeviceTimezone"
                 >立即检测</el-button
               >
             </el-form-item>
@@ -138,7 +140,7 @@
           </el-form>
         </el-card>
 
-        <el-card shadow="never" class="settings-card">
+        <el-card shadow="never" class="settings-card" data-amitia-ui="settings.card">
           <template #header>
             <div class="card-header">
               <span>当前时间快照</span
@@ -173,11 +175,11 @@
       </el-tab-pane>
 
       <el-tab-pane label="时间锚点" name="anchors">
-        <el-card shadow="never" class="settings-card">
+        <el-card shadow="never" class="settings-card" data-amitia-ui="settings.card">
           <template #header>
             <div class="card-header">
               <span>生日、纪念日与计划</span
-              ><el-button type="primary" @click="openAnchorDialog()"
+              ><el-button type="primary" data-amitia-ui="settings.button" @click="openAnchorDialog()"
                 ><el-icon><Plus /></el-icon>新增锚点</el-button
               >
             </div>
@@ -231,6 +233,7 @@
 
     <el-dialog
       v-model="anchorDialogVisible"
+      data-amitia-ui="settings.dialog"
       :title="anchorForm.id ? '编辑时间锚点' : '新增时间锚点'"
       width="min(620px, 92vw)"
       destroy-on-close

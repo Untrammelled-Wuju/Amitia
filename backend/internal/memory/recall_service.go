@@ -5,6 +5,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"github.com/u-ai/backend/internal/memorypolicy"
 	"math"
 	"sort"
 	"strings"
@@ -88,6 +89,7 @@ func (s *service) dynamicRecall(req *VectorSearchRequest) ([]HybridSearchResult,
 	var sourceItems []recallSourceItem
 	blockedMemoryIDs := s.blockedMemoryIDs()
 	policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, SpaceID: req.SpaceID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
+	policy.MemoryScope, _ = memorypolicy.ForCharacter(s.db, req.CharacterID)
 
 	vectorResults, _ := s.VectorSearch(&VectorSearchRequest{
 		Query: queryText, CharacterID: req.CharacterID, SpaceID: req.SpaceID, Limit: fetchLimit,
@@ -277,12 +279,12 @@ func (s *service) profileRecallItems(query string, req *VectorSearchRequest, int
 	}
 	var rows []row
 	like := "%" + query + "%"
-	profileScopes := []string{strings.TrimSpace(req.CharacterID)}
-	if spaceID := strings.TrimSpace(req.SpaceID); spaceID != "" && spaceID != strings.TrimSpace(req.CharacterID) {
-		profileScopes = append(profileScopes, spaceID)
+	spaceID := strings.TrimSpace(req.SpaceID)
+	if spaceID == "" {
+		return nil
 	}
 	q := s.db.Table("user_profiles").Select("id, category, attribute_name, attribute_value, confidence, source_memory_id, projection_status, created_at").
-		Where("(space_id IN ? OR character_id IN ?)", profileScopes, profileScopes).
+		Where("space_id=?", spaceID).
 		Where("(projection_status IS NULL OR projection_status = '' OR projection_status = 'active')")
 	if strings.TrimSpace(query) != "" && !intent.Profile && !intent.Relationship {
 		q = q.Where("attribute_name LIKE ? OR attribute_value LIKE ?", like, like)
@@ -295,23 +297,18 @@ func (s *service) profileRecallItems(query string, req *VectorSearchRequest, int
 		if r.SourceMemoryID != "" {
 			if m, err := s.repo.FindByID(r.SourceMemoryID); err == nil && m != nil {
 				s.maintainRetentionForMemory(m, time.Now())
-				policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, SpaceID: req.SpaceID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
+				policy := retrievalAuthorityPolicy{SpaceID: req.SpaceID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
 				if !recallMemoryAllowed(*m, intent, policy, s.blockedMemoryIDs()) {
 					continue
 				}
-				ks := keywordMatchScore(strings.ToLower(query), m.Key, m.Value)
-				items = append(items, recallSourceItem{Key: "memory:" + m.ID, Source: "profile", SourceRank: rank + 1, Weight: weight, Candidate: recallCandidate{
-					Memory: *m, Layer: "用户画像", SourceType: "memory", CollectionName: collectionNameForMemoryType(m.MemoryType), MatchTypes: map[string]bool{"profile": true}, KeywordScore: ks,
-				}})
-				continue
 			}
 		}
 		mt, ok := NormalizeMemoryType(r.Category)
 		if !ok || mt == "" {
 			mt = MemoryTypeFact
 		}
-		m := Memory{ID: "profile:" + r.ID, CharacterID: req.CharacterID, MemoryType: string(mt), MemorySubtype: strings.ToUpper(r.Category), Key: r.AttributeName, Value: r.AttributeValue,
-			Importance: 7, Confidence: r.Confidence, Source: "legacy_profile", Scope: "character", RetentionLevel: RetentionL2, MemoryStrength: clamp01(float64(r.Confidence) / 100), DecayState: DecayStateActive, CreatedAt: r.CreatedAt}
+		m := Memory{ID: "profile:" + r.ID, SpaceID: spaceID, MemoryType: string(mt), MemorySubtype: strings.ToUpper(r.Category), Key: r.AttributeName, Value: r.AttributeValue,
+			Importance: 7, Confidence: r.Confidence, Source: "legacy_profile", Scope: "user", RetentionLevel: RetentionL2, MemoryStrength: clamp01(float64(r.Confidence) / 100), DecayState: DecayStateActive, CreatedAt: r.CreatedAt}
 		items = append(items, recallSourceItem{Key: "profile:" + r.ID, Source: "profile", SourceRank: rank + 1, Weight: weight, Candidate: recallCandidate{
 			Memory: m, Layer: "用户画像", SourceType: "profile", CollectionName: "user_profiles", MatchTypes: map[string]bool{"profile": true}, KeywordScore: keywordMatchScore(strings.ToLower(query), r.AttributeName, r.AttributeValue),
 		}})
@@ -349,7 +346,10 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 	}
 	var rows []row
 	q := s.db.Table("episodic_memories").Select("id, scene_type, title, content, trigger_keywords, sentiment_score, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, message_time_start, created_at").Where("space_id = ?", userScope)
-	if characterID := strings.TrimSpace(req.CharacterID); characterID != "" {
+	mode, known := memorypolicy.ForCharacter(s.db, req.CharacterID)
+	if known && mode == "global" {
+		q = q.Where("character_id = '' OR character_id IS NULL")
+	} else if characterID := strings.TrimSpace(req.CharacterID); characterID != "" {
 		q = q.Where("character_id = ?", characterID)
 	}
 	if !intent.ExplicitMemoryRequest {
@@ -378,6 +378,10 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 		m := Memory{ID: "episodic:" + r.ID, SpaceID: userScope, CharacterID: req.CharacterID, MemoryType: "fact", MemorySubtype: "EPISODIC", Key: r.Title, Value: r.Content, Importance: 6,
 			Confidence: 75, Source: "episodic", Scope: "character", RetentionLevel: level, MemoryStrength: strength, StrengthUpdatedAt: r.StrengthUpdatedAt,
 			LastReinforcedAt: r.LastReinforcedAt, ReinforceCount: r.ReinforceCount, DecayState: r.DecayState, CreatedAt: occurredAt}
+		if known && mode == "global" {
+			m.Scope = "user"
+			m.CharacterID = ""
+		}
 		s.maintainEpisodicRetention(r.ID, &m, time.Now())
 		if strings.EqualFold(m.DecayState, DecayStateArchived) && !intent.ExplicitMemoryRequest {
 			continue
@@ -420,6 +424,7 @@ func (s *service) graphRecallItems(query string, req *VectorSearchRequest, inten
 	blocked := s.blockedMemoryIDs()
 	policy := retrievalAuthorityPolicy{CharacterID: req.CharacterID, SpaceID: req.SpaceID, ProactiveMention: req.ProactiveMention, Now: time.Now()}
 	capacity := limit
+	policy.MemoryScope, _ = memorypolicy.ForCharacter(s.db, req.CharacterID)
 	if len(nodes) < capacity {
 		capacity = len(nodes)
 	}

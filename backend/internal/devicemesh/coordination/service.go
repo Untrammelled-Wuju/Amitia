@@ -35,6 +35,9 @@ type Policy struct {
 }
 
 type ExecutionScope struct {
+	MemoryViewAll            bool   `json:"memoryViewAll,omitempty"`
+	ContinuityRoleID         string `json:"continuityRoleId,omitempty"`
+	MemoryRoleID             string `json:"memoryRoleId,omitempty"`
 	SpaceID                  string `json:"spaceId"`
 	InitiatorDeviceID        string `json:"initiatorDeviceId"`
 	TargetDeviceID           string `json:"targetDeviceId"`

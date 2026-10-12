@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
+import 'package:amitia_app/core/models/project.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
 import 'package:amitia_app/core/services/device_owned_chat_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,7 @@ class _ProjectApi implements BackendServiceApi {
   bool failMove = false;
   bool wrongEditRequest = false;
   final requests = <Map<String, dynamic>>[];
+  final streamRequests = <Map<String, dynamic>>[];
   final paths = <String>[];
   final projectPages = <Map<String, dynamic>>[];
   final projectQueries = <Map<String, dynamic>>[];
@@ -42,6 +44,18 @@ class _ProjectApi implements BackendServiceApi {
   Map<String, dynamic> row(String owner, {bool readOnly = false}) => {
     'id': 'same',
     'title': owner,
+    'workspaces': readOnly
+        ? []
+        : [
+            {
+              'id': 'workspace-$owner',
+              'deviceId': owner,
+              'name': '工作区 $owner',
+              'kind': 'local',
+              'rootUri': 'amitia://workspace/@workspace-$owner/',
+            },
+          ],
+    'primaryWorkspaceId': readOnly ? '' : 'workspace-$owner',
     'ownerId': owner,
     'roleId': 'role',
     'revision': 3,
@@ -148,7 +162,12 @@ class _ProjectApi implements BackendServiceApi {
     if (path.endsWith('/projects'))
       return {
             'saved': true,
-            'project': {'id': 'new', 'title': request['title']},
+            'project': {
+              'id': 'new',
+              'title': request['title'],
+              'workspaces': request['workspaces'],
+              'primaryWorkspaceId': request['primaryWorkspaceId'],
+            },
             'executionScope': {...scope(), 'requestId': request['requestId']},
             'acknowledgement': {
               'requestId': request['requestId'],
@@ -179,6 +198,7 @@ class _ProjectApi implements BackendServiceApi {
     CancelToken? cancelToken,
   }) async {
     final request = Map<String, dynamic>.from(data as Map);
+    streamRequests.add(request);
     final current = {...scope(), 'requestId': request['requestId']};
     final frames = [
       {'type': 'started', 'conversationId': 'chat', 'executionScope': current},
@@ -205,6 +225,15 @@ class _ProjectApi implements BackendServiceApi {
 }
 
 void main() {
+  List<ProjectWorkspaceDto> workspaceSet(String deviceId) => [
+    ProjectWorkspaceDto(
+      id: 'workspace-$deviceId',
+      deviceId: deviceId,
+      name: '工作区',
+      kind: 'local',
+      rootUri: 'amitia://workspace/@workspace-$deviceId/',
+    ),
+  ];
   setUp(() => SharedPreferences.setMockInitialValues({}));
   test('同 ID 的 Core 项目与 Source 历史项目保留各自归属且历史不可编辑', () async {
     final api = _ProjectApi()..coordinated = true;
@@ -241,17 +270,32 @@ void main() {
     final service = DeviceOwnedChatService(api, providerKey: () => 'cloud');
     await service.refresh();
     final original = api.scope();
-    final project = await service.createProject('new', expectedScope: original);
+    final project = await service.createProject(
+      'new',
+      expectedScope: original,
+      workspaces: workspaceSet('a'),
+      primaryWorkspaceId: 'workspace-a',
+    );
     expect(project.ownerId, 'a');
     api.badAck = true;
     await expectLater(
-      service.createProject('bad', expectedScope: original),
+      service.createProject(
+        'bad',
+        expectedScope: original,
+        workspaces: workspaceSet('a'),
+        primaryWorkspaceId: 'workspace-a',
+      ),
       throwsStateError,
     );
     api.core = 'c';
     await service.refresh();
     await expectLater(
-      service.createProject('old', expectedScope: original),
+      service.createProject(
+        'old',
+        expectedScope: original,
+        workspaces: workspaceSet('a'),
+        primaryWorkspaceId: 'workspace-a',
+      ),
       throwsStateError,
     );
     expect(api.requests.length, 2);
@@ -266,27 +310,39 @@ void main() {
       throwsStateError,
     );
   });
-  test('绑定项目禁止目录关联、打开及无原始归属的变更，不调用 legacy', () async {
+  test('绑定项目支持多工作区并保留隐藏语义，不调用 legacy', () async {
     final api = _ProjectApi();
     final service = ChatService(api, providerKey: () => 'cloud');
-    await expectLater(
-      service.createProject(name: 'folder', workspaceId: 'mount'),
-      throwsStateError,
+    await service.owned.refresh();
+    final scope = api.scope();
+    final created = await service.createProject(
+      name: 'folder',
+      workspaceId: 'workspace-a',
+      rootUri: 'amitia://workspace/@workspace-a/',
+      workspaces: workspaceSet('a'),
+      primaryWorkspaceId: 'workspace-a',
+      expectedScope: scope,
     );
-    await expectLater(service.projectLocation('same'), throwsStateError);
-    await expectLater(
-      service.updateProject('same', name: 'rename'),
-      throwsStateError,
-    );
-    await expectLater(service.deleteProject('same'), throwsStateError);
+    expect(created.primaryWorkspaceId, 'workspace-a');
+    final project = (await service.owned.projects()).first;
+    await service.updateProject(project.id, name: 'rename', project: project);
+    final refreshed = (await service.owned.projects()).first;
+    await service.deleteProject(refreshed.id, project: refreshed);
     expect(api.paths.where((path) => path.contains('/web-chat/')), isEmpty);
-    expect(api.requests, isEmpty);
+    expect(api.requests.last['changes'], {'hidden': true});
   });
   test('绑定状态未就绪必须 fail closed，不回退 legacy 目录或聊天', () async {
     final api = _ProjectApi()..available = false;
     final service = ChatService(api, providerKey: () => 'cloud');
     await expectLater(service.conversationSidebar(), throwsStateError);
-    await expectLater(service.createProject(name: 'new'), throwsStateError);
+    await expectLater(
+      service.createProject(
+        name: 'new',
+        workspaces: workspaceSet('a'),
+        primaryWorkspaceId: 'workspace-a',
+      ),
+      throwsStateError,
+    );
     expect(api.paths.where((path) => path.contains('/web-chat/')), isEmpty);
     expect(api.requests, isEmpty);
   });
@@ -319,7 +375,7 @@ void main() {
     expect(api.projectQueries.last['historicalCursor'], 'old-2');
     expect(api.projectPages, isEmpty);
   });
-  test('首条回复保存后才归组，归组失败保留已保存消息并提示', () async {
+  test('项目内首条回复直接携带项目 ID，不调用对话移动接口', () async {
     for (final fail in [false, true]) {
       final api = _ProjectApi()..failMove = fail;
       final chat = ChatService(api, providerKey: () => 'cloud');
@@ -329,22 +385,20 @@ void main() {
       controller.startDraft(
         workspace: ConversationWorkspaceDto(
           projectId: project.id,
-          workspaceId: '',
-          rootUri: '',
-          workspaceKind: 'logical',
-          logicalProject: project,
+          workspaceId: project.workspaceId,
+          rootUri: project.rootUri,
+          workspaceKind: project.workspaceKind,
+          workspaces: project.workspaces,
+          primaryWorkspaceId: project.primaryWorkspaceId,
         ),
       );
       await controller.sendText('你好');
-      expect(api.requests.single['changes']['projectId'], 'same');
-      expect(api.requests.single['expectedExecutionScope']['coreId'], 'b');
+      expect(api.requests, isEmpty);
+      expect(api.streamRequests.single['projectId'], 'same');
       final answer = controller.messages.last;
       expect(answer.content, '已保存回复');
       expect(answer.status, MessageStatus.delivered);
-      if (fail)
-        expect(controller.lastError.toString(), contains('对话已保存，但项目归组未保存'));
-      else
-        expect(controller.lastError, isNull);
+      expect(controller.lastError, isNull);
       controller.dispose();
     }
   });

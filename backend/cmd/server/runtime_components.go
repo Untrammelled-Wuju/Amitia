@@ -419,11 +419,13 @@ func newDesktopPetComponent(services *AppServices) *desktopPetComponent {
 }
 
 func (c *desktopPetComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
+	enabled := c.services != nil && c.services.RuntimePolicy.DesktopPet &&
+		config.AppCfg != nil && config.AppCfg.DesktopPetRuntime.Enabled
 	return runtimeorchestrator.ComponentDescriptor{
 		ID:       runtimeorchestrator.ComponentDesktopPet,
 		Phase:    runtimeorchestrator.PhaseApplication,
-		Enabled:  config.AppCfg.DesktopPetRuntime.Enabled,
-		Required: config.AppCfg.DesktopPetRuntime.Enabled,
+		Enabled:  enabled,
+		Required: enabled,
 		Dependencies: []runtimeorchestrator.ComponentID{
 			runtimeorchestrator.ComponentSQLite,
 			runtimeorchestrator.ComponentExtensionKernel,

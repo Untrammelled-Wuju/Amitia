@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="search-overlay" @click.self="close">
+    <div v-if="visible" class="search-overlay" data-amitia-ui="component.dialog" @click.self="close">
       <div class="search-panel">
         <div class="search-input-wrap">
           <el-icon class="search-icon"><Search /></el-icon>
@@ -12,6 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             ref="inputRef"
             v-model="query"
             class="search-input"
+            data-amitia-ui="component.input"
             placeholder="搜索功能、角色..."
             @keydown="onKeydown"
           />
@@ -24,6 +25,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               v-for="(item, ii) in group.items"
               :key="ii"
               class="result-item"
+              data-amitia-ui="component.list_item"
               :class="{ 'is-active': activeGroup === gi && activeIndex === ii }"
               @click="select(group, ii)"
               @mouseenter="

@@ -224,9 +224,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 	applyReasoningCapabilities(cfg)
-	if req.ReasoningEnabled != nil {
-		cfg.SupportsReasoning = *req.ReasoningEnabled
-	}
+	cfg.SupportsReasoning = requestedReasoningEnabled(cfg.SupportsReasoning, req.ReasoningEnabled)
 	cfg.ReasoningEffort = normalizeReasoningEffort(req.ReasoningEffort)
 	if cfg.ReasoningEffort == "" {
 		cfg.ReasoningEffort = cfg.DefaultReasoningEffort
@@ -558,6 +556,16 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		PipelineMessages:     pipelineMessages,
 		TurnItems:            turnRecorder.snapshotItems(),
 	}, nil
+}
+
+func requestedReasoningEnabled(supported bool, requested *bool) bool {
+	if !supported {
+		return false
+	}
+	if requested == nil {
+		return true
+	}
+	return *requested
 }
 
 func resolveExpressionChannel(channel string, voiceMessage bool) expression.ChannelKind {

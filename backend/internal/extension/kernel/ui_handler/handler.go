@@ -836,8 +836,12 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "contribution_not_found", err.Error())
 		return
 	}
-	if string(def.ExtensionID) != extensionID || def.Kind != ui_contribution.UIContributionSchemaPage {
+	if string(def.ExtensionID) != extensionID {
 		writeError(w, http.StatusNotFound, "schema_not_found", "schema contribution does not belong to extension")
+		return
+	}
+	if def.Entry.Type != ui_contribution.SandboxSchemaRenderer || def.Sandbox.Type != ui_contribution.SandboxSchemaRenderer || strings.TrimSpace(def.Entry.SchemaPath) == "" {
+		writeError(w, http.StatusNotFound, "schema_not_found", "contribution does not declare a schema renderer")
 		return
 	}
 	if h.schemaLookup != nil {
@@ -1381,6 +1385,7 @@ func (h *HTTPHandler) handleHostSession(w http.ResponseWriter, r *http.Request) 
 			host_registry.EndpointFeatureUINotify,
 			host_registry.EndpointFeatureUIDialog,
 			host_registry.EndpointFeatureUINavigate,
+			host_registry.EndpointFeatureUIStyle,
 		}
 	}
 	now := time.Now().UTC()
@@ -1501,6 +1506,7 @@ func normalizeUIHostFeatures(raw []string) []host_registry.EndpointFeature {
 		host_registry.EndpointFeatureUINotify:       {},
 		host_registry.EndpointFeatureUIDialog:       {},
 		host_registry.EndpointFeatureUINavigate:     {},
+		host_registry.EndpointFeatureUIStyle:        {},
 		host_registry.EndpointFeatureClipboardRead:  {},
 		host_registry.EndpointFeatureClipboardWrite: {},
 		host_registry.EndpointFeatureDesktopMenu:    {},

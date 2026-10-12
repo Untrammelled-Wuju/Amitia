@@ -561,7 +561,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     var reasoning = '';
     var accepted = false;
     var completed = false;
-    final logicalProject = wasDraft ? _workspace?.logicalProject : null;
+    final draftProjectId = wasDraft ? (_workspace?.projectId ?? '') : '';
     Map<String, dynamic> acceptedScope = {};
     String sourceConversationId = '';
     int? savedRevision;
@@ -596,6 +596,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         requestId: requestId,
         message: message,
         conversationId: _conversationId,
+        projectId: draftProjectId,
         characterId: _characterId,
         context: previousContext,
         attachments: attachments,
@@ -680,27 +681,6 @@ class ConversationRuntimeController extends ChangeNotifier {
             reasoning = (result['reasoning'] ?? reasoning).toString();
           }
           project(MessageStatus.interrupted);
-        }
-      }
-      if (completed &&
-          logicalProject != null &&
-          !_disposed &&
-          _ownedRequestId == requestId) {
-        try {
-          final conversationId = _conversationId;
-          if (conversationId == null || conversationId.isEmpty)
-            throw StateError('新会话编号不可用');
-          await _chatService.owned.query(
-            conversationId,
-            characterId: logicalProject.roleId,
-          );
-          await _chatService.moveConversationToProject(
-            conversationId,
-            logicalProject.id,
-            project: logicalProject,
-          );
-        } catch (error) {
-          if (!_disposed) _lastError = StateError('对话已保存，但项目归组未保存：$error');
         }
       }
     } catch (error) {

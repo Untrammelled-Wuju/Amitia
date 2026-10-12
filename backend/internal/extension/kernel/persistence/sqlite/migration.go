@@ -2568,6 +2568,7 @@ var schemaMigrations = []string{
 	coordination.CancelledAuthoritySchema,
 	coordination.DeliveryFailuresSchema,
 	meshaudit.Schema,
+	`UPDATE kernel_device_owned_resources SET role_id='@global-memory',revision=revision+1 WHERE kind='profile' AND role_id<>'@global-memory'`,
 }
 
 type dbExecutor interface {

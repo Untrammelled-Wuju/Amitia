@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <nav class="side-nav" :class="{ 'is-collapsed': appStore.sidebarCollapsed }">
+  <nav class="side-nav" :class="{ 'is-collapsed': appStore.sidebarCollapsed }" data-amitia-ui="app.sidebar">
     <div class="brand-row">
       <div class="brand">
         <img class="brand-mark" :src="logoUrl" alt="Amitia" />
@@ -50,7 +50,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         router
         class="side-menu"
       >
-        <el-menu-item index="/chat" :style="navigationItemStyle" @click="handleNewChat">
+        <el-menu-item index="/chat" :style="navigationItemStyle" data-amitia-ui="app.sidebar.item" @click="handleNewChat">
           <el-icon><Plus /></el-icon>
           <span>新对话</span>
         </el-menu-item>
@@ -65,6 +65,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :key="item.id"
               :index="item.route"
               :style="navigationItemStyle"
+              data-amitia-ui="app.sidebar.item"
               @mouseenter="prewarmItem(item)"
               @focus="prewarmItem(item)"
             >
@@ -77,6 +78,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             :key="item.id"
             :index="item.route"
             :style="navigationItemStyle"
+            data-amitia-ui="app.sidebar.item"
             @mouseenter="prewarmItem(item)"
             @focus="prewarmItem(item)"
           >
@@ -117,7 +119,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="thread-section">
         <div class="section-caption project-caption">
           <span>最近</span>
-          <button type="button" class="section-add" title="新建对话" aria-label="新建对话" @click="handleNewChat">
+          <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新建对话" aria-label="新建对话" @click="handleNewChat">
             <el-icon><Plus /></el-icon>
           </button>
         </div>
@@ -145,13 +147,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="thread-section">
         <div class="section-caption project-caption">
           <span>项目</span>
-          <button type="button" class="section-add" title="新增项目" aria-label="新增项目" @click="handleAddProject">
+          <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新增项目" aria-label="新增项目" @click="handleAddProject">
             <el-icon><Plus /></el-icon>
           </button>
         </div>
-        <el-select v-if="chatStore.ownedProjects && chatStore.historicalProjectRoles.length > 1" v-model="chatStore.historicalProjectRole" placeholder="选择旧设备的项目角色" size="small" @change="chatStore.fetchSidebar()">
-          <el-option v-for="role in chatStore.historicalProjectRoles" :key="role.id" :label="role.name" :value="role.id" />
-        </el-select>
         <SidebarProjectBlock
           v-for="project in regularProjects"
           :key="project.id"
@@ -165,6 +164,19 @@ SPDX-License-Identifier: AGPL-3.0-only
           @toggle-pin-conversation="handleToggleConversationPin"
           @archive-conversation="handleArchiveConversation"
         />
+        <div v-if="removedProjects.length" class="removed-projects">
+          <button type="button" class="removed-projects-toggle" data-amitia-ui="app.sidebar.item" @click="showRemovedProjects = !showRemovedProjects">
+            <el-icon><Box /></el-icon>
+            <span>已移除项目</span>
+            <small>{{ removedProjects.length }}</small>
+          </button>
+          <div v-if="showRemovedProjects" class="removed-projects-list">
+            <div v-for="project in removedProjects" :key="project.id" class="removed-project-row" data-amitia-ui="app.sidebar.item">
+              <span>{{ project.name }}</span>
+              <button type="button" @click="handleRestoreProject(project)">恢复</button>
+            </div>
+          </div>
+        </div>
       </div>
       </div>
     </div>
@@ -177,15 +189,15 @@ SPDX-License-Identifier: AGPL-3.0-only
         aria-label="个人空间选项"
         @click.stop
       >
-        <button type="button" role="menuitem" class="profile-menu__item" @click="openArchivedConversations">
+        <button type="button" role="menuitem" class="profile-menu__item" data-amitia-ui="app.sidebar.item" @click="openArchivedConversations">
           <el-icon><Box /></el-icon>
           <span>归档对话</span>
         </button>
-        <button type="button" role="menuitem" class="profile-menu__item" @click="openSettings">
+        <button type="button" role="menuitem" class="profile-menu__item" data-amitia-ui="app.sidebar.item" @click="openSettings">
           <el-icon><Setting /></el-icon>
           <span>设置</span>
         </button>
-        <button type="button" role="menuitem" class="profile-menu__item" @click="openMySpace">
+        <button type="button" role="menuitem" class="profile-menu__item" data-amitia-ui="app.sidebar.item" @click="openMySpace">
           <el-icon><UserFilled /></el-icon>
           <span>我的空间</span>
         </button>
@@ -193,6 +205,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           type="button"
           role="menuitem"
           class="profile-menu__item"
+          data-amitia-ui="app.sidebar.item"
           :aria-label="theme === 'dark' ? '切换为亮色模式' : '切换为暗色模式'"
           @click="toggleTheme"
         >
@@ -203,6 +216,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <button
         class="user-profile"
         type="button"
+        data-amitia-ui="app.sidebar.item"
         :title="username || '个人空间'"
         :aria-expanded="profileMenuOpen"
         aria-haspopup="menu"
@@ -261,8 +275,8 @@ const extensionUIStore = useExtensionUIStore();
 const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
 const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
 const { logoUrl } = useBrandLogo();
-const { get, post } = useApi();
-const { startDraftConversation } = useConversationWorkspace();
+const { get } = useApi();
+const { startDraftConversation, chooseWorkspaceDirectory, addWorkspaceToProject, removeWorkspaceFromProject, setPrimaryWorkspace } = useConversationWorkspace();
 defineProps<{
   username?: string;
   avatar?: string;
@@ -285,6 +299,8 @@ const pinnedProjects = computed(() =>
 const regularProjects = computed(() =>
   chatStore.sidebar.projects.filter((project) => !project.pinnedAt),
 );
+const removedProjects = computed(() => chatStore.sidebar.removedProjects || []);
+const showRemovedProjects = ref(false);
 const hasGeneratingConversations = computed(() => {
   const rows = [
     ...chatStore.sidebar.pinned,
@@ -345,42 +361,26 @@ async function handleArchiveConversation(conversation: ConversationItem) {
 }
 
 async function handleCreateProjectConversation(project: ProjectItem) {
-  if (project.readOnly) { ElMessage.warning("旧项目只读，可打开其中原有对话继续聊天"); return; }
-  await startDraftConversation(project.id);
-  await router.push({ path: "/chat", query: { projectId: project.id } });
+  if (project.readOnly) { ElMessage.warning("该项目为只读"); return; }
+  try {
+    await startDraftConversation(project.id);
+    await router.push({ path: "/chat", query: { projectId: project.id } });
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "新建项目对话失败");
+  }
+}
+
+function handleProjectDialogDismiss(error: unknown): undefined {
+  if (error === "cancel" || error === "close") return;
+  throw error;
 }
 
 async function handleAddProject() {
-  if (chatStore.ownedProjects) {
-    const expected = chatStore.projectIntent;
-    if (!expected) { ElMessage.warning("请先选择角色并加载项目列表"); return; }
-    const result = await ElMessageBox.prompt("为对话分组命名", "新增项目", { inputValidator: (value) => Boolean(String(value || "").trim()) || "项目名称不能为空", confirmButtonText: "创建", cancelButtonText: "取消" });
-    await chatStore.createProject({ name: result.value.trim(), expectedExecutionScope: expected });
-    ElMessage.success("项目已创建");
-    return;
+  try {
+    const project = await chooseWorkspaceDirectory();
+    if (project) ElMessage.success("项目已添加");
+  } catch {
   }
-  if (!window.amitiaDesktop?.selectWorkspaceDirectory) {
-    ElMessage.warning("当前环境不支持直接选择本机目录");
-    return;
-  }
-  const selection = await window.amitiaDesktop.selectWorkspaceDirectory();
-  if (!selection?.path) return;
-  const mount = await post<any>("/api/workspaces/local", {
-    name: selection.name || "项目",
-    localRoot: selection.path,
-    readOnly: false,
-  });
-  if (!mount?.id) throw new Error("项目根目录注册失败");
-  await chatStore.fetchSidebar();
-  const existing = chatStore.sidebar.projects.find((item) => item.workspaceId === mount.id);
-  if (!existing) {
-    await chatStore.createProject({
-      name: mount.name || selection.name || "项目",
-      workspaceId: mount.id,
-      rootUri: mount.rootUri,
-    });
-  }
-  ElMessage.success("项目已添加");
 }
 
 async function handleProjectCommand(project: ProjectItem, command: string | number | object) {
@@ -395,29 +395,38 @@ async function handleProjectCommand(project: ProjectItem, command: string | numb
       confirmButtonText: "保存",
       cancelButtonText: "取消",
       inputValidator: (value) => Boolean(String(value || "").trim()) || "项目名称不能为空",
-    });
+    }).catch(handleProjectDialogDismiss);
+    if (!result) return;
     await chatStore.updateProject(project.id, { name: result.value.trim() }, project);
     return;
   }
-  if (command === "changeRoot") {
-    if (project.logical) { ElMessage.warning("当前项目用于对话分组，文件访问需单独授权"); return; }
-    if (!window.amitiaDesktop?.selectWorkspaceDirectory) {
-      ElMessage.warning("当前环境不支持直接选择本机文件夹");
-      return;
+  if (command === "addWorkspace") {
+    try {
+      const workspace = await addWorkspaceToProject(project);
+      if (workspace) ElMessage.success("工作区已添加");
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : "添加工作区失败");
     }
-    const selection = await window.amitiaDesktop.selectWorkspaceDirectory();
-    if (!selection?.path) return;
-    const mount = await post<any>("/api/workspaces/local", {
-      name: selection.name || project.name,
-      localRoot: selection.path,
-      readOnly: false,
-    });
-    if (!mount?.id) throw new Error("项目根目录注册失败");
-    await chatStore.updateProject(project.id, {
-      workspaceId: mount.id,
-      rootUri: mount.rootUri,
-    });
-    ElMessage.success("项目根目录已更新");
+    return;
+  }
+  if (typeof command === "string" && command.startsWith("primary:")) {
+    try {
+      await setPrimaryWorkspace(project, command.slice("primary:".length));
+      ElMessage.success("主工作区已切换");
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : "切换主工作区失败");
+    }
+    return;
+  }
+  if (typeof command === "string" && command.startsWith("removeWorkspace:")) {
+    try {
+      const workspaceId = command.slice("removeWorkspace:".length);
+      const workspace = project.workspaces.find((item) => item.id === workspaceId);
+      await removeWorkspaceFromProject(project, workspaceId);
+      ElMessage.success(`已移除工作区${workspace ? `：${workspace.name}` : ""}`);
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : "移除工作区失败");
+    }
     return;
   }
   if (command === "pin") {
@@ -429,26 +438,32 @@ async function handleProjectCommand(project: ProjectItem, command: string | numb
     return;
   }
   if (command === "remove") {
-    await ElMessageBox.confirm("移除项目后，项目内对话会移回最近，磁盘文件夹不会被删除。", "移除项目", {
+    const result = await ElMessageBox.confirm("项目只会从侧边栏隐藏，项目、工作区绑定、对话和消息都会保留。", "从侧边栏移除", {
       type: "warning",
       confirmButtonText: "移除",
-      confirmButtonClass: "el-button--danger",
-    });
-    await chatStore.deleteProject(project.id, project);
-    ElMessage.success("项目已移除，对话已移至最近");
+    }).catch(handleProjectDialogDismiss);
+    if (!result) return;
+    await chatStore.hideProject(project.id, project);
+    ElMessage.success("项目已从侧边栏移除");
   }
 }
 
 async function handleOpenProject(project: ProjectItem) {
-  if (project.logical) { ElMessage.warning("当前项目用于对话分组，没有关联文件目录"); return; }
+  const primary = project.workspaces.find((workspace) => workspace.id === project.primaryWorkspaceId) || project.workspaces[0];
+  if (!primary) { ElMessage.warning("项目没有可用工作区"); return; }
   const location = await get<{ kind: string; path?: string; uri?: string }>(
-    `/api/web-chat/projects/${encodeURIComponent(project.id)}/location`,
+    `/api/workspaces/${encodeURIComponent(primary.id)}/location`,
   );
   if (location?.path && window.amitiaDesktop?.openPath) {
     await window.amitiaDesktop.openPath(location.path);
     return;
   }
   ElMessage.warning("当前环境不支持在资源管理器中打开该项目");
+}
+
+async function handleRestoreProject(project: ProjectItem) {
+  await chatStore.restoreProject(project.id, project);
+  ElMessage.success("项目已恢复到侧边栏");
 }
 
 const activeIndex = computed(() => {
@@ -582,6 +597,35 @@ watch(hasGeneratingConversations, syncConversationActivityPolling, { immediate: 
 .thread-item:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .project-thread { min-height: 27px; font-size: var(--ac-font-size-xs); }
 .thread-empty { padding: 5px 9px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
+.removed-projects { display: grid; gap: 2px; margin-top: 4px; }
+.removed-projects-toggle,
+.removed-project-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--ac-font-size-xs);
+  text-align: left;
+}
+.removed-projects-toggle:hover,
+.removed-project-row:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.removed-projects-toggle span,
+.removed-project-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.removed-project-row { padding-left: 22px; }
+.removed-project-row button {
+  border: 0;
+  background: transparent;
+  color: var(--ac-color-primary);
+  cursor: pointer;
+  font: inherit;
+}
 .side-nav-bottom { position: relative; flex: 0 0 auto; margin-top: auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
 .profile-menu { position: absolute; right: 0; bottom: calc(100% + 8px); display: grid; gap: 2px; width: 100%; padding: 5px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--ac-color-surface); }
 .profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }

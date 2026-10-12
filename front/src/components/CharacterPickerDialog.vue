@@ -4,6 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <el-dialog
+    data-amitia-ui="component.dialog"
     :model-value="visible"
     @update:model-value="$emit('update:visible', $event)"
     title="切换角色"
@@ -14,6 +15,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-for="c in characters"
         :key="c.id"
         class="char-option"
+        data-amitia-ui="component.list_item"
         :class="{ active: c.id === characterId }"
         @click="$emit('select', c)"
       >

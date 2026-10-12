@@ -33,7 +33,6 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
   String? _searchError;
   String? _statusFilter;
   List<Map<String, dynamic>> _roles = [];
-  String _selectedRole = '';
   Timer? _refreshTimer;
   Timer? _searchDebounce;
   int _searchRevision = 0;
@@ -70,7 +69,6 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
       if (!mounted) return;
       setState(() {
         _roles = roles;
-        _selectedRole = service.selectedRole;
       });
       final values = await ref
           .read(continuityServiceProvider)
@@ -226,21 +224,23 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
               vertical: AppSpacing.sm,
             ),
             child: DropdownButtonFormField<String>(
-              key: ValueKey(_selectedRole),
-              initialValue: _roles.any((role) => role['id'] == _selectedRole)
-                  ? _selectedRole
-                  : null,
-              decoration: const InputDecoration(labelText: '工作角色'),
-              items: _roles
-                  .map(
-                    (role) => DropdownMenuItem(
-                      value: role['id'].toString(),
-                      child: Text((role['name'] ?? role['id']).toString()),
-                    ),
-                  )
-                  .toList(),
+              initialValue: ref.read(continuityServiceProvider).memoryView,
+              decoration: const InputDecoration(labelText: '查看范围'),
+              items: [
+                const DropdownMenuItem(value: 'all', child: Text('全部事项')),
+                const DropdownMenuItem(value: 'global', child: Text('全局事项')),
+                ..._roles.map(
+                  (role) => DropdownMenuItem(
+                    value: 'role:${role['id']}',
+                    child: Text((role['name'] ?? role['id']).toString()),
+                  ),
+                ),
+              ],
               onChanged: (value) {
-                ref.read(continuityServiceProvider).selectedRole = value ?? '';
+                final service = ref.read(continuityServiceProvider);
+                service.memoryView = value ?? 'all';
+                if (service.memoryView.startsWith('role:'))
+                  service.selectedRole = service.memoryView.substring(5);
                 unawaited(_load());
               },
             ),

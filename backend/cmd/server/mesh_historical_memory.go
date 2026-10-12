@@ -75,6 +75,27 @@ func (p *meshLocalDataPort) historicalMemoryManagement(ctx context.Context, scop
 		return nil
 	}
 	db := p.services.DB.WithContext(ctx).Where("character_id=? AND (space_id=? OR space_id='' OR space_id='default')", role, p.legacySpaceID)
+	if scope.MemoryRoleID != "" && snapshot.OwnerID == scope.ResourceOwnerID {
+		partition := coordination.StorageRole(scope, query.ResourceKind)
+		db = p.services.DB.WithContext(ctx).Where("space_id=? OR space_id='' OR space_id='default'", p.legacySpaceID)
+		if !scope.MemoryViewAll {
+			if query.ResourceKind == "memory" || query.ResourceKind == "graph" {
+				if partition == coordination.GlobalMemoryRole {
+					db = db.Where("scope IN ('user','user_global')")
+				} else {
+					db = db.Where("character_id=? AND scope NOT IN ('user','user_global')", partition)
+				}
+			} else if query.ResourceKind == "episodic" {
+				if partition == coordination.GlobalMemoryRole {
+					partition = ""
+				}
+				db = db.Where("character_id=?", partition)
+			}
+		}
+	}
+	if query.ResourceKind == "profile" {
+		db = p.services.DB.WithContext(ctx).Where("space_id=? OR space_id='' OR space_id='default'", p.legacySpaceID)
+	}
 	var cursor string
 	var err error
 	switch query.ResourceKind {
@@ -84,12 +105,18 @@ func (p *meshLocalDataPort) historicalMemoryManagement(ctx context.Context, scop
 		snapshot.LegacyProfiles, cursor, err = meshLegacyMemoryPage[profile.UserProfile](db, scope, role, query)
 	case "episodic":
 		snapshot.LegacyEpisodes, cursor, err = meshLegacyMemoryPage[episodic.EpisodicMemory](db.Where("decay_state <> 'deleted'"), scope, role, query)
+	case "graph":
+		var memories []json.RawMessage
+		memories, cursor, err = meshLegacyMemoryPage[memory.Memory](db.Where("verified_status NOT IN ('tombstone','deleted','replaced','invalidated')"), scope, role, query)
+		if err == nil {
+			snapshot.LegacyGraphs, err = p.legacyGraphRows(ctx, memories)
+		}
 	}
 	if err != nil {
 		return err
 	}
 	if cursor != "" {
-		snapshot.NextCursors["legacy"+map[string]string{"memory": "Memory", "profile": "Profile", "episodic": "Episode"}[query.ResourceKind]] = cursor
+		snapshot.NextCursors["legacy"+map[string]string{"memory": "Memory", "profile": "Profile", "episodic": "Episode", "graph": "Graph"}[query.ResourceKind]] = cursor
 	}
 	return nil
 }

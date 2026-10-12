@@ -15,6 +15,20 @@ func TestBuildProactiveEmotionFromPsyche_NilRuntime(t *testing.T) {
 	}
 }
 
+func TestRequestedReasoningEnabledCannotExceedModelCapability(t *testing.T) {
+	requested := true
+	if requestedReasoningEnabled(false, &requested) {
+		t.Fatal("unsupported model must not receive reasoning effort")
+	}
+	requested = false
+	if requestedReasoningEnabled(true, &requested) {
+		t.Fatal("disabled request must not receive reasoning effort")
+	}
+	if !requestedReasoningEnabled(true, nil) {
+		t.Fatal("supported model should retain default reasoning")
+	}
+}
+
 func TestBuildProactiveEmotionFromPsyche_NotReady(t *testing.T) {
 	runtime := &interaction.RuntimeAssembly{
 		Context: interaction.ContextSnapshot{

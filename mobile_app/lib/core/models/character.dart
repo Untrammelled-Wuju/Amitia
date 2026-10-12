@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 class CharacterDto {
+  final bool globalMemoryEnabled;
   final String roleAuthority;
   final String id;
   final String name;
@@ -33,6 +34,7 @@ class CharacterDto {
   final Map<String, dynamic> sceneRules;
 
   CharacterDto({
+    this.globalMemoryEnabled = true,
     this.roleAuthority = '',
     required this.id,
     required this.name,
@@ -67,6 +69,7 @@ class CharacterDto {
 
   factory CharacterDto.fromJson(Map<String, dynamic> json) {
     return CharacterDto(
+      globalMemoryEnabled: json['globalMemoryEnabled'] != false,
       roleAuthority: (json['roleAuthority'] ?? '').toString(),
       id: (json['id'] ?? '').toString(),
       name: json['name'] as String? ?? '',

@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum BackgroundMediaKind { image, video }
+
+enum BackgroundDisplayMode { defaultMode, color, gradient, image, video }
 
 @immutable
 class BackgroundPreferences {
@@ -16,6 +19,15 @@ class BackgroundPreferences {
   final double opacity;
   final bool blurEnabled;
   final double blurRadius;
+  final BackgroundDisplayMode mode;
+  final Color color;
+  final Color gradientStart;
+  final Color gradientEnd;
+  final double gradientAngle;
+  final String sourceUri;
+  final String fit;
+  final Color overlayColor;
+  final double overlayOpacity;
   const BackgroundPreferences({
     this.enabled = false,
     this.kind = BackgroundMediaKind.image,
@@ -24,8 +36,31 @@ class BackgroundPreferences {
     this.opacity = 0.35,
     this.blurEnabled = false,
     this.blurRadius = 10,
+    this.mode = BackgroundDisplayMode.defaultMode,
+    this.color = const Color(0xFFF7F8FA),
+    this.gradientStart = const Color(0xFFF7F8FA),
+    this.gradientEnd = const Color(0xFFE8EDF5),
+    this.gradientAngle = 180,
+    this.sourceUri = '',
+    this.fit = 'cover',
+    this.overlayColor = const Color(0xFF000000),
+    this.overlayOpacity = 0,
   });
-  bool get active => enabled && path.isNotEmpty;
+  BackgroundDisplayMode get effectiveMode =>
+      mode == BackgroundDisplayMode.defaultMode &&
+          (path.isNotEmpty || sourceUri.isNotEmpty)
+      ? kind == BackgroundMediaKind.video
+            ? BackgroundDisplayMode.video
+            : BackgroundDisplayMode.image
+      : mode;
+  bool get active =>
+      enabled &&
+      switch (effectiveMode) {
+        BackgroundDisplayMode.defaultMode => false,
+        BackgroundDisplayMode.color || BackgroundDisplayMode.gradient => true,
+        BackgroundDisplayMode.image ||
+        BackgroundDisplayMode.video => path.isNotEmpty || sourceUri.isNotEmpty,
+      };
   BackgroundPreferences copyWith({
     bool? enabled,
     BackgroundMediaKind? kind,
@@ -34,6 +69,15 @@ class BackgroundPreferences {
     double? opacity,
     bool? blurEnabled,
     double? blurRadius,
+    BackgroundDisplayMode? mode,
+    Color? color,
+    Color? gradientStart,
+    Color? gradientEnd,
+    double? gradientAngle,
+    String? sourceUri,
+    String? fit,
+    Color? overlayColor,
+    double? overlayOpacity,
   }) => BackgroundPreferences(
     enabled: enabled ?? this.enabled,
     kind: kind ?? this.kind,
@@ -42,16 +86,103 @@ class BackgroundPreferences {
     opacity: (opacity ?? this.opacity).clamp(0, 1).toDouble(),
     blurEnabled: blurEnabled ?? this.blurEnabled,
     blurRadius: (blurRadius ?? this.blurRadius).clamp(0, 30).toDouble(),
+    mode: mode ?? this.mode,
+    color: color ?? this.color,
+    gradientStart: gradientStart ?? this.gradientStart,
+    gradientEnd: gradientEnd ?? this.gradientEnd,
+    gradientAngle: (gradientAngle ?? this.gradientAngle)
+        .clamp(0, 360)
+        .toDouble(),
+    sourceUri: sourceUri ?? this.sourceUri,
+    fit: fit ?? this.fit,
+    overlayColor: overlayColor ?? this.overlayColor,
+    overlayOpacity: (overlayOpacity ?? this.overlayOpacity)
+        .clamp(0, 1)
+        .toDouble(),
   );
   String encode() => jsonEncode({
     'enabled': enabled,
     'kind': kind.name,
+    'mode': mode.name,
     'file': path.isEmpty ? '' : File(path).uri.pathSegments.last,
     'name': name,
     'opacity': opacity,
     'blurEnabled': blurEnabled,
     'blurRadius': blurRadius,
+    'color': color.toARGB32(),
+    'gradientStart': gradientStart.toARGB32(),
+    'gradientEnd': gradientEnd.toARGB32(),
+    'gradientAngle': gradientAngle,
+    'sourceUri': sourceUri,
+    'fit': fit,
+    'overlayColor': overlayColor.toARGB32(),
+    'overlayOpacity': overlayOpacity,
   });
+  Map<String, dynamic> toMap() => <String, dynamic>{
+    'enabled': enabled,
+    'kind': kind.name,
+    'mode': mode.name,
+    'path': path,
+    'name': name,
+    'opacity': opacity,
+    'blurEnabled': blurEnabled,
+    'blurRadius': blurRadius,
+    'color': color.toARGB32(),
+    'gradientStart': gradientStart.toARGB32(),
+    'gradientEnd': gradientEnd.toARGB32(),
+    'gradientAngle': gradientAngle,
+    'sourceUri': sourceUri,
+    'fit': fit,
+    'overlayColor': overlayColor.toARGB32(),
+    'overlayOpacity': overlayOpacity,
+  };
+  factory BackgroundPreferences.fromMap(Map<String, dynamic> raw) {
+    Color color(String key, Color fallback) {
+      final value = raw[key];
+      return value is int && value >= 0 && value <= 0xFFFFFFFF
+          ? Color(value | 0xFF000000)
+          : fallback;
+    }
+
+    const defaults = BackgroundPreferences();
+    return BackgroundPreferences(
+      enabled: raw['enabled'] == true,
+      kind: raw['kind'] == 'video'
+          ? BackgroundMediaKind.video
+          : BackgroundMediaKind.image,
+      mode: BackgroundDisplayMode.values.firstWhere(
+        (item) => item.name == raw['mode'],
+        orElse: () => BackgroundDisplayMode.defaultMode,
+      ),
+      path: raw['path']?.toString() ?? '',
+      name: raw['name']?.toString() ?? '',
+      opacity: ((raw['opacity'] as num?)?.toDouble() ?? defaults.opacity)
+          .clamp(0, 1)
+          .toDouble(),
+      blurEnabled: raw['blurEnabled'] == true,
+      blurRadius:
+          ((raw['blurRadius'] as num?)?.toDouble() ?? defaults.blurRadius)
+              .clamp(0, 30)
+              .toDouble(),
+      color: color('color', defaults.color),
+      gradientStart: color('gradientStart', defaults.gradientStart),
+      gradientEnd: color('gradientEnd', defaults.gradientEnd),
+      gradientAngle:
+          ((raw['gradientAngle'] as num?)?.toDouble() ?? defaults.gradientAngle)
+              .clamp(0, 360)
+              .toDouble(),
+      sourceUri: raw['sourceUri']?.toString() ?? '',
+      fit: const ['cover', 'contain', 'stretch', 'repeat'].contains(raw['fit'])
+          ? raw['fit'].toString()
+          : defaults.fit,
+      overlayColor: color('overlayColor', defaults.overlayColor),
+      overlayOpacity:
+          ((raw['overlayOpacity'] as num?)?.toDouble() ??
+                  defaults.overlayOpacity)
+              .clamp(0, 1)
+              .toDouble(),
+    );
+  }
   static BackgroundPreferences decode(String? raw, Directory directory) {
     try {
       final value = jsonDecode(raw ?? '{}');
@@ -69,11 +200,30 @@ class BackgroundPreferences {
             : fallback;
       }
 
+      Color colorValue(String key, Color fallback) {
+        final raw = value[key];
+        return raw is int && raw >= 0 && raw <= 0xFFFFFFFF
+            ? Color(raw | 0xFF000000)
+            : fallback;
+      }
+
       return BackgroundPreferences(
-        enabled: value['enabled'] == true && validFile,
+        enabled:
+            value['enabled'] == true &&
+            (validFile ||
+                value['mode'] == 'color' ||
+                value['mode'] == 'gradient' ||
+                (value['sourceUri'] is String &&
+                    (value['sourceUri'] as String).isNotEmpty)),
         kind: value['kind'] == 'video'
             ? BackgroundMediaKind.video
             : BackgroundMediaKind.image,
+        mode: BackgroundDisplayMode.values.firstWhere(
+          (item) => item.name == value['mode'],
+          orElse: () => value['kind'] == 'video'
+              ? BackgroundDisplayMode.video
+              : BackgroundDisplayMode.image,
+        ),
         path: validFile
             ? '${directory.path}${Platform.pathSeparator}$file'
             : '',
@@ -81,6 +231,24 @@ class BackgroundPreferences {
         opacity: number('opacity', 0.35, 1),
         blurEnabled: value['blurEnabled'] == true,
         blurRadius: number('blurRadius', 10, 30),
+        color: colorValue('color', const Color(0xFFF7F8FA)),
+        gradientStart: colorValue('gradientStart', const Color(0xFFF7F8FA)),
+        gradientEnd: colorValue('gradientEnd', const Color(0xFFE8EDF5)),
+        gradientAngle: number('gradientAngle', 180, 360),
+        sourceUri: value['sourceUri'] is String
+            ? value['sourceUri'] as String
+            : '',
+        fit:
+            const [
+              'cover',
+              'contain',
+              'stretch',
+              'repeat',
+            ].contains(value['fit'])
+            ? value['fit'] as String
+            : 'cover',
+        overlayColor: colorValue('overlayColor', const Color(0xFF000000)),
+        overlayOpacity: number('overlayOpacity', 0, 1),
       );
     } catch (_) {
       return const BackgroundPreferences();
@@ -169,7 +337,7 @@ class BackgroundPreferencesNotifier
         blurEnabled: blurEnabled,
         blurRadius: blurRadius,
       );
-      if (next.enabled && next.path.isEmpty) throw StateError('请先选择背景文件');
+      if (next.enabled && !next.active) throw StateError('请先选择背景文件');
       await _save(next);
     });
   }
@@ -190,7 +358,11 @@ class BackgroundPreferencesNotifier
           state.copyWith(
             enabled: true,
             kind: kind,
+            mode: kind == BackgroundMediaKind.video
+                ? BackgroundDisplayMode.video
+                : BackgroundDisplayMode.image,
             path: target.path,
+            sourceUri: '',
             name: name,
           ),
         );
@@ -202,6 +374,42 @@ class BackgroundPreferencesNotifier
     });
   }
 
+  Future<void> importBytes(
+    Uint8List bytes,
+    String name,
+    BackgroundMediaKind kind, {
+    String sourceUri = '',
+  }) async {
+    if (bytes.isEmpty) throw const FormatException('背景文件为空');
+    final checkedKind = validateBackgroundFile(name, bytes.length);
+    if (checkedKind != kind) throw const FormatException('背景文件类型不匹配');
+    await init();
+    await _serialize(() async {
+      await _directory!.create(recursive: true);
+      final target = File(
+        '${_directory!.path}${Platform.pathSeparator}background-${DateTime.now().microsecondsSinceEpoch}.${name.split('.').last.toLowerCase()}',
+      );
+      try {
+        await target.writeAsBytes(bytes, flush: true);
+        await _save(
+          state.copyWith(
+            enabled: true,
+            kind: kind,
+            mode: kind == BackgroundMediaKind.video
+                ? BackgroundDisplayMode.video
+                : BackgroundDisplayMode.image,
+            path: target.path,
+            sourceUri: sourceUri,
+            name: name,
+          ),
+        );
+      } catch (_) {
+        if (await target.exists()) await target.delete();
+        rethrow;
+      }
+    });
+  }
+
   Future<void> clear() async {
     await init();
     await _serialize(() async {
@@ -210,6 +418,15 @@ class BackgroundPreferencesNotifier
       await _removeOwnedFile(previous);
     });
   }
+
+  Future<void> replace(BackgroundPreferences value) async {
+    await init();
+    await _serialize(() async {
+      await _save(value);
+    });
+  }
+
+  Future<void> reset() => replace(const BackgroundPreferences());
 
   Future<void> _removeOwnedFile(String path) async {
     if (path.isEmpty ||

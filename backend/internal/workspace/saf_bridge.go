@@ -61,6 +61,8 @@ type SAFWriteSource struct {
 }
 
 type SAFBridge interface {
+	PickDirectory(ctx context.Context) (string, string, bool, bool, error)
+
 	GrantStatus(ctx context.Context, grantID string) (SAFGrantStatus, error)
 
 	Stat(ctx context.Context, grantID string, documentID string, name string) (SAFStatResult, error)

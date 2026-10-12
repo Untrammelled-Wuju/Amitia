@@ -1,5 +1,6 @@
 import { apiClient } from "./useApi";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
+import { memoryStorageRole, memoryViewForScope, memoryRecordScope } from "@/runtime/owned-memory-scope";
 
 export interface OwnedMemoryManagementResource { id: string; kind: string; ownerId: string; roleId: string; revision: number; deleted?: boolean; body: Record<string, any>; executionScope: OwnedExecutionScope }
 const unwrap = (response: any) => response?.data?.data ?? response?.data;
@@ -9,12 +10,12 @@ export function useOwnedMemoryManagement() {
   function resources(result: any, expected: OwnedExecutionScope): OwnedMemoryManagementResource[] {
     if (!expected.authorizationRealm || !result?.executionScope || ownedMemoryAuthority(result.executionScope) !== ownedMemoryAuthority(expected) || !Array.isArray(result.resources) || result.resources.length > 512) throw new Error("记忆管理的数据归属已变化，请重新加载");
     return result.resources.map((resource: any) => {
-      if (!resource.id || resource.ownerId !== expected.resourceOwnerId || resource.roleId !== expected.roleId || !Number.isSafeInteger(resource.revision) || resource.revision < 1 || !resource.body || typeof resource.body !== "object") throw new Error("记忆管理记录所属设备或版本无效");
-      return { ...resource, executionScope: { ...expected } };
+      if (!resource.id || resource.ownerId !== expected.resourceOwnerId || !resource.roleId || !expected.memoryViewAll && resource.roleId !== memoryStorageRole(expected, resource.kind) || !Number.isSafeInteger(resource.revision) || resource.revision < 1 || !resource.body || typeof resource.body !== "object") throw new Error("记忆管理记录所属设备或版本无效");
+      return { ...resource, executionScope: expected.memoryViewAll && resource.kind === "memory" ? memoryRecordScope(expected, resource.roleId) : { ...expected } };
     });
   }
   async function read(expected: OwnedExecutionScope, query: Record<string, unknown> = {}, candidates = false) {
-    const result = unwrap(await apiClient.get(`/api/device-mesh/v1/business/${candidates ? "memory-candidates" : "memories"}`, { params: { ...query, characterId: expected.roleId, targetDeviceId: expected.targetDeviceId } }));
+    const result = unwrap(await apiClient.get(`/api/device-mesh/v1/business/${candidates ? "memory-candidates" : "memories"}`, { params: { ...query, memoryView: memoryViewForScope(expected), characterId: expected.roleId, targetDeviceId: expected.targetDeviceId } }));
     const rows = resources(result, expected);
     if (rows.some((row) => candidates ? row.kind !== "checkpoint" || !row.id.startsWith("memory-candidate/") || row.body.type !== "owned-memory-candidate" || row.body.state !== "pending" : row.kind !== "memory")) throw new Error("记忆管理返回了其他资源种类");
     return { resources: rows, nextCursor: result.nextCursor || "", scores: result.scores || {} };

@@ -25,11 +25,10 @@ func newRepositoryScopeRelationChecker(db *sql.DB, relationDB *sql.DB, resources
 }
 
 func (c *repositoryScopeRelationChecker) ConversationBelongsToCharacter(ctx context.Context, conversationID, characterID string) bool {
-	if c == nil || c.relationDB == nil || conversationID == "" || characterID == "" {
+	if c == nil || conversationID == "" || characterID == "" {
 		return false
 	}
-	var count int
-	return c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ?`, conversationID).Scan(&count) == nil && count == 1
+	return c.conversationExists(ctx, conversationID)
 }
 
 func (c *repositoryScopeRelationChecker) IsCharacterDeleted(ctx context.Context, characterID string) bool {
@@ -41,11 +40,21 @@ func (c *repositoryScopeRelationChecker) IsCharacterDeleted(ctx context.Context,
 }
 
 func (c *repositoryScopeRelationChecker) IsConversationDeleted(ctx context.Context, conversationID string) bool {
-	if c == nil || c.relationDB == nil || conversationID == "" {
+	if c == nil || conversationID == "" {
 		return true
 	}
+	return !c.conversationExists(ctx, conversationID)
+}
+
+func (c *repositoryScopeRelationChecker) conversationExists(ctx context.Context, conversationID string) bool {
 	var count int
-	return c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ?`, conversationID).Scan(&count) != nil || count != 1
+	if c.relationDB != nil && c.relationDB.QueryRowContext(ctx, `SELECT COUNT(1) FROM conversations WHERE id = ?`, conversationID).Scan(&count) == nil && count == 1 {
+		return true
+	}
+	if c.db == nil {
+		return false
+	}
+	return c.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM kernel_device_owned_resources WHERE kind = 'conversation' AND resource_id = ? AND deleted = 0`, conversationID).Scan(&count) == nil && count == 1
 }
 
 func (c *repositoryScopeRelationChecker) ResourceOwnedBy(ctx context.Context, resourceID, resourceType, extensionID, moduleID string) bool {

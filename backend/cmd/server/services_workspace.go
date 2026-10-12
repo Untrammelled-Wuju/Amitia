@@ -37,6 +37,7 @@ func buildWorkspaceServices(dataDir string, resolver *resourceuri.PhysicalResolv
 
 	mountRepo := workspace.NewMountRepository(db)
 	workspaceService := workspace.NewServiceWithRemote(registry, resolver, mountRepo, workspaceSAFGrantResolver{bridge: safBridge}, remoteCredentials)
+	workspaceService.SetSAFPicker(safBridge)
 	if err := workspaceService.LoadAndRestoreMounts(context.Background()); err != nil {
 		return nil, nil, nil, fmt.Errorf("restore workspace mounts: %w", err)
 	}

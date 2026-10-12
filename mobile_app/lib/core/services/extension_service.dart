@@ -169,6 +169,7 @@ class ExtensionService {
       'ui.notify',
       'ui.dialog',
       'ui.navigate',
+      'ui.style',
     ],
   }) async {
     return await _api.post<Map<String, dynamic>>(

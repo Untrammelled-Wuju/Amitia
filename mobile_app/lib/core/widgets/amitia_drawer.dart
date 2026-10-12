@@ -206,6 +206,8 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     String? name,
     String? workspaceId,
     String? rootUri,
+    List<ProjectWorkspaceDto>? workspaces,
+    String? primaryWorkspaceId,
   }) {
     final runtime = ref.read(conversationRuntimeControllerProvider);
     final workspace = runtime.workspace;
@@ -219,6 +221,8 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
         workspaceName: name ?? workspace.workspaceName,
         workspaceKind: workspace.workspaceKind,
         rootUri: rootUri ?? workspace.rootUri,
+        workspaces: workspaces ?? workspace.workspaces,
+        primaryWorkspaceId: primaryWorkspaceId ?? workspace.primaryWorkspaceId,
       ),
     );
   }
@@ -246,13 +250,12 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
           workspaceId: project.workspaceId,
           deviceId: project.deviceId,
           workspaceName: project.name,
-          workspaceKind: project.logical
-              ? 'logical'
-              : project.workspaceKind.trim().isEmpty
+          workspaceKind: project.workspaceKind.trim().isEmpty
               ? (project.rootUri.startsWith('content://') ? 'saf' : 'local')
               : project.workspaceKind,
           rootUri: project.rootUri,
-          logicalProject: project.logical ? project : null,
+          workspaces: project.workspaces,
+          primaryWorkspaceId: project.primaryWorkspaceId,
         );
       } catch (error) {
         if (mounted) amitiaSnackBar(context, '新建项目对话失败：$error');
@@ -324,56 +327,55 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   Future<void> _addProject() async {
     try {
       final service = ref.read(chatServiceProvider);
+      final mount = await _pickWorkspaceMount();
+      if (mount == null || !mounted) return;
+      Map<String, dynamic>? expectedScope;
+      var workspaceDeviceId = '';
       if (await service.owned.refresh()) {
         final initial = await service.owned.data(
           'memory',
           characterId: service.owned.selectRole(null),
         );
-        final expectedScope = Map<String, dynamic>.from(
+        expectedScope = Map<String, dynamic>.from(
           initial['executionScope'] as Map,
         );
-        if (!mounted) return;
-        final controller = TextEditingController();
-        final name = await showDialog<String>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('新建对话分组'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: '项目名称'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (controller.text.trim().isNotEmpty)
-                    Navigator.pop(dialogContext, controller.text.trim());
-                },
-                child: const Text('创建'),
-              ),
-            ],
-          ),
-        );
-        controller.dispose();
-        if (name == null) return;
-        await service.createProject(name: name, expectedScope: expectedScope);
-        await _refreshConversationSidebar();
-        return;
+        workspaceDeviceId = (expectedScope['targetDeviceId'] ?? '').toString();
       }
-      final mount = await _pickWorkspaceMount();
-      if (mount == null || !mounted) return;
       final sidebar = await _loadConversationSidebar();
-      if (!sidebar.projects.any((project) => project.workspaceId == mount.id)) {
+      final allProjects = <ProjectDto>[
+        ...sidebar.projects,
+        ...sidebar.removedProjects,
+      ];
+      final existing = allProjects
+          .where(
+            (project) =>
+                project.workspaces.any((workspace) => workspace.id == mount.id),
+          )
+          .firstOrNull;
+      if (existing != null && existing.hiddenAt.isNotEmpty) {
+        await service.updateProject(
+          existing.id,
+          hidden: false,
+          project: existing,
+        );
+      } else if (existing == null) {
+        final workspace = ProjectWorkspaceDto(
+          id: mount.id,
+          deviceId: workspaceDeviceId,
+          name: mount.name.trim().isEmpty ? '项目' : mount.name,
+          kind: mount.kind,
+          rootUri: mount.rootUri,
+          readOnly: mount.readOnly,
+        );
         await ref
             .read(chatServiceProvider)
             .createProject(
-              name: mount.name.trim().isEmpty ? '项目' : mount.name,
-              workspaceId: mount.id,
-              rootUri: mount.rootUri,
+              name: workspace.name,
+              workspaceId: workspace.id,
+              rootUri: workspace.rootUri,
+              workspaces: <ProjectWorkspaceDto>[workspace],
+              primaryWorkspaceId: workspace.id,
+              expectedScope: expectedScope,
             );
       }
       await _refreshConversationSidebar();
@@ -386,16 +388,15 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
   Future<void> _removeProject(ProjectDto project) async {
     final confirmed = await showAmitiaConfirmDialog(
       context,
-      title: '移除项目',
-      message: '移除“${project.name}”项目？项目中的对话会移到最近，不会删除聊天记录。',
+      title: '从侧边栏移除',
+      message: '从侧边栏移除“${project.name}”？项目、工作区绑定、对话和消息都会保留。',
       confirmLabel: '移除',
-      isDestructive: true,
     );
     if (confirmed != true) return;
     try {
       await ref
           .read(chatServiceProvider)
-          .deleteProject(project.id, project: project);
+          .hideProject(project.id, project: project);
       final runtime = ref.read(conversationRuntimeControllerProvider);
       if (runtime.workspace?.projectId == project.id) {
         runtime.setWorkspace(null);
@@ -419,6 +420,18 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       await _refreshConversationSidebar();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '更新项目置顶失败：$error');
+    }
+  }
+
+  Future<void> _restoreProject(ProjectDto project) async {
+    try {
+      await ref
+          .read(chatServiceProvider)
+          .updateProject(project.id, hidden: false, project: project);
+      await _refreshConversationSidebar();
+      if (mounted) amitiaSnackBar(context, '项目已恢复到侧边栏');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '恢复项目失败：$error');
     }
   }
 
@@ -498,27 +511,122 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     }
   }
 
-  Future<void> _changeProjectRoot(ProjectDto project) async {
+  Future<void> _addProjectWorkspace(ProjectDto project) async {
     try {
       final mount = await _pickWorkspaceMount();
       if (mount == null || !mounted) return;
+      final existing = project.workspaces
+          .where((workspace) => workspace.id == mount.id)
+          .firstOrNull;
+      final workspace =
+          existing ??
+          ProjectWorkspaceDto(
+            id: mount.id,
+            deviceId: project.deviceId,
+            name: mount.name.trim().isEmpty ? '工作区' : mount.name,
+            kind: mount.kind,
+            rootUri: mount.rootUri,
+            readOnly: mount.readOnly,
+          );
+      final workspaces = existing == null
+          ? <ProjectWorkspaceDto>[...project.workspaces, workspace]
+          : project.workspaces;
       await ref
           .read(chatServiceProvider)
           .updateProject(
             project.id,
-            workspaceId: mount.id,
-            rootUri: mount.rootUri,
+            workspaces: workspaces,
+            primaryWorkspaceId: workspace.id,
+            project: project,
           );
       _replaceActiveProjectWorkspace(
         project,
-        workspaceId: mount.id,
-        rootUri: mount.rootUri,
+        workspaceId: workspace.id,
+        rootUri: workspace.rootUri,
+        workspaces: workspaces,
+        primaryWorkspaceId: workspace.id,
       );
       await _refreshConversationSidebar();
-      if (mounted) amitiaSnackBar(context, '项目根目录已更新');
+      if (mounted) amitiaSnackBar(context, '主工作区已更新');
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '更新项目根目录失败：$error');
     }
+  }
+
+  Future<void> _manageProjectWorkspaces(ProjectDto project) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: context.surfacePrimary,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text('项目工作区'),
+            ),
+            for (final workspace in project.workspaces)
+              ListTile(
+                leading: Icon(
+                  workspace.id == project.primaryWorkspaceId
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                ),
+                title: Text(
+                  workspace.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(workspace.kind == 'saf' ? '系统授权目录' : '本机目录'),
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  await ref
+                      .read(chatServiceProvider)
+                      .updateProject(
+                        project.id,
+                        primaryWorkspaceId: workspace.id,
+                        project: project,
+                      );
+                  await _refreshConversationSidebar();
+                },
+                trailing: project.workspaces.length > 1
+                    ? IconButton(
+                        tooltip: '移除工作区',
+                        onPressed: () async {
+                          Navigator.of(sheetContext).pop();
+                          final remaining = project.workspaces
+                              .where((item) => item.id != workspace.id)
+                              .toList(growable: false);
+                          await ref
+                              .read(chatServiceProvider)
+                              .updateProject(
+                                project.id,
+                                workspaces: remaining,
+                                primaryWorkspaceId:
+                                    workspace.id == project.primaryWorkspaceId
+                                    ? remaining.first.id
+                                    : project.primaryWorkspaceId,
+                                project: project,
+                              );
+                          await _refreshConversationSidebar();
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                      )
+                    : null,
+              ),
+            ListTile(
+              leading: const Icon(Icons.create_new_folder_outlined),
+              title: const Text('添加文件夹工作区'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                _addProjectWorkspace(project);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _renameConversation(ConversationDto conversation) async {
@@ -676,10 +784,11 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             onCreateProjectConversation: (projectId) =>
                 _createConversation(projectId: projectId),
             onRenameProject: _renameProject,
-            onChangeProjectRoot: _changeProjectRoot,
+            onChangeProjectRoot: _manageProjectWorkspaces,
             onToggleProjectPin: _toggleProjectPin,
             onOpenProject: _openProject,
             onRemoveProject: _removeProject,
+            onRestoreProject: _restoreProject,
             conversationSidebar: conversationSidebar,
             navigationItems: navigationItems,
             installedExtensions: installedExtensions,
@@ -714,6 +823,7 @@ class _DrawerMainPanel extends StatelessWidget {
   final ValueChanged<ProjectDto> onToggleProjectPin;
   final ValueChanged<ProjectDto> onOpenProject;
   final ValueChanged<ProjectDto> onRemoveProject;
+  final ValueChanged<ProjectDto> onRestoreProject;
   final AsyncValue<ConversationSidebarDto> conversationSidebar;
   final List<UINavigationItem> navigationItems;
   final AsyncValue<ExtensionCenterView> installedExtensions;
@@ -742,6 +852,7 @@ class _DrawerMainPanel extends StatelessWidget {
     required this.onToggleProjectPin,
     required this.onOpenProject,
     required this.onRemoveProject,
+    required this.onRestoreProject,
     required this.conversationSidebar,
     required this.navigationItems,
     required this.installedExtensions,
@@ -926,6 +1037,49 @@ class _DrawerMainPanel extends StatelessWidget {
                           onRemoveProject: onRemoveProject,
                         ),
                       ),
+                      if (sidebar.removedProjects.isNotEmpty)
+                        ExpansionTile(
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                          ),
+                          title: Row(
+                            children: [
+                              const Icon(
+                                Icons.visibility_off_outlined,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                '已移除项目',
+                                style: AppTypography.label(context),
+                              ),
+                              const Spacer(),
+                              Text('${sidebar.removedProjects.length}'),
+                            ],
+                          ),
+                          children: sidebar.removedProjects
+                              .map(
+                                (project) => ListTile(
+                                  contentPadding: const EdgeInsets.only(
+                                    left: 34,
+                                    right: 12,
+                                  ),
+                                  leading: const Icon(
+                                    Icons.folder_off_outlined,
+                                  ),
+                                  title: Text(
+                                    project.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  trailing: TextButton(
+                                    onPressed: () => onRestoreProject(project),
+                                    child: const Text('恢复'),
+                                  ),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
                     ],
                   );
                 },
@@ -1341,10 +1495,10 @@ class _ProjectTile extends StatelessWidget {
               ),
               PopupMenuItem(
                 value: _ProjectAction.changeRoot,
-                enabled: !project.logical && !project.readOnly,
+                enabled: !project.readOnly,
                 child: const _ProjectMenuItem(
                   icon: Icons.drive_file_move_outline,
-                  label: '更换根目录',
+                  label: '添加/更换主工作区',
                 ),
               ),
               PopupMenuItem(
@@ -1359,7 +1513,7 @@ class _ProjectTile extends StatelessWidget {
               ),
               PopupMenuItem(
                 value: _ProjectAction.open,
-                enabled: project.available && !project.logical,
+                enabled: project.available && project.workspaces.isNotEmpty,
                 child: const _ProjectMenuItem(
                   icon: Icons.folder_open_outlined,
                   label: '在资源管理器中打开',
@@ -1370,7 +1524,7 @@ class _ProjectTile extends StatelessWidget {
                 enabled: !project.readOnly,
                 child: _ProjectMenuItem(
                   icon: Icons.remove_circle_outline,
-                  label: '移除项目',
+                  label: '从侧边栏移除',
                   isDestructive: true,
                 ),
               ),
@@ -1378,11 +1532,11 @@ class _ProjectTile extends StatelessWidget {
           ),
         ],
       ),
-      subtitle: project.logical
-          ? Text(project.readOnly ? '原设备历史分组 · 只读' : '对话分组 · 不授予目录权限')
-          : project.available
-          ? null
-          : Text(project.statusReason.isEmpty ? '目录不可用' : project.statusReason),
+      subtitle: !project.available
+          ? Text(project.statusReason.isEmpty ? '工作区不可用' : project.statusReason)
+          : project.workspaces.length > 1
+          ? Text('${project.workspaces.length} 个工作区同时可用')
+          : null,
       children: [
         _ProjectConversationList(
           conversations: project.conversations,

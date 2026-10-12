@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="deployment-panel">
+  <div class="deployment-panel" data-amitia-ui="settings.section">
     <section class="mode-summary" aria-label="当前设备连接状态">
       <div class="mode-summary-main">
         <span class="mode-summary-label">当前设备连接到</span>
@@ -13,7 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-tag :type="statusType" effect="plain">{{ statusLabel }}</el-tag>
     </section>
 
-    <el-card shadow="never" class="section-card">
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span>当前设备的 Core 连接目标</span></template>
       <p class="connection-explanation">只决定这台设备使用哪个 Core，不会改变 Core 服务器自身的部署形态。</p>
 
@@ -38,6 +38,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-form-item label="服务器地址" prop="serverURL">
             <el-input
               v-model="formData.serverURL"
+              data-amitia-ui="settings.input"
               placeholder="例如 http://192.168.1.100:18899"
               clearable
             />
@@ -52,7 +53,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="mode-save-hint">仅更改当前设备的连接目标，保存后可能需要重新连接。</span>
         <el-tag v-if="saveSuccess" type="success" size="small" effect="plain">已保存</el-tag>
         <div v-if="saveError" class="save-error">{{ saveError }}</div>
-        <el-button type="primary" @click="handleSave" :loading="saving">保存连接设置</el-button>
+        <el-button type="primary" data-amitia-ui="settings.button" @click="handleSave" :loading="saving">保存连接设置</el-button>
       </div>
     </el-card>
 

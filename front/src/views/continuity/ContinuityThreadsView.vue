@@ -3,28 +3,42 @@
     <div class="page-header">
       <div>
         <h2>持续事项</h2>
-        <p>跨会话保存“做到哪、下一步、在等什么”。执行仍由现有 Agent / Workflow / Device Runtime 负责。</p>
+        <p>跨会话跟进目标、进展、下一步和等待条件。</p>
       </div>
-      <el-button type="primary" :disabled="source !== 'current'" @click="openCreateDialog">新建事项</el-button>
+      <div class="header-actions">
+        <el-button type="primary" :disabled="source !== 'current'" @click="openCreateDialog">新建事项</el-button>
+      </div>
     </div>
 
-    <el-select v-if="mesh.coordinated.value" v-model="source" placeholder="事项数据来源" @change="refresh">
-      <el-option label="当前数据所有者" value="current" />
-      <el-option v-for="role in historicalRoles" :key="role.id" :label="`原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
-    </el-select>
-    <el-alert v-if="source !== 'current'" title="旧设备持续事项仅供读取，不会在当前 Core 自动恢复执行，请在原设备管理。" type="info" :closable="false" />
-    <el-alert v-if="mesh.notice.value" :title="mesh.notice.value" type="warning" :closable="false" />
-
-    <div class="toolbar">
-	  <el-select v-if="mesh.enabled.value" v-model="characterId" placeholder="选择工作角色" @change="refresh">
-	    <el-option v-for="role in mesh.roles.value" :key="role.id" :label="role.name" :value="role.id" />
-	  </el-select>
-      <el-input v-model="query" clearable placeholder="搜索标题、目标或当前状态" @keyup.enter="refresh" />
-      <el-select v-model="statusFilter" clearable placeholder="全部状态" @change="refresh">
-        <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-      </el-select>
-      <el-button :loading="loading" @click="refresh">刷新</el-button>
+    <div class="toolbar" :class="{ 'has-source': mesh.coordinated.value }">
+      <div v-if="mesh.coordinated.value" class="toolbar-field">
+        <label :for="`${controlId}-source`">数据来源</label>
+        <el-select :id="`${controlId}-source`" v-model="source" placeholder="事项数据来源" aria-label="事项数据来源" @change="refresh">
+          <el-option label="当前数据所有者" value="current" />
+          <el-option v-for="role in historicalRoles" :key="role.id" :label="`原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
+        </el-select>
+      </div>
+      <div class="toolbar-field search-field">
+        <label :for="`${controlId}-search`">搜索事项</label>
+        <el-input :id="`${controlId}-search`" v-model="query" clearable placeholder="搜索标题、目标或当前状态" aria-label="搜索事项" @keyup.enter="refresh" />
+      </div>
+      <div v-if="mesh.enabled.value" class="toolbar-field">
+        <label :for="`${controlId}-scope`">查看范围</label>
+        <el-select :id="`${controlId}-scope`" v-model="memoryView" aria-label="事项查看范围" @change="refresh">
+          <el-option label="全部事项" value="all" /><el-option label="全局事项" value="global" />
+          <el-option v-for="role in mesh.roles.value" :key="role.id" :label="role.name" :value="`role:${role.id}`" />
+        </el-select>
+      </div>
+      <div class="toolbar-field">
+        <label :for="`${controlId}-status`">状态</label>
+        <el-select :id="`${controlId}-status`" v-model="statusFilter" clearable placeholder="全部状态" aria-label="事项状态" @change="refresh">
+          <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </div>
+      <el-button class="refresh-button" :loading="loading" @click="refresh">刷新</el-button>
     </div>
+    <el-alert v-if="source !== 'current'" class="page-notice" title="旧设备持续事项仅供读取，不会在当前 Core 自动恢复执行，请在原设备管理。" type="info" :closable="false" />
+    <el-alert v-if="mesh.notice.value" class="page-notice" :title="mesh.notice.value" type="warning" :closable="false" />
 
     <el-empty v-if="!loading && threads.length === 0" description="暂无持续事项" />
     <div v-else class="thread-grid">
@@ -48,6 +62,9 @@
 
     <el-drawer v-model="detailOpen" size="min(720px, 92vw)" :title="detail?.thread.title || '持续事项'">
       <template v-if="detail">
+        <div v-if="source === 'current' && detail.executionScope" class="detail-actions">
+          <el-button :disabled="detail.lease?.state === 'running' || detail.lease?.state === 'unknown'" @click="openScopeTransfer">{{ detail.memoryPartition === GLOBAL_MEMORY_ROLE ? '降级为角色事项' : '提升为全局事项' }}</el-button>
+        </div>
 	    <el-alert v-if="detail.pausedReason" :title="detail.pausedReason" type="warning" :closable="false" show-icon />
         <div v-if="!detail.readOnly" class="detail-actions">
           <el-button v-if="detail.thread.status !== 'paused' && !terminal(detail.thread.status)" @click="setStatus('paused')">暂停</el-button>
@@ -110,6 +127,12 @@
         <el-button type="primary" :loading="saving" @click="createThread">创建</el-button>
       </template>
     </el-dialog>
+    <el-dialog v-model="scopeDialog" title="调整事项所属分区" width="min(480px, 92vw)" :close-on-click-modal="!scopeSaving" :show-close="!scopeSaving">
+      <p>事项、等待条件和事件一起迁移，执行角色与权限保持原样。</p>
+      <el-select v-model="scopeTarget" aria-label="目标事项分区" :disabled="scopeSaving"><el-option label="全局事项" value="global" /><el-option label="角色事项" value="character" /></el-select>
+      <el-select v-if="scopeTarget === 'character'" v-model="scopeRole" filterable aria-label="目标事项角色" :disabled="scopeSaving"><el-option v-for="role in mesh.roles.value" :key="role.id" :label="role.name" :value="role.id" /></el-select>
+      <template #footer><el-button :disabled="scopeSaving" @click="scopeDialog = false">取消</el-button><el-button type="primary" :loading="scopeSaving" :disabled="scopeTarget === 'character' && !scopeRole" @click="confirmScopeTransfer">确认迁移</el-button></template>
+    </el-dialog>
 
     <el-dialog v-model="waitDialog" title="添加等待条件" width="560px">
       <el-form label-position="top">
@@ -141,10 +164,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { onMounted, onUnmounted, reactive, ref, watch, useId } from "vue";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { GLOBAL_MEMORY_ROLE } from "@/runtime/owned-memory-scope";
+import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 import {
   cancelContinuityWait,
   confirmContinuityExecution,
@@ -164,6 +189,7 @@ import {
 
 const loading = ref(false);
 const mesh = useDeviceOwnedConversation();
+const controlId = useId();
 const characterId = ref("");
 const saving = ref(false);
 const threads = ref<ContinuityThread[]>([]);
@@ -172,6 +198,26 @@ const detail = ref<ContinuityDetail | null>(null);
 const detailIntent = ref<OwnedContinuityDocument>();
 const createIntent = ref<OwnedExecutionScope>();
 const source = ref("current");
+const memoryView = ref("all");
+const scopeDialog = ref(false);
+const scopeSaving = ref(false);
+const scopeTarget = ref<"global" | "character">("global");
+const scopeRole = ref("");
+const scopeRecord = ref<any>();
+function openScopeTransfer() {
+  if (!detail.value?.executionScope || scopeSaving.value) return;
+  scopeRecord.value = JSON.parse(JSON.stringify({ kind: "continuity", id: detail.value.thread.id, revision: detail.value.thread.revision, ownerId: detail.value.ownerId, executionScope: detail.value.executionScope }));
+  scopeTarget.value = detail.value.memoryPartition === GLOBAL_MEMORY_ROLE ? "character" : "global";
+  scopeRole.value = characterId.value;
+  scopeDialog.value = true;
+}
+async function confirmScopeTransfer() {
+  if (!scopeRecord.value || scopeSaving.value) return;
+  scopeSaving.value = true;
+  try { await transferMemoryScope(scopeRecord.value, scopeTarget.value, scopeRole.value); scopeDialog.value = false; detailOpen.value = false; await refresh(); }
+  catch (error) { ElMessage.error(error instanceof Error ? error.message : "事项分区迁移失败"); }
+  finally { scopeSaving.value = false; }
+}
 const historicalRoles = ref<Array<{ id: string; name: string }>>([]);
 let generation = 0;
 let providerTimer: ReturnType<typeof setInterval> | undefined;
@@ -216,13 +262,15 @@ async function refresh() {
   loading.value = true;
   try {
     if (await mesh.refresh()) {
-      if (!mesh.roles.value.some((role) => role.id === characterId.value)) characterId.value = mesh.selectInitialRole();
+      const selected = memoryView.value.startsWith("role:") ? memoryView.value.slice(5) : "";
+      if (selected && mesh.roles.value.some(role => role.id === selected)) characterId.value = selected;
+      else if (!mesh.roles.value.some((role) => role.id === characterId.value)) characterId.value = mesh.selectInitialRole() || mesh.roles.value[0]?.id || "";
       if (!characterId.value) { threads.value = []; return; }
     }
     ticket = ++generation;
     loading.value = true;
     const roles = mesh.coordinated.value ? await mesh.historicalRoles(characterId.value) : [];
-    const items = await listContinuityThreads({ characterId: characterId.value || undefined, historicalRoleId: source.value.startsWith("history:") ? source.value.slice(8) : undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
+    const items = await listContinuityThreads({ characterId: characterId.value || undefined, memoryView: memoryView.value || undefined, historicalRoleId: source.value.startsWith("history:") ? source.value.slice(8) : undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
     if (ticket === generation) { historicalRoles.value = roles; threads.value = items; }
   } catch (error) {
     if (ticket === generation) { threads.value = []; ElMessage.error(error instanceof Error ? error.message : "持续事项加载失败"); }
@@ -315,9 +363,11 @@ async function openCreateDialog() {
   createIntent.value = undefined;
   try {
     if (await mesh.refresh()) {
-      const result = await mesh.data("continuity", characterId.value);
+      const result = await mesh.data("continuity", characterId.value, "", "", memoryView.value ? { memoryView: memoryView.value } : {});
       if (ticket !== generation) return;
-      createIntent.value = result.executionScope;
+      const prepared = { ...result.executionScope };
+      delete prepared.memoryViewAll;
+      createIntent.value = prepared;
     }
     if (ticket === generation) createDialog.value = true;
   } catch (error) { ElMessage.error(error instanceof Error ? error.message : "持续事项数据归属加载失败"); }
@@ -334,27 +384,36 @@ function invalidate() {
   selectedId.value = "";
   loading.value = false;
 }
-watch(() => [characterId.value, source.value, mesh.coreId.value, mesh.policy.value?.providerEpoch, mesh.policy.value?.modeRevision, mesh.policy.value?.permissionRevision], invalidate, { flush: "sync" });
+watch([characterId, source, memoryView, mesh.coreId, () => mesh.policy.value?.providerEpoch, () => mesh.policy.value?.modeRevision, () => mesh.policy.value?.permissionRevision], invalidate, { flush: "sync" });
 onMounted(() => {
   void refresh();
   window.addEventListener("amitia:runtime-connection-changed", invalidate);
   window.addEventListener("amitia:execution-scope-changed", invalidate);
+  window.addEventListener("amitia:memory-scope-changed", refresh);
   providerTimer = setInterval(() => { void mesh.refresh().catch(invalidate); }, 3000);
 });
 onUnmounted(() => {
   if (providerTimer) clearInterval(providerTimer);
   window.removeEventListener("amitia:runtime-connection-changed", invalidate);
   window.removeEventListener("amitia:execution-scope-changed", invalidate);
+  window.removeEventListener("amitia:memory-scope-changed", refresh);
   invalidate();
 });
 </script>
 
 <style scoped>
-.continuity-page { max-width: 1280px; margin: 0 auto; }
-.page-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 18px; }
-.page-header h2 { margin: 0 0 6px; }
-.page-header p { margin: 0; color: var(--el-text-color-secondary); }
-.toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) 180px auto; gap: 10px; margin-bottom: 16px; }
+.continuity-page { max-width: 1280px; min-width: 0; margin: 0 auto; }
+.page-header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 20px; }
+.page-header h2 { margin: 0 0 6px; font-size: var(--ac-font-size-xl); font-weight: 600; line-height: 1.5; }
+.page-header p { margin: 0; color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.6; }
+.header-actions { display: flex; align-items: flex-end; gap: 12px; min-width: 0; max-width: 100%; }
+.role-field { width: 240px; }
+.toolbar, .toolbar.has-source { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; gap: 16px; padding: 16px; margin-bottom: 20px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); }
+.toolbar-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.toolbar-field label { color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.5; }
+.toolbar-field :deep(.el-select), .toolbar-field :deep(.el-input) { width: 100%; min-width: 0; }
+.header-actions > .el-button, .refresh-button { margin-left: 0; }
+.page-notice { margin-bottom: 16px; }
 .thread-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 .thread-card { appearance: none; text-align: left; border: 1px solid var(--el-border-color); background: var(--el-bg-color); border-radius: 10px; padding: 16px; cursor: pointer; color: inherit; }
 .thread-card:hover, .thread-card.active { border-color: var(--el-color-primary); }
@@ -366,5 +425,14 @@ onUnmounted(() => {
 .detail-section { margin-top: 24px; }
 .detail-section h3 { margin: 0 0 12px; }
 .event-summary { margin-top: 4px; color: var(--el-text-color-secondary); line-height: 1.5; }
-@media (max-width: 720px) { .toolbar { grid-template-columns: 1fr; } .page-header { align-items: stretch; flex-direction: column; } }
+@media (max-width: 1024px) {
+  .toolbar.has-source { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .toolbar, .toolbar.has-source { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .page-header { align-items: stretch; flex-direction: column; }
+  .header-actions { align-items: stretch; flex-direction: column; }
+  .role-field { width: 100%; }
+  .toolbar-field :deep(.el-select__wrapper), .toolbar-field :deep(.el-input__wrapper), .header-actions > .el-button, .refresh-button { min-height: 44px; }
+}
 </style>

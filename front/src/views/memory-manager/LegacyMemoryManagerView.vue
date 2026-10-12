@@ -1,5 +1,5 @@
 <template>
-  <div class="mem-page">
+  <div class="mem-page" data-amitia-ui="memory.page">
     <h2 class="page-title">记忆管理</h2>
 
     <div class="pipeline-bar" v-if="pipelineStatus">
@@ -276,7 +276,7 @@
       />
     </div>
 
-    <el-tabs v-model="activeTab" class="mem-tabs">
+    <el-tabs v-model="activeTab" class="mem-tabs" data-amitia-ui="component.tab">
       <el-tab-pane label="全部记忆" name="list">
         <MemoryStatusPanel />
         <el-alert

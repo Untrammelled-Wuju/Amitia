@@ -6,9 +6,11 @@ import type { UIContributionSummary } from "@/stores/extensionUI";
 import { openExtensionPage, pollPageSessionStatus, closePageSession } from "@/api/extension";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import { resolvePluginSurface } from "@/ui-runtime/pluginSurfaceResolver";
+import PluginPageFrame from "./PluginPageFrame.vue";
+import ExtensionLoadingOverlay from "./ExtensionLoadingOverlay.vue";
 
-const SchemaUIRenderer = defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
-const SandboxWebUIFrame = defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
+const SchemaUIRenderer = defineAsyncComponent({ loader: () => import("./SchemaUIRenderer.vue"), loadingComponent: ExtensionLoadingOverlay, delay: 0 });
+const SandboxWebUIFrame = defineAsyncComponent({ loader: () => import("./SandboxWebUIFrame.vue"), loadingComponent: ExtensionLoadingOverlay, delay: 0 });
 
 type PageState =
   | "resolving"
@@ -59,10 +61,12 @@ const diagnostics = ref<Record<string, unknown>>({});
 
 const extensionId = computed(() => String(route.query.extensionId ?? route.params.extensionId ?? ""));
 const pageId = computed(() => String(route.params.pageId ?? ""));
+const pageTarget = computed(() =>
+  `plugin.page.${extensionId.value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || "root"}.${pageId.value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || "root"}`
+);
 
 const title = computed(() => pageSpec.value?.title.default ?? pageId.value);
 const description = computed(() => pageSpec.value?.description.default ?? "");
-const icon = computed(() => pageSpec.value?.icon ?? "");
 
 const stateLabel = computed<Record<PageState, string>>(() => ({
   resolving: "解析中",
@@ -224,23 +228,23 @@ watch([extensionId, pageId], async () => {
 </script>
 
 <template>
-  <div class="extension-page-host" :data-extension-id="extensionId" :data-page-id="pageId">
-    <header class="extension-page-host__header">
-      <div class="extension-page-host__identity">
-        <span v-if="icon" class="extension-page-host__icon">{{ icon }}</span>
-        <div class="extension-page-host__title-group">
-          <h1 class="extension-page-host__title">{{ title }}</h1>
-          <p v-if="description" class="extension-page-host__desc">{{ description }}</p>
-        </div>
+  <PluginPageFrame
+    class="extension-page-host"
+    :title="title"
+    :description="description"
+    data-amitia-ui="extension.page"
+    :data-amitia-node-target="pageTarget"
+    data-amitia-surface="plugin.page.main"
+    :data-extension-id="extensionId"
+    :data-page-id="pageId"
+  >
+    <template #actions>
         <span class="extension-page-host__state-badge" :data-state="pageState">
           {{ stateLabel[pageState] }}
         </span>
-      </div>
-      <div class="extension-page-host__actions">
         <button class="extension-page-host__action" @click="retry">重试</button>
         <button class="extension-page-host__action" @click="goBack">返回</button>
-      </div>
-    </header>
+    </template>
 
     <main class="extension-page-host__content">
       <template v-if="isError">
@@ -253,10 +257,7 @@ watch([extensionId, pageId], async () => {
         </div>
       </template>
       <template v-else-if="!isReady">
-        <div class="extension-page-host__loading">
-          <div class="extension-page-host__spinner"></div>
-          <p>{{ stateLabel[pageState] }}</p>
-        </div>
+        <ExtensionLoadingOverlay />
       </template>
       <template v-else-if="pageContribution">
         <div class="extension-page-host__page-content">
@@ -271,6 +272,7 @@ watch([extensionId, pageId], async () => {
             :contribution="pageContribution"
             :slot-id="`extension.page.main`"
             :context="pageContext"
+            semantic-target="extension.surface"
           />
           <div v-else class="extension-page-host__placeholder">
             未知页面类型: {{ pageSpec?.entryKind }}
@@ -282,7 +284,7 @@ watch([extensionId, pageId], async () => {
     <footer v-if="diagnostics && Object.keys(diagnostics).length > 0" class="extension-page-host__diag">
       <pre>{{ JSON.stringify(diagnostics, null, 2) }}</pre>
     </footer>
-  </div>
+  </PluginPageFrame>
 </template>
 
 <style scoped>
@@ -292,31 +294,11 @@ watch([extensionId, pageId], async () => {
   height: 100%;
   min-height: 0;
 }
-.extension-page-host__header {
+.extension-page-host :deep(.plugin-page-frame__content) {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--amitia-color-border, rgba(127, 127, 127, 0.2));
-  background: var(--amitia-color-surface, transparent);
-}
-.extension-page-host__identity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.extension-page-host__icon {
-  font-size: 24px;
-}
-.extension-page-host__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-.extension-page-host__desc {
-  margin: 2px 0 0 0;
-  font-size: 12px;
-  opacity: 0.7;
+  flex-direction: column;
+  min-height: 0;
 }
 .extension-page-host__state-badge {
   padding: 2px 8px;
@@ -356,7 +338,7 @@ watch([extensionId, pageId], async () => {
   flex-direction: column;
   min-height: 0;
   overflow: auto;
-  padding: 16px;
+  padding: 0;
 }
 .extension-page-host__page-content {
   flex: 1;

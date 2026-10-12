@@ -55,6 +55,21 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 		return QueryResult{}, err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
+	if err := coordination.ResolveMemoryScope(&scope, role, request.MemoryView); err != nil {
+		return QueryResult{}, err
+	}
+	if scope.MemoryViewAll && !query.Management {
+		return QueryResult{}, coordination.ErrWrongOwner
+	}
+	if query.ResourceKind == "continuity" {
+		partition := coordination.StorageRole(scope, "continuity")
+		all := scope.MemoryViewAll
+		if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+			return QueryResult{}, err
+		}
+		scope.ContinuityRoleID = partition
+		scope.MemoryViewAll = all
+	}
 	ctx = coordination.WithScope(ctx, scope)
 	conversationRoute, err := e.resolveStoredConversationRoute(ctx, scope, query.ConversationID, request.ConversationOrigin)
 	if err != nil {

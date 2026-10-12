@@ -11,7 +11,7 @@ const { settings, source, init } = useBackgroundPreference();
 const { state } = useTheme();
 const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const reducedMotion = ref(mediaQuery.matches);
-const active = computed(() => props.visible && settings.value.enabled && !!source.value);
+const active = computed(() => props.visible && settings.value.enabled && (!!source.value || settings.value.mode === "color" || settings.value.mode === "gradient"));
 function motionChanged() { reducedMotion.value = mediaQuery.matches; }
 watch(active, value => { document.documentElement.dataset.customBackground = String(value); }, { immediate: true });
 onMounted(() => { void init(); mediaQuery.addEventListener("change", motionChanged); });

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:syntax_highlighter_plus/syntax_highlighter_plus.dart';
 
+import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../amitia_message_theme.dart';
 
 class AmitiaCodeBlock extends StatefulWidget {
@@ -83,13 +84,29 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 17),
+    final resolved = context.amitiaStyleFor(
+      'code_block',
+      states: <String>[widget.streaming ? 'loading' : 'default'],
+    );
+    final codeStyle = resolved.applyTextStyle(
+      TextStyle(
+        color: const Color(0xFFE8E8EB),
+        fontFamily: 'monospace',
+        fontSize: tokens.codeFontSize,
+        height: 1.7,
+      ),
+    );
+    final block = Container(
+      width: resolved.number('width') ?? double.infinity,
+      margin:
+          resolved.edgeInsets('margin') ?? const EdgeInsets.only(bottom: 17),
+      padding: resolved.edgeInsets('padding'),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: tokens.codeBackground,
-        borderRadius: BorderRadius.circular(tokens.codeRadius),
+      decoration: resolved.applyBoxDecoration(
+        BoxDecoration(
+          color: tokens.codeBackground,
+          borderRadius: BorderRadius.circular(tokens.codeRadius),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,7 +131,7 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
                       future: _highlightFuture,
                       code: widget.code,
                       wrap: true,
-                      fontSize: tokens.codeFontSize,
+                      style: codeStyle,
                     )
                   : SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -122,7 +139,7 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
                         future: _highlightFuture,
                         code: widget.code,
                         wrap: false,
-                        fontSize: tokens.codeFontSize,
+                        style: codeStyle,
                       ),
                     ),
             ),
@@ -145,6 +162,13 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
         ],
       ),
     );
+    final opacity = resolved.number('opacity');
+    return opacity == null
+        ? block
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: block,
+          );
   }
 
   Future<void> _copy() async {
@@ -157,10 +181,25 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
 
   Future<void> _openFullscreen() async {
     final tokens = AmitiaMessageTheme.of(context);
+    final resolved = context.amitiaStyleFor(
+      'code_block',
+      states: <String>[widget.streaming ? 'loading' : 'default'],
+    );
+    final codeStyle = resolved.applyTextStyle(
+      TextStyle(
+        color: const Color(0xFFE8E8EB),
+        fontFamily: 'monospace',
+        fontSize: tokens.codeFontSize,
+        height: 1.7,
+      ),
+    );
     await showDialog<void>(
       context: context,
       builder: (context) => Dialog.fullscreen(
-        backgroundColor: tokens.codeBackground,
+        backgroundColor:
+            resolved.color('backgroundColor') ??
+            resolved.color('background') ??
+            tokens.codeBackground,
         child: SafeArea(
           child: Column(
             children: [
@@ -183,7 +222,7 @@ class _AmitiaCodeBlockState extends State<AmitiaCodeBlock> {
                       future: _highlightFuture,
                       code: widget.code,
                       wrap: _wrap,
-                      fontSize: tokens.codeFontSize,
+                      style: codeStyle,
                     ),
                   ),
                 ),
@@ -308,32 +347,26 @@ class _HighlightedCode extends StatelessWidget {
   final Future<TextSpan?>? future;
   final String code;
   final bool wrap;
-  final double fontSize;
+  final TextStyle style;
 
   const _HighlightedCode({
     required this.future,
     required this.code,
     required this.wrap,
-    required this.fontSize,
+    required this.style,
   });
 
   @override
   Widget build(BuildContext context) {
-    final baseStyle = TextStyle(
-      color: const Color(0xFFE8E8EB),
-      fontFamily: 'monospace',
-      fontSize: fontSize,
-      height: 1.7,
-    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: FutureBuilder<TextSpan?>(
         future: future,
         builder: (context, snapshot) {
-          final span = snapshot.data ?? TextSpan(text: code, style: baseStyle);
+          final span = snapshot.data ?? TextSpan(text: code, style: style);
           return SelectableText.rich(
             span,
-            style: baseStyle,
+            style: style,
             textWidthBasis: wrap
                 ? TextWidthBasis.parent
                 : TextWidthBasis.longestLine,

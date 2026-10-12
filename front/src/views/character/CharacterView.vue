@@ -158,6 +158,12 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-form-item label="描述"
           ><el-input v-model="form.description" type="textarea" :rows="2"
         /></el-form-item>
+        <el-form-item label="记忆范围">
+          <div class="memory-scope-setting">
+            <el-switch v-model="form.globalMemoryEnabled" inline-prompt active-text="全局记忆" inactive-text="角色记忆" aria-label="使用全局记忆" />
+            <span>{{ form.globalMemoryEnabled ? '读取和保存全局记忆' : '仅读取和保存当前角色记忆' }}，已有记录保留原分区。</span>
+          </div>
+        </el-form-item>
         <el-form-item label="性格"
           ><el-input v-model="form.personality" type="textarea" :rows="3"
         /></el-form-item>
@@ -471,6 +477,7 @@ const currentVoiceSupportsEmotion = computed(() => {
 });
 
 const form = reactive({
+  globalMemoryEnabled: true,
   name: "",
   description: "",
   personality: "",
@@ -626,6 +633,7 @@ function onTabChange(tab: string) {
 }
 
 function openCreate() {
+  form.globalMemoryEnabled = true;
   if (saving.value) return;
   editorAuthority.value = collectionAuthority.value;
   editingId.value = null;
@@ -658,6 +666,7 @@ function openCreate() {
 function editCurrent() {
   if (saving.value) return;
   if (!selectedChar.value) return;
+  form.globalMemoryEnabled = selectedChar.value.globalMemoryEnabled !== false;
   editingId.value = selectedChar.value.id;
   editorAuthority.value = selectedChar.value.roleAuthority || "";
   form.name = selectedChar.value.name || "";
@@ -714,6 +723,7 @@ function copyCurrentCharacter() {
   if (!selectedChar.value) return;
   const source = selectedChar.value;
   openCreate();
+  form.globalMemoryEnabled = source.globalMemoryEnabled !== false;
   editorAuthority.value = source.roleAuthority || "";
   form.name = `${source.name || "角色"} (副本)`;
   form.avatar = source.avatar || "";
@@ -811,6 +821,7 @@ async function saveCharacter() {
     parseJsonObject(form.chatStyleConfig, "聊天风格配置");
     parseJsonObject(form.sceneRules, "场景规则");
     const payload: any = {
+      globalMemoryEnabled: form.globalMemoryEnabled,
       name: form.name,
       avatar: form.avatar,
       description: form.description,
@@ -887,6 +898,8 @@ async function deleteCurrent() {
 </script>
 
 <style scoped>
+.memory-scope-setting { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.memory-scope-setting span { color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.6; }
 .avatar-upload-row {
   display: flex;
   align-items: center;

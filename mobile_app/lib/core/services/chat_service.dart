@@ -170,7 +170,8 @@ class ConversationWorkspaceDto {
   final String workspaceName;
   final String workspaceKind;
   final String rootUri;
-  final ProjectDto? logicalProject;
+  final List<ProjectWorkspaceDto> workspaces;
+  final String primaryWorkspaceId;
 
   const ConversationWorkspaceDto({
     this.conversationId = '',
@@ -180,7 +181,8 @@ class ConversationWorkspaceDto {
     this.workspaceName = '',
     this.workspaceKind = 'local',
     required this.rootUri,
-    this.logicalProject,
+    this.workspaces = const <ProjectWorkspaceDto>[],
+    this.primaryWorkspaceId = '',
   });
 
   factory ConversationWorkspaceDto.fromJson(Map<String, dynamic> json) {
@@ -195,6 +197,14 @@ class ConversationWorkspaceDto {
       rootUri: (json['rootUri'] ?? 'amitia://workspace/@$workspaceId/')
           .toString()
           .trim(),
+      workspaces: ((json['workspaces'] as List<dynamic>?) ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) =>
+                ProjectWorkspaceDto.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(growable: false),
+      primaryWorkspaceId: (json['primaryWorkspaceId'] ?? '').toString().trim(),
     );
   }
 
@@ -205,6 +215,9 @@ class ConversationWorkspaceDto {
     'workspaceName': workspaceName,
     'workspaceKind': workspaceKind,
     'rootUri': rootUri,
+    if (workspaces.isNotEmpty)
+      'workspaces': workspaces.map((workspace) => workspace.toJson()).toList(),
+    if (primaryWorkspaceId.isNotEmpty) 'primaryWorkspaceId': primaryWorkspaceId,
   };
 }
 
@@ -313,19 +326,26 @@ class ChatService {
       final rows = (await owned.conversations())
           .where((row) => row.archivedAt.isEmpty)
           .toList();
-      final projects = await owned.projects();
+      final projects = (await owned.projects())
+          .where((project) => !project.readOnly)
+          .toList(growable: false);
       final grouped = projects
           .map(
             (project) => ProjectDto(
               id: project.id,
               name: project.name,
-              workspaceId: '',
+              workspaceId: project.workspaceId,
+              deviceId: project.deviceId,
+              rootUri: project.rootUri,
+              workspaceKind: project.workspaceKind,
               pinnedAt: project.pinnedAt,
               ownerId: project.ownerId,
               roleId: project.roleId,
               revision: project.revision,
               readOnly: project.readOnly,
-              logical: true,
+              workspaces: project.workspaces,
+              primaryWorkspaceId: project.primaryWorkspaceId,
+              hiddenAt: project.hiddenAt,
               executionScope: project.executionScope,
               conversations: rows
                   .where(
@@ -353,7 +373,10 @@ class ChatService {
               (row) => row.pinnedAt.isEmpty && !groupedIds.contains(row.id),
             )
             .toList(),
-        projects: grouped,
+        projects: grouped.where((project) => project.hiddenAt.isEmpty).toList(),
+        removedProjects: grouped
+            .where((project) => project.hiddenAt.isNotEmpty)
+            .toList(),
       );
     }
     final resp = await _api.get<Map<String, dynamic>>(
@@ -381,13 +404,18 @@ class ChatService {
     String workspaceId = '',
     String deviceId = '',
     String rootUri = '',
+    List<ProjectWorkspaceDto> workspaces = const <ProjectWorkspaceDto>[],
+    String primaryWorkspaceId = '',
     Map<String, dynamic>? expectedScope,
   }) async {
     if (await owned.refresh()) {
-      if (workspaceId.isNotEmpty || deviceId.isNotEmpty || rootUri.isNotEmpty)
-        throw StateError('绑定模式项目只管理对话分组，不授予目录权限');
       if (expectedScope == null) throw StateError('请先加载项目创建表单的数据归属');
-      return owned.createProject(name, expectedScope: expectedScope);
+      return owned.createProject(
+        name,
+        expectedScope: expectedScope,
+        workspaces: workspaces,
+        primaryWorkspaceId: primaryWorkspaceId,
+      );
     }
     if (expectedScope != null) throw StateError('原 Core 项目表单不能提交到本机');
     final resp = await _api.post<Map<String, dynamic>>(
@@ -404,30 +432,31 @@ class ChatService {
     return ProjectDto.fromJson(resp);
   }
 
-  Future<void> deleteProject(String projectId, {ProjectDto? project}) async {
+  Future<void> hideProject(String projectId, {ProjectDto? project}) async {
     if (await owned.refresh()) {
       if (project == null || project.id != projectId)
-        throw StateError('请重新加载项目归属后再删除');
-      return owned.editProject(project, deleted: true);
+        throw StateError('请重新加载项目归属后再移除');
+      return owned.editProject(project, changes: const {'hidden': true});
     }
-    if (project?.logical == true) throw StateError('原 Core 项目不能修改到本机');
     await _api.delete(
       '/api/web-chat/projects/${Uri.encodeComponent(projectId)}',
     );
   }
 
+  Future<void> deleteProject(String projectId, {ProjectDto? project}) {
+    return hideProject(projectId, project: project);
+  }
+
   Future<void> updateProject(
     String projectId, {
     String? name,
-    String? workspaceId,
-    String? deviceId,
-    String? rootUri,
+    List<ProjectWorkspaceDto>? workspaces,
+    String? primaryWorkspaceId,
     bool? pinned,
+    bool? hidden,
     ProjectDto? project,
   }) async {
     if (await owned.refresh()) {
-      if (workspaceId != null || deviceId != null || rootUri != null)
-        throw StateError('逻辑项目不支持目录授权或根目录修改');
       if (project == null || project.id != projectId)
         throw StateError('请重新加载项目归属后再修改');
       return owned.editProject(
@@ -435,24 +464,41 @@ class ChatService {
         changes: {
           if (name != null) 'title': name.trim(),
           if (pinned != null) 'pinned': pinned,
+          if (hidden != null) 'hidden': hidden,
+          if (workspaces != null)
+            'workspaces': workspaces
+                .map((workspace) => workspace.toJson())
+                .toList(),
+          if (primaryWorkspaceId != null)
+            'primaryWorkspaceId': primaryWorkspaceId,
         },
       );
     }
-    if (project?.logical == true) throw StateError('原 Core 项目不能修改到本机');
     await _api.patch<Map<String, dynamic>>(
       '/api/web-chat/projects/${Uri.encodeComponent(projectId)}',
       data: <String, dynamic>{
         if (name != null) 'name': name.trim(),
-        if (workspaceId != null) 'workspaceId': workspaceId.trim(),
-        if (deviceId != null) 'deviceId': deviceId.trim(),
-        if (rootUri != null) 'rootUri': rootUri.trim(),
         if (pinned != null) 'pinned': pinned,
       },
     );
   }
 
   Future<Map<String, dynamic>> projectLocation(String projectId) async {
-    if (await owned.refresh()) throw StateError('逻辑项目没有文件目录权限');
+    if (await owned.refresh()) {
+      final project = (await owned.projects())
+          .where((item) => item.id == projectId)
+          .firstOrNull;
+      final primary = project?.workspaces
+          .where((item) => item.id == project?.primaryWorkspaceId)
+          .firstOrNull;
+      final workspaceId = primary?.id ?? project?.workspaceId ?? '';
+      if (workspaceId.isEmpty) throw StateError('项目没有可用工作区');
+      final resp = await _api.get<Map<String, dynamic>>(
+        '/api/workspaces/${Uri.encodeComponent(workspaceId)}/location',
+        fromJson: (e) => Map<String, dynamic>.from(e as Map),
+      );
+      return resp ?? <String, dynamic>{};
+    }
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/web-chat/projects/${Uri.encodeComponent(projectId)}/location',
       fromJson: (e) => Map<String, dynamic>.from(e as Map),
@@ -465,41 +511,7 @@ class ChatService {
     String projectId, {
     ProjectDto? project,
   }) async {
-    if (await owned.refresh()) {
-      if (projectId.isNotEmpty &&
-          (project == null ||
-              project.id != projectId ||
-              project.readOnly ||
-              project.executionScope == null)) {
-        throw StateError('请重新加载当前项目归属后再移动');
-      }
-      if (project != null) {
-        final current = (await owned.projects(characterId: project.roleId))
-            .where(
-              (row) =>
-                  row.id == project.id &&
-                  row.ownerId == project.ownerId &&
-                  row.roleId == project.roleId &&
-                  !row.readOnly,
-            )
-            .firstOrNull;
-        if (current == null || current.revision != project.revision)
-          throw StateError('目标项目版本已变化，请重新加载后移动');
-      }
-      return owned.edit(
-        'conversation',
-        conversationId,
-        changes: {'projectId': projectId.trim()},
-        characterId: project?.roleId,
-        expectedScope: project?.executionScope,
-        expectedOwnerId: project?.ownerId,
-      );
-    }
-    if (project?.logical == true) throw StateError('原 Core 项目不能移动到本机');
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}',
-      data: <String, dynamic>{'projectId': projectId.trim()},
-    );
+    throw StateError('现有对话不能手动移入或移出项目');
   }
 
   Future<List<MessageDto>> getMessages(

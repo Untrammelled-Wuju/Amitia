@@ -18,6 +18,11 @@ describe("background preference", () => {
     expect(() => backgroundFileKind({ name: "big.jpg", size: 21 * 1024 * 1024 })).toThrow();
     expect(() => backgroundFileKind({ name: "empty.mp4", size: 0 })).toThrow();
     expect(normalizeBackground({ opacity: -1, blurRadius: 100, kind: "invalid" })).toMatchObject({ opacity: 0, blurRadius: 30, kind: "image" });
+    expect(normalizeBackground({ enabled: true, mode: "image", sourceUri: "amitia://artifacts/art_style" })).toMatchObject({
+      enabled: true,
+      mode: "image",
+      sourceUri: "amitia://artifacts/art_style",
+    });
   });
   it("stores the file, preserves it while disabled, restores it and releases removed URLs", async () => {
     const preferences = (await import("../composables/useBackgroundPreference")).useBackgroundPreference();

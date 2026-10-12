@@ -116,7 +116,8 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 	unlock := LockRoleSource(s.db)
 	defer unlock()
 	c := &Character{
-		ID: uuid.New().String(), SpaceID: normalizeCharacterOwner(spaceID), Name: req.Name, Identity: req.Identity,
+		GlobalMemoryEnabled: true,
+		ID:                  uuid.New().String(), SpaceID: normalizeCharacterOwner(spaceID), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
 		Avatar:            req.Avatar,
 		RelationshipStyle: req.RelationshipStyle, CharacterBase: req.CharacterBase,
@@ -131,6 +132,9 @@ func (s *service) CreateForSpace(req *CreateCharacterRequest, spaceID string) (*
 		VoiceType:         req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
 		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID, VoiceMode: req.VoiceMode,
 		Emotion: req.Emotion, EmotionScale: req.EmotionScale, SilenceDuration: req.SilenceDuration,
+	}
+	if req.GlobalMemoryEnabled != nil {
+		c.GlobalMemoryEnabled = *req.GlobalMemoryEnabled
 	}
 	if c.Name == "" {
 		c.Name = "新角色"
@@ -342,6 +346,9 @@ func (s *service) UpdateForSpace(id string, req *UpdateCharacterRequest, spaceID
 	if req.SceneRules != nil {
 		updates["scene_rules"] = *req.SceneRules
 	}
+	if req.GlobalMemoryEnabled != nil {
+		updates["global_memory_enabled"] = *req.GlobalMemoryEnabled
+	}
 	if req.Avatar != nil {
 		updates["avatar"] = *req.Avatar
 	}
@@ -509,8 +516,9 @@ func characterSyncMeta(c *Character) map[string]interface{} {
 		"emotion": c.Emotion, "emotion_scale": c.EmotionScale, "silence_duration": c.SilenceDuration,
 		"personality_config": c.PersonalityConfig, "is_default": c.IsDefault,
 		"chat_style_config": c.ChatStyleConfig, "scene_rules": c.SceneRules,
-		"avatar":       c.Avatar,
-		"gender_label": c.GenderLabel, "user_addressing_style": c.UserAddressingStyle,
+		"global_memory_enabled": c.GlobalMemoryEnabled,
+		"avatar":                c.Avatar,
+		"gender_label":          c.GenderLabel, "user_addressing_style": c.UserAddressingStyle,
 		"base_prompt": c.BasePrompt, "generated_prompt": c.GeneratedPrompt,
 		"personality_sliders": c.PersonalitySliders, "card_data_json": c.CardDataJSON,
 	}
@@ -742,18 +750,22 @@ func (s *service) ImportCardForSpace(data []byte, filename string, confirm bool,
 	name := c.SanitizeName()
 
 	char := &Character{
-		ID:            uuid.New().String(),
-		SpaceID:       normalizeCharacterOwner(spaceID),
-		Name:          name,
-		Description:   mapping.Description,
-		Personality:   mapping.Personality,
-		BasePrompt:    mapping.SystemPrompt,
-		Status:        "enabled",
-		CardDataJSON:  "",
-		CharacterBase: mapping.Scenario,
+		GlobalMemoryEnabled: true,
+		ID:                  uuid.New().String(),
+		SpaceID:             normalizeCharacterOwner(spaceID),
+		Name:                name,
+		Description:         mapping.Description,
+		Personality:         mapping.Personality,
+		BasePrompt:          mapping.SystemPrompt,
+		Status:              "enabled",
+		CardDataJSON:        "",
+		CharacterBase:       mapping.Scenario,
 	}
 
 	cardData := c.ToCardData()
+	if enabled, ok := cardData.ExternalExtensions["amitia_global_memory_enabled"].(bool); ok {
+		char.GlobalMemoryEnabled = enabled
+	}
 	cardDataBytes, err := json.Marshal(cardData)
 	if err != nil {
 		return nil, fmt.Errorf("序列化卡片数据失败: %w", err)
@@ -799,6 +811,10 @@ func (s *service) ExportCardForSpace(characterID, format, spaceID string) (*Card
 	}
 
 	exporter := card.NewExporter("data")
+	if cardData.ExternalExtensions == nil {
+		cardData.ExternalExtensions = map[string]any{}
+	}
+	cardData.ExternalExtensions["amitia_global_memory_enabled"] = char.GlobalMemoryEnabled
 	systemPrompt := strings.TrimSpace(cardData.SystemPrompt)
 	if systemPrompt == "" {
 		systemPrompt = strings.TrimSpace(char.CharacterBase)

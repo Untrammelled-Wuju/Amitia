@@ -4,6 +4,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+import '../ui_runtime/mobile_style_runtime.dart';
 import 'amitia_button.dart';
 
 export 'amitia_button.dart';
@@ -197,6 +198,7 @@ class AmitiaSwitchTile extends StatelessWidget {
   final String? subtitle;
   final bool value;
   final ValueChanged<bool>? onChanged;
+  final String? styleTarget;
 
   const AmitiaSwitchTile({
     super.key,
@@ -204,22 +206,65 @@ class AmitiaSwitchTile extends StatelessWidget {
     this.subtitle,
     required this.value,
     this.onChanged,
+    this.styleTarget,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile.adaptive(
+    final style = context.amitiaStyleFor(
+      styleTarget ?? 'switch',
+      states: <String>[
+        onChanged == null
+            ? 'disabled'
+            : value
+            ? 'checked'
+            : 'default',
+      ],
+    );
+    final radius = style.borderRadius('borderRadius');
+    final border = style.borderSide();
+    final shape = radius == null && border == null
+        ? null
+        : RoundedRectangleBorder(
+            borderRadius: radius ?? BorderRadius.circular(0),
+            side: border ?? BorderSide.none,
+          );
+    final foreground = style.color('foregroundColor');
+    final tile = SwitchListTile.adaptive(
       contentPadding: EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: 4,
+      ).add(style.edgeInsets('padding') ?? EdgeInsets.zero),
+      title: Text(
+        title,
+        style: style.applyTextStyle(AppTypography.body(context)),
       ),
-      title: Text(title, style: AppTypography.body(context)),
       subtitle: subtitle == null
           ? null
-          : Text(subtitle!, style: AppTypography.caption(context)),
+          : Text(
+              subtitle!,
+              style: style.applyTextStyle(AppTypography.caption(context)),
+            ),
       value: value,
       onChanged: onChanged,
+      tileColor: style.color('backgroundColor'),
+      activeTrackColor: foreground,
+      inactiveTrackColor: style.color('borderColor'),
+      thumbColor: style.color('iconColor') == null
+          ? null
+          : WidgetStatePropertyAll<Color?>(style.color('iconColor')),
+      overlayColor: style.color('overlayColor') == null
+          ? null
+          : WidgetStatePropertyAll<Color?>(style.color('overlayColor')),
+      shape: shape,
     );
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? tile
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: tile,
+          );
   }
 }
 
@@ -238,9 +283,24 @@ class AmitiaSegmentedControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (segments.isEmpty) return const SizedBox.shrink();
-    final style = AppTypography.bodySmall(
-      context,
-    ).copyWith(fontWeight: FontWeight.w500);
+    final resolved = context.amitiaStyleFor(
+      'segmented',
+      states: <String>[selectedIndex >= 0 ? 'selected' : 'default'],
+    );
+    final style = resolved.applyTextStyle(
+      AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w500),
+    );
+    final foreground = resolved.color('foregroundColor');
+    final selectedTextColor = foreground ?? context.textPrimary;
+    final unselectedTextColor = foreground == null
+        ? context.textSecondary
+        : foreground.withValues(alpha: 0.64);
+    final controlBackground =
+        resolved.color('backgroundColor') ?? context.surfaceSecondary;
+    final controlBorder =
+        resolved.color('borderColor') ?? context.surfaceSecondary;
+    final radius =
+        resolved.borderRadius('borderRadius') ?? BorderRadius.circular(9);
     return LayoutBuilder(
       builder: (context, constraints) {
         double requiredWidth = 8;
@@ -271,8 +331,8 @@ class AmitiaSegmentedControl extends StatelessWidget {
                   segments[i],
                   style: style.copyWith(
                     color: i == selectedIndex
-                        ? context.textPrimary
-                        : context.textSecondary,
+                        ? selectedTextColor
+                        : unselectedTextColor,
                   ),
                 ),
               ),
@@ -287,29 +347,51 @@ class AmitiaSegmentedControl extends StatelessWidget {
           child: requiredWidth > availableWidth
               ? CupertinoSegmentedControl<int>(
                   groupValue: selectedIndex.clamp(0, segments.length - 1),
-                  borderColor: context.surfaceSecondary,
-                  unselectedColor: context.surfaceSecondary,
+                  borderColor: controlBorder,
+                  unselectedColor: controlBackground,
                   selectedColor: context.surfacePrimary,
-                  pressedColor: context.accentSoft,
+                  pressedColor:
+                      resolved.color('overlayColor') ?? context.accentSoft,
                   onValueChanged: select,
                   children: children,
                 )
               : CupertinoSlidingSegmentedControl<int>(
                   groupValue: selectedIndex.clamp(0, segments.length - 1),
-                  backgroundColor: context.surfaceSecondary,
-                  thumbColor: context.surfacePrimary,
+                  backgroundColor: controlBackground,
+                  thumbColor:
+                      resolved.color('thumbColor') ?? context.surfacePrimary,
                   onValueChanged: (value) {
                     if (value != null) select(value);
                   },
                   children: children,
                 ),
         );
-        return requiredWidth > availableWidth
+        Widget result = requiredWidth > availableWidth
             ? SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: control,
               )
             : control;
+        final padding = resolved.edgeInsets('padding');
+        if (padding != null) result = Padding(padding: padding, child: result);
+        final border = resolved.borderSide();
+        result = ClipRRect(
+          borderRadius: radius,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              border: border == null ? null : Border.fromBorderSide(border),
+            ),
+            child: result,
+          ),
+        );
+        final opacity = resolved.number('opacity');
+        return opacity == null
+            ? result
+            : Opacity(
+                opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+                child: result,
+              );
       },
     );
   }

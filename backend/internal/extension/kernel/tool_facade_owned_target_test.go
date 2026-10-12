@@ -71,3 +71,43 @@ func TestOwnedDeviceToolRequiresTargetAndLocalGameHostRemainsLocal(t *testing.T)
 		t.Fatalf("local game routing changed: %+v", resolved)
 	}
 }
+
+func TestOwnedLocalWorkspaceUsesCoreProvider(t *testing.T) {
+	resolver := &ownedTargetResolver{result: capability.CapabilityResolution{
+		Provider:         capability.CapabilityProviderDefinition{ID: "core-workspace-provider"},
+		ProviderInstance: capability.CapabilityProviderInstance{ID: "core-workspace-instance"},
+		ExecutionTarget:  capability.InvocationExecutionTarget{Placement: "core", SpaceID: "realm"},
+	}}
+	facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "local-device"}
+	scope := InvocationScope{SpaceID: "realm", ExecContext: &execution.ExecutionContext{
+		RuntimeTarget: &execution.RuntimeTarget{Placement: "device", DeviceID: "local-device"},
+		Metadata:      map[string]any{"ownedDeviceTarget": true},
+	}}
+	definition := capability.ToolDefinition{
+		ID:           "workspace.write",
+		CapabilityID: "workspace.write",
+		ExtensionID:  "com.amitia.builtin.workspace",
+		Runtime:      capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeWorkspace},
+	}
+	resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
+	if resolved.target.Placement != "core" || resolver.calls != 1 || resolver.request.RequiredPlacement != capability.ProviderPlacementCore || resolver.request.AllowDevice || resolver.request.RequiredDeviceID != "" {
+		t.Fatalf("local workspace did not use core provider: resolved=%+v request=%+v", resolved, resolver.request)
+	}
+}
+
+func TestOwnedDirectBuiltinSkipsCapabilityRecovery(t *testing.T) {
+	resolver := &ownedTargetResolver{}
+	facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "local-device"}
+	scope := InvocationScope{SpaceID: "realm", ExecContext: &execution.ExecutionContext{
+		RuntimeTarget: &execution.RuntimeTarget{Placement: "device", DeviceID: "local-device"},
+		Metadata:      map[string]any{"ownedDeviceTarget": true},
+	}}
+	definition := capability.ToolDefinition{
+		ID:      "builtin.agent_admin.calculate",
+		Runtime: capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeBuiltin, HandlerName: "calculate"},
+	}
+	resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
+	if !resolved.target.IsZero() || resolved.missingCapability != "" || resolver.calls != 0 {
+		t.Fatalf("direct builtin unexpectedly required a provider: %+v calls=%d", resolved, resolver.calls)
+	}
+}

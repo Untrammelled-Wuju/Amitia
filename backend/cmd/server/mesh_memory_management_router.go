@@ -33,6 +33,7 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			}
 			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 			query := business.MemoryManagementQuery{Query: c.Query("query"), Mode: c.Query("mode"), MemoryType: c.Query("memoryType"), Source: c.Query("source"), Sort: c.Query("sort"), Cursor: c.Query("cursor"), Limit: limit}
+			request.MemoryView = c.Query("memoryView")
 			var result business.MemoryManagementResponse
 			var err error
 			if candidates {
@@ -91,6 +92,35 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 	mesh.POST("/memories/manage", manage(false))
 	mesh.GET("/memory-candidates", read(true))
 	mesh.POST("/memory-candidates/manage", manage(true))
+	mesh.POST("/memory-scope/transfer", func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.DeviceID == "" {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 512<<10)
+		var payload struct {
+			business.MemoryTransferInput
+			RequestID      string                       `json:"requestId"`
+			RoleID         string                       `json:"characterId"`
+			TargetDeviceID string                       `json:"targetDeviceId"`
+			ExpectedScope  *coordination.ExecutionScope `json:"expectedExecutionScope"`
+		}
+		if c.ShouldBindJSON(&payload) != nil || payload.ExpectedScope == nil {
+			c.JSON(400, gin.H{"message": "迁移参数无效"})
+			return
+		}
+		if _, err := uuid.Parse(payload.RequestID); err != nil {
+			c.JSON(400, gin.H{"message": "迁移请求编号无效"})
+			return
+		}
+		ack, err := services.OwnedBusiness.TransferMemory(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: payload.TargetDeviceID, RoleID: payload.RoleID, RequestID: payload.RequestID, ExpectedScope: payload.ExpectedScope}, payload.MemoryTransferInput)
+		if err != nil {
+			c.JSON(409, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"code": 200, "data": ack})
+	})
 }
 
 func writeMeshMemoryManagement(c *gin.Context, result business.MemoryManagementResponse, err error) {

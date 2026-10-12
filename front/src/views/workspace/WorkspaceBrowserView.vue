@@ -1,5 +1,5 @@
 <template>
-  <div class="workspace-page">
+  <div class="workspace-page" data-amitia-ui="workspace.page">
     <div class="head">
       <div><h1>工作区</h1><p>浏览文件、管理 Git 仓库，并创建或检查隔离工作区。</p></div>
       <div class="head-actions">
@@ -18,7 +18,7 @@
       <el-card shadow="never" class="browser">
         <template #header>
           <div class="browser-head">
-            <el-tabs v-model="activeTab" class="mode-tabs"><el-tab-pane label="文件" name="files"/><el-tab-pane label="Git" name="git"/></el-tabs>
+            <el-tabs v-model="activeTab" class="mode-tabs" data-amitia-ui="component.tab"><el-tab-pane label="文件" name="files"/><el-tab-pane label="Git" name="git"/></el-tabs>
             <div class="crumb" v-if="activeTab==='files'"><el-button text :disabled="!canUp" @click="up">上一级</el-button><code>{{ currentUri || '请选择工作区' }}</code></div>
             <div class="git-actions" v-else-if="activeMount">
               <el-button size="small" :loading="gitLoading" @click="loadGit">刷新 Git</el-button>

@@ -3,6 +3,9 @@ import { ref, onMounted, onBeforeUnmount, watch, computed } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
+import { amitiaStyleBridgePayload } from "@/ui-runtime/pluginStyleBridge";
+import { normalizeStylePageId } from "@/ui-runtime/stylePage";
+import { styleRevision, styleRules, type StyleScope } from "@/ui-runtime/styleProfile";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
 import {
   buildSandboxThemeSnapshot,
@@ -23,6 +26,7 @@ const props = defineProps<{
   slotId: string;
   surfaceState?: Record<string, unknown>;
   hostActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
+  semanticTarget?: string;
 }>();
 
 const emit = defineEmits<{
@@ -59,6 +63,27 @@ const uiContext = computed<Record<string, unknown>>(() => ({
 const surfaceRole = computed(() => String((uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main"));
 const overlayMode = computed(() => surfaceRole.value === "composer" || surfaceRole.value === "overlay");
 const composerExpanded = computed(() => overlayMode.value && ((preferredWidth.value ?? 32) > 32 || (preferredHeight.value ?? 32) > 32));
+const pluginWebTarget = computed(() =>
+  `plugin.web.${props.contribution.contributionId.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || "root"}`
+);
+const pluginStyleScope = computed<StyleScope>(() => {
+  const env = resolveHostEnvironment();
+  const platform = env.platform === "web" ? "web" : "desktop";
+  const page = normalizeStylePageId(
+    typeof document === "undefined" ? "" : document.documentElement.dataset.amitiaPage
+  );
+  return { platform, page, surface: surfaceRole.value };
+});
+const pluginPageTarget = computed(() => `page.${pluginStyleScope.value.page ?? "root"}`);
+const pluginStylePayload = computed(() =>
+  amitiaStyleBridgePayload({
+    rules: styleRules.value,
+    scope: pluginStyleScope.value,
+    target: pluginWebTarget.value,
+    additionalTargets: ["extension.surface", "extension.page", pluginPageTarget.value],
+    states: ["default", "hover", "focus", "focus-visible", "active", "disabled", "dark", "light"],
+  })
+);
 const surfaceStateWithDismiss = computed<Record<string, unknown>>(() => ({
   ...(props.surfaceState ?? {}),
   dismissToken: dismissCounter.value,
@@ -296,6 +321,7 @@ function onMessage(event: MessageEvent) {
         slotId: props.slotId,
         surfaceState: surfaceStateWithDismiss.value,
         surfaceMetrics: buildSurfaceMetrics(),
+        style: pluginStylePayload.value,
       },
       capabilities: serverCapabilities,
       grantedPerms: serverGrantedPerms,
@@ -442,6 +468,7 @@ function postUIContext() {
     generation: sessionGeneration.value,
     surfaceState: surfaceStateWithDismiss.value,
     surfaceMetrics: buildSurfaceMetrics(),
+    style: pluginStylePayload.value,
   };
   bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: contextPayload });
   bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: themeSnapshot });
@@ -449,11 +476,21 @@ function postUIContext() {
 }
 
 function buildThemeSnapshot() {
-  return buildSandboxThemeSnapshot(uiContext.value);
+  return {
+    ...buildSandboxThemeSnapshot(uiContext.value),
+    tokens: buildThemeTokens(),
+  };
 }
 
 function buildThemeTokens() {
-  return buildSandboxThemeTokens();
+  const targets = pluginStylePayload.value.targets as Record<string, { vars?: Record<string, string> }>;
+  return {
+    ...buildSandboxThemeTokens(),
+    ...(targets[pluginPageTarget.value]?.vars ?? {}),
+    ...(targets["extension.page"]?.vars ?? {}),
+    ...(targets["extension.surface"]?.vars ?? {}),
+    ...(pluginStylePayload.value.vars as Record<string, string>),
+  };
 }
 
 onMounted(async () => {
@@ -496,6 +533,11 @@ watch(ready, (value) => {
   postUIContext();
 });
 
+watch(styleRevision, () => {
+  if (!bridgePort || !ready.value) return;
+  postUIContext();
+});
+
 watch(() => uiContext.value.locale, () => {
   if (!bridgePort || !ready.value) return;
   postUIContext();
@@ -515,7 +557,10 @@ watch(dismissCounter, () => {
 <template>
   <div
     class="sandbox-webui-frame"
-    :class="{ 'sandbox-webui-frame--overlay': overlayMode }"
+    :class="{ 'sandbox-webui-frame--overlay': overlayMode, 'is-loading': loading || (!ready && !error) }"
+    :data-amitia-ui="semanticTarget || 'extension.surface'"
+    :data-amitia-node-target="pluginWebTarget"
+    :data-amitia-surface="surfaceRole"
     :data-contribution-id="contribution.contributionId"
   >
     <template v-if="loading">
@@ -526,9 +571,7 @@ watch(dismissCounter, () => {
     </template>
     <template v-else>
       <div class="sandbox-webui-frame__container">
-        <div v-if="!ready && iframeLoaded" class="sandbox-webui-frame__connecting">
-          正在建立连接...
-        </div>
+        <ExtensionRenderState v-if="!ready" state="loading" />
         <iframe
           ref="iframeRef"
           :src="resourceUrl"
@@ -547,6 +590,7 @@ watch(dismissCounter, () => {
 
 <style scoped>
 .sandbox-webui-frame {
+  position: relative;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -555,6 +599,7 @@ watch(dismissCounter, () => {
   flex: 1;
   min-height: 0;
 }
+.sandbox-webui-frame.is-loading { min-height: 160px; }
 .sandbox-webui-frame--overlay {
   position: relative;
   width: 32px;
@@ -582,7 +627,8 @@ watch(dismissCounter, () => {
 .sandbox-webui-frame--overlay .sandbox-webui-frame__loading {
   display: none;
 }
-.sandbox-webui-frame--overlay :deep(.extension-render-state) {
+.sandbox-webui-frame--overlay :deep(.extension-render-state),
+.sandbox-webui-frame--overlay :deep(.extension-loading-overlay) {
   display: none;
 }
 .sandbox-webui-frame__container {

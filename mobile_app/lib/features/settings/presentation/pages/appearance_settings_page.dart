@@ -8,6 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/settings/appearance_preferences.dart';
+import '../../../../core/settings/ui_style_command_service.dart';
+import '../../../../core/settings/ui_style_profile.dart';
 import '../widgets/custom_theme_settings.dart';
 import '../widgets/background_settings.dart';
 import '../widgets/chat_appearance_settings.dart';
@@ -29,6 +31,32 @@ class _AppearanceSettingsPageState
     Color(0xFF52B788),
     Color(0xFFE9A23B),
   ];
+  bool _styleBusy = false;
+
+  Future<void> _runStyleAction(String action) async {
+    if (_styleBusy) return;
+    setState(() => _styleBusy = true);
+    try {
+      await ref
+          .read(uiStyleCommandServiceProvider)
+          .execute(
+            action: action,
+            expectedRevision: ref.read(uiStylePatchProvider).revision,
+            changes: const <String, dynamic>{},
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(action == 'undo' ? '已撤销上次样式修改' : '已恢复默认样式')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
+    } finally {
+      if (mounted) setState(() => _styleBusy = false);
+    }
+  }
 
   int _fontIndex(double scale) {
     var bestIndex = 0;
@@ -154,6 +182,32 @@ class _AppearanceSettingsPageState
                   subtitle: '降低界面动画强度以提升性能',
                   value: appearance.reduceAnimation,
                   onChanged: notifier.setReduceAnimation,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: AppSpacing.sectionGap),
+          const _SectionLabel(text: '样式恢复'),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _styleBusy
+                        ? null
+                        : () => _runStyleAction('undo'),
+                    child: const Text('撤销上次修改'),
+                  ),
+                ),
+                SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _styleBusy
+                        ? null
+                        : () => _runStyleAction('reset'),
+                    child: const Text('恢复默认样式'),
+                  ),
                 ),
               ],
             ),

@@ -3,10 +3,10 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="theme-page">
+  <div class="theme-page" data-amitia-ui="settings.section">
     <h2 class="page-title">外观设置</h2>
 
-    <el-card shadow="never" class="section-card">
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span class="section-title">主题模式</span></template>
       <div class="theme-preset-list">
         <button
@@ -29,12 +29,13 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <el-card shadow="never" class="section-card">
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span class="section-title">字体大小</span></template>
       <div class="option-grid option-grid--four">
         <el-button
           v-for="option in fontScaleOptions"
           :key="option.value"
+          data-amitia-ui="settings.button"
           :type="sameScale(themeState.fontScale, option.value) ? 'primary' : 'default'"
           :plain="!sameScale(themeState.fontScale, option.value)"
           @click="setFontScale(option.value)"
@@ -44,7 +45,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <el-card shadow="never" class="section-card">
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span class="section-title">主题色调</span></template>
       <div class="accent-list">
         <button
@@ -68,12 +69,13 @@ SPDX-License-Identifier: AGPL-3.0-only
     <ChatAppearanceSettings />
     <CustomThemeSettings />
     <BackgroundSettings />
-    <el-card shadow="never" class="section-card">
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span class="section-title">圆角风格</span></template>
       <div class="option-grid option-grid--three">
         <el-button
           v-for="option in cornerStyleOptions"
           :key="option.value"
+          data-amitia-ui="settings.button"
           :type="themeState.cornerStyle === option.value ? 'primary' : 'default'"
           :plain="themeState.cornerStyle !== option.value"
           @click="setCornerStyle(option.value)"
@@ -83,25 +85,27 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <el-card shadow="never" class="section-card">
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span class="section-title">其他</span></template>
       <div class="switch-list">
-        <div class="switch-row">
+        <div class="switch-row" data-amitia-ui="component.list_item">
           <div>
             <div class="switch-title">动态效果</div>
             <div class="switch-description">启用页面过渡和微交互动画</div>
           </div>
           <el-switch
+            data-amitia-ui="component.switch"
             :model-value="themeState.dynamicEffect"
             @update:model-value="setDynamicEffect"
           />
         </div>
-        <div class="switch-row">
+        <div class="switch-row" data-amitia-ui="component.list_item">
           <div>
             <div class="switch-title">减少动画</div>
             <div class="switch-description">降低界面动画强度以提升性能</div>
           </div>
           <el-switch
+            data-amitia-ui="component.switch"
             :model-value="themeState.reduceAnimation"
             @update:model-value="setReduceAnimation"
           />
@@ -109,27 +113,35 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </el-card>
 
-    <el-card shadow="never" class="section-card">
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
+      <template #header><span class="section-title">样式恢复</span></template>
+      <div class="style-actions">
+        <el-button data-amitia-ui="settings.button" :loading="styleBusy" @click="undoStyle">撤销上次修改</el-button>
+        <el-button data-amitia-ui="settings.button" type="primary" :loading="styleBusy" @click="resetStyle">恢复默认样式</el-button>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span class="section-title">当前效果预览</span></template>
       <div class="preview-section">
-        <div class="preview-row">
+        <div class="preview-row" data-amitia-ui="component.list_item">
           <div class="preview-swatch" :style="{ background: 'var(--ac-color-primary)' }"></div>
           <span class="preview-label">主色调</span>
           <span class="preview-val">{{ themeState.accentColor }}</span>
         </div>
-        <div class="preview-row">
+        <div class="preview-row" data-amitia-ui="component.list_item">
           <div class="preview-swatch" :style="{ background: 'var(--ac-color-surface)' }"></div>
           <span class="preview-label">表面色</span>
         </div>
-        <div class="preview-row">
+        <div class="preview-row" data-amitia-ui="component.list_item">
           <div class="preview-swatch" :style="{ background: 'var(--ac-color-text)' }"></div>
           <span class="preview-label">文本色</span>
         </div>
-        <div class="preview-row">
+        <div class="preview-row" data-amitia-ui="component.list_item">
           <div class="preview-swatch" :style="{ background: 'var(--ac-color-success)' }"></div>
           <span class="preview-label">成功色</span>
         </div>
-        <div class="preview-row">
+        <div class="preview-row" data-amitia-ui="component.list_item">
           <div class="preview-swatch" :style="{ background: 'var(--ac-color-danger)' }"></div>
           <span class="preview-label">危险色</span>
         </div>
@@ -140,10 +152,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { Check } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { ref } from "vue";
 import { useTheme } from "../../composables/useTheme";
 import CustomThemeSettings from "../../components/CustomThemeSettings.vue";
 import BackgroundSettings from "../../components/BackgroundSettings.vue";
 import ChatAppearanceSettings from "../../components/ChatAppearanceSettings.vue";
+import { executeStyleCommand } from "../../ui-runtime/styleCommand";
+import { styleRevision } from "../../ui-runtime/styleProfile";
 
 const {
   state: themeState,
@@ -166,6 +182,29 @@ function sameScale(left: number, right: number) {
 function sameAccent(left: string, right: string) {
   return left.trim().toUpperCase() === right.trim().toUpperCase();
 }
+
+const styleBusy = ref(false);
+
+async function runStyleAction(action: "undo" | "reset") {
+  if (styleBusy.value) return;
+  styleBusy.value = true;
+  try {
+    await executeStyleCommand(action, styleRevision.value, {});
+    ElMessage.success(action === "undo" ? "已撤销上次样式修改" : "已恢复默认样式");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "样式操作失败");
+  } finally {
+    styleBusy.value = false;
+  }
+}
+
+function undoStyle() {
+  void runStyleAction("undo");
+}
+
+function resetStyle() {
+  void runStyleAction("reset");
+}
 </script>
 
 <style scoped>
@@ -180,6 +219,11 @@ function sameAccent(left: string, right: string) {
 .section-title {
   font-weight: 600;
   font-size: var(--ac-font-size-sm);
+}
+.style-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .theme-preset-list {

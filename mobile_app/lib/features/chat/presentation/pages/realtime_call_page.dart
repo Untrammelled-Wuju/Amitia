@@ -17,6 +17,7 @@ import '../../../../core/notifications/notification_coordinator.dart';
 import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/realtime/realtime_voice_activity_detector.dart';
 import '../../../../core/realtime/realtime_visual_bridge.dart';
+import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
@@ -112,6 +113,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
   @override
   void initState() {
     super.initState();
+    registerRealtimeCallStyleTargets();
     _notifications = ref.read(notificationCoordinatorProvider);
     _callLifecycleSubscription = _notifications.callLifecycleEvents.listen(
       _handleCallLifecycleEvent,
@@ -1002,51 +1004,145 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
         ? _latestCameraFrame
         : null;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      body: RealtimeCallLayout(
-        background: _buildBackground(initial, primaryFrame),
-        overlays: [
-          if (_screenActive && _cameraActive && _latestCameraFrame != null)
-            Positioned(
-              right: 16,
-              top: systemPadding.top + 96,
-              width: 104,
-              height: 140,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    border: Border.all(color: Colors.white24),
+    return AmitiaStyleTarget(
+      target: 'realtime.call.page',
+      child: const SizedBox.shrink(),
+      builder: (context, pageStyle) {
+        final pageBackground =
+            pageStyle.color('backgroundColor') ??
+            pageStyle.color('background') ??
+            const Color(0xFF121212);
+        final pagePadding = pageStyle.edgeInsets('padding');
+        final pageOpacity = pageStyle.number('opacity');
+        final page = Scaffold(
+          backgroundColor: pageBackground,
+          body: Padding(
+            padding: pagePadding ?? EdgeInsets.zero,
+            child: RealtimeCallLayout(
+              background: AmitiaStyleTarget(
+                target: 'realtime.call.background',
+                child: const SizedBox.shrink(),
+                builder: (context, style) =>
+                    _buildBackground(initial, primaryFrame, style),
+              ),
+              overlays: [
+                if (_screenActive &&
+                    _cameraActive &&
+                    _latestCameraFrame != null)
+                  Positioned(
+                    right: 16,
+                    top: systemPadding.top + 96,
+                    width: 104,
+                    height: 140,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Image.memory(
+                          _latestCameraFrame!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                        ),
+                      ),
+                    ),
                   ),
-                  child: Image.memory(
-                    _latestCameraFrame!,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
+              ],
+              details: AmitiaStyleTarget(
+                target: 'realtime.call.details',
+                child: const SizedBox.shrink(),
+                builder: (context, style) => _styleRealtimeSurface(
+                  style: style,
+                  child: _buildCenterSection(
+                    name: name,
+                    initial: initial,
+                    callMode: callMode,
+                    statusText: statusText,
+                    detailText: detailText,
+                    style: style,
                   ),
                 ),
               ),
+              controls: AmitiaStyleTarget(
+                target: 'realtime.call.control',
+                child: const SizedBox.shrink(),
+                builder: (context, style) => _styleRealtimeSurface(
+                  style: style,
+                  child: _buildControlBar(connected, style),
+                ),
+              ),
             ),
-        ],
-        details: _buildCenterSection(
-          name: name,
-          initial: initial,
-          callMode: callMode,
-          statusText: statusText,
-          detailText: detailText,
-        ),
-        controls: _buildControlBar(connected),
-      ),
+          ),
+        );
+        return pageOpacity == null
+            ? page
+            : Opacity(
+                opacity: pageOpacity.toDouble().clamp(0.0, 1.0).toDouble(),
+                child: page,
+              );
+      },
     );
   }
 
-  Widget _buildBackground(String initial, Uint8List? primaryFrame) {
-    return Stack(
+  Widget _styleRealtimeSurface({
+    required AmitiaResolvedStyle style,
+    required Widget child,
+  }) {
+    final background =
+        style.color('backgroundColor') ?? style.color('background');
+    final borderSide = style.borderSide();
+    final radius = style.borderRadius('borderRadius');
+    final shadow = style.boxShadow();
+    final padding = style.edgeInsets('padding');
+    final margin = style.edgeInsets('margin');
+    final opacity = style.number('opacity');
+    Widget surface = Container(
+      margin: margin,
+      padding: padding,
+      decoration:
+          background == null &&
+              borderSide == null &&
+              radius == null &&
+              shadow == null
+          ? null
+          : BoxDecoration(
+              color: background,
+              border: borderSide == null
+                  ? null
+                  : Border.fromBorderSide(borderSide),
+              borderRadius: radius,
+              boxShadow: shadow,
+            ),
+      child: child,
+    );
+    if (opacity != null) {
+      surface = Opacity(
+        opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+        child: surface,
+      );
+    }
+    return surface;
+  }
+
+  Widget _buildBackground(
+    String initial,
+    Uint8List? primaryFrame,
+    AmitiaResolvedStyle style,
+  ) {
+    final background =
+        style.color('backgroundColor') ??
+        style.color('background') ??
+        const Color(0xFF121212);
+    final radius = style.borderRadius('borderRadius');
+    final borderSide = style.borderSide();
+    final opacity = style.number('opacity');
+    Widget content = Stack(
       fit: StackFit.expand,
       clipBehavior: Clip.hardEdge,
       children: [
-        const ColoredBox(color: Color(0xFF121212)),
+        ColoredBox(color: background),
         Opacity(
           opacity: 0.72,
           child: ImageFiltered(
@@ -1078,6 +1174,25 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
         ),
       ],
     );
+    if (radius != null) {
+      content = ClipRRect(borderRadius: radius, child: content);
+    }
+    if (borderSide != null) {
+      content = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          border: Border.fromBorderSide(borderSide),
+        ),
+        child: content,
+      );
+    }
+    if (opacity != null) {
+      content = Opacity(
+        opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+        child: content,
+      );
+    }
+    return content;
   }
 
   Widget _buildAvatarImage(String initial) {
@@ -1108,6 +1223,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
     required String callMode,
     required String statusText,
     required String detailText,
+    required AmitiaResolvedStyle style,
   }) {
     final stateLabel = _state == 'connecting'
         ? '正在建立通话'
@@ -1133,7 +1249,11 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: _aiSpeaking ? Colors.white : Colors.white24,
+              color: _aiSpeaking
+                  ? style.color('foregroundColor') ??
+                        style.color('textColor') ??
+                        Colors.white
+                  : style.color('borderColor') ?? Colors.white24,
               width: _aiSpeaking ? 3 : 1,
             ),
           ),
@@ -1146,21 +1266,25 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
         Text(
           name,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 21,
-            fontWeight: FontWeight.w600,
-            fontVariations: <ui.FontVariation>[ui.FontVariation('wght', 650)],
+          style: style.applyTextStyle(
+            const TextStyle(
+              color: Colors.white,
+              fontSize: 21,
+              fontWeight: FontWeight.w600,
+              fontVariations: <ui.FontVariation>[ui.FontVariation('wght', 650)],
+            ),
           ),
         ),
         const SizedBox(height: 7),
         Text(
           '$stateLabel · $_duration · AI 实时语音',
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Color(0xFFBCBCC0),
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
+          style: style.applyTextStyle(
+            const TextStyle(
+              color: Color(0xFFBCBCC0),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+            ),
           ),
         ),
         const SizedBox(height: 14),
@@ -1171,10 +1295,12 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFFBCBCC0),
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
+            style: style.applyTextStyle(
+              const TextStyle(
+                color: Color(0xFFBCBCC0),
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ),
         ),
@@ -1184,7 +1310,14 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
     );
   }
 
-  Widget _buildControlBar(bool connected) {
+  Widget _buildControlBar(bool connected, AmitiaResolvedStyle style) {
+    final labelStyle = style.applyTextStyle(
+      const TextStyle(
+        color: Color(0xFFC3C3C6),
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+      ),
+    );
     if (_awaitingAnswer) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1196,6 +1329,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
               label: '拒绝',
               destructive: true,
               enabled: true,
+              labelStyle: labelStyle,
               onTap: _declineIncomingCall,
             ),
           ),
@@ -1206,13 +1340,14 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
               label: '接听',
               selected: true,
               enabled: true,
+              labelStyle: labelStyle,
               onTap: _answerIncomingCall,
             ),
           ),
         ],
       );
     }
-    if (_state == 'error') return _buildErrorControls();
+    if (_state == 'error') return _buildErrorControls(labelStyle);
     final modeControl = widget.initialMode == RealtimeCallMode.screen
         ? _RealtimeCallControl(
             icon: _screenActive
@@ -1221,6 +1356,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             label: _screenActive ? '停止共享' : '共享屏幕',
             selected: _screenActive,
             enabled: connected && _screenSupported,
+            labelStyle: labelStyle,
             onTap: _toggleScreen,
           )
         : _RealtimeCallControl(
@@ -1230,6 +1366,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             label: _cameraActive ? '关闭视频' : '视频',
             selected: _cameraActive,
             enabled: connected && _cameraSupported,
+            labelStyle: labelStyle,
             onTap: _toggleCamera,
           );
     return Row(
@@ -1242,6 +1379,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             label: _muted ? '取消静音' : '静音',
             selected: _muted,
             enabled: connected,
+            labelStyle: labelStyle,
             onTap: _toggleMute,
           ),
         ),
@@ -1254,6 +1392,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             label: '挂断',
             destructive: true,
             enabled: true,
+            labelStyle: labelStyle,
             onTap: _endCall,
           ),
         ),
@@ -1261,7 +1400,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
     );
   }
 
-  Widget _buildErrorControls() {
+  Widget _buildErrorControls(TextStyle labelStyle) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1271,6 +1410,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             icon: Icons.refresh,
             label: '重试',
             enabled: true,
+            labelStyle: labelStyle,
             onTap: () async {
               await _shutdown(sendStop: false);
               await _connect();
@@ -1284,6 +1424,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             label: '挂断',
             destructive: true,
             enabled: true,
+            labelStyle: labelStyle,
             onTap: _endCall,
           ),
         ),
@@ -1293,6 +1434,7 @@ class _RealtimeCallPageState extends ConsumerState<RealtimeCallPage> {
             icon: Icons.close,
             label: '关闭',
             enabled: true,
+            labelStyle: labelStyle,
             onTap: _endCall,
           ),
         ),
@@ -1307,6 +1449,7 @@ class _RealtimeCallControl extends StatelessWidget {
   final bool selected;
   final bool destructive;
   final bool enabled;
+  final TextStyle? labelStyle;
   final VoidCallback onTap;
 
   const _RealtimeCallControl({
@@ -1316,6 +1459,7 @@ class _RealtimeCallControl extends StatelessWidget {
     required this.onTap,
     this.selected = false,
     this.destructive = false,
+    this.labelStyle,
   });
 
   @override
@@ -1353,11 +1497,13 @@ class _RealtimeCallControl extends StatelessWidget {
             const SizedBox(height: 7),
             Text(
               label,
-              style: const TextStyle(
-                color: Color(0xFFC3C3C6),
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-              ),
+              style:
+                  labelStyle ??
+                  const TextStyle(
+                    color: Color(0xFFC3C3C6),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1365,4 +1511,76 @@ class _RealtimeCallControl extends StatelessWidget {
       ),
     );
   }
+}
+
+void registerRealtimeCallStyleTargets() {
+  AmitiaStyleTargetRegistry.register(
+    const AmitiaStyleTargetDescriptor(
+      target: 'realtime.call.page',
+      properties: <String, String>{
+        'backgroundColor': 'color',
+        'background': 'color',
+        'padding': 'insets',
+        'opacity': 'number',
+      },
+    ),
+  );
+  AmitiaStyleTargetRegistry.register(
+    const AmitiaStyleTargetDescriptor(
+      target: 'realtime.call.background',
+      properties: <String, String>{
+        'backgroundColor': 'color',
+        'background': 'color',
+        'borderColor': 'color',
+        'borderWidth': 'number',
+        'borderStyle': 'string',
+        'borderRadius': 'length',
+        'opacity': 'number',
+      },
+    ),
+  );
+  AmitiaStyleTargetRegistry.register(
+    const AmitiaStyleTargetDescriptor(
+      target: 'realtime.call.details',
+      properties: <String, String>{
+        'backgroundColor': 'color',
+        'background': 'color',
+        'foregroundColor': 'color',
+        'textColor': 'color',
+        'borderColor': 'color',
+        'borderWidth': 'number',
+        'borderStyle': 'string',
+        'borderRadius': 'length',
+        'shadowColor': 'color',
+        'boxShadow': 'shadow',
+        'padding': 'insets',
+        'margin': 'insets',
+        'fontSize': 'number',
+        'fontWeight': 'number',
+        'opacity': 'number',
+      },
+    ),
+  );
+  AmitiaStyleTargetRegistry.register(
+    const AmitiaStyleTargetDescriptor(
+      target: 'realtime.call.control',
+      properties: <String, String>{
+        'backgroundColor': 'color',
+        'background': 'color',
+        'foregroundColor': 'color',
+        'textColor': 'color',
+        'borderColor': 'color',
+        'borderWidth': 'number',
+        'borderStyle': 'string',
+        'borderRadius': 'length',
+        'shadowColor': 'color',
+        'boxShadow': 'shadow',
+        'padding': 'insets',
+        'margin': 'insets',
+        'fontSize': 'number',
+        'fontWeight': 'number',
+        'opacity': 'number',
+      },
+    ),
+  );
 }

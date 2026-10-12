@@ -292,6 +292,15 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 	if !ok {
 		return MemoryManagementResponse{}, errors.New("数据所有者不支持记忆管理")
 	}
+	if scope.MemoryRoleID != "" && scope.MemoryRoleID != coordination.GlobalMemoryRole {
+		roles, err := e.data.Roles(ctx, scope)
+		if err != nil {
+			return MemoryManagementResponse{}, err
+		}
+		if _, err := coordination.ResolveRole(scope.MemoryRoleID, roles); err != nil {
+			return MemoryManagementResponse{}, err
+		}
+	}
 	unlock := e.lock(scope.SpaceID + "\x00" + scope.ResourceOwnerID + "\x00memory-management\x00" + scope.RoleID)
 	defer unlock()
 	digest := sha256.Sum256(body(struct {
@@ -329,7 +338,7 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 	if err != nil {
 		return MemoryManagementResponse{}, err
 	}
-	identity := sha256.Sum256([]byte(scope.RoleID + "\x00memory\x00fact/" + input.Key))
+	identity := sha256.Sum256([]byte(coordination.StorageRole(scope, "memory") + "\x00memory\x00fact/" + input.Key))
 	memoryID := hex.EncodeToString(identity[:16])
 	existing, err := port.Resource(ctx, scope, "memory", memoryID)
 	if err != nil {
@@ -375,7 +384,7 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 	response := MemoryManagementResponse{Scope: scope, Saved: true, Resources: []coordination.Resource{}, Acknowledgement: coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{}}}
 	for _, mutation := range mutations {
 		response.Acknowledgement.Versions[mutation.Kind+"/"+mutation.ID] = mutation.ExpectedRevision + 1
-		response.Resources = append(response.Resources, coordination.Resource{OwnerID: scope.ResourceOwnerID, RoleID: scope.RoleID, Kind: mutation.Kind, ID: mutation.ID, SourceID: mutation.SourceID, Revision: mutation.ExpectedRevision + 1, Body: mutation.Body})
+		response.Resources = append(response.Resources, coordination.Resource{OwnerID: scope.ResourceOwnerID, RoleID: coordination.StorageRole(scope, mutation.Kind), Kind: mutation.Kind, ID: mutation.ID, SourceID: mutation.SourceID, Revision: mutation.ExpectedRevision + 1, Body: mutation.Body})
 	}
 	response.Acknowledgement.Versions["checkpoint/"+receiptID] = 1
 	mutations = append(mutations, coordination.Mutation{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: body(map[string]any{"hash": fingerprint, "response": response})})

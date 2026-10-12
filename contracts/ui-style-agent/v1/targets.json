@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "scopes": [
+    "global",
+    "platform:desktop",
+    "platform:mobile",
+    "page:/chat",
+    "page:/settings/appearance",
+    "page:/memory",
+    "page:/extensions",
+    "surface:chat.composer",
+    "surface:settings.appearance",
+    "instance"
+  ],
+  "states": [
+    "default",
+    "hover",
+    "focus",
+    "focus-visible",
+    "active",
+    "pressed",
+    "disabled",
+    "dark",
+    "light"
+  ],
+  "targets": [
+    {
+      "id": "app.shell",
+      "kind": "shell",
+      "scope": "global"
+    },
+    {
+      "id": "app.sidebar",
+      "kind": "navigation",
+      "scope": "global"
+    },
+    {
+      "id": "app.sidebar.item",
+      "kind": "navigation_item",
+      "scope": "global"
+    },
+    {
+      "id": "app.header",
+      "kind": "header",
+      "scope": "global"
+    },
+    {
+      "id": "app.content",
+      "kind": "content",
+      "scope": "global"
+    },
+    {
+      "id": "app.overlay",
+      "kind": "overlay",
+      "scope": "global"
+    },
+    {
+      "id": "chat.page",
+      "kind": "page",
+      "scope": "page:/chat"
+    },
+    {
+      "id": "chat.composer",
+      "kind": "composer",
+      "scope": "surface:chat.composer"
+    },
+    {
+      "id": "chat.composer.surface",
+      "kind": "surface",
+      "scope": "surface:chat.composer"
+    },
+    {
+      "id": "chat.composer.input",
+      "kind": "input",
+      "scope": "surface:chat.composer"
+    },
+    {
+      "id": "chat.composer.send",
+      "kind": "button",
+      "scope": "surface:chat.composer"
+    },
+    {
+      "id": "chat.composer.add",
+      "kind": "button",
+      "scope": "surface:chat.composer"
+    },
+    {
+      "id": "chat.composer.model",
+      "kind": "button",
+      "scope": "surface:chat.composer"
+    },
+    {
+      "id": "chat.composer.permission",
+      "kind": "button",
+      "scope": "surface:chat.composer"
+    },
+    {
+      "id": "chat.message.user",
+      "kind": "message",
+      "scope": "page:/chat"
+    },
+    {
+      "id": "chat.message.assistant",
+      "kind": "message",
+      "scope": "page:/chat"
+    },
+    {
+      "id": "chat.message.tool",
+      "kind": "message",
+      "scope": "page:/chat"
+    },
+    {
+      "id": "chat.message.code",
+      "kind": "code",
+      "scope": "page:/chat"
+    },
+    {
+      "id": "chat.attachment",
+      "kind": "attachment",
+      "scope": "page:/chat"
+    },
+    {
+      "id": "settings.page",
+      "kind": "page",
+      "scope": "page:/settings"
+    },
+    {
+      "id": "settings.section",
+      "kind": "section",
+      "scope": "page:/settings"
+    },
+    {
+      "id": "settings.card",
+      "kind": "card",
+      "scope": "page:/settings"
+    },
+    {
+      "id": "settings.input",
+      "kind": "input",
+      "scope": "page:/settings"
+    },
+    {
+      "id": "settings.button",
+      "kind": "button",
+      "scope": "page:/settings"
+    },
+    {
+      "id": "settings.tab",
+      "kind": "tab",
+      "scope": "page:/settings"
+    },
+    {
+      "id": "settings.dialog",
+      "kind": "dialog",
+      "scope": "page:/settings"
+    },
+    {
+      "id": "memory.page",
+      "kind": "page",
+      "scope": "page:/memory"
+    },
+    {
+      "id": "memory.list.item",
+      "kind": "list_item",
+      "scope": "page:/memory"
+    },
+    {
+      "id": "memory.graph.node",
+      "kind": "graph_node",
+      "scope": "page:/memory"
+    },
+    {
+      "id": "memory.graph.edge",
+      "kind": "graph_edge",
+      "scope": "page:/memory"
+    },
+    {
+      "id": "extensions.page",
+      "kind": "page",
+      "scope": "page:/extensions"
+    },
+    {
+      "id": "extensions.card",
+      "kind": "card",
+      "scope": "page:/extensions"
+    },
+    {
+      "id": "extension.page",
+      "kind": "plugin_page",
+      "scope": "global"
+    },
+    {
+      "id": "component.button",
+      "kind": "button",
+      "scope": "global"
+    },
+    {
+      "id": "component.input",
+      "kind": "input",
+      "scope": "global"
+    },
+    {
+      "id": "component.card",
+      "kind": "card",
+      "scope": "global"
+    },
+    {
+      "id": "component.dialog",
+      "kind": "dialog",
+      "scope": "global"
+    },
+    {
+      "id": "component.bottom_sheet",
+      "kind": "bottom_sheet",
+      "scope": "global"
+    },
+    {
+      "id": "component.drawer",
+      "kind": "drawer",
+      "scope": "global"
+    },
+    {
+      "id": "component.tooltip",
+      "kind": "tooltip",
+      "scope": "global"
+    },
+    {
+      "id": "component.popover",
+      "kind": "popover",
+      "scope": "global"
+    },
+    {
+      "id": "component.switch",
+      "kind": "switch",
+      "scope": "global"
+    },
+    {
+      "id": "component.slider",
+      "kind": "slider",
+      "scope": "global"
+    },
+    {
+      "id": "component.tab",
+      "kind": "tab",
+      "scope": "global"
+    },
+    {
+      "id": "component.list_item",
+      "kind": "list_item",
+      "scope": "global"
+    },
+    {
+      "id": "component.icon",
+      "kind": "icon",
+      "scope": "global"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:amitia_app/core/settings/background_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,8 +73,29 @@ void main() {
         false,
       );
       expect(BackgroundPreferences.decode('invalid', root).opacity, 0.35);
+      final remote = BackgroundPreferences.decode(
+        '{"enabled":true,"mode":"image","sourceUri":"amitia://artifacts/art_style"}',
+        root,
+      );
+      expect(remote.active, true);
+      expect(remote.effectiveMode, BackgroundDisplayMode.image);
     },
   );
+  test('caches remote background bytes with source identity', () async {
+    final prefs = notifier();
+    await prefs.init();
+    await prefs.importBytes(
+      Uint8List.fromList(<int>[1, 2, 3, 4]),
+      'remote.png',
+      BackgroundMediaKind.image,
+      sourceUri: 'amitia://artifacts/art_style',
+    );
+    expect(prefs.state.path, isNotEmpty);
+    expect(prefs.state.sourceUri, 'amitia://artifacts/art_style');
+    expect(prefs.state.active, true);
+    expect(await File(prefs.state.path).readAsBytes(), <int>[1, 2, 3, 4]);
+    prefs.dispose();
+  });
   test(
     'missing media restores the default background without breaking startup',
     () async {

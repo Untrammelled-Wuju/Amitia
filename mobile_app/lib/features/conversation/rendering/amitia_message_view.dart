@@ -10,6 +10,7 @@ import '../../../core/widgets/character_avatar.dart';
 import '../../../core/settings/chat_appearance_preferences.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/models/conversation.dart';
+import '../../../core/ui_runtime/mobile_style_runtime.dart';
 import 'amitia_message_theme.dart';
 import 'amrp.dart';
 import 'bubble_message_projection.dart';
@@ -151,7 +152,7 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
       );
     }
     final bubble = widget.messageStyle == ChatMessageStyle.bubble;
-    return Align(
+    final assistant = Align(
       alignment: bubble ? Alignment.topLeft : Alignment.topCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -178,76 +179,94 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
             if (!bubble && widget.aiAvatarEnabled)
               SizedBox(width: tokens.messageGap),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.showHeader)
-                    _MessageHead(
-                      name: widget.characterName,
-                      showName: !bubble && widget.aiNameEnabled,
-                      time: _formatTime(message.createdAt),
-                      tokens: tokens,
-                    ),
-                  if (_stateNotice(message.state) != null)
-                    _StateNotice(
-                      data: _stateNotice(message.state)!,
-                      state: message.state,
-                      tokens: tokens,
-                    ),
-                  if (bubble)
-                    ..._renderBubbleContent(
-                      message,
-                      citationIds,
-                      pending: streaming,
+              child: DefaultTextStyle.merge(
+                style: context
+                    .amitiaStyleFor(
+                      'message.assistant',
+                      states: <String>[streaming ? 'loading' : 'default'],
                     )
-                  else if (showThinkingPlaceholder)
-                    AmitiaThinkingBlock(
-                      block: const AmrpThinkingBlock(
-                        content: '',
-                        state: AmrpMessageState.streaming,
+                    .applyTextStyle(DefaultTextStyle.of(context).style),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.showHeader)
+                      _MessageHead(
+                        name: widget.characterName,
+                        showName: !bubble && widget.aiNameEnabled,
+                        time: _formatTime(message.createdAt),
+                        tokens: tokens,
                       ),
-                    )
-                  else if (widget.message.assistantTurn?.items.isNotEmpty ==
-                      true)
-                    ..._renderAssistantTurn(
-                      widget.message.assistantTurn!,
-                      citationIds,
-                    )
-                  else ...[
-                    if (message.thinking != null)
-                      AmitiaThinkingBlock(block: message.thinking!),
-                    if (message.markdown.isNotEmpty)
-                      AmitiaMarkdownView(
-                        source: flowBubbleText(message.markdown),
-                        streaming: message.state == AmrpMessageState.streaming,
-                        citationIds: citationIds,
-                        onCitation: (id) =>
-                            setState(() => _highlightCitation = id),
+                    if (_stateNotice(message.state) != null)
+                      _StateNotice(
+                        data: _stateNotice(message.state)!,
+                        state: message.state,
+                        tokens: tokens,
                       ),
-                    ..._renderBlocks(message.blocks, message.id),
-                    for (final tool in widget.toolBlocks)
-                      AmitiaToolBlock(block: tool),
+                    if (bubble)
+                      ..._renderBubbleContent(
+                        message,
+                        citationIds,
+                        pending: streaming,
+                      )
+                    else if (showThinkingPlaceholder)
+                      AmitiaThinkingBlock(
+                        block: const AmrpThinkingBlock(
+                          content: '',
+                          state: AmrpMessageState.streaming,
+                        ),
+                      )
+                    else if (widget.message.assistantTurn?.items.isNotEmpty ==
+                        true)
+                      ..._renderAssistantTurn(
+                        widget.message.assistantTurn!,
+                        citationIds,
+                      )
+                    else ...[
+                      if (message.thinking != null)
+                        AmitiaThinkingBlock(block: message.thinking!),
+                      if (message.markdown.isNotEmpty)
+                        AmitiaMarkdownView(
+                          source: flowBubbleText(message.markdown),
+                          streaming:
+                              message.state == AmrpMessageState.streaming,
+                          citationIds: citationIds,
+                          onCitation: (id) =>
+                              setState(() => _highlightCitation = id),
+                        ),
+                      ..._renderBlocks(message.blocks, message.id),
+                      for (final tool in widget.toolBlocks)
+                        AmitiaToolBlock(block: tool),
+                    ],
+                    AmitiaCitationList(
+                      sources: citationSources,
+                      highlightId: _highlightCitation,
+                    ),
+                    if (!streaming &&
+                        !(widget.showThinking &&
+                            message.markdown.trim().isEmpty))
+                      _MessageActions(
+                        streaming: streaming,
+                        onCopy: () => _copy(context, message.plainText),
+                        onCopyMarkdown: () => _copy(context, message.markdown),
+                        onReply: widget.onReply,
+                        onRetry: widget.onRetry,
+                      ),
                   ],
-                  AmitiaCitationList(
-                    sources: citationSources,
-                    highlightId: _highlightCitation,
-                  ),
-                  if (!streaming &&
-                      !(widget.showThinking && message.markdown.trim().isEmpty))
-                    _MessageActions(
-                      streaming: streaming,
-                      onCopy: () => _copy(context, message.plainText),
-                      onCopyMarkdown: () => _copy(context, message.markdown),
-                      onReply: widget.onReply,
-                      onRetry: widget.onRetry,
-                    ),
-                ],
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+    return bubble
+        ? assistant
+        : _applyMessageContainerStyle(
+            context,
+            'message.assistant',
+            states: <String>[streaming ? 'loading' : 'default'],
+            child: assistant,
+          );
   }
 
   List<Widget> _renderBlocks(List<AmrpRichBlock> blocks, String messageId) {
@@ -288,19 +307,34 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
       toolBlocks: widget.toolBlocks,
     );
     Widget frame(String key, Widget child) {
+      final target = user ? 'message.user' : 'message.assistant';
+      final resolved = context.amitiaStyleFor(
+        target,
+        states: <String>[user || !pending ? 'default' : 'loading'],
+      );
+      final hasExplicitSurface =
+          resolved.has('backgroundColor') ||
+          resolved.has('background') ||
+          resolved.has('gradient');
       final surface = UserMessageSurface(
-        material: user ? widget.userMessageMaterial : UserMessageMaterial.solid,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: user ? context.accentSoft : context.surfacePrimary,
-          border: user
-              ? null
-              : Border.all(color: context.borderPrimary, width: 0.5),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(user ? 16 : 4),
-            topRight: Radius.circular(user ? 4 : 16),
-            bottomLeft: const Radius.circular(16),
-            bottomRight: const Radius.circular(16),
+        material: user && !hasExplicitSurface
+            ? widget.userMessageMaterial
+            : UserMessageMaterial.solid,
+        padding:
+            resolved.edgeInsets('padding') ??
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: resolved.applyBoxDecoration(
+          BoxDecoration(
+            color: user ? context.accentSoft : context.surfacePrimary,
+            border: user
+                ? null
+                : Border.all(color: context.borderPrimary, width: 0.5),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(user ? 16 : 4),
+              topRight: Radius.circular(user ? 4 : 16),
+              bottomLeft: const Radius.circular(16),
+              bottomRight: const Radius.circular(16),
+            ),
           ),
         ),
         child: child,
@@ -328,9 +362,10 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
           surface,
         ],
       );
-      return Padding(
+      Widget result = Padding(
         key: ValueKey<String>('bubble:$key'),
-        padding: const EdgeInsets.only(bottom: 10),
+        padding:
+            resolved.edgeInsets('margin') ?? const EdgeInsets.only(bottom: 10),
         child: user || !widget.aiAvatarEnabled
             ? body
             : Row(
@@ -355,6 +390,14 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                 ],
               ),
       );
+      final opacity = resolved.number('opacity');
+      if (opacity != null) {
+        result = Opacity(
+          opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+          child: result,
+        );
+      }
+      return result;
     }
 
     return [
@@ -816,33 +859,84 @@ class _UserMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Align(
-      alignment: Alignment.centerRight,
-      child: UserMessageSurface(
-        material: material,
-        constraints: const BoxConstraints(maxWidth: 620),
-        margin: const EdgeInsets.only(bottom: 34),
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-        decoration: BoxDecoration(
-          color: colorScheme.primaryContainer,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(18),
-            topRight: Radius.circular(18),
-            bottomLeft: Radius.circular(18),
-            bottomRight: Radius.circular(18),
-          ),
-        ),
-        child: SelectableText(
-          message.markdown,
-          style: TextStyle(
-            color: colorScheme.onPrimaryContainer,
-            fontSize: 14,
-            height: 1.6,
-          ),
-        ),
+    final style = context.amitiaStyleFor('message.user');
+    final effectiveMaterial =
+        style.has('backgroundColor') ||
+            style.has('background') ||
+            style.has('gradient')
+        ? UserMessageMaterial.solid
+        : material;
+    final textStyle = style.applyTextStyle(
+      TextStyle(
+        color: colorScheme.onPrimaryContainer,
+        fontSize: 14,
+        height: 1.6,
       ),
     );
+    final result = Align(
+      alignment: Alignment.centerRight,
+      child: UserMessageSurface(
+        material: effectiveMaterial,
+        constraints: const BoxConstraints(maxWidth: 620),
+        margin: style.edgeInsets('margin') ?? const EdgeInsets.only(bottom: 34),
+        padding:
+            style.edgeInsets('padding') ??
+            const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+        decoration: style.applyBoxDecoration(
+          BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(18),
+              topRight: Radius.circular(18),
+              bottomLeft: Radius.circular(18),
+              bottomRight: Radius.circular(18),
+            ),
+          ),
+        ),
+        child: SelectableText(message.markdown, style: textStyle),
+      ),
+    );
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? result
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: result,
+          );
   }
+}
+
+Widget _applyMessageContainerStyle(
+  BuildContext context,
+  String target, {
+  required Widget child,
+  List<String> states = const <String>['default'],
+}) {
+  final style = context.amitiaStyleFor(target, states: states);
+  final decoration = style.applyBoxDecoration(BoxDecoration());
+  final padding = style.edgeInsets('padding');
+  final margin = style.edgeInsets('margin');
+  final hasDecoration =
+      decoration.color != null ||
+      decoration.gradient != null ||
+      decoration.border != null ||
+      decoration.boxShadow != null;
+  Widget result = hasDecoration || padding != null
+      ? Container(
+          padding: padding,
+          decoration: hasDecoration ? decoration : null,
+          child: child,
+        )
+      : child;
+  if (margin != null) result = Padding(padding: margin, child: result);
+  final opacity = style.number('opacity');
+  if (opacity != null) {
+    result = Opacity(
+      opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+      child: result,
+    );
+  }
+  return result;
 }
 
 class _MinecraftServerBlock extends StatelessWidget {

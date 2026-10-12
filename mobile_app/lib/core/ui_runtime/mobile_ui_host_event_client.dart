@@ -15,6 +15,7 @@ import '../native_bridge/providers/native_bridge_relay_provider.dart';
 import '../services/extension_service.dart';
 import '../services/providers.dart';
 import '../services/system_service.dart';
+import '../settings/ui_style_command_service.dart';
 import 'ui_device_identity.dart';
 import 'ui_runtime_invalidation.dart';
 
@@ -73,6 +74,15 @@ final mobileUIHostEventClientProvider = Provider<MobileUIHostEventClient?>((
     extensionService: ref.read(extensionServiceProvider),
     systemService: ref.read(systemServiceProvider),
     nativeDispatcher: ref.read(nativeBridgePlatformDispatcherProvider),
+    applyStyleCommand: (action, expectedRevision, changes) {
+      return ref
+          .read(uiStyleCommandServiceProvider)
+          .execute(
+            action: action,
+            expectedRevision: expectedRevision,
+            changes: changes,
+          );
+    },
     activeConversationId: () => ref.read(activeConversationIdProvider),
     applyClientRuntimeSnapshot: (conversationId, state) {
       ref
@@ -98,6 +108,12 @@ class MobileUIHostEventClient {
     required ExtensionService extensionService,
     required SystemService systemService,
     required NativeBridgePlatformDispatcher nativeDispatcher,
+    required Future<Map<String, dynamic>> Function(
+      String action,
+      int expectedRevision,
+      Map<String, dynamic> changes,
+    )
+    applyStyleCommand,
     required String Function() activeConversationId,
     required void Function(
       String conversationId,
@@ -108,6 +124,7 @@ class MobileUIHostEventClient {
   }) : _extensionService = extensionService,
        _systemService = systemService,
        _nativeDispatcher = nativeDispatcher,
+       _applyStyleCommand = applyStyleCommand,
        _activeConversationId = activeConversationId,
        _applyClientRuntimeSnapshot = applyClientRuntimeSnapshot,
        _invalidateClientRuntime = invalidateClientRuntime;
@@ -116,6 +133,12 @@ class MobileUIHostEventClient {
   final ExtensionService _extensionService;
   final SystemService _systemService;
   final NativeBridgePlatformDispatcher _nativeDispatcher;
+  final Future<Map<String, dynamic>> Function(
+    String action,
+    int expectedRevision,
+    Map<String, dynamic> changes,
+  )
+  _applyStyleCommand;
   final String Function() _activeConversationId;
   final void Function(String conversationId, Map<String, dynamic> sessionState)
   _applyClientRuntimeSnapshot;
@@ -284,6 +307,12 @@ class MobileUIHostEventClient {
       return;
     }
 
+    if (eventType == 'ui_style_command') {
+      if (!_shouldProcessEnvelope(envelope)) return;
+      unawaited(_handleStyleCommand(envelope));
+      return;
+    }
+
     if (eventType == 'ui_notify' ||
         eventType == 'ui_navigate' ||
         eventType == 'ui_dialog') {
@@ -383,6 +412,51 @@ class MobileUIHostEventClient {
       _invalidateClientRuntime(conversationId);
     } catch (error) {
       await respond(const <String, dynamic>{}, error.toString());
+    }
+  }
+
+  Future<void> _handleStyleCommand(Map<String, dynamic> envelope) async {
+    final rawPayload = envelope['payload'];
+    if (rawPayload is! Map) return;
+    final payload = rawPayload.cast<String, dynamic>();
+    final commandId = (payload['commandId'] ?? '').toString().trim();
+    if (commandId.isEmpty) return;
+    final hostClientId =
+        (payload['hostClientId'] ?? envelope['hostClientId'] ?? _hostClientId)
+            .toString()
+            .trim();
+    final hostSessionId =
+        (payload['hostSessionId'] ??
+                envelope['hostSessionId'] ??
+                _hostSessionId)
+            .toString()
+            .trim();
+    final action = (payload['action'] ?? '').toString().trim();
+    final expectedRevision =
+        (payload['expectedRevision'] as num?)?.toInt() ?? 0;
+    final rawChanges = payload['changes'];
+    final changes = rawChanges is Map
+        ? rawChanges.cast<String, dynamic>()
+        : <String, dynamic>{};
+    try {
+      final result = await _applyStyleCommand(
+        action,
+        expectedRevision,
+        changes,
+      );
+      await _extensionService.sendClientRuntimeResponse(
+        commandId: commandId,
+        hostClientId: hostClientId,
+        hostSessionId: hostSessionId,
+        result: result,
+      );
+    } catch (error) {
+      await _extensionService.sendClientRuntimeResponse(
+        commandId: commandId,
+        hostClientId: hostClientId,
+        hostSessionId: hostSessionId,
+        error: error.toString(),
+      );
     }
   }
 

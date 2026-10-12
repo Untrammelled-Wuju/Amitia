@@ -4,6 +4,7 @@ package memory
 
 import (
 	"fmt"
+	"github.com/u-ai/backend/internal/memorypolicy"
 	"strings"
 	"time"
 
@@ -126,6 +127,15 @@ func (s *service) CreateForSpace(req *CreateMemoryRequest, spaceID string) (*Mem
 		copyReq.CharacterID = conversationCharacterID
 	} else if err := s.requireCharacterOwnerForMemory(copyReq.CharacterID, spaceID); err != nil {
 		return nil, err
+	}
+	if copyReq.Scope == "" {
+		if mode, known := memorypolicy.ForCharacter(s.db, copyReq.CharacterID); known {
+			if mode == "global" {
+				copyReq.Scope = "user"
+			} else {
+				copyReq.Scope = "character"
+			}
+		}
 	}
 	return s.Create(&copyReq)
 }

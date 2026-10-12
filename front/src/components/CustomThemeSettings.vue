@@ -1,11 +1,11 @@
 <template>
-  <el-card shadow="never" class="custom-theme">
-    <template #header><div class="setting-row"><span>自定义配色</span><el-switch :model-value="palette.enabled" aria-label="启用自定义配色" @update:model-value="togglePalette" /></div></template>
+  <el-card shadow="never" class="custom-theme" data-amitia-ui="component.card">
+    <template #header><div class="setting-row"><span>自定义配色</span><el-switch data-amitia-ui="component.switch" :model-value="palette.enabled" aria-label="启用自定义配色" @update:model-value="togglePalette" /></div></template>
     <p>主色用于主要操作，副色用于辅助操作。关闭后恢复预设配色。</p>
     <div class="color-grid">
-      <label v-for="field in fields" :key="field.key">{{ field.label }}<el-color-picker :model-value="palette[field.key]" :disabled="!palette.enabled" :aria-label="field.label" @change="changeColor(field.key, $event)" /><span>{{ palette[field.key] }}</span></label>
+      <label v-for="field in fields" :key="field.key">{{ field.label }}<el-color-picker data-amitia-ui="component.input" :model-value="palette[field.key]" :disabled="!palette.enabled" :aria-label="field.label" @change="changeColor(field.key, $event)" /><span>{{ palette[field.key] }}</span></label>
     </div>
-    <div class="setting-row"><span>文字颜色模式</span><el-select :model-value="palette.textMode" :disabled="!palette.enabled" aria-label="文字颜色模式" @update:model-value="changeTextMode"><el-option v-for="option in modes" :key="option.value" :label="option.label" :value="option.value" /></el-select></div>
+    <div class="setting-row"><span>文字颜色模式</span><el-select data-amitia-ui="component.input" :model-value="palette.textMode" :disabled="!palette.enabled" aria-label="文字颜色模式" @update:model-value="changeTextMode"><el-option v-for="option in modes" :key="option.value" :label="option.label" :value="option.value" /></el-select></div>
     <p>选择文字颜色会切换为自选；自动模式按背景选择高对比文字。页面亮色、暗色和跟随系统仍由上方主题模式控制。</p>
     <div class="preview-grid">
       <div v-for="sample in samples" :key="sample.label" class="sample" :style="{ background: sample.background, color: sample.text }">

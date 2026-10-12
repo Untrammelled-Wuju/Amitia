@@ -411,8 +411,22 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 
 	taskOwnershipBinding := &task_runtime.OwnedRuntimeBinding{}
+	kernelRuntimeIdentity := runtimeidentity.Identity{}
+	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" &&
+		(runtimeProfile == runtimeprofile.ProfileLocal || runtimeProfile == runtimeprofile.ProfileDeviceAgent) {
+		localIdentity, identityErr := devicemeshagent.NewIdentityStore(config.AppCfg.Storage.DataDir).Load()
+		if identityErr != nil {
+			return nil, fmt.Errorf("load kernel runtime identity: %w", identityErr)
+		}
+		kernelRuntimeIdentity = runtimeidentity.Identity{
+			SpaceID:   runtimeidentity.ParseSpaceID(spaceidentity.DefaultSpaceID()),
+			DeviceID:  localIdentity.DeviceID,
+			RuntimeID: localIdentity.RuntimeID,
+		}
+	}
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithTaskOwnershipBinding(taskOwnershipBinding).
+		WithRuntimeIdentity(kernelRuntimeIdentity).
 		WithWorkshopModelGenerator(chatSvc).
 		WithDBPath(kernelDBPath).
 		WithScopeRelationDB(scopeRelationDB).

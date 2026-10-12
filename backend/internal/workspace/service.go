@@ -18,6 +18,7 @@ type Service struct {
 	physicalResolver   PhysicalResolverProvider
 	mountRepo          *MountRepository
 	safGrantResolver   SAFGrantResolver
+	safPicker          SAFBridge
 	remoteCredResolver RemoteCredentialResolver
 	precise            PreciseEditingService
 }
@@ -63,6 +64,27 @@ func (s *Service) ListMounts(ctx context.Context) ([]WorkspaceMount, error) {
 
 func (s *Service) HasBackend(kind WorkspaceKind) bool {
 	return s.registry != nil && s.registry.HasBackend(kind)
+}
+
+func (s *Service) SetSAFPicker(bridge SAFBridge) {
+	if s != nil {
+		s.safPicker = bridge
+	}
+}
+
+func (s *Service) PickSAFDirectory(ctx context.Context) (WorkspaceMount, bool, error) {
+	if s == nil || s.safPicker == nil {
+		return WorkspaceMount{}, false, ErrSAFUnavailable
+	}
+	name, grantID, readOnly, cancelled, err := s.safPicker.PickDirectory(ctx)
+	if err != nil {
+		return WorkspaceMount{}, false, err
+	}
+	if cancelled {
+		return WorkspaceMount{}, true, nil
+	}
+	mount, err := s.RegisterSAFMount(ctx, name, grantID, readOnly)
+	return mount, false, err
 }
 
 func (s *Service) LocalWorkspaceRoot(workspaceID string) (string, error) {

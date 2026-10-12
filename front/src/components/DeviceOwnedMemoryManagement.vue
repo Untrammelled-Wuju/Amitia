@@ -1,7 +1,7 @@
 <template>
   <section class="owned-management">
     <div class="management-toolbar">
-      <el-input v-model="query" clearable placeholder="检索当前角色的记忆" @keyup.enter="search()" />
+      <el-input v-model="query" clearable placeholder="检索当前查看范围的记忆" @keyup.enter="search()" />
       <el-select v-model="mode" aria-label="记忆检索方式"><el-option label="关键词" value="keyword" /><el-option label="混合检索" value="hybrid" /><el-option label="向量检索" value="vector" /></el-select>
       <el-select v-model="memoryType" clearable placeholder="全部记忆类型"><el-option label="全部类型" value="" /><el-option v-for="type in types" :key="type.value" :label="type.label" :value="type.value" /></el-select>
       <el-select v-model="sourceFilter" clearable placeholder="全部来源"><el-option label="全部来源" value="" /><el-option label="手动新增" value="manual" /><el-option label="审核保存" value="reviewed" /></el-select>

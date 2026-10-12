@@ -8,12 +8,29 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
+const (
+	MetadataOriginPrincipalType    = "originPrincipalType"
+	MetadataOriginDeviceID         = "originDeviceId"
+	MetadataOriginRuntimeID        = "originRuntimeId"
+	MetadataOriginSessionID        = "originSessionId"
+	MetadataOriginRuntimeSessionID = "originRuntimeSessionId"
+)
+
 type RuntimeTarget struct {
 	Placement        string                    `json:"placement"`
 	SpaceID          runtimeidentity.SpaceID   `json:"spaceId,omitempty"`
 	DeviceID         runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
 	RuntimeID        runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`
 	RuntimeSessionID string                    `json:"runtimeSessionId,omitempty"`
+}
+
+type WorkspaceBinding struct {
+	ID       string `json:"id"`
+	DeviceID string `json:"deviceId,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	RootURI  string `json:"rootUri,omitempty"`
+	ReadOnly bool   `json:"readOnly,omitempty"`
 }
 
 type ExecutionContext struct {
@@ -35,9 +52,11 @@ type ExecutionContext struct {
 	ScopeSnapshotID      string `json:"scopeSnapshotId,omitempty"`
 	PermissionSnapshotID string `json:"permissionSnapshotId,omitempty"`
 
-	ExtensionID string `json:"extensionId,omitempty"`
-	ModuleID    string `json:"moduleId,omitempty"`
-	WorkspaceID string `json:"workspaceId,omitempty"`
+	ExtensionID        string             `json:"extensionId,omitempty"`
+	ModuleID           string             `json:"moduleId,omitempty"`
+	WorkspaceID        string             `json:"workspaceId,omitempty"`
+	PrimaryWorkspaceID string             `json:"primaryWorkspaceId,omitempty"`
+	WorkspaceBindings  []WorkspaceBinding `json:"workspaceBindings,omitempty"`
 
 	Resume *ResumeContext `json:"resume,omitempty"`
 
@@ -66,6 +85,7 @@ func NewChildExecution(parent ExecutionContext, source string) ExecutionContext 
 	for key, value := range parent.Metadata {
 		metadata[key] = value
 	}
+	workspaces := append([]WorkspaceBinding(nil), parent.WorkspaceBindings...)
 	return ExecutionContext{
 		ExecutionID:          NewExecutionID(),
 		RootExecutionID:      parent.RootExecutionID,
@@ -81,6 +101,8 @@ func NewChildExecution(parent ExecutionContext, source string) ExecutionContext 
 		ExtensionID:          parent.ExtensionID,
 		ModuleID:             parent.ModuleID,
 		WorkspaceID:          parent.WorkspaceID,
+		PrimaryWorkspaceID:   parent.PrimaryWorkspaceID,
+		WorkspaceBindings:    workspaces,
 		Source:               source,
 		Budget:               parent.Budget,
 		Metadata:             metadata,

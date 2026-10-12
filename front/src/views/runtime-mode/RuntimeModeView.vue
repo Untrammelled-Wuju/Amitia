@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="runtime-mode-page">
+  <div class="runtime-mode-page" data-amitia-ui="runtime.page">
     <h2 class="page-title">
       <el-icon><Monitor /></el-icon>
       Core 配置与校验

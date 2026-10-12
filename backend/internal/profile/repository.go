@@ -35,9 +35,6 @@ func (r *repository) List(q ProfileListQuery) ([]UserProfile, int64, error) {
 	if q.SpaceID != "" {
 		query = query.Where("space_id = ?", q.SpaceID)
 	}
-	if q.CharacterID != "" {
-		query = query.Where("character_id = ?", q.CharacterID)
-	}
 	if q.Category != "" {
 		query = query.Where("category = ?", q.Category)
 	}
@@ -74,8 +71,9 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	profile.Confidence = clampProfileConfidence(profile.Confidence)
 	clampedConfidence := profile.Confidence
 	var existing UserProfile
-	err := r.db.Where("space_id = ? AND character_id = ? AND category = ? AND attribute_name = ?",
-		profile.SpaceID, profile.CharacterID, profile.Category, profile.AttributeName).First(&existing).Error
+	profile.CharacterID = ""
+	err := r.db.Where("space_id = ? AND category = ? AND attribute_name = ?",
+		profile.SpaceID, profile.Category, profile.AttributeName).Order("confidence DESC, updated_at DESC").First(&existing).Error
 	if err != nil {
 		if profile.ID == "" {
 			profile.ID = uuid.New().String()
@@ -178,7 +176,7 @@ func (r *repository) Delete(id string) error {
 
 func (r *repository) GetBySpaceID(spaceID string) ([]UserProfile, error) {
 	var items []UserProfile
-	err := r.db.Where("space_id = ? AND character_id = ''", spaceID).Order("confidence DESC").Find(&items).Error
+	err := r.db.Where("space_id = ?", spaceID).Order("confidence DESC").Find(&items).Error
 	if items == nil {
 		items = []UserProfile{}
 	}
@@ -200,11 +198,6 @@ func (r *repository) GetUserFactSummary(spaceID string, characterID ...string) (
 func (r *repository) getScopedProfiles(spaceID, characterID, order string, limit int, onlyFacts bool) ([]UserProfile, error) {
 	var items []UserProfile
 	query := r.db.Where("space_id = ?", spaceID)
-	if characterID != "" {
-		query = query.Where("character_id IN ?", []string{characterID, ""})
-	} else {
-		query = query.Where("character_id = ?", "")
-	}
 	if onlyFacts {
 		query = query.Where("confidence >= 50")
 	}
@@ -215,10 +208,7 @@ func (r *repository) getScopedProfiles(spaceID, characterID, order string, limit
 	if items == nil {
 		items = []UserProfile{}
 	}
-	if err != nil || characterID == "" {
-		return items, err
-	}
-	return preferCharacterProfiles(items, characterID), nil
+	return items, err
 }
 
 func preferCharacterProfiles(items []UserProfile, characterID string) []UserProfile {

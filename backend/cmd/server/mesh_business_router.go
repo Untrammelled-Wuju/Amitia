@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -60,6 +59,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 		if id := c.Query("id"); id != "" {
+			request.MemoryView = c.Query("memoryView")
 			document, _, err := services.OwnedBusiness.Continuity(c.Request.Context(), request, business.ContinuityMutation{ID: id, Action: "read"})
 			if err != nil {
 				c.JSON(409, gin.H{"message": err.Error()})
@@ -73,7 +73,8 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "持续事项分页参数无效"})
 			return
 		}
-		result, err := services.OwnedBusiness.Query(c.Request.Context(), request, coordination.DataQuery{ResourceKind: "continuity", Cursor: cursor, Limit: 128})
+		request.MemoryView = c.Query("memoryView")
+		result, err := services.OwnedBusiness.Query(c.Request.Context(), request, coordination.DataQuery{ResourceKind: "continuity", Cursor: cursor, Limit: 128, Management: true})
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
@@ -88,7 +89,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				c.JSON(503, gin.H{"message": "持续事项数据格式无效"})
 				return
 			}
-			documents = append(documents, business.PresentContinuity(document, result.Scope, time.Now()))
+			documents = append(documents, services.OwnedBusiness.PresentManagedContinuity(c.Request.Context(), document, result.Scope, resource.RoleID))
 		}
 		if c.Query("pagination") == "1" {
 			c.JSON(200, gin.H{"code": 200, "data": gin.H{"documents": documents, "executionScope": result.Scope, "nextCursor": result.Snapshot.NextCursors["continuity"]}})
@@ -232,6 +233,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId")}
 		historicalRole := c.Query("historicalRoleId")
+		request.MemoryView = c.Query("memoryView")
 		historicalCursor := c.Query("historicalCursor")
 		historicalLegacyCursor := c.Query("historicalLegacyCursor")
 		if len(historicalRole) > 512 || len(historicalCursor) > 4096 || len(historicalLegacyCursor) > 4096 {
@@ -266,6 +268,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 		var expected *coordination.ExecutionScope
+		request.MemoryView = c.Query("memoryView")
 		rebuild := c.Request.Method == http.MethodPost
 		if rebuild {
 			var input struct {
@@ -279,6 +282,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				return
 			}
 			request.RoleID, request.TargetDeviceID, expected = input.RoleID, input.TargetDeviceID, input.ExpectedScope
+			request.ExpectedScope = expected
 		}
 		status, scope, err := services.OwnedBusiness.Projections(c.Request.Context(), request, rebuild, expected)
 		if err != nil {
@@ -300,7 +304,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "数据查询参数无效"})
 			return
 		}
-		resource, scope, err := services.OwnedBusiness.ReadResource(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}, kind, id)
+		resource, scope, err := services.OwnedBusiness.ReadResource(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), MemoryView: c.Query("memoryView"), RequestID: uuid.NewString()}, kind, id)
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return

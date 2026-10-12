@@ -10,8 +10,8 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/design_tokens.dart';
+import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../models/schema_ui_types.dart';
 import '../engine/binding_engine.dart';
@@ -63,6 +63,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   final Map<String, dynamic> _storageState = {};
   final Map<String, DataSourceResult> _dataSources = {};
   final Set<String> _dismissedNodeIds = <String>{};
+  final Set<String> _registeredStyleTargets = <String>{};
   String _lifecycleMountKey = '';
   bool _lifecycleRunning = false;
 
@@ -79,6 +80,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (initialStorage is Map) {
       _storageState.addAll(initialStorage.cast<String, dynamic>());
     }
+    _registerStyleTargets();
     unawaited(_loadStorageBindings());
     unawaited(_loadDataSources());
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -93,6 +95,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         oldWidget.extensionId != widget.extensionId ||
         oldWidget.contributionId != widget.contributionId) {
       _lifecycleMountKey = '';
+      _registerStyleTargets();
       widget.dataSourceLoader?.invalidate(
         widget.extensionId,
         widget.contributionId,
@@ -107,6 +110,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   @override
   void dispose() {
+    for (final target in _registeredStyleTargets) {
+      AmitiaStyleTargetRegistry.unregister(target);
+    }
+    _registeredStyleTargets.clear();
     widget.dataSourceLoader?.cancel(widget.extensionId, widget.contributionId);
     super.dispose();
   }
@@ -654,6 +661,129 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
+  String? get _stylePageId {
+    final pageId = widget.initialContext?['pageId']?.toString().trim() ?? '';
+    if (pageId.isEmpty) return null;
+    final extensionId =
+        widget.initialContext?['extensionId']?.toString().trim() ??
+        widget.extensionId;
+    return 'plugin.${_styleTargetSegment(extensionId)}.'
+        '${_styleTargetSegment(pageId)}';
+  }
+
+  String _styleTargetForNode(SchemaUINode node) {
+    return 'plugin.schema.'
+        '${_styleTargetSegment(widget.extensionId)}.'
+        '${_styleTargetSegment(widget.contributionId)}.'
+        '${_styleTargetSegment(node.id)}';
+  }
+
+  void _registerStyleTargets() {
+    for (final target in _registeredStyleTargets) {
+      AmitiaStyleTargetRegistry.unregister(target);
+    }
+    _registeredStyleTargets.clear();
+
+    void visit(SchemaUINode node) {
+      final target = _styleTargetForNode(node);
+      _registeredStyleTargets.add(target);
+      AmitiaStyleTargetRegistry.register(
+        AmitiaStyleTargetDescriptor(
+          target: target,
+          page: _stylePageId,
+          properties: const <String, String>{
+            'backgroundColor': 'color',
+            'foregroundColor': 'color',
+            'borderColor': 'color',
+            'borderWidth': 'number',
+            'borderRadius': 'length',
+            'padding': 'insets',
+            'margin': 'insets',
+            'fontFamily': 'string',
+            'fontSize': 'number',
+            'fontWeight': 'number',
+            'lineHeight': 'number',
+            'opacity': 'number',
+            'width': 'length',
+            'height': 'length',
+          },
+        ),
+      );
+      for (final child in node.children) {
+        visit(child);
+      }
+    }
+
+    for (final child in widget.document.children) {
+      visit(child);
+    }
+  }
+
+  Widget _applyNodeStyle(
+    BuildContext context,
+    AmitiaResolvedStyle style,
+    Widget child,
+  ) {
+    if (style.properties.isEmpty) return child;
+    Widget result = child;
+    result = IconTheme.merge(
+      data: style.applyIconTheme(IconTheme.of(context)),
+      child: result,
+    );
+    result = DefaultTextStyle.merge(
+      style: style.applyTextStyle(DefaultTextStyle.of(context).style),
+      child: result,
+    );
+
+    final hasBoxStyle =
+        style.has('backgroundColor') ||
+        style.has('background') ||
+        style.has('borderColor') ||
+        style.has('borderWidth') ||
+        style.has('borderRadius') ||
+        style.has('border') ||
+        style.has('borderSide') ||
+        style.has('boxShadow') ||
+        style.has('boxShadows') ||
+        style.has('shadow') ||
+        style.has('gradient');
+    final padding = style.edgeInsets('padding');
+    final margin = style.edgeInsets('margin');
+    final width = style.number('width');
+    final height = style.number('height');
+    if (hasBoxStyle ||
+        padding != null ||
+        margin != null ||
+        width != null ||
+        height != null) {
+      result = Container(
+        width: width,
+        height: height,
+        padding: padding,
+        margin: margin,
+        decoration: hasBoxStyle
+            ? style.applyBoxDecoration(const BoxDecoration())
+            : null,
+        child: result,
+      );
+    }
+
+    final opacity = style.number('opacity');
+    if (opacity != null) {
+      result = Opacity(
+        opacity: opacity.clamp(0.0, 1.0).toDouble(),
+        child: result,
+      );
+    }
+    return result;
+  }
+
+  String _styleTargetSegment(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return 'root';
+    return normalized.replaceAll(RegExp(r'[^a-z0-9_-]+'), '-');
+  }
+
   Widget _buildNode(BuildContext context, SchemaUINode node, int depth) {
     if (depth > 12) {
       return _buildErrorWidget(context, 'Node depth exceeded maximum');
@@ -667,79 +797,98 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
     try {
       final renderedNode = _withResolvedBindings(node);
-      switch (renderedNode.type) {
-        case SchemaUI.nodePage:
-        case SchemaUI.nodeSection:
-          return _buildSection(context, renderedNode, depth);
-        case SchemaUI.nodeStack:
-          return _buildStack(context, renderedNode, depth);
-        case SchemaUI.nodeRow:
-          return _buildRow(context, renderedNode, depth);
-        case SchemaUI.nodeGrid:
-          return _buildGrid(context, renderedNode, depth);
-        case SchemaUI.nodeTabs:
-          return _buildTabs(context, renderedNode);
-        case SchemaUI.nodeTabItem:
-        case SchemaUI.nodeColumn:
-          return _buildColumn(context, renderedNode, depth);
-        case SchemaUI.nodeCard:
-          return _buildCard(context, renderedNode);
-        case SchemaUI.nodeText:
-          return _buildText(context, renderedNode);
-        case SchemaUI.nodeMarkdown:
-          return _buildMarkdown(context, renderedNode);
-        case SchemaUI.nodeBadge:
-          return _buildBadge(context, renderedNode);
-        case SchemaUI.nodeDivider:
-          return _buildDivider(context, renderedNode);
-        case SchemaUI.nodeIcon:
-          return _buildIcon(context, renderedNode);
-        case SchemaUI.nodeImage:
-          return _buildImage(context, renderedNode);
-        case SchemaUI.nodeField:
-          return _buildField(context, renderedNode);
-        case SchemaUI.nodeSelect:
-          return _buildSelect(context, renderedNode);
-        case SchemaUI.nodeSwitch:
-          return _buildSwitch(context, renderedNode);
-        case SchemaUI.nodeSlider:
-          return _buildSlider(context, renderedNode);
-        case SchemaUI.nodeButton:
-          return _buildButton(context, renderedNode);
-        case SchemaUI.nodeButtonGroup:
-          return _buildButtonGroup(context, renderedNode);
-        case SchemaUI.nodeList:
-          return _buildList(context, renderedNode, depth);
-        case SchemaUI.nodeGallery:
-          return _buildGallery(context, renderedNode);
-        case SchemaUI.nodeFilePicker:
-          return _buildFilePicker(context, renderedNode);
-        case SchemaUI.nodeTable:
-          return _buildTable(context, renderedNode);
-        case SchemaUI.nodeEmptyState:
-          return _buildNodeEmptyState(context, renderedNode);
-        case SchemaUI.nodeAlert:
-          return _buildAlert(context, renderedNode);
-        case SchemaUI.nodeProgress:
-          return _buildProgress(context, renderedNode);
-        case SchemaUI.nodeCode:
-          return _buildCode(context, renderedNode);
-        case SchemaUI.nodeKeyValue:
-          return _buildKeyValue(context, renderedNode);
-        case SchemaUI.nodeResourceLink:
-          return _buildResourceLink(context, renderedNode);
-        case SchemaUI.nodePermissionSummary:
-          return _buildPermissionSummary(context, renderedNode);
-        case SchemaUI.nodeRuntimeStatus:
-          return _buildRuntimeStatus(context, renderedNode);
-        case SchemaUI.nodeExtensionSlot:
-          return _buildExtensionSlot(context, renderedNode);
-        default:
-          return _buildErrorWidget(
-            context,
-            'Unknown node type: ${renderedNode.type}',
-          );
+      final styleTarget = _styleTargetForNode(renderedNode);
+      Widget buildRawNode() {
+        switch (renderedNode.type) {
+          case SchemaUI.nodePage:
+          case SchemaUI.nodeSection:
+            return _buildSection(
+              context,
+              renderedNode,
+              depth,
+              styleTarget: styleTarget,
+            );
+          case SchemaUI.nodeStack:
+            return _buildStack(context, renderedNode, depth);
+          case SchemaUI.nodeRow:
+            return _buildRow(context, renderedNode, depth);
+          case SchemaUI.nodeGrid:
+            return _buildGrid(context, renderedNode, depth);
+          case SchemaUI.nodeTabs:
+            return _buildTabs(context, renderedNode);
+          case SchemaUI.nodeTabItem:
+          case SchemaUI.nodeColumn:
+            return _buildColumn(context, renderedNode, depth);
+          case SchemaUI.nodeCard:
+            return _buildCard(context, renderedNode, styleTarget: styleTarget);
+          case SchemaUI.nodeText:
+            return _buildText(context, renderedNode);
+          case SchemaUI.nodeMarkdown:
+            return _buildMarkdown(context, renderedNode);
+          case SchemaUI.nodeBadge:
+            return _buildBadge(context, renderedNode);
+          case SchemaUI.nodeDivider:
+            return _buildDivider(context, renderedNode);
+          case SchemaUI.nodeIcon:
+            return _buildIcon(context, renderedNode);
+          case SchemaUI.nodeImage:
+            return _buildImage(context, renderedNode);
+          case SchemaUI.nodeField:
+            return _buildField(context, renderedNode, styleTarget: styleTarget);
+          case SchemaUI.nodeSelect:
+            return _buildSelect(context, renderedNode);
+          case SchemaUI.nodeSwitch:
+            return _buildSwitch(context, renderedNode);
+          case SchemaUI.nodeSlider:
+            return _buildSlider(context, renderedNode);
+          case SchemaUI.nodeButton:
+            return _buildButton(
+              context,
+              renderedNode,
+              styleTarget: styleTarget,
+            );
+          case SchemaUI.nodeButtonGroup:
+            return _buildButtonGroup(context, renderedNode);
+          case SchemaUI.nodeList:
+            return _buildList(context, renderedNode, depth);
+          case SchemaUI.nodeGallery:
+            return _buildGallery(context, renderedNode);
+          case SchemaUI.nodeFilePicker:
+            return _buildFilePicker(context, renderedNode);
+          case SchemaUI.nodeTable:
+            return _buildTable(context, renderedNode);
+          case SchemaUI.nodeEmptyState:
+            return _buildNodeEmptyState(context, renderedNode);
+          case SchemaUI.nodeAlert:
+            return _buildAlert(context, renderedNode);
+          case SchemaUI.nodeProgress:
+            return _buildProgress(context, renderedNode);
+          case SchemaUI.nodeCode:
+            return _buildCode(context, renderedNode);
+          case SchemaUI.nodeKeyValue:
+            return _buildKeyValue(context, renderedNode);
+          case SchemaUI.nodeResourceLink:
+            return _buildResourceLink(context, renderedNode);
+          case SchemaUI.nodePermissionSummary:
+            return _buildPermissionSummary(context, renderedNode);
+          case SchemaUI.nodeRuntimeStatus:
+            return _buildRuntimeStatus(context, renderedNode);
+          case SchemaUI.nodeExtensionSlot:
+            return _buildExtensionSlot(context, renderedNode);
+          default:
+            return _buildErrorWidget(
+              context,
+              'Unknown node type: ${renderedNode.type}',
+            );
+        }
       }
+
+      return AmitiaStyleTarget(
+        target: styleTarget,
+        builder: (context, style) =>
+            _applyNodeStyle(context, style, buildRawNode()),
+        child: const SizedBox.shrink(),
+      );
     } catch (e) {
       return _buildErrorWidget(context, 'Render error: $e');
     }
@@ -845,7 +994,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     });
   }
 
-  Widget _buildSection(BuildContext context, SchemaUINode node, int depth) {
+  Widget _buildSection(
+    BuildContext context,
+    SchemaUINode node,
+    int depth, {
+    String? styleTarget,
+  }) {
     final title = node.props?['title']?.toString().trim() ?? '';
     final subtitle = node.props?['subtitle']?.toString().trim() ?? '';
     final bordered = node.props?['bordered'] != false;
@@ -869,6 +1023,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       ],
     );
     return AmitiaCard(
+      styleTarget: styleTarget,
       border: bordered ? null : Border.all(color: Colors.transparent, width: 0),
       child: content,
     );
@@ -1038,12 +1193,17 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
-  Widget _buildCard(BuildContext context, SchemaUINode node) {
+  Widget _buildCard(
+    BuildContext context,
+    SchemaUINode node, {
+    String? styleTarget,
+  }) {
     final title = node.props?['title']?.toString().trim() ?? '';
     final bordered = node.props?['bordered'] != false;
     final shadow =
         node.props?['shadow']?.toString().trim().toLowerCase() ?? 'hover';
     Widget card = AmitiaCard(
+      styleTarget: styleTarget,
       border: bordered ? null : Border.all(color: Colors.transparent, width: 0),
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
@@ -1618,7 +1778,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     _updateFormState(binding!.path, value);
   }
 
-  Widget _buildField(BuildContext context, SchemaUINode node) {
+  Widget _buildField(
+    BuildContext context,
+    SchemaUINode node, {
+    String? styleTarget,
+  }) {
     final label = (node.props?['label'] ?? node.props?['title'] ?? '')
         .toString();
     final required = node.props?['required'] == true;
@@ -1677,6 +1841,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           const SizedBox(height: 4),
         ],
         AmitiaTextField(
+          styleTarget: styleTarget,
           key: ValueKey('${node.id}:$text'),
           hintText: node.props?['placeholder']?.toString() ?? '',
           controller: TextEditingController(text: text),
@@ -1981,6 +2146,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final subtitle = value ? activeText : inactiveText;
     final disabled = _isNodeDisabled(node) || !_isEditableBinding(binding);
     return AmitiaSwitchTile(
+      styleTarget: _styleTargetForNode(node),
       title: label,
       subtitle: subtitle.isEmpty ? null : subtitle,
       value: value,
@@ -2056,7 +2222,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
-  Widget _buildButton(BuildContext context, SchemaUINode node) {
+  Widget _buildButton(
+    BuildContext context,
+    SchemaUINode node, {
+    String? styleTarget,
+  }) {
     final label = (node.props?['text'] ?? node.props?['label'] ?? '按钮')
         .toString();
     final kind = (node.props?['variant'] ?? node.props?['type'] ?? '')
@@ -2073,6 +2243,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       _ => AppSpacing.buttonHeight,
     };
     return AmitiaButton(
+      styleTarget: styleTarget,
       label: loading ? '加载中…' : label,
       height: height,
       isSecondary: kind == 'secondary' || kind == 'default' || kind == 'info',
@@ -2090,7 +2261,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       spacing: AppSpacing.sm,
       children: node.children.map((child) {
         if (child.type == SchemaUI.nodeButton)
-          return _buildButton(context, child);
+          return _buildButton(
+            context,
+            child,
+            styleTarget: _styleTargetForNode(child),
+          );
         return _buildNode(context, child, 0);
       }).toList(),
     );

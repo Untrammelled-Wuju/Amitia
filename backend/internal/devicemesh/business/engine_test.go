@@ -25,7 +25,7 @@ func (p testDataPort) Snapshot(ctx context.Context, scope coordination.Execution
 	snapshot := coordination.DataSnapshot{OwnerID: scope.ResourceOwnerID, Role: p.role}
 	store := coordination.NewOwnershipStore(p.db, scope.ResourceOwnerID)
 	for _, kind := range []string{"conversation", "message", "checkpoint", "memory", "fact", "vector", "graph", "working", "summary", "profile", "episodic"} {
-		resources, err := store.List(ctx, kind, scope.RoleID, false)
+		resources, err := store.List(ctx, kind, coordination.StorageRole(scope, kind), false)
 		if err != nil {
 			return snapshot, err
 		}
@@ -43,7 +43,7 @@ func (p testDataPort) SaveInterrupted(ctx context.Context, reply coordination.In
 
 func (p testDataPort) Resource(ctx context.Context, scope coordination.ExecutionScope, kind, id string) (*coordination.Resource, error) {
 	resource, err := coordination.NewOwnershipStore(p.db, scope.ResourceOwnerID).Get(ctx, kind, id)
-	if resource != nil && resource.RoleID != scope.RoleID {
+	if resource != nil && resource.RoleID != coordination.StorageRole(scope, kind) {
 		return nil, coordination.ErrWrongOwner
 	}
 	return resource, err
@@ -87,7 +87,7 @@ func engineHarness(t *testing.T) (*Engine, *sql.DB, *coordination.Service, *test
 	}
 	service := coordination.NewService(db)
 	model := &testModel{}
-	data := testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"device-role"}`)}}
+	data := testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"device-role","globalMemoryEnabled":false}`)}}
 	return NewEngine(service, data, model), db, service, model
 }
 

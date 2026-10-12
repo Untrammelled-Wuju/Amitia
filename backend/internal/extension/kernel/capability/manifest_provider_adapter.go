@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -65,6 +66,13 @@ func runtimeBindingFromManifestModule(mod domain.ModuleDefinition) RuntimeBindin
 		}
 	}
 	rt := runtimeTypeFromManifest(mod.Runtime.Type, mod.Placement)
+	if override, ok := mod.Metadata["providerRuntimeType"].(string); ok && strings.TrimSpace(override) != "" {
+		rt = RuntimeType(strings.TrimSpace(override))
+	}
+	handlerName := mod.Runtime.EntryPoint
+	if override, ok := mod.Metadata["providerHandlerName"].(string); ok && strings.TrimSpace(override) != "" {
+		handlerName = strings.TrimSpace(override)
+	}
 	metadata := make(map[string]any)
 	if mod.Metadata != nil {
 		for k, v := range mod.Metadata {
@@ -74,8 +82,8 @@ func runtimeBindingFromManifestModule(mod domain.ModuleDefinition) RuntimeBindin
 	return RuntimeBinding{
 		RuntimeType: rt,
 		RuntimeID:   string(mod.ID),
-		HandlerName: mod.Runtime.EntryPoint,
-		Endpoint:    mod.Runtime.EntryPoint,
+		HandlerName: handlerName,
+		Endpoint:    handlerName,
 		Metadata:    metadata,
 	}
 }

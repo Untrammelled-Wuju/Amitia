@@ -253,7 +253,10 @@ func (o *Orchestrator) handleProcessorError(ctx context.Context, record *Interac
 	if record.Status == InteractionStatusCommitted || record.Status == InteractionStatusCompleted {
 		log.Printf("[orchestrator] interaction %s committed despite processor error: %v", record.ID, procErr)
 		if resp != nil {
-			resp.RequestID, resp.ConversationID, resp.CharacterID = req.RequestID, req.ConversationID, req.CharacterID
+			resp.RequestID, resp.CharacterID = req.RequestID, req.CharacterID
+			if req.ConversationID != "" || resp.ConversationID == "" {
+				resp.ConversationID = req.ConversationID
+			}
 		}
 		result := o.buildResult(record, resp, OutcomeCompleted, nil)
 		result.Duration = duration

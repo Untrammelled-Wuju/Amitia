@@ -33,12 +33,12 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	allowed := map[string]bool{}
 	switch edit.Kind {
 	case "conversation":
-		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "projectId": true, "lastReadTurnSequence": true}
+		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "lastReadTurnSequence": true}
 	case "project":
 		if edit.ExpectedScope == nil {
 			return coordination.Acknowledgement{}, errors.New("项目修改缺少原数据归属，请重新加载")
 		}
-		allowed = map[string]bool{"title": true, "pinned": true}
+		allowed = map[string]bool{"title": true, "pinned": true, "hidden": true, "workspaces": true, "primaryWorkspaceId": true}
 	case "message":
 		allowed = map[string]bool{"content": true}
 	case "memory":
@@ -61,16 +61,25 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 				return coordination.Acknowledgement{}, errors.New("项目名称无效或超过上限")
 			}
 		}
-		if key == "archived" || key == "pinned" || key == "allowContextUse" {
+		if key == "archived" || key == "pinned" || key == "hidden" || key == "allowContextUse" {
 			var valueBool bool
 			if json.Unmarshal(value, &valueBool) != nil {
 				return coordination.Acknowledgement{}, errors.New("开关参数无效")
 			}
 		}
-		if key == "projectId" {
-			var projectID string
-			if edit.ExpectedScope == nil || json.Unmarshal(value, &projectID) != nil || len(projectID) > 128 || strings.ContainsAny(projectID, "\x00\r\n") {
-				return coordination.Acknowledgement{}, errors.New("项目归属参数无效，请重新加载")
+		if key == "workspaces" {
+			var workspaces []ProjectWorkspace
+			if json.Unmarshal(value, &workspaces) != nil {
+				return coordination.Acknowledgement{}, errors.New("项目工作区参数无效")
+			}
+			if _, _, err := normalizeProjectWorkspaces(workspaces, workspacesPrimaryCandidate(workspaces)); err != nil {
+				return coordination.Acknowledgement{}, err
+			}
+		}
+		if key == "primaryWorkspaceId" {
+			var primaryID string
+			if json.Unmarshal(value, &primaryID) != nil || strings.TrimSpace(primaryID) == "" || len(primaryID) > 512 || strings.ContainsAny(primaryID, "\x00\r\n") {
+				return coordination.Acknowledgement{}, errors.New("项目主工作区参数无效")
 			}
 		}
 		if key == "expiresAt" || key == "archivedAt" {
@@ -114,6 +123,17 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 		return coordination.Acknowledgement{}, err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
+	view := ""
+	if edit.ExpectedScope != nil {
+		if edit.ExpectedScope.MemoryRoleID == coordination.GlobalMemoryRole {
+			view = "global"
+		} else if edit.ExpectedScope.MemoryRoleID != "" {
+			view = "role:" + edit.ExpectedScope.MemoryRoleID
+		}
+	}
+	if err := coordination.ResolveMemoryScope(&scope, role, view); err != nil {
+		return coordination.Acknowledgement{}, err
+	}
 	if edit.ExpectedScope != nil {
 		expected := *edit.ExpectedScope
 		expected.RequestID, expected.TurnID, expected.ExecutionID = scope.RequestID, scope.TurnID, scope.ExecutionID
@@ -171,28 +191,13 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	if resource == nil || resource.Deleted || resource.Revision != edit.ExpectedRevision {
 		return coordination.Acknowledgement{}, coordination.ErrResourceVersion
 	}
-	var dependencies []coordination.ResourceVersion
-	if rawProject, changed := edit.Changes["projectId"]; changed {
-		var projectID string
-		json.Unmarshal(rawProject, &projectID)
-		if projectID != "" {
-			project, err := port.Resource(ctx, scope, "project", projectID)
-			if err != nil {
-				return coordination.Acknowledgement{}, err
-			}
-			if project == nil || project.Deleted || project.OwnerID != scope.ResourceOwnerID || project.RoleID != scope.RoleID {
-				return coordination.Acknowledgement{}, coordination.ErrWrongOwner
-			}
-			dependencies = append(dependencies, coordination.ResourceVersion{Kind: "project", ID: projectID, Revision: project.Revision})
-		}
-	}
 	var document map[string]json.RawMessage
 	if err := json.Unmarshal(resource.Body, &document); err != nil || document == nil {
 		return coordination.Acknowledgement{}, errors.New("数据格式不支持修改")
 	}
 	for key, value := range edit.Changes {
 		document[key] = value
-		if (edit.Kind == "conversation" || edit.Kind == "project") && (key == "archived" || key == "pinned") {
+		if (edit.Kind == "conversation" || edit.Kind == "project") && (key == "archived" || key == "pinned" || key == "hidden") {
 			var enabled bool
 			json.Unmarshal(value, &enabled)
 			var timestamp any
@@ -200,6 +205,42 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 				timestamp = time.Now().UTC().Format(time.RFC3339Nano)
 			}
 			document[key+"At"] = body(timestamp)
+		}
+	}
+	if edit.Kind == "project" {
+		var project Project
+		if encoded, err := json.Marshal(document); err != nil || json.Unmarshal(encoded, &project) != nil {
+			return coordination.Acknowledgement{}, errors.New("项目数据格式无效")
+		}
+		workspaces, primaryID, err := normalizeProjectWorkspaces(project.Workspaces, project.PrimaryWorkspaceID)
+		if err != nil || !projectWorkspacesBelongToDevice(workspaces, scope.TargetDeviceID) {
+			return coordination.Acknowledgement{}, errors.New("项目工作区无效或不属于当前执行设备")
+		}
+		document["workspaces"] = body(workspaces)
+		document["primaryWorkspaceId"] = body(primaryID)
+		if _, changed := edit.Changes["workspaces"]; changed {
+			snapshot, err := e.data.Snapshot(ctx, scope, coordination.DataQuery{Management: true, ResourceKind: "project", Limit: 128})
+			if err != nil {
+				return coordination.Acknowledgement{}, err
+			}
+			requested := make(map[string]bool, len(workspaces))
+			for _, workspace := range workspaces {
+				requested[workspace.ID] = true
+			}
+			for _, row := range snapshot.Resources {
+				if row.Kind != "project" || row.ID == edit.ID {
+					continue
+				}
+				var other Project
+				if json.Unmarshal(row.Body, &other) != nil {
+					continue
+				}
+				for _, workspace := range other.Workspaces {
+					if requested[workspace.ID] {
+						return coordination.Acknowledgement{}, errors.New("该工作区已经属于其他项目")
+					}
+				}
+			}
 		}
 	}
 	if edit.Clear {
@@ -211,7 +252,14 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	}
 	ack := coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{edit.Kind + "/" + edit.ID: resource.Revision + 1, "checkpoint/" + receiptID: 1}}
 	proof := body(map[string]any{"hash": fingerprint, "roleRevision": scope.RoleRevision, "acknowledgement": ack})
-	return e.commit(ctx, coordination.Commit{Scope: scope, Dependencies: dependencies, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: scope.RoleID, SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
+	return e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: edit.Kind, ID: edit.ID, RoleID: coordination.StorageRole(scope, edit.Kind), SourceID: resource.SourceID, ExpectedRevision: resource.Revision, Deleted: edit.Deleted, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
+}
+
+func workspacesPrimaryCandidate(items []ProjectWorkspace) string {
+	if len(items) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(items[0].ID)
 }
 
 func (e *Engine) ReadResource(ctx context.Context, authority Request, kind, id string) (*coordination.Resource, coordination.ExecutionScope, error) {
@@ -232,6 +280,9 @@ func (e *Engine) ReadResource(ctx context.Context, authority Request, kind, id s
 		return nil, scope, err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
+	if err := coordination.ResolveMemoryScope(&scope, role, authority.MemoryView); err != nil {
+		return nil, scope, err
+	}
 	port, ok := e.data.(coordination.ResourcePort)
 	if !ok {
 		return nil, scope, errors.New("数据来源不支持记录查询")
@@ -244,7 +295,7 @@ func (e *Engine) ReadResource(ctx context.Context, authority Request, kind, id s
 	if err := e.coordination.Validate(ctx, scope); err != nil {
 		return nil, scope, err
 	}
-	if resource != nil && (resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != scope.RoleID || resource.Kind != kind || resource.ID != id || resource.Revision < 1 || !json.Valid(resource.Body)) {
+	if resource != nil && (resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != coordination.StorageRole(scope, kind) || resource.Kind != kind || resource.ID != id || resource.Revision < 1 || !json.Valid(resource.Body)) {
 		return nil, scope, coordination.ErrWrongOwner
 	}
 	if err := coordination.ValidateRoleRevision(ctx, e.data, scope); err != nil {

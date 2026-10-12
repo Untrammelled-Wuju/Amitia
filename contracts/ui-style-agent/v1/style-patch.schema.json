@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://u-ai.local/contracts/ui-style-agent/v1/style-patch.schema.json",
+  "title": "U-Ai UI Style Patch",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "targets": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/styleTargetRule"
+      }
+    },
+    "reset": {
+      "$ref": "#/$defs/resetFilter"
+    },
+    "scope": {
+      "$ref": "#/$defs/styleScope"
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "states": {
+      "$ref": "#/$defs/states"
+    },
+    "properties": {
+      "$ref": "#/$defs/styleProperties"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2000
+    },
+    "includeComputed": {
+      "type": "boolean"
+    },
+    "themeMode": {
+      "enum": ["system", "light", "dark"]
+    },
+    "preset": {
+      "enum": ["system", "light", "dark"]
+    },
+    "accentColor": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "fontScale": {
+      "type": "number",
+      "minimum": 0.8,
+      "maximum": 1.4
+    },
+    "cornerStyle": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "dynamicEffect": {
+      "type": "boolean"
+    },
+    "reduceAnimation": {
+      "type": "boolean"
+    },
+    "customPalette": {
+      "type": "object"
+    },
+    "palette": {
+      "type": "object"
+    },
+    "typography": {
+      "type": "object"
+    },
+    "layout": {
+      "type": "object"
+    },
+    "icons": {
+      "type": "object"
+    },
+    "components": {
+      "type": "object"
+    },
+    "componentVariants": {
+      "type": "object"
+    },
+    "background": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "styleScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "enum": ["desktop", "mobile", "web"]
+        },
+        "page": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "surface": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "states": {
+      "type": "array",
+      "maxItems": 24,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9_-]+$"
+      }
+    },
+    "styleProperties": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": true
+    },
+    "styleTargetRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "anyOf": [
+        {
+          "required": ["properties"]
+        },
+        {
+          "required": ["set"]
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "source": {
+          "enum": ["ai", "user"]
+        },
+        "scope": {
+          "$ref": "#/$defs/styleScope"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "states": {
+          "$ref": "#/$defs/states"
+        },
+        "properties": {
+          "$ref": "#/$defs/styleProperties"
+        },
+        "set": {
+          "$ref": "#/$defs/styleProperties"
+        },
+        "transactionId": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    },
+    "resetFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/styleScope"
+        },
+        "target": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "states": {
+          "$ref": "#/$defs/states"
+        },
+        "properties": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "transactionId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "source": {
+          "enum": ["ai", "user"]
+        }
+      }
+    }
+  }
+}

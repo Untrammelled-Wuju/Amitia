@@ -168,7 +168,17 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		if query.ResourceKind != "" && query.ResourceKind != kind {
 			continue
 		}
-		resources, nextCursor, err := p.store.ListPage(ctx, kind, scope.RoleID, query)
+		partition := coordination.StorageRole(scope, kind)
+		if scope.MemoryViewAll && query.Management && coordination.MemoryKind(kind) {
+			partition = coordination.AllMemoryRole
+		}
+		resourceQuery := query
+		if kind == "continuity" && !query.Management {
+			if lease := coordination.CommitLease(ctx); lease != nil {
+				resourceQuery.ResourceID = lease.ContinuityID
+			}
+		}
+		resources, nextCursor, err := p.store.ListPage(ctx, kind, partition, resourceQuery)
 		if err != nil {
 			return snapshot, err
 		}
@@ -204,13 +214,13 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 					continue
 				}
 			}
-			if resource.SourceID != "" {
+			if resource.SourceID != "" && kind != "profile" {
 				if _, found := usableMemories[resource.SourceID]; !found {
 					source, err := p.store.Get(ctx, "memory", resource.SourceID)
 					if err != nil {
 						return snapshot, err
 					}
-					usableMemories[resource.SourceID] = source != nil && !source.Deleted && source.RoleID == scope.RoleID && coordination.ResourceUsable(source.Body, time.Now())
+					usableMemories[resource.SourceID] = source != nil && !source.Deleted && source.RoleID == coordination.StorageRole(scope, "memory") && coordination.ResourceUsable(source.Body, time.Now())
 					if usableMemories[resource.SourceID] {
 						snapshot.Resources = append(snapshot.Resources, *source)
 					}
@@ -255,7 +265,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		}
 	}
 	if query.ResourceKind == "" && len(query.Vector) > 0 {
-		relevant, err := p.semanticSearch(ctx, scope.RoleID, query)
+		relevant, err := p.semanticSearch(ctx, coordination.StorageRole(scope, "memory"), query)
 		if err != nil {
 			return snapshot, err
 		}
@@ -271,7 +281,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			}
 		}
 	}
-	if query.Management && !scope.Coordinated {
+	if query.Management {
 		if err := p.historicalMemoryManagement(ctx, scope, scope.RoleID, query, &snapshot); err != nil {
 			return snapshot, err
 		}
@@ -364,7 +374,14 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	if p.services.DataLifecycle == nil || !p.services.DataLifecycle.IsRetrievalBlocked(scope.RoleID) {
 		var memories []memory.Memory
-		if err := db.Where("character_id=? AND (space_id=? OR space_id='' OR space_id='default') AND verified_status NOT IN ('tombstone','replaced','invalidated','deleted') AND (allow_context_use IS NULL OR allow_context_use=1) AND archived_at IS NULL", scope.RoleID, p.legacySpaceID).Order("importance DESC,updated_at DESC").Limit(limit).Find(&memories).Error; err != nil {
+		selection := db.Where("(space_id=? OR space_id='' OR space_id='default') AND verified_status NOT IN ('tombstone','replaced','invalidated','deleted') AND (allow_context_use IS NULL OR allow_context_use=1) AND archived_at IS NULL", p.legacySpaceID)
+		partition := coordination.StorageRole(scope, "memory")
+		if partition == coordination.GlobalMemoryRole {
+			selection = selection.Where("scope IN ('user','user_global')")
+		} else {
+			selection = selection.Where("character_id=? AND scope NOT IN ('user','user_global')", partition)
+		}
+		if err := selection.Order("importance DESC,updated_at DESC").Limit(limit).Find(&memories).Error; err != nil {
 			return snapshot, err
 		}
 		live := make([]memory.Memory, 0, len(memories))
@@ -378,7 +395,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			return snapshot, err
 		}
 		var profiles []profile.UserProfile
-		if err := db.Where("character_id=? AND (space_id=? OR space_id='' OR space_id='default') AND projection_status='active'", scope.RoleID, p.legacySpaceID).Order("confidence DESC,updated_at DESC").Limit(limit).Find(&profiles).Error; err != nil {
+		if err := db.Where("(space_id=? OR space_id='' OR space_id='default') AND projection_status='active'", p.legacySpaceID).Order("confidence DESC,updated_at DESC").Limit(limit).Find(&profiles).Error; err != nil {
 			return snapshot, err
 		}
 		snapshot.LegacyProfiles, err = appendMeshJSON(profiles)
@@ -386,7 +403,11 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			return snapshot, err
 		}
 		var episodes []episodic.EpisodicMemory
-		if err := db.Where("character_id=? AND (space_id=? OR space_id='' OR space_id='default') AND archived_at IS NULL AND decay_state NOT IN ('forgotten','deleted')", scope.RoleID, p.legacySpaceID).Order("created_at DESC").Limit(limit).Find(&episodes).Error; err != nil {
+		partition = coordination.StorageRole(scope, "episodic")
+		if partition == coordination.GlobalMemoryRole {
+			partition = ""
+		}
+		if err := db.Where("character_id=? AND (space_id=? OR space_id='' OR space_id='default') AND archived_at IS NULL AND decay_state NOT IN ('forgotten','deleted')", partition, p.legacySpaceID).Order("created_at DESC").Limit(limit).Find(&episodes).Error; err != nil {
 			return snapshot, err
 		}
 		snapshot.LegacyEpisodes, err = appendMeshJSON(episodes)
@@ -532,6 +553,8 @@ func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordi
 	historical.ResourceOwnerID = p.ownerID
 	historical.RoleOwnerID = p.ownerID
 	historical.RoleID = storedRole
+	historical.MemoryRoleID = storedRole
+	historical.MemoryViewAll = false
 	role := coordination.Role{ID: storedRole, Name: "设备历史角色", Revision: 1, Profile: json.RawMessage(`{}`)}
 	historical.RoleRevision = role.Revision
 	snapshot, err := p.snapshotWithRole(ctx, historical, query, role)
@@ -545,11 +568,6 @@ func (p *meshLocalDataPort) HistoricalSnapshot(ctx context.Context, scope coordi
 		}
 	}
 	snapshot.Resources = filtered
-	if query.Management && query.HistoricalRoleID != "" {
-		if err := p.historicalMemoryManagement(ctx, scope, storedRole, query, &snapshot); err != nil {
-			return nil, err
-		}
-	}
 	snapshot.Role.Profile = json.RawMessage(`{}`)
 	return &snapshot, nil
 }
@@ -576,6 +594,12 @@ func (p *meshLocalDataPort) Commit(ctx context.Context, commit coordination.Comm
 	if role.Revision != commit.Scope.RoleRevision {
 		return coordination.Acknowledgement{}, coordination.ErrScopeExpired
 	}
+	if commit.MemoryTransfer != nil && commit.MemoryTransfer.ToRoleID != coordination.GlobalMemoryRole {
+		target, err := coordination.ResolveRole(commit.MemoryTransfer.ToRoleID, roles)
+		if err != nil || target.Revision != commit.MemoryTransfer.TargetRoleRevision {
+			return coordination.Acknowledgement{}, coordination.ErrScopeExpired
+		}
+	}
 	var ack coordination.Acknowledgement
 	err = coordination.CommitCurrent(ctx, func() error {
 		var err error
@@ -599,7 +623,7 @@ func (p *meshLocalDataPort) Resource(ctx context.Context, scope coordination.Exe
 	if err != nil {
 		return nil, err
 	}
-	if resource != nil && resource.RoleID != scope.RoleID {
+	if resource != nil && resource.RoleID != coordination.StorageRole(scope, kind) {
 		return nil, coordination.ErrWrongOwner
 	}
 	return resource, nil

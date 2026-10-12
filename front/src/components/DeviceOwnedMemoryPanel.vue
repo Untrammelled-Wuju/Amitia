@@ -1,30 +1,73 @@
 <template>
   <component :is="embedded ? 'section' : ElDrawer" :model-value="visible" title="记忆与数据归属" size="min(620px, 100vw)" @update:model-value="$emit('update:visible', $event)">
-    <el-alert :title="owned.coordinated.value ? '新记忆由当前 Core 保存和管理' : '新记忆由当前设备保存和管理，Core 负责计算'" type="info" :closable="false" />
-    <p class="owner-line">服务：{{ owned.coreId.value }} · 数据所有者：{{ owner || '加载中' }}</p>
-	<el-select v-if="owned.coordinated.value" v-model="source" aria-label="记忆数据来源" class="layer-select">
-	  <el-option label="当前 Core 的数据" value="current" />
-	  <el-option v-for="role in historicalRoles" :key="role.id" :label="`原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
-	</el-select>
-	<el-alert v-if="source !== 'current'" title="原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。" type="info" :closable="false" />
-    <el-select v-model="kind" aria-label="记忆层" class="layer-select">
-      <el-option v-for="layer in layers" :key="layer.id" :label="layer.label" :value="layer.id" />
-    </el-select>
+    <div class="memory-controls">
+      <div v-if="owned.coordinated.value || !fixedKind" class="memory-filters">
+        <div v-if="owned.coordinated.value" class="filter-field">
+          <label :for="`${controlId}-source`">数据来源</label>
+          <el-select :id="`${controlId}-source`" v-model="source" aria-label="记忆数据来源" class="layer-select">
+            <el-option label="当前 Core 的数据" value="current" />
+            <el-option v-for="role in kind === 'profile' ? historicalRoles.slice(0, 1) : historicalRoles" :key="role.id" :label="kind === 'profile' ? '原设备历史' : `原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
+          </el-select>
+        </div>
+        <div v-if="!fixedKind" class="filter-field">
+          <label :for="`${controlId}-kind`">记忆分类</label>
+          <el-select :id="`${controlId}-kind`" v-model="kind" aria-label="记忆层" class="layer-select">
+            <el-option v-for="layer in layers" :key="layer.id" :label="layer.label" :value="layer.id" />
+          </el-select>
+        </div>
+      </div>
+      <div v-if="!fixedKind && kind !== 'profile' && source === 'current'" class="memory-filters">
+        <div class="filter-field">
+          <label :for="`${controlId}-scope`">查看范围</label>
+          <el-select :id="`${controlId}-scope`" v-model="memoryView" aria-label="记忆查看范围">
+            <el-option label="全部记忆" value="all" />
+            <el-option label="全局记忆" value="global" />
+            <el-option v-for="role in owned.roles.value" :key="role.id" :label="role.name" :value="`role:${role.id}`" />
+          </el-select>
+        </div>
+      </div>
+      <div class="ownership-info">
+        <p class="ownership-description">{{ kind === 'profile' ? '用户画像在当前数据来源内全局共享' : owned.coordinated.value ? '新记忆由当前 Core 保存和管理' : '新记忆由当前设备保存和管理，Core 负责计算' }}</p>
+        <dl class="ownership-details">
+          <div class="ownership-item">
+            <dt>服务</dt>
+            <dd><el-tooltip v-if="owned.coreId.value" :content="owned.coreId.value" placement="top"><span class="identity-value" tabindex="0">{{ owned.coreId.value }}</span></el-tooltip><span v-else>未连接</span></dd>
+          </div>
+          <div class="ownership-item">
+            <dt>数据所有者</dt>
+            <dd aria-live="polite"><el-tooltip v-if="owner" :content="owner" placement="top"><span class="identity-value" tabindex="0">{{ owner }}</span></el-tooltip><span v-else>{{ loading ? '加载中…' : error ? '获取失败' : '未获取' }}</span></dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+    <el-alert v-if="source !== 'current'" title="原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <DeviceOwnedMemoryManagement v-if="source === 'current' && kind === 'memory' && loadedScope && !loading" :execution-scope="loadedScope" @saved="load()" />
-    <div v-if="source === 'current' && ['vector', 'graph'].includes(kind)" class="projection-status">
+    <div v-if="source === 'current' && !loadedScope?.memoryViewAll && ['vector', 'graph'].includes(kind)" class="projection-status">
       <p v-for="layer in projection?.status?.layers || []" :key="layer.kind">{{ layer.kind === 'vector' ? '向量' : '图谱' }}：已处理 {{ layer.current }}/{{ layer.total }} · 待更新 {{ layer.pending }} · 重试 {{ layer.retrying }}</p>
       <el-alert v-if="projectionNotice" :title="projectionNotice" type="info" :closable="false" />
-      <el-button :disabled="!projection || loading" :loading="rebuilding" @click="rebuild">重建当前角色索引</el-button>
+      <el-button :disabled="!projection || loading" :loading="rebuilding" @click="rebuild">重建当前范围索引</el-button>
     </div>
     <div v-loading="loading">
+      <OwnedMemoryGraph v-if="kind === 'graph'" :resources="rows" :loading="loading" :error="error" />
+      <div v-if="kind === 'graph' && source === 'current' && rows.length" class="record-actions">
+        <el-select v-model="graphTransferId" filterable placeholder="选择要迁移的图谱关系" aria-label="待迁移图谱关系">
+          <el-option v-for="row in rows" :key="row.id" :label="row.body.key || row.id" :value="row.id" />
+        </el-select>
+        <el-button :disabled="loading || !graphTransferId" @click="openTransfer(rows.find(row => row.id === graphTransferId))">调整所属分区</el-button>
+      </div>
+      <template v-else>
       <article v-for="row in rows" :key="`${row.ownerId}/${row.kind}/${row.id}`" class="owned-memory-card">
         <div class="card-title">{{ row.body.key || row.body.title || row.id }}</div>
         <div class="record-text">{{ content(row) }}</div>
         <div class="record-state">
+          <el-tag v-if="['memory', 'episodic', 'graph', 'fact', 'vector'].includes(row.kind)" size="small">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '全局记忆' : '角色记忆' }}</el-tag>
           <el-tag size="small">版本 {{ row.revision }}</el-tag>
           <el-tag v-if="row.body.allowContextUse === false" size="small" type="warning">已停用</el-tag>
           <el-tag v-if="row.body.expiresAt" size="small" type="info">到期 {{ row.body.expiresAt }}</el-tag>
+        </div>
+        <div v-if="source === 'current' && ['memory', 'episodic', 'fact', 'vector'].includes(row.kind) && row.executionScope" class="record-actions">
+          <el-button size="small" :disabled="loading" @click="openTransfer(row)">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '降级为角色记忆' : '提升为全局记忆' }}</el-button>
         </div>
         <div v-if="['memory', 'summary'].includes(row.kind) && source === 'current' && row.revision > 0" class="record-actions">
           <el-button size="small" :disabled="loading" @click="editContent(row)">编辑</el-button>
@@ -37,22 +80,37 @@
         </div>
       </article>
       <el-empty v-if="!loading && !error && rows.length === 0" description="当前角色在此数据来源中暂无记录" />
+      </template>
     </div>
     <el-button v-if="next || nextLegacy" :loading="loading" @click="load(true)">加载更多</el-button>
     <el-button :disabled="loading" @click="load(false)">刷新</el-button>
+    <el-dialog v-model="transferOpen" title="调整记忆所属分区" width="min(480px, 92vw)" :close-on-click-modal="!transferring" :show-close="!transferring">
+      <p>移动这条记录及关联事实、向量和图谱，保留来源和历史。原分区不再保留副本。</p>
+      <el-select v-model="transferTarget" aria-label="目标记忆分区" :disabled="transferring">
+        <el-option label="全局记忆" value="global" /><el-option label="角色记忆" value="character" />
+      </el-select>
+      <el-select v-if="transferTarget === 'character'" v-model="transferRole" filterable aria-label="目标角色" placeholder="选择目标角色" :disabled="transferring">
+        <el-option v-for="role in owned.roles.value" :key="role.id" :label="role.name" :value="role.id" />
+      </el-select>
+      <template #footer><el-button :disabled="transferring" @click="transferOpen = false">取消</el-button><el-button type="primary" :loading="transferring" :disabled="transferTarget === 'character' && !transferRole" @click="confirmTransfer">确认迁移</el-button></template>
+    </el-dialog>
   </component>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted, useId } from "vue";
 import { ElDrawer, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import DeviceOwnedMemoryManagement from "./DeviceOwnedMemoryManagement.vue";
+import OwnedMemoryGraph from "./OwnedMemoryGraph.vue";
+import { GLOBAL_MEMORY_ROLE, memoryStorageRole, memoryRecordScope } from "@/runtime/owned-memory-scope";
+import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 
-const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string }>();
+const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string }>();
 defineEmits<{ "update:visible": [value: boolean] }>();
 const owned = useDeviceOwnedConversation();
+const controlId = useId();
 const layers = [
   { id: "memory", label: "原始记忆" }, { id: "working", label: "工作记忆" },
   { id: "profile", label: "用户画像" }, { id: "episodic", label: "情节记忆" },
@@ -64,6 +122,30 @@ const rows = ref<any[]>([]);
 const next = ref("");
 const nextLegacy = ref("");
 const source = ref("current");
+const memoryView = ref(props.requestedMemoryView || "");
+watch(() => props.requestedMemoryView, value => { memoryView.value = value || ""; });
+const transferOpen = ref(false);
+const transferring = ref(false);
+const transferTarget = ref<"global" | "character">("global");
+const transferRole = ref("");
+const transferRecord = ref<any>();
+const graphTransferId = ref("");
+
+function openTransfer(row: any) {
+  if (!row || transferring.value) return;
+  transferRecord.value = JSON.parse(JSON.stringify(row));
+  transferTarget.value = row.roleId === GLOBAL_MEMORY_ROLE ? "character" : "global";
+  transferRole.value = props.characterId;
+  transferOpen.value = true;
+}
+async function confirmTransfer() {
+  if (!transferRecord.value || transferring.value) return;
+  const record = transferRecord.value;
+  transferring.value = true;
+  try { await transferMemoryScope(record, transferTarget.value, transferRole.value); transferOpen.value = false; await load(); }
+  catch (cause) { error.value = cause instanceof Error ? cause.message : "分区迁移失败"; }
+  finally { transferring.value = false; }
+}
 const historicalRoles = ref<Array<{id:string;name:string}>>([]);
 const owner = ref("");
 const error = ref("");
@@ -74,6 +156,7 @@ const rebuilding = ref(false);
 const loadedScope = ref<OwnedExecutionScope>();
 let generation = 0;
 let scope = "";
+let authorityInvalidated = false;
 let providerTimer: ReturnType<typeof setInterval> | undefined;
 
 function content(row: any): string {
@@ -84,6 +167,7 @@ function content(row: any): string {
 }
 
 async function load(older = false) {
+  authorityInvalidated = false;
   const ticket = ++generation;
   const currentKind = kind.value;
   if (!older) { projection.value = null; projectionNotice.value = ""; }
@@ -98,7 +182,7 @@ async function load(older = false) {
       historicalRoles.value = catalog;
     }
     const historical = source.value.startsWith("history:");
-	    const result = await owned.data(currentKind, props.characterId, historical ? "" : props.conversationId, !historical && older ? next.value : "", historical ? { historicalRoleId: source.value.slice(8), historicalCursor: older ? next.value : "", historicalLegacyCursor: older ? nextLegacy.value : "" } : { legacyCursor: older ? nextLegacy.value : "" });
+	    const result = await owned.data(currentKind, props.characterId, historical ? "" : props.conversationId, !historical && older ? next.value : "", historical ? { historicalRoleId: source.value.slice(8), historicalCursor: older ? next.value : "", historicalLegacyCursor: older ? nextLegacy.value : "" } : { legacyCursor: older ? nextLegacy.value : "", ...(memoryView.value ? { memoryView: memoryView.value } : {}) });
     if (ticket !== generation || !props.visible) return;
     const currentScope = JSON.stringify(result.executionScope, (key, value) => ["requestId", "turnId", "executionId"].includes(key) ? undefined : value);
     if (older && scope !== currentScope) throw new Error("服务或数据归属已变化，请刷新后继续查看");
@@ -110,25 +194,35 @@ async function load(older = false) {
     loadedScope.value = result.executionScope;
     const merged = new Map((older ? rows.value : []).map((row: any) => [`${row.ownerId}/${row.kind}/${row.id}`, row]));
     for (const row of snapshot.resources.filter((row: any) => row.kind === currentKind)) {
-      if (row.ownerId !== snapshot.ownerId || row.roleId !== (historical ? source.value.slice(8) : props.characterId)) throw new Error("记忆所属设备或角色无效，请重新加载");
-      merged.set(`${row.ownerId}/${row.kind}/${row.id}`, { ...row, executionScope: result.executionScope });
+      if (row.ownerId !== snapshot.ownerId || !row.roleId || !result.executionScope.memoryViewAll && row.roleId !== (historical ? source.value.slice(8) : memoryStorageRole(result.executionScope, currentKind))) throw new Error("记忆所属设备或角色无效，请重新加载");
+      const recordScope = result.executionScope.memoryViewAll ? memoryRecordScope(result.executionScope, row.roleId) : result.executionScope;
+      merged.set(`${row.ownerId}/${row.kind}/${row.id}`, { ...row, executionScope: recordScope });
     }
     const legacy = currentKind === "memory" ? snapshot.legacyMemories : currentKind === "profile" ? snapshot.legacyProfiles : currentKind === "episodic" ? snapshot.legacyEpisodes : [];
     for (const row of legacy || []) {
       const id = `legacy/${row.id}`;
-      merged.set(`${snapshot.ownerId}/${currentKind}/${id}`, { id, kind: currentKind, ownerId: snapshot.ownerId, revision: 0, body: { key: row.key || row.title || row.fieldName, content: row, expiresAt: row.expiresAt, allowContextUse: row.allowContextUse } });
+      const partition = currentKind === "memory" ? ['user','user_global'].includes(row.scope) ? GLOBAL_MEMORY_ROLE : row.characterId : currentKind === "profile" || !row.characterId ? GLOBAL_MEMORY_ROLE : row.characterId;
+      const recordScope = memoryRecordScope(result.executionScope, partition || props.characterId);
+      merged.set(`${snapshot.ownerId}/${currentKind}/${id}`, { id, kind: currentKind, ownerId: snapshot.ownerId, roleId: partition, revision: 0, executionScope: recordScope, body: { key: row.key || row.title || row.fieldName, content: row, expiresAt: row.expiresAt, allowContextUse: row.allowContextUse } });
     }
     rows.value = Array.from(merged.values());
+    if(currentKind==='graph'){
+      for(const row of snapshot.legacyGraphs || []){
+        if(row.ownerId!==snapshot.ownerId || !row.roleId || (!result.executionScope.memoryViewAll && row.roleId!==memoryStorageRole(result.executionScope,'graph'))) throw new Error('历史图谱分区已变化，请重新加载');
+        merged.set(`${row.ownerId}/graph/${row.id}`,{...row,executionScope:memoryRecordScope(result.executionScope,row.roleId)});
+      }
+      rows.value=Array.from(merged.values());
+    }
     const cursor = snapshot.nextCursors?.[currentKind] || "";
-    const legacyKinds: Record<string, string> = { memory: "legacyMemory", profile: "legacyProfile", episodic: "legacyEpisode" };
+    const legacyKinds: Record<string, string> = { memory: "legacyMemory", profile: "legacyProfile", episodic: "legacyEpisode",graph:"legacyGraph" };
     const legacyKind = legacyKinds[currentKind];
     const legacyCursor = legacyKind ? snapshot.nextCursors?.[legacyKind] || "" : "";
     if (older && ((cursor && cursor === next.value) || (legacyCursor && legacyCursor === nextLegacy.value))) throw new Error("分页游标重复，请刷新后重试");
     next.value = cursor;
     nextLegacy.value = legacyCursor;
-    if (source.value === "current" && ["vector", "graph"].includes(currentKind)) {
+    if (source.value === "current" && !result.executionScope.memoryViewAll && ["vector", "graph"].includes(currentKind)) {
       try {
-        const value = await owned.projections(props.characterId);
+        const value = await owned.projections(props.characterId, undefined, memoryView.value || undefined);
         if (JSON.stringify(value.executionScope, (key, item) => ["requestId", "turnId", "executionId"].includes(key) ? undefined : item) !== currentScope) throw new Error("索引数据归属已变化，请刷新后重试");
         if (ticket === generation) projection.value = value;
       } catch (cause) {
@@ -204,6 +298,7 @@ async function remove(row: any) {
 
 function clearAuthority() {
   generation++;
+  authorityInvalidated = true;
   historicalRoles.value = [];
   source.value = "current";
   rows.value = [];
@@ -215,8 +310,9 @@ function clearAuthority() {
   scope = "";
   loading.value = false;
 }
-watch(() => [props.characterId, owned.coreId.value, owned.policy.value?.providerEpoch, owned.policy.value?.modeRevision, owned.policy.value?.permissionRevision], clearAuthority, { flush: "sync" });
-watch(() => [props.visible, props.characterId, props.conversationId, kind.value, source.value, owned.coreId.value, owned.policy.value?.providerEpoch, owned.policy.value?.modeRevision, owned.policy.value?.permissionRevision], () => {
+function reloadScope() { if (props.visible && props.characterId) void load(); }
+watch([() => props.characterId, owned.coreId, () => owned.policy.value?.providerEpoch, () => owned.policy.value?.modeRevision, () => owned.policy.value?.permissionRevision], clearAuthority, { flush: "sync" });
+watch([() => props.visible, () => props.characterId, () => props.conversationId, kind, source, memoryView, owned.coreId, () => owned.policy.value?.providerEpoch, () => owned.policy.value?.modeRevision, () => owned.policy.value?.permissionRevision], () => {
   generation++;
   loading.value = false;
   if (props.visible && props.characterId) void load();
@@ -224,19 +320,41 @@ watch(() => [props.visible, props.characterId, props.conversationId, kind.value,
 onMounted(() => {
   window.addEventListener("amitia:runtime-connection-changed", clearAuthority);
   window.addEventListener("amitia:execution-scope-changed", clearAuthority);
-  providerTimer = setInterval(() => { if (props.visible) void owned.refresh().catch(clearAuthority); }, 3000);
+  window.addEventListener("amitia:memory-scope-changed", reloadScope);
+  providerTimer = setInterval(() => {
+    if (!props.visible) return;
+    void owned.refresh().then((ready) => {
+      if (ready && props.visible && props.characterId && authorityInvalidated && !loading.value) void load();
+    }).catch(clearAuthority);
+  }, 3000);
 });
 onUnmounted(() => {
   if (providerTimer) clearInterval(providerTimer);
   window.removeEventListener("amitia:runtime-connection-changed", clearAuthority);
   window.removeEventListener("amitia:execution-scope-changed", clearAuthority);
+  window.removeEventListener("amitia:memory-scope-changed", reloadScope);
   clearAuthority();
 });
 </script>
 
 <style scoped>
-.owner-line { overflow-wrap: anywhere; color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); }
-.layer-select { width: 100%; margin-bottom: 16px; }
+.memory-controls { margin-bottom: 20px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); }
+.memory-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 16px; padding: 16px; }
+.filter-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.filter-field label { color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.5; }
+.layer-select { width: 100%; }
+.ownership-info { padding: 12px 16px; }
+.memory-filters + .ownership-info { border-top: 1px solid var(--ac-color-border); }
+.ownership-description { margin: 0 0 8px; color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.6; }
+.ownership-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px 24px; margin: 0; }
+.ownership-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: var(--ac-font-size-xs); line-height: 1.6; }
+.ownership-item dt { flex-shrink: 0; color: var(--ac-color-text-secondary); }
+.ownership-item dd { min-width: 0; margin: 0; color: var(--ac-color-text-primary); }
+.identity-value { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.identity-value:focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: 2px; border-radius: 2px; }
+@media (max-width: 640px) {
+  .layer-select :deep(.el-select__wrapper) { min-height: 44px; }
+}
 .owned-memory-card { padding: 14px; margin-bottom: 10px; border-radius: var(--ac-radius-sm); background: var(--ac-color-bg-secondary); }
 .card-title { font-weight: 500; overflow-wrap: anywhere; }
 .record-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0; }

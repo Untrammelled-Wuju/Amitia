@@ -1,39 +1,39 @@
 <template>
-  <div class="advanced-page">
+  <div class="advanced-page" data-amitia-ui="settings.section">
     <div class="head">
       <div>
         <h2>高级系统</h2>
         <p>Space / 设备安全、审计、运行观测与语音会话的统一管理入口。</p>
       </div>
-      <el-button :loading="loading" @click="loadAll">刷新</el-button>
+      <el-button :loading="loading" data-amitia-ui="settings.button" @click="loadAll">刷新</el-button>
     </div>
 
-    <el-tabs v-model="tab">
+    <el-tabs v-model="tab" data-amitia-ui="settings.tab">
       <el-tab-pane label="Space 与设备安全" name="security">
-        <el-card shadow="never">
+        <el-card shadow="never" data-amitia-ui="settings.card">
           <template #header>访问安全</template>
           <el-form label-width="130px">
-            <el-form-item label="要求认证"><el-switch v-model="accessConfig.requireAuth" /></el-form-item>
-            <el-form-item label="允许 Origin"><el-input v-model="accessConfig.allowedOrigins" /></el-form-item>
-            <el-form-item label="限流"><el-switch v-model="accessConfig.rateLimit" /></el-form-item>
-            <el-button type="primary" @click="saveAccess">保存</el-button>
+            <el-form-item label="要求认证"><el-switch v-model="accessConfig.requireAuth" data-amitia-ui="component.switch" /></el-form-item>
+            <el-form-item label="允许 Origin"><el-input v-model="accessConfig.allowedOrigins" data-amitia-ui="component.input" /></el-form-item>
+            <el-form-item label="限流"><el-switch v-model="accessConfig.rateLimit" data-amitia-ui="component.switch" /></el-form-item>
+            <el-button type="primary" data-amitia-ui="settings.button" @click="saveAccess">保存</el-button>
           </el-form>
         </el-card>
-        <el-card shadow="never"><template #header>设备身份状态</template><pre class="json">{{ pretty(identityCheck) }}</pre></el-card>
-        <el-card shadow="never"><template #header>访问状态</template><pre class="json">{{ pretty(accessStatus) }}</pre></el-card>
+        <el-card shadow="never" data-amitia-ui="settings.card"><template #header>设备身份状态</template><pre class="json">{{ pretty(identityCheck) }}</pre></el-card>
+        <el-card shadow="never" data-amitia-ui="settings.card"><template #header>访问状态</template><pre class="json">{{ pretty(accessStatus) }}</pre></el-card>
       </el-tab-pane>
 
       <el-tab-pane label="审计" name="audit">
-        <el-card shadow="never">
+        <el-card shadow="never" data-amitia-ui="settings.card">
           <template #header>
             <div class="card-head">
               <span>系统审计</span>
-              <div><el-button size="small" @click="saveAuditSettings">保存设置</el-button><el-button size="small" type="danger" plain @click="clearAudit">清空日志</el-button></div>
+              <div><el-button size="small" data-amitia-ui="settings.button" @click="saveAuditSettings">保存设置</el-button><el-button size="small" type="danger" plain data-amitia-ui="settings.button" @click="clearAudit">清空日志</el-button></div>
             </div>
           </template>
           <el-form inline>
-            <el-form-item label="启用"><el-switch v-model="auditSettings.enabled" /></el-form-item>
-            <el-form-item label="记录动作"><el-switch v-model="auditSettings.logActions" /></el-form-item>
+            <el-form-item label="启用"><el-switch v-model="auditSettings.enabled" data-amitia-ui="component.switch" /></el-form-item>
+            <el-form-item label="记录动作"><el-switch v-model="auditSettings.logActions" data-amitia-ui="component.switch" /></el-form-item>
             <el-form-item label="保留天数"><el-input-number v-model="auditSettings.retentionDays" :min="1" :max="3650" /></el-form-item>
           </el-form>
           <p>日志总数：{{ auditStats.total ?? 0 }} · 可审计动作：{{ auditActions.join('、') || '—' }}</p>
@@ -53,7 +53,7 @@
         <el-card shadow="never">
           <template #header>日志文件</template>
           <el-table :data="logFiles"><el-table-column prop="name" label="文件" min-width="220"/><el-table-column prop="size" label="大小" width="120"/><el-table-column label="操作" width="100"><template #default="{row}"><el-button link type="primary" @click="openLog(row.name)">查看</el-button></template></el-table-column></el-table>
-          <el-dialog v-model="logOpen" :title="logName" width="70%"><pre class="json log-content">{{ logContent }}</pre></el-dialog>
+          <el-dialog v-model="logOpen" data-amitia-ui="settings.dialog" :title="logName" width="70%"><pre class="json log-content">{{ logContent }}</pre></el-dialog>
         </el-card>
         <el-card shadow="never"><template #header><div class="card-head"><span>Usage 分析</span><el-button size="small" type="danger" plain @click="clearUsage">清空统计</el-button></div></template><h4>按天</h4><pre class="json">{{ pretty(usageDaily) }}</pre><h4>按模型</h4><pre class="json">{{ pretty(usageModels) }}</pre><h4>按来源</h4><pre class="json">{{ pretty(usageSources) }}</pre></el-card>
       </el-tab-pane>

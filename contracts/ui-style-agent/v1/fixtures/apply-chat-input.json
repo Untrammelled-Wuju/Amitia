@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "id": "chat-input-black",
+      "source": "ai",
+      "scope": {
+        "platform": "desktop",
+        "page": "chat"
+      },
+      "target": "chat.composer.input",
+      "states": ["default", "focus"],
+      "properties": {
+        "backgroundColor": "#000000",
+        "foregroundColor": "#FFFFFF",
+        "placeholderColor": "#9CA3AF",
+        "borderColor": "#111111",
+        "borderWidth": 1,
+        "borderRadius": 16,
+        "padding": {
+          "x": 12,
+          "y": 10
+        }
+      }
+    }
+  ]
+}

@@ -11,11 +11,11 @@ SPDX-License-Identifier: AGPL-3.0-only
     :context="conversationProviderContext"
     :actions="conversationHostActions"
   />
-  <div v-else class="webchat-page">
-    <el-dialog v-if="boundCallScope" v-model="callActive" fullscreen :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" destroy-on-close>
+  <div v-else class="webchat-page" data-amitia-ui="chat.page">
+    <el-dialog v-if="boundCallScope" v-model="callActive" data-amitia-ui="component.dialog" fullscreen :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" destroy-on-close>
       <RealtimeCallDialog :mode="callMode" voice-type="" resource-id="" :conversation-id="boundCallConversation" :character-id="boundCallScope.roleId" :expected-execution-scope="boundCallScope" :historical-role-id="boundCallHistoricalRole" :char-name="charName" :char-avatar="charAvatar" @close="handleEndCall" @conversation-saved="handleOwnedCallSaved" />
     </el-dialog>
-    <section class="chat-surface">
+    <section class="chat-surface" data-amitia-ui="chat.surface">
     <el-alert v-if="owned.notice.value" :title="owned.notice.value" type="warning" show-icon :closable="false" />
     <AutomationStatusIndicator :status="automationStatus" />
 <ChatBanners
@@ -124,7 +124,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         />
       </aside>
     </div>
-    <el-drawer v-if="hasConversationSidebar && isSmallViewport" v-model="sidebarDrawerOpen" direction="rtl" size="320px" :with-header="false" modal-class="sidebar-drawer-modal">
+    <el-drawer v-if="hasConversationSidebar && isSmallViewport" v-model="sidebarDrawerOpen" data-amitia-ui="component.bottom_sheet" direction="rtl" size="320px" :with-header="false" modal-class="sidebar-drawer-modal">
       <UIProviderHost
         capability="conversation.sidebar"
         :fallback="BuiltinConversationSidebar"
@@ -144,7 +144,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :has-status-extensions="hasStatusExtensions"
       />
     </div>
-    <div class="composer-region"><UIProviderHost
+    <div class="composer-region" data-amitia-ui="chat.composer"><UIProviderHost
       capability="conversation.composer"
       :fallback="ChatInput"
       :context="chatExtensionContext"
@@ -190,7 +190,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <DeviceOwnedMemoryPanel v-if="owned.enabled.value" v-model:visible="showMemories" :character-id="characterId" :conversation-id="convId" />
     <MemoryPanel v-else v-model:visible="showMemories" :memories="memories" />
 
-    <el-drawer v-model="showSummaryDrawer" title="会话摘要" direction="rtl" size="420px">
+    <el-drawer v-model="showSummaryDrawer" title="会话摘要" data-amitia-ui="component.drawer" direction="rtl" size="420px">
       <div v-if="convSummary" class="summary-drawer-text">{{ convSummary }}</div>
       <el-empty v-else description="暂无会话摘要" :image-size="88" />
     </el-drawer>
@@ -212,6 +212,7 @@ import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
 import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
+import { OwnedChatStateChangedError, pollOwnedChat } from "@/runtime/owned-chat-poll";
 import { useConversationWorkspace } from "../../composables/useConversationWorkspace";
 import {
   loadChatPermissionMode,
@@ -998,6 +999,16 @@ onMounted(async () => {
     }) ?? null;
   void loadLlmModels();
   let ownedInitialized = false;
+  let ownedDataRefreshPending = false;
+  let ownedLoadError = "";
+  const reportOwnedLoadError = (error: unknown) => {
+    ownedLoadError = error instanceof Error ? error.message : "聊天数据加载失败，请重试";
+    modelError.value = ownedLoadError;
+  };
+  const clearOwnedLoadError = () => {
+    if (ownedLoadError && modelError.value === ownedLoadError) modelError.value = "";
+    ownedLoadError = "";
+  };
   const initializeOwned = async () => {
     characters.value = owned.roles.value;
     const selectedId = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
@@ -1005,6 +1016,7 @@ onMounted(async () => {
     if (selected) selectCharacter(selected);
     else { characterId.value = ""; modelError.value = characters.value.length ? "请选择调用角色后发送消息" : "没有可用角色，拒绝调用"; }
     if (characterId.value) { await chatStore.fetchSidebar(); await loadCharacterConversation(); await fetchConversations(); }
+    clearOwnedLoadError();
     ownedInitialized = true;
   };
   const startOwnedPolling = () => {
@@ -1014,29 +1026,37 @@ onMounted(async () => {
       ownedPolling = true;
       try {
         const previousProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
-        const available = await owned.refresh();
-        if (ownedDisposed || !available) return;
-        if (!ownedInitialized) { await initializeOwned(); return; }
-        characters.value = owned.roles.value;
-        const currentProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
-        if (previousProvider !== currentProvider) await chatStore.fetchSidebar();
-        if (!characters.value.some((character) => character.id === characterId.value)) { characterId.value = ""; modelError.value = "当前角色已失效，请重新选择角色"; }
-      } catch {
-        if (!ownedDisposed && !owned.notice.value.includes("等待新服务批准")) owned.stopLocal("云端服务暂不可用，当前回复已中断；不会自动切换到本机模型。");
+        await pollOwnedChat(owned, async () => {
+          if (!ownedInitialized) { await initializeOwned(); return; }
+          characters.value = owned.roles.value;
+          const currentProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
+          if (previousProvider !== currentProvider || ownedDataRefreshPending) {
+            await chatStore.fetchSidebar();
+            ownedDataRefreshPending = false;
+            clearOwnedLoadError();
+          }
+          if (!characters.value.some((character) => character.id === characterId.value)) { characterId.value = ""; modelError.value = "当前角色已失效，请重新选择角色"; }
+        }, (error) => {
+          ownedDataRefreshPending = true;
+          reportOwnedLoadError(error);
+        }, () => ownedDisposed);
       } finally { ownedPolling = false; }
     }, 3000);
   };
   let available = false;
   try { available = await owned.refresh(); }
   catch (error) {
-    modelError.value = error instanceof Error ? error.message : "云端服务暂不可用";
+    if (ownedDisposed) return;
+    if (!(error instanceof OwnedChatStateChangedError) && !owned.notice.value.includes("等待新服务批准")) owned.markUnavailable();
+    reportOwnedLoadError(error);
     startOwnedPolling();
     return;
   }
   if (ownedDisposed) return;
   if (available) {
-    await initializeOwned();
-    startOwnedPolling();
+    try { await initializeOwned(); }
+    catch (error) { if (!ownedDisposed) reportOwnedLoadError(error); }
+    finally { startOwnedPolling(); }
     return;
   }
   connectProactiveSSE();

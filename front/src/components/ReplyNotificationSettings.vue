@@ -1,19 +1,19 @@
 <template>
-  <el-card shadow="never" class="reply-settings">
+  <el-card shadow="never" class="reply-settings" data-amitia-ui="component.card">
     <template #header>对话通知</template>
     <div class="setting-row">
       <div>
         <strong>回复完成通知</strong>
         <p>AI 回复完成且应用处于后台时发送系统通知。前台、失败或取消的回复不通知。</p>
       </div>
-      <el-switch :model-value="enabled" :disabled="busy" aria-label="回复完成通知" @update:model-value="update" />
+      <el-switch data-amitia-ui="component.switch" :model-value="enabled" :disabled="busy" aria-label="回复完成通知" @update:model-value="update" />
     </div>
     <div class="setting-row sound-row">
       <div>
         <strong>回复提示音</strong>
         <p>仅后台正常完成回复时播放，可独立于通知开启。音量由系统控制。</p>
       </div>
-      <el-switch :model-value="soundEnabled" :disabled="busy" aria-label="回复提示音" @update:model-value="updateSound" />
+      <el-switch data-amitia-ui="component.switch" :model-value="soundEnabled" :disabled="busy" aria-label="回复提示音" @update:model-value="updateSound" />
     </div>
   </el-card>
 </template>

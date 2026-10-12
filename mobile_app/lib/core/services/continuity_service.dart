@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import '../backend_transport/backend_service_api.dart';
 import '../models/continuity.dart';
+import 'owned_memory_scope.dart';
 
 class ContinuityService {
   ContinuityService(this._api, {bool Function()? isBound})
@@ -11,6 +12,7 @@ class ContinuityService {
   final bool Function() _isBound;
 
   String selectedRole = '';
+  String memoryView = 'all';
   final _threadRoles = <String, String>{};
   Map<String, dynamic>? _coordination;
   String _providerStamp = '';
@@ -55,8 +57,8 @@ class ContinuityService {
     if (selectedRole.isEmpty && policy is Map) {
       selectedRole = (policy['selectedRole'] ?? '').toString();
     }
-    if (selectedRole.isEmpty && roles.length == 1) {
-      selectedRole = roles.single['id'].toString();
+    if (selectedRole.isEmpty && roles.isNotEmpty) {
+      selectedRole = roles.first['id'].toString();
     }
     return roles;
   }
@@ -76,10 +78,22 @@ class ContinuityService {
 
   Map<String, dynamic> _managementDocument(Map document, [Map? expected]) {
     final scope = document['managementExecutionScope'];
+    String frame(Map value) => _scopeStamp(
+      Map<String, dynamic>.from(value)
+        ..remove('roleId')
+        ..remove('roleRevision')
+        ..remove('memoryRoleId')
+        ..remove('memoryViewAll')
+        ..remove('continuityRoleId'),
+    );
     if (scope is! Map ||
         document['ownerId'] != scope['resourceOwnerId'] ||
-        document['thread']?['characterId'] != scope['roleId'] ||
-        (expected != null && _scopeStamp(scope) != _scopeStamp(expected))) {
+        (document['memoryPartition'] ?? document['thread']?['characterId']) !=
+            memoryStorageRole(scope, 'continuity') ||
+        (expected != null &&
+            (document['memoryPartition'] != null
+                ? frame(scope) != frame(expected)
+                : _scopeStamp(scope) != _scopeStamp(expected)))) {
       throw StateError('持续事项的管理范围或数据归属无效，请重新加载');
     }
     return {
@@ -104,7 +118,14 @@ class ContinuityService {
       throw StateError('请从持续事项列表打开并确认原始归属');
     final document = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/continuity',
-      queryParameters: {'id': id, 'characterId': role},
+      queryParameters: {
+        'id': id,
+        'characterId': role,
+        if (expectedDocument?['executionScope'] is Map)
+          'memoryView': continuityViewForScope(
+            expectedDocument!['executionScope'] as Map,
+          ),
+      },
     );
     if (document == null || document['thread'] is! Map) {
       throw StateError('持续事项数据无效');
@@ -210,6 +231,7 @@ class ContinuityService {
             'characterId': role,
             'pagination': '1',
             'cursor': cursor,
+            'memoryView': memoryView,
           },
         );
         if (page == null ||
@@ -346,7 +368,11 @@ class ContinuityService {
     if (role == null) return null;
     final result = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/data',
-      queryParameters: {'kind': 'memory', 'characterId': role},
+      queryParameters: {
+        'kind': 'continuity',
+        'characterId': role,
+        'memoryView': memoryView,
+      },
     );
     final scope = result?['executionScope'];
     if (scope is! Map ||
@@ -354,7 +380,8 @@ class ContinuityService {
         scope['roleId'] != role)
       throw StateError('无法确认持续事项创建的数据归属');
     return {
-      'executionScope': Map<String, dynamic>.from(scope),
+      'executionScope': Map<String, dynamic>.from(scope)
+        ..remove('memoryViewAll'),
       'coreId': scope['coreId'],
       'ownerId': scope['resourceOwnerId'],
       'modeRevision': scope['modeRevision'],

@@ -41,7 +41,9 @@ func (r *repository) List(q EpisodicListQuery) ([]EpisodicMemory, int64, error) 
 	if q.SpaceID != "" {
 		query = query.Where("space_id = ?", q.SpaceID)
 	}
-	if q.CharacterID != "" {
+	if q.MemoryScope == "global" {
+		query = query.Where("character_id = '' OR character_id IS NULL")
+	} else if q.CharacterID != "" {
 		query = query.Where("character_id = ?", q.CharacterID)
 	}
 	if q.SceneType != "" {

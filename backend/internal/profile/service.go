@@ -84,7 +84,7 @@ func (s *service) Create(req *CreateProfileRequest) (*UserProfile, error) {
 	req.Confidence = clampProfileConfidence(req.Confidence)
 	p := &UserProfile{
 		SpaceID:        spaceID,
-		CharacterID:    req.CharacterID,
+		CharacterID:    "",
 		Category:       req.Category,
 		AttributeName:  req.AttributeName,
 		AttributeValue: req.AttributeValue,

@@ -1,6 +1,7 @@
 import { clipboard, type BrowserWindow } from "electron";
 import { getLocalAdminHeaders } from "./backend-session-client";
 import { getDeviceId } from "./pet/runtime-identity";
+import { IPC_CHANNELS } from "../shared/ipc";
 
 const CORE_HOST = "127.0.0.1";
 const CORE_PORT = 18899;
@@ -110,7 +111,7 @@ export class ClipboardBridge {
         deviceId: getDeviceId(),
         platform: this.platformName(),
         windowId: "main",
-        features: ["clipboard.read", "clipboard.write"],
+        features: ["clipboard.read", "clipboard.write", "ui.style"],
       },
     );
     const sessionId = String(result.hostSessionId ?? "").trim();
@@ -183,7 +184,7 @@ export class ClipboardBridge {
       }
 
       await this.registerHostSession(headers);
-      console.log("[ClipboardBridge] SSE 连接成功，开始监听 clipboard_request 事件");
+      console.log("[ClipboardBridge] SSE 连接成功，开始监听 clipboard_request 与 ui_style_command 事件");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -229,6 +230,10 @@ export class ClipboardBridge {
 
     if (eventName === "clipboard_request" && dataStr) {
       void this.handleClipboardRequest(dataStr, headers);
+    } else if (eventName === "ui_style_command" && dataStr) {
+      if (!this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(IPC_CHANNELS.uiStyleCommand, dataStr);
+      }
     }
   }
 

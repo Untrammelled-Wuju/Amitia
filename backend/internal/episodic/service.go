@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/memorypolicy"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
@@ -99,6 +100,9 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 		SourceConvID:     req.SourceConvID,
 		MessageTimeStart: s.resolveMessageTime(req.SourceConvID, req.MessageIDStart),
 		MessageTimeEnd:   s.resolveMessageTime(req.SourceConvID, req.MessageIDEnd),
+	}
+	if mode, known := memorypolicy.ForCharacter(s.db, m.CharacterID); known && mode == "global" {
+		m.CharacterID = ""
 	}
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
@@ -212,6 +216,9 @@ func (s *service) SaveFromTool(spaceID, sceneType, title, content string, sentim
 		MessageIDStart:   msgStart,
 		MessageIDEnd:     msgEnd,
 	}
+	if mode, known := memorypolicy.ForCharacter(s.db, m.CharacterID); known && mode == "global" {
+		m.CharacterID = ""
+	}
 	if err := s.repo.Create(m); err != nil {
 		return nil, err
 	}
@@ -315,6 +322,9 @@ func (s *service) ExtractFromConversation(spaceID, convID string, messages []map
 			TriggerKeywords: keywords,
 			SourceConvID:    convID,
 		}
+		if mode, known := memorypolicy.ForCharacter(s.db, m.CharacterID); known && mode == "global" {
+			m.CharacterID = ""
+		}
 		if err := s.repo.Create(m); err != nil {
 			s.rollbackExtractedEpisodic(persisted)
 			return fmt.Errorf("persist extracted episodic memory %q: %w", title, err)
@@ -351,6 +361,7 @@ func (s *service) rollbackExtractedEpisodic(items []*EpisodicMemory) {
 
 func (s *service) ToSystemPrompt(spaceID string, characterID ...string) string {
 	q := EpisodicListQuery{SpaceID: cleanOwner(spaceID), CharacterID: firstScope(characterID...), Page: 1, PageSize: 3}
+	q.MemoryScope, _ = memorypolicy.ForCharacter(s.db, q.CharacterID)
 	memories, _, err := s.repo.List(q)
 	if err != nil || len(memories) == 0 {
 		return ""

@@ -1,5 +1,5 @@
 <template>
-  <main class="center-page">
+  <main class="center-page" data-amitia-ui="extensions.page">
     <header class="center-header">
       <div>
         <h1>扩展中心</h1>

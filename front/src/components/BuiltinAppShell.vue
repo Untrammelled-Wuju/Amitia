@@ -8,8 +8,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       <UIProviderHost v-if="!isMobile" capability="app.navigation" :fallback="SideNav" :context="{ viewport: 'desktop' }" :username="authUsername" :avatar="authAvatar" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
 
       <div class="app-main workspace" :class="{ 'is-desktop-shell': isDesktopShell() }">
-        <main class="app-content workspace-surface" :class="{ 'workspace-surface--chat': isChatPage }">
-          <header v-if="isMobile" class="mobile-header">
+        <main class="app-content workspace-surface" :class="{ 'workspace-surface--chat': isChatPage }" data-amitia-ui="app.content">
+          <header v-if="isMobile" class="mobile-header" data-amitia-ui="app.header">
             <span class="mobile-title">{{ pageTitle }}</span>
             <span class="mobile-status">
               <span class="dot" :class="modelClass"></span>
@@ -23,6 +23,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           >
             <div
               class="content-scroll-inner"
+              data-amitia-ui="app.content"
               :class="{
                 'no-padding': isContentPaddingDisabled,
                 'fill-height': isContentFullHeight,

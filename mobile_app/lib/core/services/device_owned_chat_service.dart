@@ -10,6 +10,7 @@ import '../models/conversation.dart';
 import '../models/project.dart';
 import 'device_owned_attachments.dart';
 import 'owned_conversation_reference.dart';
+import 'owned_memory_scope.dart';
 
 const _scopeFields = [
   'spaceId',
@@ -31,6 +32,12 @@ const _scopeFields = [
   'resourceOwnerId',
   'requestId',
 ];
+const _authorityFields = [
+  ..._scopeFields,
+  'memoryRoleId',
+  'memoryViewAll',
+  'continuityRoleId',
+];
 
 String _scopeStamp(Map<String, dynamic> scope, String requestId) {
   if (scope['requestId'] != requestId ||
@@ -49,7 +56,7 @@ String _scopeStamp(Map<String, dynamic> scope, String requestId) {
       ].any((key) => scope[key] is! int || (scope[key] as int) < 1)) {
     throw StateError('回复缺少有效的服务提供者和数据归属信息');
   }
-  return jsonEncode(_scopeFields.map((key) => scope[key]).toList());
+  return jsonEncode(_authorityFields.map((key) => scope[key]).toList());
 }
 
 Stream<Map<String, dynamic>> decodeOwnedChatStream(
@@ -165,10 +172,14 @@ class DeviceOwnedChatService {
     this._api, {
     String Function()? providerKey,
     Future<Map<String, dynamic>?> Function()? providerTransition,
+    String providerStateKey = 'amitia.mesh.provider-state',
   }) : _providerKey = providerKey ?? (() => ''),
-       _providerTransition = providerTransition;
+       _providerTransition = providerTransition,
+       _providerStateKey = providerStateKey;
 
   final BackendServiceApi _api;
+  final String _providerStateKey;
+  Future<bool>? _refreshInFlight;
   final String Function() _providerKey;
   final Future<Map<String, dynamic>?> Function()? _providerTransition;
   bool enabled = false;
@@ -197,7 +208,7 @@ class DeviceOwnedChatService {
     try {
       final preferences = await SharedPreferences.getInstance();
       final state = jsonDecode(
-        preferences.getString('amitia.mesh.provider-state') ?? '{}',
+        preferences.getString(_providerStateKey) ?? '{}',
       );
       if (state is Map) {
         coreId = (state['coreId'] ?? '').toString();
@@ -211,7 +222,7 @@ class DeviceOwnedChatService {
     try {
       final preferences = await SharedPreferences.getInstance();
       await preferences.setString(
-        'amitia.mesh.provider-state',
+        _providerStateKey,
         jsonEncode({
           'coreId': coreId,
           'notice': notice,
@@ -227,7 +238,18 @@ class DeviceOwnedChatService {
   String _stamp(String core, Map<String, dynamic>? state) =>
       '$core:${state?['providerEpoch']}:${state?['modeRevision']}:${state?['permissionRevision']}';
 
-  Future<bool> refresh() async {
+  Future<bool> refresh() {
+    final active = _refreshInFlight;
+    if (active != null) return active;
+    late final Future<bool> pending;
+    pending = _refreshState().whenComplete(() {
+      if (identical(_refreshInFlight, pending)) _refreshInFlight = null;
+    });
+    _refreshInFlight = pending;
+    return pending;
+  }
+
+  Future<bool> _refreshState() async {
     final transition = await _providerTransition?.call();
     if (transition?['providerChangePending'] == true) {
       enabled = true;
@@ -470,6 +492,7 @@ class DeviceOwnedChatService {
     String historicalRoleId = '',
     String historicalCursor = '',
     String historicalLegacyCursor = '',
+    String memoryView = '',
   }) async {
     if (!enabled) throw StateError('设备数据服务尚未就绪');
     final captured = revision;
@@ -484,18 +507,31 @@ class DeviceOwnedChatService {
         'historicalRoleId': historicalRoleId,
         'historicalCursor': historicalCursor,
         'historicalLegacyCursor': historicalLegacyCursor,
+        if (memoryView.isNotEmpty) 'memoryView': memoryView,
       },
     );
     if (captured != revision ||
         result == null ||
         result['executionScope'] is! Map ||
         result['executionScope']['coreId'] != coreId ||
-        result['snapshot'] is! Map)
+        result['snapshot'] is! Map ||
+        result['snapshot']['ownerId'] !=
+            result['executionScope']['resourceOwnerId'])
       throw StateError('服务状态已变化，请重新加载记忆');
     for (final row
         in (result['snapshot']['resources'] as List? ?? []).whereType<Map>()) {
+      final scope = result['executionScope'] as Map;
+      if (row['ownerId'] != scope['resourceOwnerId'] ||
+          !(scope['memoryViewAll'] == true &&
+                  isMemoryKind(row['kind'].toString())) &&
+              row['roleId'] != memoryStorageRole(scope, row['kind'].toString()))
+        throw StateError('记忆数据归属无效');
       _resources['${row['kind']}/${row['id']}'] = Map<String, dynamic>.from(row)
-        ..['executionScope'] = result['executionScope'];
+        ..['executionScope'] =
+            scope['memoryViewAll'] == true &&
+                isMemoryKind(row['kind'].toString())
+            ? memoryRecordScope(scope, row['roleId'].toString())
+            : scope;
     }
     return result;
   }
@@ -539,7 +575,13 @@ class DeviceOwnedChatService {
       if (origin != null) throw StateError('请先加载该会话并确认当前数据来源后再修改');
       final result = await _api.get<Map<String, dynamic>>(
         '/api/device-mesh/v1/business/resources',
-        queryParameters: {'kind': kind, 'id': id, 'characterId': role},
+        queryParameters: {
+          'kind': kind,
+          'id': id,
+          'characterId': role,
+          if (expectedScope != null)
+            'memoryView': memoryViewForScope(expectedScope),
+        },
       );
       if (result?['resource'] is Map) {
         resource = Map<String, dynamic>.from(result!['resource'] as Map);
@@ -589,7 +631,7 @@ class DeviceOwnedChatService {
   static int _editSequence = 0;
 
   static String _authorityStamp(Map scope) => jsonEncode(
-    _scopeFields
+    _authorityFields
         .where(
           (key) => !const ['requestId', 'turnId', 'executionId'].contains(key),
         )
@@ -662,7 +704,6 @@ class DeviceOwnedChatService {
           rows.add(
             ProjectDto.fromJson({
               ...Map<String, dynamic>.from(row),
-              'logical': true,
               'readOnly': readOnly,
               'executionScope': scope,
             }),
@@ -697,6 +738,8 @@ class DeviceOwnedChatService {
     String title, {
     String? characterId,
     Map<String, dynamic>? expectedScope,
+    List<ProjectWorkspaceDto> workspaces = const <ProjectWorkspaceDto>[],
+    String primaryWorkspaceId = '',
   }) async {
     final role = selectRole(characterId);
     final captured = revision;
@@ -708,6 +751,11 @@ class DeviceOwnedChatService {
         _authorityStamp(expectedScope) != _authorityStamp(currentScope))
       throw StateError('项目创建表单的数据归属已变化，请重新打开');
     final scope = expectedScope ?? currentScope;
+    if (workspaces.isEmpty ||
+        primaryWorkspaceId.isEmpty ||
+        !workspaces.any((workspace) => workspace.id == primaryWorkspaceId)) {
+      throw StateError('项目至少需要一个有效工作区');
+    }
     final random = Random.secure();
     final requestId =
         'project-${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
@@ -718,6 +766,10 @@ class DeviceOwnedChatService {
         'title': title.trim(),
         'characterId': role,
         'expectedExecutionScope': scope,
+        'workspaces': workspaces
+            .map((workspace) => workspace.toJson())
+            .toList(),
+        'primaryWorkspaceId': primaryWorkspaceId,
       },
     );
     final returned = result?['executionScope'];
@@ -743,7 +795,6 @@ class DeviceOwnedChatService {
       'ownerId': scope['resourceOwnerId'],
       'roleId': role,
       'revision': 1,
-      'logical': true,
       'executionScope': returned,
     });
   }
@@ -753,8 +804,7 @@ class DeviceOwnedChatService {
     Map<String, dynamic> changes = const {},
     bool deleted = false,
   }) async {
-    if (!project.logical ||
-        project.readOnly ||
+    if (project.readOnly ||
         project.executionScope == null ||
         project.ownerId.isEmpty ||
         project.revision < 1) {
@@ -872,7 +922,7 @@ class DeviceOwnedChatService {
       },
     );
     String stamp(Map value) => jsonEncode(
-      _scopeFields
+      _authorityFields
           .where(
             (key) =>
                 !const ['requestId', 'turnId', 'executionId'].contains(key),
@@ -947,6 +997,7 @@ class DeviceOwnedChatService {
   Future<Map<String, dynamic>> projections(
     String characterId, {
     Map<String, dynamic>? expectedScope,
+    String memoryView = '',
   }) async {
     if (!enabled) throw StateError('设备索引服务尚未就绪');
     final captured = revision;
@@ -954,7 +1005,10 @@ class DeviceOwnedChatService {
     final result = expectedScope == null
         ? await _api.get<Map<String, dynamic>>(
             '/api/device-mesh/v1/business/projections',
-            queryParameters: {'characterId': role},
+            queryParameters: {
+              'characterId': role,
+              if (memoryView.isNotEmpty) 'memoryView': memoryView,
+            },
           )
         : await _api.post<Map<String, dynamic>>(
             '/api/device-mesh/v1/business/projections/rebuild',
@@ -970,7 +1024,8 @@ class DeviceOwnedChatService {
         result?['status'] is! Map ||
         result?['status']['ownerId'] !=
             result?['executionScope']['resourceOwnerId'] ||
-        result?['status']['roleId'] != role ||
+        result?['status']['roleId'] !=
+            memoryStorageRole(result!['executionScope'] as Map, 'memory') ||
         result?['status']['layers'] is! List) {
       throw StateError('服务状态已变化，索引状态已丢弃');
     }
@@ -1189,6 +1244,7 @@ class DeviceOwnedChatService {
     required String requestId,
     required String message,
     String? conversationId,
+    String? projectId,
     String? characterId,
     Map<String, dynamic>? context,
     List<Map<String, dynamic>>? attachments,
@@ -1230,6 +1286,7 @@ class DeviceOwnedChatService {
             'historicalRoleId': quote['characterId'],
           if (conversationId?.isNotEmpty == true)
             'conversationId': origin?['id'] ?? conversationId,
+          if (projectId?.isNotEmpty == true) 'projectId': projectId,
           if (origin != null) 'conversationOrigin': origin,
           if (context != null)
             'context': {

@@ -1,6 +1,7 @@
 <template>
   <div
     class="thread-row"
+    data-amitia-ui="app.sidebar.item"
     :class="{ compact }"
   >
     <div

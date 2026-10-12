@@ -72,6 +72,17 @@ class _OwnedApi implements BackendServiceApi {
     if (deferred != null) return await deferred!.future as T;
     queries.add(Map<String, dynamic>.from(queryParameters ?? {}));
     if (pages.isNotEmpty) return pages.removeAt(0) as T;
+    if (path.endsWith('/data'))
+      return {
+            'executionScope': scope(),
+            'snapshot': {
+              'ownerId': 'a',
+              'resources': [
+                {...resource, 'ownerId': 'a'},
+              ],
+            },
+          }
+          as T;
     return {
           'executionScope': scope(),
           'snapshot': {
@@ -166,19 +177,37 @@ Stream<List<int>> bytes(List<Map<String, dynamic>> events) {
 
 void main() {
   test('手机从所有者原附件恢复文件和视频，不生成本地镜像文件', () {
-    final service = DeviceOwnedChatService(_OwnedApi(),
-      providerKey: () => 'https://provider');
+    final service = DeviceOwnedChatService(
+      _OwnedApi(),
+      providerKey: () => 'https://provider',
+    );
     for (final kind in ['file', 'video']) {
-      final uri = 'data:${kind == 'file' ? 'text/plain' : 'video/mp4'};base64,AQIDBA==';
-      final attachment = ownedFileAttachment(uri,
-        name: kind == 'file' ? 'notes.txt' : 'clip.mp4', kind: kind);
+      final uri =
+          'data:${kind == 'file' ? 'text/plain' : 'video/mp4'};base64,AQIDBA==';
+      final attachment = ownedFileAttachment(
+        uri,
+        name: kind == 'file' ? 'notes.txt' : 'clip.mp4',
+        kind: kind,
+      );
       final rows = service.messages({
         'executionScope': scope(),
-        'snapshot': {'ownerId': 'a', 'resources': [
-          {'kind': 'message', 'id': 'message', 'revision': 3,
-            'body': {'id': 'message', 'conversationId': 'chat',
-              'role': 'user', 'content': '附件', 'attachments': [attachment]}}
-        ]},
+        'snapshot': {
+          'ownerId': 'a',
+          'resources': [
+            {
+              'kind': 'message',
+              'id': 'message',
+              'revision': 3,
+              'body': {
+                'id': 'message',
+                'conversationId': 'chat',
+                'role': 'user',
+                'content': '附件',
+                'attachments': [attachment],
+              },
+            },
+          ],
+        },
       });
       expect(rows, hasLength(1));
       expect(rows.single.msgType, kind);

@@ -58,6 +58,7 @@ import '../../../../shared/models/models.dart';
 import '../chat_route_state.dart';
 import '../widgets/agent_approval_guard.dart';
 import '../widgets/automation_status_indicator.dart';
+import '../widgets/floating_chat_composer_layout.dart';
 import 'realtime_call_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -88,7 +89,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Timer? _conversationEventRefreshTimer;
   ChatMessage? _replyTarget;
   List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
-  Map<String, ProjectDto> _logicalProjects = const {};
   bool _workspaceBusy = false;
   final RealtimeAudioBridge _realtimeAudio = RealtimeAudioBridge();
   final BytesBuilder _voicePcm = BytesBuilder(copy: false);
@@ -272,9 +272,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
     try {
       final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
-      final project = sidebar.projects
-          .where((item) => item.id == id)
-          .firstOrNull;
+      final allProjects = <ProjectDto>[
+        ...sidebar.projects,
+        ...sidebar.removedProjects,
+      ];
+      final project = allProjects.where((item) => item.id == id).firstOrNull;
       if (!mounted) return;
       _runtime.setWorkspace(
         project == null || project.readOnly
@@ -284,15 +286,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 workspaceId: project.workspaceId,
                 deviceId: project.deviceId,
                 workspaceName: project.name,
-                workspaceKind: project.logical
-                    ? 'logical'
-                    : project.workspaceKind.trim().isEmpty
+                workspaceKind: project.workspaceKind.trim().isEmpty
                     ? (project.rootUri.startsWith('content://')
                           ? 'saf'
                           : 'local')
                     : project.workspaceKind,
                 rootUri: project.rootUri,
-                logicalProject: project.logical ? project : null,
+                workspaces: project.workspaces,
+                primaryWorkspaceId: project.primaryWorkspaceId,
               ),
       );
     } catch (_) {
@@ -549,21 +550,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) return;
       _cachedProviderContext = null;
       setState(() {
-        _logicalProjects = {
-          for (final project in sidebar.projects.where(
-            (project) => project.logical && !project.readOnly,
-          ))
-            project.id: project,
-        };
         _recentWorkspaces = sidebar.projects
             .map(
               (project) => WorkspaceMountDto(
-                id: project.logical ? project.id : project.workspaceId,
+                id: project.workspaceId,
                 projectId: project.id,
                 name: project.name,
-                kind: project.logical
-                    ? 'logical'
-                    : project.workspaceKind.trim().isEmpty
+                kind: project.workspaceKind.trim().isEmpty
                     ? (project.rootUri.startsWith('content://')
                           ? 'saf'
                           : 'local')
@@ -588,17 +581,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<ConversationWorkspaceDto> _workspaceBindingForMount(
     WorkspaceMountDto mount,
   ) async {
-    if (mount.kind == 'logical') {
-      if (mount.readOnly) throw StateError('原设备历史项目只读');
-      return ConversationWorkspaceDto(
-        projectId: mount.projectId,
-        workspaceId: '',
-        workspaceName: mount.name,
-        workspaceKind: 'logical',
-        rootUri: '',
-        logicalProject: _logicalProjects[mount.projectId],
-      );
-    }
     var deviceId = '';
     final deployment = ref.read(mobileDeploymentConfigProvider);
     if (deployment.mode == MobileDeploymentMode.cloud) {
@@ -612,6 +594,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         throw StateError('无法读取本机 Device Mesh 身份');
       }
     }
+    final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
+    final project = <ProjectDto>[
+      ...sidebar.projects,
+      ...sidebar.removedProjects,
+    ].where((item) => item.id == mount.projectId).firstOrNull;
+    final workspaces = project?.workspaces.isNotEmpty == true
+        ? project!.workspaces
+        : <ProjectWorkspaceDto>[
+            ProjectWorkspaceDto(
+              id: mount.id,
+              deviceId: deviceId,
+              name: mount.name,
+              kind: mount.kind,
+              rootUri: mount.rootUri,
+            ),
+          ];
     return ConversationWorkspaceDto(
       conversationId: _runtime.conversationId?.trim() ?? '',
       projectId: mount.projectId,
@@ -622,6 +620,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       rootUri: mount.rootUri.isEmpty
           ? 'amitia://workspace/@${mount.id}/'
           : mount.rootUri,
+      workspaces: workspaces,
+      primaryWorkspaceId: project?.primaryWorkspaceId ?? mount.id,
     );
   }
 
@@ -640,22 +640,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     try {
       final binding = await _workspaceBindingForMount(mount);
       final conversationId = _runtime.conversationId?.trim() ?? '';
-      if (conversationId.isNotEmpty && mount.projectId.isNotEmpty) {
-        await ref
-            .read(chatServiceProvider)
-            .moveConversationToProject(
-              conversationId,
-              mount.projectId,
-              project: mount.kind == 'logical'
-                  ? _logicalProjects[mount.projectId]
-                  : null,
-            );
-      }
+      if (conversationId.isNotEmpty) throw StateError('现有对话不能手动切换项目');
       _runtime.setWorkspace(binding);
-      if (mount.kind != 'logical')
-        try {
-          await ref.read(workspaceServiceProvider).touchLocal(mount.id);
-        } catch (_) {}
+      try {
+        await ref.read(workspaceServiceProvider).touchLocal(mount.id);
+      } catch (_) {}
       await _refreshRecentWorkspaces();
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '切换工作目录失败：$error');
@@ -719,99 +708,75 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     setState(() => _workspaceBusy = true);
     try {
       final service = ref.read(chatServiceProvider);
+      final mount = await _pickWorkspaceMount();
+      if (mount == null) return;
+      Map<String, dynamic>? expectedScope;
+      var workspaceDeviceId = '';
       if (await service.owned.refresh()) {
         final initial = await service.owned.data(
           'memory',
           characterId: service.owned.selectRole(null),
         );
-        final expectedScope = Map<String, dynamic>.from(
+        expectedScope = Map<String, dynamic>.from(
           initial['executionScope'] as Map,
         );
-        if (!mounted) return;
-        final controller = TextEditingController();
-        final title = await showDialog<String>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('新建对话分组'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(hintText: '项目名称'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (controller.text.trim().isNotEmpty)
-                    Navigator.pop(dialogContext, controller.text.trim());
-                },
-                child: const Text('创建'),
-              ),
-            ],
-          ),
-        );
-        controller.dispose();
-        if (title == null) return;
-        final project = await service.createProject(
-          name: title,
-          expectedScope: expectedScope,
-        );
-        final conversationId = _runtime.conversationId?.trim() ?? '';
-        if (conversationId.isNotEmpty)
-          await service.moveConversationToProject(
-            conversationId,
-            project.id,
-            project: project,
-          );
-        _runtime.setWorkspace(
-          ConversationWorkspaceDto(
-            projectId: project.id,
-            workspaceId: '',
-            workspaceName: project.name,
-            workspaceKind: 'logical',
-            rootUri: '',
-            logicalProject: project,
-          ),
-        );
-        await _refreshRecentWorkspaces();
-        return;
+        workspaceDeviceId = (expectedScope['targetDeviceId'] ?? '').toString();
       }
-      final mount = await _pickWorkspaceMount();
-      if (mount == null) return;
-      final sidebar = await ref.read(chatServiceProvider).conversationSidebar();
-      final existing = sidebar.projects
-          .where((project) => project.workspaceId == mount.id)
-          .firstOrNull;
-      final project =
-          existing ??
-          await ref
-              .read(chatServiceProvider)
-              .createProject(
-                name: mount.name.trim().isEmpty ? '项目' : mount.name,
-                workspaceId: mount.id,
-                rootUri: mount.rootUri,
-              );
-      final projectMount = WorkspaceMountDto(
+      final workspace = ProjectWorkspaceDto(
         id: mount.id,
-        projectId: project.id,
-        name: project.name,
+        deviceId: workspaceDeviceId,
+        name: mount.name.trim().isEmpty ? '项目' : mount.name,
         kind: mount.kind,
         rootUri: mount.rootUri,
         readOnly: mount.readOnly,
+      );
+      final sidebar = await service.conversationSidebar();
+      final allProjects = <ProjectDto>[
+        ...sidebar.projects,
+        ...sidebar.removedProjects,
+      ];
+      var existing = allProjects
+          .where(
+            (project) =>
+                project.workspaces.any((item) => item.id == workspace.id),
+          )
+          .firstOrNull;
+      if (existing != null && existing.hiddenAt.isNotEmpty) {
+        await service.updateProject(
+          existing.id,
+          hidden: false,
+          project: existing,
+        );
+        final refreshed = await service.conversationSidebar();
+        existing = refreshed.projects
+            .where((project) => project.id == existing?.id)
+            .firstOrNull;
+      }
+      final project =
+          existing ??
+          await service.createProject(
+            name: workspace.name,
+            workspaceId: workspace.id,
+            deviceId: workspace.deviceId,
+            rootUri: workspace.rootUri,
+            workspaces: <ProjectWorkspaceDto>[workspace],
+            primaryWorkspaceId: workspace.id,
+            expectedScope: expectedScope,
+          );
+      final projectMount = WorkspaceMountDto(
+        id: project.workspaceId,
+        projectId: project.id,
+        name: project.name,
+        kind: project.workspaceKind,
+        rootUri: project.rootUri,
+        readOnly: project.readOnly,
         available: project.available,
         status: project.status,
         statusReason: project.statusReason,
       );
       final binding = await _workspaceBindingForMount(projectMount);
       final conversationId = _runtime.conversationId?.trim() ?? '';
-      if (conversationId.isNotEmpty) {
-        await ref
-            .read(chatServiceProvider)
-            .moveConversationToProject(conversationId, project.id);
-      }
+      if (conversationId.isNotEmpty) throw StateError('现有对话不能手动移入或移出项目');
       _runtime.setWorkspace(binding);
       await _refreshRecentWorkspaces();
     } catch (error) {
@@ -826,11 +791,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     setState(() => _workspaceBusy = true);
     try {
       final conversationId = _runtime.conversationId?.trim() ?? '';
-      if (conversationId.isNotEmpty) {
-        await ref
-            .read(chatServiceProvider)
-            .moveConversationToProject(conversationId, '');
-      }
+      if (conversationId.isNotEmpty) throw StateError('现有对话不能手动移出项目');
       _runtime.setWorkspace(null);
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '清除工作目录失败：$error');
@@ -842,7 +803,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _showWorkspacePicker() async {
     await _refreshRecentWorkspaces();
     if (!mounted) return;
-    final logical = ref.read(chatServiceProvider).owned.enabled;
     final selectedId = _runtime.workspace?.workspaceId ?? '';
     await showModalBottomSheet<void>(
       context: context,
@@ -883,13 +843,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         ),
                         subtitle: Text(
                           mount.available
-                              ? (mount.kind == 'logical'
-                                    ? (mount.readOnly
-                                          ? '原设备历史分组 · 只读'
-                                          : '对话分组 · 不授予目录权限')
-                                    : mount.kind == 'saf'
-                                    ? '系统授权目录'
-                                    : '本机目录')
+                              ? (mount.kind == 'saf' ? '系统授权目录' : '本机目录')
                               : (mount.statusReason.isNotEmpty
                                     ? mount.statusReason
                                     : '目录不可用'),
@@ -914,7 +868,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.create_new_folder_outlined),
-                title: Text(logical ? '新建对话分组…' : '添加文件夹为项目…'),
+                title: const Text('添加文件夹为项目…'),
                 enabled: !_workspaceBusy,
                 onTap: () {
                   Navigator.of(sheetContext).pop();
@@ -924,7 +878,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               if (_runtime.workspace != null)
                 ListTile(
                   leading: const Icon(Icons.close_rounded),
-                  title: const Text('移出项目'),
+                  title: const Text('取消项目选择'),
                   enabled: !_workspaceBusy,
                   onTap: () {
                     Navigator.of(sheetContext).pop();
@@ -2735,441 +2689,406 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: Column(
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: SafeArea(
-                          bottom: false,
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: AnimatedSwitcher(
-                                  duration: AppMotion.standard,
-                                  reverseDuration: AppMotion.quick,
-                                  switchInCurve: AppMotion.enterCurve,
-                                  switchOutCurve: AppMotion.exitCurve,
-                                  layoutBuilder:
-                                      (currentChild, previousChildren) {
-                                        return Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            ...previousChildren,
-                                            ?currentChild,
-                                          ],
-                                        );
-                                      },
-                                  transitionBuilder: (child, animation) {
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: child,
-                                    );
-                                  },
-                                  child: KeyedSubtree(
-                                    key: ValueKey<String>(
-                                      'conversation-messages:${conversationId.isEmpty ? 'draft' : conversationId}',
-                                    ),
-                                    child: showEmptyState
-                                        ? _buildEmptyChatState(
-                                            context,
-                                            characterName,
-                                            workspaceName,
-                                          )
-                                        : ListView.builder(
-                                            controller: _scrollController,
-                                            padding: EdgeInsets.fromLTRB(
-                                              0,
-                                              _chatTopBarHeight + 24,
-                                              0,
+            child: FloatingChatComposerLayout(
+              composer: conversationComposer,
+              onComposerHeightChanged: _scrollToBottom,
+              contentBuilder: (context, composerHeight) => Stack(
+                children: [
+                  Positioned.fill(
+                    child: SafeArea(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: AnimatedSwitcher(
+                              duration: AppMotion.standard,
+                              reverseDuration: AppMotion.quick,
+                              switchInCurve: AppMotion.enterCurve,
+                              switchOutCurve: AppMotion.exitCurve,
+                              layoutBuilder: (currentChild, previousChildren) {
+                                return Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ...previousChildren,
+                                    ?currentChild,
+                                  ],
+                                );
+                              },
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                );
+                              },
+                              child: KeyedSubtree(
+                                key: ValueKey<String>(
+                                  'conversation-messages:${conversationId.isEmpty ? 'draft' : conversationId}',
+                                ),
+                                child: showEmptyState
+                                    ? _buildEmptyChatState(
+                                        context,
+                                        characterName,
+                                        workspaceName,
+                                      )
+                                    : ListView.builder(
+                                        controller: _scrollController,
+                                        padding: EdgeInsets.fromLTRB(
+                                          0,
+                                          _chatTopBarHeight + 24,
+                                          0,
+                                          (composerHeight -
+                                                      MediaQuery.paddingOf(
+                                                        context,
+                                                      ).bottom)
+                                                  .clamp(0.0, double.infinity) +
                                               32,
-                                            ),
-                                            itemCount:
-                                                flowItems.length +
-                                                (pendingRoleSwitch ? 1 : 0) +
-                                                (showHistoryLoader ? 1 : 0),
-                                            itemBuilder: (context, contentIndex) {
-                                              if (showHistoryLoader &&
-                                                  contentIndex == 0) {
-                                                return SizedBox(
-                                                  height: 56,
-                                                  child: Center(
-                                                    child:
-                                                        _runtime
-                                                            .isLoadingOlderMessages
-                                                        ? const SizedBox(
-                                                            width: 18,
-                                                            height: 18,
-                                                            child:
-                                                                CircularProgressIndicator(
-                                                                  strokeWidth:
-                                                                      2,
-                                                                ),
-                                                          )
-                                                        : Text(
-                                                            '正在加载更早消息…',
-                                                            style:
-                                                                AppTypography.caption(
-                                                                  context,
-                                                                ),
-                                                          ),
-                                                  ),
-                                                );
-                                              }
-                                              final adjustedIndex =
-                                                  showHistoryLoader
-                                                  ? contentIndex - 1
-                                                  : contentIndex;
-                                              final pendingRoleSwitchIndex =
-                                                  flowItems.length;
-                                              if (pendingRoleSwitch &&
-                                                  adjustedIndex ==
-                                                      pendingRoleSwitchIndex) {
-                                                return AmitiaRoleSwitchDivider(
-                                                  key: const ValueKey(
-                                                    'role-switch-pending',
-                                                  ),
-                                                  characterName: characterName,
-                                                );
-                                              }
-                                              final item =
-                                                  flowItems[adjustedIndex];
-                                              if (item.errorDetail != null) {
-                                                return KeyedSubtree(
-                                                  key: ValueKey(item.key),
-                                                  child: _ChatErrorNotice(
-                                                    detail: item.errorDetail!,
-                                                    title:
-                                                        item.messageIndex ==
-                                                            null
-                                                        ? '生成失败'
-                                                        : '发送失败',
-                                                    onRetry:
-                                                        item.messageIndex !=
-                                                                null &&
-                                                            item.messageIndex! >=
-                                                                0 &&
-                                                            _runtime.canRetryMessage(
-                                                              item.messageIndex!,
-                                                            )
-                                                        ? () => _retryMessage(
-                                                            item.messageIndex!,
-                                                          )
-                                                        : null,
-                                                  ),
-                                                );
-                                              }
-                                              if (!item.isMessage) {
-                                                final node = item.node!;
-                                                return KeyedSubtree(
-                                                  key: ValueKey(item.key),
-                                                  child: MobileExtensionSlot(
-                                                    slotId:
-                                                        'chat.conversation.node',
-                                                    contributionId:
-                                                        node.contributionId,
-                                                    context: {
-                                                      ...providerContext,
-                                                      'conversationNode': node
-                                                          .toJson(),
-                                                      'eventType':
-                                                          node.eventType,
-                                                    },
-                                                    actions: providerActions,
-                                                  ),
-                                                );
-                                              }
-
-                                              final index = item.messageIndex!;
-                                              final message = item.message!;
-                                              final messageCharacter =
-                                                  characters
-                                                      .where(
-                                                        (item) =>
-                                                            item.id ==
-                                                            message.characterId,
+                                        ),
+                                        itemCount:
+                                            flowItems.length +
+                                            (pendingRoleSwitch ? 1 : 0) +
+                                            (showHistoryLoader ? 1 : 0),
+                                        itemBuilder: (context, contentIndex) {
+                                          if (showHistoryLoader &&
+                                              contentIndex == 0) {
+                                            return SizedBox(
+                                              height: 56,
+                                              child: Center(
+                                                child:
+                                                    _runtime
+                                                        .isLoadingOlderMessages
+                                                    ? const SizedBox(
+                                                        width: 18,
+                                                        height: 18,
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                            ),
                                                       )
-                                                      .firstOrNull;
-                                              final messageCharacterName =
-                                                  messageCharacter?.name
-                                                          .trim()
-                                                          .isNotEmpty ==
-                                                      true
-                                                  ? messageCharacter!.name
-                                                        .trim()
-                                                  : message.characterId
-                                                        .trim()
-                                                        .isEmpty
-                                                  ? characterName
-                                                  : '未知角色';
-                                              final messageAvatarInitial =
-                                                  messageCharacterName
-                                                      .isNotEmpty
-                                                  ? messageCharacterName
-                                                        .characters
-                                                        .first
-                                                  : '?';
-                                              final isAgentTask =
-                                                  message.type ==
-                                                  MessageType.agentTask;
-                                              final builtinMessage = RepaintBoundary(
-                                                child: AmitiaMessageBubble(
-                                                  aiNameEnabled: ref.watch(
-                                                    aiNamePreferencesProvider,
-                                                  ),
-                                                  aiAvatarEnabled: ref.watch(
-                                                    aiAvatarPreferencesProvider,
-                                                  ),
-                                                  aiAvatarShape: ref.watch(
-                                                    aiAvatarShapeProvider,
-                                                  ),
-                                                  userMessageMaterial: ref.watch(
-                                                    userMessageMaterialProvider,
-                                                  ),
-                                                  message: message,
-                                                  messageStyle: ref.watch(
-                                                    chatAppearancePreferencesProvider,
-                                                  ),
-                                                  showAvatar:
-                                                      _shouldShowAssistantIdentity(
-                                                        index,
+                                                    : Text(
+                                                        '正在加载更早消息…',
+                                                        style:
+                                                            AppTypography.caption(
+                                                              context,
+                                                            ),
                                                       ),
-                                                  showHeader:
-                                                      _shouldShowAssistantIdentity(
-                                                        index,
-                                                      ),
-                                                  compactBottom:
-                                                      _shouldCompactBottom(
-                                                        index,
-                                                      ),
-                                                  avatarInitial:
-                                                      messageAvatarInitial,
-                                                  avatarColor: avatarColor,
-                                                  avatarCharacterId:
-                                                      messageCharacter?.id ??
-                                                      (message.characterId
-                                                              .trim()
-                                                              .isEmpty
-                                                          ? characterId
-                                                          : message
-                                                                .characterId),
-                                                  avatarUrl:
-                                                      messageCharacter
-                                                          ?.avatar ??
-                                                      (message.characterId
-                                                              .trim()
-                                                              .isEmpty
-                                                          ? character?.avatar ??
-                                                                ''
-                                                          : ''),
-                                                  characterName:
-                                                      messageCharacterName,
-                                                  userInitial: userInitial,
-                                                  userAvatarColor:
-                                                      userAvatarColor,
-                                                  userName: userName,
-                                                  agentActivities:
-                                                      activitiesForMessage(
-                                                        message,
-                                                      ),
-                                                  onRetry:
-                                                      _runtime.canRetryMessage(
-                                                        index,
-                                                      )
-                                                      ? () =>
-                                                            _retryMessage(index)
-                                                      : null,
-                                                  onReply:
-                                                      message.type ==
-                                                          MessageType
-                                                              .systemNotice
-                                                      ? null
-                                                      : () => _setReplyTarget(
-                                                          message,
-                                                        ),
-                                                  onCopy:
-                                                      message.type ==
-                                                              MessageType
-                                                                  .systemNotice ||
-                                                          message.content
-                                                              .trim()
-                                                              .isEmpty
-                                                      ? null
-                                                      : () => _copyMessage(
-                                                          message,
-                                                        ),
-                                                  onEdit:
-                                                      message.role ==
-                                                          MessageRole.user
-                                                      ? () => _editMessage(
-                                                          message,
+                                              ),
+                                            );
+                                          }
+                                          final adjustedIndex =
+                                              showHistoryLoader
+                                              ? contentIndex - 1
+                                              : contentIndex;
+                                          final pendingRoleSwitchIndex =
+                                              flowItems.length;
+                                          if (pendingRoleSwitch &&
+                                              adjustedIndex ==
+                                                  pendingRoleSwitchIndex) {
+                                            return AmitiaRoleSwitchDivider(
+                                              key: const ValueKey(
+                                                'role-switch-pending',
+                                              ),
+                                              characterName: characterName,
+                                            );
+                                          }
+                                          final item = flowItems[adjustedIndex];
+                                          if (item.errorDetail != null) {
+                                            return KeyedSubtree(
+                                              key: ValueKey(item.key),
+                                              child: _ChatErrorNotice(
+                                                detail: item.errorDetail!,
+                                                title: item.messageIndex == null
+                                                    ? '生成失败'
+                                                    : '发送失败',
+                                                onRetry:
+                                                    item.messageIndex != null &&
+                                                        item.messageIndex! >=
+                                                            0 &&
+                                                        _runtime.canRetryMessage(
+                                                          item.messageIndex!,
                                                         )
-                                                      : null,
-                                                  onAgentTaskTap: isAgentTask
-                                                      ? () {
-                                                          final taskId =
-                                                              message
-                                                                  .agentTaskId
-                                                                  ?.trim() ??
-                                                              '';
-                                                          context.push(
-                                                            taskId.isEmpty
-                                                                ? AppRoutes
-                                                                      .agent
-                                                                : AppRoutes.agentTask(
-                                                                    taskId,
-                                                                  ),
-                                                          );
-                                                        }
-                                                      : null,
-                                                ),
-                                              );
-                                              final messageRenderer =
-                                                  UIMessageRendererRegistry.resolve(
-                                                    uiSnapshot,
-                                                    messageType:
-                                                        message.type.name,
-                                                    role: message.role.name,
-                                                  );
-                                              final providerMessage =
-                                                  UIProviderHost(
-                                                    capability: UICapability
-                                                        .conversationMessageRenderer,
-                                                    providerId: messageRenderer
-                                                        ?.providerId,
-                                                    fallback: builtinMessage,
-                                                    context: {
-                                                      ...providerContext,
-                                                      'message':
-                                                          _providerMessage(
-                                                            message,
-                                                          ),
-                                                      'messageIndex': index,
-                                                    },
-                                                    actions: providerActions,
-                                                  );
-                                              final messageContext =
-                                                  <String, dynamic>{
-                                                    ...providerContext,
-                                                    'messageId': message.id,
-                                                    'sourceOwnerId':
-                                                        message.sourceOwnerId,
-                                                    'messageType':
-                                                        message.type.name,
-                                                    'message': _providerMessage(
+                                                    ? () => _retryMessage(
+                                                        item.messageIndex!,
+                                                      )
+                                                    : null,
+                                              ),
+                                            );
+                                          }
+                                          if (!item.isMessage) {
+                                            final node = item.node!;
+                                            return KeyedSubtree(
+                                              key: ValueKey(item.key),
+                                              child: MobileExtensionSlot(
+                                                slotId:
+                                                    'chat.conversation.node',
+                                                contributionId:
+                                                    node.contributionId,
+                                                context: {
+                                                  ...providerContext,
+                                                  'conversationNode': node
+                                                      .toJson(),
+                                                  'eventType': node.eventType,
+                                                },
+                                                actions: providerActions,
+                                              ),
+                                            );
+                                          }
+
+                                          final index = item.messageIndex!;
+                                          final message = item.message!;
+                                          final messageCharacter = characters
+                                              .where(
+                                                (item) =>
+                                                    item.id ==
+                                                    message.characterId,
+                                              )
+                                              .firstOrNull;
+                                          final messageCharacterName =
+                                              messageCharacter?.name
+                                                      .trim()
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? messageCharacter!.name.trim()
+                                              : message.characterId
+                                                    .trim()
+                                                    .isEmpty
+                                              ? characterName
+                                              : '未知角色';
+                                          final messageAvatarInitial =
+                                              messageCharacterName.isNotEmpty
+                                              ? messageCharacterName
+                                                    .characters
+                                                    .first
+                                              : '?';
+                                          final isAgentTask =
+                                              message.type ==
+                                              MessageType.agentTask;
+                                          final builtinMessage = RepaintBoundary(
+                                            child: AmitiaMessageBubble(
+                                              aiNameEnabled: ref.watch(
+                                                aiNamePreferencesProvider,
+                                              ),
+                                              aiAvatarEnabled: ref.watch(
+                                                aiAvatarPreferencesProvider,
+                                              ),
+                                              aiAvatarShape: ref.watch(
+                                                aiAvatarShapeProvider,
+                                              ),
+                                              userMessageMaterial: ref.watch(
+                                                userMessageMaterialProvider,
+                                              ),
+                                              message: message,
+                                              messageStyle: ref.watch(
+                                                chatAppearancePreferencesProvider,
+                                              ),
+                                              showAvatar:
+                                                  _shouldShowAssistantIdentity(
+                                                    index,
+                                                  ),
+                                              showHeader:
+                                                  _shouldShowAssistantIdentity(
+                                                    index,
+                                                  ),
+                                              compactBottom:
+                                                  _shouldCompactBottom(index),
+                                              avatarInitial:
+                                                  messageAvatarInitial,
+                                              avatarColor: avatarColor,
+                                              avatarCharacterId:
+                                                  messageCharacter?.id ??
+                                                  (message.characterId
+                                                          .trim()
+                                                          .isEmpty
+                                                      ? characterId
+                                                      : message.characterId),
+                                              avatarUrl:
+                                                  messageCharacter?.avatar ??
+                                                  (message.characterId
+                                                          .trim()
+                                                          .isEmpty
+                                                      ? character?.avatar ?? ''
+                                                      : ''),
+                                              characterName:
+                                                  messageCharacterName,
+                                              userInitial: userInitial,
+                                              userAvatarColor: userAvatarColor,
+                                              userName: userName,
+                                              agentActivities:
+                                                  activitiesForMessage(message),
+                                              onRetry:
+                                                  _runtime.canRetryMessage(
+                                                    index,
+                                                  )
+                                                  ? () => _retryMessage(index)
+                                                  : null,
+                                              onReply:
+                                                  message.type ==
+                                                      MessageType.systemNotice
+                                                  ? null
+                                                  : () => _setReplyTarget(
                                                       message,
                                                     ),
-                                                    'messageIndex': index,
-                                                  };
-                                              final hasAttachment =
-                                                  (message.resourceUri ?? '')
-                                                      .trim()
-                                                      .isNotEmpty ||
-                                                  (message.fileName ?? '')
-                                                      .trim()
-                                                      .isNotEmpty;
-                                              return KeyedSubtree(
-                                                key: ValueKey(item.key),
-                                                child: Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment
-                                                          .stretch,
-                                                  children: [
-                                                    if (index > 0 &&
-                                                        shouldShowRoleSwitch(
-                                                          _runtime
-                                                              .messages[index -
-                                                              1],
-                                                          message,
-                                                        ))
-                                                      AmitiaRoleSwitchDivider(
-                                                        characterName:
-                                                            messageCharacterName,
-                                                      ),
-                                                    providerMessage,
-                                                    if (hasAttachment)
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets.fromLTRB(
-                                                              52,
-                                                              2,
-                                                              12,
-                                                              2,
-                                                            ),
-                                                        child: MobileExtensionSlot(
-                                                          slotId:
-                                                              'chat.message.attachment_renderer',
-                                                          context:
-                                                              messageContext,
-                                                          actions:
-                                                              providerActions,
-                                                        ),
-                                                      ),
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.fromLTRB(
-                                                            52,
-                                                            0,
-                                                            12,
-                                                            2,
-                                                          ),
-                                                      child: MobileExtensionSlot(
-                                                        slotId:
-                                                            'chat.message.badge',
-                                                        context: messageContext,
-                                                        actions:
-                                                            providerActions,
-                                                      ),
-                                                    ),
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.fromLTRB(
-                                                            52,
-                                                            0,
-                                                            12,
-                                                            6,
-                                                          ),
-                                                      child: MobileExtensionSlot(
-                                                        slotId:
-                                                            'chat.message.action',
-                                                        context: messageContext,
-                                                        actions:
-                                                            providerActions,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
+                                              onCopy:
+                                                  message.type ==
+                                                          MessageType
+                                                              .systemNotice ||
+                                                      message.content
+                                                          .trim()
+                                                          .isEmpty
+                                                  ? null
+                                                  : () => _copyMessage(message),
+                                              onEdit:
+                                                  message.role ==
+                                                      MessageRole.user
+                                                  ? () => _editMessage(message)
+                                                  : null,
+                                              onAgentTaskTap: isAgentTask
+                                                  ? () {
+                                                      final taskId =
+                                                          message.agentTaskId
+                                                              ?.trim() ??
+                                                          '';
+                                                      context.push(
+                                                        taskId.isEmpty
+                                                            ? AppRoutes.agent
+                                                            : AppRoutes.agentTask(
+                                                                taskId,
+                                                              ),
+                                                      );
+                                                    }
+                                                  : null,
+                                            ),
+                                          );
+                                          final messageRenderer =
+                                              UIMessageRendererRegistry.resolve(
+                                                uiSnapshot,
+                                                messageType: message.type.name,
+                                                role: message.role.name,
                                               );
+                                          final providerMessage = UIProviderHost(
+                                            capability: UICapability
+                                                .conversationMessageRenderer,
+                                            providerId:
+                                                messageRenderer?.providerId,
+                                            fallback: builtinMessage,
+                                            context: {
+                                              ...providerContext,
+                                              'message': _providerMessage(
+                                                message,
+                                              ),
+                                              'messageIndex': index,
                                             },
-                                          ),
-                                  ),
-                                ),
+                                            actions: providerActions,
+                                          );
+                                          final messageContext =
+                                              <String, dynamic>{
+                                                ...providerContext,
+                                                'messageId': message.id,
+                                                'sourceOwnerId':
+                                                    message.sourceOwnerId,
+                                                'messageType':
+                                                    message.type.name,
+                                                'message': _providerMessage(
+                                                  message,
+                                                ),
+                                                'messageIndex': index,
+                                              };
+                                          final hasAttachment =
+                                              (message.resourceUri ?? '')
+                                                  .trim()
+                                                  .isNotEmpty ||
+                                              (message.fileName ?? '')
+                                                  .trim()
+                                                  .isNotEmpty;
+                                          return KeyedSubtree(
+                                            key: ValueKey(item.key),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                if (index > 0 &&
+                                                    shouldShowRoleSwitch(
+                                                      _runtime.messages[index -
+                                                          1],
+                                                      message,
+                                                    ))
+                                                  AmitiaRoleSwitchDivider(
+                                                    characterName:
+                                                        messageCharacterName,
+                                                  ),
+                                                providerMessage,
+                                                if (hasAttachment)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.fromLTRB(
+                                                          52,
+                                                          2,
+                                                          12,
+                                                          2,
+                                                        ),
+                                                    child: MobileExtensionSlot(
+                                                      slotId:
+                                                          'chat.message.attachment_renderer',
+                                                      context: messageContext,
+                                                      actions: providerActions,
+                                                    ),
+                                                  ),
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.fromLTRB(
+                                                        52,
+                                                        0,
+                                                        12,
+                                                        2,
+                                                      ),
+                                                  child: MobileExtensionSlot(
+                                                    slotId:
+                                                        'chat.message.badge',
+                                                    context: messageContext,
+                                                    actions: providerActions,
+                                                  ),
+                                                ),
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.fromLTRB(
+                                                        52,
+                                                        0,
+                                                        12,
+                                                        6,
+                                                      ),
+                                                  child: MobileExtensionSlot(
+                                                    slotId:
+                                                        'chat.message.action',
+                                                    context: messageContext,
+                                                    actions: providerActions,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
                               ),
-                              _ChatScrollFade(
-                                alignment: Alignment.topCenter,
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                color: context.backgroundPrimary,
-                                height: _chatTopBarHeight,
-                              ),
-                              _ChatScrollFade(
-                                alignment: Alignment.bottomCenter,
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                                color: context.backgroundPrimary,
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
+                          _ChatScrollFade(
+                            alignment: Alignment.topCenter,
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            color: context.backgroundPrimary,
+                            height: _chatTopBarHeight,
+                          ),
+                          _ChatScrollFade(
+                            alignment: Alignment.bottomCenter,
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            color: context.backgroundPrimary,
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                conversationComposer,
-              ],
+                ],
+              ),
             ),
           ),
           Positioned(

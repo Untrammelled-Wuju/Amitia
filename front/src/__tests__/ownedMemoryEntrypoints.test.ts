@@ -9,12 +9,15 @@ import MemoryTimeline from "../views/memory-timeline/MemoryTimeline.vue";
 
 const mocks = vi.hoisted(() => ({ data: vi.fn(), historicalRoles: vi.fn(), edit: vi.fn(), projections: vi.fn(), refresh: vi.fn(), legacy: vi.fn(), profiles: vi.fn(), confirm: vi.fn(), prompt: vi.fn(), deployment: vi.fn(), owned: null as any }));
 vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => mocks.owned }));
+vi.mock("vue-echarts", () => ({ default: { name: "VChart", props: ["option"], template: '<div data-graph-canvas />' } }));
 vi.mock("../composables/useApi", () => ({ apiClient: {}, useApi: () => ({ get: mocks.legacy, post: mocks.legacy, put: mocks.legacy, del: mocks.legacy }) }));
 vi.mock("../composables/useProfile", () => ({ useProfile: () => ({ profiles: ref([]), fetchProfiles: mocks.profiles, categoryLabel: (value: string) => value }) }));
 vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: mocks.deployment }));
 vi.mock("element-plus", async () => ({ ...await vi.importActual<any>("element-plus"), ElMessageBox: { confirm: mocks.confirm, prompt: mocks.prompt } }));
 const global = { directives: { loading: () => {} }, stubs: {
   DeviceOwnedMemoryManagement: true,
+  ElDialog: { props: ["modelValue"], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },
+  ElInput: { props: ["modelValue"], emits: ["update:modelValue"], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   ElSelect: { props: ["modelValue"], emits: ["update:modelValue"], template: "<select :value='modelValue' @change='$emit(\"update:modelValue\", $event.target.value)'><slot /></select>" },
   ElOption: { props: ["value", "label"], template: "<option :value='value'>{{ label }}</option>" },
   ElAlert: { props: ["title"], template: "<div>{{ title }}<slot /></div>" }, ElButton: { props: ["disabled"], emits: ["click"], template: "<button :disabled='disabled' @click='$emit(\"click\")'><slot /></button>" }, ElTag: { template: "<span><slot /></span>" }, ElEmpty: { props: ["description"], template: "<div>{{ description }}</div>" },
@@ -39,13 +42,95 @@ describe("网页六层记忆的数据归属入口", () => {
     mocks.data.mockImplementation(async (kind, role) => ({ executionScope: { ...scope, roleId: role }, snapshot: { ownerId: scope.resourceOwnerId, resources: [{ kind, id: "same-id", roleId: role, ownerId: scope.resourceOwnerId, revision: 1, body: { key: "记录", content: "原始内容", allowContextUse: true } }] } }));
     mocks.confirm.mockResolvedValue(true);
   });
-  afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()); });
+  afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()); vi.useRealTimers(); });
+
+  it.each(["memory", "episodic", "graph", "profile"])("%s 状态轮询结果不变时保留记录且不重新请求数据", async (kind) => {
+    vi.useFakeTimers();
+    mocks.projections.mockResolvedValue({ executionScope: scope, status: { layers: [] } });
+    mocks.refresh.mockImplementation(async () => {
+      mocks.owned.policy.value = { ...mocks.owned.policy.value };
+      return true;
+    });
+    const wrapper = open(DeviceOwnedMemoryPanel, { initialKind: kind });
+    await flushPromises();
+    expect(mocks.data).toHaveBeenCalledTimes(1);
+    for (let index = 0; index < 5; index++) {
+      await vi.advanceTimersByTimeAsync(3000);
+      await flushPromises();
+      if (kind === "graph") expect(wrapper.find("[data-graph-canvas]").exists()).toBe(true);
+      else expect(wrapper.text()).toContain("原始内容");
+      expect(mocks.data).toHaveBeenCalledTimes(1);
+    }
+    await wrapper.findAll("button").find((button) => button.text() === "刷新")!.trigger("click");
+    await flushPromises();
+    expect(mocks.data).toHaveBeenCalledTimes(2);
+  });
+
+  it("相同状态不丢弃正在加载的数据，权限实际变化后重新加载", async () => {
+    let finish!: (result: any) => void;
+    mocks.data.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const wrapper = open();
+    await flushPromises();
+    mocks.owned.policy.value = { ...mocks.owned.policy.value };
+    await flushPromises();
+    expect(mocks.data).toHaveBeenCalledTimes(1);
+    finish({ executionScope: scope, snapshot: { ownerId: "source", resources: [{ kind: "memory", id: "pending", roleId: "role", ownerId: "source", revision: 1, body: { content: "首次加载完成" } }] } });
+    await flushPromises();
+    expect(wrapper.text()).toContain("首次加载完成");
+    scope.permissionRevision = 2;
+    mocks.owned.policy.value = { ...mocks.owned.policy.value, permissionRevision: 2 };
+    await flushPromises();
+    expect(mocks.data).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).not.toContain("首次加载完成");
+    expect(wrapper.text()).toContain("原始内容");
+  });
+
+  it("服务断线恢复且权限版本未变化时重新加载一次，后续轮询保留数据", async () => {
+    vi.useFakeTimers();
+    const wrapper = open();
+    await flushPromises();
+    mocks.refresh.mockRejectedValueOnce(new Error("offline"));
+    await vi.advanceTimersByTimeAsync(3000);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("原始内容");
+    expect(mocks.data).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3000);
+    await flushPromises();
+    expect(wrapper.text()).toContain("原始内容");
+    expect(mocks.data).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(6000);
+    await flushPromises();
+    expect(mocks.data).toHaveBeenCalledTimes(2);
+  });
 
   it("当前 Owner 的记忆操作保留加载时 scope、角色和 CAS", async () => {
     const wrapper = open();
     await flushPromises();
     await wrapper.findAll("button").find((button) => button.text() === "停用")!.trigger("click");
     expect(mocks.edit).toHaveBeenCalledWith("memory", "same-id", { allowContextUse: false }, { characterId: "role", expectedExecutionScope: scope, expectedOwnerId: "source", expectedRevision: 1 });
+  });
+  it("独立页面只有一个范围入口，默认全部且可选择具体角色", async () => {
+    mocks.owned.roles.value = [{ id: "role", name: "角色" }, { id: "other", name: "第二角色" }];
+    const wrapper = open(DeviceOwnedDataView, { title: "记忆总览", initialKind: "memory" });
+    await flushPromises();
+    const selector = wrapper.find('select[aria-label="记忆查看范围"]');
+    expect(wrapper.findAll('select[aria-label="记忆查看范围"]')).toHaveLength(1);
+    expect(wrapper.find('select[aria-label="工作角色"]').exists()).toBe(false);
+    expect((selector.element as HTMLSelectElement).value).toBe("all");
+    await selector.setValue("role:other"); await flushPromises();
+    expect(mocks.data.mock.calls.at(-1)).toEqual(["memory", "other", "", "", { legacyCursor: "", memoryView: "role:other" }]);
+  });
+  it("用户画像全局共享，不提供角色或范围选择", async () => {
+    const wrapper = open(DeviceOwnedDataView, { title: "用户画像", initialKind: "profile" }); await flushPromises();
+    expect(wrapper.find('select[aria-label="记忆查看范围"]').exists()).toBe(false);
+    expect(mocks.data).toHaveBeenCalledWith("profile", "role", "", "", { legacyCursor: "", memoryView: "global" });
+  });
+  it("旧格式图谱仍在同一画布显示，并保留源记忆以供分区迁移", async () => {
+    mocks.data.mockResolvedValue({executionScope:{...scope,memoryRoleId:'@global-memory',memoryViewAll:true},snapshot:{ownerId:'source',resources:[],legacyGraphs:[{kind:'graph',id:'legacy/old',ownerId:'source',roleId:'role',revision:0,body:{key:'旧关系',legacyMemory:{id:'old',characterId:'role',scope:'character'},content:{nodes:[{id:'a',label:'用户'},{id:'b',label:'茶'}],edges:[{source:'a',target:'b',relation:'喜欢'}]}}}]}});
+    const wrapper=open(DeviceOwnedDataView,{title:'记忆图谱',initialKind:'graph'});await flushPromises();
+    expect(wrapper.find('[data-graph-canvas]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('旧关系');
+    expect(wrapper.findAll('button').some(button=>button.text()==='调整所属分区')).toBe(true);
   });
   it.each(["working", "profile", "episodic", "fact", "vector", "graph", "summary"])("%s 层只读取当前角色 Owned 数据通道", async (kind) => {
     mocks.projections.mockResolvedValue({ executionScope: scope, status: { layers: [] } });
@@ -120,7 +205,11 @@ describe("网页六层记忆的数据归属入口", () => {
     const timeline = mount(MemoryTimeline, { global });
     wrappers.push(timeline);
     await flushPromises();
-    expect(mocks.data).toHaveBeenCalledWith("memory", "role", "", "", { legacyCursor: "" });
+    expect(timeline.find('[aria-label="记忆层"]').exists()).toBe(false);
+    expect(timeline.text()).not.toContain("记忆分类");
+    expect(timeline.findAll('select[aria-label="记忆查看范围"]')).toHaveLength(1);
+    expect((timeline.find('select[aria-label="记忆查看范围"]').element as HTMLSelectElement).value).toBe("all");
+    expect(mocks.data).toHaveBeenCalledWith("memory", "role", "", "", { legacyCursor: "", memoryView: "all" });
     expect(mocks.legacy).not.toHaveBeenCalled();
     timeline.unmount();
     wrappers.pop();

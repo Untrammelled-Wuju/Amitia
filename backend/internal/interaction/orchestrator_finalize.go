@@ -72,7 +72,9 @@ func (o *Orchestrator) completionConflictResult(ctx context.Context, record *Int
 
 func (o *Orchestrator) successResult(record *InteractionRecord, req *ProcessRequest, resp *ProcessResponse, events []outbox.OutboxRecord, duration time.Duration) *OrchestrationResult {
 	resp.RequestID = req.RequestID
-	resp.ConversationID = req.ConversationID
+	if req.ConversationID != "" || resp.ConversationID == "" {
+		resp.ConversationID = req.ConversationID
+	}
 	resp.CharacterID = req.CharacterID
 	result := o.buildResult(record, resp, OutcomeCompleted, nil)
 	result.Duration = duration

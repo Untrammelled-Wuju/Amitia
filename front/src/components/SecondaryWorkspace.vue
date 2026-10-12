@@ -9,7 +9,7 @@
       </header>
       <slot name="navigation" />
     </aside>
-    <main class="secondary-main"><div class="secondary-content"><slot /></div></main>
+    <main class="secondary-main" data-amitia-ui="app.content"><div class="secondary-content" data-amitia-ui="app.content"><slot /></div></main>
   </div>
 </template>
 

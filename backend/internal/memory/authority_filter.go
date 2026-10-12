@@ -8,6 +8,7 @@ import (
 )
 
 type retrievalAuthorityPolicy struct {
+	MemoryScope      string
 	CharacterID      string
 	SpaceID          string
 	ProactiveMention bool
@@ -15,6 +16,10 @@ type retrievalAuthorityPolicy struct {
 }
 
 func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) bool {
+	global := m.Scope == "user" || m.Scope == "user_global"
+	if policy.MemoryScope == "global" && !global || policy.MemoryScope == "character" && global {
+		return false
+	}
 	if !memoryContextUseAllowed(m) {
 		return false
 	}

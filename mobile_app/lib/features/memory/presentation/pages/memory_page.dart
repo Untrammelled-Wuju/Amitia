@@ -73,7 +73,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final ownedPage = ownedMemoryGate(ref);
+    final ownedPage = ownedMemoryGate(ref, showTools: true);
     if (ownedPage != null) return ownedPage;
     final memoriesAsync = ref.watch(memoryListProvider);
     return AmitiaScaffold(

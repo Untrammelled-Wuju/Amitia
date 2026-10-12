@@ -7,6 +7,7 @@ import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import { useExtensionUIStore } from "../stores/extensionUI";
 import { browserClientPluginRuntime, type BrowserDeclarativeClientPackage } from "../ui-runtime/clientPluginRuntime";
 import { resolveUIHostDeviceId } from "../ui-runtime/deviceIdentity";
+import { executeStyleCommand } from "../ui-runtime/styleCommand";
 import { resolveHostEnvironment } from "./useHostEnvironment";
 
 interface SSEEventEnvelope {
@@ -50,6 +51,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   let notificationSettingsCheckedAt = 0;
   let notificationsAllowed = false;
   const proactiveNotificationIds = new Set<string>();
+  const disposeMainStyleCommand = window.amitiaDesktop?.onUIStyleCommand?.((data) => {
+    void handleStyleCommand(new MessageEvent("ui_style_command", { data }));
+  });
 
   function getStableHostClientId(): string {
     if (hostClientId) return hostClientId;
@@ -87,12 +91,18 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     const clientId = getStableHostClientId();
     const deviceId = await resolveUIHostDeviceId();
     const environment = resolveHostEnvironment();
+    const desktopStyleHost = typeof window !== "undefined" && Boolean(window.amitiaDesktop?.onUIStyleCommand);
     const result = await postHostSession("/api/extensions/ui/host-session", {
       hostClientId: clientId,
       deviceId,
       platform: environment.platform === "macos" ? "darwin" : environment.platform,
       windowId: "main",
-      features: ["ui.notify", "ui.dialog", "ui.navigate"],
+      features: [
+        "ui.notify",
+        "ui.dialog",
+        "ui.navigate",
+        ...(desktopStyleHost ? [] : ["ui.style"]),
+      ],
     });
     hostSessionId = String(result.hostSessionId ?? "").trim();
     if (!hostSessionId) throw new Error("UI host registration returned no hostSessionId");
@@ -310,6 +320,60 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     }
   }
 
+  async function handleStyleCommand(event: MessageEvent) {
+    const envelope = parseEnvelope(event);
+    if (!envelope || !envelope.payload || !shouldProcess(envelope)) return;
+    const commandId = String(envelope.payload.commandId ?? "").trim();
+    if (!commandId) return;
+    const action = String(envelope.payload.action ?? "").trim();
+    const expectedRevision = Number(envelope.payload.expectedRevision ?? 0) || 0;
+    const changes = envelope.payload.changes && typeof envelope.payload.changes === "object" && !Array.isArray(envelope.payload.changes)
+      ? envelope.payload.changes as Record<string, unknown>
+      : {};
+    for (const key of [
+      "scope",
+      "target",
+      "selector",
+      "component",
+      "targets",
+      "rules",
+      "states",
+      "state",
+      "properties",
+      "property",
+      "transactionId",
+      "source",
+      "limit",
+      "includeComputed",
+      "page",
+      "platform",
+      "surface",
+    ]) {
+      if (changes[key] === undefined && envelope.payload[key] !== undefined) {
+        changes[key] = envelope.payload[key];
+      }
+    }
+    const payloadHostClientId = String(envelope.payload.hostClientId ?? envelope.hostClientId ?? hostClientId).trim();
+    const payloadHostSessionId = String(envelope.payload.hostSessionId ?? envelope.hostSessionId ?? hostSessionId).trim();
+    try {
+      const result = await executeStyleCommand(action, expectedRevision, changes);
+      await sendClientRuntimeResponse(
+        commandId,
+        payloadHostClientId,
+        payloadHostSessionId,
+        result,
+      );
+    } catch (error) {
+      await sendClientRuntimeResponse(
+        commandId,
+        payloadHostClientId,
+        payloadHostSessionId,
+        {},
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   function parseEnvelope(event: MessageEvent): SSEEventEnvelope | null {
     try {
       return JSON.parse(event.data) as SSEEventEnvelope;
@@ -497,6 +561,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       case "ui_client_runtime_command":
         void handleClientRuntimeCommand(event);
         break;
+      case "ui_style_command":
+        void handleStyleCommand(event);
+        break;
       case "proactive_message":
         window.dispatchEvent(
           new CustomEvent("amitia:proactive-message", { detail: data }),
@@ -621,6 +688,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   }, 60000);
 
   onUnmounted(() => {
+    disposeMainStyleCommand?.();
     void unregisterHostSession();
     disconnect();
     if (dedupCleanupTimer) {

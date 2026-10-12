@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 )
 
@@ -18,6 +19,18 @@ type fixedResourceLinkResolver struct {
 
 func (r fixedResourceLinkResolver) ResolveResourceLink(string) (string, string, string, error) {
 	return "com.example/media", "data", r.fullPath, r.err
+}
+
+func TestNormalizeUIHostFeaturesIncludesStyle(t *testing.T) {
+	features := normalizeUIHostFeatures([]string{
+		"ui.notify",
+		"ui.style",
+		"unknown",
+		"ui.style",
+	})
+	if len(features) != 2 || features[0] != host_registry.EndpointFeatureUINotify || features[1] != host_registry.EndpointFeatureUIStyle {
+		t.Fatalf("unexpected features: %#v", features)
+	}
 }
 
 func TestResolveExtensionBasePathUsesCurrentGeneration(t *testing.T) {

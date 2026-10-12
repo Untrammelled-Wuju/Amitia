@@ -10,11 +10,12 @@ defineProps<{
 </script>
 
 <template>
-  <div class="web-composer-action-proxy">
+  <div class="web-composer-action-proxy" data-amitia-ui="extension.surface">
     <SandboxWebUIFrame
       :contribution="contribution"
       :context="context"
       :slot-id="slotId"
+      semantic-target="extension.surface"
     />
   </div>
 </template>

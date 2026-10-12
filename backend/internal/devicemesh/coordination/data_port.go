@@ -17,23 +17,24 @@ type Role struct {
 }
 
 type DataQuery struct {
-	Management             bool      `json:"management,omitempty"`
-	Vector                 []float32 `json:"vector,omitempty"`
-	VectorModel            string    `json:"vectorModel,omitempty"`
-	Cursor                 string    `json:"cursor,omitempty"`
-	HistoricalCursor       string    `json:"historicalCursor,omitempty"`
-	LegacyCursor           string    `json:"legacyCursor,omitempty"`
-	HistoricalLegacyCursor string    `json:"historicalLegacyCursor,omitempty"`
-	HistoricalListCursor   string    `json:"historicalListCursor,omitempty"`
-	ResourceKind           string    `json:"resourceKind,omitempty"`
-	ResourceID             string    `json:"resourceId,omitempty"`
-	RequestID              string    `json:"requestId,omitempty"`
-	ConversationID         string    `json:"conversationId,omitempty"`
-	Query                  string    `json:"query,omitempty"`
-	SearchQuery            string    `json:"searchQuery,omitempty"`
-	Limit                  int       `json:"limit,omitempty"`
-	HistoricalRoleID       string    `json:"historicalRoleId,omitempty"`
-	ListConversations      bool      `json:"listConversations,omitempty"`
+	LegacyMemoryTransfer   *LegacyMemoryTransferRequest `json:"legacyMemoryTransfer,omitempty"`
+	Management             bool                         `json:"management,omitempty"`
+	Vector                 []float32                    `json:"vector,omitempty"`
+	VectorModel            string                       `json:"vectorModel,omitempty"`
+	Cursor                 string                       `json:"cursor,omitempty"`
+	HistoricalCursor       string                       `json:"historicalCursor,omitempty"`
+	LegacyCursor           string                       `json:"legacyCursor,omitempty"`
+	HistoricalLegacyCursor string                       `json:"historicalLegacyCursor,omitempty"`
+	HistoricalListCursor   string                       `json:"historicalListCursor,omitempty"`
+	ResourceKind           string                       `json:"resourceKind,omitempty"`
+	ResourceID             string                       `json:"resourceId,omitempty"`
+	RequestID              string                       `json:"requestId,omitempty"`
+	ConversationID         string                       `json:"conversationId,omitempty"`
+	Query                  string                       `json:"query,omitempty"`
+	SearchQuery            string                       `json:"searchQuery,omitempty"`
+	Limit                  int                          `json:"limit,omitempty"`
+	HistoricalRoleID       string                       `json:"historicalRoleId,omitempty"`
+	ListConversations      bool                         `json:"listConversations,omitempty"`
 }
 
 func NormalizeConversationSearch(value string) (string, error) {
@@ -55,6 +56,7 @@ type DataSnapshot struct {
 	LegacyMemories      []json.RawMessage `json:"legacyMemories,omitempty"`
 	LegacyProfiles      []json.RawMessage `json:"legacyProfiles,omitempty"`
 	LegacyEpisodes      []json.RawMessage `json:"legacyEpisodes,omitempty"`
+	LegacyGraphs        []json.RawMessage `json:"legacyGraphs,omitempty"`
 	LegacyConversations []json.RawMessage `json:"legacyConversations,omitempty"`
 }
 
@@ -118,21 +120,21 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	if snapshot.OwnerID != scope.ResourceOwnerID || snapshot.Role.ID != scope.RoleID || snapshot.Role.Revision != scope.RoleRevision || !json.Valid(snapshot.Role.Profile) {
 		return ErrWrongOwner
 	}
-	if len(snapshot.Resources) > 4096 || len(snapshot.LegacyMessages) > 256 || len(snapshot.LegacyMemories) > 256 || len(snapshot.LegacyProfiles) > 256 || len(snapshot.LegacyEpisodes) > 256 || len(snapshot.LegacyConversations) > 256 {
+	if len(snapshot.Resources) > 4096 || len(snapshot.LegacyMessages) > 256 || len(snapshot.LegacyMemories) > 256 || len(snapshot.LegacyProfiles) > 256 || len(snapshot.LegacyEpisodes) > 256 || len(snapshot.LegacyGraphs) > 256 || len(snapshot.LegacyConversations) > 256 {
 		return ErrPendingLimit
 	}
 	if len(snapshot.NextCursors) > 16 {
 		return ErrPendingLimit
 	}
 	for kind, cursor := range snapshot.NextCursors {
-		if (!validKind(kind) && kind != "legacyMessage" && kind != "legacyConversation" && kind != "legacyMemory" && kind != "legacyProfile" && kind != "legacyEpisode") || len(cursor) > 4096 {
+		if (!validKind(kind) && kind != "legacyMessage" && kind != "legacyConversation" && kind != "legacyMemory" && kind != "legacyProfile" && kind != "legacyEpisode" && kind != "legacyGraph") || len(cursor) > 4096 {
 			return ErrWrongOwner
 		}
 	}
 	seen := make(map[string]bool)
 	for _, resource := range snapshot.Resources {
 		key := resource.Kind + "/" + resource.ID
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != scope.RoleID || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
+		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
 			return fmt.Errorf("%w: 无效上下文记录", ErrWrongOwner)
 		}
 		seen[key] = true

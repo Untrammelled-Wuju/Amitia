@@ -59,6 +59,41 @@ const mergedProps = computed<Record<string, unknown>>(() => {
   return base;
 });
 
+const semanticTarget = computed(() => {
+  const explicit = toText(mergedProps.value.amitiaUi ?? mergedProps.value.amitia_ui ?? mergedProps.value.semanticTarget).trim();
+  if (explicit) return explicit;
+  switch (nodeType.value) {
+    case "page":
+      return "extension.page";
+    case "card":
+    case "section":
+      return "extension.card";
+    case "tabs":
+    case "tab_item":
+      return "component.tab";
+    case "field":
+    case "select":
+      return "component.input";
+    case "switch":
+      return "component.switch";
+    case "slider":
+      return "component.slider";
+    case "button":
+    case "button_group":
+      return "component.button";
+    case "list":
+      return "component.list_item";
+    default:
+      return "extension.surface";
+  }
+});
+
+const nodeTarget = computed(() => {
+  const contributionId = toText(props.contributionId).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || "root";
+  const nodeId = toText(props.node.id).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || "root";
+  return `plugin.schema.${contributionId}.${nodeId}`;
+});
+
 const visible = computed(() => {
   const cond = props.node.visibleWhen ?? props.node.visibility;
   return evaluateVisibility(cond, props.context);
@@ -104,6 +139,7 @@ const markdownHtml = computed(() =>
 );
 
 const gridTemplateColumns = computed(() => {
+  if (mergedProps.value.layout === "master-detail") return undefined;
   const cols = toNumber(mergedProps.value.columns, 0);
   if (cols > 0 && cols <= 12) return `repeat(${cols}, minmax(0, 1fr))`;
   const tmpl = toText(mergedProps.value.columnsTemplate);
@@ -207,6 +243,12 @@ const activeTab = computed<string>({
   set: (v: string) => {
     activeTabRaw.value = v;
   },
+});
+
+const tabsType = computed<"" | "card" | "border-card">(() => {
+  const variant = toText(mergedProps.value.variant).trim();
+  if (variant === "card" || variant === "border-card") return variant;
+  return "";
 });
 
 const selectOptions = computed<Array<{ label: string; value: unknown }>>(() => {
@@ -315,6 +357,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-if="nodeType === 'page'"
       class="schema-ui-page schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       <SchemaUINode
@@ -335,6 +379,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-card
       v-else-if="nodeType === 'section'"
       class="schema-ui-section schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :shadow="mergedProps.shadow ?? 'never'"
       :border="mergedProps.bordered !== false"
@@ -363,6 +409,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'stack'"
       class="schema-ui-stack schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :style="{ gap: mergedProps.gap ? toText(mergedProps.gap) : undefined, alignItems: toText(mergedProps.align) || undefined }"
     >
@@ -384,6 +432,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'row'"
       class="schema-ui-row schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :style="{ gap: mergedProps.gap ? toText(mergedProps.gap) : undefined, alignItems: toText(mergedProps.align) || undefined, justifyContent: toText(mergedProps.justify) || undefined }"
     >
@@ -405,6 +455,9 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'grid'"
       class="schema-ui-grid schema-ui-node"
+      :class="{ 'schema-ui-grid--master-detail': mergedProps.layout === 'master-detail' }"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :style="{ gridTemplateColumns, gap: mergedProps.gap ? toText(mergedProps.gap) : undefined }"
     >
@@ -427,8 +480,10 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       v-else-if="nodeType === 'tabs'"
       v-model="activeTab"
       class="schema-ui-tabs schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
-      :type="(mergedProps.variant as any) || 'line'"
+      :type="tabsType"
       :tab-position="(mergedProps.position as any) || 'top'"
     >
       <SchemaUINode
@@ -449,6 +504,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-card
       v-else-if="nodeType === 'card'"
       class="schema-ui-card schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :shadow="(mergedProps.shadow as any) ?? 'hover'"
       :border="mergedProps.bordered !== false"
@@ -475,6 +532,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :is="mergedProps.variant === 'title' ? 'h3' : 'p'"
       v-else-if="nodeType === 'text'"
       class="schema-ui-text schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       {{ mergedProps.text ?? mergedProps.content ?? toText(mergedProps.value) }}
@@ -483,6 +542,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'markdown'"
       class="schema-ui-markdown schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       v-html="markdownHtml"
     ></div>
@@ -490,6 +551,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-tag
       v-else-if="nodeType === 'badge'"
       class="schema-ui-badge schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :type="(mergedProps.type as any) || 'info'"
       :effect="(mergedProps.effect as any) || 'light'"
@@ -502,6 +565,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-divider
       v-else-if="nodeType === 'divider'"
       class="schema-ui-divider schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :direction="(mergedProps.direction as any) || 'horizontal'"
       :content-position="(mergedProps.position as any) || 'center'"
@@ -512,6 +577,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-icon
       v-else-if="nodeType === 'icon'"
       class="schema-ui-icon schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :size="toNumber(mergedProps.size, 16)"
       :color="toText(mergedProps.color) || undefined"
@@ -522,10 +589,13 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-image
       v-else-if="nodeType === 'image'"
       class="schema-ui-image schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :src="toText(mergedProps.src)"
       :fit="(mergedProps.fit as any) || 'cover'"
       :alt="toText(mergedProps.alt)"
+      :style="{ width: mergedProps.width ? `${Math.max(1, toNumber(mergedProps.width))}px` : undefined, height: mergedProps.height ? `${Math.max(1, toNumber(mergedProps.height))}px` : undefined }"
       :preview-src-list="mergedProps.preview ? [toText(mergedProps.src)] : []"
       lazy
     >
@@ -540,6 +610,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-form-item
       v-else-if="nodeType === 'field'"
       class="schema-ui-field schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :label="toText(mergedProps.label ?? mergedProps.title)"
       :required="mergedProps.required === true"
@@ -579,6 +651,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-select
       v-else-if="nodeType === 'select'"
       class="schema-ui-select schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :model-value="modelValue.value"
       :placeholder="toText(mergedProps.placeholder)"
@@ -599,6 +673,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-switch
       v-else-if="nodeType === 'switch'"
       class="schema-ui-switch schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :model-value="!!modelValue.value"
       :disabled="disabled || mergedProps.disabled === true || !editableFormBinding"
@@ -609,22 +685,31 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       @update:model-value="updateModelValue"
     />
 
-    <el-slider
+    <div
       v-else-if="nodeType === 'slider'"
       class="schema-ui-slider schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
-      :model-value="toNumber(modelValue.value)"
-      :min="toNumber(mergedProps.min, 0)"
-      :max="toNumber(mergedProps.max, 100)"
-      :step="toNumber(mergedProps.step, 1)"
-      :disabled="disabled || mergedProps.disabled === true || !editableFormBinding"
-      :show-input="mergedProps.showInput === true"
-      @update:model-value="updateModelValue"
-    />
+    >
+      <span v-if="mergedProps.label" class="schema-ui-slider__label">{{ mergedProps.label }}</span>
+      <el-slider
+        :aria-label="toText(mergedProps.label) || undefined"
+        :model-value="toNumber(modelValue.value)"
+        :min="toNumber(mergedProps.min, 0)"
+        :max="toNumber(mergedProps.max, 100)"
+        :step="toNumber(mergedProps.step, 1)"
+        :disabled="disabled || mergedProps.disabled === true || !editableFormBinding"
+        :show-input="mergedProps.showInput === true"
+        @update:model-value="updateModelValue"
+      />
+    </div>
 
     <el-button
       v-else-if="nodeType === 'button'"
       class="schema-ui-button schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :type="(mergedProps.type as any) || 'default'"
       :size="(mergedProps.size as any) || 'default'"
@@ -640,6 +725,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-button-group
       v-else-if="nodeType === 'button_group'"
       class="schema-ui-button-group schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       <SchemaUINode
@@ -660,6 +747,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <ul
       v-else-if="nodeType === 'list'"
       class="schema-ui-list schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       <template v-if="listItems.length > 0">
@@ -685,8 +774,10 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'gallery'"
       class="schema-ui-gallery schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
-      :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${toNumber(mergedProps.minItemWidth, 148)}px, 1fr))` }"
+      :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${toNumber(mergedProps.minItemWidth, 148)}px), 1fr))` }"
     >
       <button
         v-for="(item, index) in galleryItems"
@@ -718,6 +809,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'file_picker'"
       class="schema-ui-file-picker schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       <input
@@ -742,6 +835,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-table
       v-else-if="nodeType === 'table'"
       class="schema-ui-table schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :data="tableData"
       :border="mergedProps.bordered === true"
@@ -762,6 +857,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-empty
       v-else-if="nodeType === 'empty_state'"
       class="schema-ui-empty schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :description="toText(mergedProps.description ?? mergedProps.text ?? '暂无数据')"
       :image-size="toNumber(mergedProps.imageSize, 60)"
@@ -770,6 +867,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-alert
       v-else-if="nodeType === 'alert'"
       class="schema-ui-alert schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :title="toText(mergedProps.title ?? mergedProps.message)"
       :description="toText(mergedProps.description ?? mergedProps.detail)"
@@ -782,6 +881,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-progress
       v-else-if="nodeType === 'progress'"
       class="schema-ui-progress schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :percentage="Math.max(0, Math.min(100, toNumber(mergedProps.value ?? mergedProps.percentage, 0)))"
       :type="(mergedProps.variant as any) || 'line'"
@@ -793,12 +894,16 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <pre
       v-else-if="nodeType === 'code'"
       class="schema-ui-code schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     ><code>{{ mergedProps.content ?? mergedProps.text ?? mergedProps.value }}</code></pre>
 
     <el-descriptions
       v-else-if="nodeType === 'key_value'"
       class="schema-ui-key-value schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :column="toNumber(mergedProps.columns, 1)"
       :border="mergedProps.bordered !== false"
@@ -815,6 +920,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-link
       v-else-if="nodeType === 'resource_link'"
       class="schema-ui-resource-link schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :href="toText(mergedProps.href)"
       :target="toText(mergedProps.target) || '_blank'"
@@ -828,6 +935,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'permission_summary'"
       class="schema-ui-permission-summary schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       <div class="schema-ui-permission-summary__title">
@@ -844,6 +953,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'runtime_status'"
       class="schema-ui-runtime-status schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :data-status="runtimeStatusInfo.status"
     >
@@ -861,6 +972,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <ExtensionSlot
       v-else-if="nodeType === 'extension_slot' && extensionSlotAuthorized"
       class="schema-ui-extension-slot schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :slot-id="toText(mergedProps.slotId)"
       :context="context"
@@ -874,6 +987,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-tab-pane
       v-else-if="nodeType === 'tab_item'"
       class="schema-ui-tab-item schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :label="toText(mergedProps.label ?? mergedProps.title)"
       :name="toText(mergedProps.name ?? node.id)"
@@ -897,6 +1012,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'column'"
       class="schema-ui-column schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       <span v-if="mergedProps.label" class="schema-ui-column__label">{{ mergedProps.label }}</span>
@@ -918,6 +1035,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else
       class="schema-ui-node__fallback schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
     >
       <SchemaUINode
@@ -939,6 +1058,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 
 <style scoped>
 .schema-ui-node {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
 }
@@ -947,6 +1067,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   flex-direction: column;
   gap: 12px;
   padding: 4px 0;
+  container-type: inline-size;
 }
 .schema-ui-section__header {
   display: flex;
@@ -977,6 +1098,22 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 .schema-ui-grid {
   display: grid;
   gap: 12px;
+}
+.schema-ui-grid--master-detail {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  align-items: start;
+}
+.schema-ui-row > .schema-ui-file-picker {
+  width: auto;
+  flex: 0 1 auto;
+}
+.schema-ui-stack > .schema-ui-field {
+  margin-bottom: 0;
+}
+@container (max-width: 760px) {
+  .schema-ui-grid--master-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .schema-ui-text {
   margin: 0;
@@ -1065,6 +1202,41 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 }
 .schema-ui-button {
   width: auto;
+  align-self: flex-start;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.schema-ui-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  container-type: inline-size;
+}
+.schema-ui-slider :deep(.el-slider) {
+  box-sizing: border-box;
+  padding-inline: calc(var(--el-slider-button-wrapper-size, 36px) / 2 + 2px);
+}
+.schema-ui-slider :deep(.el-slider__runway) {
+  min-width: 0;
+}
+@container (max-width: 280px) {
+  .schema-ui-slider :deep(.el-slider) {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: calc(var(--el-slider-button-wrapper-size, 36px) / 2 + 4px);
+    padding-block: calc((var(--el-slider-button-wrapper-size, 36px) - var(--el-slider-height, 6px)) / 2);
+  }
+  .schema-ui-slider :deep(.el-slider__runway.show-input) {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+  .schema-ui-slider :deep(.el-slider__input) {
+    margin-left: auto;
+  }
+}
+.schema-ui-slider__label {
+  font-size: var(--ac-font-size-base, 14px);
+  color: var(--amitia-text-primary, inherit);
 }
 .schema-ui-list {
   margin: 0;

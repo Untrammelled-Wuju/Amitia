@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
   clipboardReadText: "amitia:clipboard:read-text",
   clipboardWriteText: "amitia:clipboard:write-text",
   uiNavigate: "amitia:ui:navigate",
+  uiStyleCommand: "amitia:ui-style:command",
   getBackendAuthHeaders: "amitia:backend-auth:get-headers",
   publishLocalVoiceASRFinal: "amitia:workflow:voice-asr-final",
   openRealtimeCallWindow: "amitia:realtime-call:open",

@@ -1,19 +1,19 @@
 <template>
-  <el-card shadow="never" class="section-card" v-loading="loading">
+  <el-card shadow="never" class="section-card" data-amitia-ui="component.card" v-loading="loading">
     <template #header>超时控制</template>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-form label-position="top">
       <el-form-item label="停用超时">
-        <el-switch v-model="settings.disabled" :disabled="loading || saving || !!error" />
+        <el-switch v-model="settings.disabled" data-amitia-ui="component.switch" :disabled="loading || saving || !!error" />
         <span class="timeout-hint">开启后，功能调用不再因执行时间过长而中止</span>
       </el-form-item>
       <el-form-item :label="`超时时间：${formatTimeout(settings.seconds)}`">
-        <el-slider v-model="settings.seconds" :min="30" :max="1800" :step="30"
+        <el-slider v-model="settings.seconds" data-amitia-ui="component.slider" :min="30" :max="1800" :step="30"
           :format-tooltip="formatTimeout" :disabled="settings.disabled || loading || saving || !!error" />
       </el-form-item>
       <p class="timeout-hint">统一控制模型、工具与媒体处理等功能的执行时限。保存后对新调用生效；仍可主动取消。</p>
-      <el-button v-if="error" @click="load">重新加载</el-button>
-      <el-button v-else type="primary" :loading="saving" :disabled="loading" @click="save">保存</el-button>
+      <el-button v-if="error" data-amitia-ui="component.button" @click="load">重新加载</el-button>
+      <el-button v-else data-amitia-ui="component.button" type="primary" :loading="saving" :disabled="loading" @click="save">保存</el-button>
     </el-form>
   </el-card>
 </template>

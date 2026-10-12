@@ -6,10 +6,10 @@
 
 | 字段 | 值 |
 |------|----|
-| Report ID | final-acceptance-1790555239464973200 |
-| 生成时间 | 2026-09-28T00:28:14Z |
-| 开始时间 | 2026-09-28T00:27:19Z |
-| 结束时间 | 2026-09-28T00:28:14Z |
+| Report ID | final-acceptance-1791629699711797900 |
+| 生成时间 | 2026-10-10T10:56:22Z |
+| 开始时间 | 2026-10-10T10:54:59Z |
+| 结束时间 | 2026-10-10T10:56:22Z |
 | 总项 | 25 |
 | 通过 | 23 |
 | 失败 | 0 |
@@ -52,7 +52,7 @@
 | stage7.legacy_amitiax | legacy_removal | 旧 Amitiax 安装器弃用 | true | passed | amitiax_migration.Registry 实例化成功; amitiax.Installer (新安装器) 实例化成功并正确 Fail Closed; 旧 Amitiax 安装器已通过迁移注册表弃用 |
 | stage7.legacy_data | legacy_removal | 旧数据模型弃用 | true | passed | data_migration.Registry 实例化成功; data_migration.List() 返回非 nil 切片; 旧数据模型已通过迁移注册表标记弃用 |
 | arch.single_chain | kernel_core | 单一主链 | true | passed | ContainerBuilder 构建成功,ToolRegistry 和 ExecutionKernel 均非 nil; ToolFacade 在无 LegacyDispatcher 时成功返回 ModelTools; 模型工具数量=18; GlobalLegacyCallCounter.Total()=0; legacy_fallback_total=0 |
-| arch.domain_invariants | kernel_core | 领域不变量 | true | passed | DefinitionRepository 非空; ContributionRegistry 非空; ScheduleService 启动成功; EventService 启动成功; 默认事件类型数量=55 |
+| arch.domain_invariants | kernel_core | 领域不变量 | true | passed | DefinitionRepository 非空; ContributionRegistry 非空; ScheduleService 启动成功; EventService 启动成功; 默认事件类型数量=57 |
 | build.compiles | validation | go build 通过 | true | passed | go build ./... 退出码 0; 输出长度=0 字节 |
 | build.frontend | validation | 前端构建通过 | true | passed | 前端目录结构完整 (package.json, src/, router/); TypeScript 类型检查工具已配置; 前端构建基础设施就绪 |
 | platform.windows | validation | Windows 平台 | true | passed | Windows 平台 (windows/amd64) 文件读写正常; ContainerBuilder 在 Windows 上构建和关闭正常; Windows 平台验收通过 |

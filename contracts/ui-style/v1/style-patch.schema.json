@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.local/contracts/ui-style/v1/style-patch.schema.json",
+  "title": "Amitia UI Style Patch v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "themeMode": {
+      "type": "string",
+      "enum": [
+        "system",
+        "light",
+        "dark"
+      ]
+    },
+    "accentColor": {
+      "$ref": "#/$defs/color"
+    },
+    "fontScale": {
+      "type": "number",
+      "minimum": 0.8,
+      "maximum": 1.4
+    },
+    "cornerStyle": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "dynamicEffect": {
+      "type": "boolean"
+    },
+    "reduceAnimation": {
+      "type": "boolean"
+    },
+    "customPalette": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "primary": {
+          "$ref": "#/$defs/color"
+        },
+        "secondary": {
+          "$ref": "#/$defs/color"
+        },
+        "text": {
+          "$ref": "#/$defs/color"
+        },
+        "textMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "dark",
+            "light",
+            "custom"
+          ]
+        }
+      }
+    },
+    "palette": {
+      "$ref": "#/$defs/palette"
+    },
+    "typography": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "pageTitleSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "pageLargeTitleSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "sectionTitleSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "cardTitleSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "bodySize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "bodySmallSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "captionSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "labelSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "statusLabelSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "buttonSize": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "pageTitleWeight": {
+          "$ref": "#/$defs/fontWeight"
+        },
+        "sectionTitleWeight": {
+          "$ref": "#/$defs/fontWeight"
+        },
+        "cardTitleWeight": {
+          "$ref": "#/$defs/fontWeight"
+        },
+        "bodyWeight": {
+          "$ref": "#/$defs/fontWeight"
+        },
+        "labelWeight": {
+          "$ref": "#/$defs/fontWeight"
+        },
+        "buttonWeight": {
+          "$ref": "#/$defs/fontWeight"
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spacing": {
+          "$ref": "#/$defs/spacing"
+        },
+        "radius": {
+          "$ref": "#/$defs/radius"
+        },
+        "density": {
+          "type": "number",
+          "minimum": 0.75,
+          "maximum": 1.5
+        },
+        "listItemMinHeight": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "listItemMaxHeight": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "buttonHeight": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "inputMinHeight": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      }
+    },
+    "icons": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extraSmall": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "small": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "medium": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "large": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "navigation": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "toolbarHeight": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "drawerWidth": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "borderWidth": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "controlHeight": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "compactControlHeight": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      }
+    },
+    "componentVariants": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        }
+      }
+    },
+    "background": {
+      "$ref": "#/$defs/background"
+    }
+  },
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "positiveNumber": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 240
+    },
+    "fontWeight": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 900
+    },
+    "palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backgroundPrimary": {
+          "$ref": "#/$defs/color"
+        },
+        "backgroundSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "surfacePrimary": {
+          "$ref": "#/$defs/color"
+        },
+        "surfaceSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "accentPrimary": {
+          "$ref": "#/$defs/color"
+        },
+        "accentSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "accentSoft": {
+          "$ref": "#/$defs/color"
+        },
+        "accentPressed": {
+          "$ref": "#/$defs/color"
+        },
+        "textPrimary": {
+          "$ref": "#/$defs/color"
+        },
+        "textSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "textTertiary": {
+          "$ref": "#/$defs/color"
+        },
+        "textDisabled": {
+          "$ref": "#/$defs/color"
+        },
+        "borderPrimary": {
+          "$ref": "#/$defs/color"
+        },
+        "borderSecondary": {
+          "$ref": "#/$defs/color"
+        },
+        "success": {
+          "$ref": "#/$defs/color"
+        },
+        "warning": {
+          "$ref": "#/$defs/color"
+        },
+        "error": {
+          "$ref": "#/$defs/color"
+        },
+        "info": {
+          "$ref": "#/$defs/color"
+        },
+        "scrim": {
+          "$ref": "#/$defs/color"
+        },
+        "overlay": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "spacing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "xs": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "sm": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "md": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "lg": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "xl": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "xxl": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "xxxl": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "page": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "card": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "section": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "component": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "tight": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      }
+    },
+    "radius": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "xs": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "sm": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "md": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "lg": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "tag": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "pill": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      }
+    },
+    "background": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "default",
+            "color",
+            "gradient",
+            "image",
+            "video"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "gradientStart": {
+          "$ref": "#/$defs/color"
+        },
+        "gradientEnd": {
+          "$ref": "#/$defs/color"
+        },
+        "gradientAngle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "assetUri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "blurEnabled": {
+          "type": "boolean"
+        },
+        "blurRadius": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 30
+        },
+        "fit": {
+          "type": "string",
+          "enum": [
+            "cover",
+            "contain",
+            "stretch",
+            "repeat"
+          ]
+        },
+        "overlayColor": {
+          "$ref": "#/$defs/color"
+        },
+        "overlayOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

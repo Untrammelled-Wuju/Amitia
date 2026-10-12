@@ -4,6 +4,7 @@ package memory
 
 import (
 	"fmt"
+	"github.com/u-ai/backend/internal/memorypolicy"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,15 @@ func (s *service) List(q MemoryListQuery) (*MemoryListResponse, error) {
 }
 
 func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
+	if req.Scope == "" {
+		if mode, known := memorypolicy.ForCharacter(s.db, req.CharacterID); known {
+			if mode == "global" {
+				req.Scope = "user"
+			} else {
+				req.Scope = "character"
+			}
+		}
+	}
 	memoryType, ok := NormalizeMemoryType(req.MemoryType)
 	if !ok {
 		memoryType = MemoryTypeFact

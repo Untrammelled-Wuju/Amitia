@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <header class="chat-header">
+  <header class="chat-header" data-amitia-ui="app.header">
     <div class="header-leading">
       <div class="header-info">
         <span class="header-conv-name">{{ convTitle || "新对话" }}</span>
@@ -25,16 +25,16 @@ SPDX-License-Identifier: AGPL-3.0-only
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="voice">
+        <el-dropdown-item command="voice" data-amitia-ui="component.list_item">
               <el-icon><Microphone /></el-icon> 语音通话
             </el-dropdown-item>
-            <el-dropdown-item command="video">
+            <el-dropdown-item command="video" data-amitia-ui="component.list_item">
               <el-icon><VideoCamera /></el-icon> 视频通话
             </el-dropdown-item>
-            <el-dropdown-item command="screen">
+            <el-dropdown-item command="screen" data-amitia-ui="component.list_item">
               <el-icon><Monitor /></el-icon> 屏幕通话
             </el-dropdown-item>
-            <el-dropdown-item v-if="callActive" command="end" divided>
+            <el-dropdown-item v-if="callActive" command="end" data-amitia-ui="component.list_item" divided>
               <el-icon><CircleClose /></el-icon> 结束通话
             </el-dropdown-item>
           </el-dropdown-menu>
@@ -52,16 +52,16 @@ SPDX-License-Identifier: AGPL-3.0-only
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="$emit('clear')" :disabled="messagesCount === 0">
+            <el-dropdown-item data-amitia-ui="component.list_item" @click="$emit('clear')" :disabled="messagesCount === 0">
               <el-icon><Delete /></el-icon> 清空会话
             </el-dropdown-item>
-            <el-dropdown-item v-if="convId" divided @click="$emit('viewMemories')">
+            <el-dropdown-item v-if="convId" data-amitia-ui="component.list_item" divided @click="$emit('viewMemories')">
               <el-icon><Collection /></el-icon> 查看相关记忆
             </el-dropdown-item>
-            <el-dropdown-item command="summary" :disabled="!hasSummary">
+            <el-dropdown-item command="summary" data-amitia-ui="component.list_item" :disabled="!hasSummary">
               <el-icon><Document /></el-icon> 会话摘要
             </el-dropdown-item>
-            <el-dropdown-item @click="$emit('toggleCharPicker')">
+            <el-dropdown-item data-amitia-ui="component.list_item" @click="$emit('toggleCharPicker')">
               <el-icon><Switch /></el-icon> 选择角色
             </el-dropdown-item>
           </el-dropdown-menu>

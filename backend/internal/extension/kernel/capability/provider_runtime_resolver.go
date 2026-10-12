@@ -153,8 +153,27 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 	}
 
 	binding := definition.Runtime
+	if tool.Runtime.RuntimeType != "" {
+		binding.RuntimeType = tool.Runtime.RuntimeType
+	}
+	if tool.Runtime.RuntimeID != "" {
+		binding.RuntimeID = tool.Runtime.RuntimeID
+	}
 	if tool.Runtime.HandlerName != "" {
 		binding.HandlerName = tool.Runtime.HandlerName
+	}
+	if tool.Runtime.Endpoint != "" {
+		binding.Endpoint = tool.Runtime.Endpoint
+	}
+	if len(tool.Runtime.Metadata) > 0 {
+		merged := make(map[string]any, len(binding.Metadata)+len(tool.Runtime.Metadata))
+		for key, value := range binding.Metadata {
+			merged[key] = value
+		}
+		for key, value := range tool.Runtime.Metadata {
+			merged[key] = value
+		}
+		binding.Metadata = merged
 	}
 
 	route := RuntimeExecutionRoute{

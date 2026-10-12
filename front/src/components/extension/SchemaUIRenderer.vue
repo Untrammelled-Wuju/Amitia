@@ -47,7 +47,9 @@ let bridgeNonceSequence = 0;
 const actionLoading = reactive<Record<string, boolean>>({});
 const capturedError = ref<string | null>(null);
 const lifecycleMountKey = ref("");
-let lifecycleRunning = false;
+const lifecycleRunning = ref(false);
+const dataSourcesLoading = ref(false);
+const isLoading = computed(() => !error.value && !capturedError.value && (loading.value || !sessionReady.value || lifecycleRunning.value || dataSourcesLoading.value));
 
 const formState = reactive<Record<string, unknown>>({});
 const localContextOverride = reactive<Record<string, unknown>>({});
@@ -56,6 +58,15 @@ const dataSourceState = reactive<Record<string, unknown>>({});
 const sessionScopeKey = computed(() =>
   `${props.contribution.contributionId}:${props.contribution.generation}:${props.context?.characterId || ""}:${props.context?.conversationId || ""}`
 );
+
+const surfaceTarget = computed(() =>
+  `plugin.schema.${String(props.contribution.contributionId).trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || "root"}`
+);
+
+const surfaceRole = computed(() => {
+  const surface = props.context?.surface as Record<string, unknown> | undefined;
+  return String(surface?.role ?? props.context?.surfaceRole ?? "main");
+});
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -377,8 +388,9 @@ async function restartSession() {
   if (token !== restartToken) return;
   try {
     await createSession(token);
-  } catch {
+  } catch (e) {
     if (token !== restartToken) return;
+    capturedError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -433,25 +445,30 @@ async function postBridge(method: string, payload: Record<string, unknown>): Pro
 }
 
 async function loadDataSources() {
-  for (const key of Object.keys(dataSourceState)) delete dataSourceState[key];
-  const sources = schema.value?.dataSources ?? [];
-  const limit = performanceBudget.value?.maxDataFetchCount && performanceBudget.value.maxDataFetchCount > 0
-    ? performanceBudget.value.maxDataFetchCount
-    : sources.length;
-  const selected = sources.slice(0, limit);
-  const perSource = asRecord(props.context?.dataSourceInput);
-  await Promise.all(selected.map(async (source: SchemaUIDataSource) => {
-    try {
-      const sourceInput = asRecord(perSource[source.id]);
-      const fallbackInput = asRecord(props.context?.input);
-      dataSourceState[source.id] = await postBridge("ui.data.request", {
-        key: source.id,
-        params: Object.keys(sourceInput).length > 0 ? sourceInput : fallbackInput,
-      });
-    } catch (e) {
-      if (import.meta.env.DEV) console.warn(`[SchemaUI] data source ${source.id} failed`, e);
-    }
-  }));
+  dataSourcesLoading.value = true;
+  try {
+    for (const key of Object.keys(dataSourceState)) delete dataSourceState[key];
+    const sources = schema.value?.dataSources ?? [];
+    const limit = performanceBudget.value?.maxDataFetchCount && performanceBudget.value.maxDataFetchCount > 0
+      ? performanceBudget.value.maxDataFetchCount
+      : sources.length;
+    const selected = sources.slice(0, limit);
+    const perSource = asRecord(props.context?.dataSourceInput);
+    await Promise.all(selected.map(async (source: SchemaUIDataSource) => {
+      try {
+        const sourceInput = asRecord(perSource[source.id]);
+        const fallbackInput = asRecord(props.context?.input);
+        dataSourceState[source.id] = await postBridge("ui.data.request", {
+          key: source.id,
+          params: Object.keys(sourceInput).length > 0 ? sourceInput : fallbackInput,
+        });
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn(`[SchemaUI] data source ${source.id} failed`, e);
+      }
+    }));
+  } finally {
+    dataSourcesLoading.value = false;
+  }
 }
 
 async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType; item?: Record<string, unknown>; files?: Array<Record<string, unknown>> }, reportFailure = true) {
@@ -560,8 +577,8 @@ async function runLifecycleActions(
   actions: SchemaUIActionBinding[] | undefined,
   statePath: string,
 ) {
-  if (!actions?.length || lifecycleRunning) return;
-  lifecycleRunning = true;
+  if (!actions?.length || lifecycleRunning.value) return;
+  lifecycleRunning.value = true;
   try {
     for (const action of actions) {
       await invokeAction({
@@ -576,7 +593,7 @@ async function runLifecycleActions(
       }, false);
     }
   } finally {
-    lifecycleRunning = false;
+    lifecycleRunning.value = false;
   }
 }
 
@@ -594,8 +611,8 @@ function onNodeError(payload: { nodeId: string; message: string }) {
   capturedError.value = `节点 ${payload.nodeId}: ${payload.message}`;
 }
 
-function retry() {
-  loadSchema();
+async function retry() {
+  await Promise.all([loadSchema(), restartSession()]);
 }
 
 onMounted(() => {
@@ -653,12 +670,16 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="schema-ui-renderer"
+    :class="{ 'is-loading': isLoading }"
+    data-amitia-ui="extension.surface"
+    :data-amitia-node-target="surfaceTarget"
     :data-contribution-id="contribution.contributionId"
+    :data-amitia-surface="surfaceRole"
     :data-theme="effectiveTheme"
     :style="themeOverridesStyle"
     v-bind="accessibilityAttrs"
   >
-    <template v-if="loading">
+    <template v-if="isLoading">
       <ExtensionRenderState state="loading" />
     </template>
     <template v-else-if="capturedError">
@@ -721,6 +742,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .schema-ui-renderer {
+  position: relative;
   width: 100%;
   min-width: 0;
   display: flex;
@@ -730,6 +752,7 @@ onBeforeUnmount(() => {
   color: var(--amitia-text-primary, var(--amitia-color-text, inherit));
   background: var(--amitia-bg-surface, var(--amitia-color-surface, transparent));
 }
+.schema-ui-renderer.is-loading { min-height: 160px; }
 .schema-ui-renderer__loading {
   display: flex;
   align-items: center;

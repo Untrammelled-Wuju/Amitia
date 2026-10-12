@@ -13,7 +13,7 @@ import (
 )
 
 func continuityRequest(scope coordination.ExecutionScope) Request {
-	return Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, CoreID: scope.CoreID, TargetDeviceID: scope.TargetDeviceID, RoleID: scope.RoleID, RequestID: uuid.NewString()}
+	return Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, CoreID: scope.CoreID, TargetDeviceID: scope.TargetDeviceID, RoleID: scope.RoleID, RequestID: uuid.NewString(), ExpectedScope: &scope}
 }
 
 func (e *Engine) TickContinuity(ctx context.Context) error {

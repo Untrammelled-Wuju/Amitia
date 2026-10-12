@@ -68,6 +68,9 @@ func BuildWorkspaceExtension(version string) Definition {
 						"component": "workspace",
 					},
 				},
+				Metadata: map[string]any{
+					"providerRuntimeType": string(capability.RuntimeTypeWorkspace),
+				},
 				Placement: domain.ModulePlacementCloud,
 				Compatibility: domain.ModuleCompatibility{
 					Platforms: []string{"windows", "linux", "darwin"},
@@ -101,6 +104,9 @@ func BuildWorkspaceExtension(version string) Definition {
 						"component": "workspace",
 						"authority": "device-local",
 					},
+				},
+				Metadata: map[string]any{
+					"providerRuntimeType": string(capability.RuntimeTypeWorkspace),
 				},
 				Placement: domain.ModulePlacementDevice,
 				Compatibility: domain.ModuleCompatibility{

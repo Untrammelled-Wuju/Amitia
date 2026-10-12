@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:amitia_app/core/ui_runtime/mobile_style_runtime.dart';
 import 'package:amitia_app/core/widgets/amitia_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -35,6 +36,58 @@ void main() {
     expect(voiceTextCenter, closeTo(textFieldCenter, 0.5));
     expect(voiceButtonTop - composerTop, greaterThanOrEqualTo(6));
     expect(voiceButtonHeight, closeTo(44, 0.1));
+  });
+
+  testWidgets('composer resolves scoped target style overrides', (
+    tester,
+  ) async {
+    final document = AmitiaStyleDocument(
+      revision: 1,
+      rules: <AmitiaStyleRule>[
+        AmitiaStyleRule(
+          id: 'surface',
+          scope: const AmitiaStyleScopeData(platform: 'mobile', page: 'chat'),
+          target: 'chat.composer.surface',
+          properties: const <String, dynamic>{
+            'backgroundColor': '#000000',
+            'borderRadius': 4,
+          },
+        ),
+        AmitiaStyleRule(
+          id: 'input',
+          scope: const AmitiaStyleScopeData(platform: 'mobile', page: 'chat'),
+          target: 'chat.composer.input',
+          properties: const <String, dynamic>{
+            'backgroundColor': '#123456',
+            'foregroundColor': '#ffffff',
+            'placeholderColor': '#F97316',
+          },
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AmitiaStyleScopeHost(
+          scope: const AmitiaStyleScopeData(platform: 'mobile', page: 'chat'),
+          child: AmitiaStyleDocumentHost(
+            document: document,
+            child: Scaffold(body: AmitiaChatInput(onSend: (_) {})),
+          ),
+        ),
+      ),
+    );
+
+    final surface = tester.widget<Container>(
+      find.byKey(const ValueKey('chat-composer-surface')),
+    );
+    final decoration = surface.decoration! as BoxDecoration;
+    final field = tester.widget<TextField>(find.byType(TextField));
+
+    expect(decoration.color, const Color(0xFF000000));
+    expect(decoration.borderRadius, BorderRadius.circular(4));
+    expect(field.decoration?.fillColor, const Color(0xFF123456));
+    expect(field.style?.color, const Color(0xFFFFFFFF));
+    expect(field.decoration?.hintStyle?.color, const Color(0xFFF97316));
   });
 
   testWidgets('composer border does not change when input is focused', (

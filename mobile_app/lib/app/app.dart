@@ -14,13 +14,17 @@ import '../core/runtime/backend/mobile_backend_providers.dart';
 import '../core/runtime/backend/mobile_deployment_mode.dart';
 import '../core/debug/debug_log_overlay.dart';
 import '../core/debug/debug_runtime_bridge.dart';
+import '../core/widgets/amitia_system_bars.dart';
 import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
 import '../core/ui_runtime/mobile_ui_host_event_client.dart';
 import '../core/ui_runtime/mobile_ui_host_command_host.dart';
+import '../core/ui_runtime/mobile_style_runtime.dart';
 import '../core/ui_runtime/ui_theme.dart';
 import '../core/settings/appearance_preferences.dart';
 import '../core/settings/background_preferences.dart';
+import '../core/settings/ui_style_profile.dart';
+import '../core/settings/ui_style_command_service.dart';
 import '../core/settings/chat_permission_preferences.dart';
 import '../core/services/providers.dart' show extensionServiceProvider;
 import '../features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart';
@@ -53,6 +57,7 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
   Future<void> _initializeBootstrap() async {
     await ref.read(appearancePreferencesProvider.notifier).init();
+    await ref.read(uiStylePatchProvider.notifier).init();
     try {
       await ref.read(backgroundPreferencesProvider.notifier).init();
     } catch (_) {}
@@ -353,6 +358,8 @@ class AmitiaApp extends ConsumerWidget {
     ref.watch(desktopPetMobileRuntimeBootstrapProvider);
     ref.watch(mobileUIHostEventClientProvider);
     final appearance = ref.watch(appearancePreferencesProvider);
+    final stylePatch = ref.watch(uiStylePatchProvider).patch;
+    final styleDocument = ref.watch(amitiaStyleDocumentProvider);
     AppMotion.setAnimationsEnabled(
       appearance.dynamicEffect && !appearance.reduceAnimation,
     );
@@ -462,11 +469,13 @@ class AmitiaApp extends ConsumerWidget {
       );
     }
 
-    final lightTheme = applyAppearance(
-      applyVisualProviders(AppTheme.lightTheme()),
+    final lightTheme = applyUIStylePatch(
+      applyAppearance(applyVisualProviders(AppTheme.lightTheme())),
+      stylePatch,
     );
-    final darkTheme = applyAppearance(
-      applyVisualProviders(AppTheme.darkTheme()),
+    final darkTheme = applyUIStylePatch(
+      applyAppearance(applyVisualProviders(AppTheme.darkTheme())),
+      stylePatch,
     );
 
     return MaterialApp.router(
@@ -489,20 +498,41 @@ class AmitiaApp extends ConsumerWidget {
               !appearance.dynamicEffect ||
               appearance.reduceAnimation,
         );
-        return MediaQuery(
-          data: adjustedMedia,
-          child: MobileUIHostCommandHost(
-            router: router,
-            navigatorKey: appNavigatorKey,
-            extensionService: ref.read(extensionServiceProvider),
-            child: Stack(
-              children: [
-                if (child case final Widget currentChild) currentChild,
-                const McpInteractionGuard(),
-                if (kDebugMode) const DebugLogOverlay(),
-              ],
-            ),
-          ),
+        return ListenableBuilder(
+          listenable: router.routerDelegate,
+          builder: (context, _) {
+            final location =
+                router.routerDelegate.currentConfiguration.fullPath;
+            final scope = AmitiaStyleScopeData(
+              platform: 'mobile',
+              page: amitiaStylePageId(location),
+            );
+            ref.read(uiStyleCommandServiceProvider).setCurrentPage(scope.page);
+            return AmitiaStyleScopeHost(
+              scope: scope,
+              child: AmitiaStyleDocumentHost(
+                document: styleDocument,
+                child: MediaQuery(
+                  data: adjustedMedia,
+                  child: AmitiaSystemBars(
+                    child: MobileUIHostCommandHost(
+                      router: router,
+                      navigatorKey: appNavigatorKey,
+                      extensionService: ref.read(extensionServiceProvider),
+                      child: Stack(
+                        children: [
+                          if (child case final Widget currentChild)
+                            currentChild,
+                          const McpInteractionGuard(),
+                          if (kDebugMode) const DebugLogOverlay(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );

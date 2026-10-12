@@ -4,6 +4,7 @@ import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
+import '../ui_runtime/mobile_style_runtime.dart';
 import 'amitia_visual_scope.dart';
 
 class AmitiaButton extends StatelessWidget {
@@ -18,6 +19,7 @@ class AmitiaButton extends StatelessWidget {
   final double height;
   final bool outlined;
   final bool round;
+  final String? styleTarget;
 
   AmitiaButton({
     super.key,
@@ -32,6 +34,7 @@ class AmitiaButton extends StatelessWidget {
     double? height,
     this.outlined = false,
     this.round = false,
+    this.styleTarget,
   }) : height = height ?? AppSpacing.buttonHeight;
 
   @override
@@ -57,7 +60,10 @@ class AmitiaButton extends StatelessWidget {
           : context.error;
       fgColor = Colors.white;
     } else if (isSecondary) {
-      bgColor = Color.alphaBlend(context.accentSecondary.withValues(alpha: 0.14), context.surfacePrimary);
+      bgColor = Color.alphaBlend(
+        context.accentSecondary.withValues(alpha: 0.14),
+        context.surfacePrimary,
+      );
       fgColor = context.accentSecondary;
     } else {
       bgColor = onPressed == null
@@ -70,10 +76,56 @@ class AmitiaButton extends StatelessWidget {
       bgColor = Colors.transparent;
       if (onPressed == null) fgColor = fgColor.withValues(alpha: 0.4);
     }
+    final resolvedVariant = isDestructive
+        ? 'destructive'
+        : isSecondary
+        ? 'secondary'
+        : outlined
+        ? 'outlined'
+        : 'primary';
+    final resolvedTarget = styleTarget ?? 'button.$resolvedVariant';
+    final resolved = context.amitiaStyleFor(
+      resolvedTarget,
+      states: [onPressed == null ? 'disabled' : 'default'],
+    );
+    final resolvedRadius = resolved.number('borderRadius');
+    final resolvedPadding = resolved.edgeInsets('padding');
+    final resolvedHeight = resolved.number('height');
+    final resolvedWidth = resolved.number('width');
+    final resolvedOpacity = resolved.number('opacity');
+    final resolvedFontSize = resolved.number('fontSize');
+    final resolvedFontWeight = resolved.number('fontWeight');
+    final resolvedBorderWidth = resolved.number('borderWidth');
+    fgColor =
+        resolved.color('foregroundColor') ??
+        resolved.color('textColor') ??
+        fgColor;
+    bgColor =
+        resolved.color('backgroundColor') ??
+        resolved.color('background') ??
+        bgColor;
+    final effectiveRadius = round
+        ? effectiveHeight / 2
+        : resolvedRadius ?? radius;
+    final effectiveWidth = resolvedWidth ?? width;
+    final effectiveResolvedHeight = resolvedHeight ?? effectiveHeight;
+    final effectiveFontSize = resolvedFontSize ?? fontSize;
+    final effectiveFontWeight = resolvedFontWeight == null
+        ? fontWeight
+        : designFontWeight(resolvedFontWeight.toInt());
+    final effectiveBorderWidth =
+        resolvedBorderWidth ?? context.uiComponents.borderWidth;
+    final preservesComposer = AmitiaVisualScope.preservesComposer(context);
+    final effectivePadding =
+        resolvedPadding ??
+        EdgeInsets.symmetric(
+          horizontal: number('paddingX', preservesComposer ? 0 : 16),
+          vertical: number('paddingY', preservesComposer ? 0 : 12),
+        );
 
-    if (!AmitiaVisualScope.preservesComposer(context)) {
+    if (!preservesComposer) {
       final button = SizedBox(
-        width: isFullWidth ? double.infinity : width,
+        width: isFullWidth ? double.infinity : effectiveWidth,
         child: TextButton(
           onPressed: onPressed,
           style: TextButton.styleFrom(
@@ -83,17 +135,17 @@ class AmitiaButton extends StatelessWidget {
             disabledBackgroundColor: outlined
                 ? Colors.transparent
                 : context.surfaceSecondary,
-            minimumSize: Size(48, effectiveHeight.clamp(48, double.infinity)),
-            padding: EdgeInsets.symmetric(
-              horizontal: number('paddingX', 16),
-              vertical: number('paddingY', 12),
+            minimumSize: Size(
+              48,
+              effectiveResolvedHeight.clamp(48, double.infinity),
             ),
+            padding: effectivePadding,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(round ? 999 : radius),
+              borderRadius: BorderRadius.circular(effectiveRadius),
               side: outlined
                   ? BorderSide(
-                      color: fgColor,
-                      width: context.uiComponents.borderWidth,
+                      color: resolved.color('borderColor') ?? fgColor,
+                      width: effectiveBorderWidth,
                     )
                   : BorderSide.none,
             ),
@@ -112,8 +164,8 @@ class AmitiaButton extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: AppTypography.button(context).copyWith(
                     color: onPressed == null ? context.textDisabled : fgColor,
-                    fontSize: fontSize,
-                    fontWeight: fontWeight,
+                    fontSize: effectiveFontSize,
+                    fontWeight: effectiveFontWeight,
                   ),
                 ),
               ),
@@ -121,7 +173,7 @@ class AmitiaButton extends StatelessWidget {
           ),
         ),
       );
-      final opacity = variant['opacity'];
+      final opacity = resolvedOpacity ?? variant['opacity'];
       return opacity is num
           ? Opacity(opacity: opacity.toDouble().clamp(0.0, 1.0), child: button)
           : button;
@@ -130,21 +182,16 @@ class AmitiaButton extends StatelessWidget {
     final button = GestureDetector(
       onTap: onPressed,
       child: Container(
-        width: isFullWidth ? double.infinity : width,
-        height: effectiveHeight,
-        padding: EdgeInsets.symmetric(
-          horizontal: number('paddingX', 0),
-          vertical: number('paddingY', 0),
-        ),
+        width: isFullWidth ? double.infinity : effectiveWidth,
+        height: effectiveResolvedHeight,
+        padding: effectivePadding,
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(
-            round ? effectiveHeight / 2 : radius,
-          ),
+          borderRadius: BorderRadius.circular(effectiveRadius),
           border: outlined
               ? Border.all(
-                  color: fgColor,
-                  width: context.uiComponents.borderWidth,
+                  color: resolved.color('borderColor') ?? fgColor,
+                  width: effectiveBorderWidth,
                 )
               : null,
         ),
@@ -159,15 +206,15 @@ class AmitiaButton extends StatelessWidget {
               label,
               style: AppTypography.button(context).copyWith(
                 color: fgColor,
-                fontSize: fontSize,
-                fontWeight: fontWeight,
+                fontSize: effectiveFontSize,
+                fontWeight: effectiveFontWeight,
               ),
             ),
           ],
         ),
       ),
     );
-    final opacity = variant['opacity'];
+    final opacity = resolvedOpacity ?? variant['opacity'];
     return opacity is num
         ? Opacity(
             opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
@@ -184,6 +231,7 @@ class AmitiaIconButton extends StatelessWidget {
   final Color? color;
   final Color? backgroundColor;
   final String? tooltip;
+  final String? styleTarget;
 
   const AmitiaIconButton({
     super.key,
@@ -193,6 +241,7 @@ class AmitiaIconButton extends StatelessWidget {
     this.color,
     this.backgroundColor,
     this.tooltip,
+    this.styleTarget,
   });
 
   @override
@@ -201,27 +250,51 @@ class AmitiaIconButton extends StatelessWidget {
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
     final buttonSize = number('height', number('minHeight', 40));
+    final style = context.amitiaStyleFor(
+      styleTarget ?? 'component.icon_button',
+      states: <String>[onPressed == null ? 'disabled' : 'default'],
+    );
+    final resolvedButtonSize =
+        style.number('height') ?? style.number('width') ?? buttonSize;
+    final resolvedForeground =
+        style.color('iconColor') ??
+        style.color('foregroundColor') ??
+        color ??
+        context.textSecondary;
+    final resolvedBackground =
+        style.color('backgroundColor') ??
+        style.color('background') ??
+        backgroundColor;
+    final resolvedRadius =
+        style.borderRadius('borderRadius') ??
+        BorderRadius.circular(number('radius', buttonSize / 2));
+    final resolvedIconSize = style.number('iconSize') ?? number('iconSize', size);
+    final resolvedPadding = style.edgeInsets('padding');
     if (!AmitiaVisualScope.preservesComposer(context)) {
-      final targetSize = buttonSize.clamp(48.0, double.infinity);
-      return IconButton(
+      final targetSize = resolvedButtonSize.clamp(48.0, double.infinity);
+      final button = IconButton(
         onPressed: onPressed,
         tooltip: tooltip,
         constraints: BoxConstraints(
           minWidth: targetSize,
           minHeight: targetSize,
         ),
+        padding: resolvedPadding,
         style: IconButton.styleFrom(
-          backgroundColor: backgroundColor,
-          foregroundColor: color ?? context.textSecondary,
+          backgroundColor: resolvedBackground,
+          foregroundColor: resolvedForeground,
           disabledForegroundColor: context.textDisabled,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              number('radius', targetSize / 2),
-            ),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: resolvedRadius),
         ),
-        icon: Icon(icon, size: number('iconSize', size)),
+        icon: Icon(icon, size: resolvedIconSize),
       );
+      final opacity = style.number('opacity');
+      return opacity == null
+          ? button
+          : Opacity(
+              opacity: opacity.clamp(0.0, 1.0).toDouble(),
+              child: button,
+            );
     }
     final btn = GestureDetector(
       onTap: onPressed,
@@ -229,23 +302,34 @@ class AmitiaIconButton extends StatelessWidget {
       child: Tooltip(
         message: tooltip ?? '',
         child: Container(
-          width: buttonSize,
-          height: buttonSize,
+          width: resolvedButtonSize,
+          height: resolvedButtonSize,
+          padding: resolvedPadding,
           decoration: BoxDecoration(
-            color: backgroundColor ?? Colors.transparent,
-            borderRadius: BorderRadius.circular(
-              number('radius', buttonSize / 2),
-            ),
+            color: resolvedBackground ?? Colors.transparent,
+            borderRadius: resolvedRadius,
+            border: style.has('borderColor') || style.has('borderWidth')
+                ? Border.all(
+                    color: style.color('borderColor') ?? context.borderPrimary,
+                    width: style.number('borderWidth') ?? 1,
+                  )
+                : null,
           ),
           child: Icon(
             icon,
-            size: number('iconSize', size),
-            color: color ?? context.textSecondary,
+            size: resolvedIconSize,
+            color: resolvedForeground,
           ),
         ),
       ),
     );
-    return btn;
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? btn
+        : Opacity(
+            opacity: opacity.clamp(0.0, 1.0).toDouble(),
+            child: btn,
+          );
   }
 }
 
@@ -264,6 +348,7 @@ class AmitiaTextField extends StatelessWidget {
   final int? maxLength;
   final bool showCounter;
   final String? errorText;
+  final String? styleTarget;
 
   const AmitiaTextField({
     super.key,
@@ -281,6 +366,7 @@ class AmitiaTextField extends StatelessWidget {
     this.maxLength,
     this.showCounter = false,
     this.errorText,
+    this.styleTarget,
   });
 
   @override
@@ -288,18 +374,60 @@ class AmitiaTextField extends StatelessWidget {
     final variant = context.uiComponentVariant('input');
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
-    final radius = number('radius', AppRadius.medium);
+    final style = context.amitiaStyleFor(
+      styleTarget ?? 'text_field',
+      states: <String>[focusNode?.hasFocus == true ? 'focus' : 'default'],
+    );
+    final radius =
+        style.borderRadius('borderRadius') ??
+        BorderRadius.circular(number('radius', AppRadius.medium));
+    final hasBorderStyle =
+        style.has('borderColor') ||
+        style.has('borderWidth') ||
+        style.has('border') ||
+        style.has('borderSide');
+    final normalBorderFallback = hasBorderStyle
+        ? BorderSide(
+            color: context.borderPrimary,
+            width: style.number('borderWidth') ?? 1,
+          )
+        : BorderSide.none;
+    final borderSide =
+        style.borderSide(fallback: normalBorderFallback) ??
+        normalBorderFallback;
+    final focusedBorderSide =
+        style.borderSide(
+          fallback: BorderSide(
+            color: style.color('borderColor') ?? context.accentPrimary,
+            width: number('borderWidth', 1.5),
+          ),
+        ) ??
+        BorderSide(
+          color: style.color('borderColor') ?? context.accentPrimary,
+          width: number('borderWidth', 1.5),
+        );
     final normalBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(radius),
-      borderSide: BorderSide.none,
+      borderRadius: radius,
+      borderSide: borderSide,
     );
     final focusedBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(radius),
-      borderSide: BorderSide(
-        color: context.accentPrimary,
-        width: number('borderWidth', 1.5),
-      ),
+      borderRadius: radius,
+      borderSide: focusedBorderSide,
     );
+    final textStyle = style.applyTextStyle(
+      AppTypography.body(
+        context,
+      ).copyWith(fontSize: number('fontSize', context.uiTypography.bodySize)),
+    );
+    final placeholderColor =
+        style.color('placeholderColor') ??
+        style.color('foregroundColor') ??
+        context.textTertiary;
+    final hintStyle = style
+        .applyTextStyle(TextStyle(color: placeholderColor))
+        .copyWith(color: placeholderColor);
+    final background =
+        style.color('backgroundColor') ?? style.color('background');
     final field = TextField(
       controller: controller,
       obscureText: obscureText,
@@ -310,36 +438,51 @@ class AmitiaTextField extends StatelessWidget {
       onChanged: onChanged,
       keyboardType: keyboardType,
       maxLength: maxLength,
+      cursorColor: style.color('foregroundColor'),
       buildCounter: showCounter
           ? null
           : (_, {required currentLength, required isFocused, maxLength}) =>
                 null,
-      style: AppTypography.body(
-        context,
-      ).copyWith(fontSize: number('fontSize', context.uiTypography.bodySize)),
+      style: textStyle,
       decoration: InputDecoration(
         hintText: hintText,
         errorText: errorText,
-        hintStyle: TextStyle(color: context.textTertiary),
+        hintStyle: hintStyle,
         prefixIcon: prefixIcon,
         suffixIcon: suffixIcon,
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: number('paddingX', AppSpacing.lg),
-          vertical: number('paddingY', AppSpacing.md),
-        ),
+        filled: background != null,
+        fillColor: background ?? Colors.transparent,
+        contentPadding:
+            style.edgeInsets('padding') ??
+            EdgeInsets.symmetric(
+              horizontal: number('paddingX', AppSpacing.lg),
+              vertical: number('paddingY', AppSpacing.md),
+            ),
         border: normalBorder,
         enabledBorder: normalBorder,
         focusedBorder: focusedBorder,
+        disabledBorder: normalBorder,
+        errorBorder: normalBorder,
+        focusedErrorBorder: focusedBorder,
       ),
     );
-    final minHeight = variant['minHeight'];
-    return minHeight is num
+    final minHeight = style.number('height') ?? variant['minHeight'];
+    Widget result = minHeight is num
         ? ConstrainedBox(
             constraints: BoxConstraints(minHeight: minHeight.toDouble()),
             child: field,
           )
         : field;
+    final width = style.number('width');
+    if (width != null) result = SizedBox(width: width, child: result);
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? result
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: result,
+          );
   }
 }
 
@@ -362,39 +505,100 @@ class AmitiaSearchField extends StatelessWidget {
     final variant = context.uiComponentVariant('input');
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
-    return ConstrainedBox(
+    final style = context.amitiaStyleFor(
+      'text_field.search',
+      states: <String>['default'],
+    );
+    final background =
+        style.color('backgroundColor') ?? style.color('background');
+    final hasBorderStyle =
+        style.has('borderColor') ||
+        style.has('borderWidth') ||
+        style.has('border') ||
+        style.has('borderSide');
+    final normalBorderFallback = hasBorderStyle
+        ? BorderSide(
+            color: context.borderPrimary,
+            width: style.number('borderWidth') ?? 1,
+          )
+        : BorderSide.none;
+    final borderSide =
+        style.borderSide(fallback: normalBorderFallback) ??
+        normalBorderFallback;
+    final radius =
+        style.borderRadius('borderRadius') ??
+        BorderRadius.circular(number('radius', AppRadius.medium));
+    final textStyle = style.applyTextStyle(
+      AppTypography.bodySmall(context).copyWith(
+        fontSize: number('fontSize', context.uiTypography.bodySmallSize),
+      ),
+    );
+    final placeholderColor =
+        style.color('placeholderColor') ??
+        style.color('foregroundColor') ??
+        context.textTertiary;
+    final field = ConstrainedBox(
       constraints: BoxConstraints(
-        minHeight: number('height', number('minHeight', 48)),
+        minHeight:
+            style.number('height') ?? number('height', number('minHeight', 48)),
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
         autofocus: autofocus,
-        style: AppTypography.bodySmall(context).copyWith(
-          fontSize: number('fontSize', context.uiTypography.bodySmallSize),
-        ),
+        cursorColor: style.color('foregroundColor'),
+        style: textStyle,
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: TextStyle(color: context.textTertiary, fontSize: 14),
+          hintStyle: style
+              .applyTextStyle(TextStyle(color: placeholderColor, fontSize: 14))
+              .copyWith(color: placeholderColor),
           prefixIcon: Icon(
             Icons.search,
             size: number('iconSize', context.uiIcons.medium),
-            color: context.textTertiary,
+            color: style.color('iconColor') ?? context.textTertiary,
           ),
           isDense: true,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: number('paddingX', 12),
-            vertical: number('paddingY', 12),
-          ),
+          filled: background != null,
+          fillColor: background ?? Colors.transparent,
+          contentPadding:
+              style.edgeInsets('padding') ??
+              EdgeInsets.symmetric(
+                horizontal: number('paddingX', 12),
+                vertical: number('paddingY', 12),
+              ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(
-              number('radius', AppRadius.medium),
-            ),
-            borderSide: BorderSide.none,
+            borderRadius: radius,
+            borderSide: borderSide,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: radius,
+            borderSide: borderSide,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: radius,
+            borderSide:
+                style.borderSide(
+                  fallback: BorderSide(
+                    color: style.color('borderColor') ?? context.accentPrimary,
+                    width: number('borderWidth', 1.5),
+                  ),
+                ) ??
+                BorderSide(
+                  color: style.color('borderColor') ?? context.accentPrimary,
+                  width: number('borderWidth', 1.5),
+                ),
           ),
         ),
       ),
     );
+    final opacity = style.number('opacity');
+    return opacity == null
+        ? field
+        : Opacity(
+            opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(),
+            child: field,
+          );
   }
 }
 

@@ -8,6 +8,7 @@ import 'character_detail_service.dart';
 import 'chat_service.dart';
 import 'memory_service.dart';
 import 'device_owned_memory_service.dart';
+import 'device_owned_chat_service.dart';
 import 'profile_service.dart';
 import 'episodic_service.dart';
 import 'worldbook_service.dart';
@@ -85,6 +86,23 @@ final memoryServiceProvider = Provider<MemoryService>(
   (ref) => MemoryService(_getDynamicServiceApi(ref)),
 );
 
+final memoryDataSourceProvider = Provider<DeviceOwnedChatService>((ref) {
+  ref.watch(mobileDeploymentConfigProvider);
+  final api = ref.watch(rawBackendServiceApiProvider);
+  final source = DeviceOwnedChatService(
+    _getDynamicServiceApi(ref),
+    providerStateKey: 'amitia.memory.provider-state',
+    providerKey: () {
+      final current = ref.read(rawBackendServiceApiProvider);
+      if (current == null || !identical(current, api)) return '';
+      final config = ref.read(mobileDeploymentConfigProvider);
+      return '${config.mode.name}:${config.remoteCoreUri ?? 'local'}:${current.generation}';
+    },
+  );
+  ref.onDispose(() => source.stopLocal('记忆服务已变化，请重新加载'));
+  return source;
+});
+
 final deviceOwnedMemoryServiceProvider = Provider<DeviceOwnedMemoryService>((
   ref,
 ) {
@@ -92,21 +110,17 @@ final deviceOwnedMemoryServiceProvider = Provider<DeviceOwnedMemoryService>((
   if (api == null) throw StateError('记忆 Core 服务尚未就绪');
   return DeviceOwnedMemoryService(
     api,
-    isCurrent: () =>
-        identical(ref.read(rawBackendServiceApiProvider), api) &&
-        ref.read(mobileDeploymentConfigProvider).mode ==
-            MobileDeploymentMode.cloud,
+    isCurrent: () => identical(ref.read(rawBackendServiceApiProvider), api),
   );
 });
 
 final ownedMemoryModeProvider = FutureProvider<bool>((ref) async {
-  final config = ref.watch(mobileDeploymentConfigProvider);
-  final owned = ref.watch(chatServiceProvider).owned;
+  final owned = ref.watch(memoryDataSourceProvider);
   final ready = await owned.refresh();
-  if (!ready && config.mode == MobileDeploymentMode.cloud) {
+  if (!ready) {
     throw StateError('当前 Core 的设备数据服务尚未就绪，请恢复服务后重试');
   }
-  return ready;
+  return true;
 });
 
 final profileServiceProvider = Provider<ProfileService>(

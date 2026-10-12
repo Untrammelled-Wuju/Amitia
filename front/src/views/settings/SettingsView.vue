@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="settings-page">
+  <div class="settings-page" data-amitia-ui="settings.page">
     <ExtensionSlot
       slot-id="system.status.item"
       :context="settingsContext"

@@ -35,6 +35,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   String _avatarPreview = '';
   bool _isPickingAvatar = false;
   bool _isCreating = false;
+  bool _globalMemoryEnabled = true;
   String _roleAuthority = '';
 
   @override
@@ -103,6 +104,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         'characterBase': _promptController.text,
         'status': '在线',
         'voiceSpeed': 1.0,
+        'globalMemoryEnabled': _globalMemoryEnabled,
       };
       final character = await svc.create(data, roleAuthority: _roleAuthority);
       if (character == null || character.id.isEmpty) {
@@ -366,10 +368,17 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   Widget _buildPreviewStep() {
     return Padding(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: ListView(
         children: [
           Text('完成预览', style: AppTypography.sectionTitle(context)),
+          SwitchListTile.adaptive(
+            title: Text(_globalMemoryEnabled ? '全局记忆' : '角色记忆'),
+            subtitle: const Text('开启后读取和保存全局记忆；关闭后使用角色自己的记忆。'),
+            value: _globalMemoryEnabled,
+            onChanged: _isCreating
+                ? null
+                : (value) => setState(() => _globalMemoryEnabled = value),
+          ),
           SizedBox(height: AppSpacing.lg),
           Center(
             child: Container(

@@ -397,6 +397,28 @@ console.log("\n[7] 状态持久化与并发 CAS");
   check("重启后状态可恢复", list.items.length === 1 && list.items[0].id === emote.item.id);
 }
 
+console.log("\n[8] Schema UI 文件导入契约");
+{
+  const env = makeHost();
+  const tools = await activate(env);
+  const content = pngBuffer();
+  const input = {
+    action: "ui.import",
+    node_id: "import-files",
+    form_state: {},
+    files: [{ name: "契约.png", mimeType: "image/png", size: content.length, dataBase64: content.toString("base64") }],
+  };
+  const imported = await tools.get("command")(input);
+  check("完整 UI 文件字段完成导入", imported.imported === 1 && imported.total === 1 && imported.duplicate === 0);
+  const list = await tools.get("command")({ action: "ui.composer", node_id: "lifecycle-onMount", form_state: {} });
+  check("导入表情可在 composer 读取", list.emotes.length === 1 && list.emotes[0].originalFilename === "契约.png");
+  const item = list.emotes[0];
+  check("文件名称类型大小保留", item.name === "契约" && item.mimeType === "image/png" && item.fileSize === content.length);
+  check("原图及衍生图保留完整字节", [item.filePath, item.thumbnailPath, item.fallbackPath].every((path) => env.resources.get(path)?.equals(content)));
+  const repeated = await tools.get("command")(input);
+  check("重复 UI 文件导入去重", repeated.imported === 0 && repeated.duplicate === 1 && env.host.getState().emotes.length === 1);
+}
+
 console.log(`\n========== 结果：${passed} 通过 / ${failed} 失败 ==========`);
 if (failures.length) {
   console.log("失败项：");

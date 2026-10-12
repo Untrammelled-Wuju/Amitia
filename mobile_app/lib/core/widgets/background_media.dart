@@ -7,6 +7,7 @@ import '../settings/background_preferences.dart';
 
 class BackgroundMedia extends StatefulWidget {
   final BackgroundPreferences preferences;
+  final Uri? mediaUri;
   final Color baseColor;
   final bool animate;
   final bool preview;
@@ -14,6 +15,7 @@ class BackgroundMedia extends StatefulWidget {
   const BackgroundMedia({
     super.key,
     required this.preferences,
+    this.mediaUri,
     required this.baseColor,
     this.animate = true,
     this.preview = false,
@@ -47,7 +49,9 @@ class _BackgroundMediaState extends State<BackgroundMedia>
   void didUpdateWidget(BackgroundMedia oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.preferences.path != widget.preferences.path ||
-        oldWidget.preferences.kind != widget.preferences.kind) {
+        oldWidget.preferences.sourceUri != widget.preferences.sourceUri ||
+        oldWidget.preferences.kind != widget.preferences.kind ||
+        oldWidget.mediaUri != widget.mediaUri) {
       _load();
     } else {
       _syncPlayback();
@@ -68,14 +72,21 @@ class _BackgroundMediaState extends State<BackgroundMedia>
       previous.removeListener(_videoChanged);
       unawaited(previous.dispose());
     }
-    if (widget.preferences.kind != BackgroundMediaKind.video ||
-        widget.preferences.path.isEmpty) {
+    if (widget.preferences.kind != BackgroundMediaKind.video) {
       return;
     }
-    final controller = VideoPlayerController.file(
-      File(widget.preferences.path),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    );
+    final controller = widget.preferences.path.isNotEmpty
+        ? VideoPlayerController.file(
+            File(widget.preferences.path),
+            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+          )
+        : widget.mediaUri == null
+        ? null
+        : VideoPlayerController.networkUrl(
+            widget.mediaUri!,
+            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+          );
+    if (controller == null) return;
     _video = controller;
     controller.addListener(_videoChanged);
     try {
@@ -116,13 +127,49 @@ class _BackgroundMediaState extends State<BackgroundMedia>
     }
   }
 
-  Widget _imageError(String path) {
+  Widget _imageError(String source) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_failed && widget.preferences.path == path) {
+      if (mounted && !_failed && _mediaKey == source) {
         setState(() => _failed = true);
       }
     });
     return const SizedBox.shrink();
+  }
+
+  String get _mediaKey => widget.preferences.path.isNotEmpty
+      ? widget.preferences.path
+      : widget.mediaUri?.toString() ?? '';
+
+  BoxFit get _fit => switch (widget.preferences.fit) {
+    'contain' => BoxFit.contain,
+    'stretch' => BoxFit.fill,
+    'repeat' => BoxFit.none,
+    _ => BoxFit.cover,
+  };
+
+  Widget _mediaImage() {
+    if (widget.preferences.path.isNotEmpty) {
+      return Image.file(
+        File(widget.preferences.path),
+        fit: _fit,
+        repeat: widget.preferences.fit == 'repeat'
+            ? ImageRepeat.repeat
+            : ImageRepeat.noRepeat,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => _imageError(_mediaKey),
+      );
+    }
+    final uri = widget.mediaUri;
+    if (uri == null) return const SizedBox.shrink();
+    return Image.network(
+      uri.toString(),
+      fit: _fit,
+      repeat: widget.preferences.fit == 'repeat'
+          ? ImageRepeat.repeat
+          : ImageRepeat.noRepeat,
+      gaplessPlayback: true,
+      errorBuilder: (_, _, _) => _imageError(_mediaKey),
+    );
   }
 
   @override
@@ -140,19 +187,18 @@ class _BackgroundMediaState extends State<BackgroundMedia>
   @override
   Widget build(BuildContext context) {
     final prefs = widget.preferences;
+    final mode = prefs.effectiveMode;
     final video = _video;
     Widget? media;
-    if (!_failed && prefs.path.isNotEmpty) {
+    if (!_failed &&
+        mode != BackgroundDisplayMode.color &&
+        mode != BackgroundDisplayMode.gradient &&
+        mode != BackgroundDisplayMode.defaultMode) {
       if (prefs.kind == BackgroundMediaKind.image) {
-        media = Image.file(
-          File(prefs.path),
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-          errorBuilder: (_, _, _) => _imageError(prefs.path),
-        );
+        media = _mediaImage();
       } else if (video != null && video.value.isInitialized) {
         media = FittedBox(
-          fit: BoxFit.cover,
+          fit: _fit,
           clipBehavior: Clip.hardEdge,
           child: SizedBox(
             width: video.value.size.width,
@@ -167,6 +213,33 @@ class _BackgroundMediaState extends State<BackgroundMedia>
         fit: StackFit.expand,
         children: [
           ColoredBox(color: widget.baseColor),
+          if (mode == BackgroundDisplayMode.color ||
+              mode == BackgroundDisplayMode.gradient)
+            Positioned.fill(
+              child: Opacity(
+                opacity: prefs.opacity,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: mode == BackgroundDisplayMode.color
+                        ? prefs.color
+                        : null,
+                    gradient: mode == BackgroundDisplayMode.gradient
+                        ? LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            transform: GradientRotation(
+                              prefs.gradientAngle * 3.141592653589793 / 180,
+                            ),
+                            colors: <Color>[
+                              prefs.gradientStart,
+                              prefs.gradientEnd,
+                            ],
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+            ),
           if (media != null)
             Positioned.fill(
               left: prefs.blurEnabled ? -prefs.blurRadius * 2 : 0,
@@ -183,6 +256,17 @@ class _BackgroundMediaState extends State<BackgroundMedia>
                     ),
                     enabled: prefs.blurEnabled && prefs.blurRadius > 0,
                     child: media,
+                  ),
+                ),
+              ),
+            ),
+          if (prefs.overlayOpacity > 0 &&
+              mode != BackgroundDisplayMode.defaultMode)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: prefs.overlayColor.withValues(
+                    alpha: prefs.overlayOpacity,
                   ),
                 ),
               ),

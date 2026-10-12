@@ -1,5 +1,6 @@
 <template>
   <el-dialog
+    data-amitia-ui="component.dialog"
     :model-value="visible"
     :close-on-click-modal="false"
     :close-on-press-escape="false"

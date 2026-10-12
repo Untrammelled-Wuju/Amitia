@@ -134,6 +134,7 @@ type ContainerBuilder struct {
 	desktopPetPluginCapabilities *integration.DesktopPetPluginCapabilities
 	runtimeProfile               runtimeprofile.Profile
 	runtimePolicy                runtimeprofile.Policy
+	runtimeIdentity              runtimeidentity.Identity
 
 	mcpRepository          *mcp.Repository
 	mcpRuntimeConnectPort  acquisition.MCPRuntimeConnectPort
@@ -250,6 +251,11 @@ func (b *ContainerBuilder) WithRuntimeHost(
 	host runtimehost.RuntimeHost,
 ) *ContainerBuilder {
 	b.host = host
+	return b
+}
+
+func (b *ContainerBuilder) WithRuntimeIdentity(identity runtimeidentity.Identity) *ContainerBuilder {
+	b.runtimeIdentity = identity
 	return b
 }
 
@@ -1118,7 +1124,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		taskRuntimeService.SetRemoteExecutor(executor)
 	}
 	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
-	providerInstanceReconciler := capability.NewProviderInstanceReconcilerWithAdapters(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{}, adapterRegistry)
+	providerInstanceReconciler := capability.NewProviderInstanceReconcilerWithAdapters(providerLifecycle, capabilityProviderRegistry, b.runtimeIdentity, adapterRegistry)
 	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle, adapterRegistry)
 	capabilityResolver := capability.NewResolver(capability.NewProviderCatalogAdapter(capabilityProviderRegistry))
 	capabilityResolver.SetRuntimeCatalog(capability.NewRuntimeAdapterCatalogAdapter(adapterRegistry))
@@ -1505,6 +1511,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := RegisterBuiltinUtilityTools(ctx, toolRegistry, builtinUtilityTools); err != nil {
 		return nil, fmt.Errorf("kernel: register builtin utility tools: %w", err)
 	}
+	if err := builtin.RegisterUIAgentAppearanceTool(ctx, toolRegistry); err != nil {
+		return nil, fmt.Errorf("kernel: register ui appearance tool: %w", err)
+	}
+	if err := reconcileEnabledBuiltinProviderInstances(ctx, defRepo, instRepo, providerInstanceReconciler); err != nil {
+		return nil, fmt.Errorf("kernel: reconcile enabled builtin provider instances: %w", err)
+	}
 	if err := taskRuntimeService.DeleteTaskDefinition(ctx, "system.search.deep"); err != nil {
 		return nil, fmt.Errorf("kernel: remove legacy deep search task: %w", err)
 	}
@@ -1529,6 +1541,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
+	toolFacade.SetLocalDeviceID(b.runtimeIdentity.DeviceID)
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
 	toolFacade.SetCapabilityResolver(capabilityResolver)
 	toolFacade.SetCapabilityService(capabilityService)
@@ -2208,6 +2221,38 @@ func activateBuiltinUIContributions(
 					return fmt.Errorf("kernel: activate builtin ui contribution %s: %w", contrib.ID, err)
 				}
 			}
+		}
+	}
+	return nil
+}
+
+func reconcileEnabledBuiltinProviderInstances(
+	ctx context.Context,
+	defs domain.DefinitionRepository,
+	installations domain.InstallationRepository,
+	reconciler capability.ProviderInstanceReconciler,
+) error {
+	if defs == nil || installations == nil || reconciler == nil {
+		return nil
+	}
+	items, err := installations.ListInstallations(ctx)
+	if err != nil {
+		return err
+	}
+	for _, inst := range items {
+		if inst.InstallationState != domain.InstallationStateInstalled ||
+			inst.EnablementState != domain.EnablementEnabled ||
+			!strings.HasPrefix(string(inst.ExtensionID), builtin.PrefixBuiltin) {
+			continue
+		}
+		definition, err := defs.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion)
+		if err != nil {
+			return fmt.Errorf("get definition for %s: %w", inst.ExtensionID, err)
+		}
+		if instances, err := reconciler.ActivateExtension(definition, nil); err != nil {
+			return fmt.Errorf("activate provider instances for %s: %w", inst.ExtensionID, err)
+		} else {
+			log.Printf("[builtin-provider] %s activated %d provider instances", inst.ExtensionID, len(instances))
 		}
 	}
 	return nil

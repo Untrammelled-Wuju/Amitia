@@ -6,6 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div
     ref="rootEl"
     class="messages-area"
+    data-amitia-ui="chat.messages"
     @scroll="$emit('scroll')"
     @wheel="$emit('wheel', $event)"
     @touchstart="$emit('touchStart', $event)"
@@ -37,6 +38,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div
         v-if="item.kind === 'message'"
         :data-message-id="item.message.id"
+        :data-amitia-ui="messageSemanticTarget(item.message)"
         class="conversation-flow-item conversation-flow-item--message"
         :class="{
           'conversation-flow-item--assistant': item.message.role === 'assistant',
@@ -600,6 +602,16 @@ function messageContext(
     isAssistantContinuation: presentation?.isAssistantContinuation === true,
     compactBottom: presentation?.compactAfter === true,
   };
+}
+
+function messageSemanticTarget(msg: any) {
+  const messageType = String(msg?.msgType || msg?.msg_type || msg?.type || "").toLowerCase();
+  if (messageType.includes("tool") || msg?.assistantTurn?.items?.some((item: any) => String(item?.type || "").toLowerCase().includes("tool"))) {
+    return "chat.message.tool";
+  }
+  if (messageType.includes("code")) return "chat.message.code";
+  if (Array.isArray(msg?.attachments) && msg.attachments.length > 0) return "chat.attachment";
+  return msg?.role === "user" ? "chat.message.user" : "chat.message.assistant";
 }
 
 function messageSlotContext(

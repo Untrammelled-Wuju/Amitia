@@ -233,7 +233,7 @@ func (rt *Runtime) Resource(ctx context.Context, scope coordination.ExecutionSco
 	} else if err := rt.callOwnedData(ctx, scope, "resource", coordination.DataQuery{ResourceKind: kind, ResourceID: id}, &result); err != nil {
 		return nil, err
 	}
-	if result != nil && (result.OwnerID != scope.ResourceOwnerID || result.RoleID != scope.RoleID || result.Kind != kind || result.ID != id) {
+	if result != nil && (result.OwnerID != scope.ResourceOwnerID || result.RoleID != coordination.StorageRole(scope, kind) || result.Kind != kind || result.ID != id) {
 		return nil, coordination.ErrWrongOwner
 	}
 	return result, nil
@@ -305,6 +305,8 @@ func (rt *Runtime) HistoricalSnapshot(ctx context.Context, scope coordination.Ex
 	historical.ResourceOwnerID = scope.TargetDeviceID
 	historical.RoleOwnerID = scope.TargetDeviceID
 	historical.RoleID = snapshot.Role.ID
+	historical.MemoryRoleID = snapshot.Role.ID
+	historical.MemoryViewAll = false
 	historical.RoleRevision = snapshot.Role.Revision
 	if query.HistoricalRoleID != "" && snapshot.Role.ID != query.HistoricalRoleID {
 		return nil, coordination.ErrRoleRequired

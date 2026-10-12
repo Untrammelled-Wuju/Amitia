@@ -6,6 +6,7 @@ import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
+import '../ui_runtime/mobile_style_runtime.dart';
 import 'application_background.dart';
 
 enum AmitiaAppBarNavigation { drawer, back, none }
@@ -68,6 +69,10 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
   Widget build(BuildContext context) {
     final router = GoRouter.of(context);
     final currentLocation = router.routerDelegate.currentConfiguration.fullPath;
+    final pageId = amitiaStylePageId(currentLocation);
+    final pageTarget = amitiaStyleTargetForPage(pageId);
+    final pageStyle = context.amitiaStyleFor(pageTarget);
+    final shellStyle = context.amitiaStyleFor('app.shell');
     final isChatPage = currentLocation == AppRoutes.chat;
     final isTopLevelPage =
         currentLocation == '/onboarding' || currentLocation == '/privacy';
@@ -94,14 +99,26 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
           Navigator.of(context).maybePop();
         }
       },
-      child: Scaffold(
-        body: widget.body,
-        appBar: widget.appBar,
-        floatingActionButton: widget.floatingActionButton,
-        bottomNavigationBar: widget.bottomNavigationBar,
-        drawer: widget.drawer,
-        backgroundColor: widget.backgroundColor ?? (BackgroundSurfaceScope.isActive(context) ? Colors.transparent : context.backgroundPrimary),
-        resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
+      child: AmitiaStyleTarget(
+        target: pageTarget,
+        child: AmitiaStyleTarget(
+          target: 'app.shell',
+          child: Scaffold(
+            body: widget.body,
+            appBar: widget.appBar,
+            floatingActionButton: widget.floatingActionButton,
+            bottomNavigationBar: widget.bottomNavigationBar,
+            drawer: widget.drawer,
+            backgroundColor:
+                widget.backgroundColor ??
+                pageStyle.color('backgroundColor') ??
+                shellStyle.color('backgroundColor') ??
+                (BackgroundSurfaceScope.isActive(context)
+                    ? Colors.transparent
+                    : context.backgroundPrimary),
+            resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
+          ),
+        ),
       ),
     );
   }
@@ -207,6 +224,7 @@ class AmitiaCard extends StatelessWidget {
   final Color? backgroundColor;
   final Border? border;
   final BorderRadius? borderRadius;
+  final String? styleTarget;
 
   const AmitiaCard({
     super.key,
@@ -217,6 +235,7 @@ class AmitiaCard extends StatelessWidget {
     this.backgroundColor,
     this.border,
     this.borderRadius,
+    this.styleTarget,
   });
 
   @override
@@ -228,24 +247,36 @@ class AmitiaCard extends StatelessWidget {
     final paddingY = number('paddingY', AppSpacing.cardPadding);
     final radius = number('radius', AppRadius.medium);
     final borderWidth = number('borderWidth', context.uiComponents.borderWidth);
+    final style = context.amitiaStyleFor(styleTarget ?? 'card');
+    final resolvedBorderRadius =
+        style.borderRadius('borderRadius') ??
+        borderRadius ??
+        BorderRadius.circular(radius);
+    final resolvedBackground =
+        style.color('backgroundColor') ??
+        style.color('background') ??
+        backgroundColor;
+    final resolvedBorderSide = style.borderSide(fallback: border?.top);
     return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: Material(
-        color: backgroundColor ?? context.surfacePrimary,
-        borderRadius: borderRadius ?? BorderRadius.circular(radius),
+        color: resolvedBackground ?? context.surfacePrimary,
+        borderRadius: resolvedBorderRadius,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          borderRadius: borderRadius ?? BorderRadius.circular(radius),
+          borderRadius: resolvedBorderRadius,
           child: Container(
             padding:
                 padding ??
                 EdgeInsets.symmetric(horizontal: paddingX, vertical: paddingY),
             decoration: BoxDecoration(
-              borderRadius: borderRadius ?? BorderRadius.circular(radius),
+              borderRadius: resolvedBorderRadius,
               border:
                   border ??
-                  (variant.containsKey('borderWidth') && borderWidth > 0
+                  (resolvedBorderSide != null
+                      ? Border.fromBorderSide(resolvedBorderSide)
+                      : variant.containsKey('borderWidth') && borderWidth > 0
                       ? Border.all(
                           color: context.borderPrimary,
                           width: borderWidth,
@@ -305,6 +336,7 @@ class AmitiaListTile extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
   final bool isSelected;
+  final String? styleTarget;
 
   const AmitiaListTile({
     super.key,
@@ -314,6 +346,7 @@ class AmitiaListTile extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.isSelected = false,
+    this.styleTarget,
   });
 
   @override
@@ -321,6 +354,8 @@ class AmitiaListTile extends StatelessWidget {
     final variant = context.uiComponentVariant('listTile');
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
+    final style = context.amitiaStyleFor(styleTarget ?? 'listTile');
+    final resolvedRadius = style.borderRadius('borderRadius');
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -333,10 +368,13 @@ class AmitiaListTile extends StatelessWidget {
           vertical: number('paddingY', 14),
         ),
         decoration: BoxDecoration(
-          color: isSelected ? context.accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(
-            number('radius', AppRadius.small),
-          ),
+          color:
+              style.color('backgroundColor') ??
+              style.color('background') ??
+              (isSelected ? context.accentSoft : Colors.transparent),
+          borderRadius:
+              resolvedRadius ??
+              BorderRadius.circular(number('radius', AppRadius.small)),
         ),
         child: Row(
           children: [

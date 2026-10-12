@@ -142,6 +142,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(characters.creates, 1);
       expect(characters.payload?['name'], '小夏');
+      expect(characters.payload?['globalMemoryEnabled'],isTrue);
       expect(details.uploads, isEmpty);
       expect(find.text('角色列表'), findsOneWidget);
     },

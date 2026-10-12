@@ -25,8 +25,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       @change="handleGenericFileInput"
     />
 
-        <div class="composer-stack">
-      <div ref="inputWrapperRef" class="input-wrapper">
+        <div class="composer-stack" data-amitia-ui="chat.composer" data-amitia-surface="chat.composer">
+      <div ref="inputWrapperRef" class="input-wrapper" data-amitia-ui="chat.composer.surface">
         <ComposerExtensionHost
           v-if="characterId"
           :character-id="characterId"
@@ -156,6 +156,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   circle
                   size="small"
                   class="add-btn"
+                  data-amitia-ui="chat.composer.add"
                   :disabled="isInputDisabled"
                   title="添加图片、视频或技能"
                   aria-label="添加图片、视频或技能"
@@ -294,6 +295,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <button
                   type="button"
                   class="permission-trigger"
+                  data-amitia-ui="chat.composer.permission"
                   :class="{ 'is-full-access': permissionMode === 'full_access' }"
                   :disabled="isInputDisabled"
                   :aria-expanded="permissionMenuOpen"
@@ -372,7 +374,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <div class="workspace-picker-header">
                   <div>
                     <strong>项目</strong>
-                    <small>{{ ownedProjects ? '按当前角色和数据所属设备保存对话分组' : '当前项目中的所有对话共用此文件夹' }}</small>
+                    <small>项目内的全部工作区同时可用，相对路径使用主工作区</small>
                   </div>
                 </div>
                 <div v-if="recentWorkspaces.length" class="workspace-recent-list">
@@ -385,13 +387,13 @@ SPDX-License-Identifier: AGPL-3.0-only
                       'is-selected': currentWorkspace?.workspaceId === workspace.id,
                       'is-unavailable': !workspace.available,
                     }"
-                    :disabled="workspaceLoading || !workspace.available"
+                    :disabled="workspaceLoading || !workspace.available || !!activeConversationId"
                     @click="handleWorkspaceSelect(workspace)"
                   >
                     <el-icon class="workspace-option-icon"><FolderOpened /></el-icon>
                     <span class="workspace-option-copy">
                       <strong>{{ workspace.name }}</strong>
-                      <small>{{ workspace.kind === 'logical' ? '对话分组' : workspace.available ? '本机目录' : (workspace.statusReason || '目录不可用') }}</small>
+                      <small>{{ workspace.available ? '项目工作区' : (workspace.statusReason || '工作区不可用') }}</small>
                     </span>
                     <el-icon
                       v-if="currentWorkspace?.workspaceId === workspace.id"
@@ -402,24 +404,23 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <div v-else class="workspace-empty">暂无项目</div>
                 <div class="workspace-picker-divider"></div>
                 <button
-                  v-if="!ownedProjects"
                   type="button"
                   class="workspace-action"
                   :disabled="workspaceLoading"
                   @click="handleChooseWorkspaceDirectory"
                 >
                   <el-icon><FolderOpened /></el-icon>
-                  <span>添加文件夹为项目…</span>
+                  <span>新建文件夹项目…</span>
                 </button>
                 <button
-                  v-if="currentWorkspace"
+                  v-if="currentWorkspace && !activeConversationId"
                   type="button"
                   class="workspace-action is-clear"
                   :disabled="workspaceLoading"
                   @click="handleClearWorkspace"
                 >
                   <el-icon><CloseBold /></el-icon>
-                  <span>移出项目</span>
+                  <span>取消项目选择</span>
                 </button>
               </div>
             </el-popover>
@@ -431,6 +432,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               ref="inputRef"
               v-model="text"
               class="input-field"
+              data-amitia-ui="chat.composer.input"
               placeholder="输入消息..."
               :disabled="isInputDisabled"
               rows="1"
@@ -542,6 +544,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <button
                   type="button"
                   class="model-effort-trigger"
+                  data-amitia-ui="chat.composer.model"
                   :disabled="isInputDisabled"
                 >
                   <span>{{ selectedModelLabel }}</span>
@@ -715,6 +718,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   isSubmitting)
               "
               @click="generating ? $emit('stop') : handleSendClick()"
+              data-amitia-ui="chat.composer.send"
               :title="generating ? '停止生成' : (sendOnEnter ? '发送 (Enter)' : '发送')"
               :aria-label="generating ? '停止生成' : '发送消息'"
             >
@@ -876,9 +880,7 @@ const draftReasoningEnabled = ref(false);
 const modelSliderDragging = ref(false);
 const workspaceMenuOpen = ref(false);
 const permissionMenuOpen = ref(false);
-const supportsWorkspaceDirectory = computed(
-  () => typeof window !== "undefined" && !!window.amitiaDesktop?.selectWorkspaceDirectory,
-);
+const supportsWorkspaceDirectory = computed(() => true);
 const permissionLabel = computed(() =>
   props.permissionMode === "full_access" ? "完全访问" : "请求批准",
 );
@@ -889,6 +891,7 @@ function selectPermissionMode(mode: string) {
   permissionMenuOpen.value = false;
 }
 const {
+  activeConversationId,
   currentWorkspace,
   ownedProjects,
   recentWorkspaces,
@@ -2747,12 +2750,8 @@ defineExpose({ focus, setText, clear: clearText });
 .composer-send-arrow {
   font-size: 18px;
 }
-:deep(.el-button--small) {
-  min-width: 32px !important;
-  width: 32px !important;
-}
-.input-left-actions :deep(.el-button),
-.input-actions :deep(.el-button) {
+.input-left-actions > .el-button,
+.input-actions > .el-button {
   min-width: 32px !important;
   width: 32px !important;
 }

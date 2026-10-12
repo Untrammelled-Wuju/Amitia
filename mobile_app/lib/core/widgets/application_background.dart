@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/app_colors.dart';
+import '../artifact/artifact_providers.dart';
 import '../settings/appearance_preferences.dart';
 import '../settings/background_preferences.dart';
 import 'background_media.dart';
+
+final resolvedBackgroundMediaUriProvider = FutureProvider.family<Uri?, String>((
+  ref,
+  raw,
+) async {
+  final value = raw.trim();
+  if (value.isEmpty) return null;
+  if (value.startsWith('file:')) return Uri.parse(value);
+  final service = await ref.watch(artifactServiceProvider.future);
+  return service.resolveMediaUri(value);
+});
 
 class BackgroundSurfaceScope extends InheritedWidget {
   final bool active;
@@ -31,6 +43,12 @@ class ApplicationBackground extends ConsumerWidget {
     final appearance = ref.watch(appearancePreferencesProvider);
     final theme = Theme.of(context);
     final active = preferences.active;
+    final mediaSource = preferences.path.isNotEmpty
+        ? Uri.file(preferences.path).toString()
+        : preferences.sourceUri;
+    final resolvedMedia = mediaSource.isEmpty
+        ? null
+        : ref.watch(resolvedBackgroundMediaUriProvider(mediaSource));
     return BackgroundSurfaceScope(
       active: active,
       child: Stack(
@@ -42,6 +60,7 @@ class ApplicationBackground extends ConsumerWidget {
                 child: ExcludeSemantics(
                   child: BackgroundMedia(
                     preferences: preferences,
+                    mediaUri: resolvedMedia?.valueOrNull,
                     baseColor: context.backgroundPrimary,
                     animate:
                         appearance.dynamicEffect && !appearance.reduceAnimation,

@@ -66,7 +66,12 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
   Widget build(BuildContext context) {
     final preferences = ref.watch(backgroundPreferencesProvider);
     final notifier = ref.read(backgroundPreferencesProvider.notifier);
-    final hasMedia = preferences.path.isNotEmpty;
+    final hasMedia =
+        preferences.path.isNotEmpty || preferences.sourceUri.isNotEmpty;
+    final hasVisual =
+        hasMedia ||
+        preferences.mode == BackgroundDisplayMode.color ||
+        preferences.mode == BackgroundDisplayMode.gradient;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -81,11 +86,19 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
             title: '自定义背景',
             subtitle: '图片或静音循环视频，保存在当前设备',
             value: preferences.enabled,
-            onChanged: _busy || !hasMedia
+            onChanged: _busy || !hasVisual
                 ? null
                 : (value) => _run(() => notifier.update(enabled: value)),
           ),
-          Text(preferences.name.isEmpty ? '尚未选择背景' : preferences.name),
+          Text(
+            preferences.name.isNotEmpty
+                ? preferences.name
+                : preferences.mode == BackgroundDisplayMode.color
+                ? '纯色背景'
+                : preferences.mode == BackgroundDisplayMode.gradient
+                ? '渐变背景'
+                : '尚未选择背景',
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -94,7 +107,7 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
                 onPressed: _busy ? null : _pick,
                 child: Text(hasMedia ? '更换背景' : '选择背景'),
               ),
-              if (hasMedia)
+              if (hasVisual)
                 TextButton(
                   onPressed: _busy ? null : () => _run(notifier.clear),
                   child: const Text('移除'),
@@ -123,14 +136,14 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
             max: 1,
             divisions: 100,
             label: '${(preferences.opacity * 100).round()}%',
-            onChanged: _busy || !hasMedia
+            onChanged: _busy || !hasVisual
                 ? null
                 : (value) => _adjust(() => notifier.update(opacity: value)),
           ),
           AmitiaSwitchTile(
             title: '背景模糊',
             value: preferences.blurEnabled,
-            onChanged: _busy || !hasMedia
+            onChanged: _busy || !hasVisual
                 ? null
                 : (value) => _run(() => notifier.update(blurEnabled: value)),
           ),
@@ -141,11 +154,11 @@ class _BackgroundSettingsState extends ConsumerState<BackgroundSettings> {
             max: 30,
             divisions: 30,
             label: '${preferences.blurRadius.round()} px',
-            onChanged: _busy || !hasMedia || !preferences.blurEnabled
+            onChanged: _busy || !hasVisual || !preferences.blurEnabled
                 ? null
                 : (value) => _adjust(() => notifier.update(blurRadius: value)),
           ),
-          if (hasMedia)
+          if (hasVisual)
             SizedBox(
               height: 210,
               child: ClipRRect(

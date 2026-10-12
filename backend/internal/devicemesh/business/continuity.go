@@ -15,6 +15,8 @@ import (
 )
 
 type OwnedContinuity struct {
+	MemoryPartition    string                       `json:"memoryPartition,omitempty"`
+	ReadOnly           bool                         `json:"readOnly,omitempty"`
 	ManagementScope    *coordination.ExecutionScope `json:"managementExecutionScope,omitempty"`
 	PausedReason       string                       `json:"pausedReason,omitempty"`
 	Scope              coordination.ExecutionScope  `json:"executionScope"`
@@ -94,10 +96,34 @@ func (e *Engine) continuityAuthority(ctx context.Context, request Request) (cont
 		return ctx, scope, func() {}, err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
+	view := request.MemoryView
+	if request.ExpectedScope != nil {
+		if request.ExpectedScope.MemoryViewAll {
+			view = "all"
+		} else if request.ExpectedScope.MemoryRoleID == coordination.GlobalMemoryRole {
+			view = "global"
+		} else if request.ExpectedScope.MemoryRoleID != "" {
+			view = "role:" + request.ExpectedScope.MemoryRoleID
+		}
+	}
+	if err := coordination.ResolveMemoryScope(&scope, role, view); err != nil {
+		finish()
+		return ctx, scope, func() {}, err
+	}
+	if request.ExpectedScope != nil {
+		scope.ContinuityRoleID = request.ExpectedScope.ContinuityRoleID
+		if len(scope.ContinuityRoleID) > 512 {
+			finish()
+			return ctx, scope, func() {}, coordination.ErrWrongOwner
+		}
+	}
 	return coordination.WithScope(ctx, scope), scope, finish, nil
 }
 
 func (e *Engine) Continuity(ctx context.Context, request Request, mutation ContinuityMutation) (OwnedContinuity, coordination.Acknowledgement, error) {
+	if mutation.ExpectedScope != nil {
+		request.ExpectedScope = mutation.ExpectedScope
+	}
 	ctx, scope, finish, err := e.continuityAuthority(ctx, request)
 	if err != nil {
 		return OwnedContinuity{}, coordination.Acknowledgement{}, err
@@ -165,7 +191,7 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 	}
 	var document OwnedContinuity
 	if resource != nil {
-		if resource.Deleted || json.Unmarshal(resource.Body, &document) != nil || document.OwnerID != scope.ResourceOwnerID || document.Thread.CharacterID != scope.RoleID {
+		if resource.Deleted || json.Unmarshal(resource.Body, &document) != nil || document.OwnerID != scope.ResourceOwnerID {
 			return document, coordination.Acknowledgement{}, coordination.ErrWrongOwner
 		}
 	}
@@ -177,9 +203,12 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 			return document, coordination.Acknowledgement{}, err
 		}
 		if !mutation.rawRead {
-			document = PresentContinuity(document, scope, time.Now())
+			document = e.PresentManagedContinuity(ctx, document, scope, resource.RoleID)
 		}
 		return document, coordination.Acknowledgement{}, e.coordination.Validate(ctx, scope)
+	}
+	if resource != nil && document.Thread.CharacterID != scope.RoleID {
+		return document, coordination.Acknowledgement{}, errors.New("此事项由其他角色执行，请使用原执行角色管理")
 	}
 	if resource == nil && mutation.Action != "create" || resource != nil && (mutation.Action == "create" || resource.Revision != mutation.ExpectedRevision) {
 		return document, coordination.Acknowledgement{}, coordination.ErrResourceVersion
@@ -389,6 +418,7 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 		return document, coordination.Acknowledgement{}, errors.New("不支持的持续事项操作")
 	}
 	document.Scope = scope
+	document.MemoryPartition = coordination.StorageRole(scope, "continuity")
 	document.PausedReason = ""
 	document.CoreID = scope.CoreID
 	document.OwnerID = scope.ResourceOwnerID
@@ -408,13 +438,27 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 	if err := e.coordination.TrackContinuity(ctx, scope, document.Thread.ID, document.Thread.Revision); err != nil {
 		return document, coordination.Acknowledgement{}, err
 	}
-	ack, err := e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "continuity", ID: document.Thread.ID, RoleID: scope.RoleID, ExpectedRevision: mutation.ExpectedRevision, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
+	ack, err := e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "continuity", ID: document.Thread.ID, RoleID: coordination.StorageRole(scope, "continuity"), ExpectedRevision: mutation.ExpectedRevision, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
 	return document, ack, err
 }
 
 func PresentContinuity(document OwnedContinuity, scope coordination.ExecutionScope, now time.Time) OwnedContinuity {
 	current := scope
+	if scope.MemoryViewAll {
+		if document.MemoryPartition == "" {
+			document.MemoryPartition = document.Thread.CharacterID
+		}
+		current.MemoryViewAll = false
+		current.MemoryRoleID = document.MemoryPartition
+	} else {
+		document.MemoryPartition = coordination.StorageRole(scope, "continuity")
+	}
 	document.ManagementScope = &current
+	if document.Thread.CharacterID != scope.RoleID {
+		document.ReadOnly = true
+		document.PausedReason = "此事项由其他角色执行，迁移分区不会更换执行角色。"
+		return document
+	}
 	if document.Thread.Status.IsTerminal() {
 		return document
 	}
@@ -436,4 +480,28 @@ func PresentContinuity(document OwnedContinuity, scope coordination.ExecutionSco
 		document.PausedReason = "服务提供者、统筹模式、权限或角色已变化，事项已暂停，请确认后恢复。"
 	}
 	return document
+}
+
+func (e *Engine) PresentManagedContinuity(ctx context.Context, document OwnedContinuity, scope coordination.ExecutionScope, partition string) OwnedContinuity {
+	scope.ContinuityRoleID = partition
+	scope.MemoryViewAll = false
+	document.MemoryPartition = partition
+	roles, err := e.data.Roles(ctx, scope)
+	if err != nil {
+		document.ReadOnly = true
+		document.PausedReason = "无法核验原执行角色，暂时只读"
+		return PresentContinuity(document, scope, time.Now())
+	}
+	role, err := coordination.ResolveRole(document.Thread.CharacterID, roles)
+	if err != nil {
+		document.ReadOnly = true
+		document.PausedReason = "原执行角色不可用，事项只读"
+		return PresentContinuity(document, scope, time.Now())
+	}
+	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
+	_ = coordination.ResolveMemoryScope(&scope, role, "")
+	scope.ContinuityRoleID = partition
+	document.MemoryPartition = partition
+	document.ReadOnly = false
+	return PresentContinuity(document, scope, time.Now())
 }

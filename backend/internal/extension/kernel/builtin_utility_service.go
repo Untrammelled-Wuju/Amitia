@@ -220,13 +220,12 @@ func resolveWorkspaceURI(obj map[string]any, invocation capability.ToolInvocatio
 	rootURI := ""
 	if invocation.ExecContext != nil {
 		if workspaceID == "" {
-			workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
-		}
-		if metadata := invocation.ExecContext.Metadata; metadata != nil {
-			if value, ok := metadata["workspaceRootUri"].(string); ok {
-				rootURI = strings.TrimSpace(value)
+			workspaceID = strings.TrimSpace(invocation.ExecContext.PrimaryWorkspaceID)
+			if workspaceID == "" {
+				workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
 			}
 		}
+		rootURI = executionWorkspaceRoot(invocation.ExecContext, workspaceID)
 	}
 	if rootURI == "" && workspaceID != "" {
 		rootURI = workspace.MountURI(workspace.WorkspaceID(workspaceID))
@@ -241,8 +240,14 @@ func resolveWorkspaceURI(obj map[string]any, invocation capability.ToolInvocatio
 			return bindWorkspaceURI(rootURI, strings.TrimPrefix(uri, "workspace://"))
 		}
 		if strings.HasPrefix(uri, "amitia://workspace/") {
-			if rootURI != "" {
-				return bindWorkspaceURI(rootURI, uri)
+			if invocation.ExecContext != nil {
+				roots := make(map[string]string)
+				for _, binding := range executionWorkspaceBindings(invocation.ExecContext) {
+					roots[binding.ID] = binding.RootURI
+				}
+				if len(roots) > 0 {
+					return bindProjectWorkspaceURI(roots, workspaceID, workspaceID, uri)
+				}
 			}
 			return uri, nil
 		}
@@ -491,7 +496,10 @@ func resolveWorkspaceIdentity(obj map[string]any, uri string, invocation capabil
 	workspaceID := strings.TrimSpace(stringValue(obj, "workspaceId"))
 	filePath := strings.TrimPrefix(strings.TrimSpace(stringValue(obj, "path", "filePath")), "/")
 	if workspaceID == "" && invocation.ExecContext != nil {
-		workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
+		workspaceID = strings.TrimSpace(invocation.ExecContext.PrimaryWorkspaceID)
+		if workspaceID == "" {
+			workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
+		}
 	}
 	if workspaceID != "" && filePath != "" {
 		return workspaceID, filePath, nil

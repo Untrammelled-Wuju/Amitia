@@ -1,0 +1,9 @@
+{
+  "scope": {
+    "platform": "desktop",
+    "page": "chat"
+  },
+  "target": "chat.composer.input",
+  "limit": 200,
+  "includeComputed": true
+}

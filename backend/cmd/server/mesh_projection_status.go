@@ -22,11 +22,11 @@ func (p *meshLocalDataPort) ProjectionState(ctx context.Context, scope coordinat
 		return coordination.ProjectionStatus{}, coordination.ErrScopeExpired
 	}
 	if rebuild {
-		if err := coordination.CommitCurrent(ctx, func() error { return p.store.RebuildProjections(ctx, scope.RoleID) }); err != nil {
+		if err := coordination.CommitCurrent(ctx, func() error { return p.store.RebuildProjections(ctx, coordination.StorageRole(scope, "memory")) }); err != nil {
 			return coordination.ProjectionStatus{}, err
 		}
 	} else if err := coordination.ValidateCurrent(ctx); err != nil {
 		return coordination.ProjectionStatus{}, err
 	}
-	return p.store.ProjectionStatus(ctx, scope.RoleID)
+	return p.store.ProjectionStatus(ctx, coordination.StorageRole(scope, "memory"))
 }

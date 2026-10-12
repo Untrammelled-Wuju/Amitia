@@ -80,6 +80,7 @@ type CreateEpisodicRequest struct {
 }
 
 type EpisodicListQuery struct {
+	MemoryScope    string `form:"-"`
 	SpaceID        string `form:"spaceId"`
 	CharacterID    string `form:"characterId"`
 	SceneType      string `form:"sceneType"`

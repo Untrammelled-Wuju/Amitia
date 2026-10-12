@@ -1,8 +1,15 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/device_owned_memory_service.dart';
+import '../../../../core/services/owned_memory_scope.dart';
+import '../../../../core/services/memory_scope_transfer_service.dart';
+import '../widgets/memory_scope_transfer_dialog.dart';
+import '../widgets/owned_memory_graph.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import 'owned_memory_timeline.dart';
 
@@ -11,6 +18,7 @@ Widget? ownedMemoryGate(
   String kind = 'memory',
   String? characterId,
   bool timeline = false,
+  bool showTools = false,
 }) {
   final ownership = ref.watch(ownedMemoryModeProvider);
   if (ownership.isLoading) {
@@ -38,6 +46,7 @@ Widget? ownedMemoryGate(
       initialKind: kind,
       characterId: characterId,
       timeline: timeline,
+      showTools: showTools,
     );
   return null;
 }
@@ -48,10 +57,12 @@ class OwnedMemoryPage extends ConsumerStatefulWidget {
     this.initialKind = 'memory',
     this.characterId,
     this.timeline = false,
+    this.showTools = false,
   });
   final String initialKind;
   final String? characterId;
   final bool timeline;
+  final bool showTools;
 
   @override
   ConsumerState<OwnedMemoryPage> createState() => _OwnedMemoryPageState();
@@ -59,18 +70,19 @@ class OwnedMemoryPage extends ConsumerStatefulWidget {
 
 class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   static const _layers = {
-    'memory': '原始记忆',
+    'memory': '记忆总览',
     'candidate': '候选记忆',
     'legacy': '已有记忆（旧格式）',
     'working': '工作记忆',
     'profile': '用户画像',
-    'episodic': '情节记忆',
+    'episodic': '情景记忆',
     'fact': '事实记忆',
     'vector': '向量索引',
     'graph': '关系图谱',
     'summary': '对话摘要',
   };
   String _role = '';
+  String _memoryView = 'all';
   String _kind = 'memory';
   String _owner = '';
   String _next = '';
@@ -105,10 +117,12 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   void initState() {
     super.initState();
     _kind = widget.initialKind;
-    final owned = ref.read(chatServiceProvider).owned;
+    final owned = ref.read(memoryDataSourceProvider);
     try {
       _role = owned.selectRole(widget.characterId);
     } catch (_) {}
+    if (_role.isEmpty && owned.roles.isNotEmpty)
+      _role = owned.roles.first['id'].toString();
     if (_role.isNotEmpty) _load();
   }
 
@@ -128,26 +142,51 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       }
     });
     try {
-      final owned = ref.read(chatServiceProvider).owned;
+      final owned = ref.read(memoryDataSourceProvider);
       if (!await owned.refresh()) throw StateError('记忆服务尚未就绪');
+      if (!owned.roles.any((role) => role['id'] == _role)) {
+        if (_memoryView.startsWith('role:')) _memoryView = 'all';
+        _role = owned.roles.isEmpty ? '' : owned.roles.first['id'].toString();
+        if (_role.isEmpty) throw StateError('请先创建可用角色后管理记忆');
+      }
       if (owned.policy?['coordinated'] == true && _historicalRoles.isEmpty) {
         _historicalRoles = await owned.historicalRoles(_role);
       }
       final historical = _source.startsWith('history:');
       if (!historical && const ['memory', 'candidate'].contains(_kind)) {
-        final page = await ref
-            .read(deviceOwnedMemoryServiceProvider)
-            .query(
-              _role,
-              candidates: _kind == 'candidate',
-              query: _query,
-              mode: _searchMode,
-              memoryType: _memoryType,
-              source: _memorySource,
-              sort: _memorySort,
-              cursor: older ? _next : '',
-              original: older ? _managementPage : null,
-            );
+        final page = older && _next.isEmpty && _managementPage != null
+            ? {..._managementPage!, 'resources': <Map<String, dynamic>>[]}
+            : await ref
+                  .read(deviceOwnedMemoryServiceProvider)
+                  .query(
+                    _role,
+                    candidates: _kind == 'candidate',
+                    query: _query,
+                    mode: _searchMode,
+                    memoryType: _memoryType,
+                    source: _memorySource,
+                    sort: _memorySort,
+                    cursor: older ? _next : '',
+                    original: older ? _managementPage : null,
+                    memoryView: _memoryView,
+                  );
+        final legacy = _kind == 'memory' && (!older || _nextLegacy.isNotEmpty)
+            ? await owned.data(
+                'memory',
+                characterId: _role,
+                cursor: '',
+                legacyCursor: older ? _nextLegacy : '',
+                memoryView: _memoryView,
+              )
+            : null;
+        if (legacy != null &&
+            DeviceOwnedMemoryService.scopeStamp(
+                  legacy['executionScope'] as Map,
+                ) !=
+                DeviceOwnedMemoryService.scopeStamp(
+                  page['executionScope'] as Map,
+                ))
+          throw StateError('记忆分区在加载期间发生变化，请重新加载');
         if (!mounted || ticket != _generation) return;
         setState(() {
           _managementPage = page;
@@ -159,6 +198,15 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
           _next = (page['nextCursor'] ?? '').toString();
           for (final row in page['resources'] as List<Map<String, dynamic>>)
             _rows[row['id'].toString()] = row;
+          if (legacy != null) {
+            _nextLegacy =
+                (legacy['snapshot']['nextCursors']?['legacyMemory'] ?? '')
+                    .toString();
+            _appendLegacyRows(
+              legacy['snapshot'] as Map,
+              legacy['executionScope'] as Map,
+            );
+          }
         });
         return;
       }
@@ -170,6 +218,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         historicalRoleId: historical ? _source.substring(8) : '',
         historicalCursor: historical && older ? _next : '',
         historicalLegacyCursor: historical && older ? _nextLegacy : '',
+        memoryView: _kind == 'profile' ? 'global' : _memoryView,
       );
       if (!mounted || ticket != _generation) return;
       final scope = Map<String, dynamic>.from(result['executionScope'] as Map)
@@ -191,6 +240,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         'legacy': 'legacyMemory',
         'profile': 'legacyProfile',
         'episodic': 'legacyEpisode',
+        'graph': 'legacyGraph',
       }[_kind];
       final legacyCursor = legacyKind == null
           ? ''
@@ -206,11 +256,33 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         _owner = snapshot['ownerId'].toString();
         _next = cursor;
         _nextLegacy = legacyCursor;
+        if (_kind == 'graph') {
+          for (final row
+              in (snapshot['legacyGraphs'] as List? ?? []).whereType<Map>()) {
+            if (row['ownerId'] != snapshot['ownerId'] ||
+                row['roleId'] == null ||
+                (result['executionScope']['memoryViewAll'] != true &&
+                    row['roleId'] !=
+                        memoryStorageRole(
+                          result['executionScope'] as Map,
+                          'graph',
+                        )))
+              throw StateError('历史图谱的分区或数据所有者已变化');
+            _rows[row['id'].toString()] = Map<String, dynamic>.from(row)
+              ..['executionScope'] = memoryRecordScope(
+                result['executionScope'] as Map,
+                row['roleId'].toString(),
+              );
+          }
+        }
         for (final row
             in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
           if (row['kind'] == _kind) {
             _rows[row['id'].toString()] = Map<String, dynamic>.from(row)
-              ..['executionScope'] = result['executionScope'];
+              ..['executionScope'] = memoryRecordScope(
+                result['executionScope'] as Map,
+                row['roleId'].toString(),
+              );
           }
         }
         final legacyField = {
@@ -225,11 +297,24 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     : snapshot[legacyField] as List? ?? [])
                 .whereType<Map>()) {
           final id = 'legacy/${row['id']}';
+          final partition = _kind == 'memory' || _kind == 'legacy'
+              ? const ['user', 'user_global'].contains(row['scope'])
+                    ? globalMemoryRole
+                    : row['characterId'].toString()
+              : _kind == 'profile' ||
+                    (row['characterId'] ?? '').toString().isEmpty
+              ? globalMemoryRole
+              : row['characterId'].toString();
           _rows[id] = {
             'id': id,
             'kind': _kind,
             'ownerId': _owner,
             'revision': 0,
+            'roleId': partition,
+            'executionScope': memoryRecordScope(
+              result['executionScope'] as Map,
+              partition,
+            ),
             'body': {
               'key': row['key'] ?? row['title'] ?? row['fieldName'],
               'content': row,
@@ -239,9 +324,11 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
           };
         }
       });
-      if (_source == 'current' && const ['vector', 'graph'].contains(_kind)) {
+      if (_source == 'current' &&
+          _memoryView != 'all' &&
+          const ['vector', 'graph'].contains(_kind)) {
         try {
-          final value = await owned.projections(_role);
+          final value = await owned.projections(_role, memoryView: _memoryView);
           final indexScope =
               Map<String, dynamic>.from(value['executionScope'] as Map)
                 ..remove('requestId')
@@ -265,6 +352,60 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     }
   }
 
+  void _appendLegacyRows(Map snapshot, Map scope) {
+    final field = {
+      'memory': 'legacyMemories',
+      'profile': 'legacyProfiles',
+      'episodic': 'legacyEpisodes',
+    }[_kind];
+    for (final row in (snapshot[field] as List? ?? []).whereType<Map>()) {
+      final partition = _kind == 'memory'
+          ? const ['user', 'user_global'].contains(row['scope'])
+                ? globalMemoryRole
+                : row['characterId'].toString()
+          : _kind == 'profile' || (row['characterId'] ?? '').toString().isEmpty
+          ? globalMemoryRole
+          : row['characterId'].toString();
+      final id = 'legacy/${row['id']}';
+      _rows[id] = {
+        'id': id,
+        'kind': _kind,
+        'ownerId': snapshot['ownerId'],
+        'revision': 0,
+        'roleId': partition,
+        'executionScope': memoryRecordScope(scope, partition),
+        'body': {
+          'key': row['key'] ?? row['title'] ?? row['attributeName'],
+          'content': row,
+          'allowContextUse': row['allowContextUse'],
+          'expiresAt': row['expiresAt'],
+        },
+      };
+    }
+  }
+
+  Future<void> _transferScope(Map<String, dynamic> row) async {
+    final original = Map<String, dynamic>.from(row);
+    final roles = ref.read(memoryDataSourceProvider).roles;
+    final target = await showMemoryScopeTransferDialog(
+      context,
+      roles,
+      row['roleId'].toString(),
+    );
+    if (target == null || !mounted) return;
+    final api = ref.read(rawBackendServiceApiProvider);
+    if (api == null) return;
+    setState(() => _managing = true);
+    try {
+      await transferMemoryScope(api, original, target.scope, target.role);
+      if (mounted) await _load();
+    } catch (cause) {
+      if (mounted) setState(() => _error = cause.toString());
+    } finally {
+      if (mounted) setState(() => _managing = false);
+    }
+  }
+
   String _content(Map row) {
     final body = row['body'] as Map? ?? {};
     final content = body['content'];
@@ -274,6 +415,10 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     }
     if (content is String) return content;
     if (content is Map) {
+      if (_kind == 'graph')
+        return '${(content['nodes'] as List? ?? []).length} 个节点 · ${(content['edges'] as List? ?? []).length} 条关系';
+      if (_kind == 'profile')
+        return '${content['attributeName'] ?? content['fieldName'] ?? body['key'] ?? ''}：${content['attributeValue'] ?? content['fieldValue'] ?? content['value'] ?? ''}';
       return (content['value'] ??
               content['text'] ??
               content['summary'] ??
@@ -289,8 +434,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     setState(() => _rebuilding = true);
     try {
       final value = await ref
-          .read(chatServiceProvider)
-          .owned
+          .read(memoryDataSourceProvider)
           .projections(
             _role,
             expectedScope: Map<String, dynamic>.from(
@@ -321,7 +465,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     final importance = TextEditingController(
       text: (body['importance'] ?? 5).toString(),
     );
-    final result = await showDialog<Map<String, dynamic>>(
+    final route = DialogRoute<Map<String, dynamic>>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(row == null ? '新增记忆' : '编辑候选记忆'),
@@ -377,6 +521,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         ],
       ),
     );
+    final result = await Navigator.of(context).push(route);
+    await route.completed;
     key.dispose();
     value.dispose();
     type.dispose();
@@ -512,8 +658,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     if (page == null) return;
     try {
       final rows = await ref
-          .read(chatServiceProvider)
-          .owned
+          .read(memoryDataSourceProvider)
           .conversations(characterId: role);
       if (!mounted || ticket != _generation) return;
       final selected = await showDialog<int>(
@@ -548,7 +693,12 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     }
   }
 
-  Future<void> _edit(Map row, {bool deleted = false}) async {
+  Future<void> _edit(
+    Map row, {
+    bool deleted = false,
+    Map<String, dynamic>? changes,
+  }) async {
+    row = Map<String, dynamic>.from(jsonDecode(jsonEncode(row)) as Map);
     if (deleted) {
       final accepted = await showDialog<bool>(
         context: context,
@@ -571,12 +721,11 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     }
     try {
       await ref
-          .read(chatServiceProvider)
-          .owned
+          .read(memoryDataSourceProvider)
           .edit(
-            'memory',
+            row['kind'].toString(),
             row['id'].toString(),
-            characterId: _role,
+            characterId: row['executionScope']['roleId'].toString(),
             expectedScope: Map<String, dynamic>.from(
               row['executionScope'] as Map,
             ),
@@ -585,7 +734,11 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
             deleted: deleted,
             changes: deleted
                 ? {}
-                : {'allowContextUse': row['body']?['allowContextUse'] == false},
+                : changes ??
+                      {
+                        'allowContextUse':
+                            row['body']?['allowContextUse'] == false,
+                      },
           );
       if (mounted) await _load();
     } catch (cause) {
@@ -593,12 +746,84 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     }
   }
 
+  Future<void> _editContent(Map row) async {
+    final original = Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(row)) as Map,
+    );
+    final content = original['body']?['content'];
+    final field = content is Map
+        ? (content.containsKey('value')
+              ? 'value'
+              : content.containsKey('text')
+              ? 'text'
+              : 'summary')
+        : '';
+    final value = await _textInput(
+      '编辑记忆内容',
+      content is Map
+          ? (content[field] ?? '').toString()
+          : (content ?? '').toString(),
+    );
+    if (value == null || !mounted) return;
+    await _edit(
+      original,
+      changes: {
+        'content': content is Map ? {...content, field: value} : value,
+      },
+    );
+  }
+
+  Future<String?> _textInput(String title, String initial) async {
+    final controller = TextEditingController(text: initial);
+    final route = DialogRoute<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(controller: controller, minLines: 1, maxLines: 6),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    final result = await Navigator.of(context).push(route);
+    await route.completed;
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _setExpiry(Map row) async {
+    final original = Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(row)) as Map,
+    );
+    final input = await _textInput(
+      '到期时间（留空取消，填写日期或 ISO 时间）',
+      (row['body']?['expiresAt'] ?? '').toString(),
+    );
+    if (input == null || !mounted) return;
+    final date = input.trim().isEmpty ? null : DateTime.tryParse(input.trim());
+    if (input.trim().isNotEmpty && date == null) {
+      setState(() => _error = '到期时间格式无效');
+      return;
+    }
+    await _edit(
+      original,
+      changes: {'expiresAt': date?.toUtc().toIso8601String()},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final owned = ref.watch(chatServiceProvider).owned;
+    final owned = ref.watch(memoryDataSourceProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: widget.timeline ? '记忆时间线' : '记忆与数据归属',
+        title: widget.timeline ? '记忆时间线' : _layers[_kind] ?? '记忆',
         showBackButton: true,
       ),
       body: SafeArea(
@@ -613,8 +838,28 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (widget.showTools)
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            for (final entry in {
+                              '记忆管理': AppRoutes.memoryManager,
+                              '情景记忆': AppRoutes.memoryEpisodic,
+                              '记忆图谱': AppRoutes.memoryGraph,
+                              '记忆时间线': AppRoutes.memoryTimeline,
+                              '用户画像': AppRoutes.memoryProfiles,
+                              '世界书': AppRoutes.memoryWorldBook,
+                            }.entries)
+                              TextButton(
+                                onPressed: () => context.push(entry.value),
+                                child: Text(entry.key),
+                              ),
+                          ],
+                        ),
                       Text(
-                        owned.policy?['coordinated'] == true
+                        _kind == 'profile'
+                            ? '用户画像全局共享，不按角色区分'
+                            : owned.policy?['coordinated'] == true
                             ? '新记忆由当前 Core 保存和管理'
                             : '新记忆由设备保存和管理，Core 负责计算',
                       ),
@@ -631,14 +876,19 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                               value: 'current',
                               child: Text('当前 Core 的数据'),
                             ),
-                            ..._historicalRoles.map(
-                              (row) => DropdownMenuItem(
-                                value: 'history:${row['id']}',
-                                child: Text(
-                                  '原设备历史 · ${row['name'] ?? row['id']}',
+                            ...(_kind == 'profile'
+                                    ? _historicalRoles.take(1)
+                                    : _historicalRoles)
+                                .map(
+                                  (row) => DropdownMenuItem(
+                                    value: 'history:${row['id']}',
+                                    child: Text(
+                                      _kind == 'profile'
+                                          ? '原设备历史'
+                                          : '原设备历史 · ${row['name'] ?? row['id']}',
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
                           ],
                           onChanged: _loading
                               ? null
@@ -649,50 +899,39 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                         ),
                       if (_source != 'current')
                         const Text('原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。'),
-                      DropdownButtonFormField<String>(
-                        initialValue:
-                            owned.roles.any((row) => row['id'] == _role)
-                            ? _role
-                            : null,
-                        decoration: const InputDecoration(labelText: '记忆所属角色'),
-                        items: owned.roles
-                            .map(
+                      if (_kind != 'profile')
+                        DropdownButtonFormField<String>(
+                          initialValue: _memoryView,
+                          decoration: const InputDecoration(labelText: '查看范围'),
+                          items: [
+                            const DropdownMenuItem(
+                              value: 'all',
+                              child: Text('全部记忆'),
+                            ),
+                            const DropdownMenuItem(
+                              value: 'global',
+                              child: Text('全局记忆'),
+                            ),
+                            ...owned.roles.map(
                               (row) => DropdownMenuItem(
-                                value: row['id'].toString(),
+                                value: 'role:${row['id']}',
                                 child: Text(
                                   (row['name'] ?? row['id']).toString(),
                                 ),
                               ),
-                            )
-                            .toList(),
-                        onChanged: _loading
-                            ? null
-                            : (value) {
-                                _role = value ?? '';
-                                _historicalRoles = [];
-                                _source = 'current';
-                                if (_role.isNotEmpty) _load();
-                              },
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _kind,
-                        decoration: const InputDecoration(labelText: '记忆层'),
-                        items: _layers.entries
-                            .map(
-                              (row) => DropdownMenuItem(
-                                value: row.key,
-                                child: Text(row.value),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _loading
-                            ? null
-                            : (value) {
-                                _kind = value ?? 'memory';
-                                if (_kind == 'candidate') _source = 'current';
-                                if (_role.isNotEmpty) _load();
-                              },
-                      ),
+                            ),
+                          ],
+                          onChanged: _loading
+                              ? null
+                              : (value) {
+                                  _memoryView = value ?? 'all';
+                                  if (_memoryView.startsWith('role:'))
+                                    _role = _memoryView.substring(5);
+                                  _historicalRoles = [];
+                                  _source = 'current';
+                                  if (_role.isNotEmpty) _load();
+                                },
+                        ),
                       if (_error.isNotEmpty)
                         Text(
                           _error,
@@ -787,6 +1026,36 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                             _kind == 'candidate' ? '从已保存对话生成候选' : '新增记忆',
                           ),
                         ),
+                        if (_kind == 'memory')
+                          Wrap(
+                            children: [
+                              TextButton(
+                                onPressed: _loading || _managing
+                                    ? null
+                                    : _generateCandidates,
+                                child: const Text('从对话生成候选'),
+                              ),
+                              TextButton(
+                                onPressed: _loading || _managing
+                                    ? null
+                                    : () {
+                                        setState(() => _kind = 'candidate');
+                                        _load();
+                                      },
+                                child: const Text('待审核候选'),
+                              ),
+                            ],
+                          ),
+                        if (_kind == 'candidate')
+                          TextButton(
+                            onPressed: _loading || _managing
+                                ? null
+                                : () {
+                                    setState(() => _kind = 'memory');
+                                    _load();
+                                  },
+                            child: const Text('返回记忆总览'),
+                          ),
                         if (_managing) const Text('等待数据所有者确认保存'),
                         if (_pendingMemory != null &&
                             _pendingMemory!.generation == _generation &&
@@ -805,6 +1074,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                           ),
                       ],
                       if (_source == 'current' &&
+                          _memoryView != 'all' &&
                           const ['vector', 'graph'].contains(_kind)) ...[
                         for (final layer
                             in (_projection?['status']?['layers'] as List? ??
@@ -820,7 +1090,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                               _projection == null || _loading || _rebuilding
                               ? null
                               : _rebuild,
-                          child: Text(_rebuilding ? '正在提交' : '重建当前角色索引'),
+                          child: Text(_rebuilding ? '正在提交' : '重建当前范围索引'),
                         ),
                       ],
                     ],
@@ -832,6 +1102,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
             Expanded(
               child: ListView(
                 children: [
+                  if (_kind == 'graph')
+                    OwnedMemoryGraph(rows: _rows.values.toList()),
                   if (widget.timeline)
                     const Padding(
                       padding: EdgeInsets.all(16),
@@ -865,6 +1137,26 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                             Text(
                               '版本 ${row['revision']}${row['body']?['allowContextUse'] == false ? ' · 已停用' : ''}',
                             ),
+                            if (_source == 'current' &&
+                                const [
+                                  'memory',
+                                  'legacy',
+                                  'episodic',
+                                  'fact',
+                                  'graph',
+                                  'vector',
+                                ].contains(_kind) &&
+                                row['executionScope'] is Map)
+                              TextButton(
+                                onPressed: _loading || _managing
+                                    ? null
+                                    : () => _transferScope(row),
+                                child: Text(
+                                  row['roleId'] == globalMemoryRole
+                                      ? '降级为角色记忆'
+                                      : '提升为全局记忆',
+                                ),
+                              ),
                             if (_kind == 'candidate' && _source == 'current')
                               Wrap(
                                 children: [
@@ -888,7 +1180,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                                   ),
                                 ],
                               ),
-                            if (_kind == 'memory' &&
+                            if (const ['memory', 'summary'].contains(_kind) &&
                                 _source == 'current' &&
                                 (row['revision'] as num? ?? 0) > 0)
                               Wrap(
@@ -896,13 +1188,48 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                                   TextButton(
                                     onPressed: _loading
                                         ? null
-                                        : () => _edit(row),
-                                    child: Text(
-                                      row['body']?['allowContextUse'] == false
-                                          ? '允许用于对话'
-                                          : '停用',
-                                    ),
+                                        : () => _editContent(row),
+                                    child: const Text('编辑'),
                                   ),
+                                  if (_kind == 'memory') ...[
+                                    TextButton(
+                                      onPressed: _loading
+                                          ? null
+                                          : () => _setExpiry(row),
+                                      child: const Text('到期时间'),
+                                    ),
+                                    TextButton(
+                                      onPressed: _loading
+                                          ? null
+                                          : () => _edit(
+                                              row,
+                                              changes: {
+                                                'archivedAt':
+                                                    row['body']?['archivedAt'] ==
+                                                        null
+                                                    ? DateTime.now()
+                                                          .toUtc()
+                                                          .toIso8601String()
+                                                    : null,
+                                              },
+                                            ),
+                                      child: Text(
+                                        row['body']?['archivedAt'] == null
+                                            ? '归档'
+                                            : '取消归档',
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _loading
+                                          ? null
+                                          : () => _edit(row),
+                                      child: Text(
+                                        row['body']?['allowContextUse'] == false
+                                            ? '允许用于对话'
+                                            : '停用',
+                                      ),
+                                    ),
+                                  ],
                                   TextButton(
                                     onPressed: _loading
                                         ? null

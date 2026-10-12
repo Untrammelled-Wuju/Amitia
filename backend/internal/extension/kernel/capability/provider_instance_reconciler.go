@@ -85,7 +85,7 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 					}
 				}
 			}
-		} else if d.Kind == ProviderKindBuiltin && r.adapters != nil {
+		} else if (d.Kind == ProviderKindBuiltin || usesInProcessAdapter(d.Runtime.RuntimeType)) && r.adapters != nil {
 			adapter, ok := r.adapters.Resolve(d.Runtime)
 			if !ok || adapter == nil || !adapter.Supports(d.Runtime) {
 				health = HealthUnknown
@@ -110,13 +110,11 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 			Availability:      availability,
 			ExtensionID:       string(d.ExtensionID),
 			ModuleID:          d.ModuleID,
-			SpaceID:           r.runtimeIdent.SpaceID,
-			DeviceID:          r.runtimeIdent.DeviceID,
-			RuntimeID:         r.runtimeIdent.RuntimeID,
 			RuntimeInstanceID: result.InstanceID,
 		}
 
 		if d.Placement == ProviderPlacementDevice && r.runtimeIdent.DeviceID != "" {
+			inst.SpaceID = r.runtimeIdent.SpaceID
 			inst.DeviceID = r.runtimeIdent.DeviceID
 			inst.RuntimeID = r.runtimeIdent.RuntimeID
 		}
@@ -135,6 +133,15 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 	}
 
 	return activated, nil
+}
+
+func usesInProcessAdapter(runtimeType RuntimeType) bool {
+	switch runtimeType {
+	case RuntimeTypeBuiltin, RuntimeTypeWorkspace, RuntimeTypeInternal:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *providerInstanceReconciler) DeactivateExtension(extensionID string) error {

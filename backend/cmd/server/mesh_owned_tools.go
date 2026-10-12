@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat"
@@ -31,9 +32,27 @@ func ownedToolScope(inference business.Inference, call string) kernel.Invocation
 	exec := execution.NewExecutionContext(scope.ExecutionID, scope.SpaceID)
 	exec.ExecutionID = scope.ExecutionID
 	exec.ConversationID = inference.ConversationID
+	exec.PrimaryWorkspaceID = inference.PrimaryWorkspaceID
+	exec.WorkspaceID = inference.PrimaryWorkspaceID
+	exec.WorkspaceBindings = make([]execution.WorkspaceBinding, 0, len(inference.Workspaces))
+	for _, workspace := range inference.Workspaces {
+		exec.WorkspaceBindings = append(exec.WorkspaceBindings, execution.WorkspaceBinding{ID: workspace.ID, DeviceID: workspace.DeviceID, Name: workspace.Name, Kind: workspace.Kind, RootURI: workspace.RootURI, ReadOnly: workspace.ReadOnly})
+		if workspace.ID == inference.PrimaryWorkspaceID {
+			exec.Metadata = map[string]any{"workspaceId": workspace.ID, "workspaceDeviceId": workspace.DeviceID, "workspaceName": workspace.Name, "workspaceKind": workspace.Kind, "workspaceRootUri": workspace.RootURI}
+		}
+	}
 	exec.RuntimeTarget = &execution.RuntimeTarget{Placement: "device", SpaceID: runtimeidentity.SpaceID(scope.SpaceID), DeviceID: runtimeidentity.DeviceID(scope.TargetDeviceID)}
-	exec.Metadata = map[string]any{"deviceMeshScope": scope, "ownedDeviceTarget": true}
-	return kernel.InvocationScope{SpaceID: scope.SpaceID, DeviceID: scope.TargetDeviceID, PrincipalType: "device", CharacterID: scope.RoleID, ConversationID: inference.ConversationID, Channel: "device-mesh", RequestID: scope.RequestID, ToolCallID: call, Message: inference.Message, Source: "device-mesh", ExecContext: &exec}
+	if exec.Metadata == nil {
+		exec.Metadata = map[string]any{}
+	}
+	exec.Metadata["deviceMeshScope"] = scope
+	exec.Metadata["ownedDeviceTarget"] = true
+	exec.Metadata["projectId"] = inference.ProjectID
+	permissionMode := strings.TrimSpace(inference.PermissionMode)
+	if permissionMode == "" {
+		permissionMode = "request_approval"
+	}
+	return kernel.InvocationScope{SpaceID: scope.SpaceID, DeviceID: scope.TargetDeviceID, PrincipalType: "device", CharacterID: scope.RoleID, ConversationID: inference.ConversationID, Channel: "device-mesh", RequestID: scope.RequestID, ToolCallID: call, PermissionMode: permissionMode, Message: inference.Message, Source: "device-mesh", ExecContext: &exec}
 }
 
 func (r *meshOwnedToolRuntime) definition(ctx context.Context, inference business.Inference, name string) (capability.ToolDefinition, error) {

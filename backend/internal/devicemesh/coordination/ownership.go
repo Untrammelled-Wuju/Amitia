@@ -55,6 +55,7 @@ type Mutation struct {
 }
 
 type Commit struct {
+	MemoryTransfer        *MemoryTransfer   `json:"memoryTransfer,omitempty"`
 	AdditionalAuthorities []ExecutionScope  `json:"additionalAuthorities,omitempty"`
 	LeaseProof            *CommitLeaseProof `json:"leaseProof,omitempty"`
 	Scope                 ExecutionScope    `json:"scope"`
@@ -150,6 +151,9 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	if len(commit.Dependencies) > 4096 {
 		return Acknowledgement{}, ErrPendingLimit
 	}
+	if err := s.validateMemoryTransfer(ctx, tx, commit); err != nil {
+		return Acknowledgement{}, err
+	}
 	seenDependencies := make(map[string]bool)
 	for _, dependency := range commit.Dependencies {
 		key := dependency.Kind + "/" + dependency.ID
@@ -167,7 +171,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			}
 			return Acknowledgement{}, err
 		}
-		if deleted || revision != dependency.Revision || role != scope.RoleID {
+		if deleted || revision != dependency.Revision || role != StorageRole(scope, dependency.Kind) {
 			return Acknowledgement{}, ErrResourceVersion
 		}
 		if dependency.Kind == "memory" && !ResourceUsable(dependencyBody, time.Now()) {
@@ -180,7 +184,11 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	changedMessages := []changedMessage{}
 	deletedConversations := []string{}
 	for _, mutation := range commit.Mutations {
-		if !validKind(mutation.Kind) || mutation.ID == "" || mutation.RoleID != scope.RoleID || !json.Valid(mutation.Body) || mutation.ExpectedRevision < 0 {
+		expectedRole := StorageRole(scope, mutation.Kind)
+		if commit.MemoryTransfer != nil {
+			expectedRole = commit.MemoryTransfer.ToRoleID
+		}
+		if !validKind(mutation.Kind) || mutation.ID == "" || mutation.RoleID != expectedRole || !json.Valid(mutation.Body) || mutation.ExpectedRevision < 0 {
 			return Acknowledgement{}, ErrWrongOwner
 		}
 		key := mutation.Kind + "/" + mutation.ID
@@ -194,7 +202,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return Acknowledgement{}, err
 		}
-		if err == nil && storedRole != scope.RoleID {
+		if err == nil && storedRole != StorageRole(scope, mutation.Kind) {
 			return Acknowledgement{}, ErrWrongOwner
 		}
 		if revision != mutation.ExpectedRevision {
@@ -254,7 +262,11 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			if err := tx.QueryRowContext(ctx, `SELECT deleted,role_id,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='memory' AND resource_id=?`, s.ownerID, mutation.SourceID).Scan(&sourceDeleted, &sourceRole, &sourceBody); err != nil {
 				return Acknowledgement{}, err
 			}
-			if sourceDeleted || sourceRole != scope.RoleID || !ResourceUsable(sourceBody, time.Now()) {
+			sourceExpectedRole := StorageRole(scope, "memory")
+			if commit.MemoryTransfer != nil {
+				sourceExpectedRole = commit.MemoryTransfer.ToRoleID
+			}
+			if sourceDeleted || sourceRole != sourceExpectedRole || !ResourceUsable(sourceBody, time.Now()) {
 				return Acknowledgement{}, ErrWrongOwner
 			}
 		}
@@ -262,16 +274,16 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if mutation.Deleted {
 			body = []byte(`null`)
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(owner_id,kind,resource_id) DO UPDATE SET source_id=excluded.source_id,revision=excluded.revision,deleted=excluded.deleted,body=excluded.body,updated_at=excluded.updated_at`, s.ownerID, mutation.Kind, mutation.ID, mutation.RoleID, mutation.SourceID, revision+1, mutation.Deleted, body, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(owner_id,kind,resource_id) DO UPDATE SET role_id=excluded.role_id,source_id=excluded.source_id,revision=excluded.revision,deleted=excluded.deleted,body=excluded.body,updated_at=excluded.updated_at`, s.ownerID, mutation.Kind, mutation.ID, mutation.RoleID, mutation.SourceID, revision+1, mutation.Deleted, body, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return Acknowledgement{}, err
 		}
-		if mutation.Kind == "memory" && (revision > 0 || mutation.Deleted) {
+		if commit.MemoryTransfer == nil && mutation.Kind == "memory" && (revision > 0 || mutation.Deleted) {
 			changedMemories = append(changedMemories, mutation.ID)
 		}
 		ack.Versions[key] = revision + 1
 	}
 	for _, conversation := range deletedConversations {
-		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, conversation)
+		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, scope.RoleID, conversation)
 		if err != nil {
 			return Acknowledgement{}, err
 		}
@@ -288,7 +300,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			return Acknowledgement{}, err
 		}
 		rows.Close()
-		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind<>'conversation' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND (role_id=? OR (kind='memory' AND json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?)) AND kind<>'conversation' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, scope.RoleID, conversation); err != nil {
 			return Acknowledgement{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind='checkpoint' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.mutations[0].body.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
@@ -305,7 +317,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if changed.request == "" {
 			continue
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?`, s.ownerID, scope.RoleID, changed.request)
+		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?`, s.ownerID, scope.RoleID, scope.RoleID, changed.request)
 		if err != nil {
 			return Acknowledgement{}, err
 		}
@@ -322,7 +334,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			return Acknowledgement{}, err
 		}
 		rows.Close()
-		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?`, s.ownerID, scope.RoleID, changed.request); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?`, s.ownerID, scope.RoleID, scope.RoleID, changed.request); err != nil {
 			return Acknowledgement{}, err
 		}
 	}
@@ -429,8 +441,14 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 		created := `json_extract(CAST(body AS TEXT),'$.createdAt')`
 		order = `CASE WHEN ` + created + ` GLOB '????-??-??T??:??:??*Z' THEN substr(` + created + `,1,19)||'.'||CASE WHEN substr(` + created + `,20,1)='.' THEN substr(replace(substr(` + created + `,21),'Z','')||'000000000',1,9) ELSE '000000000' END||'Z' ELSE updated_at END`
 	}
-	statement := `SELECT resource_id,source_id,revision,deleted,body,` + order + ` AS resource_order FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND role_id=? AND deleted=0`
-	arguments := []any{s.ownerID, kind, role}
+	statement := `SELECT resource_id,source_id,revision,deleted,body,role_id,` + order + ` AS resource_order FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND deleted=0`
+	arguments := []any{s.ownerID, kind}
+	if role != AllMemoryRole {
+		statement += ` AND role_id=?`
+		arguments = append(arguments, role)
+	} else if !MemoryKind(kind) {
+		return nil, "", ErrWrongOwner
+	}
 	switch kind {
 	case "message", "summary", "working":
 		if query.ConversationID == "" {
@@ -459,8 +477,13 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			statement += ` AND resource_id IN (?,?)`
 			arguments = append(arguments, "turn/"+query.RequestID, "memory/"+query.RequestID)
 		}
+	case "continuity":
+		if query.ResourceID != "" {
+			statement += ` AND resource_id=?`
+			arguments = append(arguments, query.ResourceID)
+		}
 	}
-	statement = `SELECT resource_id,source_id,revision,deleted,body,resource_order FROM (` + statement + `)`
+	statement = `SELECT resource_id,source_id,revision,deleted,body,role_id,resource_order FROM (` + statement + `)`
 	if query.Cursor != "" {
 		statement += ` WHERE resource_order<? OR (resource_order=? AND resource_id<?)`
 		arguments = append(arguments, cursor.Order, cursor.Order, cursor.ID)
@@ -479,7 +502,7 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 	for rows.Next() {
 		resource := Resource{OwnerID: s.ownerID, Kind: kind, RoleID: role}
 		var ordered string
-		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body, &ordered); err != nil {
+		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body, &resource.RoleID, &ordered); err != nil {
 			return nil, "", err
 		}
 		if kind == "message" {

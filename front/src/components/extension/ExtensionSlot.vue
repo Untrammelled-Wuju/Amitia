@@ -205,7 +205,7 @@ defineExpose({ rootEl, focus, setText, clear });
 </script>
 
 <template>
-  <div v-if="!isHidden" ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`, { 'extension-slot--bare': bare }]" :data-slot-id="slotId">
+  <div v-if="!isHidden" ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`, { 'extension-slot--bare': bare }]" data-amitia-ui="extension.surface" :data-slot-id="slotId">
     <div
       v-if="chainOverlay"
       class="extension-slot__chain-fallback"

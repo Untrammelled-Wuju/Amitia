@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,8 +22,10 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	{
 		group.GET("", h.listMounts)
 		group.GET("/:id", h.getMount)
+		group.GET("/:id/location", h.getMountLocation)
 		group.DELETE("/:id", h.removeMount)
 		group.POST("/local", h.registerLocalMount)
+		group.POST("/pick", h.pickSAFDirectory)
 		group.POST("/:id/touch", h.touchMount)
 		group.POST("/saf", h.registerSAFMount)
 		group.PUT("/:id/grant", h.replaceSAFGrant)
@@ -33,6 +36,41 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		group.GET("/list", h.listResources)
 		group.GET("/read", h.readResource)
 	}
+}
+
+func (h *Handler) pickSAFDirectory(c *gin.Context) {
+	mount, cancelled, err := h.service.PickSAFDirectory(c.Request.Context())
+	if err != nil {
+		if errors.Is(err, ErrSAFUnavailable) {
+			c.JSON(http.StatusNotImplemented, gin.H{"error": "当前设备不支持系统目录选择"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if cancelled {
+		c.JSON(http.StatusOK, gin.H{"cancelled": true})
+		return
+	}
+	c.JSON(http.StatusCreated, mount)
+}
+
+func (h *Handler) getMountLocation(c *gin.Context) {
+	id := WorkspaceID(strings.TrimSpace(c.Param("id")))
+	mount, ok := h.service.registry.GetMount(id)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	if mount.Kind == WorkspaceKindLocal {
+		c.JSON(http.StatusOK, gin.H{"kind": mount.Kind, "path": mount.LocalRoot, "uri": mount.RootURI})
+		return
+	}
+	if mount.Kind == WorkspaceKindSAF {
+		c.JSON(http.StatusOK, gin.H{"kind": mount.Kind, "uri": mount.RootURI, "grantId": mount.NativeGrant})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"kind": mount.Kind, "uri": mount.RootURI})
 }
 
 func (h *Handler) listMounts(c *gin.Context) {

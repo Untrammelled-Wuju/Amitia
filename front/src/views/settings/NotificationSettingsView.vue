@@ -1,17 +1,17 @@
 <template>
   <div class="panel">
-    <div class="head"><div><h2>通知设置</h2><p>管理系统通知订阅并发送测试通知。</p></div><el-button :loading="loading" @click="load">刷新</el-button></div>
+    <div class="head"><div><h2>通知设置</h2><p>管理系统通知订阅并发送测试通知。</p></div><el-button :loading="loading" data-amitia-ui="settings.button" @click="load">刷新</el-button></div>
     <ReplyNotificationSettings />
-    <el-card shadow="never">
+    <el-card shadow="never" data-amitia-ui="settings.card">
       <el-form label-position="left" label-width="150px">
-        <el-form-item label="启用通知"><el-switch v-model="settings.enabled" :loading="saving" @change="saveSettings" /></el-form-item>
+        <el-form-item label="启用通知"><el-switch v-model="settings.enabled" data-amitia-ui="component.switch" :loading="saving" @change="saveSettings" /></el-form-item>
         <el-form-item label="订阅状态"><el-tag :type="status.subscribed ? 'success' : 'info'">{{ status.subscribed ? '已订阅' : '未订阅' }}</el-tag></el-form-item>
         <el-form-item label="订阅标识" v-if="status.subscriptionId"><code>{{ status.subscriptionId }}</code></el-form-item>
       </el-form>
       <div class="actions">
-        <el-button type="primary" :loading="saving" @click="subscribe">订阅通知</el-button>
-        <el-button :disabled="!status.subscribed" :loading="saving" @click="unsubscribe">取消订阅</el-button>
-        <el-button :loading="saving" @click="test">发送测试通知</el-button>
+        <el-button type="primary" data-amitia-ui="settings.button" :loading="saving" @click="subscribe">订阅通知</el-button>
+        <el-button :disabled="!status.subscribed" data-amitia-ui="settings.button" :loading="saving" @click="unsubscribe">取消订阅</el-button>
+        <el-button :loading="saving" data-amitia-ui="settings.button" @click="test">发送测试通知</el-button>
       </div>
     </el-card>
   </div>

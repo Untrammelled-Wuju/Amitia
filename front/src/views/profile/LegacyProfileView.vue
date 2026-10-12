@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="profile-page">
+  <div class="profile-page" data-amitia-ui="profile.page">
     <div class="page-header">
       <h2>用户画像</h2>
       <div class="header-actions">
@@ -110,6 +110,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <el-dialog
       v-model="dialogVisible"
+      data-amitia-ui="component.dialog"
       :title="dialogTitle"
       width="440px"
       @close="closeModal"

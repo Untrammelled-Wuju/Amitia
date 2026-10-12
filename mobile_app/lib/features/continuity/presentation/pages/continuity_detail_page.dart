@@ -8,9 +8,13 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/continuity.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../widgets/continuity_editors.dart';
+import '../../../../core/services/memory_scope_transfer_service.dart';
+import '../../../../core/services/owned_memory_scope.dart';
+import '../../../memory/presentation/widgets/memory_scope_transfer_dialog.dart';
 
 class ContinuityDetailPage extends ConsumerStatefulWidget {
   const ContinuityDetailPage({
@@ -34,6 +38,43 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
   String? _error;
   Timer? _refreshTimer;
   bool get _readOnly => _detail?.thread.sourceDocument?['readOnly'] == true;
+
+  Future<void> _transferScope() async {
+    final document = _detail?.thread.sourceDocument;
+    if (document == null || document['executionScope'] is! Map || _saving)
+      return;
+    final scope = document['executionScope'] as Map;
+    final roles = await ref.read(continuityServiceProvider).availableRoles();
+    if (!mounted) return;
+    final target = await showMemoryScopeTransferDialog(
+      context,
+      roles,
+      memoryStorageRole(scope, 'continuity'),
+    );
+    if (target == null || !mounted) return;
+    final api = ref.read(rawBackendServiceApiProvider);
+    if (api == null) return;
+    setState(() => _saving = true);
+    try {
+      await transferMemoryScope(
+        api,
+        {
+          'kind': 'continuity',
+          'id': document['thread']['id'],
+          'revision': document['thread']['revision'],
+          'ownerId': document['ownerId'],
+          'executionScope': scope,
+        },
+        target.scope,
+        target.role,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (cause) {
+      if (mounted) setState(() => _error = cause.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   void initState() {
@@ -333,6 +374,22 @@ class _ContinuityDetailPageState extends ConsumerState<ContinuityDetailPage> {
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: [
+            if (!_readOnly && thread.sourceDocument?['executionScope'] is Map)
+              AmitiaButton(
+                label:
+                    thread.sourceDocument?['memoryPartition'] ==
+                        globalMemoryRole
+                    ? '降级为角色事项'
+                    : '提升为全局事项',
+                isSecondary: true,
+                outlined: true,
+                onPressed:
+                    _saving ||
+                        detail.leaseState == 'running' ||
+                        detail.leaseState == 'unknown'
+                    ? null
+                    : _transferScope,
+              ),
             if (!thread.terminal)
               AmitiaButton(
                 label: thread.paused ? '恢复' : '暂停',

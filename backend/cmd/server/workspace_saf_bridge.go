@@ -18,6 +18,17 @@ func newWorkspaceSAFBridge(bridge nativebridge.Bridge) workspace.SAFBridge {
 	return &workspaceSAFBridge{bridge: bridge}
 }
 
+func (b *workspaceSAFBridge) PickDirectory(ctx context.Context) (string, string, bool, bool, error) {
+	var result struct {
+		Name      string `json:"name"`
+		GrantID   string `json:"grantId"`
+		ReadOnly  bool   `json:"readOnly"`
+		Cancelled bool   `json:"cancelled"`
+	}
+	err := b.call(ctx, "workspace.saf.pick_tree", map[string]any{}, &result)
+	return result.Name, result.GrantID, result.ReadOnly, result.Cancelled, err
+}
+
 func (b *workspaceSAFBridge) call(ctx context.Context, operation string, payload map[string]any, result any) error {
 	if b.bridge == nil {
 		return workspace.SAFNativeError{Code: "PROVIDER_UNAVAILABLE", Message: "android native bridge not configured", ProviderUnavailable: true}

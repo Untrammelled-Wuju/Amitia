@@ -35,7 +35,7 @@ func (e *Engine) prepareMemoryMutations(ctx context.Context, scope coordination.
 		if resource.Deleted {
 			return nil, coordination.ErrResourceVersion
 		}
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != scope.RoleID || resource.Kind != mutation.Kind || resource.ID != mutation.ID {
+		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID != coordination.StorageRole(scope, mutation.Kind) || resource.Kind != mutation.Kind || resource.ID != mutation.ID {
 			return nil, coordination.ErrWrongOwner
 		}
 		snapshot.Resources = append(snapshot.Resources, *resource)

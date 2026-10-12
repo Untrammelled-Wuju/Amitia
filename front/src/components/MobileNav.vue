@@ -4,12 +4,13 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 ﻿
 <template>
-  <nav class="mobile-nav">
+  <nav class="mobile-nav" data-amitia-ui="app.sidebar">
     <router-link
       v-for="item in mobileItems"
       :key="item.id"
       :to="item.route"
       class="tab-item"
+      data-amitia-ui="app.sidebar.item"
       :class="{ 'tab-active': isActive(item) }"
       :aria-current="isActive(item) ? 'page' : undefined"
       :style="navigationItemStyle"

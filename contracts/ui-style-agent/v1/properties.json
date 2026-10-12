@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "aliases": {
+    "textColor": "foregroundColor",
+    "titleColor": "foregroundColor",
+    "subtitleColor": "foregroundColor",
+    "borderRadius": "borderRadius",
+    "cornerRadius": "borderRadius",
+    "shadow": "boxShadow",
+    "elevation": "boxShadow"
+  },
+  "properties": {
+    "backgroundColor": {
+      "type": "color",
+      "css": "background-color",
+      "flutter": "color"
+    },
+    "foregroundColor": {
+      "type": "color",
+      "css": "color",
+      "flutter": "color"
+    },
+    "placeholderColor": {
+      "type": "color",
+      "css": "placeholder-color",
+      "flutter": "hintColor"
+    },
+    "iconColor": {
+      "type": "color",
+      "css": "color",
+      "flutter": "iconColor"
+    },
+    "borderColor": {
+      "type": "color",
+      "css": "border-color",
+      "flutter": "borderColor"
+    },
+    "borderWidth": {
+      "type": "length",
+      "css": "border-width",
+      "flutter": "borderWidth"
+    },
+    "borderStyle": {
+      "type": "enum",
+      "values": ["solid", "dashed", "dotted", "none"],
+      "css": "border-style",
+      "flutter": "borderStyle"
+    },
+    "borderRadius": {
+      "type": "length",
+      "css": "border-radius",
+      "flutter": "borderRadius"
+    },
+    "padding": {
+      "type": "spacing",
+      "css": "padding",
+      "flutter": "padding"
+    },
+    "margin": {
+      "type": "spacing",
+      "css": "margin",
+      "flutter": "margin"
+    },
+    "gap": {
+      "type": "length",
+      "css": "gap",
+      "flutter": "gap"
+    },
+    "width": {
+      "type": "length",
+      "css": "width",
+      "flutter": "width"
+    },
+    "height": {
+      "type": "length",
+      "css": "height",
+      "flutter": "height"
+    },
+    "minWidth": {
+      "type": "length",
+      "css": "min-width",
+      "flutter": "minWidth"
+    },
+    "maxWidth": {
+      "type": "length",
+      "css": "max-width",
+      "flutter": "maxWidth"
+    },
+    "minHeight": {
+      "type": "length",
+      "css": "min-height",
+      "flutter": "minHeight"
+    },
+    "maxHeight": {
+      "type": "length",
+      "css": "max-height",
+      "flutter": "maxHeight"
+    },
+    "fontFamily": {
+      "type": "string",
+      "css": "font-family",
+      "flutter": "fontFamily"
+    },
+    "fontSize": {
+      "type": "length",
+      "css": "font-size",
+      "flutter": "fontSize"
+    },
+    "fontWeight": {
+      "type": "number_or_keyword",
+      "css": "font-weight",
+      "flutter": "fontWeight"
+    },
+    "lineHeight": {
+      "type": "number",
+      "css": "line-height",
+      "flutter": "lineHeight"
+    },
+    "letterSpacing": {
+      "type": "length",
+      "css": "letter-spacing",
+      "flutter": "letterSpacing"
+    },
+    "textAlign": {
+      "type": "enum",
+      "values": ["left", "right", "center", "justify", "start", "end"],
+      "css": "text-align",
+      "flutter": "textAlign"
+    },
+    "opacity": {
+      "type": "number",
+      "css": "opacity",
+      "flutter": "opacity"
+    },
+    "boxShadow": {
+      "type": "shadow",
+      "css": "box-shadow",
+      "flutter": "boxShadow"
+    },
+    "transform": {
+      "type": "transform",
+      "css": "transform",
+      "flutter": "transform"
+    },
+    "gradient": {
+      "type": "gradient",
+      "css": "background-image",
+      "flutter": "gradient"
+    },
+    "backgroundImage": {
+      "type": "asset",
+      "css": "background-image",
+      "flutter": "image"
+    },
+    "backgroundVideo": {
+      "type": "asset",
+      "css": "background-video",
+      "flutter": "video"
+    },
+    "display": {
+      "type": "enum",
+      "values": ["block", "flex", "grid", "inline", "inline-flex", "none"],
+      "css": "display",
+      "flutter": "display"
+    },
+    "flexDirection": {
+      "type": "enum",
+      "values": ["row", "row-reverse", "column", "column-reverse"],
+      "css": "flex-direction",
+      "flutter": "axis"
+    },
+    "alignItems": {
+      "type": "string",
+      "css": "align-items",
+      "flutter": "crossAxisAlignment"
+    },
+    "justifyContent": {
+      "type": "string",
+      "css": "justify-content",
+      "flutter": "mainAxisAlignment"
+    },
+    "flexWrap": {
+      "type": "enum",
+      "values": ["nowrap", "wrap", "wrap-reverse"],
+      "css": "flex-wrap",
+      "flutter": "wrap"
+    },
+    "overflow": {
+      "type": "enum",
+      "values": ["visible", "hidden", "scroll", "auto", "clip"],
+      "css": "overflow",
+      "flutter": "overflow"
+    },
+    "cursor": {
+      "type": "string",
+      "css": "cursor",
+      "flutter": "cursor"
+    },
+    "zIndex": {
+      "type": "number",
+      "css": "z-index",
+      "flutter": "zIndex"
+    }
+  },
+  "stateSelectors": {
+    "default": "",
+    "hover": ":hover",
+    "focus": ":focus",
+    "focus-visible": ":focus-visible",
+    "active": ":active",
+    "pressed": ":active",
+    "disabled": ":disabled",
+    "dark": ":root[data-theme='dark']",
+    "light": ":root[data-theme='light']"
+  }
+}

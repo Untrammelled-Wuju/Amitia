@@ -34,6 +34,9 @@ func (e *Engine) ResumeMemory(ctx context.Context, job coordination.MemoryJobLoc
 		return Response{}, err
 	}
 	scope.RoleRevision = role.Revision
+	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+		return Response{}, err
+	}
 	ctx = coordination.WithScope(ctx, scope)
 	snapshot, err := e.data.Snapshot(ctx, scope, coordination.DataQuery{RequestID: job.RequestID, ConversationID: job.ConversationID, Limit: 128})
 	if err != nil {
@@ -76,6 +79,15 @@ func (e *Engine) ResumeMemory(ctx context.Context, job coordination.MemoryJobLoc
 	}
 	if saved.Response.MemoryStatus == "saved" {
 		return *saved.Response, e.coordination.FinishMemoryJob(ctx, saved.Response.Scope)
+	}
+	if saved.Response.Scope.ContinuityRoleID != "" {
+		filtered := snapshot.Resources[:0]
+		for _, row := range snapshot.Resources {
+			if row.Kind != "continuity" {
+				filtered = append(filtered, row)
+			}
+		}
+		snapshot.Resources = filtered
 	}
 	inference := Inference{Scope: saved.Response.Scope, ConversationID: job.ConversationID, Snapshot: snapshot, Message: message, Context: saved.Context}
 	return e.completeMemory(coordination.WithScope(ctx, inference.Scope), inference, saved.Hash, *saved.Response, revision)

@@ -1,6 +1,7 @@
 import type { UIProviderDefinition } from "./types";
 
-const appliedKeys = new Set<string>();
+const providerAppliedKeys = new Set<string>();
+const styleAppliedKeys = new Set<string>();
 type TokenUnit = "raw" | "px" | "number" | "ms";
 interface TokenSpec { css: string; unit: TokenUnit }
 
@@ -92,9 +93,9 @@ const TOKEN_SPECS: Record<string, TokenSpec> = {
   "components.borderWidth": { css: "--ui-border-width", unit: "px" },
 };
 
-function clearApplied(root: HTMLElement) {
-  for (const key of appliedKeys) root.style.removeProperty(key);
-  appliedKeys.clear();
+function clearApplied(root: HTMLElement, keys: Set<string>) {
+  for (const key of keys) root.style.removeProperty(key);
+  keys.clear();
 }
 
 function formatToken(value: unknown, unit: TokenUnit): string {
@@ -125,7 +126,12 @@ function componentVariantVariable(key: string, value: unknown): [string, string]
   return [`--ui-component-${kebab(component)}-${kebab(property)}`, formatToken(value, unit)];
 }
 
-function setVariable(root: HTMLElement, key: string, value: unknown) {
+function setVariable(
+  root: HTMLElement,
+  key: string,
+  value: unknown,
+  appliedKeys: Set<string>,
+) {
   if (value === null || value === undefined) return;
   if (key.startsWith("--")) {
     root.style.setProperty(key, String(value));
@@ -170,16 +176,16 @@ function applyLayer(root: HTMLElement, provider: UIProviderDefinition, mode: "li
   const selected = selectTokenSource(provider, mode);
   if (selected) {
     for (const [key, value] of Object.entries(selected)) {
-      if (key.startsWith("--")) setVariable(root, key, value);
+      if (key.startsWith("--")) setVariable(root, key, value, providerAppliedKeys);
     }
-    for (const [key, value] of flatten(selected)) setVariable(root, key, value);
+    for (const [key, value] of flatten(selected)) setVariable(root, key, value, providerAppliedKeys);
   }
   // componentVariants is an independent design-system layer and must not be
   // hidden when the same provider also declares metadata.tokens/theme.
   const variants = provider.metadata?.componentVariants;
   if (variants && typeof variants === "object" && !Array.isArray(variants)) {
     for (const [key, value] of flatten({ componentVariants: variants as Record<string, unknown> })) {
-      setVariable(root, key, value);
+      setVariable(root, key, value, providerAppliedKeys);
     }
   }
   if (selected || variants) root.dataset.uiThemeProvider = provider.providerId;
@@ -192,8 +198,30 @@ export function applyProviderTheme(
 ) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  clearApplied(root);
+  clearApplied(root, providerAppliedKeys);
   delete root.dataset.uiThemeProvider;
   const layers = Array.isArray(providers) ? providers : providers ? [providers] : [];
   for (const provider of layers) if (provider) applyLayer(root, provider, mode);
+}
+
+export function applyStyleTokens(
+  tokens: Record<string, unknown>,
+  componentVariants: Record<string, unknown> = {},
+) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  clearApplied(root, styleAppliedKeys);
+  for (const [key, value] of flatten(tokens)) {
+    setVariable(root, key, value, styleAppliedKeys);
+  }
+  if (Object.keys(componentVariants).length > 0) {
+    for (const [key, value] of flatten({ componentVariants })) {
+      setVariable(root, key, value, styleAppliedKeys);
+    }
+  }
+  if (Object.keys(tokens).length > 0 || Object.keys(componentVariants).length > 0) {
+    root.dataset.localStylePatch = "true";
+  } else {
+    delete root.dataset.localStylePatch;
+  }
 }

@@ -75,14 +75,27 @@ func resolveHostCommandDirectory(root, requested string) (string, error) {
 }
 
 func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
-	if s.workspace == nil || invocation.ExecContext == nil || strings.TrimSpace(invocation.ExecContext.WorkspaceID) == "" {
+	if s.workspace == nil || invocation.ExecContext == nil {
 		return nil, errors.New("WORKSPACE_NOT_BOUND: host commands require a local conversation workspace")
 	}
-	root, err := s.workspace.LocalWorkspaceRoot(invocation.ExecContext.WorkspaceID)
+	obj, err := unmarshalObject(input)
 	if err != nil {
 		return nil, err
 	}
-	obj, err := unmarshalObject(input)
+	workspaceID := strings.TrimSpace(stringValue(obj, "workspaceId"))
+	if workspaceID == "" {
+		workspaceID = strings.TrimSpace(invocation.ExecContext.PrimaryWorkspaceID)
+	}
+	if workspaceID == "" {
+		workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
+	}
+	if workspaceID == "" {
+		return nil, errors.New("WORKSPACE_NOT_BOUND: host commands require a local conversation workspace")
+	}
+	if executionWorkspaceRoot(invocation.ExecContext, workspaceID) == "" {
+		return nil, errors.New("WORKSPACE_SCOPE_MISMATCH: selected workspace is outside the current project")
+	}
+	root, err := s.workspace.LocalWorkspaceRoot(workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +103,14 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 	if command == "" {
 		return nil, errors.New("command is required")
 	}
-	directory, err := resolveHostCommandDirectory(root, stringValue(obj, "cwd", "workingDir"))
+	requestedDirectory := stringValue(obj, "cwd", "workingDir")
+	if mountedWorkspaceID, relative, ok := parseMountedWorkspaceDirectory(requestedDirectory); ok {
+		if mountedWorkspaceID != workspaceID {
+			return nil, errors.New("working directory is outside the selected workspace")
+		}
+		requestedDirectory = relative
+	}
+	directory, err := resolveHostCommandDirectory(root, requestedDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +157,7 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 	result := map[string]any{
 		"exitCode": exitCode, "stdout": outText, "stderr": errText,
 		"truncated": outTruncated || errTruncated, "timedOut": timedOut,
-		"cwd": directory, "durationMs": time.Since(startedAt).Milliseconds(),
+		"cwd": directory, "workspaceId": workspaceID, "durationMs": time.Since(startedAt).Milliseconds(),
 	}
 	if runErr != nil {
 		if timedOut {
@@ -146,4 +166,22 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 		return nil, fmt.Errorf("host command failed with exit code %d: %v; stderr: %s; stdout: %s", exitCode, runErr, errText, outText)
 	}
 	return marshalResult(result)
+}
+
+func parseMountedWorkspaceDirectory(value string) (string, string, bool) {
+	value = strings.TrimSpace(value)
+	const prefix = "amitia://workspace/@"
+	if !strings.HasPrefix(value, prefix) {
+		return "", "", false
+	}
+	remainder := strings.TrimPrefix(value, prefix)
+	parts := strings.SplitN(remainder, "/", 2)
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+		return "", "", false
+	}
+	relative := ""
+	if len(parts) == 2 {
+		relative = parts[1]
+	}
+	return strings.TrimSpace(parts[0]), relative, true
 }

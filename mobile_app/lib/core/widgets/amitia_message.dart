@@ -11,6 +11,7 @@ import '../../app/theme/app_typography.dart';
 import '../../shared/models/models.dart';
 import '../../features/conversation/rendering/amitia_message_view.dart';
 import '../../features/conversation/rendering/amrp.dart';
+import '../ui_runtime/mobile_style_runtime.dart';
 import 'amitia_button.dart';
 import 'amitia_misc.dart';
 import 'user_message_surface.dart';
@@ -441,32 +442,49 @@ class AmitiaMessageBubble extends StatelessWidget {
       case MessageType.systemNotice:
         break;
     }
+    final baseDecoration = BoxDecoration(
+      color: isUser ? context.accentSoft : context.surfacePrimary,
+      borderRadius: messageStyle == ChatMessageStyle.bubble
+          ? const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(4),
+              bottomLeft: Radius.circular(16),
+              bottomRight: Radius.circular(16),
+            )
+          : BorderRadius.circular(17),
+      border: isUser
+          ? null
+          : Border.all(color: context.borderPrimary, width: 0.6),
+    );
+    final baseTextStyle = AppTypography.bodySmall(context).copyWith(
+      color: isUser ? context.accentPressed : context.textPrimary,
+      height: 1.52,
+    );
+    final userStyle = isUser ? context.amitiaStyleFor('message.user') : null;
     return UserMessageSurface(
-      material: isUser ? userMessageMaterial : UserMessageMaterial.solid,
+      material: _resolveUserMessageMaterial(
+        context,
+        isUser,
+        isUser ? userMessageMaterial : UserMessageMaterial.solid,
+      ),
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * (isUser ? 0.76 : 0.80),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-      decoration: BoxDecoration(
-        color: isUser ? context.accentSoft : context.surfacePrimary,
-        borderRadius: messageStyle == ChatMessageStyle.bubble
-            ? const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(4),
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              )
-            : BorderRadius.circular(17),
-        border: isUser
-            ? null
-            : Border.all(color: context.borderPrimary, width: 0.6),
+      padding:
+          _resolveUserMessagePadding(
+            context,
+            isUser,
+            const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+          ) ??
+          const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      decoration: _resolveUserMessageDecoration(
+        context,
+        isUser,
+        baseDecoration,
       ),
       child: Text(
         message.content,
-        style: AppTypography.bodySmall(context).copyWith(
-          color: isUser ? context.accentPressed : context.textPrimary,
-          height: 1.52,
-        ),
+        style: userStyle?.applyTextStyle(baseTextStyle) ?? baseTextStyle,
       ),
     );
   }
@@ -749,6 +767,39 @@ class _AgentActivityRow extends StatelessWidget {
   }
 }
 
+UserMessageMaterial _resolveUserMessageMaterial(
+  BuildContext context,
+  bool isUser,
+  UserMessageMaterial fallback,
+) {
+  if (!isUser) return fallback;
+  final style = context.amitiaStyleFor('message.user');
+  return style.has('backgroundColor') ||
+          style.has('background') ||
+          style.has('gradient')
+      ? UserMessageMaterial.solid
+      : fallback;
+}
+
+BoxDecoration _resolveUserMessageDecoration(
+  BuildContext context,
+  bool isUser,
+  BoxDecoration fallback,
+) {
+  if (!isUser) return fallback;
+  return context.amitiaStyleFor('message.user').applyBoxDecoration(fallback);
+}
+
+EdgeInsetsGeometry? _resolveUserMessagePadding(
+  BuildContext context,
+  bool isUser,
+  EdgeInsetsGeometry fallback,
+) {
+  if (!isUser) return fallback;
+  return context.amitiaStyleFor('message.user').edgeInsets('padding') ??
+      fallback;
+}
+
 class _FileMessage extends StatelessWidget {
   final UserMessageMaterial material;
   final String fileName;
@@ -765,17 +816,27 @@ class _FileMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return UserMessageSurface(
-      material: material,
+      material: _resolveUserMessageMaterial(context, isUser, material),
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.7,
       ),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isUser ? context.accentSoft : context.surfacePrimary,
-        borderRadius: AppRadius.brMedium,
-        border: isUser
-            ? null
-            : Border.all(color: context.borderPrimary, width: 0.5),
+      padding:
+          _resolveUserMessagePadding(
+            context,
+            isUser,
+            const EdgeInsets.all(12),
+          ) ??
+          const EdgeInsets.all(12),
+      decoration: _resolveUserMessageDecoration(
+        context,
+        isUser,
+        BoxDecoration(
+          color: isUser ? context.accentSoft : context.surfacePrimary,
+          borderRadius: AppRadius.brMedium,
+          border: isUser
+              ? null
+              : Border.all(color: context.borderPrimary, width: 0.5),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -835,16 +896,20 @@ class _ImageMessage extends StatelessWidget {
     return GestureDetector(
       onTap: hasUrl ? () => _preview(context) : null,
       child: UserMessageSurface(
-        material: material,
+        material: _resolveUserMessageMaterial(context, isUser, material),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * 0.6,
         ),
-        decoration: BoxDecoration(
-          color: context.surfaceSecondary,
-          borderRadius: AppRadius.brMedium,
-          border: isUser
-              ? null
-              : Border.all(color: context.borderPrimary, width: 0.5),
+        decoration: _resolveUserMessageDecoration(
+          context,
+          isUser,
+          BoxDecoration(
+            color: context.surfaceSecondary,
+            borderRadius: AppRadius.brMedium,
+            border: isUser
+                ? null
+                : Border.all(color: context.borderPrimary, width: 0.5),
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -930,17 +995,27 @@ class _VideoMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return UserMessageSurface(
-      material: material,
+      material: _resolveUserMessageMaterial(context, isUser, material),
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.6,
       ),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isUser ? context.accentSoft : context.surfacePrimary,
-        borderRadius: AppRadius.brMedium,
-        border: isUser
-            ? null
-            : Border.all(color: context.borderPrimary, width: 0.5),
+      padding:
+          _resolveUserMessagePadding(
+            context,
+            isUser,
+            const EdgeInsets.all(12),
+          ) ??
+          const EdgeInsets.all(12),
+      decoration: _resolveUserMessageDecoration(
+        context,
+        isUser,
+        BoxDecoration(
+          color: isUser ? context.accentSoft : context.surfacePrimary,
+          borderRadius: AppRadius.brMedium,
+          border: isUser
+              ? null
+              : Border.all(color: context.borderPrimary, width: 0.5),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -998,17 +1073,27 @@ class _AudioMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return UserMessageSurface(
-      material: material,
+      material: _resolveUserMessageMaterial(context, isUser, material),
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.62,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: isUser ? context.accentSoft : context.surfacePrimary,
-        borderRadius: AppRadius.brMedium,
-        border: isUser
-            ? null
-            : Border.all(color: context.borderPrimary, width: 0.5),
+      padding:
+          _resolveUserMessagePadding(
+            context,
+            isUser,
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ) ??
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: _resolveUserMessageDecoration(
+        context,
+        isUser,
+        BoxDecoration(
+          color: isUser ? context.accentSoft : context.surfacePrimary,
+          borderRadius: AppRadius.brMedium,
+          border: isUser
+              ? null
+              : Border.all(color: context.borderPrimary, width: 0.5),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1510,7 +1595,12 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     ).toDouble();
     _controller.addListener(_syncControllerText);
     _inputFocusNode.onKeyEvent = _handleComposerKey;
+    _inputFocusNode.addListener(_syncInputFocus);
     unawaited(_loadAgentSkills());
+  }
+
+  void _syncInputFocus() {
+    if (mounted) setState(() {});
   }
 
   KeyEventResult _handleComposerKey(FocusNode node, KeyEvent event) {
@@ -1809,6 +1899,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   @override
   void dispose() {
     _controller.removeListener(_syncControllerText);
+    _inputFocusNode.removeListener(_syncInputFocus);
     _inputFocusNode.dispose();
     _slashMenuScrollController.dispose();
     if (_ownsController) _controller.dispose();
@@ -2494,6 +2585,27 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   @override
   Widget build(BuildContext context) {
     final recipient = (widget.recipientName ?? '').trim();
+    final surfaceStyle = context.amitiaStyleFor('chat.composer.surface');
+    final inputStyle = context.amitiaStyleFor(
+      'chat.composer.input',
+      states: <String>[_inputFocusNode.hasFocus ? 'focus' : 'default'],
+    );
+    final sendStyle = context.amitiaStyleFor(
+      'chat.composer.send',
+      states: <String>[widget.generating ? 'disabled' : 'default'],
+    );
+    final modelStyle = context.amitiaStyleFor('chat.composer.model');
+    final placeholderColor =
+        inputStyle.color('placeholderColor') ??
+        inputStyle.color('foregroundColor') ??
+        context.textTertiary;
+    final hintStyle = inputStyle
+        .applyTextStyle(
+          AppTypography.bodySmall(
+            context,
+          ).copyWith(color: placeholderColor, fontSize: _composerTextSize),
+        )
+        .copyWith(color: placeholderColor);
     return SafeArea(
       top: false,
       child: Column(
@@ -2511,21 +2623,23 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
             child: Container(
               key: const ValueKey('chat-composer-surface'),
               constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
-              decoration: BoxDecoration(
-                color: context.surfacePrimary,
-                borderRadius: BorderRadius.circular(23),
-                border: Border.all(color: context.borderPrimary, width: 0.8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: Theme.of(context).brightness == Brightness.dark
-                          ? 0.16
-                          : 0.045,
+              decoration: surfaceStyle.applyBoxDecoration(
+                BoxDecoration(
+                  color: context.surfacePrimary,
+                  borderRadius: BorderRadius.circular(23),
+                  border: Border.all(color: context.borderPrimary, width: 0.8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: Theme.of(context).brightness == Brightness.dark
+                            ? 0.16
+                            : 0.045,
+                      ),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
                     ),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                  ],
+                ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2631,32 +2745,39 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                     _controller.value.composing.isCollapsed)
                                   _send();
                               },
-                              style: AppTypography.bodySmall(
-                                context,
-                              ).copyWith(fontSize: _composerTextSize),
+                              style: inputStyle.applyTextStyle(
+                                AppTypography.bodySmall(
+                                  context,
+                                ).copyWith(fontSize: _composerTextSize),
+                              ),
                               decoration: InputDecoration(
                                 hintText: recipient.isEmpty
                                     ? '发消息…'
                                     : '给 $recipient 发消息…',
-                                hintStyle: AppTypography.bodySmall(context)
-                                    .copyWith(
-                                      color: context.textTertiary,
-                                      fontSize: _composerTextSize,
-                                    ),
+                                hintStyle: hintStyle,
                                 isDense: true,
-                                contentPadding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  10,
-                                  16,
-                                  10,
+                                contentPadding:
+                                    inputStyle.edgeInsets('padding') ??
+                                    const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                                filled:
+                                    inputStyle.color('backgroundColor') != null,
+                                border: _composerInputBorder(inputStyle),
+                                enabledBorder: _composerInputBorder(inputStyle),
+                                focusedBorder: _composerInputBorder(
+                                  inputStyle,
+                                  focused: true,
                                 ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
-                                errorBorder: InputBorder.none,
-                                focusedErrorBorder: InputBorder.none,
-                                fillColor: Colors.transparent,
+                                disabledBorder: _composerInputBorder(
+                                  inputStyle,
+                                ),
+                                errorBorder: _composerInputBorder(inputStyle),
+                                focusedErrorBorder: _composerInputBorder(
+                                  inputStyle,
+                                  focused: true,
+                                ),
+                                fillColor:
+                                    inputStyle.color('backgroundColor') ??
+                                    Colors.transparent,
                                 focusColor: Colors.transparent,
                                 hoverColor: Colors.transparent,
                               ),
@@ -2680,6 +2801,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                             icon: Icons.add_rounded,
                             tooltip: '添加内容',
                             onTap: _showComposerTools,
+                            styleTarget: 'chat.composer.add',
                           ),
                           if (widget.extensionAttachments != null) ...[
                             const SizedBox(width: 4),
@@ -2701,6 +2823,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                   ? '完全访问'
                                   : '请求批准',
                               onTap: _showPermissionPicker,
+                              styleTarget: 'chat.composer.permission',
                             ),
                           ),
                           if (widget.workspaceSelector != null) ...[
@@ -2736,13 +2859,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 9,
                                 ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: _modelMenuTriggerHovered
-                                        ? context.borderPrimary
-                                        : Colors.transparent,
+                                decoration: modelStyle.applyBoxDecoration(
+                                  BoxDecoration(
+                                    border: Border.all(
+                                      color: _modelMenuTriggerHovered
+                                          ? context.borderPrimary
+                                          : Colors.transparent,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 alignment: Alignment.center,
                                 child: Text(
@@ -2752,9 +2877,11 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.label(context).copyWith(
-                                    fontSize: 14,
-                                    color: context.textSecondary,
+                                  style: modelStyle.applyTextStyle(
+                                    AppTypography.label(context).copyWith(
+                                      fontSize: 14,
+                                      color: context.textSecondary,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2772,17 +2899,19 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                   key: const ValueKey('composer-send-button'),
                                   width: 31,
                                   height: 31,
-                                  decoration: BoxDecoration(
-                                    color: context.accentPrimary,
-                                    shape: BoxShape.circle,
+                                  decoration: sendStyle.applyBoxDecoration(
+                                    BoxDecoration(
+                                      color: context.accentPrimary,
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
                                   alignment: Alignment.center,
                                   child: Icon(
                                     Icons.arrow_upward_rounded,
                                     size: 18,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onPrimary,
+                                    color:
+                                        sendStyle.color('foregroundColor') ??
+                                        Theme.of(context).colorScheme.onPrimary,
                                   ),
                                 ),
                               ),
@@ -3563,11 +3692,32 @@ enum _ComposerModelMenuPage { effort, models, reasoning }
 
 enum _VoiceGestureIntent { send, cancel, transcribe }
 
+InputBorder _composerInputBorder(
+  AmitiaResolvedStyle style, {
+  bool focused = false,
+}) {
+  final side = style.borderSide();
+  final radius = style.borderRadius('borderRadius');
+  if (side == null && radius == null) return InputBorder.none;
+  return OutlineInputBorder(
+    borderRadius: radius ?? BorderRadius.circular(23),
+    borderSide:
+        side ??
+        BorderSide(
+          color: focused
+              ? style.color('borderColor') ?? Colors.transparent
+              : Colors.transparent,
+          width: style.number('borderWidth') ?? 0,
+        ),
+  );
+}
+
 class _ComposerRoundButton extends StatelessWidget {
   final IconData icon;
   final double iconSize;
   final String tooltip;
   final VoidCallback onTap;
+  final String? styleTarget;
 
   const _ComposerRoundButton({
     super.key,
@@ -3575,10 +3725,20 @@ class _ComposerRoundButton extends StatelessWidget {
     this.iconSize = 17,
     required this.tooltip,
     required this.onTap,
+    this.styleTarget,
   });
 
   @override
   Widget build(BuildContext context) {
+    final style = styleTarget == null
+        ? const AmitiaResolvedStyle()
+        : context.amitiaStyleFor(styleTarget!);
+    final color =
+        style.color('foregroundColor') ??
+        style.color('color') ??
+        context.textPrimary;
+    final backgroundColor = style.color('backgroundColor');
+    final radius = style.borderRadius('borderRadius');
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
@@ -3587,8 +3747,14 @@ class _ComposerRoundButton extends StatelessWidget {
         child: Container(
           width: 31,
           height: 31,
+          decoration: backgroundColor == null && radius == null
+              ? null
+              : BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: radius ?? BorderRadius.circular(15.5),
+                ),
           alignment: Alignment.center,
-          child: Icon(icon, size: iconSize, color: context.textPrimary),
+          child: Icon(icon, size: iconSize, color: color),
         ),
       ),
     );

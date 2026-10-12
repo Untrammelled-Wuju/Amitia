@@ -1,5 +1,5 @@
 <template>
-  <div class="project-block">
+  <div class="project-block" data-amitia-ui="app.sidebar.item">
     <div class="project-row" :class="{ active: active }">
       <button
         type="button"
@@ -9,7 +9,8 @@
       >
         <el-icon><FolderOpened /></el-icon>
         <span>{{ project.name }}</span>
-        <small v-if="project.readOnly">旧设备 · 只读</small>
+        <small v-if="workspaces.length > 1">{{ workspaces.length }} 个工作区</small>
+        <small v-if="project.readOnly">只读</small>
         <small v-if="!project.available">不可用</small>
       </button>
       <button
@@ -34,10 +35,16 @@
           <el-dropdown-menu>
             <el-dropdown-item command="newChat" :disabled="!project.available || project.readOnly">新建对话</el-dropdown-item>
             <el-dropdown-item v-if="!project.readOnly" command="rename">重命名项目</el-dropdown-item>
-            <el-dropdown-item v-if="!project.logical" command="changeRoot">更换根目录</el-dropdown-item>
+            <el-dropdown-item v-if="!project.readOnly" command="addWorkspace">添加文件夹工作区</el-dropdown-item>
+            <el-dropdown-item v-for="workspace in workspaces" :key="workspace.id" :command="`primary:${workspace.id}`" :disabled="workspace.id === project.primaryWorkspaceId">
+              主根：{{ workspace.name }}
+            </el-dropdown-item>
+            <el-dropdown-item v-for="workspace in workspaces" :key="`remove:${workspace.id}`" :command="`removeWorkspace:${workspace.id}`" :disabled="workspaces.length <= 1">
+              移除工作区：{{ workspace.name }}
+            </el-dropdown-item>
             <el-dropdown-item v-if="!project.readOnly" command="pin">{{ project.pinnedAt ? "取消置顶" : "置顶" }}</el-dropdown-item>
-            <el-dropdown-item v-if="!project.logical" command="open" :disabled="!project.available">在资源管理器中打开</el-dropdown-item>
-            <el-dropdown-item v-if="!project.readOnly" command="remove" divided>移除项目</el-dropdown-item>
+            <el-dropdown-item command="open" :disabled="!project.available">在资源管理器中打开主根</el-dropdown-item>
+            <el-dropdown-item v-if="!project.readOnly" command="remove" divided>从侧边栏移除</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -70,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { FolderOpened, MoreFilled, Plus } from "@element-plus/icons-vue";
 import type { ConversationItem, ProjectItem } from "@/stores/chat";
 import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
@@ -92,6 +99,7 @@ const emit = defineEmits<{
 }>();
 
 const expanded = ref(false);
+const workspaces = computed(() => props.project.workspaces || []);
 const {
   visible: visibleConversations,
   hasMore: hasMoreConversations,

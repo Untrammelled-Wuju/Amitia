@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../backend_transport/errors/backend_transport_error.dart';
+import 'owned_memory_scope.dart';
 
 class OwnedMemoryConflict implements Exception {
   final List<Map<String, dynamic>> resources;
@@ -113,7 +114,10 @@ class DeviceOwnedMemoryService {
     for (final raw in value['resources'] as List) {
       if (raw is! Map ||
           raw['ownerId'] != scope['resourceOwnerId'] ||
-          raw['roleId'] != role ||
+          raw['roleId'] is! String ||
+          scope['memoryViewAll'] != true &&
+              raw['roleId'] !=
+                  memoryStorageRole(scope, raw['kind'].toString()) ||
           raw['id'] is! String ||
           (raw['id'] as String).isEmpty ||
           raw['revision'] is! int ||
@@ -123,7 +127,10 @@ class DeviceOwnedMemoryService {
       rows.add(
         Map<String, dynamic>.unmodifiable({
           ...Map<String, dynamic>.from(raw),
-          'executionScope': scope,
+          'executionScope':
+              scope['memoryViewAll'] == true && raw['kind'] == 'memory'
+              ? memoryRecordScope(scope, raw['roleId'].toString())
+              : scope,
           '_memoryAuthority': _authority,
         }),
       );
@@ -145,6 +152,7 @@ class DeviceOwnedMemoryService {
     String source = '',
     String sort = '',
     String cursor = '',
+    String memoryView = '',
     Map<String, dynamic>? original,
   }) async {
     if (cursor.isNotEmpty && original == null) throw StateError('分页缺少原始记忆范围');
@@ -160,6 +168,7 @@ class DeviceOwnedMemoryService {
         'sort': sort,
         'cursor': cursor,
         'limit': 128,
+        if (memoryView.isNotEmpty) 'memoryView': memoryView,
       },
     );
     final current = await _state(original);

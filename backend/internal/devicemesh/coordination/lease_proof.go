@@ -67,7 +67,7 @@ func (s *OwnershipStore) validateCommitLease(ctx context.Context, tx *sql.Tx, co
 			ExpiresAt time.Time `json:"expiresAt"`
 		} `json:"lease"`
 	}
-	if deleted || role != commit.Scope.RoleID || json.Unmarshal(raw, &document) != nil || document.Lease == nil || document.CoreID != commit.Scope.CoreID || document.OwnerID != s.ownerID || !sameLeaseAuthority(document.Scope, commit.Scope) || document.Lease.ID != proof.LeaseID || document.Lease.RequestID != proof.RequestID {
+	if deleted || role != StorageRole(commit.Scope, "continuity") || json.Unmarshal(raw, &document) != nil || document.Lease == nil || document.CoreID != commit.Scope.CoreID || document.OwnerID != s.ownerID || !sameLeaseAuthority(document.Scope, commit.Scope) || document.Lease.ID != proof.LeaseID || document.Lease.RequestID != proof.RequestID {
 		return ErrResourceVersion
 	}
 	if document.Lease.State == "running" && document.Lease.ExpiresAt.After(time.Now()) && document.Thread.Status != "paused" && document.Thread.Status != "completed" && document.Thread.Status != "cancelled" {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_motion.dart';
+import '../ui_runtime/mobile_style_runtime.dart';
 
 enum AmitiaPopupMenuHorizontalAnchor { start, center, end }
 
@@ -68,32 +69,71 @@ class AmitiaPopupSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 14,
-              spreadRadius: 0,
-              offset: Offset.zero,
+    return AmitiaStyleTarget(
+      target: 'component.popover',
+      child: const SizedBox.shrink(),
+      builder: (popupContext, style) {
+        final radius =
+            style.borderRadius('borderRadius') ?? BorderRadius.circular(14);
+        final decoration = BoxDecoration(
+          color: style.color('backgroundColor') ?? style.color('background'),
+          borderRadius: radius,
+          boxShadow:
+              style.boxShadow() ??
+              [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 14,
+                  spreadRadius: 0,
+                  offset: Offset.zero,
+                ),
+              ],
+        );
+        final borderSide = style.borderSide();
+        return SizedBox(
+          width: width,
+          child: DecoratedBox(
+            decoration: decoration,
+            child: Material(
+              color:
+                  style.color('backgroundColor') ??
+                  style.color('background') ??
+                  popupContext.surfacePrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: radius,
+                side: borderSide ?? BorderSide.none,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Builder(
+                builder: (materialContext) => ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: maxHeight ?? double.infinity,
+                  ),
+                  child: SingleChildScrollView(
+                    padding: style.edgeInsets('padding') ?? padding,
+                    child: DefaultTextStyle(
+                      style: style.applyTextStyle(
+                        (Theme.of(materialContext).textTheme.bodyMedium ??
+                                const TextStyle())
+                            .copyWith(
+                              fontWeight: FontWeight.w400,
+                              decoration: TextDecoration.none,
+                            ),
+                      ),
+                      child: IconTheme.merge(
+                        data: style.applyIconTheme(
+                          IconTheme.of(materialContext),
+                        ),
+                        child: child,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ],
-        ),
-        child: Material(
-          color: context.surfacePrimary,
-          borderRadius: BorderRadius.circular(14),
-          clipBehavior: Clip.antiAlias,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: maxHeight ?? double.infinity,
-            ),
-            child: SingleChildScrollView(padding: padding, child: child),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -501,35 +541,60 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
     required bool selected,
     required Widget child,
   }) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: itemHorizontalMargin),
-      child: Material(
-        color: selected ? context.accentSoft : Colors.transparent,
-        borderRadius: BorderRadius.circular(9),
-        child: InkWell(
-          onTap: entry.enabled
-              ? () {
-                  Navigator.of(context).pop(entry.value);
-                  entry.onTap?.call();
-                }
-              : null,
-          borderRadius: BorderRadius.circular(9),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: itemMinHeight ?? entry.height,
-            ),
-            child: Padding(
-              padding:
-                  entry.padding ??
-                  EdgeInsets.symmetric(
-                    horizontal: itemHorizontalPadding ?? 10,
-                    vertical: itemVerticalPadding ?? 4,
-                  ),
-              child: Align(alignment: Alignment.centerLeft, child: child),
+    final style = context.amitiaStyleFor('component.list_item');
+    final radius =
+        style.borderRadius('borderRadius') ?? BorderRadius.circular(9);
+    final borderSide = style.borderSide();
+    final boxShadow = style.boxShadow();
+    final item = Material(
+      color:
+          style.color('backgroundColor') ??
+          style.color('background') ??
+          (selected ? context.accentSoft : Colors.transparent),
+      shape: RoundedRectangleBorder(
+        borderRadius: radius,
+        side: borderSide ?? BorderSide.none,
+      ),
+      child: InkWell(
+        onTap: entry.enabled
+            ? () {
+                Navigator.of(context).pop(entry.value);
+                entry.onTap?.call();
+              }
+            : null,
+        borderRadius: radius,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: itemMinHeight ?? entry.height),
+          child: Padding(
+            padding:
+                style.edgeInsets('padding') ??
+                entry.padding ??
+                EdgeInsets.symmetric(
+                  horizontal: itemHorizontalPadding ?? 10,
+                  vertical: itemVerticalPadding ?? 4,
+                ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: DefaultTextStyle.merge(
+                style: style.applyTextStyle(DefaultTextStyle.of(context).style),
+                child: child,
+              ),
             ),
           ),
         ),
       ),
+    );
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: itemHorizontalMargin),
+      child: boxShadow == null
+          ? item
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                boxShadow: boxShadow,
+              ),
+              child: item,
+            ),
     );
   }
 
@@ -538,12 +603,19 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
     PopupMenuItem<T> entry, {
     required Widget child,
   }) {
-    final style =
+    final popoverStyle = context.amitiaStyleFor('component.popover');
+    final itemStyle = context.amitiaStyleFor('component.list_item');
+    final baseStyle =
         entry.textStyle ??
         TextStyle(
           color: entry.enabled ? context.textPrimary : context.textDisabled,
           fontSize: itemFontSize ?? 14.5,
+          fontWeight: FontWeight.w400,
+          decoration: TextDecoration.none,
         );
+    final resolvedStyle = itemStyle.applyTextStyle(
+      popoverStyle.applyTextStyle(baseStyle),
+    );
     var themedChild = child;
     if (itemFontSize != null ||
         itemIconSize != null ||
@@ -571,6 +643,6 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
         child: themedChild,
       );
     }
-    return DefaultTextStyle.merge(style: style, child: themedChild);
+    return DefaultTextStyle.merge(style: resolvedStyle, child: themedChild);
   }
 }

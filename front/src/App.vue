@@ -47,6 +47,9 @@ import NotFoundView from "./views/NotFoundView.vue";
 import { useExtensionUIStore } from "./stores/extensionUI";
 import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
 import { applyProviderTheme } from "./ui-runtime/providerTheme";
+import { applyStylePatchToDocument, applyStyleRuntime } from "./ui-runtime/styleRuntime";
+import { initializeStyleProfile, stylePatch, styleRules } from "./ui-runtime/styleProfile";
+import { normalizeStylePageId } from "./ui-runtime/stylePage";
 import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
 import SettingsWorkspace from "./components/SettingsWorkspace.vue";
 import AccountWorkspace from "./components/AccountWorkspace.vue";
@@ -60,6 +63,7 @@ const renderError = ref(false);
 const capturedError = ref<string | null>(null);
 const extensionUIStore = useExtensionUIStore();
 const themeRuntime = useTheme();
+initializeStyleProfile();
 
 const publicPaths = [
   "/web-access",
@@ -87,6 +91,24 @@ watch(
     );
   },
   { immediate: true },
+);
+
+watch(
+  route,
+  () => {
+    document.documentElement.dataset.amitiaPage = normalizeStylePageId(route.fullPath);
+    document.documentElement.dataset.amitiaPlatform = isDesktopShell() ? "desktop" : "web";
+    applyStyleRuntime(stylePatch.value, styleRules.value);
+  },
+  { immediate: true },
+);
+
+watch(
+  [stylePatch, styleRules],
+  ([patch, rules]) => {
+    applyStyleRuntime(patch, rules);
+  },
+  { immediate: true, deep: true },
 );
 
 onErrorCaptured((err, _instance, info) => {
@@ -149,10 +171,13 @@ watch(
     () => isUIProviderRecoveryPage.value,
   ],
   ([themeProvider, tokenProvider, iconProvider, componentProvider, mode, recovery]) =>
+  {
     applyProviderTheme(
       recovery ? [] : [themeProvider ?? null, tokenProvider ?? null, iconProvider ?? null, componentProvider ?? null],
       mode,
-    ),
+    );
+    applyStylePatchToDocument(stylePatch.value);
+  },
   { immediate: true },
 );
 

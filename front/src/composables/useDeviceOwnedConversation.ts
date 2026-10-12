@@ -5,12 +5,15 @@ import { streamOwnedChat, type OwnedChatEvent, type OwnedChatRequest, type Owned
 import { ownedImageURL, ownedAudioURL, ownedMessageText, ownedAttachmentURL } from "@/runtime/device-owned-attachments";
 import { conversationReference, parseConversationReference, ownedConversationRow, type OwnedConversationOrigin } from "@/runtime/device-owned-conversation-reference";
 import { createOwnedConversationExport } from "@/runtime/device-owned-export";
+import { OwnedChatStateChangedError } from "@/runtime/owned-chat-poll";
+import { memoryRecordScope, memoryStorageRole } from "@/runtime/owned-memory-scope";
 
 interface MeshRole { id: string; name: string; revision: number }
-export interface OwnedProject { id: string; title: string; revision: number; ownerId: string; roleId: string; readOnly: boolean; createdAt: string; updatedAt: string; pinnedAt?: string | null; executionScope: OwnedExecutionScope }
+export interface OwnedProjectWorkspace { id: string; deviceId: string; name: string; kind: string; rootUri: string; readOnly?: boolean }
+export interface OwnedProject { id: string; title: string; workspaces: OwnedProjectWorkspace[]; primaryWorkspaceId: string; hiddenAt?: string | null; revision: number; ownerId: string; roleId: string; readOnly: boolean; createdAt: string; updatedAt: string; pinnedAt?: string | null; executionScope: OwnedExecutionScope }
 interface MeshPolicy { coordinated: boolean; modeRevision: number; providerEpoch: number; permissionRevision: number; selectedRole: string }
 interface MeshResource { kind: string; id: string; roleId: string; ownerId: string; revision: number; deleted: boolean; body: any; executionScope?: OwnedExecutionScope }
-interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string>; legacyMessages?: any[]; legacyMemories?: any[]; legacyProfiles?: any[]; legacyEpisodes?: any[]; legacyConversations?: any[]; legacySummary?: any }
+interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string>; legacyGraphs?: any[]; legacyMessages?: any[]; legacyMemories?: any[]; legacyProfiles?: any[]; legacyEpisodes?: any[]; legacyConversations?: any[]; legacySummary?: any }
 interface MeshQueryResult { conversationReference?: string; conversationOrigin?: OwnedConversationOrigin; executionScope: OwnedExecutionScope; snapshot: MeshSnapshot; historicalSnapshot?: MeshSnapshot; historicalConversations?: any[]; nextHistoricalListCursor?: string; deliveryFailures?: Array<{ ownerId: string; requestId: string; conversationId?: string; errorCode: string; failedAt: string }> }
 
 const enabled = ref(false);
@@ -22,10 +25,13 @@ const coreId = ref(String(readProviderState().coreId || ""));
 const roleOwnerId = ref("");
 const policy = ref<MeshPolicy | null>(null);
 const notice = ref(String(readProviderState().notice || ""));
+const unavailableNotice = "云端服务暂不可用，当前回复已中断；不会自动切换到本机模型。";
+let persistentNotice = notice.value === unavailableNotice ? "" : notice.value;
 let providerChangeId = String(readProviderState().changeId || "");
 let activeController: AbortController | null = null;
 let activeRequest = "";
 let revision = 0;
+let refreshInFlight: Promise<boolean> | undefined;
 const resourceCache = new Map<string, MeshResource>();
 const summaries = new Map<string, string>();
 const summaryViews = new Map<string, { summaryViewId: string; summaryText: string; sourceOwnerId: string; sourceResourceId: string; sourceRevision: number; sourceScope: OwnedExecutionScope; editable: boolean }>();
@@ -40,7 +46,7 @@ const historyRequests = new Map<string, symbol>();
 const conversationLoads = new Map<string, Promise<any[]>>();
 
 function saveProviderState() {
-  try { localStorage.setItem("amitia.mesh.provider-state", JSON.stringify({ coreId: coreId.value, notice: notice.value, changeId: providerChangeId })); } catch {}
+  try { localStorage.setItem("amitia.mesh.provider-state", JSON.stringify({ coreId: coreId.value, notice: persistentNotice, changeId: providerChangeId })); } catch {}
 }
 
 function unwrap<T>(response: any): T {
@@ -51,8 +57,9 @@ function stamp(core: string, state: MeshPolicy | null) {
   return `${core}:${state?.providerEpoch}:${state?.modeRevision}:${state?.permissionRevision}`;
 }
 
-function stopLocal(message: string) {
+function stopLocal(message: string, temporary = false) {
   revision++;
+  refreshInFlight = undefined;
   resourceCache.clear();
   summaryViews.clear();
   summaryPreparations.clear();
@@ -63,8 +70,14 @@ function stopLocal(message: string) {
   activeController = null;
   activeRequest = "";
   notice.value = message;
+  if (!temporary) persistentNotice = message;
   saveProviderState();
   window.dispatchEvent(new CustomEvent("amitia:execution-scope-changed", { detail: { reason: message } }));
+}
+
+function markUnavailable() {
+  if (notice.value === unavailableNotice && !activeController) return;
+  stopLocal(unavailableNotice, true);
 }
 
 window.addEventListener("amitia:runtime-connection-changed", () => {
@@ -76,11 +89,11 @@ window.addEventListener("amitia:runtime-connection-changed", () => {
 });
 
 export function useDeviceOwnedConversation() {
-	async function data(kind: string, characterId: string, conversationId = "", cursor = "", historical: { legacyCursor?: string; historicalRoleId?: string; historicalCursor?: string; historicalLegacyCursor?: string } = {}): Promise<MeshQueryResult> {
+	async function data(kind: string, characterId: string, conversationId = "", cursor = "", historical: { memoryView?: string; legacyCursor?: string; historicalRoleId?: string; historicalCursor?: string; historicalLegacyCursor?: string } = {}): Promise<MeshQueryResult> {
 	  const captured = revision;
 	  const result = unwrap<MeshQueryResult>(await apiClient.get("/api/device-mesh/v1/business/data", { params: { kind, characterId, conversationId, cursor, ...historical } }));
 	  if (captured !== revision || result.executionScope.coreId !== coreId.value) throw new Error("服务状态已变化，请重新加载记忆");
-	  for (const resource of result.snapshot.resources) resourceCache.set(`${resource.kind}/${resource.id}`, { ...resource, executionScope: result.executionScope });
+	  for (const resource of result.snapshot.resources) resourceCache.set(`${resource.kind}/${resource.id}`, { ...resource, executionScope: memoryRecordScope(result.executionScope, resource.roleId, resource.kind) });
 	  return result;
 	}
 	async function historicalRoles(characterId: string) {
@@ -89,7 +102,16 @@ export function useDeviceOwnedConversation() {
 	  if (captured !== revision || result.executionScope.coreId !== coreId.value) throw new Error("服务状态已变化，旧记忆目录已丢弃");
 	  return result.roles;
 	}
-  async function refresh() {
+  function refresh(): Promise<boolean> {
+    if (refreshInFlight) return refreshInFlight;
+    const pending = refreshState().finally(() => {
+      if (refreshInFlight === pending) refreshInFlight = undefined;
+    });
+    refreshInFlight = pending;
+    return pending;
+  }
+
+  async function refreshState() {
 	const transition = await getNativeProviderTransition();
 	if (transition?.providerChangePending) {
 	  enabled.value = true;
@@ -102,10 +124,10 @@ export function useDeviceOwnedConversation() {
     const captured = revision;
     const current = unwrap<any>(await apiClient.get("/api/device-mesh/v1/coordination/me"));
     const latestDeployment = await getDeploymentConfig();
-    if (captured !== revision || latestDeployment.mode !== deployment.mode || latestDeployment.serverURL !== deployment.serverURL) throw new Error("服务提供者已变化，旧状态已丢弃");
+    if (captured !== revision || latestDeployment.mode !== deployment.mode || latestDeployment.serverURL !== deployment.serverURL) throw new OwnedChatStateChangedError("服务提供者已变化，旧状态已丢弃");
     const previous = stamp(coreId.value, policy.value);
     const next = stamp(String(current.coreId || ""), current.policy || null);
-    if ((enabled.value && previous !== next) || (coreId.value && coreId.value !== current.coreId)) {
+    if ((enabled.value && policy.value && previous !== next) || (coreId.value && coreId.value !== current.coreId)) {
       const message = coreId.value !== current.coreId
         ? `云端服务提供者已从「${coreId.value}」切换为「${current.coreId}」，当前回复已中断。`
         : "统筹模式或调用权限已变化，当前回复已中断；继续发送时将使用当前服务和数据归属。";
@@ -124,9 +146,15 @@ export function useDeviceOwnedConversation() {
     const roleGeneration = revision;
     const available = unwrap<any>(await apiClient.get("/api/device-mesh/v1/business/roles"));
     const finalDeployment = await getDeploymentConfig();
-    if (roleGeneration !== revision || finalDeployment.mode !== deployment.mode || finalDeployment.serverURL !== deployment.serverURL) throw new Error("服务提供者已变化，旧角色已丢弃");
-    roles.value = Array.isArray(available.roles) ? available.roles : [];
+    if (roleGeneration !== revision || finalDeployment.mode !== deployment.mode || finalDeployment.serverURL !== deployment.serverURL) throw new OwnedChatStateChangedError("服务提供者已变化，旧角色已丢弃");
+    const nextRoles: MeshRole[] = Array.isArray(available.roles) ? available.roles : [];
+    if (roles.value.some(role => nextRoles.find(item => item.id === role.id)?.revision !== role.revision)) stopLocal("角色配置已变化，请重新加载后继续操作");
+    roles.value = nextRoles;
     roleOwnerId.value = String(available.roleOwnerId || "");
+    if (notice.value === unavailableNotice) {
+      notice.value = persistentNotice;
+      saveProviderState();
+    }
     return true;
   }
 
@@ -353,13 +381,13 @@ export function useDeviceOwnedConversation() {
     return result;
   }
 
-  async function projections(characterId: string, expectedExecutionScope?: OwnedExecutionScope) {
+  async function projections(characterId: string, expectedExecutionScope?: OwnedExecutionScope, memoryView?: string) {
     if (!enabled.value) throw new Error("设备索引服务尚未就绪");
     const captured = revision;
     const result = unwrap<any>(expectedExecutionScope
       ? await apiClient.post("/api/device-mesh/v1/business/projections/rebuild", { characterId, expectedExecutionScope })
-      : await apiClient.get("/api/device-mesh/v1/business/projections", { params: { characterId } }));
-    if (captured !== revision || result?.executionScope?.coreId !== coreId.value || result?.executionScope?.roleId !== characterId || result?.status?.ownerId !== result?.executionScope?.resourceOwnerId || result?.status?.roleId !== characterId || !Array.isArray(result?.status?.layers)) throw new Error("服务状态已变化，索引状态已丢弃");
+      : await apiClient.get("/api/device-mesh/v1/business/projections", { params: { characterId, memoryView } }));
+    if (captured !== revision || result?.executionScope?.coreId !== coreId.value || result?.executionScope?.roleId !== characterId || result?.status?.ownerId !== result?.executionScope?.resourceOwnerId || result?.status?.roleId !== memoryStorageRole(result.executionScope, "memory") || !Array.isArray(result?.status?.layers)) throw new Error("服务状态已变化，索引状态已丢弃");
     return result;
   }
 
@@ -464,15 +492,16 @@ export function useDeviceOwnedConversation() {
     throw new Error("项目分页超过上限");
   }
 
-  async function createProject(title: string, expected: OwnedExecutionScope) {
+  async function createProject(title: string, expected: OwnedExecutionScope, workspaces: OwnedProjectWorkspace[], primaryWorkspaceId: string) {
     if (!enabled.value || !expected || expected.coreId !== coreId.value) throw new Error("项目归属无法确认，请重新加载");
+    if (!Array.isArray(workspaces) || workspaces.length === 0 || !primaryWorkspaceId || !workspaces.some((workspace) => workspace.id === primaryWorkspaceId)) throw new Error("项目工作区无效");
     const captured = revision;
     const requestId = crypto.randomUUID();
     const identity = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${expected.coreId}\0${expected.initiatorDeviceId}\0${requestId}`))), (value) => value.toString(16).padStart(2, "0")).join("");
     if (captured !== revision) throw new Error("项目归属已变化，请重新加载");
-    const result = unwrap<any>(await apiClient.post("/api/device-mesh/v1/business/projects", { requestId, title, characterId: expected.roleId, expectedExecutionScope: expected }));
-    if (captured !== revision || result.saved !== true || result.project?.id !== `project-${identity}` || result.executionScope?.requestId !== requestId || authorityStamp(result.executionScope) !== authorityStamp(expected) || result.acknowledgement?.ownerId !== expected.resourceOwnerId || result.acknowledgement?.requestId !== requestId || result.acknowledgement?.versions?.[`project/${result.project.id}`] !== 1 || result.acknowledgement?.versions?.[`checkpoint/project/${requestId}`] !== 1) throw new Error("项目尚未获得数据所有者保存确认");
+    const result = unwrap<any>(await apiClient.post("/api/device-mesh/v1/business/projects", { requestId, title, workspaces, primaryWorkspaceId, characterId: expected.roleId, expectedExecutionScope: expected }));
+    if (captured !== revision || result.saved !== true || result.project?.id !== `project-${identity}` || result.project?.primaryWorkspaceId !== primaryWorkspaceId || result.executionScope?.requestId !== requestId || authorityStamp(result.executionScope) !== authorityStamp(expected) || result.acknowledgement?.ownerId !== expected.resourceOwnerId || result.acknowledgement?.requestId !== requestId || result.acknowledgement?.versions?.[`project/${result.project.id}`] !== 1 || result.acknowledgement?.versions?.[`checkpoint/project/${requestId}`] !== 1) throw new Error("项目尚未获得数据所有者保存确认");
     return { ...result.project, ownerId: expected.resourceOwnerId, roleId: expected.roleId, readOnly: false, revision: 1, executionScope: result.executionScope } as OwnedProject;
   }
-  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, selectInitialRole, query, data, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, interrupt, stopLocal, previousSummary, projects, createProject, coordinated: computed(() => policy.value?.coordinated === true) };
+  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, interrupt, stopLocal, previousSummary, projects, createProject, coordinated: computed(() => policy.value?.coordinated === true) };
 }

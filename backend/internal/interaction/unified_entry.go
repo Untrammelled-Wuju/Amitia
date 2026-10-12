@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/continuity"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -101,48 +102,49 @@ var (
 )
 
 type UnifiedEntryRequest struct {
-	Channel                  string          `json:"channel"`
-	Message                  string          `json:"message"`
-	PeerID                   string          `json:"peerId,omitempty"`
-	SpaceID                  string          `json:"spaceId,omitempty"`
-	DeviceTimezone           string          `json:"deviceTimezone,omitempty"`
-	Source                   string          `json:"source,omitempty"`
-	ProactiveTaskInstruction string          `json:"-"`
-	ProactiveTimeContext     string          `json:"-"`
-	ProactiveRecentContext   string          `json:"-"`
-	ProactiveRelationship    string          `json:"-"`
-	ProactiveEmotion         string          `json:"-"`
-	ProactiveMemory          string          `json:"-"`
-	CharacterID              string          `json:"characterId,omitempty"`
-	ConversationID           string          `json:"conversationId,omitempty"`
-	ThreadID                 string          `json:"threadId,omitempty"`
-	WorkspaceID              string          `json:"workspaceId,omitempty"`
-	WorkspaceDeviceID        string          `json:"workspaceDeviceId,omitempty"`
-	WorkspaceName            string          `json:"workspaceName,omitempty"`
-	WorkspaceKind            string          `json:"workspaceKind,omitempty"`
-	WorkspaceRootURI         string          `json:"workspaceRootUri,omitempty"`
-	AudioUrl                 string          `json:"audioUrl,omitempty"`
-	AudioDuration            float64         `json:"audioDuration,omitempty"`
-	VoiceMessage             bool            `json:"voiceMessage"`
-	ExpressionPlan           *ExpressionPlan `json:"expressionPlan,omitempty"`
-	ImageUrl                 string          `json:"imageUrl,omitempty"`
-	VideoUrl                 string          `json:"videoUrl,omitempty"`
-	ImageContext             string          `json:"imageContext,omitempty"`
-	ReplyToMessageID         *string         `json:"replyToMessageId,omitempty"`
-	ModelConfigID            int             `json:"modelConfigId,omitempty"`
-	ReasoningEffort          string          `json:"reasoningEffort,omitempty"`
-	MessageStyle             string          `json:"messageStyle,omitempty"`
-	ReasoningEnabled         *bool           `json:"reasoningEnabled,omitempty"`
-	PermissionMode           string          `json:"permissionMode,omitempty"`
-	RequestID                string          `json:"requestId,omitempty"`
-	TurnID                   string          `json:"turnId,omitempty"`
-	ExecutionID              string          `json:"executionId,omitempty"`
-	SessionID                string          `json:"sessionId,omitempty"`
-	IsInternal               bool            `json:"-"`
-	SuppressReplyPersistence bool            `json:"-"`
-	ForceRegenerate          bool            `json:"-"`
-	ReservedInteractionID    string          `json:"-"`
-	RecoverExistingTurn      bool            `json:"-"`
+	Channel                  string             `json:"channel"`
+	Message                  string             `json:"message"`
+	PeerID                   string             `json:"peerId,omitempty"`
+	SpaceID                  string             `json:"spaceId,omitempty"`
+	DeviceTimezone           string             `json:"deviceTimezone,omitempty"`
+	Source                   string             `json:"source,omitempty"`
+	ProactiveTaskInstruction string             `json:"-"`
+	ProactiveTimeContext     string             `json:"-"`
+	ProactiveRecentContext   string             `json:"-"`
+	ProactiveRelationship    string             `json:"-"`
+	ProactiveEmotion         string             `json:"-"`
+	ProactiveMemory          string             `json:"-"`
+	CharacterID              string             `json:"characterId,omitempty"`
+	ConversationID           string             `json:"conversationId,omitempty"`
+	ThreadID                 string             `json:"threadId,omitempty"`
+	WorkspaceID              string             `json:"workspaceId,omitempty"`
+	WorkspaceDeviceID        string             `json:"workspaceDeviceId,omitempty"`
+	WorkspaceName            string             `json:"workspaceName,omitempty"`
+	WorkspaceKind            string             `json:"workspaceKind,omitempty"`
+	WorkspaceRootURI         string             `json:"workspaceRootUri,omitempty"`
+	AudioUrl                 string             `json:"audioUrl,omitempty"`
+	AudioDuration            float64            `json:"audioDuration,omitempty"`
+	VoiceMessage             bool               `json:"voiceMessage"`
+	ExpressionPlan           *ExpressionPlan    `json:"expressionPlan,omitempty"`
+	ImageUrl                 string             `json:"imageUrl,omitempty"`
+	VideoUrl                 string             `json:"videoUrl,omitempty"`
+	ImageContext             string             `json:"imageContext,omitempty"`
+	ReplyToMessageID         *string            `json:"replyToMessageId,omitempty"`
+	ModelConfigID            int                `json:"modelConfigId,omitempty"`
+	ReasoningEffort          string             `json:"reasoningEffort,omitempty"`
+	MessageStyle             string             `json:"messageStyle,omitempty"`
+	ReasoningEnabled         *bool              `json:"reasoningEnabled,omitempty"`
+	PermissionMode           string             `json:"permissionMode,omitempty"`
+	RequestID                string             `json:"requestId,omitempty"`
+	TurnID                   string             `json:"turnId,omitempty"`
+	ExecutionID              string             `json:"executionId,omitempty"`
+	SessionID                string             `json:"sessionId,omitempty"`
+	IsInternal               bool               `json:"-"`
+	SuppressReplyPersistence bool               `json:"-"`
+	ForceRegenerate          bool               `json:"-"`
+	ReservedInteractionID    string             `json:"-"`
+	RecoverExistingTurn      bool               `json:"-"`
+	OriginActor              *auth.ActorContext `json:"-"`
 }
 
 type UnifiedEntry struct {
@@ -205,6 +207,13 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		e.mu.Unlock()
 		return nil, ErrBackpressureShedding
 	}
+	originActor := req.OriginActor
+	if originActor == nil {
+		originActor, _ = auth.FromContext(ctx)
+	}
+	if originActor != nil {
+		ctx = auth.WithActor(ctx, originActor)
+	}
 
 	requestID := stableRequestID(req.RequestID)
 	source := parseOptionalEntrySource(req.Source)
@@ -265,6 +274,13 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		}
 		if resolution.Scope.ThreadID != "" {
 			created.Metadata["threadId"] = resolution.Scope.ThreadID
+		}
+		if originActor != nil {
+			created.Metadata[coreexec.MetadataOriginPrincipalType] = string(originActor.PrincipalType)
+			created.Metadata[coreexec.MetadataOriginDeviceID] = string(originActor.DeviceID)
+			created.Metadata[coreexec.MetadataOriginRuntimeID] = string(originActor.RuntimeID)
+			created.Metadata[coreexec.MetadataOriginSessionID] = originActor.SessionID
+			created.Metadata[coreexec.MetadataOriginRuntimeSessionID] = string(originActor.RuntimeSessionID)
 		}
 		if created.WorkspaceID != "" {
 			created.Metadata["workspaceName"] = strings.TrimSpace(req.WorkspaceName)

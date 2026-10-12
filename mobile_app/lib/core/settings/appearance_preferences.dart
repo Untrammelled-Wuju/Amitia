@@ -42,14 +42,48 @@ class AppearancePreferences {
       customPalette: customPalette ?? this.customPalette,
     );
   }
+
+  Map<String, dynamic> toMap() => <String, dynamic>{
+    'themeMode': themeMode.name,
+    'fontScale': fontScale,
+    'accentColorIndex': accentColorIndex,
+    'cornerStyleIndex': cornerStyleIndex,
+    'dynamicEffect': dynamicEffect,
+    'reduceAnimation': reduceAnimation,
+    'customPalette': customPalette.encode(),
+  };
+
+  factory AppearancePreferences.fromMap(Map<String, dynamic> raw) {
+    final theme = switch ((raw['themeMode'] ?? '').toString()) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+    return AppearancePreferences(
+      themeMode: theme,
+      fontScale: ((raw['fontScale'] as num?)?.toDouble() ?? 1)
+          .clamp(0.8, 1.4)
+          .toDouble(),
+      accentColorIndex: ((raw['accentColorIndex'] as num?)?.toInt() ?? 1)
+          .clamp(0, 3)
+          .toInt(),
+      cornerStyleIndex: ((raw['cornerStyleIndex'] as num?)?.toInt() ?? 1)
+          .clamp(0, 2)
+          .toInt(),
+      dynamicEffect: raw['dynamicEffect'] != false,
+      reduceAnimation: raw['reduceAnimation'] == true,
+      customPalette: CustomPalette.decode(raw['customPalette']?.toString()),
+    );
+  }
 }
 
 final appearancePreferencesProvider =
     StateNotifierProvider<AppearancePreferencesNotifier, AppearancePreferences>(
-  (ref) => AppearancePreferencesNotifier(),
-);
+      (ref) => AppearancePreferencesNotifier(),
+    );
 
-class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences> {
+class AppearancePreferencesNotifier
+    extends StateNotifier<AppearancePreferences> {
   AppearancePreferencesNotifier() : super(const AppearancePreferences());
 
   static const _themeKey = 'appearance.themeMode';
@@ -74,12 +108,16 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
     };
     state = AppearancePreferences(
       themeMode: theme,
-      fontScale: (prefs.getDouble(_fontScaleKey) ?? 1.0).clamp(0.8, 1.4).toDouble(),
+      fontScale: (prefs.getDouble(_fontScaleKey) ?? 1.0)
+          .clamp(0.8, 1.4)
+          .toDouble(),
       accentColorIndex: (prefs.getInt(_accentKey) ?? 1).clamp(0, 3).toInt(),
       cornerStyleIndex: (prefs.getInt(_cornerKey) ?? 1).clamp(0, 2).toInt(),
       dynamicEffect: prefs.getBool(_dynamicKey) ?? true,
       reduceAnimation: prefs.getBool(_reduceAnimationKey) ?? false,
-      customPalette: CustomPalette.decode(prefs.getString('appearance.customPalette.v1')),
+      customPalette: CustomPalette.decode(
+        prefs.getString('appearance.customPalette.v1'),
+      ),
     );
   }
 
@@ -106,10 +144,16 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
 
   Future<void> setAccentColorIndex(int value) async {
     final next = value.clamp(0, 3).toInt();
-    state = state.copyWith(accentColorIndex: next, customPalette: state.customPalette.copyWith(enabled: false));
+    state = state.copyWith(
+      accentColorIndex: next,
+      customPalette: state.customPalette.copyWith(enabled: false),
+    );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_accentKey, next);
-    await prefs.setString('appearance.customPalette.v1', state.customPalette.encode());
+    await prefs.setString(
+      'appearance.customPalette.v1',
+      state.customPalette.encode(),
+    );
   }
 
   Future<void> setCornerStyleIndex(int value) async {
@@ -130,4 +174,22 @@ class AppearancePreferencesNotifier extends StateNotifier<AppearancePreferences>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_reduceAnimationKey, value);
   }
+
+  Future<void> replace(AppearancePreferences value) async {
+    await init();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_themeKey, value.themeMode.name);
+    await prefs.setDouble(_fontScaleKey, value.fontScale);
+    await prefs.setInt(_accentKey, value.accentColorIndex);
+    await prefs.setInt(_cornerKey, value.cornerStyleIndex);
+    await prefs.setBool(_dynamicKey, value.dynamicEffect);
+    await prefs.setBool(_reduceAnimationKey, value.reduceAnimation);
+    await prefs.setString(
+      'appearance.customPalette.v1',
+      value.customPalette.encode(),
+    );
+    if (mounted) state = value;
+  }
+
+  Future<void> reset() => replace(const AppearancePreferences());
 }

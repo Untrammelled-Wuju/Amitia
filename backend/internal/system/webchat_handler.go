@@ -16,9 +16,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agentpermission"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/requestidentity"
 	applog "github.com/u-ai/backend/log"
@@ -496,6 +498,10 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		return
 	}
 
+	originActor := security.GetActor(c)
+	if originActor == nil {
+		originActor, _ = auth.FromContext(c.Request.Context())
+	}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -550,6 +556,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 			PermissionMode:   body.PermissionMode,
 			TurnID:           queuedTurn.ID,
 			ExecutionID:      queuedTurn.ExecutionID,
+			OriginActor:      originActor,
 		}, workspaceBinding)
 		if err != nil {
 			applog.Warn(fmt.Sprintf("[WebChatSubmitMessage] generation failed: %v", err))

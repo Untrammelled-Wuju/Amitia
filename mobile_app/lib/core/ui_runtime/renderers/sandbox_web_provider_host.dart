@@ -9,6 +9,7 @@ import '../../backend_connection/backend_connection_availability.dart';
 import '../../backend_connection/backend_uri_builder.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
 import '../../services/providers.dart';
+import '../mobile_style_runtime.dart';
 import '../ui_provider.dart';
 
 class SandboxWebProviderHost extends ConsumerStatefulWidget {
@@ -46,6 +47,27 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
   bool _inlineOverlayOpen = false;
   OverlayEntry? _inlineOverlay;
   Size _inlineOverlaySize = const Size(360, 480);
+  String _lastStyleSignature = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final document = context.amitiaStyleDocument;
+    final scope = context.amitiaStyleScope;
+    final signature = <Object?>[
+      document.revision,
+      document.hashCode,
+      document.rules.length,
+      scope.platform,
+      scope.page,
+      scope.surface,
+    ].join('|');
+    if (signature == _lastStyleSignature) return;
+    _lastStyleSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_pushHostState());
+    });
+  }
 
   void _closeInlineOverlay({bool notifyWeb = false, bool rebuild = true}) {
     _inlineOverlay?.remove();
@@ -427,6 +449,27 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
     }
   }
 
+  String get _pluginStyleTarget {
+    final contributionId =
+        widget.entry.contributionId?.trim().isNotEmpty == true
+        ? widget.entry.contributionId!.trim()
+        : widget.provider.providerId;
+    return 'plugin.web.${_styleTargetSegment(contributionId)}';
+  }
+
+  String get _pluginPageTarget {
+    final page = widget.context['pageId']?.toString().trim().isNotEmpty == true
+        ? widget.context['pageId'].toString().trim()
+        : context.amitiaStyleScope.page;
+    return amitiaStyleTargetForPage(page);
+  }
+
+  String _styleTargetSegment(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return 'root';
+    return normalized.replaceAll(RegExp(r'[^a-z0-9_-]+'), '-');
+  }
+
   String _cssColor(Color color) {
     final value = color.toARGB32();
     final rgb = value & 0x00ffffff;
@@ -438,6 +481,22 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
     if (target == null || !mounted) return;
     final theme = Theme.of(context);
     final size = MediaQuery.sizeOf(context);
+    final pageTarget = _pluginPageTarget;
+    final stylePayload = amitiaStyleBridgePayload(
+      context,
+      _pluginStyleTarget,
+      additionalTargets: <String>[
+        'extension.surface',
+        'extension.page',
+        pageTarget,
+      ],
+    );
+    final styleVars = <String, String>{
+      ...amitiaStyleVars(context, pageTarget),
+      ...amitiaStyleVars(context, 'extension.page'),
+      ...amitiaStyleVars(context, 'extension.surface'),
+      ...amitiaStyleVars(context, _pluginStyleTarget),
+    };
     final themePayload = <String, dynamic>{
       'mode': theme.brightness == Brightness.dark ? 'dark' : 'light',
       'tokens': <String, String>{
@@ -446,6 +505,7 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
         '--amitia-color-surface': _cssColor(theme.colorScheme.surface),
         '--amitia-color-on-surface': _cssColor(theme.colorScheme.onSurface),
         '--amitia-color-error': _cssColor(theme.colorScheme.error),
+        ...styleVars,
       },
     };
     final resizePayload = <String, dynamic>{
@@ -459,6 +519,8 @@ class _SandboxWebProviderHostState extends ConsumerState<SandboxWebProviderHost>
       ...widget.context,
       'surfaceRole': _surfaceRole,
       if (widget.context['surface'] == null) 'surface': _surfaceRole,
+      'styleTarget': _pluginStyleTarget,
+      'style': stylePayload,
     };
     try {
       await target.runJavaScript('''
