@@ -61,7 +61,7 @@ class MemorySource extends DeviceOwnedChatService {
     'executionScope': currentScope(memoryView),
     'snapshot': {
       'ownerId': 'phone',
-      'resources': kind == 'graph' ? [record('graph')] : [],
+      'resources': kind != 'memory' ? [record(kind)] : [],
       'legacyMemories': kind == 'memory'
           ? [
               {
@@ -180,14 +180,21 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
-  Future<MemorySource> render(WidgetTester tester, String kind) async {
+  Future<MemorySource> render(
+    WidgetTester tester,
+    String kind, {
+    bool showTools = false,
+    double textScale = 1,
+    Brightness brightness = Brightness.light,
+  }) async {
     final api = BackendServiceApi(TaskTransport([]), 1),
         source = MemorySource(BackendServiceApi(TaskTransport([]), 1));
     final router = GoRouter(
       routes: [
         GoRoute(
           path: '/',
-          builder: (context, state) => OwnedMemoryPage(initialKind: kind),
+          builder: (context, state) =>
+              OwnedMemoryPage(initialKind: kind, showTools: showTools),
         ),
       ],
     );
@@ -201,7 +208,16 @@ void main() {
             MemoryManagement(api),
           ),
         ],
-        child: MaterialApp.router(routerConfig: router),
+        child: MaterialApp.router(
+          routerConfig: router,
+          theme: ThemeData(brightness: brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -214,15 +230,21 @@ void main() {
     expect(find.text('全部记忆'), findsOneWidget);
     expect(find.text('记忆层'), findsNothing);
     expect(find.text('工作角色'), findsNothing);
-    for (final text in ['编辑', '到期时间', '归档', '待审核候选', '从对话生成候选']) {
+    for (final text in ['待审核候选', '从对话生成候选']) {
       expect(find.text(text), findsOneWidget);
     }
-    await tester.drag(find.byType(ListView).last, const Offset(0, -600));
+    expect(find.text('编辑'), findsNothing);
+    expect(find.text('筛选记忆'), findsOneWidget);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
     await tester.pumpAndSettle();
     expect(find.text('历史'), findsOneWidget);
     expect(find.textContaining('保留内容'), findsOneWidget);
-    await tester.drag(find.byType(ListView).last, const Offset(0, 600));
+    await tester.ensureVisible(find.text('饮品'));
+    await tester.tap(find.text('饮品'));
     await tester.pumpAndSettle();
+    for (final text in ['编辑', '到期时间', '归档']) {
+      expect(find.text(text), findsOneWidget);
+    }
     await tester.ensureVisible(find.text('到期时间'));
     await tester.tap(find.text('到期时间'));
     await tester.pumpAndSettle();
@@ -231,6 +253,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.edits.single['scope']['memoryRoleId'], '@global-memory');
     expect(source.edits.single['characterId'], 'role');
+    expect(find.byType(BottomSheet), findsNothing);
   });
   testWidgets('用户画像无角色范围选项，图谱页显示真实画布', (tester) async {
     await render(tester, 'profile');
@@ -240,5 +263,38 @@ void main() {
     await render(tester, 'graph');
     expect(find.byType(OwnedMemoryGraph), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);
+  });
+  testWidgets('历史工具卡片在窄屏、大字体和深色下保持可用', (tester) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await render(
+      tester,
+      'memory',
+      showTools: true,
+      textScale: 2,
+      brightness: Brightness.dark,
+    );
+    for (final title in ['记忆管理', '情景记忆', '记忆图谱', '记忆时间线', '用户画像', '世界书']) {
+      expect(find.text(title), findsOneWidget);
+    }
+    expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('搜索和筛选可以展开，手机横屏不溢出', (tester) async {
+    tester.view.physicalSize = const Size(812, 375);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await render(tester, 'memory');
+    await tester.tap(find.byTooltip('搜索记忆'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('search/memory')), findsOneWidget);
+    await tester.ensureVisible(find.text('筛选记忆'));
+    await tester.tap(find.text('筛选记忆'));
+    await tester.pumpAndSettle();
+    expect(find.text('检索方式'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

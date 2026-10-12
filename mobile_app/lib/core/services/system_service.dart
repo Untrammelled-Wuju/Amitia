@@ -149,18 +149,25 @@ class SystemService {
     return resp;
   }
 
+
+
   Future<Map<String, dynamic>?> pipelineStatus() async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/memory/pipeline/status',
+    final characterId = await _firstCharacterId();
+    if (characterId.isEmpty) return null;
+    return _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/projections',
+      queryParameters: <String, dynamic>{'characterId': characterId},
     );
-    return resp;
   }
 
-  Future<Map<String, dynamic>?> memoryStats() async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/memory/retrieval/stats',
+  Future<String> _firstCharacterId() async {
+    final roles = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/roles',
     );
-    return resp;
+    final list = roles?['roles'];
+    return list is List && list.isNotEmpty && list.first is Map
+        ? ((list.first as Map)['id'] ?? '').toString()
+        : '';
   }
 
   Future<Map<String, dynamic>?> graphStats() async {
@@ -307,20 +314,6 @@ class SystemService {
         .toList(growable: false);
   }
 
-  Future<List<Map<String, dynamic>>> graphPath(
-    String from,
-    String to, {
-    int maxDepth = 4,
-  }) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/graph/path',
-      queryParameters: {'from': from, 'to': to, 'maxDepth': maxDepth},
-    );
-    return (resp ?? const [])
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList(growable: false);
-  }
 }
 
 class SafetyService {

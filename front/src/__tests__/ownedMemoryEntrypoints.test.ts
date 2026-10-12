@@ -179,11 +179,14 @@ describe("网页六层记忆的数据归属入口", () => {
     mocks.owned.coreId.value = "core-c";
     scope.coreId = "core-c";
     scope.resourceOwnerId = "core-c";
+    mocks.data.mockResolvedValue({ executionScope: { ...scope }, snapshot: { ownerId: "core-c", resources: [{ kind: "memory", id: "core-c-record", ownerId: "core-c", roleId: "role", revision: 1, body: { content: "新 Core 的记忆内容" } }] } });
     await flushPromises();
     oldCatalog([{ id: "old-b-role", name: "旧B独有角色" }]);
     await flushPromises();
     expect(wrapper.text()).not.toContain("旧B独有角色");
-    expect(wrapper.text()).toContain("core-c");
+    expect(wrapper.text()).toContain("新 Core 的记忆内容");
+    await wrapper.findAll("button").find((button) => button.text() === "停用")!.trigger("click");
+    expect(mocks.edit).toHaveBeenCalledWith("memory", "core-c-record", { allowContextUse: false }, { characterId: "role", expectedExecutionScope: scope, expectedOwnerId: "core-c", expectedRevision: 1 });
   });
   it("不同 Owner 的同 ID 记录不能伪装为当前记忆", async () => {
     mocks.data.mockResolvedValue({ executionScope: scope, snapshot: { ownerId: "foreign", resources: [{ kind: "memory", id: "same-id", ownerId: "foreign", roleId: "role", revision: 1, body: { content: "异地数据" } }] } });

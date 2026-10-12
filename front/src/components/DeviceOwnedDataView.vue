@@ -4,16 +4,25 @@
   <section v-else-if="owned.enabled.value" class="owned-data-page" :data-amitia-ui="semanticTarget">
     <header class="data-page-header">
       <h2>{{ title }}</h2>
-      <div v-if="initialKind !== 'profile'" class="role-field">
-        <label :for="roleSelectId">查看范围</label>
-        <el-select :id="roleSelectId" v-model="viewSelection" filterable aria-label="记忆查看范围" class="role-select">
-          <el-option label="全部记忆" value="all" />
-          <el-option label="全局记忆" value="global" />
-          <el-option v-for="item in owned.roles.value" :key="item.id" :label="item.name" :value="`role:${item.id}`" />
-        </el-select>
+      <div class="role-field">
+        <template v-if="owned.coordinated.value">
+          <label :for="`${roleSelectId}-source`">数据来源</label>
+          <el-select :id="`${roleSelectId}-source`" v-model="dataSource" filterable aria-label="记忆数据来源" class="role-select">
+            <el-option label="当前 Core 的数据" value="current" />
+            <el-option v-for="item in historicalRoles" :key="item.id" :label="`原设备历史 · ${item.name}`" :value="`history:${item.id}`" />
+          </el-select>
+        </template>
+        <template v-if="initialKind !== 'profile' && dataSource === 'current'">
+          <label :for="roleSelectId">查看范围</label>
+          <el-select :id="roleSelectId" v-model="viewSelection" filterable aria-label="记忆查看范围" class="role-select">
+            <el-option label="全部记忆" value="all" />
+            <el-option label="全局记忆" value="global" />
+            <el-option v-for="item in owned.roles.value" :key="item.id" :label="item.name" :value="`role:${item.id}`" />
+          </el-select>
+        </template>
       </div>
     </header>
-    <DeviceOwnedMemoryPanel v-if="role" :key="`${owned.coreId.value}/${role}/${mode || initialKind}`" embedded fixed-kind :requested-memory-view="initialKind === 'profile' ? 'global' : viewSelection" :visible="true" :character-id="role" conversation-id="" :initial-kind="initialKind" :mode="mode" :kinds="kinds" />
+    <DeviceOwnedMemoryPanel v-if="role" :key="`${owned.coreId.value}/${role}/${mode || initialKind}`" embedded fixed-kind :source="dataSource" :requested-memory-view="initialKind === 'profile' ? 'global' : viewSelection" :visible="true" :character-id="role" conversation-id="" :initial-kind="initialKind" :mode="mode" :kinds="kinds" />
     <el-empty v-else description="选择角色后查看其数据；未配置角色时不能调用服务" />
   </section>
   <el-alert v-else title="当前 Core 的设备数据服务尚未就绪，请恢复服务后重试" type="warning" :closable="false" />
@@ -31,6 +40,8 @@ const loading = ref(true);
 const error = ref("");
 const role = ref("");
 const viewSelection = ref("all");
+const dataSource = ref("current");
+const historicalRoles = ref<Array<{ id: string; name: string }>>([]);
 const roleSelectId = useId();
 let generation = 0;
 let providerTimer: ReturnType<typeof setInterval> | undefined;
@@ -54,7 +65,19 @@ function selectAuthorityRole() {
   const selected = viewSelection.value.startsWith("role:") ? viewSelection.value.slice(5) : "";
   role.value = owned.roles.value.some(item => item.id === selected) ? selected : owned.selectInitialRole(role.value) || owned.roles.value[0]?.id || "";
 }
+async function loadHistoricalRoles() {
+  if (!owned.coordinated.value || !role.value) {
+    historicalRoles.value = [];
+    return;
+  }
+  try {
+    historicalRoles.value = await owned.historicalRoles(role.value);
+  } catch {
+    historicalRoles.value = [];
+  }
+}
 watch([owned.roles, viewSelection], () => { if (owned.enabled.value) selectAuthorityRole(); });
+watch([role, dataSource], () => { if (owned.enabled.value) void loadHistoricalRoles(); });
 onMounted(() => {
   void initialize();
   window.addEventListener("amitia:runtime-connection-changed", initialize);

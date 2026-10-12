@@ -60,6 +60,32 @@ class ProfileService {
     return rows;
   }
 
+  Future<Map<String, dynamic>?> _profileScope(String characterId) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/data',
+      queryParameters: <String, dynamic>{
+        if (characterId.isNotEmpty) 'characterId': characterId,
+        'kind': 'profile',
+        'memoryView': 'global',
+      },
+    );
+    final nested = resp?['data'];
+    final payload = nested is Map ? nested : resp;
+    return payload is Map ? Map<String, dynamic>.from(payload) : null;
+  }
+
+  static String _requestId() {
+    final values = List<int>.generate(16, (_) => Random.secure().nextInt(256));
+    values[6] = (values[6] & 15) | 64;
+    values[8] = (values[8] & 63) | 128;
+    final value = values
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${value.substring(0, 8)}-${value.substring(8, 12)}-'
+        '${value.substring(12, 16)}-${value.substring(16, 20)}-'
+        '${value.substring(20)}';
+  }
+
   List<Map<String, dynamic>> _profiles(Map<String, dynamic>? resp) {
     final nested = resp?['data'];
     final payload = nested is Map ? nested : resp;
@@ -99,26 +125,64 @@ class ProfileService {
     );
   }
 
-  static String _requestId() {
-    final values = List<int>.generate(16, (_) => Random.secure().nextInt(256));
-    values[6] = (values[6] & 15) | 64;
-    values[8] = (values[8] & 63) | 128;
-    final value = values
-        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-        .join();
-    return '${value.substring(0, 8)}-${value.substring(8, 12)}-'
-        '${value.substring(12, 16)}-${value.substring(16, 20)}-'
-        '${value.substring(20)}';
-  }
 
   Future<ProfileDto?> create(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/profiles', data: data);
-    return resp == null ? null : ProfileDto.fromJson(resp);
+    final payload = await _profileScope(
+      (data['characterId'] ?? '').toString(),
+    );
+    if (payload == null) return null;
+    await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/memories/manage',
+      data: <String, dynamic>{
+        'action': 'create',
+        'key': (data['attributeName'] ?? '').toString(),
+        'value': (data['attributeValue'] ?? '').toString(),
+        'memoryType': (data['category'] ?? 'custom').toString(),
+        'importance': 5,
+        'partition': 'profile',
+        'requestId': _requestId(),
+        'characterId': (data['characterId'] ?? '').toString(),
+        'expectedExecutionScope': payload,
+      },
+    );
+    return ProfileDto.fromJson(<String, dynamic>{
+      'id': (data['attributeName'] ?? '').toString(),
+      'characterId': (data['characterId'] ?? '').toString(),
+      'category': (data['category'] ?? 'custom').toString(),
+      'attributeName': (data['attributeName'] ?? '').toString(),
+      'attributeValue': (data['attributeValue'] ?? '').toString(),
+      'confidence': 100,
+    });
   }
 
   Future<ProfileDto?> update(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/profiles/$id', data: data);
-    return resp == null ? null : ProfileDto.fromJson(resp);
+    final payload = await _profileScope(
+      (data['characterId'] ?? '').toString(),
+    );
+    if (payload == null) return null;
+    await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/resources/edit',
+      data: <String, dynamic>{
+        'requestId': _requestId(),
+        'kind': 'profile',
+        'id': id,
+        'characterId': (data['characterId'] ?? '').toString(),
+        'expectedRevision': payload['revision'],
+        'expectedExecutionScope': payload['executionScope'],
+        'changes': <String, dynamic>{
+          'content': <String, dynamic>{
+            'value': (data['attributeValue'] ?? '').toString(),
+          },
+        },
+      },
+    );
+    return ProfileDto.fromJson(<String, dynamic>{
+      'id': id,
+      'category': (data['category'] ?? 'custom').toString(),
+      'attributeName': (data['attributeName'] ?? '').toString(),
+      'attributeValue': (data['attributeValue'] ?? '').toString(),
+      'confidence': 100,
+    });
   }
 
   Future<bool> delete(String id) async {
@@ -126,52 +190,6 @@ class ProfileService {
     return true;
   }
 
-  Future<List<ProfileDto>> getBySpace({
-    String spaceId = 'default',
-    String characterId = '',
-  }) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/profiles/by-space',
-      queryParameters: {
-        'spaceId': spaceId,
-        if (characterId.isNotEmpty) 'characterId': characterId,
-      },
-    );
-    if (resp == null) return const [];
-    return resp
-        .whereType<Map>()
-        .map((e) => ProfileDto.fromJson(Map<String, dynamic>.from(e)))
-        .toList(growable: false);
-  }
 
-  Future<bool> extract({
-    String spaceId = 'default',
-    String characterId = '',
-    required String conversationId,
-    required List<Map<String, String>> messages,
-  }) async {
-    await _api.post(
-      '/api/profiles/extract',
-      data: {
-        'spaceId': spaceId,
-        'characterId': characterId,
-        'conversationId': conversationId,
-        'messages': messages,
-      },
-    );
-    return true;
-  }
 
-  Future<Map<String, dynamic>?> systemPrompt({
-    String spaceId = 'default',
-    String characterId = '',
-  }) {
-    return _api.get<Map<String, dynamic>>(
-      '/api/profiles/system-prompt',
-      queryParameters: {
-        'spaceId': spaceId,
-        if (characterId.isNotEmpty) 'characterId': characterId,
-      },
-    );
-  }
 }

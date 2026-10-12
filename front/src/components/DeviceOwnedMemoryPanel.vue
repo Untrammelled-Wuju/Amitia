@@ -1,12 +1,18 @@
 <template>
   <component :is="embedded ? 'section' : ElDrawer" :model-value="visible" title="记忆与数据归属" size="min(620px, 100vw)" @update:model-value="$emit('update:visible', $event)">
-    <div class="memory-controls">
+    <div v-if="!fixedKind" class="memory-controls">
       <div v-if="owned.coordinated.value || !fixedKind" class="memory-filters">
         <div v-if="owned.coordinated.value" class="filter-field">
           <label :for="`${controlId}-source`">数据来源</label>
           <el-select :id="`${controlId}-source`" v-model="source" aria-label="记忆数据来源" class="layer-select">
             <el-option label="当前 Core 的数据" value="current" />
             <el-option v-for="role in kind === 'profile' ? historicalRoles.slice(0, 1) : historicalRoles" :key="role.id" :label="kind === 'profile' ? '原设备历史' : `原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
+          </el-select>
+        </div>
+        <div v-if="view !== 'profile'" class="filter-field">
+          <label :for="`${controlId}-scope`">查看范围</label>
+          <el-select :id="`${controlId}-scope`" v-model="memoryView" aria-label="记忆查看范围" class="layer-select">
+            <el-option v-for="option in viewOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </div>
         <div v-if="!fixedKind" class="filter-field">
@@ -16,29 +22,6 @@
           </el-select>
         </div>
       </div>
-      <div v-if="!fixedKind && kind !== 'profile' && source === 'current'" class="memory-filters">
-        <div class="filter-field">
-          <label :for="`${controlId}-scope`">查看范围</label>
-          <el-select :id="`${controlId}-scope`" v-model="memoryView" aria-label="记忆查看范围">
-            <el-option label="全部记忆" value="all" />
-            <el-option label="全局记忆" value="global" />
-            <el-option v-for="role in owned.roles.value" :key="role.id" :label="role.name" :value="`role:${role.id}`" />
-          </el-select>
-        </div>
-      </div>
-      <div class="ownership-info">
-        <p class="ownership-description">{{ kind === 'profile' ? '用户画像在当前数据来源内全局共享' : owned.coordinated.value ? '新记忆由当前 Core 保存和管理' : '新记忆由当前设备保存和管理，Core 负责计算' }}</p>
-        <dl class="ownership-details">
-          <div class="ownership-item">
-            <dt>服务</dt>
-            <dd><el-tooltip v-if="owned.coreId.value" :content="owned.coreId.value" placement="top"><span class="identity-value" tabindex="0">{{ owned.coreId.value }}</span></el-tooltip><span v-else>未连接</span></dd>
-          </div>
-          <div class="ownership-item">
-            <dt>数据所有者</dt>
-            <dd aria-live="polite"><el-tooltip v-if="owner" :content="owner" placement="top"><span class="identity-value" tabindex="0">{{ owner }}</span></el-tooltip><span v-else>{{ loading ? '加载中…' : error ? '获取失败' : '未获取' }}</span></dd>
-          </div>
-        </dl>
-      </div>
     </div>
     <el-alert v-if="source !== 'current'" title="原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
@@ -47,6 +30,12 @@
       <p v-for="layer in projection?.status?.layers || []" :key="layer.kind">{{ layer.kind === 'vector' ? '向量' : '图谱' }}：已处理 {{ layer.current }}/{{ layer.total }} · 待更新 {{ layer.pending }} · 重试 {{ layer.retrying }}</p>
       <el-alert v-if="projectionNotice" :title="projectionNotice" type="info" :closable="false" />
       <el-button :disabled="!projection || loading" :loading="rebuilding" @click="rebuild">重建当前范围索引</el-button>
+    </div>
+    <div class="memory-filters page-filters">
+      <div class="filter-field">
+        <el-input :id="`${controlId}-page-search`" v-model="searchKeyword" clearable aria-label="搜索记忆" placeholder="搜索标题或内容" class="layer-select" />
+      </div>
+      <el-button v-if="view === 'profile' && source === 'current'" :disabled="loading" @click="createProfileOpen = true">新增画像</el-button>
     </div>
     <div v-loading="loading">
       <OwnedMemoryGraph v-if="view === 'graph'" :resources="rows" :loading="loading" :error="error" />
@@ -58,7 +47,6 @@
       </div>
       <div v-else-if="view === 'timeline'" class="timeline-view">
         <div class="timeline-toolbar">
-          <el-input v-model="timelineKeyword" clearable placeholder="搜索标题或内容" class="tl-search" />
           <el-select v-model="timelineLayers" multiple collapse-tags clearable placeholder="记忆层" class="tl-layers">
             <el-option v-for="layer in timelineLayerOptions" :key="layer.id" :label="layer.label" :value="layer.id" />
           </el-select>
@@ -87,7 +75,7 @@
         </div>
       </div>
       <template v-else>
-      <article v-for="row in rows" :key="`${row.ownerId}/${row.kind}/${row.id}`" class="owned-memory-card">
+      <article v-for="row in displayRows" :key="`${row.ownerId}/${row.kind}/${row.id}`" class="owned-memory-card">
         <div class="card-title">{{ ownedMemoryTitle(row) }}</div>
         <div class="record-text">
           <div v-for="(field, index) in ownedMemoryFields(row)" :key="index" class="record-field">
@@ -114,7 +102,27 @@
           <el-button size="small" type="danger" :disabled="loading" @click="remove(row)">删除</el-button>
         </div>
       </article>
-      <el-empty v-if="!loading && !error && rows.length === 0" description="当前角色在此数据来源中暂无记录" />
+      <el-empty v-if="!loading && !error && displayRows.length === 0" description="当前角色在此数据来源中暂无记录" />
+    <el-dialog v-model="createProfileOpen" title="新增画像" width="min(520px, 94vw)">
+      <el-form label-position="top">
+        <el-form-item label="属性名"><el-input v-model="createProfileForm.key" maxlength="120" placeholder="如：饮食习惯" /></el-form-item>
+        <el-form-item label="属性值"><el-input v-model="createProfileForm.value" type="textarea" :rows="3" maxlength="2000" /></el-form-item>
+        <el-form-item label="类别">
+          <el-select v-model="createProfileForm.memoryType">
+            <el-option label="个人信息" value="personal_info" />
+            <el-option label="偏好" value="preference" />
+            <el-option label="习惯" value="habit" />
+            <el-option label="计划" value="plan" />
+            <el-option label="关系" value="relationship" />
+            <el-option label="自定义" value="custom" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="createProfileSaving" @click="createProfileOpen = false">取消</el-button>
+        <el-button type="primary" :loading="createProfileSaving" :disabled="!createProfileForm.key.trim() || !createProfileForm.value.trim()" @click="submitCreateProfile">保存</el-button>
+      </template>
+    </el-dialog>
       </template>
     </div>
     <el-button v-if="next || nextLegacy" :loading="loading" @click="load(true)">加载更多</el-button>
@@ -133,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted, useId } from "vue";
+import { computed, reactive, ref, watch, onMounted, onUnmounted, useId } from "vue";
 import { ElDrawer, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { useOwnedMemoryManagement } from "@/composables/useOwnedMemoryManagement";
@@ -144,7 +152,7 @@ import { GLOBAL_MEMORY_ROLE, memoryStorageRole, memoryRecordScope } from "@/runt
 import { ownedMemoryTitle, ownedMemoryFields, ownedMemoryEditableText } from "@/runtime/owned-memory-format";
 import { transferMemoryScope } from "@/composables/useMemoryScopeTransfer";
 
-const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string; mode?: string; kinds?: string[] }>();
+const props = defineProps<{ visible: boolean; characterId: string; conversationId: string; embedded?: boolean; initialKind?: string; fixedKind?: boolean; requestedMemoryView?: string; mode?: string; kinds?: string[]; source?: string }>();
 defineEmits<{ "update:visible": [value: boolean] }>();
 const owned = useDeviceOwnedConversation();
 const controlId = useId();
@@ -158,9 +166,44 @@ const kind = ref(props.initialKind || "memory");
 const rows = ref<any[]>([]);
 const next = ref("");
 const nextLegacy = ref("");
-const source = ref("current");
+const internalSource = ref("current");
+const source = computed({
+  get: () => props.source ?? internalSource.value,
+  set: (value: string) => { internalSource.value = value; },
+});
 const memoryView = ref(props.requestedMemoryView || "");
 watch(() => props.requestedMemoryView, value => { memoryView.value = value || ""; });
+const searchKeyword = ref("");
+const createProfileOpen = ref(false);
+const createProfileSaving = ref(false);
+const createProfileForm = reactive({ key: "", value: "", memoryType: "personal_info" });
+
+const viewOptions = computed(() => {
+  if (source.value === "current") {
+    return [
+      { label: "全部记忆", value: "all" },
+      { label: "全局记忆", value: "global" },
+      ...owned.roles.value.map((role) => ({ label: role.name, value: `role:${role.id}` })),
+    ];
+  }
+  const historicalId = source.value.startsWith("history:") ? source.value.slice(8) : "";
+  const historical = historicalRoles.value.find((item) => item.id === historicalId);
+  return [{ label: historical ? `原设备历史 · ${historical.name}` : "原设备历史", value: "all" }];
+});
+
+watch(source, (value) => {
+  if (value !== "current") memoryView.value = "";
+  else if (!memoryView.value) memoryView.value = "all";
+});
+
+const displayRows = computed(() => {
+  const search = searchKeyword.value.trim().toLowerCase();
+  if (!search) return rows.value;
+  return rows.value.filter((row) => {
+    const text = [ownedMemoryTitle(row), ...ownedMemoryFields(row).map((field) => `${field.label}${field.value}`)].join(" ").toLowerCase();
+    return text.includes(search);
+  });
+});
 const transferOpen = ref(false);
 const transferring = ref(false);
 const transferTarget = ref<"global" | "character">("global");
@@ -215,7 +258,6 @@ const timelineLayerOptions = [
   { id: "graph", label: "关系图谱" },
   { id: "summary", label: "对话摘要" },
 ];
-const timelineKeyword = ref("");
 const timelineLayers = ref<string[]>([]);
 
 function timelineLayerLabel(kindValue: string) {
@@ -235,7 +277,7 @@ function timelineTime(row: any) {
 }
 
 const timelineRows = computed(() => {
-  const search = timelineKeyword.value.trim().toLowerCase();
+  const search = searchKeyword.value.trim().toLowerCase();
   return rows.value
     .filter((row) => !row.deleted)
     .filter((row) => timelineLayers.value.length === 0 || timelineLayers.value.includes(row.kind))
@@ -383,6 +425,34 @@ async function load(older = false) {
   }
 }
 
+async function submitCreateProfile() {
+  const scope = loadedScope.value;
+  const key = createProfileForm.key.trim();
+  const value = createProfileForm.value.trim();
+  if (!key || !value) return;
+  if (!scope) { error.value = "记忆服务尚未就绪"; return; }
+  createProfileSaving.value = true;
+  try {
+    const api = useOwnedMemoryManagement();
+    await api.write(scope, crypto.randomUUID(), {
+      action: "create",
+      key,
+      value,
+      memoryType: createProfileForm.memoryType,
+      importance: 5,
+      partition: "profile",
+    });
+    createProfileOpen.value = false;
+    createProfileForm.key = "";
+    createProfileForm.value = "";
+    await load();
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : "画像保存失败";
+  } finally {
+    createProfileSaving.value = false;
+  }
+}
+
 async function setUse(row: any) {
   try {
     await owned.edit("memory", row.id, { allowContextUse: row.body.allowContextUse === false }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
@@ -510,6 +580,7 @@ onUnmounted(() => {
 .record-field-value { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 
 .timeline-view { min-width: 0; }
+.page-filters { margin-bottom: 12px; }
 .timeline-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
 .tl-search { width: 220px; max-width: 100%; }
 .tl-layers { width: 260px; max-width: 100%; }

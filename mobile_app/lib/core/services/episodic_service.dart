@@ -124,10 +124,6 @@ class EpisodicService {
         '${value.substring(20)}';
   }
 
-  Future<EpisodicDto?> create(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/episodic', data: data);
-    return resp == null ? null : EpisodicDto.fromJson(resp);
-  }
 
   Future<bool> delete(String id) async {
     await _editEpisode(id, deleted: true);
@@ -144,56 +140,7 @@ class EpisodicService {
     return EpisodicDto(id: id);
   }
 
-  Future<List<EpisodicDto>> getBySpace({
-    String spaceId = 'default',
-    String characterId = '',
-  }) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/episodic/by-space',
-      queryParameters: {
-        'spaceId': spaceId,
-        if (characterId.isNotEmpty) 'characterId': characterId,
-      },
-    );
-    if (resp == null) return const [];
-    return resp
-        .whereType<Map>()
-        .map((e) => EpisodicDto.fromJson(Map<String, dynamic>.from(e)))
-        .toList(growable: false);
-  }
 
-  Future<Map<String, dynamic>?> getDetail(String id) {
-    return _api.get<Map<String, dynamic>>('/api/episodic/$id/detail');
-  }
 
-  Future<bool> extract({
-    String spaceId = 'default',
-    String characterId = '',
-    required String conversationId,
-    required List<Map<String, String>> messages,
-  }) async {
-    await _api.post(
-      '/api/episodic/extract',
-      data: {
-        'spaceId': spaceId,
-        'characterId': characterId,
-        'conversationId': conversationId,
-        'messages': messages,
-      },
-    );
-    return true;
-  }
 
-  Future<Map<String, dynamic>?> systemPrompt({
-    String spaceId = 'default',
-    String characterId = '',
-  }) {
-    return _api.get<Map<String, dynamic>>(
-      '/api/episodic/system-prompt',
-      queryParameters: {
-        'spaceId': spaceId,
-        if (characterId.isNotEmpty) 'characterId': characterId,
-      },
-    );
-  }
 }
