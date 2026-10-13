@@ -167,9 +167,9 @@ Android 构建与真机安装规则：
 
 Android Release 构建方法：
 
-- APK 构建程序的内存配置预算最多为 1 GiB，禁止通过项目配置、命令行或环境变量提高总上限。Gradle JVM 堆、Metaspace 和 CodeCache 的配置上限合计不得超过 1024 MiB；默认分别为 512 MiB、448 MiB、64 MiB。允许在总预算内按编译阶段调整三者比例，但必须串行执行。
-- APK 构建使用单个 Gradle worker，关闭 Gradle 并行构建；Kotlin 必须在 Gradle 同一进程中编译，禁止额外启动 Kotlin 编译守护进程扩大内存预算。
-- 构建前必须停止旧的超限 Gradle/Kotlin 构建进程并核验新进程的内存参数。遇到内存不足必须停止并报告，禁止自动提高内存上限。
+- 项目构建不设置固定内存预算，不再限制为 1 GiB。默认由 JVM 和构建工具自动配置内存；需要时可根据机器可用内存调整，不再限制堆、Metaspace 和 CodeCache 的合计上限。
+- APK 构建使用单个 Gradle worker，关闭 Gradle 并行构建；Kotlin 在 Gradle 同一进程中编译。
+- 构建前检查并停止遗留的 Gradle/Kotlin 构建进程，避免重复构建；核验新进程使用的实际内存参数。
 - 禁止为 APK 构建启用自动 JVM 堆转储，避免内存不足时生成大体积转储文件。
 
 1. 禁止使用 scripts/build-apk.ps1 的临时源码复制流程。正式构建必须使用项目根目录中的同一份源码。
@@ -183,9 +183,9 @@ Android Release 构建方法：
    - flutter pub get
    - flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --config-only
 6. 在 R:\mobile_app\android 执行：
-   - 先执行 `.\gradlew.bat :app:lintVitalRelease --no-daemon '-Dorg.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=448m -XX:ReservedCodeCacheSize=64m -XX:ActiveProcessorCount=2'`
-   - 上一步成功退出后，再执行 `.\gradlew.bat assembleRelease --no-daemon '-Dorg.gradle.jvmargs=-Xmx736m -XX:MaxMetaspaceSize=256m -XX:ReservedCodeCacheSize=32m -XX:ActiveProcessorCount=2'`
-   - 两个阶段必须串行执行，使用同一份源码与新构建的 Runtime Package；禁止跳过 Release lint。两组 JVM 内存配置预算均为 1024 MiB，操作系统实际进程内存还包含原生运行开销，该预算不是进程工作集硬限制。
+   - 先执行 `.\gradlew.bat :app:lintVitalRelease --no-daemon --no-parallel --max-workers=1 '-Pkotlin.compiler.execution.strategy=in-process' '-Dorg.gradle.jvmargs=-Dfile.encoding=UTF-8 -XX:-HeapDumpOnOutOfMemoryError'`
+   - 上一步成功退出后，再执行 `.\gradlew.bat assembleRelease --no-daemon --no-parallel --max-workers=1 '-Pkotlin.compiler.execution.strategy=in-process' '-Dorg.gradle.jvmargs=-Dfile.encoding=UTF-8 -XX:-HeapDumpOnOutOfMemoryError'`
+   - 两个阶段必须串行执行，使用同一份源码与新构建的 Runtime Package；禁止跳过 Release lint。内存由 JVM 自动配置，遇到内存不足时可根据机器资源调整。
 7. 必须使用 Gradle 返回码判断构建结果。由于中文路径下 Flutter 包装命令可能在产物查找阶段误报失败，禁止仅凭 flutter build apk 的产物查找结果判定构建失败或成功。
 8. APK 输出路径固定为 R:\mobile_app\android\app\build\outputs\flutter-apk\app-release.apk，等价实际路径为 D:\桌面\跟进项目\U-Ai\mobile_app\android\app\build\outputs\flutter-apk\app-release.apk。
 9. 安装前必须验证：
