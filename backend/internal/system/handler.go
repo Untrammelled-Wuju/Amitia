@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/continuity"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/interaction"
@@ -38,6 +39,8 @@ const SystemFormatInstruction = `【回复格式 - 系统固定规则】
 不要用句号连接多个意思。`
 
 type Handler struct {
+	canonicalMemory       *business.Engine
+	memoryCoreID          string
 	service               Service
 	db                    *gorm.DB
 	chatSvc               chat.Service

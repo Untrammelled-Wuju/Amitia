@@ -17,24 +17,23 @@ type Role struct {
 }
 
 type DataQuery struct {
-	LegacyMemoryTransfer   *LegacyMemoryTransferRequest `json:"legacyMemoryTransfer,omitempty"`
-	Management             bool                         `json:"management,omitempty"`
-	Vector                 []float32                    `json:"vector,omitempty"`
-	VectorModel            string                       `json:"vectorModel,omitempty"`
-	Cursor                 string                       `json:"cursor,omitempty"`
-	HistoricalCursor       string                       `json:"historicalCursor,omitempty"`
-	LegacyCursor           string                       `json:"legacyCursor,omitempty"`
-	HistoricalLegacyCursor string                       `json:"historicalLegacyCursor,omitempty"`
-	HistoricalListCursor   string                       `json:"historicalListCursor,omitempty"`
-	ResourceKind           string                       `json:"resourceKind,omitempty"`
-	ResourceID             string                       `json:"resourceId,omitempty"`
-	RequestID              string                       `json:"requestId,omitempty"`
-	ConversationID         string                       `json:"conversationId,omitempty"`
-	Query                  string                       `json:"query,omitempty"`
-	SearchQuery            string                       `json:"searchQuery,omitempty"`
-	Limit                  int                          `json:"limit,omitempty"`
-	HistoricalRoleID       string                       `json:"historicalRoleId,omitempty"`
-	ListConversations      bool                         `json:"listConversations,omitempty"`
+	Management             bool      `json:"management,omitempty"`
+	Vector                 []float32 `json:"vector,omitempty"`
+	VectorModel            string    `json:"vectorModel,omitempty"`
+	Cursor                 string    `json:"cursor,omitempty"`
+	HistoricalCursor       string    `json:"historicalCursor,omitempty"`
+	LegacyCursor           string    `json:"legacyCursor,omitempty"`
+	HistoricalLegacyCursor string    `json:"historicalLegacyCursor,omitempty"`
+	HistoricalListCursor   string    `json:"historicalListCursor,omitempty"`
+	ResourceKind           string    `json:"resourceKind,omitempty"`
+	ResourceID             string    `json:"resourceId,omitempty"`
+	RequestID              string    `json:"requestId,omitempty"`
+	ConversationID         string    `json:"conversationId,omitempty"`
+	Query                  string    `json:"query,omitempty"`
+	SearchQuery            string    `json:"searchQuery,omitempty"`
+	Limit                  int       `json:"limit,omitempty"`
+	HistoricalRoleID       string    `json:"historicalRoleId,omitempty"`
+	ListConversations      bool      `json:"listConversations,omitempty"`
 }
 
 func NormalizeConversationSearch(value string) (string, error) {

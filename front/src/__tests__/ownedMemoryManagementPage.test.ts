@@ -13,6 +13,7 @@ const global = { stubs: {
   ElOption: { props: ["value", "label"], template: `<option :value="value">{{label}}</option>` },
   ElDialog: { props: ["modelValue"], template: `<div v-if="modelValue" class="dialog"><slot /><slot name="footer" /></div>` },
   ElAlert: { props: ["title"], template: `<p>{{title}}</p>` }, ElForm: { template: `<div><slot /></div>` }, ElFormItem: { template: `<div><slot /></div>` }, ElInputNumber: true,
+  ElSwitch: { props: ["modelValue"], emits: ["update:modelValue"], template: `<input type="checkbox" :checked="modelValue" @change="$emit('update:modelValue', $event.target.checked)" />` }, ElCheckbox: true,
 } };
 describe("Owned 记忆管理表单原意图", () => {
   let scope: any; const wrappers: any[] = [];

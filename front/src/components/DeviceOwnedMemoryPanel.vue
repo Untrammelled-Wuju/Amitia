@@ -43,7 +43,7 @@
         <el-select v-model="graphTransferId" filterable placeholder="选择要迁移的图谱关系" aria-label="待迁移图谱关系">
           <el-option v-for="row in rows" :key="row.id" :label="ownedMemoryTitle(row)" :value="row.id" />
         </el-select>
-        <el-button :disabled="loading || !graphTransferId" @click="openTransfer(rows.find(row => row.id === graphTransferId))">调整所属分区</el-button>
+        <el-button :disabled="loading || !graphTransferId" @click="openTransfer(rows.find((row: any) => row.id === graphTransferId))">调整所属分区</el-button>
       </div>
       <div v-else-if="view === 'timeline'" class="timeline-view">
         <div class="timeline-toolbar">
@@ -86,6 +86,7 @@
         <div class="record-state">
           <el-tag v-if="['memory', 'episodic', 'graph', 'fact', 'vector'].includes(row.kind)" size="small">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '全局记忆' : '角色记忆' }}</el-tag>
           <el-tag size="small">版本 {{ row.revision }}</el-tag>
+          <el-tag v-if="row.kind === 'memory'" size="small">L{{ (row.body.effectiveRetentionLevel ?? row.body.retentionLevel) || 3 }} · 强度 {{ Math.round(((row.body.effectiveStrength ?? row.body.memoryStrength) ?? 0.68) * 100) }}% · {{ row.body.pinned ? '已固定' : (row.body.effectiveDecayState ?? row.body.decayState) === 'archived' ? '自动归档' : (row.body.effectiveDecayState ?? row.body.decayState) === 'fading' ? '淡化' : '活跃' }} · 强化 {{ row.body.reinforceCount || 0 }} 次</el-tag>
           <el-tag v-if="row.body.allowContextUse === false" size="small" type="warning">已停用</el-tag>
           <el-tag v-if="row.body.expiresAt" size="small" type="info">到期 {{ row.body.expiresAt }}</el-tag>
         </div>
@@ -95,6 +96,7 @@
         <div v-if="['memory', 'summary'].includes(row.kind) && source === 'current' && row.revision > 0" class="record-actions">
           <el-button size="small" :disabled="loading" @click="editContent(row)">编辑</el-button>
           <template v-if="row.kind === 'memory'">
+            <el-button size="small" :disabled="loading" @click="openLifecycle(row)">保留等级与固定</el-button>
             <el-button size="small" :disabled="loading" @click="setUse(row)">{{ row.body.allowContextUse === false ? '允许用于对话' : '停用' }}</el-button>
             <el-button size="small" :disabled="loading" @click="setExpiry(row)">到期时间</el-button>
             <el-button size="small" :disabled="loading" @click="setArchive(row)">{{ row.body.archivedAt ? '取消归档' : '归档' }}</el-button>
@@ -136,6 +138,14 @@
         <el-option v-for="role in owned.roles.value" :key="role.id" :label="role.name" :value="role.id" />
       </el-select>
       <template #footer><el-button :disabled="transferring" @click="transferOpen = false">取消</el-button><el-button type="primary" :loading="transferring" :disabled="transferTarget === 'character' && !transferRole" @click="confirmTransfer">确认迁移</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="lifecycleOpen" title="记忆保留设置" width="min(480px, 96vw)">
+      <el-form label-position="top">
+        <el-form-item label="保留等级"><el-select v-model="lifecycleForm.retentionLevel" :disabled="lifecycleForm.pinned"><el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" /></el-select></el-form-item>
+        <el-form-item label="固定记忆"><el-switch v-model="lifecycleForm.pinned" /><span>固定为 L1，停止自动衰减</span></el-form-item>
+        <el-form-item label="记忆强度"><el-slider v-model="lifecycleForm.strength" :disabled="lifecycleForm.pinned || lifecycleForm.retentionLevel === 1" :min="0" :max="100" /></el-form-item>
+      </el-form>
+      <template #footer><el-button :disabled="lifecycleSaving" @click="lifecycleOpen = false">取消</el-button><el-button :loading="lifecycleSaving" @click="saveLifecycle">保存</el-button></template>
     </el-dialog>
   </component>
 </template>
@@ -179,6 +189,26 @@ const activeSearch = computed(() => props.search ?? searchKeyword.value);
 const createProfileOpen = ref(false);
 const createProfileSaving = ref(false);
 const createProfileForm = reactive({ key: "", value: "", memoryType: "personal_info" });
+const lifecycleOpen = ref(false);
+const lifecycleSaving = ref(false);
+const lifecycleForm = reactive({ retentionLevel: 3, strength: 68, pinned: false });
+let lifecycleRow: any;
+function openLifecycle(row: any) {
+  lifecycleRow = JSON.parse(JSON.stringify(row));
+  Object.assign(lifecycleForm, { retentionLevel: (row.body.effectiveRetentionLevel ?? row.body.retentionLevel) || 3, strength: Math.round(((row.body.effectiveStrength ?? row.body.memoryStrength) ?? .68) * 100), pinned: row.body.pinned === true });
+  lifecycleOpen.value = true;
+}
+async function saveLifecycle() {
+  const original = lifecycleRow;
+  if (!original || loading.value || lifecycleSaving.value) return;
+  lifecycleSaving.value = true;
+  try {
+    await owned.edit("memory", original.id, { retentionLevel: lifecycleForm.pinned ? 1 : lifecycleForm.retentionLevel, memoryStrength: lifecycleForm.pinned || lifecycleForm.retentionLevel === 1 ? 1 : lifecycleForm.strength / 100, pinned: lifecycleForm.pinned }, { characterId: original.executionScope.roleId, expectedExecutionScope: original.executionScope, expectedOwnerId: original.ownerId, expectedRevision: original.revision });
+    lifecycleOpen.value = false;
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : "保留设置保存失败"; }
+  finally { lifecycleSaving.value = false; }
+}
 
 const viewOptions = computed(() => ownedMemoryViewOptions(source.value, owned.roles.value, historicalRoles.value, kind.value));
 
@@ -378,28 +408,11 @@ async function load(older = false) {
       const recordScope = result.executionScope.memoryViewAll ? memoryRecordScope(result.executionScope, row.roleId) : result.executionScope;
       merged.set(`${row.ownerId}/${row.kind}/${row.id}`, { ...row, executionScope: recordScope });
     }
-    const legacy = currentKind === "memory" ? snapshot.legacyMemories : currentKind === "profile" ? snapshot.legacyProfiles : currentKind === "episodic" ? snapshot.legacyEpisodes : [];
-    for (const row of legacy || []) {
-      const id = `legacy/${row.id}`;
-      const partition = currentKind === "memory" ? ['user','user_global'].includes(row.scope) ? GLOBAL_MEMORY_ROLE : row.characterId : currentKind === "profile" || !row.characterId ? GLOBAL_MEMORY_ROLE : row.characterId;
-      const recordScope = memoryRecordScope(result.executionScope, partition || props.characterId);
-      merged.set(`${snapshot.ownerId}/${currentKind}/${id}`, { id, kind: currentKind, ownerId: snapshot.ownerId, roleId: partition, revision: 0, executionScope: recordScope, body: { key: row.key || row.title || row.fieldName, content: row, expiresAt: row.expiresAt, allowContextUse: row.allowContextUse } });
-    }
     rows.value = Array.from(merged.values());
-    if(currentKind==='graph'){
-      for(const row of snapshot.legacyGraphs || []){
-        if(row.ownerId!==snapshot.ownerId || !row.roleId || (!result.executionScope.memoryViewAll && row.roleId!==memoryStorageRole(result.executionScope,'graph'))) throw new Error('历史图谱分区已变化，请重新加载');
-        merged.set(`${row.ownerId}/graph/${row.id}`,{...row,executionScope:memoryRecordScope(result.executionScope,row.roleId)});
-      }
-      rows.value=Array.from(merged.values());
-    }
     const cursor = snapshot.nextCursors?.[currentKind] || "";
-    const legacyKinds: Record<string, string> = { memory: "legacyMemory", profile: "legacyProfile", episodic: "legacyEpisode",graph:"legacyGraph" };
-    const legacyKind = legacyKinds[currentKind];
-    const legacyCursor = legacyKind ? snapshot.nextCursors?.[legacyKind] || "" : "";
-    if (older && ((cursor && cursor === next.value) || (legacyCursor && legacyCursor === nextLegacy.value))) throw new Error("分页游标重复，请刷新后重试");
+    if (older && cursor && cursor === next.value) throw new Error("分页游标重复，请刷新后重试");
     next.value = cursor;
-    nextLegacy.value = legacyCursor;
+    nextLegacy.value = "";
     if (source.value === "current" && !result.executionScope.memoryViewAll && ["vector", "graph"].includes(currentKind)) {
       try {
         const value = await owned.projections(props.characterId, undefined, memoryView.value || undefined);

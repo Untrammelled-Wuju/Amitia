@@ -1,23 +1,12 @@
 package coordination
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 )
 
 const GlobalMemoryRole = "@global-memory"
 const AllMemoryRole = "@all-memory"
-
-type LegacyMemoryTransferRequest struct {
-	Kind           string          `json:"kind"`
-	ID             string          `json:"id"`
-	ExpectedRecord json.RawMessage `json:"expectedRecord"`
-	TargetRoleID   string          `json:"targetRoleId"`
-}
-type LegacyMemoryTransferPort interface {
-	TransferLegacyMemory(context.Context, ExecutionScope, LegacyMemoryTransferRequest) (Acknowledgement, error)
-}
 
 func MemoryKind(kind string) bool {
 	switch kind {

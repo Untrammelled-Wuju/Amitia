@@ -120,13 +120,7 @@ export function useWebChatConversation(
 
   async function handleViewMemories() {
     showMemories.value = true;
-    try {
-      if (owned.enabled.value) {
-        return;
-      }
-      const r = await get<any>("/api/memories", { page: 1, pageSize: 10 });
-      memories.value = r?.items || [];
-    } catch {}
+    await owned.refresh();
   }
 
   async function fetchWebMsgCount() {

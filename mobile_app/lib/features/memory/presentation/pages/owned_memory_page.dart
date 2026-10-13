@@ -19,44 +19,6 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../owned_memory_format.dart';
 import '../widgets/historical_memory_card.dart';
 
-Widget? ownedMemoryGate(
-  WidgetRef ref, {
-  String kind = 'memory',
-  String? characterId,
-  bool timeline = false,
-  bool showTools = false,
-}) {
-  final ownership = ref.watch(ownedMemoryModeProvider);
-  if (ownership.isLoading) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
-  }
-  if (ownership.hasError) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('记忆与数据归属')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(ownership.error.toString()),
-            TextButton(
-              onPressed: () => ref.invalidate(ownedMemoryModeProvider),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  if (ownership.value == true)
-    return OwnedMemoryPage(
-      initialKind: kind,
-      characterId: characterId,
-      timeline: timeline,
-      showTools: showTools,
-    );
-  return null;
-}
-
 class OwnedMemoryPage extends ConsumerStatefulWidget {
   const OwnedMemoryPage({
     super.key,
@@ -78,7 +40,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   static const _layers = {
     'memory': '记忆总览',
     'candidate': '候选记忆',
-    'legacy': '已有记忆（旧格式）',
     'working': '工作记忆',
     'profile': '用户画像',
     'episodic': '情景记忆',
@@ -90,7 +51,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   String _role = '';
   String _memoryView = 'all';
   String _kind = 'memory';
-  String _owner = '';
   String _next = '';
   String _nextLegacy = '';
   String _source = 'current';
@@ -102,6 +62,9 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   String _memoryType = '';
   String _memorySource = '';
   String _memorySort = '';
+  int _retentionFilter = 0;
+  bool _pinnedOnly = false;
+  String _decayFilter = '';
   Map<String, dynamic>? _managementPage;
   bool _managing = false;
   ({
@@ -130,7 +93,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     } catch (_) {}
     if (_role.isEmpty && owned.roles.isNotEmpty)
       _role = owned.roles.first['id'].toString();
-    if (_role.isNotEmpty) _load();
+    _load();
   }
 
   Future<void> _load({bool older = false}) async {
@@ -173,52 +136,27 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     memoryType: _memoryType,
                     source: _memorySource,
                     sort: _memorySort,
+                    retentionLevel: _retentionFilter,
+                    pinned: _pinnedOnly ? true : null,
+                    decayState: _decayFilter,
                     cursor: older ? _next : '',
                     original: older ? _managementPage : null,
                     memoryView: _memoryView,
                   );
-        final legacy = _kind == 'memory' && (!older || _nextLegacy.isNotEmpty)
-            ? await owned.data(
-                'memory',
-                characterId: _role,
-                cursor: '',
-                legacyCursor: older ? _nextLegacy : '',
-                memoryView: _memoryView,
-              )
-            : null;
-        if (legacy != null &&
-            DeviceOwnedMemoryService.scopeStamp(
-                  legacy['executionScope'] as Map,
-                ) !=
-                DeviceOwnedMemoryService.scopeStamp(
-                  page['executionScope'] as Map,
-                ))
-          throw StateError('记忆分区在加载期间发生变化，请重新加载');
         if (!mounted || ticket != _generation) return;
         setState(() {
           _managementPage = page;
-          _owner = (page['executionScope'] as Map)['resourceOwnerId']
-              .toString();
           _scope = DeviceOwnedMemoryService.scopeStamp(
             page['executionScope'] as Map,
           );
           _next = (page['nextCursor'] ?? '').toString();
           for (final row in page['resources'] as List<Map<String, dynamic>>)
             _rows[row['id'].toString()] = row;
-          if (legacy != null) {
-            _nextLegacy =
-                (legacy['snapshot']['nextCursors']?['legacyMemory'] ?? '')
-                    .toString();
-            _appendLegacyRows(
-              legacy['snapshot'] as Map,
-              legacy['executionScope'] as Map,
-            );
-          }
         });
         return;
       }
       final result = await owned.data(
-        _kind == 'legacy' ? 'memory' : _kind,
+        _kind,
         characterId: _role,
         cursor: !historical && older ? _next : '',
         legacyCursor: !historical && older ? _nextLegacy : '',
@@ -243,49 +181,13 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
           : result['snapshot'];
       if (rawSnapshot is! Map) throw StateError('原设备历史数据暂不可用');
       final snapshot = rawSnapshot;
-      final cursor = _kind == 'legacy'
-          ? ''
-          : (snapshot['nextCursors']?[_kind] ?? '').toString();
-      final legacyKind = {
-        'memory': 'legacyMemory',
-        'legacy': 'legacyMemory',
-        'profile': 'legacyProfile',
-        'episodic': 'legacyEpisode',
-        'graph': 'legacyGraph',
-      }[_kind];
-      final legacyCursor = legacyKind == null
-          ? ''
-          : (snapshot['nextCursors']?[legacyKind] ?? '').toString();
+      final cursor = (snapshot['nextCursors']?[_kind] ?? '').toString();
       if (older && cursor.isNotEmpty && cursor == _next) {
-        throw StateError('记忆分页游标重复');
-      }
-      if (older && legacyCursor.isNotEmpty && legacyCursor == _nextLegacy) {
         throw StateError('记忆分页游标重复');
       }
       setState(() {
         _scope = stamp;
-        _owner = snapshot['ownerId'].toString();
         _next = cursor;
-        _nextLegacy = legacyCursor;
-        if (_kind == 'graph') {
-          for (final row
-              in (snapshot['legacyGraphs'] as List? ?? []).whereType<Map>()) {
-            if (row['ownerId'] != snapshot['ownerId'] ||
-                row['roleId'] == null ||
-                (result['executionScope']['memoryViewAll'] != true &&
-                    row['roleId'] !=
-                        memoryStorageRole(
-                          result['executionScope'] as Map,
-                          'graph',
-                        )))
-              throw StateError('历史图谱的分区或数据所有者已变化');
-            _rows[row['id'].toString()] = Map<String, dynamic>.from(row)
-              ..['executionScope'] = memoryRecordScope(
-                result['executionScope'] as Map,
-                row['roleId'].toString(),
-              );
-          }
-        }
         for (final row
             in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
           if (row['kind'] == _kind) {
@@ -295,44 +197,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                 row['roleId'].toString(),
               );
           }
-        }
-        final legacyField = {
-          'memory': 'legacyMemories',
-          'legacy': 'legacyMemories',
-          'profile': 'legacyProfiles',
-          'episodic': 'legacyEpisodes',
-        }[_kind];
-        for (final row
-            in (legacyField == null
-                    ? <dynamic>[]
-                    : snapshot[legacyField] as List? ?? [])
-                .whereType<Map>()) {
-          final id = 'legacy/${row['id']}';
-          final partition = _kind == 'memory' || _kind == 'legacy'
-              ? const ['user', 'user_global'].contains(row['scope'])
-                    ? globalMemoryRole
-                    : row['characterId'].toString()
-              : _kind == 'profile' ||
-                    (row['characterId'] ?? '').toString().isEmpty
-              ? globalMemoryRole
-              : row['characterId'].toString();
-          _rows[id] = {
-            'id': id,
-            'kind': _kind,
-            'ownerId': _owner,
-            'revision': 0,
-            'roleId': partition,
-            'executionScope': memoryRecordScope(
-              result['executionScope'] as Map,
-              partition,
-            ),
-            'body': {
-              'key': row['key'] ?? row['title'] ?? row['fieldName'],
-              'content': row,
-              'allowContextUse': row['allowContextUse'],
-              'expiresAt': row['expiresAt'],
-            },
-          };
         }
       });
       if (_source == 'current' &&
@@ -360,38 +224,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
       }
     } finally {
       if (mounted && ticket == _generation) setState(() => _loading = false);
-    }
-  }
-
-  void _appendLegacyRows(Map snapshot, Map scope) {
-    final field = {
-      'memory': 'legacyMemories',
-      'profile': 'legacyProfiles',
-      'episodic': 'legacyEpisodes',
-    }[_kind];
-    for (final row in (snapshot[field] as List? ?? []).whereType<Map>()) {
-      final partition = _kind == 'memory'
-          ? const ['user', 'user_global'].contains(row['scope'])
-                ? globalMemoryRole
-                : row['characterId'].toString()
-          : _kind == 'profile' || (row['characterId'] ?? '').toString().isEmpty
-          ? globalMemoryRole
-          : row['characterId'].toString();
-      final id = 'legacy/${row['id']}';
-      _rows[id] = {
-        'id': id,
-        'kind': _kind,
-        'ownerId': snapshot['ownerId'],
-        'revision': 0,
-        'roleId': partition,
-        'executionScope': memoryRecordScope(scope, partition),
-        'body': {
-          'key': row['key'] ?? row['title'] ?? row['attributeName'],
-          'content': row,
-          'allowContextUse': row['allowContextUse'],
-          'expiresAt': row['expiresAt'],
-        },
-      };
     }
   }
 
@@ -538,6 +370,11 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     final importance = TextEditingController(
       text: (body['importance'] ?? 5).toString(),
     );
+    final level = TextEditingController(
+      text: ((body['effectiveRetentionLevel'] ?? body['retentionLevel']) ?? 3)
+          .toString(),
+    );
+    final pinned = ValueNotifier<bool>(body['pinned'] == true);
     final route = DialogRoute<Map<String, dynamic>>(
       context: context,
       builder: (context) => AlertDialog(
@@ -565,6 +402,20 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: '重要程度（0—10）'),
               ),
+              TextField(
+                controller: level,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '保留等级（1—5）'),
+              ),
+              ValueListenableBuilder<bool>(
+                valueListenable: pinned,
+                builder: (context, value, _) => SwitchListTile(
+                  title: const Text('固定记忆'),
+                  subtitle: const Text('固定为 L1，保持完整强度'),
+                  value: value,
+                  onChanged: (value) => pinned.value = value,
+                ),
+              ),
             ],
           ),
         ),
@@ -576,17 +427,23 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
           TextButton(
             onPressed: () {
               final number = int.tryParse(importance.text);
+              final retention = int.tryParse(level.text);
               if (key.text.trim().isEmpty ||
                   value.text.trim().isEmpty ||
                   number == null ||
                   number < 0 ||
-                  number > 10)
+                  number > 10 ||
+                  retention == null ||
+                  retention < 1 ||
+                  retention > 5)
                 return;
               Navigator.pop(context, {
                 'key': key.text.trim(),
                 'value': value.text.trim(),
                 'memoryType': type.text.trim(),
                 'importance': number,
+                'retentionLevel': retention,
+                'pinned': pinned.value,
               });
             },
             child: const Text('保存'),
@@ -600,6 +457,8 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     value.dispose();
     type.dispose();
     importance.dispose();
+    level.dispose();
+    pinned.dispose();
     return result;
   }
 
@@ -847,6 +706,89 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         'content': content is Map ? {...content, field: value} : value,
       },
     );
+  }
+
+  Future<void> _editLifecycle(Map row) async {
+    final original = Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(row)) as Map,
+    );
+    final body = original['body'] as Map;
+    var level =
+        ((body['effectiveRetentionLevel'] ?? body['retentionLevel']) as num?)
+            ?.toInt() ??
+        3;
+    var strength =
+        (((body['effectiveStrength'] ?? body['memoryStrength']) as num?)
+                    ?.toDouble() ??
+                .68)
+            .clamp(0.0, 1.0)
+            .toDouble();
+    var pinned = body['pinned'] == true;
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('记忆保留设置'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: level,
+                decoration: const InputDecoration(labelText: '保留等级'),
+                items: List.generate(
+                  5,
+                  (index) => DropdownMenuItem(
+                    value: index + 1,
+                    child: Text('L${index + 1}'),
+                  ),
+                ),
+                onChanged: pinned
+                    ? null
+                    : (value) => update(() => level = value ?? 3),
+              ),
+              SwitchListTile(
+                title: const Text('固定记忆'),
+                subtitle: const Text('固定为 L1，停止自动衰减'),
+                value: pinned,
+                onChanged: (value) => update(() {
+                  pinned = value;
+                  if (value) {
+                    level = 1;
+                    strength = 1;
+                  }
+                }),
+              ),
+              Text('记忆强度 ${(strength * 100).round()}%'),
+              Slider(
+                value: strength,
+                min: 0,
+                max: 1,
+                divisions: 100,
+                onChanged: pinned || level == 1
+                    ? null
+                    : (value) => update(() => strength = value),
+              ),
+              const Text('普通记忆随时间衰减，对话使用后自动强化。L1 保持完整强度。'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, {
+                'retentionLevel': pinned ? 1 : level,
+                'memoryStrength': pinned || level == 1 ? 1.0 : strength,
+                'pinned': pinned,
+              }),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != null && mounted) await _edit(original, changes: result);
   }
 
   Future<String?> _textInput(String title, String initial) async {
@@ -1394,12 +1336,58 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   leading: Icon(Icons.tune, color: context.accentPrimary),
                   title: Text('筛选记忆', style: AppTypography.body(context)),
                   subtitle: Text(
-                    '类型、来源与检索方式',
+                    '类型、等级、固定与检索方式',
                     style: AppTypography.caption(context),
                   ),
                   childrenPadding: EdgeInsets.all(AppSpacing.md),
                   children: [
                     if (_kind == 'memory') ...[
+                      DropdownButtonFormField<int>(
+                        initialValue: _retentionFilter,
+                        decoration: const InputDecoration(labelText: '保留等级'),
+                        items: [
+                          const DropdownMenuItem(value: 0, child: Text('全部等级')),
+                          ...List.generate(
+                            5,
+                            (index) => DropdownMenuItem(
+                              value: index + 1,
+                              child: Text('L${index + 1}'),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          _retentionFilter = value ?? 0;
+                          Navigator.pop(sheetContext);
+                          _load();
+                        },
+                      ),
+                      SwitchListTile(
+                        title: const Text('仅看固定记忆'),
+                        value: _pinnedOnly,
+                        onChanged: (value) {
+                          _pinnedOnly = value;
+                          Navigator.pop(sheetContext);
+                          _load();
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: _decayFilter,
+                        decoration: const InputDecoration(labelText: '记忆状态'),
+                        items: const [
+                          DropdownMenuItem(value: '', child: Text('全部状态')),
+                          DropdownMenuItem(value: 'active', child: Text('活跃')),
+                          DropdownMenuItem(value: 'fading', child: Text('淡化')),
+                          DropdownMenuItem(
+                            value: 'archived',
+                            child: Text('自动归档'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          _decayFilter = value ?? '';
+                          Navigator.pop(sheetContext);
+                          _load();
+                        },
+                      ),
                       TextFormField(
                         initialValue: _memoryType,
                         decoration: const InputDecoration(
@@ -1840,6 +1828,15 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   '版本 ${row['revision'] ?? 0}${body['allowContextUse'] == false ? ' · 已停用' : ''}',
                   style: AppTypography.caption(context),
                 ),
+                if (row['kind'] == 'memory')
+                  Text(
+                    'L${(body['effectiveRetentionLevel'] ?? body['retentionLevel']) ?? 3} · 强度 ${((((body['effectiveStrength'] ?? body['memoryStrength']) as num?)?.toDouble() ?? .68) * 100).round()}% · ${(body['effectiveDecayState'] ?? body['decayState']) == 'archived'
+                        ? '自动归档'
+                        : (body['effectiveDecayState'] ?? body['decayState']) == 'fading'
+                        ? '淡化'
+                        : '活跃'}${body['pinned'] == true ? ' · 已固定' : ''} · 强化 ${body['reinforceCount'] ?? 0} 次',
+                    style: AppTypography.caption(context),
+                  ),
                 SizedBox(height: AppSpacing.md),
                 Wrap(
                   spacing: 8,
@@ -1848,7 +1845,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     if (_source == 'current' &&
                         const [
                           'memory',
-                          'legacy',
                           'episodic',
                           'fact',
                           'graph',
@@ -1920,6 +1916,15 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                             child: const Text('编辑'),
                           ),
                           if (_kind == 'memory') ...[
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () => _detailAction(
+                                      sheetContext,
+                                      () => _editLifecycle(row),
+                                    ),
+                              child: const Text('保留等级与固定'),
+                            ),
                             TextButton(
                               onPressed: _loading
                                   ? null

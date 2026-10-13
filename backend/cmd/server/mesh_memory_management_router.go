@@ -33,6 +33,23 @@ func registerMeshMemoryManagementRouter(mesh *gin.RouterGroup, services *AppServ
 			}
 			request := business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: coreID, TargetDeviceID: c.Query("targetDeviceId"), RoleID: c.Query("characterId"), RequestID: uuid.NewString()}
 			query := business.MemoryManagementQuery{Query: c.Query("query"), Mode: c.Query("mode"), MemoryType: c.Query("memoryType"), Source: c.Query("source"), Sort: c.Query("sort"), Cursor: c.Query("cursor"), Limit: limit}
+			query.DecayState = c.Query("decayState")
+			if raw := c.Query("retentionLevel"); raw != "" {
+				value, err := strconv.Atoi(raw)
+				if err != nil || value < 1 || value > 5 {
+					c.JSON(400, gin.H{"message": "记忆等级参数无效"})
+					return
+				}
+				query.RetentionLevel = value
+			}
+			if raw := c.Query("pinned"); raw != "" {
+				value, err := strconv.ParseBool(raw)
+				if err != nil {
+					c.JSON(400, gin.H{"message": "固定记忆参数无效"})
+					return
+				}
+				query.Pinned = &value
+			}
 			request.MemoryView = c.Query("memoryView")
 			var result business.MemoryManagementResponse
 			var err error

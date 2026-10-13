@@ -1,151 +1,20 @@
-<!--
-SPDX-FileCopyrightText: 2026 彭旭
-SPDX-License-Identifier: AGPL-3.0-only
--->
 <template>
-  <div v-if="visible && owned.enabled.value" class="fa-panel mem-inject-panel">
-    <div class="mi-header"><h4>记忆与数据归属</h4><button class="mi-close-btn" type="button" aria-label="关闭记忆上下文" @click="close">✕</button></div>
-    <DeviceOwnedMemoryPanel embedded :visible="true" :character-id="characterId || ''" :conversation-id="convId" />
-  </div>
-  <div v-else-if="visible" class="fa-panel mem-inject-panel">
-    <div class="mi-header">
-      <h4>记忆上下文</h4>
-      <button class="mi-close-btn" type="button" aria-label="关闭记忆上下文" @click="close">✕</button>
-    </div>
-    <div v-if="loading" class="mi-loading">加载中...</div>
-    <div v-else>
-      <div v-if="memories.length" class="mi-section">
-        <h5>相关记忆 ({{ memories.length }})</h5>
-        <div v-for="m in memories" :key="m.id" class="mi-item">
-          <div class="mi-item-head">
-            <span class="mi-layer">{{ memoryTypeLabel(m.memoryType || m.type) }}</span>
-            <span class="mi-score">置信度 {{ m.confidence ?? 0 }}%</span>
-          </div>
-          <div class="mi-key" v-if="m.key">{{ m.key }}</div>
-          <div class="mi-content">{{ m.value || m.memory?.value || "" }}</div>
-        </div>
-      </div>
-
-      <div v-if="profiles.length" class="mi-section">
-        <h5>用户画像 ({{ profiles.length }})</h5>
-        <div v-for="p in profiles" :key="p.id" class="mi-profile-card">
-          <span>{{ p.attributeName }}: {{ p.attributeValue }}</span>
-          <el-tag :type="p.confidence >= 80 ? 'success' : 'warning'" size="small">{{ p.confidence }}%</el-tag>
-        </div>
-      </div>
-
-      <div class="mi-section">
-        <h5>压缩状态</h5>
-        <div class="mi-compress">
-          <span>已压缩 {{ compression.compressedRounds || 0 }} / {{ compression.totalRounds || 0 }} 轮</span>
-          <span v-if="compression.lastCompressedAt">上次: {{ compression.lastCompressedAt }}</span>
-        </div>
-      </div>
-
-      <div class="mi-section">
-        <h5>管线状态</h5>
-        <div v-if="pipeline?.layers?.length" class="mi-pipeline">
-          <template v-for="l in pipeline.layers" :key="l.layer">
-            <el-tooltip :content="l.name + ': ' + l.status + ' (' + l.durationMs + 'ms)'" placement="top">
-              <span
-                class="mi-pl-dot"
-                :style="{
-                  backgroundColor:
-                    l.status === 'completed'
-                      ? 'var(--ac-color-success)'
-                      : l.status === 'skipped'
-                        ? 'var(--ac-color-text-muted)'
-                        : 'var(--ac-color-primary)',
-                }"
-              />
-            </el-tooltip>
-          </template>
-        </div>
-        <span v-else class="mi-muted">暂无管线状态</span>
-      </div>
-
-      <div v-if="!memories.length && !profiles.length" class="mi-empty">暂无可展示的记忆上下文</div>
-    </div>
+  <div v-if="visible" class="fa-panel mem-inject-panel">
+    <div class="mi-header"><h4>记忆上下文</h4><button class="mi-close-btn" type="button" aria-label="关闭记忆上下文" @click="$emit('close')">✕</button></div>
+    <DeviceOwnedMemoryPanel v-if="owned.enabled.value" embedded :visible="true" :character-id="characterId || ''" :conversation-id="convId" />
+    <el-alert v-else title="当前记忆服务尚未就绪，请恢复连接后重试" type="warning" :closable="false"><el-button @click="refresh">重试</el-button></el-alert>
   </div>
 </template>
-
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { useApi } from "../../../composables/useApi";
+import { watch } from "vue";
 import DeviceOwnedMemoryPanel from "@/components/DeviceOwnedMemoryPanel.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
-
-const props = defineProps<{
-  visible: boolean;
-  convId: string;
-  characterId?: string;
-}>();
-
-const emit = defineEmits<{ close: [] }>();
-const { get } = useApi();
+const props = defineProps<{ visible: boolean; characterId?: string; convId: string; userMessage?: string; }>();
+defineEmits<{ close: [] }>();
 const owned = useDeviceOwnedConversation();
-const loading = ref(false);
-const memories = ref<any[]>([]);
-const profiles = ref<any[]>([]);
-const compression = ref<any>({});
-const pipeline = ref<any>(null);
-let requestVersion = 0;
-
-function close() {
-  emit("close");
-}
-
-function memoryTypeLabel(type?: string) {
-  const labels: Record<string, string> = {
-    fact: "事实",
-    preference: "偏好",
-    episodic: "情景",
-    relationship: "关系",
-    custom: "记忆",
-  };
-  return labels[type || ""] || type || "记忆";
-}
-
-async function loadData() {
-  if (!props.visible || owned.enabled.value) return;
-  const version = ++requestVersion;
-  loading.value = true;
-
-  const [memoryResult, profileResult, compressionResult, pipelineResult] = await Promise.allSettled([
-    props.characterId
-      ? get<any>("/api/memories", {
-          page: 1,
-          pageSize: 8,
-          characterId: props.characterId,
-          sort: "recently_used",
-        })
-      : Promise.resolve({ items: [] }),
-    get<any>("/api/profiles", {
-      page: 1,
-      pageSize: 5,
-      characterId: props.characterId || undefined,
-    }),
-    props.convId
-      ? get<any>(`/api/chats/conversations/${encodeURIComponent(props.convId)}/compression-status`)
-      : Promise.resolve({}),
-    get<any>("/api/memory/pipeline/status"),
-  ]);
-
-  if (version !== requestVersion) return;
-  memories.value = memoryResult.status === "fulfilled" ? memoryResult.value?.items || [] : [];
-  profiles.value = profileResult.status === "fulfilled" ? profileResult.value?.items || [] : [];
-  compression.value = compressionResult.status === "fulfilled" ? compressionResult.value || {} : {};
-  pipeline.value = pipelineResult.status === "fulfilled" ? pipelineResult.value || null : null;
-  loading.value = false;
-}
-
-watch(
-  () => [props.visible, props.convId, props.characterId] as const,
-  () => void loadData(),
-  { immediate: true },
-);
+async function refresh() { try { await owned.refresh(); } catch {} }
+watch(() => props.visible, visible => { if (visible) void refresh(); }, { immediate: true });
 </script>
-
 <style scoped>
 .fa-panel {
   position: absolute;

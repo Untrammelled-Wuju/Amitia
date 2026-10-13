@@ -12,21 +12,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
-
-type importScopedMemoryService interface {
-	CreateForSpace(req *memory.CreateMemoryRequest, spaceID string) (*memory.Memory, error)
-}
-
-func (h *Handler) importMemoryServiceForSpace() (importScopedMemoryService, bool) {
-	svc, ok := h.memorySvc.(importScopedMemoryService)
-	return svc, ok
-}
 
 func (h *Handler) GetImportsBatches(c *gin.Context) {
 	spaceID := webChatSpaceID(c)
@@ -114,32 +104,8 @@ func (h *Handler) GetImportsBatchSummary(c *gin.Context) {
 }
 
 func (h *Handler) GetImportsBatchMemoryCandidates(c *gin.Context) {
-	id := strings.TrimSpace(c.Param("id"))
-	spaceID := webChatSpaceID(c)
-	if _, err := h.requireWebChatImportConversation(id, spaceID); err != nil {
-		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
-		return
-	}
-	var msgs []map[string]interface{}
-	if err := h.db.Table("messages").Where("conversation_id = ? AND role = ?", id, "user").Order("created_at DESC").Limit(20).Find(&msgs).Error; err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取导入消息失败", nil)
-		return
-	}
-	if msgs == nil {
-		msgs = []map[string]interface{}{}
-	}
-	candidates := make([]map[string]interface{}, 0)
-	for _, msg := range msgs {
-		content, _ := msg["content"].(string)
-		if len(content) > 10 {
-			candidates = append(candidates, map[string]interface{}{
-				"key":        fmt.Sprintf("candidate_%d", len(candidates)),
-				"value":      content,
-				"importance": 5,
-			})
-		}
-	}
-	util.SuccessResponse(c, map[string]interface{}{"candidates": candidates, "conversationId": id})
+	h.canonicalImportCandidates(c, false)
+
 }
 
 func (h *Handler) DeleteImportsBatch(c *gin.Context) {
@@ -209,53 +175,8 @@ func (h *Handler) GenerateImportsBatchSummary(c *gin.Context) {
 }
 
 func (h *Handler) ConfirmImportsBatchMemories(c *gin.Context) {
-	id := strings.TrimSpace(c.Param("id"))
-	spaceID := webChatSpaceID(c)
-	if _, err := h.requireWebChatImportConversation(id, spaceID); err != nil {
-		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
-		return
-	}
-	var body map[string]interface{}
-	_ = c.ShouldBindJSON(&body)
-	selectedIDs := []string{}
-	if raw, ok := body["selectedIds"]; ok {
-		if arr, ok2 := raw.([]interface{}); ok2 {
-			for _, v := range arr {
-				selectedIDs = append(selectedIDs, fmt.Sprint(v))
-			}
-		}
-	}
-	var msgs []map[string]interface{}
-	q := h.db.Table("messages").Where("conversation_id = ?", id)
-	if len(selectedIDs) > 0 {
-		q = q.Where("id IN ?", selectedIDs)
-	} else {
-		q = q.Where("role = ?", "user").Limit(20)
-	}
-	if err := q.Find(&msgs).Error; err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取导入消息失败", nil)
-		return
-	}
-	svc, ok := h.importMemoryServiceForSpace()
-	if !ok {
-		util.ErrorResponse(c, response.InternalError, "memory service does not provide user-scoped operations", nil)
-		return
-	}
-	confirmed := 0
-	for _, msg := range msgs {
-		content, _ := msg["content"].(string)
-		if len(content) <= 10 {
-			continue
-		}
-		if _, err := svc.CreateForSpace(&memory.CreateMemoryRequest{
-			Key:    fmt.Sprintf("imported_%d", confirmed),
-			Value:  content,
-			Source: "import",
-		}, spaceID); err == nil {
-			confirmed++
-		}
-	}
-	util.SuccessResponse(c, map[string]interface{}{"confirmed": true, "memoriesCreated": confirmed})
+	h.canonicalConfirmImportMemories(c)
+
 }
 
 func (h *Handler) UploadImports(c *gin.Context) {
@@ -732,90 +653,8 @@ func (h *Handler) DoImportData(c *gin.Context) {
 }
 
 func (h *Handler) ExtractImportsMemoryCandidates(c *gin.Context) {
-	id := strings.TrimSpace(c.Param("id"))
-	spaceID := webChatSpaceID(c)
-	if _, err := h.requireWebChatImportConversation(id, spaceID); err != nil {
-		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
-		return
-	}
-	var msgs []map[string]interface{}
-	h.db.Table("messages").Where("conversation_id = ? AND role != ?", id, "system").Order("created_at ASC, sequence ASC").Limit(100).Find(&msgs)
-	if len(msgs) == 0 {
-		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "没有可提取的消息"})
-		return
-	}
-	lines := make([]string, 0)
-	for _, m := range msgs {
-		role, _ := m["role"].(string)
-		content, _ := m["content"].(string)
-		if len(content) > 5 {
-			lines = append(lines, fmt.Sprintf("[%s] %s", role, content))
-		}
-	}
-	if len(lines) == 0 {
-		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "消息内容不足"})
-		return
-	}
-	text := strings.Join(lines, "\n")
-	systemPrompt := "你是一个记忆提取助手。从以下对话中提取可作为长期记忆的关键信息。返回 JSON，格式为 {\"candidates\": [{\"key\": \"主题\", \"value\": \"具体内容\", \"importance\": 1-10}]}。只提取有长期价值的信息，如用户偏好、重要事件、个人信息、关系等。最多提取10条。"
-	userPrompt := "请从以下对话中提取记忆候选：\n\n" + text
-	reply, _, _, err := h.chatSvc.GenerateWorkshopJSON(context.Background(), systemPrompt, userPrompt)
-	if err != nil {
-		var fallback []map[string]interface{}
-		for i, m := range msgs {
-			content, _ := m["content"].(string)
-			if len(content) > 10 && i < 10 {
-				fallback = append(fallback, map[string]interface{}{
-					"key":        fmt.Sprintf("消息_%d", i+1),
-					"value":      content,
-					"importance": 3,
-				})
-			}
-		}
-		util.SuccessResponse(c, map[string]interface{}{"candidates": fallback, "conversationId": id})
-		return
-	}
-	reply = strings.TrimSpace(reply)
-	var result struct {
-		Candidates []struct {
-			Key        string `json:"key"`
-			Value      string `json:"value"`
-			Importance int    `json:"importance"`
-		} `json:"candidates"`
-	}
-	if err := json.Unmarshal([]byte(reply), &result); err != nil {
-		var fallback []map[string]interface{}
-		for i, m := range msgs {
-			content, _ := m["content"].(string)
-			if len(content) > 10 && i < 10 {
-				fallback = append(fallback, map[string]interface{}{
-					"key":        fmt.Sprintf("消息_%d", i+1),
-					"value":      content,
-					"importance": 3,
-				})
-			}
-		}
-		util.SuccessResponse(c, map[string]interface{}{"candidates": fallback, "conversationId": id})
-		return
-	}
-	candidates := make([]map[string]interface{}, 0)
-	for _, cand := range result.Candidates {
-		if cand.Key != "" && cand.Value != "" {
-			imp := cand.Importance
-			if imp < 1 {
-				imp = 1
-			}
-			if imp > 10 {
-				imp = 10
-			}
-			candidates = append(candidates, map[string]interface{}{
-				"key":        cand.Key,
-				"value":      cand.Value,
-				"importance": imp,
-			})
-		}
-	}
-	util.SuccessResponse(c, map[string]interface{}{"candidates": candidates, "conversationId": id})
+	h.canonicalImportCandidates(c, true)
+
 }
 
 func (h *Handler) WebChatFromImport(c *gin.Context) {

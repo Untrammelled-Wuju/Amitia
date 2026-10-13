@@ -14,7 +14,6 @@ vi.mock("../views/continuity/api", () => ({ listContinuityThreads: mocks.listThr
 vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => mocks.owned }));
 vi.mock("vue-echarts", () => ({ default: { name: "VChart", props: ["option"], template: '<div data-graph-canvas />' } }));
 vi.mock("../composables/useApi", () => ({ apiClient: {}, useApi: () => ({ get: mocks.legacy, post: mocks.legacy, put: mocks.legacy, del: mocks.legacy }) }));
-vi.mock("../composables/useProfile", () => ({ useProfile: () => ({ profiles: ref([]), fetchProfiles: mocks.profiles, categoryLabel: (value: string) => value }) }));
 vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: mocks.deployment }));
 vi.mock("element-plus", async () => ({ ...await vi.importActual<any>("element-plus"), ElMessageBox: { confirm: mocks.confirm, prompt: mocks.prompt } }));
 const global = { directives: { loading: () => {} }, stubs: {
@@ -26,6 +25,8 @@ const global = { directives: { loading: () => {} }, stubs: {
   ElOption: { props: ["value", "label"], template: "<option :value='value'>{{ label }}</option>" },
   ElAlert: { props: ["title"], template: "<div>{{ title }}<slot /></div>" }, ElButton: { props: ["disabled"], emits: ["click"], template: "<button :disabled='disabled' @click='$emit(\"click\")'><slot /></button>" }, ElTag: { template: "<span><slot /></span>" }, ElEmpty: { props: ["description"], template: "<div>{{ description }}</div>" },
   ElTooltip: { template: "<span><slot /></span>" },
+  ElSwitch: { props: ["modelValue"], emits: ["update:modelValue"], template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />' },
+  ElSlider: true,
 } };
 
 describe("网页六层记忆的数据归属入口", () => {
@@ -169,12 +170,21 @@ describe("网页六层记忆的数据归属入口", () => {
     await wrapper.find('select[aria-label="事项数据来源"]').setValue("current");
     expect(selection.findAll("option").map(option => option.text())).toEqual(["全部事项", "全局事项", "角色"]);
   });
-  it("旧格式图谱仍在同一画布显示，并保留源记忆以供分区迁移", async () => {
+  it("旧版本图谱不混入当前系统画布和分区操作", async () => {
     mocks.data.mockResolvedValue({executionScope:{...scope,memoryRoleId:'@global-memory',memoryViewAll:true},snapshot:{ownerId:'source',resources:[],legacyGraphs:[{kind:'graph',id:'legacy/old',ownerId:'source',roleId:'role',revision:0,body:{key:'旧关系',legacyMemory:{id:'old',characterId:'role',scope:'character'},content:{nodes:[{id:'a',label:'用户'},{id:'b',label:'茶'}],edges:[{source:'a',target:'b',relation:'喜欢'}]}}}]}});
     const wrapper=open(DeviceOwnedDataView,{title:'记忆图谱',initialKind:'graph'});await flushPromises();
-    expect(wrapper.find('[data-graph-canvas]').exists()).toBe(true);
-    expect(wrapper.text()).toContain('旧关系');
-    expect(wrapper.findAll('button').some(button=>button.text()==='调整所属分区')).toBe(true);
+    expect(wrapper.findComponent(OwnedMemoryGraph).props('resources')).toEqual([]);
+    expect(wrapper.text()).not.toContain('旧关系');
+    expect(wrapper.findAll('button').some(button=>button.text()==='调整所属分区')).toBe(false);
+  });
+  it("固定记忆保存原数据所有者、版本和 L1 强度", async () => {
+    const wrapper = open(DeviceOwnedMemoryPanel, { initialKind: "memory" });
+    await flushPromises();
+    await wrapper.findAll("button").find(button => button.text() === "保留等级与固定")!.trigger("click");
+    await wrapper.find('input[type="checkbox"]').setValue(true);
+    await wrapper.findAll("button").find(button => button.text() === "保存")!.trigger("click");
+    await flushPromises();
+    expect(mocks.edit).toHaveBeenCalledWith("memory", "same-id", { retentionLevel: 1, memoryStrength: 1, pinned: true }, { characterId: "role", expectedExecutionScope: scope, expectedOwnerId: "source", expectedRevision: 1 });
   });
   it.each(["working", "profile", "episodic", "fact", "vector", "graph", "summary"])("%s 层只读取当前角色 Owned 数据通道", async (kind) => {
     mocks.projections.mockResolvedValue({ executionScope: scope, status: { layers: [] } });

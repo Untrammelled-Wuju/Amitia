@@ -18,6 +18,8 @@ type MemoryCandidateModel interface {
 }
 
 type MemoryCandidateInput struct {
+	RetentionLevel           int    `json:"retentionLevel,omitempty"`
+	Pinned                   bool   `json:"pinned,omitempty"`
 	Action                   string `json:"action"`
 	ID                       string `json:"id,omitempty"`
 	ExpectedRevision         int64  `json:"expectedRevision,omitempty"`
@@ -32,6 +34,8 @@ type MemoryCandidateInput struct {
 }
 
 type OwnedMemoryCandidate struct {
+	RetentionLevel     int                            `json:"retentionLevel,omitempty"`
+	Pinned             bool                           `json:"pinned,omitempty"`
 	Type               string                         `json:"type"`
 	ID                 string                         `json:"id"`
 	Key                string                         `json:"key"`
@@ -218,10 +222,14 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 	dependencies := []coordination.ResourceVersion{}
 	switch input.Action {
 	case "update":
+		if input.RetentionLevel < 0 || input.RetentionLevel > 5 {
+			return MemoryManagementResponse{}, errors.New("记忆等级必须为 L1—L5")
+		}
 		if strings.TrimSpace(input.Key) == "" || strings.TrimSpace(input.Value) == "" {
 			return MemoryManagementResponse{}, errors.New("候选记忆标题及内容不能为空")
 		}
 		candidate.Key, candidate.Value, candidate.MemoryType, candidate.Importance = strings.TrimSpace(input.Key), strings.TrimSpace(input.Value), input.MemoryType, input.Importance
+		candidate.RetentionLevel, candidate.Pinned = input.RetentionLevel, input.Pinned
 	case "reject":
 		candidate.State = "rejected"
 	case "accept":
@@ -289,6 +297,7 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 			return MemoryManagementResponse{}, errors.New("候选计算结果无效")
 		}
 		content["value"], content["memoryType"], content["importance"], content["source"] = candidate.Value, candidate.MemoryType, candidate.Importance, "reviewed"
+		content["retentionLevel"], content["pinned"] = candidate.RetentionLevel, candidate.Pinned
 		prepared, err := e.prepareMemoryMutations(ctx, scope, candidate.ConversationID, []DerivedMemory{{Kind: candidate.DerivedKind, Key: key, Body: body(content)}}, &snapshot)
 		if err != nil {
 			return MemoryManagementResponse{}, err

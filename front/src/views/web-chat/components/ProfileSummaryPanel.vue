@@ -1,83 +1,20 @@
-<!--
-SPDX-FileCopyrightText: 2026 彭旭
-SPDX-License-Identifier: AGPL-3.0-only
--->
 <template>
-  <div v-if="visible && owned.enabled.value" class="fa-panel profile-summary-panel">
-    <div class="profile-panel-header"><h4>用户画像与数据归属</h4><button class="profile-close-btn" type="button" aria-label="关闭用户画像" @click="close">✕</button></div>
-    <DeviceOwnedMemoryPanel embedded :visible="true" :character-id="characterId || ''" conversation-id="" initial-kind="profile" />
-  </div>
-  <div v-else-if="visible" class="fa-panel profile-summary-panel">
-    <div class="profile-panel-header">
-      <h4>用户画像摘要</h4>
-      <button class="profile-close-btn" type="button" aria-label="关闭用户画像" @click="close">✕</button>
-    </div>
-    <div v-if="loading" class="profile-loading">加载中...</div>
-    <div v-else-if="items.length === 0" class="profile-empty">暂无画像</div>
-    <div v-else class="profile-items">
-      <div v-for="p in items" :key="p.id" class="profile-item">
-        <span class="profile-cat">{{ categoryLabel(p.category) }}</span>
-        <span class="profile-copy">
-          <strong>{{ p.attributeName }}</strong>
-          <span>{{ p.attributeValue }}</span>
-        </span>
-        <span class="profile-conf" :class="confClass(p.confidence)">{{ p.confidence }}%</span>
-      </div>
-    </div>
+  <div v-if="visible" class="fa-panel mem-inject-panel">
+    <div class="ps-header"><h4>用户画像</h4><button class="ps-close-btn" type="button" aria-label="关闭用户画像" @click="$emit('close')">✕</button></div>
+    <DeviceOwnedMemoryPanel v-if="owned.enabled.value" embedded :visible="true" :character-id="characterId || ''" conversation-id="" initial-kind="profile" />
+    <el-alert v-else title="当前记忆服务尚未就绪，请恢复连接后重试" type="warning" :closable="false"><el-button @click="refresh">重试</el-button></el-alert>
   </div>
 </template>
-
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { useProfile } from "@/composables/useProfile";
+import { watch } from "vue";
 import DeviceOwnedMemoryPanel from "@/components/DeviceOwnedMemoryPanel.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
-
-const props = defineProps<{
-  visible: boolean;
-  characterId?: string;
-}>();
-const emit = defineEmits<{ close: [] }>();
-const { profiles: profData, fetchProfiles, categoryLabel } = useProfile();
+const props = defineProps<{ visible: boolean; characterId?: string;  }>();
+defineEmits<{ close: [] }>();
 const owned = useDeviceOwnedConversation();
-const loading = ref(false);
-const items = ref<any[]>([]);
-let requestVersion = 0;
-
-function confClass(confidence: number): string {
-  if (confidence >= 80) return "conf-high";
-  if (confidence >= 50) return "conf-mid";
-  return "conf-low";
-}
-
-function close() {
-  emit("close");
-}
-
-async function loadProfiles() {
-  if (!props.visible || owned.enabled.value) return;
-  const version = ++requestVersion;
-  loading.value = true;
-  try {
-    await fetchProfiles({
-      pageSize: 10,
-      characterId: props.characterId || undefined,
-    });
-    if (version === requestVersion) items.value = [...profData.value];
-  } catch {
-    if (version === requestVersion) items.value = [];
-  } finally {
-    if (version === requestVersion) loading.value = false;
-  }
-}
-
-watch(
-  () => [props.visible, props.characterId] as const,
-  () => void loadProfiles(),
-  { immediate: true },
-);
+async function refresh() { try { await owned.refresh(); } catch {} }
+watch(() => props.visible, visible => { if (visible) void refresh(); }, { immediate: true });
 </script>
-
 <style scoped>
 .fa-panel {
   position: absolute;

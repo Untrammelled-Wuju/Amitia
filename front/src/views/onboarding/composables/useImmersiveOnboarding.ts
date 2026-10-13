@@ -2,6 +2,9 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import { useOwnedMemoryManagement } from "@/composables/useOwnedMemoryManagement";
+import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { getApiBaseURL, saveDeploymentConfig } from "@/runtime/runtime-adapter";
 import { roleAuthorityConfig } from "@/runtime/role-authority";
 import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "@/composables/useCoreConfigurationAccess";
@@ -9,6 +12,9 @@ import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "@/co
 export function useImmersiveOnboarding() {
   const router = useRouter();
   const { get, post } = useApi();
+  const owned = useDeviceOwnedConversation();
+  const memory = useOwnedMemoryManagement();
+  const initialMemoryRequests = new Map<string, string>();
   const configurationAccess = useCoreConfigurationAccess();
   const configurationContext = ref("");
 
@@ -583,15 +589,18 @@ const res = await post<any>("/api/model/detect-models", {
       }
 
       if (memoryItems.value.some((item) => item)) {
+        if (!await owned.refresh()) throw new Error("当前记忆服务尚未就绪，初始记忆未保存");
+        const characterId = owned.selectInitialRole(localStorage.getItem("webchat-char-id") || "");
+        if (!characterId) throw new Error("请先创建角色后保存初始记忆");
+        const page = await get<{ executionScope: OwnedExecutionScope }>("/api/device-mesh/v1/business/memories", { characterId, memoryView: "global", mode: "keyword", limit: 1 });
+        if (!page?.executionScope) throw new Error("初始记忆缺少当前数据归属");
         const memoryAttrNames = ["称呼", "交流风格", "初始记忆"];
         for (let i = 0; i < memoryItems.value.length; i++) {
           const item = memoryItems.value[i];
           if (!item) continue;
-          await post("/api/profiles", {
-            category: "memory",
-            attributeName: memoryAttrNames[i],
-            attributeValue: item,
-          }).catch(() => {});
+          const intent = JSON.stringify([page.executionScope.coreId, characterId, i, item]);
+          if (!initialMemoryRequests.has(intent)) initialMemoryRequests.set(intent, crypto.randomUUID());
+          await memory.write(page.executionScope, initialMemoryRequests.get(intent)!, { action: "create", partition: "profile", key: memoryAttrNames[i], value: item, memoryType: "personal_info", importance: 9, retentionLevel: 2 });
         }
       }
 

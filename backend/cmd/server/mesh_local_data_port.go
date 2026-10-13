@@ -11,9 +11,6 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/episodic"
-	"github.com/u-ai/backend/internal/memory"
-	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
@@ -281,11 +278,6 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			}
 		}
 	}
-	if query.Management {
-		if err := p.historicalMemoryManagement(ctx, scope, scope.RoleID, query, &snapshot); err != nil {
-			return snapshot, err
-		}
-	}
 	if query.Management || query.ResourceKind == "continuity" || (query.Cursor != "" && query.LegacyCursor == "") {
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 	}
@@ -371,49 +363,6 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	if query.ResourceKind == "message" || query.ResourceKind == "conversation" {
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
-	}
-	if p.services.DataLifecycle == nil || !p.services.DataLifecycle.IsRetrievalBlocked(scope.RoleID) {
-		var memories []memory.Memory
-		selection := db.Where("(space_id=? OR space_id='' OR space_id='default') AND verified_status NOT IN ('tombstone','replaced','invalidated','deleted') AND (allow_context_use IS NULL OR allow_context_use=1) AND archived_at IS NULL", p.legacySpaceID)
-		partition := coordination.StorageRole(scope, "memory")
-		if partition == coordination.GlobalMemoryRole {
-			selection = selection.Where("scope IN ('user','user_global')")
-		} else {
-			selection = selection.Where("character_id=? AND scope NOT IN ('user','user_global')", partition)
-		}
-		if err := selection.Order("importance DESC,updated_at DESC").Limit(limit).Find(&memories).Error; err != nil {
-			return snapshot, err
-		}
-		live := make([]memory.Memory, 0, len(memories))
-		for _, item := range memories {
-			if meshMemoryUsable(item, time.Now()) {
-				live = append(live, item)
-			}
-		}
-		snapshot.LegacyMemories, err = appendMeshJSON(live)
-		if err != nil {
-			return snapshot, err
-		}
-		var profiles []profile.UserProfile
-		if err := db.Where("(space_id=? OR space_id='' OR space_id='default') AND projection_status='active'", p.legacySpaceID).Order("confidence DESC,updated_at DESC").Limit(limit).Find(&profiles).Error; err != nil {
-			return snapshot, err
-		}
-		snapshot.LegacyProfiles, err = appendMeshJSON(profiles)
-		if err != nil {
-			return snapshot, err
-		}
-		var episodes []episodic.EpisodicMemory
-		partition = coordination.StorageRole(scope, "episodic")
-		if partition == coordination.GlobalMemoryRole {
-			partition = ""
-		}
-		if err := db.Where("character_id=? AND (space_id=? OR space_id='' OR space_id='default') AND archived_at IS NULL AND decay_state NOT IN ('forgotten','deleted')", partition, p.legacySpaceID).Order("created_at DESC").Limit(limit).Find(&episodes).Error; err != nil {
-			return snapshot, err
-		}
-		snapshot.LegacyEpisodes, err = appendMeshJSON(episodes)
-		if err != nil {
-			return snapshot, err
-		}
 	}
 	return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 }
@@ -650,22 +599,4 @@ func (p *meshLocalDataPort) ReadTaskResource(ctx context.Context, current coordi
 		return nil, err
 	}
 	return resource, coordination.ValidateCurrent(ctx)
-}
-
-func meshMemoryUsable(item memory.Memory, now time.Time) bool {
-	if item.AllowContextUse != nil && !*item.AllowContextUse {
-		return false
-	}
-	if item.ArchivedAt != nil && *item.ArchivedAt != "" {
-		return false
-	}
-	if item.ExpiresAt == nil || *item.ExpiresAt == "" {
-		return true
-	}
-	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05", "2006-01-02"} {
-		if expires, err := time.ParseInLocation(layout, *item.ExpiresAt, time.Local); err == nil {
-			return expires.After(now)
-		}
-	}
-	return false
 }

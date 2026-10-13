@@ -1,9 +1,14 @@
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/features/memory/presentation/pages/owned_memory_page.dart';
 import 'package:amitia_app/features/memory/presentation/pages/owned_memory_timeline.dart';
+import 'package:amitia_app/features/memory/presentation/pages/memory_timeline_page.dart';
+import 'package:amitia_app/core/services/device_owned_chat_service.dart';
+import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
+import '../../core/services/owned_task_submission_test.dart' show TaskTransport;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
   test('真实更新时间排序保留不同Owner同ID和无时间记录，不修改原数据', () {
@@ -48,56 +53,41 @@ void main() {
     expect(ownedMemoryResourceTime(row), DateTime.utc(2026, 10, 1));
   });
 
-  testWidgets('绑定时间线使用Owner入口，未绑定才使用旧页面', (tester) async {
-    Widget? selected;
-    Future<void> render(bool bound) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          key: ValueKey(bound),
-          overrides: [
-            ownedMemoryModeProvider.overrideWith((ref) async => bound),
-          ],
-          child: MaterialApp(
-            home: Consumer(
-              builder: (context, ref, child) {
-                selected = ownedMemoryGate(ref, timeline: true);
-                return const SizedBox();
-              },
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-    }
-
-    await render(true);
-    expect(selected, isA<OwnedMemoryPage>());
-    expect((selected as OwnedMemoryPage).timeline, isTrue);
-    await render(false);
-    expect(selected, isNull);
-  });
-
-  testWidgets('归属查询失败不回退读取旧Core时间线', (tester) async {
+  testWidgets('时间线始终复用当前唯一记忆入口', (tester) async {
     Widget? selected;
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ownedMemoryModeProvider.overrideWith(
-            (ref) async => throw StateError('Core已切换'),
-          ),
-        ],
-        child: MaterialApp(
-          home: Consumer(
-            builder: (context, ref, child) {
-              selected = ownedMemoryGate(ref, timeline: true);
-              return const SizedBox();
-            },
-          ),
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            selected = const MemoryTimelinePage().build(context);
+            return const SizedBox();
+          },
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    expect(selected, isNotNull);
-    expect(selected, isNot(isA<OwnedMemoryPage>()));
+    expect(selected, isA<OwnedMemoryPage>());
+    expect((selected as OwnedMemoryPage).timeline, isTrue);
   });
+
+  testWidgets('归属服务失败明确显示错误，不回退旧时间线', (tester) async {
+    final source = FailingMemorySource(BackendServiceApi(TaskTransport([]), 1));
+    final router = GoRouter(routes: [
+      GoRoute(path: '/', builder: (_, _) => const MemoryTimelinePage()),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [memoryDataSourceProvider.overrideWithValue(source)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('当前记忆服务不可用'), findsOneWidget);
+  });
+}
+
+class FailingMemorySource extends DeviceOwnedChatService {
+  FailingMemorySource(super.api);
+  @override
+  Future<bool> refresh() async => throw StateError('当前记忆服务不可用');
 }

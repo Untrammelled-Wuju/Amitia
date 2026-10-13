@@ -22,17 +22,20 @@ const (
 )
 
 type PostProcessPayload struct {
-	ExecutionScope   *coordination.ExecutionScope `json:"executionScope,omitempty"`
-	Version          string                       `json:"version"`
-	ConversationID   string                       `json:"conversationId"`
-	CharacterID      string                       `json:"characterId"`
-	Source           string                       `json:"source"`
-	RequestID        string                       `json:"requestId"`
-	Reply            string                       `json:"reply"`
-	PipelineMessages []map[string]string          `json:"pipelineMessages"`
+	RecallEvidence       []coordination.ResourceVersion `json:"recallEvidence,omitempty"`
+	SpaceID              string                         `json:"spaceId,omitempty"`
+	MemoryRuntimeVersion string                         `json:"memoryRuntimeVersion,omitempty"`
+	ExecutionScope       *coordination.ExecutionScope   `json:"executionScope,omitempty"`
+	Version              string                         `json:"version"`
+	ConversationID       string                         `json:"conversationId"`
+	CharacterID          string                         `json:"characterId"`
+	Source               string                         `json:"source"`
+	RequestID            string                         `json:"requestId"`
+	Reply                string                         `json:"reply"`
+	PipelineMessages     []map[string]string            `json:"pipelineMessages"`
 }
 
-func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFields, spaceID, convID, threadID, executionID, charID, source, requestID, userMessage string, pipelineMessages []map[string]string, reply string) {
+func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFields, spaceID, convID, threadID, executionID, charID, source, requestID, userMessage string, pipelineMessages []map[string]string, reply string, recall ...[]coordination.ResourceVersion) {
 	if err := ctx.Err(); err != nil {
 		applog.TraceWarn(trace.WithStage("postprocess_skipped_cancelled"), applog.Fields{"conversation_id": convID}, "process message postprocess skipped because request context was cancelled")
 		return
@@ -41,12 +44,19 @@ func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFie
 		return
 	}
 	payload := PostProcessPayload{Version: postProcessPayloadVersion, ConversationID: convID, CharacterID: charID, Source: source, RequestID: requestID, Reply: reply, PipelineMessages: pipelineMessages}
+	payload.SpaceID = spaceID
+	if len(recall) > 0 {
+		payload.RecallEvidence = recall[0]
+	}
+	if s.canonicalMemory != nil {
+		payload.MemoryRuntimeVersion = "owned-v1"
+	}
 	if scope, ok := coordination.FromContext(ctx); ok {
 		payload.ExecutionScope = &scope
 	}
 	data, _ := json.Marshal(payload)
 	s.appendPostProcessOutbox(convID, postProcessEventMoodRecovery, requestID+"|"+postProcessEventMoodRecovery, data)
-	if s.pipeline != nil {
+	if s.pipeline != nil || s.canonicalMemory != nil {
 		s.appendPostProcessOutbox(convID, postProcessEventPipelineExecute, requestID+"|"+postProcessEventPipelineExecute, data)
 	}
 	if s.compressor != nil {
@@ -72,6 +82,12 @@ func (s *service) ReplayPostProcess(eventType string, payload []byte) error {
 		return err
 	}
 	ctx := context.Background()
+	if eventType == postProcessEventPipelineExecute && s.canonicalMemory != nil {
+		if pp.MemoryRuntimeVersion != "owned-v1" {
+			return fmt.Errorf("旧版本记忆后处理任务不再执行")
+		}
+		return s.canonicalMemory.Observe(ctx, pp)
+	}
 	if pp.ExecutionScope != nil {
 		if pp.ExecutionScope.ResourceOwnerID != pp.ExecutionScope.CoreID {
 			return coordination.ErrWrongOwner

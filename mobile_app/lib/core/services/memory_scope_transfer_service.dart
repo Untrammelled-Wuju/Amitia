@@ -10,10 +10,7 @@ Future<void> transferMemoryScope(
   final scope = record['executionScope'] as Map;
   final generation = api.generation;
   final requestId = DeviceOwnedMemoryService.requestId();
-  final legacyGraph = record['body']?['legacyMemory'];
-  final kind = record['kind'] == 'legacy' || legacyGraph != null
-      ? 'memory'
-      : record['kind'].toString();
+  final kind = record['kind'].toString();
   final id = record['id'].toString();
   final revision = record['revision'] as int;
   final state = await api.get<Map<String, dynamic>>(
@@ -40,8 +37,6 @@ Future<void> transferMemoryScope(
       'expectedRevision': revision,
       'targetScope': targetScope,
       if (targetScope == 'character') 'targetRoleId': targetRole,
-      if (id.startsWith('legacy/'))
-        'expectedLegacyRecord': legacyGraph ?? record['body']['content'],
     },
   );
   if (api.generation != generation ||

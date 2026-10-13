@@ -236,26 +236,36 @@ func (p *defaultCharacterProvider) GetDefaultCharacterID(ctx context.Context) (s
 }
 
 type reflectionMemoryServiceAdapter struct {
-	memory memory.Service
+	runtime *canonicalChatMemoryRuntime
 }
 
 func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interaction.ReflectionCandidateSubmitRequest) error {
-	memoryKey := fmt.Sprintf("reflection:%s:%s", strings.TrimSpace(req.CandidateID), req.Topic)
-	memoryType := strings.TrimSpace(req.SuggestedMemoryType)
-	if _, ok := memory.NormalizeMemoryType(memoryType); !ok {
-		memoryType = string(memory.MemoryTypeFact)
+	if a.runtime == nil {
+		return fmt.Errorf("当前记忆业务尚未就绪")
 	}
-	_, err := a.memory.SubmitCandidate(&memory.SubmitCandidateRequest{
-		Key:            memoryKey,
-		Value:          req.Abstract,
-		MemoryType:     memoryType,
-		Importance:     req.Importance,
-		SourceText:     req.Abstract,
-		ConversationID: req.ConversationID,
-		CharacterID:    req.CharacterID,
-		CandidateKind:  string(memory.CandidateKindReflection),
-	})
-	return err
+	ctx, finish, err := a.runtime.begin(context.Background())
+	if err != nil {
+		return err
+	}
+	defer finish()
+	request, err := a.runtime.request(a.runtime.spaceID, req.CharacterID)
+	if err != nil {
+		return err
+	}
+	request.RequestID = "reflection-" + memorySubmissionFingerprint(req.RequestID, req.CandidateID, req.Topic)
+	request.ConversationID = req.ConversationID
+	kind := strings.TrimSpace(req.SuggestedMemoryType)
+	if _, ok := memory.NormalizeMemoryType(kind); !ok {
+		kind = string(memory.MemoryTypeFact)
+	}
+	result, err := a.runtime.engine.SubmitMemoryCandidate(ctx, request, business.MemoryCandidateInput{Key: "reflection:" + strings.TrimSpace(req.CandidateID) + ":" + req.Topic, Value: req.Abstract, MemoryType: kind, Importance: req.Importance})
+	if err != nil {
+		return err
+	}
+	if !result.Saved || result.Acknowledgement.OwnerID != result.Scope.ResourceOwnerID {
+		return fmt.Errorf("反思候选尚未获得所有者保存确认")
+	}
+	return nil
 }
 
 func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, runtimeProfile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
@@ -307,7 +317,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	charRepo := character.NewRepository(ctx)
 	kernelCharReader := newKernelCharacterReader(charRepo)
 	kernelConvReader := newKernelConversationReader(chatSvc)
-	kernelMemQuerySvc := newKernelMemoryQueryService(memSvc)
+	kernelMemQuerySvc := newKernelMemoryQueryService()
 	var nodeResolver script_host.NodeEnvironmentResolver
 	var artifactResolver script_host.ArtifactResolver
 	var commandResolver commandenv.Resolver
@@ -680,7 +690,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	dispatchedPublisher.Register("interaction.state_changed", interactionPublisher)
 	dispatchedPublisher.Register("interaction.runtime_assembled", interactionPublisher)
 
-	reflectionMemoryAdapter := &reflectionMemoryServiceAdapter{memory: memSvc}
+	reflectionMemoryAdapter := &reflectionMemoryServiceAdapter{}
 	reflectionPublisher := interaction.NewReflectionMemoryPublisher(reflectionMemoryAdapter, nil)
 	dispatchedPublisher.Register(interaction.ReflectionCandidateApprovedEventType, reflectionPublisher)
 	dispatchedPublisher.Register(interaction.ReflectionMemoryAbstractionEventType, reflectionPublisher)
@@ -1351,6 +1361,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("Core 缺少设备归属计算端口")
 		}
 		services.OwnedBusiness = business.NewEngine(deviceMeshRuntime.Coordination, deviceMeshRuntime, ownedModel)
+		kernelMemQuerySvc.engine = services.OwnedBusiness
+		if setter, ok := services.Chat.(interface {
+			SetCanonicalMemoryRuntime(chat.CanonicalMemoryRuntime)
+		}); ok {
+			runtime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: deviceMeshRuntime.LocalHandler.LocalInferenceContext}
+			setter.SetCanonicalMemoryRuntime(runtime)
+			reflectionMemoryAdapter.runtime = runtime
+		}
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
 			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services})
 		}

@@ -14,9 +14,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/memorypolicy"
 )
 
 type MemoryManagementInput struct {
+	RetentionLevel           int    `json:"retentionLevel,omitempty"`
+	Pinned                   bool   `json:"pinned,omitempty"`
 	Action                   string `json:"action"`
 	Key                      string `json:"key"`
 	Value                    string `json:"value"`
@@ -29,16 +32,20 @@ type MemoryManagementInput struct {
 }
 
 type MemoryManagementQuery struct {
-	Query      string `json:"query"`
-	Mode       string `json:"mode"`
-	MemoryType string `json:"memoryType,omitempty"`
-	Source     string `json:"source,omitempty"`
-	Sort       string `json:"sort,omitempty"`
-	Cursor     string `json:"cursor,omitempty"`
-	Limit      int    `json:"limit,omitempty"`
+	RetentionLevel int    `json:"retentionLevel,omitempty"`
+	Pinned         *bool  `json:"pinned,omitempty"`
+	DecayState     string `json:"decayState,omitempty"`
+	Query          string `json:"query"`
+	Mode           string `json:"mode"`
+	MemoryType     string `json:"memoryType,omitempty"`
+	Source         string `json:"source,omitempty"`
+	Sort           string `json:"sort,omitempty"`
+	Cursor         string `json:"cursor,omitempty"`
+	Limit          int    `json:"limit,omitempty"`
 }
 
 type MemoryManagementResponse struct {
+	Total           int                          `json:"total"`
 	Resources       []coordination.Resource      `json:"resources"`
 	Scope           coordination.ExecutionScope  `json:"executionScope"`
 	Saved           bool                         `json:"saved"`
@@ -148,6 +155,10 @@ func memoryManagementText(raw json.RawMessage) (string, string, string, string, 
 }
 
 func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input MemoryManagementQuery) (MemoryManagementResponse, error) {
+	now := time.Now()
+	if input.RetentionLevel < 0 || input.RetentionLevel > 5 || input.DecayState != "" && input.DecayState != "active" && input.DecayState != "fading" && input.DecayState != "archived" {
+		return MemoryManagementResponse{}, errors.New("记忆生命周期筛选参数无效")
+	}
 	if len(input.Query) > 1024 || !utf8.ValidString(input.Query) || strings.ContainsRune(input.Query, 0) || input.Limit < 0 || input.Limit > 128 || len(input.Cursor) > 4096 || input.Mode != "" && input.Mode != "keyword" && input.Mode != "hybrid" && input.Mode != "vector" {
 		return MemoryManagementResponse{}, errors.New("记忆检索参数无效")
 	}
@@ -221,6 +232,12 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 	}
 	for _, resource := range snapshot.Resources {
 		key, value, kind, source, importance := memoryManagementText(resource.Body)
+		var document map[string]json.RawMessage
+		_ = json.Unmarshal(resource.Body, &document)
+		state := memorypolicy.ReadLifecycle(document, now).Effective(now)
+		if input.RetentionLevel != 0 && input.RetentionLevel != state.RetentionLevel || input.Pinned != nil && *input.Pinned != state.Pinned || input.DecayState != "" && input.DecayState != state.DecayState {
+			continue
+		}
 		if input.MemoryType != "" && input.MemoryType != kind || input.Source != "" && input.Source != source {
 			continue
 		}
@@ -231,7 +248,7 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		}
 		result.Resources = append(result.Resources, resource)
 		if input.Mode == "hybrid" || input.Mode == "vector" {
-			result.Scores[resource.ID] = semantic[resource.ID]
+			result.Scores[resource.ID] = semantic[resource.ID] * (.85 + state.MemoryStrength*.2)
 			if input.Mode == "hybrid" && keyword {
 				result.Scores[resource.ID] += 1
 			}
@@ -250,6 +267,7 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		catalog = append(catalog, coordination.ResourceVersion{Kind: resource.Kind, ID: resource.ID, Revision: resource.Revision})
 	}
 	filter := input
+	result.Total = len(result.Resources)
 	filter.Cursor, filter.Limit = "", 0
 	page := memoryManagementCursor{Scope: memoryManagementHash(summaryAuthority(scope)), Filter: memoryManagementHash(filter), Catalog: memoryManagementHash(catalog)}
 	if input.Cursor != "" {
@@ -276,10 +294,16 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 	if err := coordination.ValidateRoleRevision(ctx, e.data, scope); err != nil {
 		return MemoryManagementResponse{}, err
 	}
+	for index, resource := range result.Resources {
+		result.Resources[index].Body = memorypolicy.ProjectLifecycle(resource.Body, time.Now())
+	}
 	return result, nil
 }
 
 func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input MemoryManagementInput) (MemoryManagementResponse, error) {
+	if input.RetentionLevel < 0 || input.RetentionLevel > 5 {
+		return MemoryManagementResponse{}, errors.New("记忆等级必须为 L1—L5")
+	}
 	input.Key, input.Value = strings.TrimSpace(input.Key), strings.TrimSpace(input.Value)
 	if input.Action != "create" && input.Action != "resolve" || input.Key == "" || input.Value == "" || len(input.Key) > 512 || len(input.Value) > 128<<10 || !utf8.ValidString(input.Key+input.Value) || strings.ContainsRune(input.Key+input.Value, 0) || input.Importance < 0 || input.Importance > 10 || len(input.MemoryType) > 64 {
 		return MemoryManagementResponse{}, errors.New("记忆内容或管理操作参数无效")
@@ -384,7 +408,7 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 		return MemoryManagementResponse{}, coordination.ErrResourceVersion
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	derived := []DerivedMemory{{Kind: derivedKind, Key: input.Key, Body: body(map[string]any{"value": input.Value, "memoryType": input.MemoryType, "importance": input.Importance, "source": "manual", "createdAt": now})}}
+	derived := []DerivedMemory{{Kind: derivedKind, Key: input.Key, Body: body(map[string]any{"value": input.Value, "memoryType": input.MemoryType, "importance": input.Importance, "source": "manual", "createdAt": now, "retentionLevel": input.RetentionLevel, "pinned": input.Pinned})}}
 	mutations, err := e.prepareMemoryMutations(ctx, scope, "", derived, &snapshot)
 	if err != nil {
 		return MemoryManagementResponse{}, err

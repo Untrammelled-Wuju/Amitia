@@ -5,16 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"strings"
 )
 
 type MemoryTransferInput struct {
-	ExpectedLegacyRecord json.RawMessage `json:"expectedLegacyRecord,omitempty"`
-	Kind                 string          `json:"kind"`
-	ID                   string          `json:"id"`
-	ExpectedRevision     int64           `json:"expectedRevision"`
-	TargetScope          string          `json:"targetScope"`
-	TargetRoleID         string          `json:"targetRoleId,omitempty"`
+	Kind             string `json:"kind"`
+	ID               string `json:"id"`
+	ExpectedRevision int64  `json:"expectedRevision"`
+	TargetScope      string `json:"targetScope"`
+	TargetRoleID     string `json:"targetRoleId,omitempty"`
 }
 
 func (e *Engine) TransferMemory(ctx context.Context, request Request, input MemoryTransferInput) (coordination.Acknowledgement, error) {
@@ -40,13 +38,6 @@ func (e *Engine) TransferMemory(ctx context.Context, request Request, input Memo
 		target, targetRevision = role.ID, role.Revision
 	} else if input.TargetScope != "global" {
 		return coordination.Acknowledgement{}, coordination.ErrWrongOwner
-	}
-	if strings.HasPrefix(input.ID, "legacy/") {
-		port, ok := e.data.(coordination.LegacyMemoryTransferPort)
-		if !ok || len(input.ExpectedLegacyRecord) == 0 {
-			return coordination.Acknowledgement{}, coordination.ErrWrongOwner
-		}
-		return port.TransferLegacyMemory(ctx, scope, coordination.LegacyMemoryTransferRequest{Kind: input.Kind, ID: strings.TrimPrefix(input.ID, "legacy/"), ExpectedRecord: input.ExpectedLegacyRecord, TargetRoleID: target})
 	}
 	if input.ExpectedRevision < 1 {
 		return coordination.Acknowledgement{}, coordination.ErrResourceVersion

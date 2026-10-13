@@ -10,8 +10,9 @@ import (
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/system"
 )
 
@@ -145,7 +146,7 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 }
 
 type kernelMemoryQueryService struct {
-	memSvc memory.Service
+	engine *business.Engine
 }
 
 type conversationMessageSenderAdapter struct {
@@ -268,53 +269,57 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 	}, nil
 }
 
-func newKernelMemoryQueryService(memSvc memory.Service) *kernelMemoryQueryService {
-	return &kernelMemoryQueryService{memSvc: memSvc}
+func newKernelMemoryQueryService() *kernelMemoryQueryService {
+	return &kernelMemoryQueryService{}
 }
 
 func (s *kernelMemoryQueryService) Query(ctx context.Context, extensionID string, query string, limit int) ([]json.RawMessage, error) {
+	scope, owned := coordination.FromContext(ctx)
+	host := kernel.GetHostAPIScope(ctx)
+	if !owned || s.engine == nil || scope.SpaceID != host.SpaceID || scope.RoleID != host.CharacterID {
+		return nil, fmt.Errorf("记忆查询缺少当前数据归属")
+	}
 	if strings.TrimSpace(query) == "" {
 		return []json.RawMessage{}, nil
 	}
-	if limit <= 0 || limit > 50 {
+	if limit < 1 || limit > 50 {
 		limit = 10
 	}
-	scopeCtx := kernel.GetHostAPIScope(ctx)
-	req := &memory.SearchMemoryRequest{
-		Keyword:     query,
-		CharacterID: scopeCtx.CharacterID,
-		Limit:       limit,
-	}
-	if strings.TrimSpace(scopeCtx.SpaceID) == "" {
-		return []json.RawMessage{}, nil
-	}
-	type scopedMemoryReader interface {
-		SearchForSpace(req *memory.SearchMemoryRequest, spaceID string) ([]memory.Memory, error)
-	}
-	scopedMemory, ok := s.memSvc.(scopedMemoryReader)
-	if !ok {
-		return nil, fmt.Errorf("memory service does not support authenticated ownership")
-	}
-	memories, err := scopedMemory.SearchForSpace(req, scopeCtx.SpaceID)
+	result, err := s.engine.SearchOwnedMemories(ctx, business.Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID, RoleID: scope.RoleID, RequestID: scope.RequestID + "|host-memory"}, business.MemoryManagementQuery{Query: query, Mode: "keyword", Limit: limit})
 	if err != nil {
 		return nil, err
 	}
-	results := make([]json.RawMessage, 0, len(memories))
-	for _, m := range memories {
-		value := m.Value
-		if m.SensitivityLevel == "confidential" || m.SensitivityLevel == "restricted" {
-			value = "[restricted]"
-		} else if utf8.RuneCountInString(value) > maxMemoryValueLength {
-			value = truncateRunes(value, maxMemoryValueLength)
+	results := []json.RawMessage{}
+	for _, row := range result.Resources {
+		if !coordination.ResourceUsable(row.Body, time.Now()) {
+			continue
 		}
-		entry, _ := json.Marshal(map[string]any{
-			"id":         m.ID,
-			"memoryType": m.MemoryType,
-			"key":        m.Key,
-			"value":      value,
-			"importance": m.Importance,
-			"createdAt":  m.CreatedAt,
-		})
+		var document struct {
+			Key     string `json:"key"`
+			Content struct {
+				Value       string `json:"value"`
+				Text        string `json:"text"`
+				MemoryType  string `json:"memoryType"`
+				Importance  int    `json:"importance"`
+				Sensitivity string `json:"sensitivityLevel"`
+			} `json:"content"`
+		}
+		if json.Unmarshal(row.Body, &document) != nil {
+			return nil, fmt.Errorf("记忆记录格式无效")
+		}
+		text := document.Content.Value
+		if text == "" {
+			text = document.Content.Text
+		}
+		if document.Content.Sensitivity == "confidential" || document.Content.Sensitivity == "restricted" {
+			text = "[restricted]"
+		} else if utf8.RuneCountInString(text) > maxMemoryValueLength {
+			text = truncateRunes(text, maxMemoryValueLength)
+		}
+		entry, err := json.Marshal(map[string]any{"id": row.ID, "key": document.Key, "value": text, "memoryType": document.Content.MemoryType, "importance": document.Content.Importance})
+		if err != nil {
+			return nil, err
+		}
 		results = append(results, entry)
 	}
 	return results, nil

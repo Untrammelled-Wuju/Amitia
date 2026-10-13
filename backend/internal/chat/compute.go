@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/decision"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/runtimegate"
@@ -25,6 +26,7 @@ import (
 )
 
 type ComputeResult struct {
+	RecallEvidence       []coordination.ResourceVersion
 	RequestID            string
 	TurnID               string
 	ConversationID       string
@@ -233,9 +235,20 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		cfg.ReasoningEffort = ""
 	}
 
+	var recallEvidence []coordination.ResourceVersion
 	sys1Result := s.sys1Builder(convID, runtimeProfile, req.Message, req.Runtime)
 	history := s.loadHistoryExcluding(convID, userMsgID)
 	sys2Result := s.sys2Builder(convID, charID, requestID, req.Channel, req.Message)
+	if s.canonicalMemory != nil && shouldRetrieveMemory(req.Message) {
+		memories, err := s.canonicalMemory.Recall(ctx, req.SpaceID, charID, req.Message, 8)
+		if err != nil {
+			return nil, err
+		}
+		sys2Result.MemoryInjectRaw = s.buildMemoryInjectItems(memories)
+		for _, result := range memories {
+			recallEvidence = append(recallEvidence, coordination.ResourceVersion{Kind: "memory", ID: result.Memory.ID, Revision: int64(result.Memory.Version)})
+		}
+	}
 
 	kind := resolveExpressionChannel(req.Channel, req.VoiceMessage)
 	channelPrompt := expression.CompileChannelPrompt(kind)
@@ -554,6 +567,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		Trace:                trace,
 		TotalTokens:          totalTokens,
 		PipelineMessages:     pipelineMessages,
+		RecallEvidence:       recallEvidence,
 		TurnItems:            turnRecorder.snapshotItems(),
 	}, nil
 }
@@ -588,7 +602,7 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 		result.UserMessageContent,
 		result.TitleSourceReply,
 	)
-	s.startPostProcessing(ctx, result.Trace, result.SpaceID, result.ConversationID, result.ThreadID, result.ExecutionID, result.CharacterID, result.Source, result.RequestID, result.UserMessageContent, result.PipelineMessages, result.Reply)
+	s.startPostProcessing(ctx, result.Trace, result.SpaceID, result.ConversationID, result.ThreadID, result.ExecutionID, result.CharacterID, result.Source, result.RequestID, result.UserMessageContent, result.PipelineMessages, result.Reply, result.RecallEvidence)
 }
 
 func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) string {

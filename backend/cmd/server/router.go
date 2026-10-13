@@ -575,6 +575,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			return services.KernelContainer.ChannelResolver.Has(channelID)
 		})
 		var systemRouterOptions []system.SystemRouterOption
+		systemRouterOptions = append(systemRouterOptions, system.WithCanonicalMemory(services.OwnedBusiness, spaceID))
 		if services.KernelContainer != nil {
 			systemRouterOptions = append(systemRouterOptions, system.WithApprovalBroker(services.KernelContainer.ApprovalBroker))
 		}

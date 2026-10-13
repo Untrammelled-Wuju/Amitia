@@ -6,6 +6,9 @@
       <el-select v-model="memoryType" clearable placeholder="全部记忆类型"><el-option label="全部类型" value="" /><el-option v-for="type in types" :key="type.value" :label="type.label" :value="type.value" /></el-select>
       <el-select v-model="sourceFilter" clearable placeholder="全部来源"><el-option label="全部来源" value="" /><el-option label="手动新增" value="manual" /><el-option label="审核保存" value="reviewed" /></el-select>
       <el-select v-model="sort" aria-label="记忆排序"><el-option label="默认排序" value="" /><el-option label="重要程度优先" value="importance_desc" /></el-select>
+      <el-select v-model="retentionLevel" aria-label="保留等级"><el-option label="全部等级" :value="0" /><el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" /></el-select>
+      <el-checkbox v-model="pinnedOnly">仅看固定记忆</el-checkbox>
+      <el-select v-model="decayState" aria-label="记忆状态"><el-option label="全部状态" value="" /><el-option label="活跃" value="active" /><el-option label="淡化" value="fading" /><el-option label="自动归档" value="archived" /></el-select>
       <el-button :loading="loading" @click="search()">检索</el-button>
     </div>
     <div class="management-actions">
@@ -21,7 +24,7 @@
       <div><el-button :disabled="loading" @click="accept(row)">确认保存</el-button><el-button :disabled="loading" @click="editCandidate(row)">编辑候选</el-button><el-button :disabled="loading" @click="reject(row)">拒绝</el-button></div>
     </article>
     <el-dialog v-model="editorOpen" :title="editingCandidate ? '编辑候选记忆' : '新增记忆'" width="min(560px, 96vw)">
-      <el-form label-position="top"><el-form-item label="标题"><el-input v-model="form.key" maxlength="512" /></el-form-item><el-form-item label="内容"><el-input v-model="form.value" type="textarea" :rows="5" /></el-form-item><el-form-item label="记忆类型"><el-select v-model="form.memoryType"><el-option v-for="kind in types" :key="kind.value" :label="kind.label" :value="kind.value" /></el-select></el-form-item><el-form-item label="重要程度"><el-input-number v-model="form.importance" :min="0" :max="10" /></el-form-item></el-form>
+      <el-form label-position="top"><el-form-item label="标题"><el-input v-model="form.key" maxlength="512" /></el-form-item><el-form-item label="内容"><el-input v-model="form.value" type="textarea" :rows="5" /></el-form-item><el-form-item label="记忆类型"><el-select v-model="form.memoryType"><el-option v-for="kind in types" :key="kind.value" :label="kind.label" :value="kind.value" /></el-select></el-form-item><el-form-item label="重要程度"><el-input-number v-model="form.importance" :min="0" :max="10" /></el-form-item><el-form-item label="保留等级"><el-select v-model="form.retentionLevel" :disabled="form.pinned"><el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" /></el-select></el-form-item><el-form-item label="固定记忆"><el-switch v-model="form.pinned" /><span>固定为 L1，保持完整强度</span></el-form-item></el-form>
       <template #footer><el-button @click="editorOpen = false">取消</el-button><el-button :loading="loading" @click="save">保存</el-button></template>
     </el-dialog>
     <el-dialog v-model="generateOpen" title="从已保存对话提取候选" width="min(560px, 96vw)">
@@ -55,6 +58,9 @@ const mode = ref("keyword");
 const memoryType = ref("");
 const sourceFilter = ref("");
 const sort = ref("");
+const retentionLevel = ref(0);
+const pinnedOnly = ref(false);
+const decayState = ref("");
 const loading = ref(false);
 const error = ref("");
 const results = ref<OwnedMemoryManagementResource[]>([]);
@@ -64,7 +70,7 @@ const editorOpen = ref(false);
 const generateOpen = ref(false);
 const conflictOpen = ref(false);
 const editingCandidate = ref<OwnedMemoryManagementResource>();
-const form = reactive({ key: "", value: "", memoryType: "custom", importance: 5 });
+const form = reactive({ key: "", value: "", memoryType: "custom", importance: 5, retentionLevel: 3, pinned: false });
 const types = [{ value: "fact", label: "事实" }, { value: "preference", label: "偏好" }, { value: "episodic", label: "情节" }, { value: "relationship", label: "关系" }, { value: "custom", label: "其他" }];
 const conversations = ref<any[]>([]);
 const conversationId = ref("");
@@ -82,14 +88,15 @@ const snapshot = () => JSON.parse(JSON.stringify(props.executionScope)) as Owned
 const text = (row: OwnedMemoryManagementResource) => typeof row.body.content === "string" ? row.body.content : String(row.body.content?.value || row.body.content?.text || "");
 function invalidate() { generation++; editorScope = undefined; generateScope = undefined; conflictIntent = undefined; results.value = []; candidates.value = []; nextCursor.value = ""; editorOpen.value = false; generateOpen.value = false; conflictOpen.value = false; loading.value = false; attempt = ""; attemptFingerprint = ""; }
 watch(() => ownedMemoryAuthority(props.executionScope), invalidate, { flush: "sync" });
-watch([query, mode, memoryType, sourceFilter, sort], () => { results.value = []; nextCursor.value = ""; });
+watch([query, mode, memoryType, sourceFilter, sort, retentionLevel, pinnedOnly, decayState], () => { results.value = []; nextCursor.value = ""; });
 onUnmounted(invalidate);
 async function search(older = false) {
   const scope = snapshot(); const ticket = generation;
   loading.value = true; error.value = "";
-  const filter = { query: query.value, mode: mode.value, memoryType: memoryType.value, source: sourceFilter.value, sort: sort.value };
+  const filters = () => ({ query: query.value, mode: mode.value, memoryType: memoryType.value, source: sourceFilter.value, sort: sort.value, ...(retentionLevel.value ? { retentionLevel: retentionLevel.value } : {}), ...(pinnedOnly.value ? { pinned: true } : {}), ...(decayState.value ? { decayState: decayState.value } : {}) });
+  const filter = filters();
   const filterKey = JSON.stringify(filter);
-  try { const page = await api.read(scope, { ...filter, cursor: older ? nextCursor.value : "", limit: 32 }); if (ticket !== generation || filterKey !== JSON.stringify({ query: query.value, mode: mode.value, memoryType: memoryType.value, source: sourceFilter.value, sort: sort.value })) return; results.value = older ? [...results.value, ...page.resources] : page.resources; nextCursor.value = page.nextCursor; }
+  try { const page = await api.read(scope, { ...filter, cursor: older ? nextCursor.value : "", limit: 32 }); if (ticket !== generation || filterKey !== JSON.stringify(filters())) return; results.value = older ? [...results.value, ...page.resources] : page.resources; nextCursor.value = page.nextCursor; }
   catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "记忆检索失败"; }
   finally { if (ticket === generation) loading.value = false; }
 }
@@ -102,8 +109,8 @@ async function loadCandidates() {
   } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "候选记忆加载失败"; }
   finally { if (ticket === generation) loading.value = false; }
 }
-function openCreate() { editorScope = snapshot(); editingCandidate.value = undefined; Object.assign(form, { key: "", value: "", memoryType: "custom", importance: 5 }); attempt = ""; editorOpen.value = true; }
-function editCandidate(row: OwnedMemoryManagementResource) { editorScope = JSON.parse(JSON.stringify(row.executionScope)); editingCandidate.value = JSON.parse(JSON.stringify(row)); Object.assign(form, { key: row.body.key, value: row.body.value, memoryType: row.body.memoryType || "custom", importance: row.body.importance ?? 5 }); attempt = ""; editorOpen.value = true; }
+function openCreate() { editorScope = snapshot(); editingCandidate.value = undefined; Object.assign(form, { key: "", value: "", memoryType: "custom", importance: 5, retentionLevel: 3, pinned: false }); attempt = ""; editorOpen.value = true; }
+function editCandidate(row: OwnedMemoryManagementResource) { editorScope = JSON.parse(JSON.stringify(row.executionScope)); editingCandidate.value = JSON.parse(JSON.stringify(row)); Object.assign(form, { key: row.body.key, value: row.body.value, memoryType: row.body.memoryType || "custom", importance: row.body.importance ?? 5, retentionLevel: row.body.retentionLevel || 3, pinned: row.body.pinned === true }); attempt = ""; editorOpen.value = true; }
 async function mutate(scope: OwnedExecutionScope, input: Record<string, unknown>, candidate = false) {
   if (ownedMemoryAuthority(scope) !== ownedMemoryAuthority(props.executionScope)) { error.value = "服务或权限已变化，请重新加载原记录再操作"; return; }
   const ticket = generation; const fingerprint = JSON.stringify([ownedMemoryAuthority(scope), input, candidate]); if (!attempt || fingerprint !== attemptFingerprint) { attempt = crypto.randomUUID(); attemptFingerprint = fingerprint; }

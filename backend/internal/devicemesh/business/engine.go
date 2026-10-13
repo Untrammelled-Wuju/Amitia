@@ -13,31 +13,33 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/memorypolicy"
 )
 
 var ErrUncertainExecution = errors.New("上次执行的结果尚未确认，请查询结果后再继续，系统不会重复执行已发起的动作")
 var ErrInterrupted = errors.New("当前回复已主动停止")
 
 type Request struct {
-	MemoryView         string                       `json:"memoryView,omitempty"`
-	Quote              *QuoteReference              `json:"quote,omitempty"`
-	ConversationOrigin *ConversationOrigin          `json:"conversationOrigin,omitempty"`
-	Attachments        []Attachment                 `json:"attachments,omitempty"`
-	ExpectedScope      *coordination.ExecutionScope `json:"expectedExecutionScope,omitempty"`
-	Context            *ForwardedContext            `json:"context,omitempty"`
-	ProjectID          string                       `json:"projectId,omitempty"`
-	SpaceID            string                       `json:"-"`
-	DeviceID           string                       `json:"-"`
-	CoreID             string                       `json:"-"`
-	ProjectWorkspaces  []ProjectWorkspace           `json:"-"`
-	PrimaryWorkspaceID string                       `json:"-"`
-	TargetDeviceID     string                       `json:"targetDeviceId,omitempty"`
-	RoleID             string                       `json:"characterId,omitempty"`
-	HistoricalRoleID   string                       `json:"historicalRoleId,omitempty"`
-	ConversationID     string                       `json:"conversationId,omitempty"`
-	PermissionMode     string                       `json:"permissionMode,omitempty"`
-	RequestID          string                       `json:"requestId"`
-	Message            string                       `json:"message"`
+	RecallEvidence     []coordination.ResourceVersion `json:"-"`
+	MemoryView         string                         `json:"memoryView,omitempty"`
+	Quote              *QuoteReference                `json:"quote,omitempty"`
+	ConversationOrigin *ConversationOrigin            `json:"conversationOrigin,omitempty"`
+	Attachments        []Attachment                   `json:"attachments,omitempty"`
+	ExpectedScope      *coordination.ExecutionScope   `json:"expectedExecutionScope,omitempty"`
+	Context            *ForwardedContext              `json:"context,omitempty"`
+	ProjectID          string                         `json:"projectId,omitempty"`
+	SpaceID            string                         `json:"-"`
+	DeviceID           string                         `json:"-"`
+	CoreID             string                         `json:"-"`
+	ProjectWorkspaces  []ProjectWorkspace             `json:"-"`
+	PrimaryWorkspaceID string                         `json:"-"`
+	TargetDeviceID     string                         `json:"targetDeviceId,omitempty"`
+	RoleID             string                         `json:"characterId,omitempty"`
+	HistoricalRoleID   string                         `json:"historicalRoleId,omitempty"`
+	ConversationID     string                         `json:"conversationId,omitempty"`
+	PermissionMode     string                         `json:"permissionMode,omitempty"`
+	RequestID          string                         `json:"requestId"`
+	Message            string                         `json:"message"`
 }
 
 type ContextMessage struct {
@@ -640,7 +642,7 @@ func (e *Engine) completeMemory(ctx context.Context, inference Inference, finger
 	if err := e.coordination.Validate(ctx, scope); err != nil {
 		return response, err
 	}
-	mutations, err := e.prepareMemoryMutations(ctx, scope, response.ConversationID, derived, &inference.Snapshot)
+	mutations, err := e.prepareMemoryMutations(ctx, scope, response.ConversationID, modelMemoryDerived(derived), &inference.Snapshot)
 	if err != nil {
 		response.MemoryStatus = "failed"
 		if memoryFailureStatus(err) == "paused" {
@@ -649,6 +651,7 @@ func (e *Engine) completeMemory(ctx context.Context, inference Inference, finger
 		response.MemoryError = err.Error()
 		return e.recordMemoryStatus(ctx, scope, fingerprint, response, checkpointRevision)
 	}
+	mutations = reinforceMemoryMutations(mutations, inference.Snapshot, scope, time.Now())
 	if len(mutations) > 0 {
 		dependencies := append([]coordination.ResourceVersion(nil), response.Evidence...)
 		for _, resource := range inference.Snapshot.Resources {
@@ -734,7 +737,37 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		digest := sha256.Sum256([]byte(coordination.StorageRole(scope, "memory") + "\x00memory\x00" + key))
 		id := hex.EncodeToString(digest[:16])
 		sources[key] = id
-		result = append(result, coordination.Mutation{Kind: "memory", ID: id, RoleID: coordination.StorageRole(scope, "memory"), ExpectedRevision: version(snapshot, "memory", id), Body: body(map[string]any{"conversationId": conversation, "key": item.Key, "kind": item.Kind, "content": item.Body, "executionScope": scope})})
+		document := map[string]json.RawMessage{"conversationId": body(conversation), "key": body(item.Key), "kind": body(item.Kind), "content": item.Body, "executionScope": body(scope)}
+		var metadata struct {
+			RetentionLevel int    `json:"retentionLevel"`
+			Pinned         bool   `json:"pinned"`
+			Importance     int    `json:"importance"`
+			MemoryType     string `json:"memoryType"`
+			MemorySubtype  string `json:"memorySubtype"`
+		}
+		_ = json.Unmarshal(item.Body, &metadata)
+		state := memorypolicy.NewLifecycle(metadata.RetentionLevel, metadata.Pinned, metadata.Importance, time.Now())
+		if metadata.RetentionLevel == 0 {
+			state = memorypolicy.AssignLifecycle(metadata.MemoryType, metadata.MemorySubtype, metadata.Importance, metadata.Pinned, time.Now())
+		}
+		for _, previous := range snapshot.Resources {
+			if previous.Kind == "memory" && previous.ID == id {
+				var old map[string]json.RawMessage
+				if json.Unmarshal(previous.Body, &old) == nil {
+					state = memorypolicy.ReadLifecycle(old, time.Now())
+					for _, field := range []string{"allowContextUse", "expiresAt", "archivedAt"} {
+						if value, found := old[field]; found {
+							document[field] = value
+						}
+					}
+				}
+			}
+		}
+		if err := state.Validate(); err != nil {
+			return nil, err
+		}
+		memorypolicy.WriteLifecycle(document, state)
+		result = append(result, coordination.Mutation{Kind: "memory", ID: id, RoleID: coordination.StorageRole(scope, "memory"), ExpectedRevision: version(snapshot, "memory", id), Body: body(document)})
 	}
 	for _, item := range derived {
 		if item.Key == "" || !json.Valid(item.Body) {

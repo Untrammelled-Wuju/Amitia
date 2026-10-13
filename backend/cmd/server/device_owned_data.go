@@ -194,11 +194,6 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result, err = port.ProjectionState(ctx, scope, req.Operation == "projection-rebuild")
 			case "snapshot":
 				result, err = port.Snapshot(ctx, scope, req.Query)
-			case "legacy-memory-transfer":
-				if req.Query.LegacyMemoryTransfer == nil {
-					return coordination.ErrWrongOwner
-				}
-				result, err = port.TransferLegacyMemory(ctx, scope, *req.Query.LegacyMemoryTransfer)
 			case "resource":
 				result, err = port.Resource(ctx, scope, req.Query.ResourceKind, req.Query.ResourceID)
 			case "task-history-resource":

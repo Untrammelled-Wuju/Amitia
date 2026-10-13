@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useApi } from "../../../composables/useApi";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 
 export function useDashboardData() {
   const { get, post } = useApi();
+  const owned = useDeviceOwnedConversation();
 
   const health = ref<any>({});
   const runtimeHealth = ref<any>(null);
@@ -286,7 +288,10 @@ export function useDashboardData() {
       }
     } catch {}
     try {
-      const mem = await get<any>("/api/memories", { limit: 1 });
+      if (!await owned.refresh()) throw new Error("当前记忆服务尚未就绪");
+      const characterId = owned.selectInitialRole(getActiveCharacterId());
+      if (!characterId) { totalMemories.value = 0; return; }
+      const mem = await get<any>("/api/device-mesh/v1/business/memories", { characterId, memoryView: "all", mode: "keyword", limit: 1 });
       if (mem) totalMemories.value = mem.total || 0;
     } catch {}
   }

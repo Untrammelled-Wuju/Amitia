@@ -187,8 +187,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @select="handleSwitchChar"
     />
 
-    <DeviceOwnedMemoryPanel v-if="owned.enabled.value" v-model:visible="showMemories" :character-id="characterId" :conversation-id="convId" />
-    <MemoryPanel v-else v-model:visible="showMemories" :memories="memories" />
+    <DeviceOwnedMemoryPanel v-model:visible="showMemories" :character-id="characterId" :conversation-id="convId" />
 
     <el-drawer v-model="showSummaryDrawer" title="会话摘要" data-amitia-ui="component.drawer" direction="rtl" size="420px">
       <div v-if="convSummary" class="summary-drawer-text">{{ convSummary }}</div>
@@ -227,7 +226,6 @@ import { conversationReference } from "../../runtime/device-owned-conversation-r
 import MessagesArea from "../../components/MessagesArea.vue";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
-import MemoryPanel from "../../components/MemoryPanel.vue";
 import DeviceOwnedMemoryPanel from "../../components/DeviceOwnedMemoryPanel.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";

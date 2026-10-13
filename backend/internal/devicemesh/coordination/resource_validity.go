@@ -2,12 +2,16 @@ package coordination
 
 import (
 	"encoding/json"
+	"github.com/u-ai/backend/internal/memorypolicy"
 	"time"
 )
 
 func ResourceUsable(body json.RawMessage, now time.Time) bool {
 	var value map[string]json.RawMessage
 	if err := json.Unmarshal(body, &value); err != nil || value == nil {
+		return false
+	}
+	if _, exists := value["memoryStrength"]; exists && value["retentionLevel"] != nil && memorypolicy.ReadLifecycle(value, now).Effective(now).DecayState == "archived" {
 		return false
 	}
 	if raw, exists := value["allowContextUse"]; exists {

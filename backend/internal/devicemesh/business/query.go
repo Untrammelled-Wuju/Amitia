@@ -3,9 +3,11 @@ package business
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/memorypolicy"
 )
 
 type QueryResult struct {
@@ -120,6 +122,20 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 	result.DeliveryFailures, err = e.coordination.DeliveryFailures(ctx, scope, query.ConversationID)
 	if err != nil {
 		return QueryResult{}, err
+	}
+	if query.Management {
+		for index, resource := range result.Snapshot.Resources {
+			if resource.Kind == "memory" {
+				result.Snapshot.Resources[index].Body = memorypolicy.ProjectLifecycle(resource.Body, time.Now())
+			}
+		}
+		if result.HistoricalSnapshot != nil {
+			for index, resource := range result.HistoricalSnapshot.Resources {
+				if resource.Kind == "memory" {
+					result.HistoricalSnapshot.Resources[index].Body = memorypolicy.ProjectLifecycle(resource.Body, time.Now())
+				}
+			}
+		}
 	}
 	return result, nil
 }

@@ -42,7 +42,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	case "message":
 		allowed = map[string]bool{"content": true}
 	case "memory":
-		allowed = map[string]bool{"content": true, "allowContextUse": true, "expiresAt": true, "archivedAt": true}
+		allowed = map[string]bool{"content": true, "allowContextUse": true, "expiresAt": true, "archivedAt": true, "retentionLevel": true, "memoryStrength": true, "pinned": true}
 	case "profile":
 		allowed = map[string]bool{"content": true}
 	case "episodic":
@@ -199,7 +199,15 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	if err := json.Unmarshal(resource.Body, &document); err != nil || document == nil {
 		return coordination.Acknowledgement{}, errors.New("数据格式不支持修改")
 	}
+	if edit.Kind == "memory" {
+		if err := editMemoryLifecycle(document, edit.Changes, time.Now()); err != nil {
+			return coordination.Acknowledgement{}, err
+		}
+	}
 	for key, value := range edit.Changes {
+		if edit.Kind == "memory" && (key == "retentionLevel" || key == "memoryStrength" || key == "pinned") {
+			continue
+		}
 		document[key] = value
 		if (edit.Kind == "conversation" || edit.Kind == "project") && (key == "archived" || key == "pinned" || key == "hidden") {
 			var enabled bool

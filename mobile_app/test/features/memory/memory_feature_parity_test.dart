@@ -128,6 +128,9 @@ class MemoryManagement extends DeviceOwnedMemoryService {
     String memoryType = '',
     String source = '',
     String sort = '',
+    int retentionLevel = 0,
+    bool? pinned,
+    String decayState = '',
     String cursor = '',
     Map<String, dynamic>? original,
     int limit = 128,
@@ -329,7 +332,7 @@ void main() {
     return source;
   }
 
-  testWidgets('记忆页面保留历史数据、默认全部、无重复分类并补齐操作', (tester) async {
+  testWidgets('记忆页面忽略旧版本数据、保留当前入口和操作', (tester) async {
     final source = await render(tester, 'memory');
     expect(find.text('查看范围'), findsNothing);
     expect(find.text('全部记忆'), findsOneWidget);
@@ -342,11 +345,8 @@ void main() {
     }
     await tester.tap(find.byTooltip('关闭筛选'));
     await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('owned-memory/legacy/old')),
-      findsOneWidget,
-    );
-    expect(find.textContaining('保留内容'), findsOneWidget);
+    expect(find.byKey(const ValueKey('owned-memory/legacy/old')), findsNothing);
+    expect(find.textContaining('保留内容'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('owned-memory/record')));
     await tester.pumpAndSettle();
     for (final text in ['编辑', '到期时间', '归档']) {

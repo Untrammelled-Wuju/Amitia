@@ -156,6 +156,7 @@ type service struct {
 	deliveryStore       DeliveryStore
 	toolRuntime         ModelToolRuntime
 	ownedToolRuntime    OwnedToolRuntime
+	canonicalMemory     CanonicalMemoryRuntime
 	inferenceAuthority  InferenceAuthority
 	hookInvoker         HookInvoker
 	desktopPetLifecycle DesktopPetLifecycleObserver
