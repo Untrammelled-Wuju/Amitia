@@ -19,7 +19,14 @@ func (h *Handler) StorageBackups(c *gin.Context) {
 }
 
 func (h *Handler) StorageCreateBackup(c *gin.Context) {
-	result := h.service.CreatePhysicalSafetySnapshot()
+	svc, ok := h.service.(interface {
+		CreatePhysicalSafetySnapshotContext(context.Context) map[string]interface{}
+	})
+	if !ok {
+		util.ErrorResponse(c, 503, "统一备份入口不可用", nil)
+		return
+	}
+	result := svc.CreatePhysicalSafetySnapshotContext(c.Request.Context())
 	if ok, exists := result["ok"].(bool); exists && !ok {
 		util.ErrorResponse(c, http.StatusInternalServerError, "创建备份失败", result)
 		return
@@ -33,7 +40,14 @@ func (h *Handler) StorageRestoreBackup(c *gin.Context) {
 		util.ErrorResponse(c, http.StatusBadRequest, "无效备份名称", nil)
 		return
 	}
-	result := h.service.RestorePhysicalSafetySnapshot(name)
+	svc, ok := h.service.(interface {
+		RestorePhysicalSafetySnapshotContext(context.Context, string) map[string]interface{}
+	})
+	if !ok {
+		util.ErrorResponse(c, 503, "统一恢复入口不可用", nil)
+		return
+	}
+	result := svc.RestorePhysicalSafetySnapshotContext(c.Request.Context(), name)
 	if ok, exists := result["ok"].(bool); exists && !ok {
 		util.ErrorResponse(c, http.StatusInternalServerError, "恢复备份失败", result)
 		return
@@ -62,7 +76,14 @@ func (h *Handler) StorageExportAmitia(c *gin.Context) {
 		util.ErrorResponse(c, 400, "characterId is required when scope is 'character'", nil)
 		return
 	}
-	util.SuccessResponse(c, h.service.StorageExportAmitia(body.Scope, body.CharacterID))
+	svc, ok := h.service.(interface {
+		StorageExportAmitiaContext(context.Context, string, string) map[string]interface{}
+	})
+	if !ok {
+		util.ErrorResponse(c, 503, "统一记忆导出入口不可用", nil)
+		return
+	}
+	util.SuccessResponse(c, svc.StorageExportAmitiaContext(c.Request.Context(), body.Scope, body.CharacterID))
 }
 
 func (h *Handler) StorageImportUserData(c *gin.Context) {

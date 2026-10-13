@@ -16,7 +16,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	kernelsqlite "github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 )
@@ -126,19 +125,9 @@ func TestMeshLocalSnapshotReadsOnlySelectedDeviceRoleAndLiveMemories(t *testing.
 			t.Fatal(err)
 		}
 	}
-	expired := time.Now().Add(-time.Hour).Format(time.RFC3339)
-	for _, item := range []memory.Memory{{ID: "live", SpaceID: p.legacySpaceID, CharacterID: "one", Key: "drink", Value: "tea", VerifiedStatus: "verified"}, {ID: "dead", SpaceID: p.legacySpaceID, CharacterID: "one", Key: "drink", Value: "coffee", VerifiedStatus: "tombstone"}, {ID: "expired", SpaceID: p.legacySpaceID, CharacterID: "one", Key: "temporary", Value: "expired", ExpiresAt: &expired, VerifiedStatus: "verified"}, {ID: "other", SpaceID: p.legacySpaceID, CharacterID: "two", Key: "private", Value: "other-role", VerifiedStatus: "verified"}} {
-		if err := p.services.DB.Create(&item).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
 	snapshot, err := p.Snapshot(t.Context(), scope, coordination.DataQuery{ConversationID: conversation.ID})
-	if err != nil || len(snapshot.LegacyMessages) != 1 || len(snapshot.LegacyMemories) != 1 {
+	if err != nil || len(snapshot.LegacyMessages) != 1 {
 		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
-	}
-	var remembered memory.Memory
-	if err := json.Unmarshal(snapshot.LegacyMemories[0], &remembered); err != nil || remembered.ID != "live" {
-		t.Fatalf("memory=%+v err=%v", remembered, err)
 	}
 	scope.ResourceOwnerID = "device-b"
 	if _, err := p.Snapshot(t.Context(), scope, coordination.DataQuery{}); !errors.Is(err, coordination.ErrWrongOwner) {

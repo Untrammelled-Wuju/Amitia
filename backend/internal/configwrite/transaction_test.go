@@ -208,7 +208,7 @@ func TestConfigurationHTTPHandlersKeepTheRevocableRequestScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	appctx := &app.AppContext{DB: db}
-	models := chat.NewHandler(chat.NewService(chat.NewRepository(appctx), appctx, nil, nil, nil, nil, nil, nil, nil, nil))
+	models := chat.NewHandler(chat.NewService(chat.NewRepository(appctx), appctx, nil, nil, nil, nil, nil))
 	voices := tts.NewHandler(tts.NewService(tts.NewRepository(db)))
 	transcription := asr.NewHandler(asr.NewService(asr.NewRepository(db)))
 	router := gin.New()

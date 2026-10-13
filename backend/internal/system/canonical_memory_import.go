@@ -16,6 +16,15 @@ func WithCanonicalMemory(engine *business.Engine, coreID string) SystemRouterOpt
 	return func(handler *Handler) { handler.canonicalMemory, handler.memoryCoreID = engine, coreID }
 }
 
+func WithMemoryConsumers(port business.MemoryConsumerPort) SystemRouterOption {
+	return func(handler *Handler) {
+		handler.memoryConsumer = port
+		if service, ok := handler.service.(*service); ok {
+			service.memoryConsumer = port
+		}
+	}
+}
+
 func (h *Handler) importMemoryRequest(c *gin.Context) (business.Request, error) {
 	actor := security.GetActor(c)
 	if h.canonicalMemory == nil || actor == nil || actor.DeviceID == "" {

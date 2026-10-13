@@ -24,6 +24,7 @@ type SummaryMessage struct {
 }
 
 type SummaryInference struct {
+	MemoryTopic    string
 	Scope          coordination.ExecutionScope
 	Role           coordination.Role
 	ConversationID string
@@ -225,6 +226,9 @@ func (e *Engine) GenerateSummary(ctx context.Context, request Request, expectedR
 	}
 	defer finish()
 	scope.RoleRevision = first.Scope.RoleRevision
+	if err := coordination.ResolveMemoryScope(&scope, first.Snapshot.Role, request.MemoryView); err != nil {
+		return SummaryResponse{}, err
+	}
 	if summaryAuthority(scope) != summaryAuthority(first.Scope) {
 		return SummaryResponse{}, coordination.ErrScopeExpired
 	}

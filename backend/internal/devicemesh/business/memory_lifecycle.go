@@ -19,6 +19,9 @@ func modelMemoryDerived(derived []DerivedMemory) []DerivedMemory {
 		for _, key := range []string{"retentionLevel", "memoryStrength", "pinned", "reinforceCount", "strengthUpdatedAt", "lastReinforcedAt", "decayState"} {
 			delete(content, key)
 		}
+		if item.Kind == "fact" || item.Kind == "profile" || item.Kind == "episodic" {
+			content["source"] = body("extraction")
+		}
 		result[index].Body = body(content)
 	}
 	return result

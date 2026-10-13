@@ -13,6 +13,17 @@ type MemoryTimeResolver struct {
 	clock    Clock
 }
 
+type ResolvedMemoryTimeRange struct {
+	FromUTC          *time.Time `json:"fromUtc"`
+	ToUTC            *time.Time `json:"toUtc"`
+	Timezone         string     `json:"timezone"`
+	LocalDateFrom    string     `json:"localDateFrom"`
+	LocalDateTo      string     `json:"localDateTo"`
+	Precision        string     `json:"precision"`
+	SourceExpression string     `json:"sourceExpression"`
+	Confidence       string     `json:"confidence"`
+}
+
 func NewMemoryTimeResolver(temporalSvc *Service, clock Clock) *MemoryTimeResolver {
 	if clock == nil {
 		clock = SystemClock{}

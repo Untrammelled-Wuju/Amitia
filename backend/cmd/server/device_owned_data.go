@@ -192,6 +192,14 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result, err = port.Roles(ctx, scope)
 			case "projection-status", "projection-rebuild":
 				result, err = port.ProjectionState(ctx, scope, req.Operation == "projection-rebuild")
+			case "memory-deletion-status":
+				var complete bool
+				complete, err = port.MemoryDeletionComplete(ctx, scope, req.Query.ResourceID)
+				result = map[string]interface{}{"ownerId": scope.ResourceOwnerID, "roleId": coordination.StorageRole(scope, "memory"), "complete": complete}
+			case "memory-deletion-cleanup":
+				var count int
+				count, err = port.CleanupMemoryDeletions(ctx, scope)
+				result = map[string]interface{}{"ownerId": scope.ResourceOwnerID, "cleaned": count}
 			case "snapshot":
 				result, err = port.Snapshot(ctx, scope, req.Query)
 			case "resource":

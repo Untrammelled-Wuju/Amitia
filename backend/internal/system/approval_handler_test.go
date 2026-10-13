@@ -52,7 +52,7 @@ func TestRegisterSystemRouterWiresApprovalBroker(t *testing.T) {
 	}
 
 	router := gin.New()
-	RegisterSystemRouter(router.Group(""), &app.AppContext{DB: handler.db}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, WithApprovalBroker(broker))
+	RegisterSystemRouter(router.Group(""), &app.AppContext{DB: handler.db}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, WithApprovalBroker(broker))
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/web-chat/conversations/"+conversationID+"/turns/turn-approval/approvals/"+pending[0].ID, bytes.NewBufferString(`{"approved":true}`))
 	request.Header.Set("Content-Type", "application/json")

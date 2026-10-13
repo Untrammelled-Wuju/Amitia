@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/character"
@@ -211,19 +212,53 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 					continue
 				}
 			}
-			if resource.SourceID != "" && kind != "profile" {
-				if _, found := usableMemories[resource.SourceID]; !found {
+			if resource.SourceID != "" {
+				if _, found := usableMemories[resource.SourceID]; !found || kind == "profile" {
 					source, err := p.store.Get(ctx, "memory", resource.SourceID)
 					if err != nil {
 						return snapshot, err
 					}
-					usableMemories[resource.SourceID] = source != nil && !source.Deleted && source.RoleID == coordination.StorageRole(scope, "memory") && coordination.ResourceUsable(source.Body, time.Now())
-					if usableMemories[resource.SourceID] {
-						snapshot.Resources = append(snapshot.Resources, *source)
+					expectedSourceRole := coordination.StorageRole(scope, "memory")
+					if kind == "profile" {
+						expectedSourceRole = coordination.GlobalMemoryRole
+					}
+					usableMemories[resource.SourceID] = source != nil && !source.Deleted && source.RoleID == expectedSourceRole && coordination.ResourceUsable(source.Body, time.Now())
+					if usableMemories[resource.SourceID] && source.RoleID == coordination.StorageRole(scope, "memory") {
+						alreadyPresent := false
+						for _, row := range snapshot.Resources {
+							if row.Kind == "memory" && row.ID == source.ID {
+								alreadyPresent = true
+								break
+							}
+						}
+						if !alreadyPresent {
+							snapshot.Resources = append(snapshot.Resources, *source)
+						}
 					}
 				}
 				if !usableMemories[resource.SourceID] {
 					continue
+				}
+			}
+			if kind == "graph" {
+				var document struct {
+					Content struct {
+						Target         string `json:"target"`
+						TargetKind     string `json:"targetKind"`
+						TargetRevision int64  `json:"targetRevision"`
+					} `json:"content"`
+				}
+				if json.Unmarshal(resource.Body, &document) != nil {
+					return snapshot, coordination.ErrResourceVersion
+				}
+				if document.Content.TargetKind == "memory" {
+					target, err := p.store.Get(ctx, "memory", strings.TrimPrefix(document.Content.Target, "memory:"))
+					if err != nil {
+						return snapshot, err
+					}
+					if target == nil || target.Deleted || target.RoleID != resource.RoleID || !coordination.ResourceUsable(target.Body, time.Now()) {
+						continue
+					}
 				}
 			}
 			if kind == "conversation" && !query.ListConversations && resource.ID != query.ConversationID {

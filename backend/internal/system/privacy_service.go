@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/devicemesh/business"
 )
 
 const (
@@ -23,16 +25,6 @@ type privacyMessageRow struct {
 	SafetyLevel        string `gorm:"column:safety_level"`
 	MessageSource      string `gorm:"column:message_source"`
 	ConversationSource string `gorm:"column:conversation_source"`
-}
-
-type privacyMemoryRow struct {
-	ID               string `gorm:"column:id"`
-	CharacterID      string `gorm:"column:character_id"`
-	MemoryType       string `gorm:"column:memory_type"`
-	Key              string `gorm:"column:key"`
-	Value            string `gorm:"column:value"`
-	CreatedAt        string `gorm:"column:created_at"`
-	SensitivityLevel string `gorm:"column:sensitivity_level"`
 }
 
 type privacyMaskTarget struct {
@@ -54,6 +46,15 @@ var privacySensitivePatterns = []struct {
 }
 
 func (s *service) PrivacyScan(scope []string) map[string]interface{} {
+	for _, item := range normalizePrivacyScopes(scope) {
+		if item == privacyScopeMemories {
+			return map[string]interface{}{"status": "failed", "error": "记忆隐私扫描必须通过统一记忆入口"}
+		}
+	}
+	return s.privacyScan(scope, business.MemoryPrivacySnapshot{})
+}
+
+func (s *service) privacyScan(scope []string, memories business.MemoryPrivacySnapshot) map[string]interface{} {
 	normalizedScope := normalizePrivacyScopes(scope)
 	scanID := fmt.Sprintf("scan_%d", time.Now().UnixNano())
 	findings := make([]interface{}, 0)
@@ -78,13 +79,8 @@ func (s *service) PrivacyScan(scope []string) map[string]interface{} {
 				}
 			}
 		case privacyScopeMemories:
-			rows := s.scanPrivacyMemories()
-			totalScanned += len(rows)
-			for _, row := range rows {
-				if finding := privacyMemoryFinding(row); finding != nil {
-					findings = append(findings, finding)
-				}
-			}
+			totalScanned += memories.Count
+			findings = append(findings, memories.Findings...)
 		}
 	}
 
@@ -139,16 +135,6 @@ func (s *service) scanPrivacyMessages(imported bool) []privacyMessageRow {
 	return rows
 }
 
-func (s *service) scanPrivacyMemories() []privacyMemoryRow {
-	var rows []privacyMemoryRow
-	s.db.Table("memories").
-		Select("id, character_id, memory_type, key, value, created_at, sensitivity_level").
-		Order("created_at DESC").
-		Limit(1000).
-		Scan(&rows)
-	return rows
-}
-
 func privacyMessageFinding(row privacyMessageRow, sourceTable string) map[string]interface{} {
 	pattern, severity, ok := matchPrivacyPattern(row.Content)
 	if !ok {
@@ -170,30 +156,6 @@ func privacyMessageFinding(row privacyMessageRow, sourceTable string) map[string
 		"snippet":        privacyPreview(row.Content),
 		"preview":        privacyPreview(row.Content),
 		"masked":         strings.EqualFold(row.SafetyLevel, "masked") || strings.TrimSpace(row.Content) == "[已脱敏]",
-	}
-}
-
-func privacyMemoryFinding(row privacyMemoryRow) map[string]interface{} {
-	searchText := strings.TrimSpace(row.Key + " " + row.Value)
-	pattern, severity, ok := matchPrivacyPattern(searchText)
-	if !ok {
-		return nil
-	}
-	return map[string]interface{}{
-		"id":           row.ID,
-		"recordId":     row.ID,
-		"characterId":  row.CharacterID,
-		"memoryType":   row.MemoryType,
-		"createdAt":    row.CreatedAt,
-		"pattern":      pattern,
-		"severity":     severity,
-		"risk_level":   severity,
-		"risk_type":    pattern,
-		"source_table": privacyScopeMemories,
-		"sourceTable":  privacyScopeMemories,
-		"snippet":      privacyPreview(row.Value),
-		"preview":      privacyPreview(row.Value),
-		"masked":       strings.TrimSpace(row.Value) == "[已脱敏]",
 	}
 }
 

@@ -41,14 +41,8 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	if services.Chat == nil {
 		t.Fatal("missing chat service")
 	}
-	if services.Memory == nil {
-		t.Fatal("missing memory service")
-	}
-	if services.Profile == nil {
-		t.Fatal("missing profile service")
-	}
-	if services.Episodic == nil {
-		t.Fatal("missing episodic service")
+	if services.MemoryConsumers == nil {
+		t.Fatal("missing unified memory consumer")
 	}
 	if services.WorldBook == nil {
 		t.Fatal("missing worldbook service")

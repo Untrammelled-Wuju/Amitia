@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/embedding"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 func ownedPrompt(inference business.Inference) ([]map[string]interface{}, error) {
@@ -58,10 +59,6 @@ func ownedPromptContext(ctx context.Context, inference business.Inference) ([]ma
 	if inference.HistoricalSnapshot != nil {
 		historical := *inference.HistoricalSnapshot
 		historical.LegacyMessages = nil
-		historical.LegacyMemories = nil
-		historical.LegacyProfiles = nil
-		historical.LegacyEpisodes = nil
-		historical.LegacyGraphs = nil
 		historical.Resources = make([]coordination.Resource, 0, len(inference.HistoricalSnapshot.Resources))
 		for _, resource := range inference.HistoricalSnapshot.Resources {
 			if resource.Kind != "vector" && resource.Kind != "message" {
@@ -330,6 +327,14 @@ func (s *service) OwnedQueryVector(ctx context.Context, message string) ([]float
 	embedder := embedding.NewService(s.db)
 	defer embedder.Close()
 	return embedder.EmbedContextWithFingerprint(ctx, message)
+}
+
+func (s *service) OwnedMemoryTemporalEnabled(ctx context.Context, spaceID string) (bool, error) {
+	profile, err := temporal.NewService(temporal.NewRepository(s.db), temporal.SystemClock{}).GetProfile(ctx, temporal.OwnerSpace, spaceID)
+	if err != nil {
+		return false, err
+	}
+	return profile.MemoryResonance, nil
 }
 
 func ownedSummaryContext(inference business.Inference) []json.RawMessage {

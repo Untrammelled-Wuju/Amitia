@@ -177,7 +177,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	})
 
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
-	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
+	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.MemoryConsumers)
 	if services.KernelContainer != nil {
 		systemHandler.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
 		systemHandler.SetSearchCredentialSecretBroker(services.KernelContainer.SecretBroker)
@@ -576,10 +576,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		})
 		var systemRouterOptions []system.SystemRouterOption
 		systemRouterOptions = append(systemRouterOptions, system.WithCanonicalMemory(services.OwnedBusiness, spaceID))
+		systemRouterOptions = append(systemRouterOptions, system.WithMemoryConsumers(services.MemoryConsumers))
 		if services.KernelContainer != nil {
 			systemRouterOptions = append(systemRouterOptions, system.WithApprovalBroker(services.KernelContainer.ApprovalBroker))
 		}
-		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service, services.Continuity, services.ContinuityCoordinator, channelAccess, systemRouterOptions...)
+		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, services.Continuity, services.ContinuityCoordinator, channelAccess, systemRouterOptions...)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		if services.AdapterManager != nil {
@@ -633,7 +634,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, services.Readiness)
 		system.RegisterPsycheAPIRouter(apiGroup)
-		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
+		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB, services.MemoryConsumers.Beliefs)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
 		ttsRepo := tts.NewRepository(ctx.DB)
 		ttsSvc := tts.NewService(ttsRepo)

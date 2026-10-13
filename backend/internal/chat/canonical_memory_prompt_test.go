@@ -11,12 +11,11 @@ import (
 
 func TestOwnedPromptIgnoresLegacyMemoryCollections(t *testing.T) {
 	role := coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"角色"}`)}
-	old := []json.RawMessage{json.RawMessage(`{"value":"obsolete-memory-data"}`)}
 	inference := business.Inference{
 		Scope:              coordination.ExecutionScope{RoleID: "role", RoleRevision: 1, ResourceOwnerID: "core", RoleOwnerID: "core"},
 		Message:            "你好",
-		Snapshot:           coordination.DataSnapshot{OwnerID: "core", Role: role, LegacyMemories: old, LegacyProfiles: old, LegacyEpisodes: old, LegacyGraphs: old},
-		HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "source", LegacyMemories: old, LegacyProfiles: old, LegacyEpisodes: old, LegacyGraphs: old, Resources: []coordination.Resource{{Kind: "memory", Body: json.RawMessage(`{"value":"current-system-memory"}`)}}},
+		Snapshot:           coordination.DataSnapshot{OwnerID: "core", Role: role},
+		HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "source", Resources: []coordination.Resource{{Kind: "memory", Body: json.RawMessage(`{"value":"current-system-memory"}`)}}},
 	}
 	messages, err := ownedPrompt(inference)
 	if err != nil {
@@ -26,7 +25,7 @@ func TestOwnedPromptIgnoresLegacyMemoryCollections(t *testing.T) {
 	if strings.Contains(system, "obsolete-memory-data") || !strings.Contains(system, "current-system-memory") {
 		t.Fatalf("memory prompt mixed versions: %s", system)
 	}
-	if len(inference.HistoricalSnapshot.LegacyMemories) != 1 {
+	if len(inference.HistoricalSnapshot.Resources) != 1 {
 		t.Fatal("prompt mutated snapshot")
 	}
 }

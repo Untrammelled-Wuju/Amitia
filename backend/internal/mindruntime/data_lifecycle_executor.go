@@ -72,26 +72,15 @@ func (e *DefaultOutboxCleanupExecutor) cleanupPrimaryStore(item OutboxCleanupIte
 	targetKind := strings.ToLower(strings.TrimSpace(item.TargetKind))
 
 	switch targetKind {
-	case "memory":
-		var errs []error
-		errs = append(errs, e.deleteByExactColumns("memories", targetID, "id"))
-		errs = append(errs, e.deleteByExactColumns("memory_events", targetID, "memory_id", "id"))
-		return joinCleanupErrors(errs)
 	case "message":
 		return e.deleteByExactColumns("messages", targetID, "id")
 	case "character":
 		var errs []error
-		errs = append(errs, e.deleteByExactColumns("memory_events", targetID, "character_id"))
-		errs = append(errs, e.deleteByExactColumns("memories", targetID, "character_id"))
-		errs = append(errs, e.deleteByExactColumns("memory_candidates", targetID, "character_id"))
-		errs = append(errs, e.deleteByExactColumns("retrieval_logs", targetID, "character_id"))
 		errs = append(errs, e.deleteByExactColumns("messages", targetID, "character_id"))
 		return joinCleanupErrors(errs)
 	case "conversation":
 		var errs []error
 		errs = append(errs, e.deleteByExactColumns("messages", targetID, "conversation_id"))
-		errs = append(errs, e.deleteByExactColumns("memory_candidates", targetID, "conversation_id"))
-		errs = append(errs, e.deleteByExactColumns("retrieval_logs", targetID, "conversation_id"))
 		return joinCleanupErrors(errs)
 	default:
 		return fmt.Errorf("unknown target kind %q for primary store cleanup", targetKind)
@@ -102,18 +91,11 @@ func (e *DefaultOutboxCleanupExecutor) cleanupCache(item OutboxCleanupItem) erro
 	if e.db == nil || strings.TrimSpace(item.TargetID) == "" {
 		return nil
 	}
-	targetID := strings.TrimSpace(item.TargetID)
 	targetKind := strings.ToLower(strings.TrimSpace(item.TargetKind))
 
 	switch targetKind {
-	case "memory":
-		return joinCleanupErrors([]error{
-			e.deleteByExactColumns("memory_embeddings", targetID, "memory_id"),
-		})
 	case "character":
-		return joinCleanupErrors([]error{
-			e.deleteByExactColumns("retrieval_logs", targetID, "character_id"),
-		})
+		return nil
 	default:
 		return fmt.Errorf("cleanup cache: unknown target kind %q", targetKind)
 	}
@@ -129,8 +111,6 @@ func (e *DefaultOutboxCleanupExecutor) cleanupSummaries(item OutboxCleanupItem) 
 	switch targetKind {
 	case "conversation":
 		return e.deleteByExactColumns("conversation_summaries", targetID, "conversation_id")
-	case "memory":
-		return e.deleteByExactColumns("memory_summaries", targetID, "memory_id")
 	default:
 		return fmt.Errorf("cleanup summaries: unknown target kind %q", targetKind)
 	}

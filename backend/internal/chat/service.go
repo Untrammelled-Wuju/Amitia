@@ -15,11 +15,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/emotionstate"
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/psyche"
 	syncapi "github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/temporal"
@@ -142,21 +142,18 @@ type service struct {
 	changeRecorder      syncapi.ChangeRecorder
 	psycheStore         psyche.PsycheStore
 	emotion             *emotionstate.Service
-	memoryPort          MemoryPort
-	profilePort         ProfilePort
-	episodicPort        EpisodicPort
 	worldBookPort       WorldBookPort
 	visionPort          VisionPort
 	wmCache             *WorkingMemoryCache
 	stateProvider       *ConversationStateProvider
 	compressor          *Compressor
-	pipeline            *memory.Pipeline
 	llmWithTools        llmWithToolsFunc
 	outboxStore         OutboxStore
 	deliveryStore       DeliveryStore
 	toolRuntime         ModelToolRuntime
 	ownedToolRuntime    OwnedToolRuntime
 	canonicalMemory     CanonicalMemoryRuntime
+	memoryConsumers     business.MemoryConsumerPort
 	inferenceAuthority  InferenceAuthority
 	hookInvoker         HookInvoker
 	desktopPetLifecycle DesktopPetLifecycleObserver
@@ -411,40 +408,17 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
-// delegatedDerivedMemoryLayer keeps the diagnostic pipeline honest. Vector and
-// graph writes are already executed by the canonical memory/profile/episodic
-// write paths; running placeholder layers here previously reported "completed"
-// without doing any work. The skipped state tells the UI that these derived
-// projections are delegated to those authoritative write paths.
-type delegatedDerivedMemoryLayer struct {
-	name string
-}
-
-func (l delegatedDerivedMemoryLayer) Name() string { return l.name }
-
-func (l delegatedDerivedMemoryLayer) Process(context.Context, string, []map[string]string, string) error {
-	return memory.ErrSkip
-}
-
-func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPort ProfilePort, epiPort EpisodicPort, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore, recorder ...syncapi.ChangeRecorder) Service {
+func NewService(repo Repository, ctx *app.AppContext, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore, recorder ...syncapi.ChangeRecorder) Service {
 	if visionPort != nil {
 		SetVisionModelConfigProvider(visionPort.GetActive)
 	}
 	wmCache := NewWorkingMemoryCache(30 * time.Minute)
 	stateProvider := NewConversationStateProvider(wmCache)
-	p := memory.NewPipeline(
-		memory.NewWorkingMemoryService(stateProvider),
-		profPort,
-		epiPort,
-		memPort,
-		delegatedDerivedMemoryLayer{name: "向量同步（随记忆写入执行）"},
-		delegatedDerivedMemoryLayer{name: "图谱关系（随记忆写入执行）"},
-	)
 	var r syncapi.ChangeRecorder
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, emotion: emotionstate.NewService(ctx.DB), memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, emotion: emotionstate.NewService(ctx.DB), worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
 	visioncfg.SetLocalImageGenerator(svc.generateLocalVision)
 	return svc
 }

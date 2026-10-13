@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 )
 
 type ConversationStateProvider struct {
@@ -62,14 +62,14 @@ func (p *ConversationStateProvider) UpsertState(convID string, state *interactio
 	entry.State = state
 }
 
-func (p *ConversationStateProvider) GetWorkingMemoryState(convID string) (memory.ConversationWorkingMemoryState, bool) {
+func (p *ConversationStateProvider) GetWorkingMemoryState(convID string) (business.ConversationWorkingMemoryState, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	entry, ok := p.store[convID]
 	if !ok || entry.State == nil {
-		return memory.ConversationWorkingMemoryState{}, false
+		return business.ConversationWorkingMemoryState{}, false
 	}
-	return memory.ConversationWorkingMemoryState{
+	return business.ConversationWorkingMemoryState{
 		ConversationID:         entry.State.ConversationID,
 		MessageCount:           entry.State.MessageCount,
 		LastMessageAt:          entry.State.LastMessageAt,
@@ -78,7 +78,7 @@ func (p *ConversationStateProvider) GetWorkingMemoryState(convID string) (memory
 	}, true
 }
 
-func (p *ConversationStateProvider) UpsertWorkingMemoryState(convID string, state memory.ConversationWorkingMemoryState) {
+func (p *ConversationStateProvider) UpsertWorkingMemoryState(convID string, state business.ConversationWorkingMemoryState) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	entry, ok := p.store[convID]

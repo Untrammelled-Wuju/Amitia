@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
@@ -231,11 +232,11 @@ func (l *RelationshipContextLoader) Load(ctx context.Context, scope InteractionS
 }
 
 type BeliefContextLoader struct {
-	db *gorm.DB
+	read business.MemoryConsumerReader
 }
 
-func NewBeliefContextLoader(db *gorm.DB) *BeliefContextLoader {
-	return &BeliefContextLoader{db: db}
+func NewBeliefContextLoader(read business.MemoryConsumerReader) *BeliefContextLoader {
+	return &BeliefContextLoader{read: read}
 }
 
 func (l *BeliefContextLoader) Name() string           { return "beliefs" }
@@ -245,18 +246,22 @@ func (l *BeliefContextLoader) CacheKey(scope InteractionScope, version string) s
 	return version + ":beliefs:" + scope.CharacterID
 }
 func (l *BeliefContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
-	var rows []struct {
-		Key        string
-		Value      string
-		Confidence float64
+	if l.read == nil {
+		return FieldUnavailable[any](l.Name()), errors.New("统一记忆读取端口尚未就绪")
 	}
-	err := l.db.WithContext(ctx).Table("memories").Select("key, value, confidence").Where("character_id = ? AND COALESCE(allow_context_use, 1) = 1", scope.CharacterID).Order("importance DESC, updated_at DESC").Limit(5).Scan(&rows).Error
+	rows, err := l.read(ctx, scope.CharacterID, 5)
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
 	beliefs := make([]ResolvedBelief, 0, len(rows))
 	for _, row := range rows {
-		beliefs = append(beliefs, ResolvedBelief{Key: row.Key, Value: row.Value, Confidence: row.Confidence})
+		document, content, err := business.MemoryContent(row)
+		if err != nil {
+			return FieldUnavailable[any](l.Name()), err
+		}
+		var confidence float64
+		_ = json.Unmarshal(content["confidence"], &confidence)
+		beliefs = append(beliefs, ResolvedBelief{Key: business.MemoryText(document, "key"), Value: business.MemoryValue(content), Confidence: confidence})
 	}
 	return FieldReady[any](BeliefSet{Beliefs: beliefs}, l.Name(), version), nil
 }

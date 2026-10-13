@@ -13,12 +13,12 @@ import (
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mcp"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
 )
@@ -29,6 +29,7 @@ type mcpReconnectController interface {
 
 type serverAgentAdminController struct {
 	chat       chat.Service
+	memory     business.MemoryRelationPort
 	characters character.Repository
 	db         *gorm.DB
 	graph      graph.Service
@@ -686,34 +687,24 @@ func (c *serverAgentAdminController) ExecuteAgentAdminTool(ctx context.Context, 
 		if err := parseAdminInput(input, &req); err != nil {
 			return nil, err
 		}
-		if c.graph == nil {
-			return nil, fmt.Errorf("graph service unavailable")
-		}
-		if req.SourceID == "" || req.TargetID == "" {
-			return nil, fmt.Errorf("sourceId and targetId are required")
-		}
-		if req.SourceID == req.TargetID {
-			return nil, fmt.Errorf("cannot link a memory to itself")
-		}
-		if req.RelationType == "" {
-			req.RelationType = "related_to"
+		if c.memory == nil {
+			return nil, fmt.Errorf("统一记忆关联入口不可用")
 		}
 		if req.Weight == 0 {
 			req.Weight = 1
 		}
-		if req.Weight < 0 || req.Weight > 1 {
-			return nil, fmt.Errorf("weight must be between 0 and 1")
+		operationID := invocation.IdempotencyKey
+		if operationID == "" {
+			operationID = invocation.InvocationID
 		}
-		if err := c.ensureMemoryScope(req.SourceID, invocation); err != nil {
+		if operationID == "" {
+			return nil, fmt.Errorf("记忆关联缺少执行标识")
+		}
+		ack, err := c.memory.Link(ctx, invocation.CharacterID, req.SourceID, req.TargetID, req.RelationType, req.Weight, "memory-link/"+memorySubmissionFingerprint(operationID)[:48])
+		if err != nil {
 			return nil, err
 		}
-		if err := c.ensureMemoryScope(req.TargetID, invocation); err != nil {
-			return nil, err
-		}
-		if err := c.graph.SyncEdge("memory:"+req.SourceID, "memory:"+req.TargetID, req.RelationType, req.Weight); err != nil {
-			return nil, err
-		}
-		return jsonResult(map[string]any{"linked": true, "sourceId": req.SourceID, "targetId": req.TargetID, "relationType": req.RelationType, "weight": req.Weight})
+		return jsonResult(map[string]any{"linked": true, "sourceId": req.SourceID, "targetId": req.TargetID, "acknowledgement": ack})
 	case "query_memory_links":
 		var req struct {
 			MemoryID string `json:"memoryId"`
@@ -722,19 +713,10 @@ func (c *serverAgentAdminController) ExecuteAgentAdminTool(ctx context.Context, 
 		if err := parseAdminInput(input, &req); err != nil {
 			return nil, err
 		}
-		if c.graph == nil {
-			return nil, fmt.Errorf("graph service unavailable")
+		if c.memory == nil {
+			return nil, fmt.Errorf("统一记忆关联入口不可用")
 		}
-		if err := c.ensureMemoryScope(req.MemoryID, invocation); err != nil {
-			return nil, err
-		}
-		if req.Depth < 1 {
-			req.Depth = 1
-		}
-		if req.Depth > 3 {
-			req.Depth = 3
-		}
-		return resultOrError(c.graph.QueryNeighbors("memory:"+req.MemoryID, req.Depth, spaceID))
+		return resultOrError(c.memory.Links(ctx, invocation.CharacterID, req.MemoryID, req.Depth))
 	default:
 		return nil, fmt.Errorf("agent admin tool %s is not supported", toolName)
 	}
@@ -965,21 +947,6 @@ func (c *serverAgentAdminController) resolveConversationID(inv capability.ToolIn
 		return selected
 	}
 	return strings.TrimSpace(inv.ConversationID)
-}
-
-func (c *serverAgentAdminController) ensureMemoryScope(id string, inv capability.ToolInvocationContext) error {
-	var m memory.Memory
-	if err := c.db.Where("id = ?", strings.TrimSpace(id)).First(&m).Error; err != nil {
-		return fmt.Errorf("memory %s not found", id)
-	}
-	if !agentAdminOwnerMatches(m.SpaceID, agentAdminSpaceID(inv)) {
-		return fmt.Errorf("memory %s not found", id)
-	}
-	charID := strings.TrimSpace(inv.CharacterID)
-	if charID != "" && strings.TrimSpace(m.CharacterID) != "" && m.CharacterID != charID {
-		return fmt.Errorf("memory %s is outside the current character scope", id)
-	}
-	return nil
 }
 
 func parseAdminInput(raw json.RawMessage, out any) error {

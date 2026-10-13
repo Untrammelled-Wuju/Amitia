@@ -20,7 +20,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/tts"
@@ -40,11 +39,13 @@ const SystemFormatInstruction = `【回复格式 - 系统固定规则】
 
 type Handler struct {
 	canonicalMemory       *business.Engine
+	memoryConsumer        business.MemoryConsumerPort
+	privacyMemoryMu       sync.RWMutex
+	privacyMemoryEntries  map[string]business.MemoryConsumerEntry
 	memoryCoreID          string
 	service               Service
 	db                    *gorm.DB
 	chatSvc               chat.Service
-	memorySvc             memory.Service
 	dataLifecycle         *mindruntime.DataLifecycleCoordinator
 	unifiedEntry          *interaction.UnifiedEntry
 	reconciliation        *mindruntime.ReconciliationEngine
@@ -69,8 +70,11 @@ func (f ChannelAvailabilityFunc) Has(channelID string) bool {
 	return f != nil && f(channelID)
 }
 
-func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memorySvc memory.Service) *Handler {
-	h := &Handler{service: srv, db: db, chatSvc: chatSvc, memorySvc: memorySvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
+func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort) *Handler {
+	if service, ok := srv.(*service); ok {
+		service.memoryConsumer = memoryConsumer
+	}
+	h := &Handler{service: srv, db: db, chatSvc: chatSvc, memoryConsumer: memoryConsumer, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
 	if db != nil {
 		if sqlDB, err := db.DB(); err == nil {
 			h.searchCredentials = search.NewCredentialStore(sqlDB)

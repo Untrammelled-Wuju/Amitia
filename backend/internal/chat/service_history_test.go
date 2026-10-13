@@ -7,8 +7,6 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/internal/profile"
-	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
 
@@ -155,52 +153,5 @@ func TestBuildRoleSystemPartsUsesRuntimeProfile(t *testing.T) {
 	}
 	if strings.Contains(joined, "【场景配置】") {
 		t.Fatalf("default-only scene rules should not be appended: %s", joined)
-	}
-}
-
-func TestSys1BuilderUsesCharacterScopedProfilePrompt(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		sqlDB.Close()
-	})
-	if err := db.AutoMigrate(&profile.UserProfile{}); err != nil {
-		t.Fatal(err)
-	}
-	rows := []profile.UserProfile{
-		{ID: "global-1", SpaceID: "char-1", CharacterID: "", Category: "preference", AttributeName: "饮品", AttributeValue: "茶", Confidence: 80},
-		{ID: "char-1", SpaceID: "char-1", CharacterID: "char-1", Category: "preference", AttributeName: "称呼", AttributeValue: "小安", Confidence: 90},
-		{ID: "char-2", SpaceID: "char-1", CharacterID: "char-2", Category: "preference", AttributeName: "称呼", AttributeValue: "小北", Confidence: 95},
-	}
-	for _, row := range rows {
-		if err := db.Create(&row).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
-	ctx := app.NewAppContext(db, nil)
-	svc := &service{
-		db:          db,
-		profilePort: profile.NewService(profile.NewRepository(ctx), ctx, nil),
-	}
-	result := svc.sys1Builder("", &character.RoleRuntimeProfile{
-		CharacterID: "char-1",
-		Name:        "Amitia",
-		Identity:    "心理模拟伙伴",
-	}, "你好", nil)
-	joined := result.ProfileContext
-	if !strings.Contains(joined, "小安") {
-		t.Fatalf("expected scoped profile prompt to include char-1 profile, got %s", joined)
-	}
-	if !strings.Contains(joined, "茶") {
-		t.Fatalf("expected scoped profile prompt to retain global fallback, got %s", joined)
-	}
-	if strings.Contains(joined, "小北") {
-		t.Fatalf("expected scoped profile prompt to exclude other character profile, got %s", joined)
 	}
 }

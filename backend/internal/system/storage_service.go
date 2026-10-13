@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
 )
@@ -31,7 +32,7 @@ func (s *service) GetStorageInfo() map[string]interface{} {
 		dbSize = info.Size()
 	}
 
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"totalMB":           totalSize / 1024 / 1024,
 		"usedMB":            totalSize / 1024 / 1024,
 		"freeMB":            0,
@@ -40,8 +41,43 @@ func (s *service) GetStorageInfo() map[string]interface{} {
 		"dbSizeBytes":       dbSize,
 		"messageCount":      s.storageTableCount("messages"),
 		"conversationCount": s.storageTableCount("conversations"),
-		"memoryCount":       s.storageTableCount("memories"),
 	}
+	if s.memoryConsumer == nil {
+		result["memoryError"] = "统一记忆统计入口不可用"
+		return result
+	}
+	entries, err := s.memoryConsumer.Read(context.Background(), "", "memory", true)
+	if err != nil {
+		result["memoryError"] = err.Error()
+		return result
+	}
+	result["memoryCount"] = len(entries)
+	return result
+}
+
+func (s *service) ownedMemoryUsage() (map[string]int64, error) {
+	if s.memoryConsumer == nil {
+		return nil, fmt.Errorf("统一记忆统计入口不可用")
+	}
+	entries, err := s.memoryConsumer.Read(context.Background(), "", "memory", true)
+	if err != nil {
+		return nil, err
+	}
+	counts := map[string]int64{}
+	for _, entry := range entries {
+		document, content, err := business.MemoryContent(entry)
+		if err != nil {
+			return nil, err
+		}
+		created := business.MemoryText(content, "createdAt")
+		if created == "" {
+			created = business.MemoryText(document, "createdAt")
+		}
+		if len(created) >= 10 {
+			counts[created[:10]]++
+		}
+	}
+	return counts, nil
 }
 
 func (s *service) storageTableCount(table string) int64 {
@@ -205,19 +241,20 @@ func boolToInt(v bool) int {
 }
 
 func (s *service) CreatePhysicalSafetySnapshot() map[string]interface{} {
-	backupDir := filepath.Join(s.dataDir, "backups")
-	os.MkdirAll(backupDir, 0755)
-	name := fmt.Sprintf("safety_%s.db", time.Now().Format("20060102_150405"))
-	src := filepath.Join(s.dataDir, "app.db")
-	srcData, err := os.ReadFile(src)
+	return s.CreatePhysicalSafetySnapshotContext(context.Background())
+}
+
+func (s *service) CreatePhysicalSafetySnapshotContext(ctx context.Context) map[string]interface{} {
+	if s.coordinator == nil {
+		return map[string]interface{}{"ok": false, "error": "统一备份入口不可用"}
+	}
+	runner := dataportability.NewSQLiteAdapter(s.db, filepath.Join(s.dataDir, "backups"))
+	result, err := s.coordinator.CreateBackup(ctx, dataportability.BackupRequest{Scope: dataportability.ScopeAll, Profile: dataportability.ProfileFull, Purpose: dataportability.PurposeUser}, filepath.Join(s.dataDir, "app.db"), runner)
 	if err != nil {
 		return map[string]interface{}{"ok": false, "error": err.Error()}
 	}
-	err = os.WriteFile(filepath.Join(backupDir, name), srcData, 0644)
-	if err != nil {
-		return map[string]interface{}{"ok": false, "error": err.Error()}
-	}
-	return map[string]interface{}{"ok": true, "snapshotName": name, "name": name, "size": int64(len(srcData)), "sizeMB": int64(len(srcData)) / 1024 / 1024, "createdAt": time.Now().Format(time.DateTime)}
+	name := filepath.Base(result.Path)
+	return map[string]interface{}{"ok": true, "name": name, "snapshotName": name, "size": result.SizeBytes, "sizeMB": result.SizeBytes / 1024 / 1024, "createdAt": time.Now().Format(time.DateTime)}
 }
 
 func (s *service) DeleteStorageBackup(name string) map[string]interface{} {
@@ -242,17 +279,18 @@ func (s *service) DeleteAllStorage() map[string]interface{} {
 }
 
 func (s *service) RestorePhysicalSafetySnapshot(name string) map[string]interface{} {
+	return s.RestorePhysicalSafetySnapshotContext(context.Background(), name)
+}
+
+func (s *service) RestorePhysicalSafetySnapshotContext(ctx context.Context, name string) map[string]interface{} {
 	clean := filepath.Base(name)
 	if clean == "." || clean == "" || clean != name {
-		return map[string]interface{}{"ok": false, "error": "invalid backup name"}
+		return map[string]interface{}{"ok": false, "error": "无效备份名称"}
 	}
-	src := filepath.Join(s.dataDir, "backups", clean)
-	dst := filepath.Join(s.dataDir, "app.db")
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return map[string]interface{}{"ok": false, "error": err.Error()}
+	if s.coordinator == nil {
+		return map[string]interface{}{"ok": false, "error": "统一备份入口不可用"}
 	}
-	err = os.WriteFile(dst, data, 0644)
+	_, err := s.coordinator.ExecuteImport(ctx, filepath.Join(s.dataDir, "backups", clean), dataportability.ImportRequest{CharacterPolicy: dataportability.CollisionReplace, Purpose: dataportability.PurposeUser})
 	if err != nil {
 		return map[string]interface{}{"ok": false, "error": err.Error()}
 	}
@@ -265,6 +303,10 @@ func sanitizeName(s string) string {
 }
 
 func (s *service) StorageExportAmitia(scope string, characterID string) map[string]interface{} {
+	return s.StorageExportAmitiaContext(context.Background(), scope, characterID)
+}
+
+func (s *service) StorageExportAmitiaContext(ctx context.Context, scope string, characterID string) map[string]interface{} {
 	coord := s.coordinator
 	if coord == nil {
 		return map[string]interface{}{"exported": false, "error": "coordinator not initialized"}
@@ -289,7 +331,7 @@ func (s *service) StorageExportAmitia(scope string, characterID string) map[stri
 	}
 
 	runner := dataportability.NewSQLiteAdapter(s.db, filepath.Join(s.dataDir, "backups"))
-	result, err := coord.CreateBackup(context.Background(), req, dbPath, runner)
+	result, err := coord.CreateBackup(ctx, req, dbPath, runner)
 	if err != nil {
 		return map[string]interface{}{"exported": false, "error": err.Error()}
 	}

@@ -127,24 +127,6 @@ type Event struct {
 
 func (Event) TableName() string { return "temporal_events" }
 
-type MemoryTemporalMetadata struct {
-	MemoryID          string     `gorm:"column:memory_id;primaryKey" json:"memoryId"`
-	OccurredAtUTC     *time.Time `gorm:"column:occurred_at_utc;index" json:"occurredAtUtc,omitempty"`
-	EndedAtUTC        *time.Time `gorm:"column:ended_at_utc" json:"endedAtUtc,omitempty"`
-	Timezone          string     `gorm:"column:timezone" json:"timezone,omitempty"`
-	LocalDate         string     `gorm:"column:local_date" json:"localDate,omitempty"`
-	Daypart           string     `gorm:"column:daypart" json:"daypart,omitempty"`
-	TemporalPrecision string     `gorm:"column:temporal_precision" json:"temporalPrecision"`
-	ValidFromUTC      *time.Time `gorm:"column:valid_from_utc" json:"validFromUtc,omitempty"`
-	ValidToUTC        *time.Time `gorm:"column:valid_to_utc" json:"validToUtc,omitempty"`
-	AnchorIDsJSON     string     `gorm:"column:anchor_ids_json" json:"anchorIdsJson,omitempty"`
-	SourceTimeText    string     `gorm:"column:source_time_text" json:"sourceTimeText,omitempty"`
-	CreatedAtUTC      time.Time  `gorm:"column:created_at_utc" json:"createdAtUtc"`
-	UpdatedAtUTC      time.Time  `gorm:"column:updated_at_utc" json:"updatedAtUtc"`
-}
-
-func (MemoryTemporalMetadata) TableName() string { return "memory_temporal_metadata" }
-
 type CivilTimeSnapshot struct {
 	Timezone      string    `json:"timezone"`
 	LocalTime     time.Time `json:"localTime"`

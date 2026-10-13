@@ -32,16 +32,22 @@ type MemoryManagementInput struct {
 }
 
 type MemoryManagementQuery struct {
-	RetentionLevel int    `json:"retentionLevel,omitempty"`
-	Pinned         *bool  `json:"pinned,omitempty"`
-	DecayState     string `json:"decayState,omitempty"`
-	Query          string `json:"query"`
-	Mode           string `json:"mode"`
-	MemoryType     string `json:"memoryType,omitempty"`
-	Source         string `json:"source,omitempty"`
-	Sort           string `json:"sort,omitempty"`
-	Cursor         string `json:"cursor,omitempty"`
-	Limit          int    `json:"limit,omitempty"`
+	ContextUsable     bool              `json:"contextUsable,omitempty"`
+	Types             []string          `json:"types,omitempty"`
+	Layers            []string          `json:"layers,omitempty"`
+	MinimumImportance int               `json:"minimumImportance,omitempty"`
+	Time              *MemoryTimeFilter `json:"time,omitempty"`
+	ExactTitle        bool              `json:"exactTitle,omitempty"`
+	RetentionLevel    int               `json:"retentionLevel,omitempty"`
+	Pinned            *bool             `json:"pinned,omitempty"`
+	DecayState        string            `json:"decayState,omitempty"`
+	Query             string            `json:"query"`
+	Mode              string            `json:"mode"`
+	MemoryType        string            `json:"memoryType,omitempty"`
+	Source            string            `json:"source,omitempty"`
+	Sort              string            `json:"sort,omitempty"`
+	Cursor            string            `json:"cursor,omitempty"`
+	Limit             int               `json:"limit,omitempty"`
 }
 
 type MemoryManagementResponse struct {
@@ -155,11 +161,22 @@ func memoryManagementText(raw json.RawMessage) (string, string, string, string, 
 }
 
 func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input MemoryManagementQuery) (MemoryManagementResponse, error) {
+	if err := validateMemoryTimeFilter(input.Time); err != nil {
+		return MemoryManagementResponse{}, err
+	}
+	if len(input.Types) > 32 || len(input.Layers) > 6 || input.MinimumImportance < 0 || input.MinimumImportance > 10 {
+		return MemoryManagementResponse{}, errors.New("记忆筛选参数无效")
+	}
+	for _, layer := range input.Layers {
+		if !IsValidLayer(layer) {
+			return MemoryManagementResponse{}, errors.New("记忆层筛选参数无效")
+		}
+	}
 	now := time.Now()
 	if input.RetentionLevel < 0 || input.RetentionLevel > 5 || input.DecayState != "" && input.DecayState != "active" && input.DecayState != "fading" && input.DecayState != "archived" {
 		return MemoryManagementResponse{}, errors.New("记忆生命周期筛选参数无效")
 	}
-	if len(input.Query) > 1024 || !utf8.ValidString(input.Query) || strings.ContainsRune(input.Query, 0) || input.Limit < 0 || input.Limit > 128 || len(input.Cursor) > 4096 || input.Mode != "" && input.Mode != "keyword" && input.Mode != "hybrid" && input.Mode != "vector" {
+	if len(input.Query) > 4096 || !utf8.ValidString(input.Query) || strings.ContainsRune(input.Query, 0) || input.Limit < 0 || input.Limit > 128 || len(input.Cursor) > 4096 || input.Mode != "" && input.Mode != "keyword" && input.Mode != "hybrid" && input.Mode != "vector" {
 		return MemoryManagementResponse{}, errors.New("记忆检索参数无效")
 	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
@@ -234,6 +251,18 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 		key, value, kind, source, importance := memoryManagementText(resource.Body)
 		var document map[string]json.RawMessage
 		_ = json.Unmarshal(resource.Body, &document)
+		if input.ContextUsable && !coordination.ResourceUsable(resource.Body, now) {
+			continue
+		}
+		var content map[string]json.RawMessage
+		_ = json.Unmarshal(document["content"], &content)
+		layer := MemoryText(document, "kind")
+		if layer == "" {
+			layer = "fact"
+		}
+		if importance < input.MinimumImportance || !memorySetMatches(input.Types, kind) || !memorySetMatches(input.Layers, layer) || !memoryTimeMatches(document, content, input.Time) || input.ExactTitle && key != input.Query {
+			continue
+		}
 		state := memorypolicy.ReadLifecycle(document, now).Effective(now)
 		if input.RetentionLevel != 0 && input.RetentionLevel != state.RetentionLevel || input.Pinned != nil && *input.Pinned != state.Pinned || input.DecayState != "" && input.DecayState != state.DecayState {
 			continue
@@ -256,8 +285,40 @@ func (e *Engine) SearchOwnedMemories(ctx context.Context, request Request, input
 			result.Scores[resource.ID] = float64(importance)
 		}
 	}
+	temporalRank := false
+	if hasTemporalIntent(input.Query) && input.Sort == "" {
+		enabled := true
+		if policy, ok := e.model.(MemoryTemporalPolicy); ok {
+			var err error
+			enabled, err = policy.OwnedMemoryTemporalEnabled(ctx, scope.SpaceID)
+			if err != nil {
+				return MemoryManagementResponse{}, err
+			}
+		}
+		if enabled {
+			temporalRank = true
+			candidates := []MemoryScoreCandidate{}
+			metadata := map[string]MemoryTemporalMetadata{}
+			for _, resource := range result.Resources {
+				var document map[string]json.RawMessage
+				_ = json.Unmarshal(resource.Body, &document)
+				var item MemoryTemporalMetadata
+				_ = json.Unmarshal(document["content"], &item)
+				_, _, kind, _, _ := memoryManagementText(resource.Body)
+				metadata[resource.ID] = item
+				candidates = append(candidates, MemoryScoreCandidate{MemoryID: resource.ID, BaseScore: result.Scores[resource.ID], MemoryType: kind})
+			}
+			reranked, err := RerankMemoryScores(ctx, input.Query, candidates, metadata, now)
+			if err != nil {
+				return MemoryManagementResponse{}, err
+			}
+			for id, score := range reranked {
+				result.Scores[id] = score.FinalScore
+			}
+		}
+	}
 	sort.Slice(result.Resources, func(i, j int) bool {
-		if (input.Sort == "importance_desc" || input.Mode == "hybrid" || input.Mode == "vector") && result.Scores[result.Resources[i].ID] != result.Scores[result.Resources[j].ID] {
+		if (temporalRank || input.Sort == "importance_desc" || input.Mode == "hybrid" || input.Mode == "vector") && result.Scores[result.Resources[i].ID] != result.Scores[result.Resources[j].ID] {
 			return result.Scores[result.Resources[i].ID] > result.Scores[result.Resources[j].ID]
 		}
 		return result.Resources[i].ID < result.Resources[j].ID

@@ -2,77 +2,25 @@ package tool
 
 import (
 	"context"
-	"database/sql"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/glebarez/sqlite"
-	memorysvc "github.com/u-ai/backend/internal/memory"
-	"github.com/u-ai/backend/pkg/app"
-	"gorm.io/gorm"
 )
 
 func setupSummaryTestDB(t *testing.T) func() {
 	t.Helper()
-	gormDB, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "summary.db")), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB, err := gormDB.DB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec("CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, character_id TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER DEFAULT 0, confidence INTEGER DEFAULT 50, scope TEXT, last_used_at TEXT, created_at TEXT, updated_at TEXT)"); err != nil {
-		t.Fatal(err)
-	}
-	schema := []string{
-		"CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, character_id TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER DEFAULT 0, confidence INTEGER DEFAULT 50, scope TEXT, last_used_at TEXT, created_at TEXT, updated_at TEXT)",
-		"CREATE TABLE IF NOT EXISTS tool_call_intents (id TEXT PRIMARY KEY, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, args_json TEXT, idempotency_key TEXT, status TEXT, created_at TEXT, updated_at TEXT)",
-		"CREATE TABLE IF NOT EXISTS tool_call_results (id TEXT PRIMARY KEY, intent_id TEXT, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, status TEXT, content TEXT, error_code TEXT, visible_text TEXT, side_effects_json TEXT, external_operation_id TEXT, idempotency_key TEXT, audit_json TEXT, confidence REAL, force_voice INTEGER, created_at TEXT)",
-	}
-	for _, stmt := range schema {
-		if _, err := sqlDB.Exec(stmt); err != nil {
+	_, _, cleanup := setupToolTestDB(t)
+	for _, row := range []struct {
+		role, key, value string
+		importance       int
+	}{
+		{"char-1", "颜色", "最喜欢的颜色是蓝色", 9}, {"char-1", "音乐", "喜欢古典音乐和爵士", 7}, {"char-1", "食物", "喜欢吃辣", 6}, {"char-2", "颜色", "最喜欢绿色", 8}, {"char-1", "运动", "偶尔跑步但不常去", 4}, {"char-1", "工作", "是一名软件工程师", 9}, {"char-1", "旅行计划", "计划去日本旅行", 6},
+	} {
+		execution := ToolExecutionContext{CharacterID: row.role, ConversationID: "seed-chat", RequestID: "seed-" + row.role + row.key, ToolCallID: "call"}
+		if _, err := currentToolMemoryTestRuntime.ExecuteMemory(t.Context(), execution, "save_memory", map[string]interface{}{"key": row.key, "value": row.value, "importance": row.importance}); err != nil {
 			t.Fatal(err)
 		}
-	}
-	SetDB(sqlDB)
-	ctx := app.NewAppContext(gormDB, nil)
-	SetMemoryService(memorysvc.NewService(memorysvc.NewRepository(ctx), ctx, nil))
-	seedMemories(t, sqlDB)
-	cleanup := func() {
-		sqlDB.Close()
-		SetDB(nil)
-		SetMemoryService(nil)
 	}
 	return cleanup
-}
-
-func seedMemories(t *testing.T, db *sql.DB) {
-	t.Helper()
-	entries := []struct {
-		id, charID, key, value, memType, scope, lastUsed string
-		importance, confidence                           int
-	}{
-		{"m1", "char-1", "颜色", "最喜欢的颜色是蓝色", "personal_info", "character", "2026-06-30", 9, 90},
-		{"m2", "char-1", "音乐", "喜欢古典音乐和爵士", "hobby", "character", "2026-06-28", 7, 80},
-		{"m3", "char-1", "食物", "喜欢吃辣", "preference", "character", "2026-06-25", 6, 70},
-		{"m4", "char-2", "颜色", "最喜欢绿色", "personal_info", "character", "2026-06-29", 8, 85},
-		{"m5", "char-1", "运动", "偶尔跑步但不常去", "hobby", "character", "2026-06-20", 4, 50},
-		{"m6", "char-1", "工作", "是一名软件工程师", "personal_info", "character", "2026-06-15", 9, 90},
-		{"m7", "char-1", "旅行计划", "计划去日本旅行", "plan", "character", "", 6, 60},
-	}
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	for _, e := range entries {
-		_, err := db.Exec(
-			"INSERT INTO memories (id, character_id, key, value, memory_type, importance, confidence, scope, last_used_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			e.id, e.charID, e.key, e.value, e.memType, e.importance, e.confidence, e.scope, e.lastUsed, nowStr, nowStr,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 func TestSummarizeMemoriesReturnsResults(t *testing.T) {
@@ -150,7 +98,7 @@ func TestSummarizeMemoriesRespectsLimit(t *testing.T) {
 		RequestID:      "req-summary-4",
 	}
 
-	result, ok := ExecuteMemoryWithContext(execCtx, "summarize_memories", `{"topic":"a","limit":2}`)
+	result, ok := ExecuteMemoryWithContext(execCtx, "summarize_memories", `{"topic":"喜欢","limit":2}`)
 	if !ok {
 		t.Fatalf("summarize_memories failed: %s", result.Content)
 	}

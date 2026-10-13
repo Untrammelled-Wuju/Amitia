@@ -92,6 +92,7 @@ type Event struct {
 }
 
 type Inference struct {
+	ConsolidateMemory  bool
 	Quote              *ReviewedQuote
 	Attachments        []Attachment
 	Context            *ForwardedContext
@@ -108,9 +109,10 @@ type Inference struct {
 }
 
 type DerivedMemory struct {
-	Kind string          `json:"kind"`
-	Key  string          `json:"key"`
-	Body json.RawMessage `json:"body"`
+	SourceKind string          `json:"sourceKind,omitempty"`
+	Kind       string          `json:"kind"`
+	Key        string          `json:"key"`
+	Body       json.RawMessage `json:"body"`
 }
 
 type Model interface {
@@ -717,7 +719,8 @@ func (e *Engine) recordMemoryStatus(ctx context.Context, scope coordination.Exec
 }
 
 func memoryMutations(scope coordination.ExecutionScope, conversation string, derived []DerivedMemory, snapshot coordination.DataSnapshot) ([]coordination.Mutation, error) {
-	if len(derived) > 80 {
+	derived = partitionMemoryDerived(scope, derived)
+	if len(derived) > 160 {
 		return nil, coordination.ErrPendingLimit
 	}
 	result := make([]coordination.Mutation, 0, len(derived)*2)
@@ -730,6 +733,10 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		if item.Key == "" || !json.Valid(item.Body) {
 			return nil, errors.New("记忆计算结果无效")
 		}
+		var content map[string]json.RawMessage
+		if json.Unmarshal(item.Body, &content) != nil || strings.TrimSpace(MemoryValue(content)) == "" {
+			return nil, errors.New("记忆正文没有可用内容")
+		}
 		key := item.Kind + "/" + item.Key
 		if sources[key] != "" {
 			return nil, coordination.ErrRequestConflict
@@ -737,7 +744,7 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		digest := sha256.Sum256([]byte(coordination.StorageRole(scope, "memory") + "\x00memory\x00" + key))
 		id := hex.EncodeToString(digest[:16])
 		sources[key] = id
-		document := map[string]json.RawMessage{"conversationId": body(conversation), "key": body(item.Key), "kind": body(item.Kind), "content": item.Body, "executionScope": body(scope)}
+		document := map[string]json.RawMessage{"conversationId": body(conversation), "key": body(item.Key), "kind": body(item.Kind), "content": item.Body, "executionScope": body(scope), "createdAt": body(time.Now().UTC().Format(time.RFC3339Nano)), "updatedAt": body(time.Now().UTC().Format(time.RFC3339Nano))}
 		var metadata struct {
 			RetentionLevel int    `json:"retentionLevel"`
 			Pinned         bool   `json:"pinned"`
@@ -755,7 +762,7 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 				var old map[string]json.RawMessage
 				if json.Unmarshal(previous.Body, &old) == nil {
 					state = memorypolicy.ReadLifecycle(old, time.Now())
-					for _, field := range []string{"allowContextUse", "expiresAt", "archivedAt"} {
+					for _, field := range []string{"allowContextUse", "expiresAt", "archivedAt", "createdAt"} {
 						if value, found := old[field]; found {
 							document[field] = value
 						}
@@ -778,7 +785,11 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		default:
 			return nil, errors.New("记忆计算结果类型无效")
 		}
-		digest := sha256.Sum256([]byte(coordination.StorageRole(scope, item.Kind) + "\x00" + item.Kind + "\x00" + item.Key))
+		identityKey := item.Key
+		if (item.Kind == "vector" || item.Kind == "graph") && item.SourceKind != "" && item.SourceKind != "fact" {
+			identityKey = item.SourceKind + "\x00" + item.Key
+		}
+		digest := sha256.Sum256([]byte(coordination.StorageRole(scope, item.Kind) + "\x00" + item.Kind + "\x00" + identityKey))
 		id := hex.EncodeToString(digest[:16])
 		if item.Kind == "working" || item.Kind == "summary" {
 			id = conversation + "/" + item.Kind
@@ -793,9 +804,13 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 			mutation.SourceID = sources[item.Kind+"/"+item.Key]
 		}
 		if item.Kind == "vector" || item.Kind == "graph" {
-			sourceID := sources["fact/"+item.Key]
+			sourceKind := item.SourceKind
+			if sourceKind == "" {
+				sourceKind = "fact"
+			}
+			sourceID := sources[sourceKind+"/"+item.Key]
 			if sourceID == "" {
-				return nil, errors.New("向量或图谱必须引用本轮明确的事实来源")
+				return nil, errors.New("向量或图谱必须引用本轮明确的记忆来源")
 			}
 			mutation.SourceID = sourceID
 		}

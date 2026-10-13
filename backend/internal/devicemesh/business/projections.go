@@ -27,9 +27,24 @@ func (e *Engine) Projections(ctx context.Context, request Request, rebuild bool,
 	if !ok {
 		return coordination.ProjectionStatus{}, scope, errors.New("数据所有者的索引管理端口不可用")
 	}
+	if rebuild {
+		if err := e.rebuildMemoryInputs(ctx, scope); err != nil {
+			return coordination.ProjectionStatus{}, scope, err
+		}
+	}
 	result, err := port.ProjectionState(ctx, scope, rebuild)
 	if err != nil {
 		return result, scope, err
+	}
+	missing, err := e.countMissingMemoryInputs(ctx, scope)
+	if err != nil {
+		return result, scope, err
+	}
+	for index := range result.Layers {
+		if result.Layers[index].Kind == "vector" {
+			result.Layers[index].Total += missing
+			result.Layers[index].Pending += missing
+		}
 	}
 	if err := e.coordination.Validate(ctx, scope); err != nil {
 		return result, scope, err

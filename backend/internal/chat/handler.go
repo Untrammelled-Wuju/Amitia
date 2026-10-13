@@ -59,8 +59,8 @@ type messageChangeScopedService interface {
 }
 
 type cleanupCapableService interface {
-	PreviewCleanup(req CleanupRequest, spaceID string) (*CleanupPreview, error)
-	ConfirmCleanup(previewID, confirmText, spaceID string) (*CleanupResult, error)
+	PreviewCleanup(req CleanupRequest, spaceID string, contexts ...context.Context) (*CleanupPreview, error)
+	ConfirmCleanup(previewID, confirmText, spaceID string, contexts ...context.Context) (*CleanupResult, error)
 	VacuumCleanup() error
 }
 
@@ -739,7 +739,7 @@ func (h *Handler) CleanupPreview(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
 		return
 	}
-	result, err := cleanup.PreviewCleanup(req, requestidentity.ResolveGin(c))
+	result, err := cleanup.PreviewCleanup(req, requestidentity.ResolveGin(c), c.Request.Context())
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -761,7 +761,7 @@ func (h *Handler) CleanupConfirm(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
 		return
 	}
-	result, err := cleanup.ConfirmCleanup(req.PreviewID, req.ConfirmText, requestidentity.ResolveGin(c))
+	result, err := cleanup.ConfirmCleanup(req.PreviewID, req.ConfirmText, requestidentity.ResolveGin(c), c.Request.Context())
 	if err != nil {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return

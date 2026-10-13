@@ -8,13 +8,8 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	episodicsvc "github.com/u-ai/backend/internal/episodic"
-	"github.com/u-ai/backend/internal/graph"
-	memorysvc "github.com/u-ai/backend/internal/memory"
-	profilesvc "github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/spaceidentity"
-	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
 
@@ -28,14 +23,12 @@ func setupToolTestDB(t *testing.T) (*gorm.DB, *gorm.DB, func()) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := gormDB.AutoMigrate(&memorysvc.Memory{}); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := spaceidentity.InitializeDefault(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	canonical := requestidentity.CanonicalSpaceID()
 	schema := []string{
+		`CREATE TABLE memories (id TEXT PRIMARY KEY, character_id TEXT, key TEXT, value TEXT)`,
 		`CREATE TABLE memory_events (id TEXT PRIMARY KEY, memory_id TEXT, event_type TEXT, key TEXT, value TEXT, memory_type TEXT, importance INTEGER, confidence INTEGER DEFAULT 0, source TEXT, character_id TEXT, created_at TEXT, version INTEGER DEFAULT 0, operation_id TEXT DEFAULT '', snapshot_hash TEXT DEFAULT '', event_reason TEXT DEFAULT '')`,
 		`CREATE TABLE schedules (id TEXT PRIMARY KEY, title TEXT, description TEXT, due_time TEXT, repeat_mode TEXT, channel TEXT, status TEXT, created_at TEXT, updated_at TEXT)`,
 		`CREATE TABLE user_profiles (id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT 'default', character_id TEXT NOT NULL DEFAULT '', category TEXT NOT NULL, attribute_name TEXT NOT NULL, attribute_value TEXT NOT NULL, confidence INTEGER DEFAULT 50, source TEXT NOT NULL DEFAULT '', source_conv_id TEXT DEFAULT '', verified_at TEXT DEFAULT '', created_at TEXT, updated_at TEXT, source_memory_id TEXT DEFAULT '', projection_status TEXT DEFAULT 'active')`,
@@ -77,21 +70,15 @@ func setupToolTestDB(t *testing.T) (*gorm.DB, *gorm.DB, func()) {
 		}
 	}
 	SetDB(sqlDB)
-	ctx := app.NewAppContext(gormDB, nil)
-	SetMemoryService(memorysvc.NewService(memorysvc.NewRepository(ctx), ctx, nil))
-	SetProfileService(profilesvc.NewService(profilesvc.NewRepository(ctx), ctx, graph.NewStubService()))
-	SetEpisodicService(episodicsvc.NewService(episodicsvc.NewRepository(ctx), ctx, graph.NewStubService()))
+	newToolMemoryTestRuntime(t, canonical)
 	cleanup := func() {
 		sqlDB.Close()
 		SetDB(nil)
-		SetMemoryService(nil)
-		SetProfileService(nil)
-		SetEpisodicService(nil)
 	}
 	return gormDB, gormDB, cleanup
 }
 
-func TestConcurrentToolExecutionKeepsRoleContext(t *testing.T) {
+func TestConcurrentSchedulesKeepChannelContext(t *testing.T) {
 	gormDB, _, cleanup := setupToolTestDB(t)
 	t.Cleanup(cleanup)
 	var wg sync.WaitGroup
@@ -109,9 +96,6 @@ func TestConcurrentToolExecutionKeepsRoleContext(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			ctx := ToolExecutionContext{ConversationID: "conv-" + item.characterID, CharacterID: item.characterID, Channel: item.channel}
-			if result, ok := ExecuteWithContext(ctx, "save_memory", `{"key":"`+item.key+`","value":"`+item.value+`"}`); !ok || !strings.HasPrefix(result.Content, "OK") {
-				t.Errorf("save_memory failed: ok=%v result=%s", ok, result.Content)
-			}
 			if result, ok := ExecuteWithContext(ctx, "create_schedule", `{"title":"提醒","due_time":"2026-07-01 18:00"}`); !ok || !strings.HasPrefix(result.Content, "OK") {
 				t.Errorf("create_schedule failed: ok=%v result=%s", ok, result.Content)
 			}
@@ -121,22 +105,6 @@ func TestConcurrentToolExecutionKeepsRoleContext(t *testing.T) {
 	db, err := gormDB.DB()
 	if err != nil {
 		t.Fatal(err)
-	}
-	rows, err := db.Query("SELECT character_id, value FROM memories ORDER BY character_id")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	got := map[string]string{}
-	for rows.Next() {
-		var characterID, value string
-		if err := rows.Scan(&characterID, &value); err != nil {
-			t.Fatal(err)
-		}
-		got[characterID] = value
-	}
-	if got["char-a"] != "蓝色" || got["char-b"] != "绿色" {
-		t.Fatalf("memory context crossed roles: %#v", got)
 	}
 	var wechatCount, qqCount int
 	if err := db.QueryRow("SELECT COUNT(*) FROM schedules WHERE channel = 'wechat'").Scan(&wechatCount); err != nil {
@@ -215,111 +183,6 @@ func TestWriteToolsRejectMissingScopeWithoutSideEffects(t *testing.T) {
 				t.Fatalf("tool wrote side effect without scope: table=%s count=%d", tt.tableName, count)
 			}
 		})
-	}
-}
-
-func TestProfileAndEpisodicToolsStayInCharacterScope(t *testing.T) {
-	gormDB, _, cleanup := setupToolTestDB(t)
-	t.Cleanup(cleanup)
-	for _, item := range []struct {
-		characterID string
-		convID      string
-		value       string
-	}{
-		{"char-profile-a", "conv-profile-a", "蓝色"},
-		{"char-profile-b", "conv-profile-b", "绿色"},
-	} {
-		ctx := ToolExecutionContext{ConversationID: item.convID, CharacterID: item.characterID, Channel: "wechat"}
-		profileResult, ok := ExecuteWithContextAndCancel(context.Background(), ctx, "save_profile", `{"category":"preference","attribute_name":"颜色","attribute_value":"`+item.value+`"}`)
-		if !ok || profileResult.Status != ToolStatusSuccess {
-			t.Fatalf("save_profile failed: ok=%v result=%#v", ok, profileResult)
-		}
-		episodicResult, ok := ExecuteWithContextAndCancel(context.Background(), ctx, "save_episodic_memory", `{"scene_type":"insight","title":"颜色偏好","content":"用户说明了颜色偏好"}`)
-		if !ok || episodicResult.Status != ToolStatusSuccess {
-			t.Fatalf("save_episodic_memory failed: ok=%v result=%#v", ok, episodicResult)
-		}
-	}
-	db, err := gormDB.DB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rows, err := db.Query("SELECT character_id, attribute_value, source_conv_id FROM user_profiles ORDER BY character_id")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	gotProfiles := map[string]string{}
-	gotProfileConvs := map[string]string{}
-	for rows.Next() {
-		var characterID, value, convID string
-		if err := rows.Scan(&characterID, &value, &convID); err != nil {
-			t.Fatal(err)
-		}
-		gotProfiles[characterID] = value
-		gotProfileConvs[characterID] = convID
-	}
-	if gotProfiles["char-profile-a"] != "蓝色" || gotProfiles["char-profile-b"] != "绿色" {
-		t.Fatalf("profile context crossed roles: %#v", gotProfiles)
-	}
-	if gotProfileConvs["char-profile-a"] != "conv-profile-a" || gotProfileConvs["char-profile-b"] != "conv-profile-b" {
-		t.Fatalf("profile conversation context crossed roles: %#v", gotProfileConvs)
-	}
-	var episodicA, episodicB int
-	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE character_id = ? AND source_conv_id = ?", "char-profile-a", "conv-profile-a").Scan(&episodicA); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM episodic_memories WHERE character_id = ? AND source_conv_id = ?", "char-profile-b", "conv-profile-b").Scan(&episodicB); err != nil {
-		t.Fatal(err)
-	}
-	if episodicA != 1 || episodicB != 1 {
-		t.Fatalf("episodic context crossed roles: a=%d b=%d", episodicA, episodicB)
-	}
-}
-
-func TestSaveMemoryPersistsExpiresAtAndEntityID(t *testing.T) {
-	gormDB, _, cleanup := setupToolTestDB(t)
-	t.Cleanup(cleanup)
-	entityID := "550e8400-e29b-41d4-a716-446655440000"
-	execCtx := ToolExecutionContext{
-		ConversationID: "conv-memory",
-		CharacterID:    "char-memory",
-		Channel:        "wechat",
-		RequestID:      "req-memory",
-		ToolCallID:     "tool-memory",
-	}
-	result, ok := ExecuteWithContextAndCancel(context.Background(), execCtx, "save_memory", `{"key":"计划","value":"下周出差","expiresAt":"2026-12-31","entityId":"`+entityID+`"}`)
-	if !ok || result.Status != ToolStatusSuccess {
-		t.Fatalf("unexpected result: ok=%v %#v", ok, result)
-	}
-	db, err := gormDB.DB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var expiresAt, savedEntityID, sourceConvID string
-	if err := db.QueryRow("SELECT expires_at, entity_id, source_conv_id FROM memories WHERE id = ?", result.ExternalOperationID).Scan(&expiresAt, &savedEntityID, &sourceConvID); err != nil {
-		t.Fatal(err)
-	}
-	if expiresAt != "2026-12-31" || savedEntityID != entityID || sourceConvID != "conv-memory" {
-		t.Fatalf("unexpected memory row: expiresAt=%s entityId=%s sourceConvID=%s", expiresAt, savedEntityID, sourceConvID)
-	}
-}
-
-func TestSaveMemoryRejectsInvalidExpiresAt(t *testing.T) {
-	_, _, cleanup := setupToolTestDB(t)
-	t.Cleanup(cleanup)
-	execCtx := ToolExecutionContext{
-		ConversationID: "conv-invalid",
-		CharacterID:    "char-invalid",
-		Channel:        "wechat",
-		RequestID:      "req-invalid",
-		ToolCallID:     "tool-invalid",
-	}
-	result, ok := ExecuteWithContextAndCancel(context.Background(), execCtx, "save_memory", `{"key":"计划","value":"下周出差","expiresAt":"2026/12/31"}`)
-	if !ok {
-		t.Fatal("tool execute failed")
-	}
-	if result.Status != ToolStatusFailed || result.ErrorCode != "invalid_expires_at" {
-		t.Fatalf("unexpected result: %#v", result)
 	}
 }
 

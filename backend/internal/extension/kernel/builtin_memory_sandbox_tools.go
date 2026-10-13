@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
@@ -31,6 +33,21 @@ func registerBuiltinMemorySandboxTools(ctx context.Context, registry *capability
 		{id: "builtin.sandbox.environment.write", modelName: "write_environment_variable", name: "Write Sandbox Environment Variable", description: "Create, update, or delete one scoped sandbox-package environment variable without mutating the backend process environment.", input: `{"type":"object","required":["name"],"additionalProperties":false,"properties":{"name":{"type":"string","pattern":"^[A-Za-z_][A-Za-z0-9_]{0,127}$"},"value":{"type":"string","maxLength":65536},"delete":{"type":"boolean"}}}`, permissions: []capability.PermissionRequirement{{Capability: "secrets.write", Risk: string(capability.RiskHigh)}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, background: false, idempotent: true, timeout: 5 * time.Second, maxOutput: 4096},
 		{id: "builtin.sandbox.script.direct", modelName: "execute_sandbox_script_direct", name: "Execute Sandbox Script Direct", description: "Execute inline JavaScript in a restricted Node VM with no require, process, filesystem, network, child-process, WASM, eval or Function access.", input: `{"type":"object","required":["script"],"additionalProperties":false,"properties":{"script":{"type":"string","minLength":1,"maxLength":131072},"input":{},"timeout_ms":{"type":"integer","minimum":100,"maximum":30000}}}`, permissions: []capability.PermissionRequirement{{Capability: "service.runtime.execute", Risk: string(capability.RiskHigh)}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, background: false, idempotent: false, timeout: 32 * time.Second, maxOutput: 1024 * 1024},
 	}
+	for _, definition := range append(tool.GetAll(), tool.GetMemoryTools()...) {
+		name := definition.Function.Name
+		if name != "save_memory" && name != "save_profile" && name != "save_episodic_memory" && name != "summarize_memories" && name != "request_memory_consolidation" {
+			continue
+		}
+		schema, err := json.Marshal(definition.Function.Parameters)
+		if err != nil {
+			return err
+		}
+		permission, side, approval := "memory.write", capability.SideEffectWrite, true
+		if name == "summarize_memories" {
+			permission, side, approval = "memory.read", capability.SideEffectReadOnly, false
+		}
+		specs = append(specs, builtinMemorySandboxToolSpec{id: "builtin.memory." + name, modelName: name, name: name, description: definition.Function.Description, input: string(schema), permissions: []capability.PermissionRequirement{{Capability: permission, Risk: string(capability.RiskMedium)}}, risk: capability.RiskMedium, side: side, approval: approval, background: true, idempotent: true, timeout: 90 * time.Second, maxOutput: 256 * 1024})
+	}
 	for _, spec := range specs {
 		def := capability.ToolDefinition{
 			ID: spec.id, ModelName: spec.modelName, Source: capability.ToolSourceBuiltin, Name: spec.name, Description: spec.description,
@@ -40,6 +57,7 @@ func registerBuiltinMemorySandboxTools(ctx context.Context, registry *capability
 			ToolVersion: capability.ToolVersion{SchemaVersion: 1, Revision: "builtin-v1"}, ModelExposure: capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"memory", "sandbox", "automation"}, Priority: 44},
 			ExecutionPolicy: capability.ToolExecutionPolicy{Timeout: spec.timeout, MaxConcurrency: 2, Idempotent: spec.idempotent, ApprovalRequired: spec.approval, AllowBackground: spec.background},
 			ResultPolicy:    capability.ToolResultPolicy{SanitizeError: true, MaxOutputBytes: spec.maxOutput}, Runtime: capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeBuiltin, RuntimeID: "builtin", HandlerName: spec.modelName},
+			Metadata: map[string]interface{}{"deviceMeshOwnershipAware": strings.HasPrefix(spec.id, "builtin.memory.")},
 		}
 		if err := registry.Register(ctx, def); err != nil {
 			return fmt.Errorf("register builtin memory/sandbox tool %s: %w", spec.modelName, err)

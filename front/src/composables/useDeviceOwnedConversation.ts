@@ -13,7 +13,7 @@ export interface OwnedProjectWorkspace { id: string; deviceId: string; name: str
 export interface OwnedProject { id: string; title: string; workspaces: OwnedProjectWorkspace[]; primaryWorkspaceId: string; hiddenAt?: string | null; revision: number; ownerId: string; roleId: string; readOnly: boolean; createdAt: string; updatedAt: string; pinnedAt?: string | null; executionScope: OwnedExecutionScope }
 interface MeshPolicy { coordinated: boolean; modeRevision: number; providerEpoch: number; permissionRevision: number; selectedRole: string }
 interface MeshResource { kind: string; id: string; roleId: string; ownerId: string; revision: number; deleted: boolean; body: any; executionScope?: OwnedExecutionScope }
-interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string>; legacyGraphs?: any[]; legacyMessages?: any[]; legacyMemories?: any[]; legacyProfiles?: any[]; legacyEpisodes?: any[]; legacyConversations?: any[]; legacySummary?: any }
+interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string>; legacyMessages?: any[]; legacyConversations?: any[]; legacySummary?: any }
 interface MeshQueryResult { conversationReference?: string; conversationOrigin?: OwnedConversationOrigin; executionScope: OwnedExecutionScope; snapshot: MeshSnapshot; historicalSnapshot?: MeshSnapshot; historicalConversations?: any[]; nextHistoricalListCursor?: string; deliveryFailures?: Array<{ ownerId: string; requestId: string; conversationId?: string; errorCode: string; failedAt: string }> }
 
 const enabled = ref(false);

@@ -15,21 +15,14 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
-	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/worldbook"
-	"github.com/u-ai/backend/pkg/app"
 )
 
 func registerLegacyDataTestRoutes(router *gin.Engine) {
 	group := router.Group("/api")
-	memory.RegisterMemoryRouter(group, &app.AppContext{}, nil)
-	profile.RegisterProfileRouter(group, nil)
-	episodic.RegisterEpisodicRouter(group, nil)
 	worldbook.RegisterWorldBookRouter(group, nil)
 	group.GET("/unrelated", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 }
@@ -98,7 +91,7 @@ func TestLegacyDataRegisteredRoutesRequireCurrentCoreAdministration(t *testing.T
 		t.Fatal(err)
 	}
 	originalPolicy := fmt.Sprintf("%d:%d:%d", policy.ProviderEpoch, policy.ModeRevision, policy.PermissionRevision)
-	for _, path := range []string{"/api/memories", "/api/memory-candidates/generate", "/api/profiles", "/api/episodic", "/api/world-book"} {
+	for _, path := range []string{"/api/world-book"} {
 		response := request(http.MethodPost, path, originalPolicy)
 		var payload map[string]any
 		expectedMessage := "unexpected EOF"
@@ -121,7 +114,7 @@ func TestLegacyDataRegisteredRoutesRequireCurrentCoreAdministration(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/memories", "/api/profiles", "/api/episodic", "/api/world-book"} {
+	for _, path := range []string{"/api/world-book"} {
 		if response := request(http.MethodPost, path, originalPolicy); response.Code != http.StatusConflict {
 			t.Fatalf("regrant revived old intent %s: %d", path, response.Code)
 		}
@@ -141,7 +134,7 @@ func TestLegacyDataRegisteredRoutesPreserveLocalCoreAccess(t *testing.T) {
 			c.Next()
 		})
 		registerLegacyDataTestRoutes(router)
-		for _, path := range []string{"/api/memories", "/api/profiles", "/api/episodic", "/api/world-book"} {
+		for _, path := range []string{"/api/world-book"} {
 			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader("{"))
 			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()

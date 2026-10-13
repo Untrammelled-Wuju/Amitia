@@ -75,7 +75,6 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding"
-	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -93,7 +92,6 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
 	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mindruntime"
@@ -102,11 +100,9 @@ import (
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
-	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/psyche/appraisal"
 	"github.com/u-ai/backend/internal/psyche/budget"
-	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
@@ -138,9 +134,7 @@ type AppServices struct {
 	DeliveryWorker               *delivery.Worker
 	Browser                      browser.BrowserProvider
 	Graph                        graph.Service
-	Memory                       memory.Service
-	Profile                      profile.Service
-	Episodic                     episodic.Service
+	MemoryConsumers              *ownedMemoryConsumers
 	WorldBook                    worldbook.Service
 	Vision                       vision.Service
 	Chat                         chat.Service
@@ -255,8 +249,8 @@ func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interactio
 	request.RequestID = "reflection-" + memorySubmissionFingerprint(req.RequestID, req.CandidateID, req.Topic)
 	request.ConversationID = req.ConversationID
 	kind := strings.TrimSpace(req.SuggestedMemoryType)
-	if _, ok := memory.NormalizeMemoryType(kind); !ok {
-		kind = string(memory.MemoryTypeFact)
+	if _, ok := business.NormalizeMemoryType(kind); !ok {
+		kind = string(business.MemoryTypeFact)
 	}
 	result, err := a.runtime.engine.SubmitMemoryCandidate(ctx, request, business.MemoryCandidateInput{Key: "reflection:" + strings.TrimSpace(req.CandidateID) + ":" + req.Topic, Value: req.Abstract, MemoryType: kind, Importance: req.Importance})
 	if err != nil {
@@ -273,16 +267,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		config.AppCfg = &config.Config{}
 	}
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
+	memoryConsumers := &ownedMemoryConsumers{}
 	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
 	relTimeCoordinator := temporal.NewRelationshipTimeCoordinator(relTimeRepo, temporal.SystemClock{})
 	temporalSvc.SetRelationshipTimeProvider(relTimeCoordinator)
-	memRepo := memory.NewRepository(ctx)
-	memSvc := memory.NewService(memRepo, ctx, graphSvc)
-	memory.SetTemporalRepo(memSvc, temporal.NewRepository(ctx.DB))
-	profRepo := profile.NewRepository(ctx)
-	profSvc := profile.NewService(profRepo, ctx, graphSvc)
-	epiRepo := episodic.NewRepository(ctx)
-	epiSvc := episodic.NewService(epiRepo, ctx, graphSvc)
 	wbRepo := worldbook.NewRepository(ctx)
 	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
 	visionRepo := vision.NewRepository(ctx.DB)
@@ -299,7 +287,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
 	syncService := syncpkg.NewService(ctx.DB, syncApplier)
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
 	extensionRuntime, err := extension.NewRuntime(context.Background(), ctx.DB, "1.0.0")
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
@@ -415,6 +403,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry, func() *MCPCompatibilityRuntime { return mcpCompatibility })
 	agentAdminController := newServerAgentAdminController(chatSvc, charRepo, ctx.DB, graphSvc, extensionRuntime.Kernel, mcpRepository)
+	agentAdminController.memory = memoryConsumers
+	if setter, ok := chatSvc.(interface {
+		SetMemoryConsumers(business.MemoryConsumerPort)
+	}); ok {
+		setter.SetMemoryConsumers(memoryConsumers)
+	}
 	scopeRelationDB, err := ctx.DB.DB()
 	if err != nil {
 		return nil, fmt.Errorf("scope relation database unavailable: %w", err)
@@ -699,7 +693,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
 		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
 	}
-	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, extensionContextProvider, temporalSvc)
+	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, extensionContextProvider, memoryConsumers.Beliefs, temporalSvc)
 	runtimeRegistry.Register(interaction.NewContinuityContextLoader(continuityRepo))
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
 	runtimePipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
@@ -730,21 +724,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		panic("failed to init data lifecycle schema")
 	}
 	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB, graphSvc))
-	if coordinatorSetter, ok := interface{}(memSvc).(interface {
-		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
-	}); ok {
-		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
-	}
-	if coordinatorSetter, ok := interface{}(profSvc).(interface {
-		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
-	}); ok {
-		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
-	}
-	if coordinatorSetter, ok := interface{}(epiSvc).(interface {
-		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
-	}); ok {
-		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
-	}
 	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
 	entry.SetContinuityResolver(continuityResolver)
 	continuityCoordinator.SetDispatcher(&continuityWakeDispatcher{entry: entry})
@@ -756,9 +735,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		entry.SetExecutionService(kernelContainer.ExecutionService)
 	}
 	reconciliationEngine := mindruntime.NewReconciliationEngine(mindruntime.DefaultReconciliationConfig())
-	graphReconAdapter := &graphReconciliationAdapter{graphSvc: graphSvc}
-	qdrantReconAdapter := &qdrantReconciliationAdapter{qdrantClient: qdrant.NewQdrantClient()}
-	if err := mindruntime.RegisterRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB, graphReconAdapter, qdrantReconAdapter); err != nil {
+	if err := mindruntime.RegisterRuntimeReconciliationCheckers(reconciliationEngine, ctx.DB); err != nil {
 		log.Warn("reconciliation checkers registration warning: ", err)
 	}
 	pipelineMgr := pipelinecheckpoint.New(ctx.DB)
@@ -1210,9 +1187,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		RuntimePolicy:                policy,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
-		Memory:                       memSvc,
-		Profile:                      profSvc,
-		Episodic:                     epiSvc,
+		MemoryConsumers:              memoryConsumers,
 		WorldBook:                    wbSvc,
 		Vision:                       visionSvc,
 		Chat:                         chatSvc,
@@ -1291,8 +1266,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	dataPortability, dataPortabilityErr := buildDataPortabilityCoordinator(dataPortabilityDeps{
 		DataDir:   config.AppCfg.Storage.DataDir,
 		DB:        ctx.DB,
-		MemSvc:    memSvc,
-		EpicSvc:   epiSvc,
+		Memory:    memoryConsumers,
 		ExtSvc:    extensionRuntime,
 		Workspace: workspaceService,
 	})
@@ -1367,6 +1341,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}); ok {
 			runtime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: deviceMeshRuntime.LocalHandler.LocalInferenceContext}
 			setter.SetCanonicalMemoryRuntime(runtime)
+			memoryConsumers.runtime = runtime
 			reflectionMemoryAdapter.runtime = runtime
 		}
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
@@ -1648,14 +1623,14 @@ func (p *petInfoPort) ResolvePetInfo(ctx context.Context, petInstanceID string) 
 	return "", ""
 }
 
-func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository, extensionContext extensioncontext.Provider, temporalServices ...*temporal.Service) *interaction.ContextLoaderRegistry {
+func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository, extensionContext extensioncontext.Provider, memoryReader business.MemoryConsumerReader, temporalServices ...*temporal.Service) *interaction.ContextLoaderRegistry {
 	runtimeRegistry := interaction.NewContextLoaderRegistry()
 	runtimeRegistry.Register(interaction.NewRoleRuntimeProfileContextLoader(charRepo))
 	runtimeRegistry.Register(interaction.NewChannelContextLoader())
 	runtimeRegistry.Register(interaction.NewConversationContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewPsycheContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewRelationshipContextLoader(ctx.DB))
-	runtimeRegistry.Register(interaction.NewBeliefContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewBeliefContextLoader(memoryReader))
 	runtimeRegistry.Register(interaction.NewLifeContextLoader(extensionContext))
 	runtimeRegistry.Register(interaction.NewNeedContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewUnresolvedThreadContextLoader(ctx.DB))
@@ -1776,40 +1751,6 @@ func registerAgentReconciliation(engine *mindruntime.ReconciliationEngine, goalR
 		engine.RegisterChecker(mindruntime.ReconciliationAgentDescriptorRefStale, interaction.NewDescriptorRefStaleChecker(recoveryDescriptor, settleDelay))
 		engine.RegisterChecker(mindruntime.ReconciliationAgentDescriptorSchema, interaction.NewDescriptorRefStaleChecker(recoveryDescriptor, settleDelay))
 	}
-}
-
-type graphReconciliationAdapter struct {
-	graphSvc graph.Service
-}
-
-func (a *graphReconciliationAdapter) Name() string { return "graph" }
-
-func (a *graphReconciliationAdapter) CheckSideEffectExists(ctx context.Context, aggregateID, eventType string) (bool, error) {
-	if a.graphSvc == nil {
-		return false, nil
-	}
-	nodes, err := a.graphSvc.GetAllNodes(aggregateID)
-	if err != nil {
-		return false, err
-	}
-	return len(nodes) > 0, nil
-}
-
-type qdrantReconciliationAdapter struct {
-	qdrantClient *qdrant.QdrantClient
-}
-
-func (a *qdrantReconciliationAdapter) Name() string { return "qdrant" }
-
-func (a *qdrantReconciliationAdapter) CheckSideEffectExists(ctx context.Context, aggregateID, eventType string) (bool, error) {
-	if a.qdrantClient == nil {
-		return false, nil
-	}
-	_, err := a.qdrantClient.SearchWithFilter(ctx, "memory_embeddings", nil, qdrant.QdrantFilter{CharacterID: aggregateID}, 1)
-	if err != nil {
-		return false, nil
-	}
-	return true, nil
 }
 
 type postProcessPublisherAdapter struct {

@@ -9,14 +9,11 @@ import (
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/continuity"
-	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
-	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/modelerror"
-	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
@@ -32,9 +29,9 @@ func WithApprovalBroker(broker *execution.ApprovalBroker) SystemRouterOption {
 	}
 }
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, continuityRepo *continuity.Repository, continuityCoordinator *continuity.WaitCoordinator, channelAccess ChannelAvailability, options ...SystemRouterOption) {
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, continuityRepo *continuity.Repository, continuityCoordinator *continuity.WaitCoordinator, channelAccess ChannelAvailability, options ...SystemRouterOption) {
 	svc := NewService(ctx, runtimeprofile.Profile(""))
-	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
+	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memoryConsumer)
 	for _, option := range options {
 		if option != nil {
 			option(handler)

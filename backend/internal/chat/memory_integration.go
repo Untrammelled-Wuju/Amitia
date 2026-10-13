@@ -5,59 +5,9 @@ package chat
 import (
 	"strings"
 
-	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	promptir "github.com/u-ai/backend/internal/prompt"
 )
-
-func (s *service) detectEpisodicMoment(convID, charID string) {
-	if s.episodicPort == nil {
-		return
-	}
-	messages := s.loadHistory(convID)
-	if len(messages) == 0 {
-		return
-	}
-	s.episodicPort.ExtractFromConversation(charID, convID, messages)
-}
-
-func (s *service) extractProfile(convID, charID string) {
-	if s.profilePort == nil {
-		return
-	}
-	messages := s.loadHistory(convID)
-	if len(messages) == 0 {
-		return
-	}
-	s.profilePort.ExtractFromConversation(s.profileExtractionSpaceID(convID, charID), convID, messages, charID)
-}
-
-func (s *service) autoExtractMemories(convID, charID string) {
-	if s.memoryPort == nil {
-		return
-	}
-	candidates, err := s.memoryPort.GenerateCandidates(convID)
-	if err != nil || len(candidates) == 0 {
-		return
-	}
-
-	existingKeys := map[string]bool{}
-	var existingMemories []struct {
-		Key   string
-		Value string
-	}
-	s.db.Table("memories").Select("key, value").Find(&existingMemories)
-	for _, m := range existingMemories {
-		existingKeys[m.Key+"|"+m.Value] = true
-	}
-
-	for _, c := range candidates {
-		if existingKeys[c.Key+"|"+c.Value] {
-			continue
-		}
-		existingKeys[c.Key+"|"+c.Value] = true
-		s.memoryPort.AcceptCandidate(c.ID)
-	}
-}
 
 func (s *service) profileExtractionSpaceID(convID, charID string) string {
 	fallback := strings.TrimSpace(charID)
@@ -75,19 +25,19 @@ func (s *service) profileExtractionSpaceID(convID, charID string) string {
 	return peerID
 }
 
-func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) string {
+func (s *service) buildMemoryInjectItems(results []business.HybridSearchResult) string {
 	if len(results) == 0 {
 		return promptir.BuildMemoryInjectGuardrailOnly()
 	}
-	if len(results) > memory.MaxMemoryInjectTotal {
-		results = results[:memory.MaxMemoryInjectTotal]
+	if len(results) > business.MaxMemoryInjectTotal {
+		results = results[:business.MaxMemoryInjectTotal]
 	}
 	injectItems := make([]promptir.MemoryInjectItem, 0, len(results))
 	for _, r := range results {
 		if isMemoryBlocked(r.Memory) {
 			continue
 		}
-		cat := string(memory.CanonicalMemoryType(r.Memory.MemoryType))
+		cat := string(business.CanonicalMemoryType(r.Memory.MemoryType))
 		tier := mapMemoryToTier(r)
 		injectItems = append(injectItems, promptir.MemoryInjectItem{
 			Content:  r.Memory.Value,
@@ -98,21 +48,21 @@ func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) st
 	return promptir.BuildMemoryInjectRawSection(injectItems)
 }
 
-func mapMemoryToTier(result memory.HybridSearchResult) promptir.MemoryInjectTier {
+func mapMemoryToTier(result business.HybridSearchResult) promptir.MemoryInjectTier {
 	if result.SourceType == "episodic" {
 		return promptir.TierRecent
 	}
 	switch result.Memory.RetentionLevel {
-	case memory.RetentionL1, memory.RetentionL2:
+	case business.RetentionL1, business.RetentionL2:
 		return promptir.TierLongTerm
-	case memory.RetentionL3:
+	case business.RetentionL3:
 		return promptir.TierRoleRel
 	default:
 		return promptir.TierRecent
 	}
 }
 
-func isMemoryBlocked(m memory.Memory) bool {
+func isMemoryBlocked(m business.Memory) bool {
 	if m.AllowContextUse != nil && !*m.AllowContextUse {
 		return true
 	}

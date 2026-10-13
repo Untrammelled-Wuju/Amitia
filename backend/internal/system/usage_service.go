@@ -3,6 +3,7 @@
 package system
 
 import (
+	"sort"
 	"time"
 )
 
@@ -35,14 +36,12 @@ func (s *service) GetUsageDaily() map[string]interface{} {
 			COALESCE(m.model_calls, 0)   AS model_calls,
 			COALESCE(m.tokens, 0)        AS tokens,
 			COALESCE(c.conversations, 0) AS conversations,
-			COALESCE(mem.memories, 0)    AS memories,
+			0 AS memories,
 			COALESCE(fb.feedback, 0)     AS feedback
 		FROM (
 			SELECT date(created_at) AS date FROM messages
 			UNION
 			SELECT date(created_at) FROM conversations
-			UNION
-			SELECT date(created_at) FROM memories
 			UNION
 			SELECT date(created_at) FROM message_feedback
 		) d
@@ -57,10 +56,6 @@ func (s *service) GetUsageDaily() map[string]interface{} {
 			SELECT date(created_at) AS date, COUNT(*) AS conversations
 			FROM conversations GROUP BY date(created_at)
 		) c ON d.date = c.date
-		LEFT JOIN (
-			SELECT date(created_at) AS date, COUNT(*) AS memories
-			FROM memories GROUP BY date(created_at)
-		) mem ON d.date = mem.date
 		LEFT JOIN (
 			SELECT date(created_at) AS date, COUNT(*) AS feedback
 			FROM message_feedback GROUP BY date(created_at)
@@ -90,6 +85,25 @@ func (s *service) GetUsageDaily() map[string]interface{} {
 
 	if daily == nil {
 		daily = []map[string]interface{}{}
+	}
+	counts, memoryErr := s.ownedMemoryUsage()
+	if memoryErr != nil {
+		return map[string]interface{}{"daily": daily, "memoryError": memoryErr.Error()}
+	}
+	represented := map[string]bool{}
+	for _, item := range daily {
+		day, _ := item["date"].(string)
+		item["memories"] = counts[day]
+		represented[day] = true
+	}
+	for day, count := range counts {
+		if !represented[day] {
+			daily = append(daily, map[string]interface{}{"date": day, "messages": int64(0), "modelCalls": int64(0), "tokens": int64(0), "conversations": int64(0), "memories": count, "feedback": int64(0)})
+		}
+	}
+	sort.Slice(daily, func(i, j int) bool { return daily[i]["date"].(string) > daily[j]["date"].(string) })
+	if len(daily) > 30 {
+		daily = daily[:30]
 	}
 	return map[string]interface{}{"daily": daily}
 }

@@ -258,7 +258,7 @@ func CollectionNames() []string {
 	if len(cfg.Collections) == 0 {
 		return []string{defaultCollectionName()}
 	}
-	keys := []string{"memory_embeddings", "working_memory", "user_profiles", "episodic_memories", "amitia_emotes"}
+	keys := []string{"amitia_emotes"}
 	names := make([]string, 0, len(cfg.Collections))
 	seen := map[string]bool{}
 	for _, key := range keys {
@@ -308,12 +308,12 @@ func resolveCollectionName(collectionName ...string) string {
 
 func defaultCollectionName() string {
 	if config.AppCfg == nil {
-		return "memory_embeddings"
+		return "amitia_vectors"
 	}
 	if config.AppCfg.Providers.VectorStore.Qdrant.CollectionName != "" {
 		return config.AppCfg.Providers.VectorStore.Qdrant.CollectionName
 	}
-	return ResolveConfiguredCollection("memory_embeddings")
+	return "amitia_vectors"
 }
 
 func defaultVectorDim() int {
@@ -322,9 +322,6 @@ func defaultVectorDim() int {
 	}
 	if config.AppCfg.Providers.VectorStore.Qdrant.VectorDim > 0 {
 		return config.AppCfg.Providers.VectorStore.Qdrant.VectorDim
-	}
-	if c, ok := config.AppCfg.Providers.VectorStore.Qdrant.Collections["memory_embeddings"]; ok && c.VectorDim > 0 {
-		return c.VectorDim
 	}
 	return 1536
 }

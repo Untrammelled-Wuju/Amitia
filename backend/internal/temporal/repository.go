@@ -23,8 +23,6 @@ type Repository interface {
 	DeleteAnchor(id, spaceID, characterID string) error
 	CreateEvent(*Event) (bool, error)
 	ListEvents(spaceID, characterID string, limit int) ([]Event, error)
-	SaveMemoryTemporalMetadata(*MemoryTemporalMetadata) error
-	GetMemoryTemporalMetadata(memoryIDs []string) (map[string]MemoryTemporalMetadata, error)
 }
 
 type SQLiteRepository struct{ db *gorm.DB }
@@ -32,7 +30,7 @@ type SQLiteRepository struct{ db *gorm.DB }
 func NewRepository(db *gorm.DB) *SQLiteRepository { return &SQLiteRepository{db: db} }
 
 func (r *SQLiteRepository) InitSchema() error {
-	return r.db.AutoMigrate(&Profile{}, &Anchor{}, &Event{}, &MemoryTemporalMetadata{})
+	return r.db.AutoMigrate(&Profile{}, &Anchor{}, &Event{})
 }
 
 func (r *SQLiteRepository) GetProfile(ownerType, ownerID string) (*Profile, error) {
@@ -148,25 +146,6 @@ func (r *SQLiteRepository) ListEvents(spaceID, characterID string, limit int) ([
 	var events []Event
 	err := db.Order("occurred_at_utc DESC").Limit(limit).Find(&events).Error
 	return events, err
-}
-
-func (r *SQLiteRepository) SaveMemoryTemporalMetadata(metadata *MemoryTemporalMetadata) error {
-	return r.db.Clauses(clause.OnConflict{UpdateAll: true}).Create(metadata).Error
-}
-
-func (r *SQLiteRepository) GetMemoryTemporalMetadata(memoryIDs []string) (map[string]MemoryTemporalMetadata, error) {
-	result := map[string]MemoryTemporalMetadata{}
-	if len(memoryIDs) == 0 {
-		return result, nil
-	}
-	var items []MemoryTemporalMetadata
-	if err := r.db.Where("memory_id IN ?", memoryIDs).Find(&items).Error; err != nil {
-		return nil, err
-	}
-	for _, item := range items {
-		result[item.MemoryID] = item
-	}
-	return result, nil
 }
 
 func utc(value time.Time) time.Time { return value.UTC().Round(0) }

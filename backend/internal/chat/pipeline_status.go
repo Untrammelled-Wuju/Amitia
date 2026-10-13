@@ -10,8 +10,5 @@ func (s *service) GetCompressionStatus(convID string) map[string]interface{} {
 }
 
 func (s *service) GetPipelineStatus() interface{} {
-	if s.pipeline == nil {
-		return nil
-	}
-	return s.pipeline.LastRun()
+	return map[string]interface{}{"runtime": "owned-v1", "ready": s.canonicalMemory != nil}
 }

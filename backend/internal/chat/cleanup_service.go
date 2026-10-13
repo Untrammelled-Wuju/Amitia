@@ -1,12 +1,14 @@
 package chat
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	memorymodel "github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"gorm.io/gorm"
 )
@@ -44,10 +46,11 @@ type cleanupPlan struct {
 	MessageCount    int64
 	MemoryCount     int64
 	IncludeMemories bool
+	Memories        []business.MemoryConsumerEntry
 	ExpiresAt       time.Time
 }
 
-func (s *service) PreviewCleanup(req CleanupRequest, spaceID string) (*CleanupPreview, error) {
+func (s *service) PreviewCleanup(req CleanupRequest, spaceID string, contexts ...context.Context) (*CleanupPreview, error) {
 	query := s.db.Table("conversations").Where("deleted_at IS NULL")
 	query = applyConversationOwnerScope(query, spaceID)
 	threshold := strings.TrimSpace(req.BeforeDate)
@@ -82,21 +85,37 @@ func (s *service) PreviewCleanup(req CleanupRequest, spaceID string) (*CleanupPr
 	}
 	var messageCount int64
 	var memoryCount int64
+	var memoryEntries []business.MemoryConsumerEntry
+	ctx := context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
 	if len(ids) > 0 {
 		if err := s.db.Table("messages").Where("deleted_at IS NULL AND conversation_id IN ?", ids).Count(&messageCount).Error; err != nil {
 			return nil, err
 		}
 		if req.IncludeMemories {
-			memoryQuery := s.db.Model(&memorymodel.Memory{}).Where("source_conv_id IN ?", ids)
-			owner := normalizeConversationOwner(spaceID)
-			if chatLocalSingleUserMode() {
-				memoryQuery = memoryQuery.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", owner)
-			} else {
-				memoryQuery = memoryQuery.Where("space_id = ?", owner)
+			if s.memoryConsumers == nil {
+				return nil, fmt.Errorf("统一记忆服务尚未就绪")
 			}
-			if err := memoryQuery.Count(&memoryCount).Error; err != nil {
+			entries, err := s.memoryConsumers.Read(ctx, "", "memory", true)
+			if err != nil {
 				return nil, err
 			}
+			for _, entry := range entries {
+				var document map[string]json.RawMessage
+				if err := json.Unmarshal(entry.Body, &document); err != nil {
+					return nil, err
+				}
+				conversation := business.MemoryText(document, "conversationId")
+				for _, id := range ids {
+					if conversation == id {
+						memoryEntries = append(memoryEntries, entry)
+						break
+					}
+				}
+			}
+			memoryCount = int64(len(memoryEntries))
 		}
 	}
 
@@ -113,7 +132,7 @@ func (s *service) PreviewCleanup(req CleanupRequest, spaceID string) (*CleanupPr
 	}
 	s.cleanupPlans[previewID] = cleanupPlan{
 		SpaceID: spaceID, ConversationIDs: append([]string(nil), ids...), MessageCount: messageCount,
-		MemoryCount: memoryCount, IncludeMemories: req.IncludeMemories, ExpiresAt: expiresAt,
+		Memories: memoryEntries, MemoryCount: memoryCount, IncludeMemories: req.IncludeMemories, ExpiresAt: expiresAt,
 	}
 	s.cleanupMu.Unlock()
 
@@ -123,7 +142,7 @@ func (s *service) PreviewCleanup(req CleanupRequest, spaceID string) (*CleanupPr
 	}, nil
 }
 
-func (s *service) ConfirmCleanup(previewID, confirmText, spaceID string) (*CleanupResult, error) {
+func (s *service) ConfirmCleanup(previewID, confirmText, spaceID string, contexts ...context.Context) (*CleanupResult, error) {
 	if strings.TrimSpace(confirmText) != "确认清理" {
 		return nil, fmt.Errorf("确认文本不匹配")
 	}
@@ -145,6 +164,21 @@ func (s *service) ConfirmCleanup(previewID, confirmText, spaceID string) (*Clean
 	}
 
 	deletedMemories := int64(0)
+	if len(plan.Memories) > 0 {
+		port, ok := s.memoryConsumers.(business.MemoryDeletionPort)
+		if !ok {
+			return nil, fmt.Errorf("统一记忆删除入口不可用")
+		}
+		ctx := context.Background()
+		if len(contexts) > 0 {
+			ctx = contexts[0]
+		}
+		var err error
+		deletedMemories, err = port.DeleteEntries(ctx, plan.Memories, "chat-cleanup/"+previewID)
+		if err != nil {
+			return nil, fmt.Errorf("记忆清理失败（已清理 %d 条），请重新预览：%w", deletedMemories, err)
+		}
+	}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		for _, id := range plan.ConversationIDs {
 			if _, err := s.tombstoneConversationTx(tx, id, spaceID); err != nil {
@@ -154,20 +188,7 @@ func (s *service) ConfirmCleanup(previewID, confirmText, spaceID string) (*Clean
 				return err
 			}
 		}
-		if plan.IncludeMemories && len(plan.ConversationIDs) > 0 {
-			memoryQuery := tx.Where("source_conv_id IN ?", plan.ConversationIDs)
-			owner := normalizeConversationOwner(spaceID)
-			if chatLocalSingleUserMode() {
-				memoryQuery = memoryQuery.Where("space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = 'default'", owner)
-			} else {
-				memoryQuery = memoryQuery.Where("space_id = ?", owner)
-			}
-			result := memoryQuery.Delete(&memorymodel.Memory{})
-			if result.Error != nil {
-				return result.Error
-			}
-			deletedMemories = result.RowsAffected
-		}
+
 		return nil
 	})
 	if err != nil {
@@ -199,3 +220,5 @@ func compactStrings(values []string) []string {
 	}
 	return out
 }
+
+func (s *service) SetMemoryConsumers(port business.MemoryConsumerPort) { s.memoryConsumers = port }

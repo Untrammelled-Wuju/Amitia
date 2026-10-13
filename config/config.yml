@@ -48,22 +48,10 @@ providers:
       configDir: ""
       dataDir: ""
       snapshotsDir: ""
-      collectionName: "memory_embeddings"
+      collectionName: "amitia_vectors"
       vectorDim: 1536
       limit: 10
-      collections:
-        memory_embeddings:
-          name: "memory_embeddings"
-          vectorDim: 1536
-        working_memory:
-          name: "working_memory"
-          vectorDim: 1536
-        user_profiles:
-          name: "user_profiles"
-          vectorDim: 1536
-        episodic_memories:
-          name: "episodic_memories"
-          vectorDim: 1536
+      collections: {}
   graphStore:
     enabled: true
     required: false

@@ -11,7 +11,6 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 
@@ -49,14 +48,8 @@ func (s *service) sys1Builder(convID string, profile *character.RoleRuntimeProfi
 	if profile != nil {
 		characterID = strings.TrimSpace(profile.CharacterID)
 	}
-	// Only the compact core profile remains in sys1. Extended profile and episodic
-	// memories are recalled dynamically so relevance and retention decide what is
-	// remembered in this turn instead of being injected unconditionally.
 	var profileCtx, epiCtx, wbCtx string
 	spaceID := s.profileExtractionSpaceID(convID, characterID)
-	if s.profilePort != nil && characterID != "" {
-		profileCtx = s.profilePort.ToSystemPrompt(spaceID, characterID)
-	}
 	if s.worldBookPort != nil {
 		wbPrompt := s.worldBookPort.ToSystemPromptForSpace(spaceID, characterID, userMessage, "")
 		if wbPrompt != "" {
@@ -108,26 +101,6 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 		status := s.compressor.GetCompressionStatus(convID)
 		if summary, ok := status["latestSummary"].(string); ok && summary != "" {
 			internalParts = append(internalParts, "【对话历史摘要】\n"+summary)
-		}
-	}
-	if s.memoryPort != nil && shouldRetrieveMemory(userMessage) {
-		spaceID := s.profileExtractionSpaceID(convID, charID)
-		results, err := s.memoryPort.HybridSearch(&memory.VectorSearchRequest{
-			Query:          userMessage,
-			CharacterID:    charID,
-			SpaceID:        spaceID,
-			ConversationID: convID,
-			RequestID:      requestID,
-			Channel:        channel,
-			Limit:          8,
-		})
-		if err == nil && len(results) > 0 {
-			memoryInjectRaw = s.buildMemoryInjectItems(results)
-			for _, result := range results {
-				if result.SourceType == "memory" && result.Memory.ID != "" {
-					go s.memoryPort.RecordUse(result.Memory.ID)
-				}
-			}
 		}
 	}
 

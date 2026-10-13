@@ -6,10 +6,9 @@ import (
 	"runtime"
 
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/embedding_config"
-	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
@@ -25,8 +24,7 @@ import (
 type dataPortabilityDeps struct {
 	DataDir   string
 	DB        *gorm.DB
-	MemSvc    memory.Service
-	EpicSvc   episodic.Service
+	Memory    business.MemoryArchivePort
 	ExtSvc    *extension.Runtime
 	Workspace *workspace.Service
 }
@@ -43,9 +41,8 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 
 	contributors := []dataportability.BackupContributor{
 		dataportability.NewCharacterContributor(deps.DB),
-		memory.NewMemoryBackupContributor(deps.MemSvc),
+		business.NewMemoryBackupContributor(deps.Memory),
 		chat.NewChatBackupContributor(deps.DB),
-		episodic.NewEpisodicBackupContributor(deps.DB),
 		relationship.NewRelationshipBackupContributor(deps.DB),
 		psyche.NewPsycheBackupContributor(deps.DB),
 		worldbook.NewWorldbookBackupContributor(deps.DB),

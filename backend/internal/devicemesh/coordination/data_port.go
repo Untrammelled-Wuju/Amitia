@@ -52,10 +52,6 @@ type DataSnapshot struct {
 	Resources           []Resource        `json:"resources"`
 	LegacyMessages      []json.RawMessage `json:"legacyMessages,omitempty"`
 	LegacySummary       json.RawMessage   `json:"legacySummary,omitempty"`
-	LegacyMemories      []json.RawMessage `json:"legacyMemories,omitempty"`
-	LegacyProfiles      []json.RawMessage `json:"legacyProfiles,omitempty"`
-	LegacyEpisodes      []json.RawMessage `json:"legacyEpisodes,omitempty"`
-	LegacyGraphs        []json.RawMessage `json:"legacyGraphs,omitempty"`
 	LegacyConversations []json.RawMessage `json:"legacyConversations,omitempty"`
 }
 
@@ -119,14 +115,14 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	if snapshot.OwnerID != scope.ResourceOwnerID || snapshot.Role.ID != scope.RoleID || snapshot.Role.Revision != scope.RoleRevision || !json.Valid(snapshot.Role.Profile) {
 		return ErrWrongOwner
 	}
-	if len(snapshot.Resources) > 4096 || len(snapshot.LegacyMessages) > 256 || len(snapshot.LegacyMemories) > 256 || len(snapshot.LegacyProfiles) > 256 || len(snapshot.LegacyEpisodes) > 256 || len(snapshot.LegacyGraphs) > 256 || len(snapshot.LegacyConversations) > 256 {
+	if len(snapshot.Resources) > 4096 || len(snapshot.LegacyMessages) > 256 || len(snapshot.LegacyConversations) > 256 {
 		return ErrPendingLimit
 	}
 	if len(snapshot.NextCursors) > 16 {
 		return ErrPendingLimit
 	}
 	for kind, cursor := range snapshot.NextCursors {
-		if (!validKind(kind) && kind != "legacyMessage" && kind != "legacyConversation" && kind != "legacyMemory" && kind != "legacyProfile" && kind != "legacyEpisode" && kind != "legacyGraph") || len(cursor) > 4096 {
+		if (!validKind(kind) && kind != "legacyMessage" && kind != "legacyConversation") || len(cursor) > 4096 {
 			return ErrWrongOwner
 		}
 	}

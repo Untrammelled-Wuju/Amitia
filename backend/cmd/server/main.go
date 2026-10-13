@@ -278,9 +278,7 @@ func main() {
 		}
 	}()
 	if policy.CoreBusinessServices {
-		agenttool.SetMemoryService(services.Memory)
-		agenttool.SetProfileService(services.Profile)
-		agenttool.SetEpisodicService(services.Episodic)
+		agenttool.SetOwnedMemoryRuntime(services.MemoryConsumers)
 		agenttool.SetTemporalService(services.Temporal)
 		temporalScheduler := temporal.NewScheduler(services.Temporal)
 		_ = temporalScheduler
@@ -300,16 +298,6 @@ func main() {
 	fmt.Printf("  ========================================\n\n")
 
 	if policy.FullHTTPAPI {
-		agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
-			services.Memory.SyncEmbedding(id, key, value, characterID, memoryType)
-			services.Memory.SyncGraphMemory(id)
-		})
-		agenttool.SetOnProfileSaved(func(id string) {
-			services.Profile.SyncGraphProfile(id)
-		})
-		agenttool.SetOnEpisodicSaved(func(id string) {
-			services.Episodic.SyncGraphEpisodic(id)
-		})
 		count, err := services.Chat.RecalculateMessageCounts()
 		backfilled, backfillErr := services.Chat.BackfillMissingConversations()
 		if backfillErr != nil {

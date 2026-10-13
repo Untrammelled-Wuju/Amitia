@@ -31,7 +31,7 @@ func TestRuntimeContextLoaderRegistryRegistersCompleteRuntimeInputs(t *testing.T
 	}
 
 	appCtx := app.NewAppContext(db, nil)
-	registry := newRuntimeContextLoaderRegistry(appCtx, character.NewRepository(appCtx), nil)
+	registry := newRuntimeContextLoaderRegistry(appCtx, character.NewRepository(appCtx), nil, nil)
 	registry.LoadAll(context.Background(), interaction.InteractionScope{CharacterID: "char-runtime", ConversationID: "conv-runtime", Channel: "web"}, "v-test")
 
 	registered := map[string]bool{}

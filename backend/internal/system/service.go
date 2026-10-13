@@ -4,6 +4,7 @@ package system
 
 import (
 	"encoding/json"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
@@ -126,6 +127,7 @@ type Service interface {
 }
 
 type service struct {
+	memoryConsumer business.MemoryConsumerPort
 	db             *gorm.DB
 	startTime      time.Time
 	healthLog      []map[string]interface{}

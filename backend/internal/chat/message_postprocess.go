@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/continuity"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	applog "github.com/u-ai/backend/log"
 )
@@ -56,7 +57,7 @@ func (s *service) startPostProcessing(ctx context.Context, trace applog.TraceFie
 	}
 	data, _ := json.Marshal(payload)
 	s.appendPostProcessOutbox(convID, postProcessEventMoodRecovery, requestID+"|"+postProcessEventMoodRecovery, data)
-	if s.pipeline != nil || s.canonicalMemory != nil {
+	if s.canonicalMemory != nil {
 		s.appendPostProcessOutbox(convID, postProcessEventPipelineExecute, requestID+"|"+postProcessEventPipelineExecute, data)
 	}
 	if s.compressor != nil {
@@ -86,7 +87,13 @@ func (s *service) ReplayPostProcess(eventType string, payload []byte) error {
 		if pp.MemoryRuntimeVersion != "owned-v1" {
 			return fmt.Errorf("旧版本记忆后处理任务不再执行")
 		}
-		return s.canonicalMemory.Observe(ctx, pp)
+		if err := s.canonicalMemory.Observe(ctx, pp); err != nil {
+			return err
+		}
+		if s.stateProvider != nil {
+			return business.NewWorkingMemoryService(s.stateProvider).Process(ctx, pp.ConversationID, pp.PipelineMessages, pp.Reply)
+		}
+		return nil
 	}
 	if pp.ExecutionScope != nil {
 		if pp.ExecutionScope.ResourceOwnerID != pp.ExecutionScope.CoreID {
@@ -96,9 +103,7 @@ func (s *service) ReplayPostProcess(eventType string, payload []byte) error {
 	}
 	switch eventType {
 	case postProcessEventPipelineExecute:
-		if s.pipeline != nil {
-			s.pipeline.Execute(ctx, pp.ConversationID, pp.PipelineMessages, pp.Reply)
-		}
+		return fmt.Errorf("统一记忆服务尚未就绪")
 	case postProcessEventContextTrim:
 	case postProcessEventMoodRecovery:
 		s.moodRecoveryCheck(ctx, pp.ConversationID, pp.CharacterID, pp.Source)

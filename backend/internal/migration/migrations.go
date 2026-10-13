@@ -227,6 +227,7 @@ func DefaultMigrations() []Migration {
 		ToolExecutionLedgerMigration(),
 		ConversationReadStateMigration(),
 		GlobalMemoryPolicyMigration(),
+		RetireLegacyMemoryDataMigration(),
 	}
 }
 

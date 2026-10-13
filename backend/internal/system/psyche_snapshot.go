@@ -1,12 +1,14 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
 	"github.com/u-ai/backend/internal/requestidentity"
@@ -46,15 +48,19 @@ type beliefSnapshotEntry struct {
 	Conflicted bool    `json:"conflicted"`
 }
 
-func RegisterPsycheSnapshotRouter(r *gin.RouterGroup, db *gorm.DB) {
+func RegisterPsycheSnapshotRouter(r *gin.RouterGroup, db *gorm.DB, readers ...business.MemoryConsumerReader) {
 	handler := newPsycheSnapshotHandler(db)
+	if len(readers) > 0 {
+		handler.readMemories = readers[0]
+	}
 	r.GET("/psyche/state", handler.handle)
 	r.GET("/psyche/snapshot", handler.handle)
 	r.GET("/psyche/messages/:messageId", handler.handleMessageSnapshot)
 }
 
 type psycheSnapshotHandler struct {
-	db *gorm.DB
+	db           *gorm.DB
+	readMemories business.MemoryConsumerReader
 }
 
 func newPsycheSnapshotHandler(db *gorm.DB) *psycheSnapshotHandler {
@@ -188,14 +194,18 @@ func (h *psycheSnapshotHandler) handle(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, psyche.ErrStateNotFound) {
 			defaultState := psyche.NewPsycheState(characterID)
-			c.JSON(http.StatusOK, gin.H{"code": 200, "data": buildSnapshot(defaultState, characterID, now, h), "msg": "操作成功"})
+			state = &defaultState
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to load psyche state", "error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "failed to load psyche state", "error": err.Error()})
+	}
+	beliefs, err := h.loadBeliefSnapshots(c.Request.Context(), characterID)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "统一记忆读取失败", "error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 200, "data": buildSnapshot(*state, characterID, now, h), "msg": "操作成功"})
+	c.JSON(http.StatusOK, gin.H{"code": 200, "data": buildSnapshot(*state, characterID, now, h, beliefs), "msg": "操作成功"})
 }
 
 func (h *psycheSnapshotHandler) characterOwned(c *gin.Context, characterID string) bool {
@@ -207,7 +217,7 @@ func (h *psycheSnapshotHandler) characterOwned(c *gin.Context, characterID strin
 	return count > 0
 }
 
-func buildSnapshot(state psyche.PsycheState, characterID string, now time.Time, h *psycheSnapshotHandler) PsycheSnapshotOutput {
+func buildSnapshot(state psyche.PsycheState, characterID string, now time.Time, h *psycheSnapshotHandler, beliefs []beliefSnapshotEntry) PsycheSnapshotOutput {
 	var collectedAt string
 	if !state.UpdatedAt.IsZero() {
 		collectedAt = state.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
@@ -232,8 +242,6 @@ func buildSnapshot(state psyche.PsycheState, characterID string, now time.Time, 
 	needs := h.loadNeedSnapshot(characterID)
 
 	relState := h.loadRelationshipState(characterID)
-
-	beliefs := h.loadBeliefSnapshots(characterID)
 
 	return PsycheSnapshotOutput{
 		Emotion: PsycheEmotionOutput{
@@ -312,24 +320,28 @@ func (h *psycheSnapshotHandler) loadRelationshipState(characterID string) relati
 	return relState
 }
 
-func (h *psycheSnapshotHandler) loadBeliefSnapshots(characterID string) []beliefSnapshotEntry {
-	var rows []struct {
-		Key        string
-		Value      string
-		Confidence float64
+func (h *psycheSnapshotHandler) loadBeliefSnapshots(ctx context.Context, characterID string) ([]beliefSnapshotEntry, error) {
+	if h.readMemories == nil {
+		return nil, errors.New("统一记忆端口尚未就绪")
 	}
-	err := h.db.Table("memories").Select("key, value, confidence").Where("character_id = ? AND confidence > 0 AND COALESCE(allow_context_use, 1) = 1", characterID).Order("importance DESC, updated_at DESC").Limit(10).Scan(&rows).Error
-	if err != nil || len(rows) == 0 {
-		return []beliefSnapshotEntry{}
+	rows, err := h.readMemories(ctx, characterID, 10)
+	if err != nil {
+		return nil, err
 	}
 	beliefs := make([]beliefSnapshotEntry, 0, len(rows))
 	for _, row := range rows {
+		document, content, err := business.MemoryContent(row)
+		if err != nil {
+			return nil, err
+		}
+		var confidence float64
+		_ = json.Unmarshal(content["confidence"], &confidence)
 		beliefs = append(beliefs, beliefSnapshotEntry{
-			Key:        row.Key,
-			Value:      row.Value,
-			Confidence: row.Confidence,
+			Key:        business.MemoryText(document, "key"),
+			Value:      business.MemoryValue(content),
+			Confidence: confidence,
 			Conflicted: false,
 		})
 	}
-	return beliefs
+	return beliefs, nil
 }

@@ -3,14 +3,15 @@
 package system
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -24,14 +25,52 @@ func (h *Handler) PrivacyScan(c *gin.Context) {
 	// An empty body remains valid for backwards compatibility and scans the
 	// historical default scope. Updated clients always send their selected scope.
 	_ = c.ShouldBindJSON(&req)
+	memories := business.MemoryPrivacySnapshot{}
+	for _, item := range normalizePrivacyScopes(req.Scope) {
+		if item != privacyScopeMemories {
+			continue
+		}
+		if h.memoryConsumer == nil {
+			util.ErrorResponse(c, response.OperationFailed, "统一记忆服务尚未就绪", nil)
+			return
+		}
+		entries, err := h.memoryConsumer.Read(c.Request.Context(), "", "memory", true)
+		if err == nil {
+			memories, err = business.ScanMemoryPrivacy(entries, matchPrivacyPattern)
+		}
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "记忆隐私扫描失败", err.Error())
+			return
+		}
+		h.privacyMemoryMu.Lock()
+		h.privacyMemoryEntries = map[string]business.MemoryConsumerEntry{}
+		for _, entry := range entries {
+			h.privacyMemoryEntries[entry.ID] = entry
+		}
+		h.privacyMemoryMu.Unlock()
+	}
 	var result map[string]interface{}
 	if !h.commitAdministratorAction(c, func() error {
-		result = h.service.PrivacyScan(req.Scope)
+		svc, ok := h.service.(*service)
+		if !ok {
+			return errors.New("统一隐私扫描服务尚未就绪")
+		}
+		result = svc.privacyScan(req.Scope, memories)
 		return nil
 	}) {
 		return
 	}
 	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) scannedPrivacyMemory(id string) (business.MemoryConsumerEntry, error) {
+	h.privacyMemoryMu.RLock()
+	defer h.privacyMemoryMu.RUnlock()
+	entry, exists := h.privacyMemoryEntries[id]
+	if !exists {
+		return business.MemoryConsumerEntry{}, errors.New("请重新扫描隐私后再进行记忆脱敏")
+	}
+	return entry, nil
 }
 
 func (h *Handler) PrivacyMask(c *gin.Context) {
@@ -85,29 +124,28 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 	// canonical memory mutation service instead of a raw SQL update. Disabling
 	// context/proactive use makes the existing update path synchronously evict
 	// derived retrieval state while preserving the masked record for audit/UI.
-	maskedValue := "[已脱敏]"
-	restricted := "restricted"
-	allowContextUse := false
-	allowProactiveMention := false
 	maskedTargets := make([]privacyMaskTarget, 0, len(targets))
 	var updated int64
 	for _, target := range targets {
 		if target.SourceTable != privacyScopeMemories {
 			continue
 		}
-		if h.memorySvc == nil {
+		if h.memoryConsumer == nil {
 			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", "memory service unavailable")
 			return
 		}
-		if err := coordination.CommitCurrent(c.Request.Context(), func() error {
-			_, err := h.memorySvc.Update(target.ID, &memory.UpdateMemoryRequest{
-				Value:                 &maskedValue,
-				SensitivityLevel:      &restricted,
-				AllowContextUse:       &allowContextUse,
-				AllowProactiveMention: &allowProactiveMention,
-			})
-			return err
-		}); err != nil {
+		entry, err := h.scannedPrivacyMemory(target.ID)
+		if err == nil {
+			_, content, parseErr := business.MemoryContent(entry)
+			err = parseErr
+			if err == nil {
+				content["value"] = business.MemoryJSON("[已脱敏]")
+				content["sensitivityLevel"] = business.MemoryJSON("restricted")
+				content["allowProactiveMention"] = business.MemoryJSON(false)
+				_, err = h.memoryConsumer.Change(c.Request.Context(), entry, map[string]json.RawMessage{"content": business.MemoryJSON(content), "allowContextUse": business.MemoryJSON(false)}, false, "privacy-mask/"+entry.ID+"/"+fmt.Sprint(entry.Revision))
+			}
+		}
+		if err != nil {
 			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", err.Error())
 			return
 		}
@@ -203,6 +241,51 @@ func (h *Handler) PrivacyDeletionRequest(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
 		return
 	}
+	if strings.EqualFold(req.TargetType, "memory") {
+		if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+			util.ErrorResponse(c, 409, err.Error(), nil)
+			return
+		}
+		port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort)
+		if !ok {
+			util.ErrorResponse(c, 503, "统一记忆删除入口不可用", nil)
+			return
+		}
+		selection := string(req.Scope)
+		if selection == "" {
+			selection = "all"
+		}
+		result, err := port.DeleteMemory(c.Request.Context(), req.TargetID, selection)
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "记忆删除失败", err.Error())
+			return
+		}
+		util.SuccessResponse(c, result)
+		return
+	}
+	var memoryDeletions []business.MemoryDeletionStatus
+	targetType := strings.ToLower(strings.TrimSpace(req.TargetType))
+	if (targetType == "character" || targetType == "conversation") && (req.Scope == mindruntime.DeletionScopeMemory || req.Scope == mindruntime.DeletionScopeAll) {
+		if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+			util.ErrorResponse(c, 409, err.Error(), nil)
+			return
+		}
+		port, ok := h.memoryConsumer.(business.MemoryRelatedDeletionPort)
+		if !ok {
+			util.ErrorResponse(c, 503, "关联记忆删除入口不可用", nil)
+			return
+		}
+		var err error
+		memoryDeletions, err = port.DeleteRelatedMemories(c.Request.Context(), targetType, req.TargetID)
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "关联记忆删除未全部完成", gin.H{"error": err.Error(), "memoryDeletions": memoryDeletions})
+			return
+		}
+		if req.Scope == mindruntime.DeletionScopeMemory {
+			util.SuccessResponse(c, gin.H{"memoryDeletions": memoryDeletions, "targetType": targetType, "targetId": req.TargetID})
+			return
+		}
+	}
 	var tombstone mindruntime.DeletionTombstone
 	if !h.commitAdministratorAction(c, func() error {
 		if h.dataLifecycle == nil {
@@ -214,11 +297,33 @@ func (h *Handler) PrivacyDeletionRequest(c *gin.Context) {
 	}) {
 		return
 	}
+	if memoryDeletions != nil {
+		result := gin.H{}
+		encoded, _ := json.Marshal(tombstone)
+		_ = json.Unmarshal(encoded, &result)
+		result["memoryDeletions"] = memoryDeletions
+		util.SuccessResponse(c, result)
+		return
+	}
 	util.SuccessResponse(c, tombstone)
 }
 
 func (h *Handler) PrivacyDeletionStatus(c *gin.Context) {
 	id := c.Param("id")
+	if strings.HasPrefix(id, "owned-memory-delete.") {
+		port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort)
+		if !ok {
+			util.ErrorResponse(c, 503, "统一记忆删除入口不可用", nil)
+			return
+		}
+		result, err := port.DeletionStatus(c.Request.Context(), id)
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "读取记忆删除状态失败", err.Error())
+			return
+		}
+		util.SuccessResponse(c, result)
+		return
+	}
 	tombstone, ok := h.dataLifecycle.GetTombstone(id)
 	if !ok {
 		util.ErrorResponse(c, response.DataNotFound, "tombstone not found", nil)
@@ -229,10 +334,41 @@ func (h *Handler) PrivacyDeletionStatus(c *gin.Context) {
 
 func (h *Handler) PrivacyDeletionStats(c *gin.Context) {
 	stats := h.dataLifecycle.Stats()
+	if port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort); ok {
+		owned, err := port.DeletionStats(c.Request.Context())
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "读取记忆删除统计失败", err.Error())
+			return
+		}
+		for key, value := range owned {
+			stats[key] = value
+		}
+		if total, ok := owned["memoryDeletions"].(int64); ok {
+			count, _ := stats["tombstones"].(int)
+			stats["tombstones"] = int64(count) + total
+		}
+		if completed, ok := owned["memoryCompleted"].(int64); ok {
+			count, _ := stats["completed"].(int)
+			stats["completed"] = int64(count) + completed
+		}
+	}
 	util.SuccessResponse(c, stats)
 }
 
 func (h *Handler) PrivacyDeletionCleanup(c *gin.Context) {
+	ownedCount := 0
+	if port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort); ok {
+		if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+			util.ErrorResponse(c, 409, err.Error(), nil)
+			return
+		}
+		var err error
+		ownedCount, err = port.CleanupDeletions(c.Request.Context())
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "记忆索引清理失败", err.Error())
+			return
+		}
+	}
 	var results []mindruntime.OutboxCleanupItem
 	if !h.commitAdministratorAction(c, func() error {
 		if h.dataLifecycle == nil {
@@ -244,7 +380,7 @@ func (h *Handler) PrivacyDeletionCleanup(c *gin.Context) {
 	}) {
 		return
 	}
-	util.SuccessResponse(c, gin.H{"cleaned": len(results), "items": results})
+	util.SuccessResponse(c, gin.H{"cleaned": len(results) + ownedCount, "memoryCleaned": ownedCount, "items": results})
 }
 
 func (h *Handler) PrivacyDeletionSecurityTests(c *gin.Context) {
@@ -254,6 +390,20 @@ func (h *Handler) PrivacyDeletionSecurityTests(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
+		return
+	}
+	if strings.EqualFold(req.TargetType, "memory") {
+		port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort)
+		if !ok {
+			util.ErrorResponse(c, 503, "统一记忆删除核验入口不可用", nil)
+			return
+		}
+		checks, err := port.DeletionChecks(c.Request.Context(), req.TargetID)
+		if err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "记忆删除核验失败", err.Error())
+			return
+		}
+		util.SuccessResponse(c, checks)
 		return
 	}
 	var results []mindruntime.SecurityTestResult

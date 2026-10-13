@@ -171,11 +171,7 @@ func (s *AppServices) hasNoMemoryRawWriter() bool {
 }
 
 func (s *AppServices) hasMemoryRawWriter() bool {
-	if s == nil || s.Memory == nil {
-		return false
-	}
-	authority := s.Memory.WriteAuthoritySnapshot()
-	return authority.LegacyRawWriterEnabled
+	return false
 }
 
 func verifyCanonicalStartupOrPanic(services *AppServices) {

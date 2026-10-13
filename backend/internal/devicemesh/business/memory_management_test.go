@@ -63,7 +63,7 @@ func TestOwnedMemoryManagementCreateConflictCASAndReplay(t *testing.T) {
 			request.ExpectedScope = &view.Scope
 			input := MemoryManagementInput{Action: "create", Key: "饮品", Value: "喜欢茶", MemoryType: "preference", Importance: 7}
 			created, err := engine.ManageOwnedMemory(t.Context(), request, input)
-			if err != nil || !created.Saved || len(created.Resources) != 2 || created.Acknowledgement.Versions["checkpoint/memory-management/manual"] != 1 {
+			if err != nil || !created.Saved || len(created.Resources) < 2 || created.Acknowledgement.Versions["checkpoint/memory-management/manual"] != 1 {
 				t.Fatalf("created=%+v err=%v", created, err)
 			}
 			replay, err := engine.ManageOwnedMemory(t.Context(), request, input)

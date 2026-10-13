@@ -18,24 +18,6 @@ func SetDB(db *sql.DB) {
 	toolDB = db
 }
 
-var OnMemorySaved func(id, key, value, memoryType, characterID string)
-
-func SetOnMemorySaved(fn func(id, key, value, memoryType, characterID string)) {
-	OnMemorySaved = fn
-}
-
-var OnProfileSaved func(id string)
-
-func SetOnProfileSaved(fn func(id string)) {
-	OnProfileSaved = fn
-}
-
-var OnEpisodicSaved func(id string)
-
-func SetOnEpisodicSaved(fn func(id string)) {
-	OnEpisodicSaved = fn
-}
-
 func init() {
 	Register(Tool{
 		Type: "function",

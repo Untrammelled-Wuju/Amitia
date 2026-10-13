@@ -2,13 +2,12 @@ package main
 
 import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/memory"
 	"testing"
 )
 
 func TestMemoryReadsIgnorePreviousVersionRecords(t *testing.T) {
 	p := setupMeshLocalDataPort(t)
-	if err := p.services.DB.Create(&memory.Memory{ID: "old-memory", SpaceID: p.legacySpaceID, CharacterID: "one", Key: "旧版本", Value: "不应读取", VerifiedStatus: "verified"}).Error; err != nil {
+	if err := p.services.DB.Exec(`INSERT INTO memories(id,space_id,character_id,key,value,verified_status) VALUES(?,?,?,?,?,?)`, "old-memory", p.legacySpaceID, "one", "旧版本", "不应读取", "verified").Error; err != nil {
 		t.Fatal(err)
 	}
 	db := p.services.KernelContainer.DeviceRegistry.Database()
@@ -21,7 +20,7 @@ func TestMemoryReadsIgnorePreviousVersionRecords(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(snapshot.Resources) != 1 || snapshot.Resources[0].ID != "current" || len(snapshot.LegacyMemories) != 0 || len(snapshot.LegacyProfiles) != 0 || len(snapshot.LegacyEpisodes) != 0 || len(snapshot.LegacyGraphs) != 0 {
+		if len(snapshot.Resources) != 1 || snapshot.Resources[0].ID != "current" {
 			t.Fatalf("old memory leaked: %+v", snapshot)
 		}
 	}
@@ -31,7 +30,7 @@ func TestMemoryReadsIgnorePreviousVersionRecords(t *testing.T) {
 		t.Fatalf("roles=%+v err=%v", roles, err)
 	}
 	snapshot, err := p.HistoricalSnapshot(t.Context(), scope, coordination.DataQuery{Management: true, ResourceKind: "memory", HistoricalRoleID: "one"})
-	if err != nil || len(snapshot.Resources) != 1 || len(snapshot.LegacyMemories) != 0 {
+	if err != nil || len(snapshot.Resources) != 1 {
 		t.Fatalf("current device history=%+v err=%v", snapshot, err)
 	}
 }

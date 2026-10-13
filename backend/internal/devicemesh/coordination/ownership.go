@@ -34,15 +34,15 @@ var ErrWrongOwner = errors.New("禁止将设备专属数据保存到其他设备
 var ErrPendingLimit = errors.New("待保存数据已达到上限，请等待设备恢复连接")
 
 type Resource struct {
-	OwnerID  string          `json:"ownerId"`
-	Kind     string          `json:"kind"`
-	ID       string          `json:"id"`
-	RoleID   string          `json:"roleId"`
-	SourceID string          `json:"sourceId,omitempty"`
-	Revision int64           `json:"revision"`
-	Deleted  bool            `json:"deleted"`
-	UpdatedAt string         `json:"updatedAt,omitempty"`
-	Body     json.RawMessage `json:"body"`
+	OwnerID   string          `json:"ownerId"`
+	Kind      string          `json:"kind"`
+	ID        string          `json:"id"`
+	RoleID    string          `json:"roleId"`
+	SourceID  string          `json:"sourceId,omitempty"`
+	Revision  int64           `json:"revision"`
+	Deleted   bool            `json:"deleted"`
+	UpdatedAt string          `json:"updatedAt,omitempty"`
+	Body      json.RawMessage `json:"body"`
 }
 
 type Mutation struct {
@@ -267,18 +267,26 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			if commit.MemoryTransfer != nil {
 				sourceExpectedRole = commit.MemoryTransfer.ToRoleID
 			}
-			if sourceDeleted || sourceRole != sourceExpectedRole || !ResourceUsable(sourceBody, time.Now()) {
+			if sourceDeleted || sourceRole != sourceExpectedRole {
 				return Acknowledgement{}, ErrWrongOwner
 			}
 		}
 		body := []byte(mutation.Body)
+		invalidateDerived := mutation.Deleted
+		if mutation.Kind == "memory" && revision > 0 && !mutation.Deleted {
+			var previousBody json.RawMessage
+			if err := tx.QueryRowContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='memory' AND resource_id=?`, s.ownerID, mutation.ID).Scan(&previousBody); err != nil {
+				return Acknowledgement{}, err
+			}
+			invalidateDerived = memoryContentChanged(previousBody, mutation.Body)
+		}
 		if mutation.Deleted {
 			body = []byte(`null`)
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(owner_id,kind,resource_id) DO UPDATE SET role_id=excluded.role_id,source_id=excluded.source_id,revision=excluded.revision,deleted=excluded.deleted,body=excluded.body,updated_at=excluded.updated_at`, s.ownerID, mutation.Kind, mutation.ID, mutation.RoleID, mutation.SourceID, revision+1, mutation.Deleted, body, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return Acknowledgement{}, err
 		}
-		if commit.MemoryTransfer == nil && mutation.Kind == "memory" && (revision > 0 || mutation.Deleted) {
+		if commit.MemoryTransfer == nil && mutation.Kind == "memory" && invalidateDerived {
 			changedMemories = append(changedMemories, mutation.ID)
 		}
 		ack.Versions[key] = revision + 1
@@ -342,6 +350,13 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	for _, source := range changedMemories {
 		statement := `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND source_id=? AND deleted=0`
 		arguments := []any{s.ownerID, source}
+		var sourceDeleted bool
+		if err := tx.QueryRowContext(ctx, `SELECT deleted FROM kernel_device_owned_resources WHERE owner_id=? AND kind='memory' AND resource_id=?`, s.ownerID, source).Scan(&sourceDeleted); err != nil {
+			return Acknowledgement{}, err
+		}
+		if !sourceDeleted {
+			statement += ` AND NOT(kind='graph' AND resource_id LIKE 'memory-relation/%')`
+		}
 		for _, mutation := range commit.Mutations {
 			if mutation.SourceID == source && !mutation.Deleted {
 				statement += ` AND NOT(kind=? AND resource_id=?)`

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/memory"
 )
 
 func TestNewConversationStateProvider(t *testing.T) {
@@ -241,7 +241,7 @@ func TestWorkingMemoryStateAdapterWritesConversationState(t *testing.T) {
 	p := NewConversationStateProvider(cache)
 	now := time.Now()
 
-	p.UpsertWorkingMemoryState("wm-state", memory.ConversationWorkingMemoryState{
+	p.UpsertWorkingMemoryState("wm-state", business.ConversationWorkingMemoryState{
 		ConversationID:         "wm-state",
 		MessageCount:           3,
 		LastMessageAt:          now,

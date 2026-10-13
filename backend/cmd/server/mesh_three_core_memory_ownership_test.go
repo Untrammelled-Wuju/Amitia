@@ -83,7 +83,7 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	}
 	for _, kind := range []string{"working", "profile", "episodic", "fact", "vector", "graph"} {
 		query := threeCoreMemoryQuery(t, b, a, kind, deviceReply.ConversationID)
-		if query.Snapshot.OwnerID != a.device.DeviceID.String() || len(query.Snapshot.Resources) != 1 || query.Snapshot.Resources[0].Kind != kind {
+		if query.Snapshot.OwnerID != a.device.DeviceID.String() || len(query.Snapshot.Resources) != threeCoreExpectedMemoryCount(kind) || !threeCoreResourcesHaveKind(query.Snapshot.Resources, kind) {
 			t.Fatalf("设备 %s 记忆读取错误: resources=%d", kind, len(query.Snapshot.Resources))
 		}
 	}
@@ -113,7 +113,7 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	}
 	for _, kind := range []string{"working", "profile", "episodic", "fact", "vector", "graph", "summary"} {
 		query := threeCoreMemoryQuery(t, b, a, kind, deviceReply.ConversationID)
-		if query.Snapshot.OwnerID != b.core || len(query.Snapshot.Resources) != 0 || query.HistoricalSnapshot == nil || query.HistoricalSnapshot.OwnerID != a.device.DeviceID.String() || len(query.HistoricalSnapshot.Resources) != 1 {
+		if query.Snapshot.OwnerID != b.core || len(query.Snapshot.Resources) != 0 || query.HistoricalSnapshot == nil || query.HistoricalSnapshot.OwnerID != a.device.DeviceID.String() || len(query.HistoricalSnapshot.Resources) != threeCoreExpectedMemoryCount(kind) {
 			t.Fatalf("开启统筹没有保留设备 %s 历史读取", kind)
 		}
 	}
@@ -153,7 +153,7 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	}
 	for _, kind := range []string{"working", "profile", "episodic", "fact", "vector", "graph", "summary"} {
 		query := threeCoreMemoryQuery(t, c, a, kind, deviceReply.ConversationID)
-		if query.Snapshot.OwnerID != c.core || len(query.Snapshot.Resources) != 0 || query.HistoricalSnapshot == nil || len(query.HistoricalSnapshot.Resources) != 1 || query.HistoricalSnapshot.OwnerID != a.device.DeviceID.String() {
+		if query.Snapshot.OwnerID != c.core || len(query.Snapshot.Resources) != 0 || query.HistoricalSnapshot == nil || len(query.HistoricalSnapshot.Resources) != threeCoreExpectedMemoryCount(kind) || query.HistoricalSnapshot.OwnerID != a.device.DeviceID.String() {
 			t.Fatalf("切换后 %s 混入 B 专属数据或丢失设备历史", kind)
 		}
 	}
@@ -180,8 +180,29 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 			owner = a.device.DeviceID.String()
 		}
 		var count int
-		if err := fixture.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind IN ('working','profile','episodic','fact','vector','graph','summary','continuity') AND deleted=0`, owner).Scan(&count); err != nil || count != 8 {
+		if err := fixture.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind IN ('working','profile','episodic','fact','vector','graph','summary','continuity') AND deleted=0`, owner).Scan(&count); err != nil || count != 10 {
 			t.Fatalf("原所有者数据被迁移或丢失: count=%d error=%v", count, err)
 		}
 	}
+}
+
+func threeCoreExpectedMemoryCount(kind string) int {
+	switch kind {
+	case "profile":
+		return 0
+	case "fact":
+		return 2
+	case "graph":
+		return 3
+	default:
+		return 1
+	}
+}
+func threeCoreResourcesHaveKind(resources []coordination.Resource, kind string) bool {
+	for _, resource := range resources {
+		if resource.Kind != kind {
+			return false
+		}
+	}
+	return true
 }
