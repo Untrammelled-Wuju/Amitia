@@ -1,33 +1,33 @@
 # AMITIA Release Gate Report
 
-Generated: 2026-10-16T15:18:33.920Z
+Generated: 2026-10-16T16:24:46.305Z
 
 Status: **PASS**
 
 | Gate | Result |
 |---|---|
 | Canonical freeze verification | PASS (10455 files) |
-| Source Gate SHA256 | `a7b80b6b2258b44ffc6aecbd117799bf2edb95eed84fe44c46bfd2296ed06eda` |
+| Source Gate SHA256 | `dcf2ef71099536b18daee7988ab4f55b1d55a1d2dd5c4ce9e2f21752afbeb050` |
 | AmitiaCore provenance | PASS |
 | Runtime asset provenance | PASS (6 files) |
 | Packaged artifact integrity | PASS |
 
 ## Core provenance
 
-- Core SHA256: `3c0c515cb79f8c915e4b876ec4eca5d45f69a974c080b614988f674fe45e7ada`
-- Core SourceGate SHA256: `a7b80b6b2258b44ffc6aecbd117799bf2edb95eed84fe44c46bfd2296ed06eda`
+- Core SHA256: `cd7a44c088a74da5c285df8035a9b02ce57fe0e3190943a133c084479e3add97`
+- Core SourceGate SHA256: `dcf2ef71099536b18daee7988ab4f55b1d55a1d2dd5c4ce9e2f21752afbeb050`
 - Go: go version go1.26.1 windows/amd64
-- Commit: b47244e72
+- Commit: 3b3c4affa
 
 ## Runtime assets
 
-- Runtime asset SourceGate SHA256: `a7b80b6b2258b44ffc6aecbd117799bf2edb95eed84fe44c46bfd2296ed06eda`
+- Runtime asset SourceGate SHA256: `dcf2ef71099536b18daee7988ab4f55b1d55a1d2dd5c4ce9e2f21752afbeb050`
 - Verified packaged runtime files: 6
 
 ## Release artifacts
 
 | Artifact | Bytes | SHA256 |
 |---|---:|---|
-| AmitiaSetup-26.2.0-beta.2-x64.exe | 275895616 | `5fbfa26b33a585a463844fd223aeec470ea374135b2f23645e20bf831a9320a0` |
-| AmitiaSetup-26.2.0-beta.2-x64.exe.blockmap | 286532 | `9a3203e67e3a2fd2fc774bf3942b27a7a10e185c6f3dd93153e8f3b643d9b02d` |
-| latest.yml | 7645 | `e420d9f3817f8788bf5c3fb8b640c46e6b433ccf6f8c4280faf90f68c169cc71` |
+| AmitiaSetup-26.2.0-beta.2-x64.exe | 275894179 | `fd7d4561da5d0291149840014b36cb1de71bc168e68d472c4c8cc94ab56f964d` |
+| AmitiaSetup-26.2.0-beta.2-x64.exe.blockmap | 286686 | `b9a129404b7baab041c51acb247d5c29c2dfb903bee846dc4de31d14b7b4ca17` |
+| latest.yml | 7787 | `1dc7c4d0e839e2b25978659cd66b17f3001bf612952bd9dcf54072528f65f1dc` |
