@@ -16,7 +16,7 @@ type asyncUnifiedEntryWorkerRunner struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	mu      sync.Mutex
-	active  map[string]struct{}
+	active  map[string]context.CancelFunc
 	closed  bool
 	wg      sync.WaitGroup
 }
@@ -24,7 +24,7 @@ type asyncUnifiedEntryWorkerRunner struct {
 func NewAsyncUnifiedEntryWorkerRunner(entry *UnifiedEntry, tracker InteractionTracker) AgentWorkerRunner {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &asyncUnifiedEntryWorkerRunner{
-		entry: entry, tracker: tracker, ctx: ctx, cancel: cancel, active: make(map[string]struct{}),
+		entry: entry, tracker: tracker, ctx: ctx, cancel: cancel, active: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -100,7 +100,8 @@ func (r *asyncUnifiedEntryWorkerRunner) StartWorker(ctx context.Context, req Wor
 		r.mu.Unlock()
 		return childID, nil
 	}
-	r.active[childID] = struct{}{}
+	runCtx, cancel := context.WithTimeout(r.ctx, 30*time.Minute)
+	r.active[childID] = cancel
 	r.wg.Add(1)
 	r.mu.Unlock()
 	go func() {
@@ -110,7 +111,6 @@ func (r *asyncUnifiedEntryWorkerRunner) StartWorker(ctx context.Context, req Wor
 			delete(r.active, childID)
 			r.mu.Unlock()
 		}()
-		runCtx, cancel := context.WithTimeout(r.ctx, 30*time.Minute)
 		defer cancel()
 		_, runErr := r.entry.Handle(runCtx, input)
 		if runErr != nil {
@@ -121,6 +121,41 @@ func (r *asyncUnifiedEntryWorkerRunner) StartWorker(ctx context.Context, req Wor
 		}
 	}()
 	return childID, nil
+}
+
+func (r *asyncUnifiedEntryWorkerRunner) CancelWorker(ctx context.Context, childID string) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	cancel := r.active[childID]
+	if cancel != nil {
+		cancel()
+	}
+	r.mu.Unlock()
+	if r.tracker == nil {
+		return nil
+	}
+	if err := r.tracker.RequestCancel(ctx, childID, "coordination_cancelled"); err != nil {
+		return err
+	}
+	for attempt := 0; attempt < 3; attempt++ {
+		record, found, err := r.tracker.Get(ctx, childID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return ErrInteractionNotFound
+		}
+		if record.IsTerminal() {
+			return nil
+		}
+		_, err = r.tracker.TransitionCAS(ctx, childID, record.StatusVersion, InteractionStatusCancelled)
+		if !errors.Is(err, ErrVersionConflict) {
+			return err
+		}
+	}
+	return ErrVersionConflict
 }
 
 func (r *asyncUnifiedEntryWorkerRunner) WorkerIsActive(childID string) bool {

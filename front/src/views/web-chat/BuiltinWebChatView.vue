@@ -50,7 +50,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-call="handleEndCall"
       @start-call="handleStartCall"
       @view-summary="handleViewSummary"
-    ><template #extension-actions><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
+    ><template #extension-actions><button type="button" class="sidebar-toggle-btn" aria-label="切换工作区" title="工作区" @click="workbench.toggleVisible()">工作区</button><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
     </div>
       <div class="chat-body-wrapper">
       <ExtensionSlot
@@ -114,7 +114,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @edit="handleEditMessage"
         @scroll-to-bottom="scrollToBottom(true)"
       />
-      <aside v-if="hasConversationSidebar && !isSmallViewport" class="chat-sidebar-region provider-sidebar-region">
+      <aside v-if="hasConversationSidebar && !isSmallViewport && !workbench.visible" class="chat-sidebar-region provider-sidebar-region">
         <UIProviderHost
           capability="conversation.sidebar"
           :fallback="BuiltinConversationSidebar"
@@ -205,6 +205,7 @@ import { Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useChatStore } from "@/stores/chat";
+import { useWorkbenchStore } from "@/stores/workbench";
 import { useConversationRuntime } from "../../composables/useConversationRuntime";
 import AutomationStatusIndicator from "../../components/AutomationStatusIndicator.vue";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
@@ -332,11 +333,13 @@ const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);
 const extensionUIStore = useExtensionUIStore();
 const chatStore = useChatStore();
+const workbench = useWorkbenchStore();
 
 const persistedMessages = ref<any[]>([]);
 const convId = ref(String(route.query.conversationId || ""));
 const convTitle = ref("");
 const characterId = ref("");
+watch([convId, characterId], ([id, role]) => workbench.setConversation(id, role), { immediate: true });
 const cachedDef = (() => {
   try {
     const v = localStorage.getItem("uai-default-char");
@@ -740,8 +743,6 @@ const {
   beginPendingAssistant,
   failPendingAssistant,
   cleanup: cleanupSSE,
-  connectProactiveMessages: connectProactiveSSE,
-  disconnectProactiveMessages: disconnectProactiveSSE,
 } = useConversationRuntime(
   convId,
   persistedMessages,
@@ -881,6 +882,8 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
     if (input?.blob instanceof Blob) return handleVoiceAudio(input.blob, input?.transcript, input?.duration);
     if (input?.text) return handleVoiceText(String(input.text));
   },
+  "conversation.workbench.open": async (input) => workbench.openTab(input),
+  "conversation.workbench.toggle": async () => workbench.toggleVisible(),
   "conversation.workspace.choose": async () => chooseWorkspaceDirectory(),
   "conversation.workspace.select": async (input) => {
     const workspaceId = String(input?.workspaceId ?? input ?? "").trim();
@@ -920,8 +923,24 @@ watch(
 );
 
 watch(
-  () => String(route.query.conversationId || ""),
-  async (nextId) => {
+  () => [String(route.query.conversationId || ""), String(route.query.characterId || ""), String(route.query.ownerId || "")],
+  async ([nextId, nextRole, nextOwner]) => {
+    if (nextOwner) {
+      try { await owned.refresh(); } catch (error: any) { modelError.value = error?.message || '无法确认通知执行核心'; return; }
+      if (owned.coreId.value !== nextOwner) {
+        disconnectAndResetConversation();
+        convId.value = '';
+        modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
+        return;
+      }
+    }
+    const roleChanged = Boolean(nextRole && nextRole !== characterId.value);
+    if (nextRole && nextRole !== characterId.value) {
+      await owned.refresh();
+      const selected = owned.roles.value.find((role) => role.id === nextRole);
+      if (!selected) { modelError.value = '通知所属角色不可用，无法打开会话'; return; }
+      selectCharacter(selected);
+    }
     if (!nextId) {
       disconnectAndResetConversation();
       convId.value = "";
@@ -931,7 +950,7 @@ watch(
       await loadConversationWorkspace("", String(route.query.projectId || ""));
       return;
     }
-    if (nextId === convId.value) return;
+    if (nextId === convId.value && !roleChanged) return;
     if (owned.enabled.value && sending.value) owned.stopLocal("会话已切换，原回复已中断");
     convId.value = nextId;
     convTitle.value = "新对话";
@@ -1009,7 +1028,21 @@ onMounted(async () => {
   };
   const initializeOwned = async () => {
     characters.value = owned.roles.value;
-    const selectedId = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
+    const notificationOwner = String(route.query.ownerId || '');
+    if (notificationOwner && notificationOwner !== owned.coreId.value) {
+      disconnectAndResetConversation();
+      convId.value = '';
+      modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
+      return;
+    }
+    const notificationRole = String(route.query.characterId || '');
+    if (notificationRole && !characters.value.some((role) => role.id === notificationRole)) {
+      disconnectAndResetConversation();
+      convId.value = '';
+      modelError.value = '通知所属角色不可用，无法打开会话';
+      return;
+    }
+    const selectedId = owned.selectInitialRole(String(route.query.characterId || "") || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
     const selected = characters.value.find((character) => character.id === selectedId);
     if (selected) selectCharacter(selected);
     else { characterId.value = ""; modelError.value = characters.value.length ? "请选择调用角色后发送消息" : "没有可用角色，拒绝调用"; }
@@ -1027,6 +1060,12 @@ onMounted(async () => {
         await pollOwnedChat(owned, async () => {
           if (!ownedInitialized) { await initializeOwned(); return; }
           characters.value = owned.roles.value;
+          const notificationOwner = String(route.query.ownerId || '');
+          if (notificationOwner && notificationOwner !== owned.coreId.value) {
+            disconnectAndResetConversation(); convId.value = '';
+            modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
+            return;
+          }
           const currentProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
           if (previousProvider !== currentProvider || ownedDataRefreshPending) {
             await chatStore.fetchSidebar();
@@ -1057,7 +1096,6 @@ onMounted(async () => {
     finally { startOwnedPolling(); }
     return;
   }
-  connectProactiveSSE();
   history.scrollRestoration = "manual";
 
   window.addEventListener("online", () => {
@@ -1161,13 +1199,11 @@ onUnmounted(() => {
   stopCallWindowListener?.();
   stopCallWindowListener = null;
   cleanupSSE();
-  disconnectProactiveSSE();
   window.removeEventListener("resize", updateViewport);
 });
 
 function handleScopeChanged() {
   disconnectSSE();
-  disconnectProactiveSSE();
   persistedMessages.value = persistedMessages.value.map((message) => ["streaming", "sending", "queued"].includes(message.status) ? { ...message, status: "interrupted" } : message);
   sending.value = false;
   llmModels.value = [];

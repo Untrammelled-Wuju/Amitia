@@ -26,7 +26,10 @@ func (t *SQLiteInteractionTracker) InitSchema() error {
 	if err := t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_request_unique ON interaction_records(space_id, request_id) WHERE request_id <> ''").Error; err != nil {
 		return err
 	}
-	return t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_conv_request_unique ON interaction_records(conversation_id, request_id) WHERE request_id <> ''").Error
+	if err := t.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_conv_request_unique ON interaction_records(conversation_id, request_id) WHERE request_id <> ''").Error; err != nil {
+		return err
+	}
+	return t.db.Exec("CREATE INDEX IF NOT EXISTS idx_interaction_workbench_tasks_recent ON interaction_records(space_id, conversation_id, updated_at DESC, id DESC)").Error
 }
 
 func (t *SQLiteInteractionTracker) Create(ctx context.Context, record *InteractionRecord) error {
@@ -122,6 +125,9 @@ func (t *SQLiteInteractionTracker) TransitionCAS(ctx context.Context, id string,
 
 func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string, update InteractionMetadataUpdate) (*InteractionRecord, error) {
 	updates := map[string]interface{}{}
+	if update.ResultRef != nil {
+		updates["result_ref"] = *update.ResultRef
+	}
 	if update.Priority != nil {
 		updates["priority"] = *update.Priority
 	}

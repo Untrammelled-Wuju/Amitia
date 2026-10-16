@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/worktree-merge-v1.schema.json",
+  "title": "Workbench Approved Worktree Merge V1",
+  "oneOf": [
+    { "$ref": "#/$defs/plan" },
+    { "$ref": "#/$defs/audit" }
+  ],
+  "$defs": {
+    "hex40or64": { "type": "string", "pattern": "^([a-f0-9]{40}|[a-f0-9]{64})$" },
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worktreeId", "taskId", "conversationId", "revision", "sourceHead", "targetBranch", "targetHead", "planId", "filesChanged", "approvedBy"],
+      "properties": {
+        "worktreeId": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        "taskId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "conversationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "revision": { "$ref": "#/$defs/hash" },
+        "sourceHead": { "$ref": "#/$defs/hex40or64" },
+        "targetBranch": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "targetHead": { "$ref": "#/$defs/hex40or64" },
+        "planId": { "$ref": "#/$defs/hash" },
+        "filesChanged": { "type": "integer", "minimum": 1 },
+        "approvedBy": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "plan", "actor", "startedAt", "result"],
+      "properties": {
+        "version": { "const": 1 },
+        "plan": { "$ref": "#/$defs/plan" },
+        "actor": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "finishedAt": { "type": "string", "format": "date-time" },
+        "result": { "enum": ["pending", "applied", "failed-needs-review"] },
+        "appliedHead": { "$ref": "#/$defs/hex40or64" }
+      }
+    }
+  }
+}

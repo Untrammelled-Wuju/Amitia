@@ -160,6 +160,13 @@ func (t *InMemoryTracker) UpdateMetadata(ctx context.Context, id string, update 
 		return nil, ErrInteractionNotFound
 	}
 	rec.mu.Lock()
+	if update.ExpectedStatusVersion != nil && rec.StatusVersion != *update.ExpectedStatusVersion || update.ExpectedOwner != nil && rec.CommitOwner != *update.ExpectedOwner {
+		rec.mu.Unlock()
+		return nil, ErrInteractionCASConflict
+	}
+	if update.ResultRef != nil {
+		rec.ResultRef = *update.ResultRef
+	}
 	if update.Priority != nil {
 		rec.Priority = *update.Priority
 	}

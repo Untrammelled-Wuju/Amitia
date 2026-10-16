@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/dbtransaction"
 
 	_ "github.com/glebarez/sqlite"
 )
@@ -56,8 +57,6 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
-type txKey struct{}
-
 type TransactionManager struct {
 	db *sql.DB
 }
@@ -67,7 +66,7 @@ func NewTransactionManager(db *sql.DB) *TransactionManager {
 }
 
 func (tm *TransactionManager) WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
-	if tx, ok := ctx.Value(txKey{}).(*sql.Tx); ok && tx != nil {
+	if _, ok := dbtransaction.From(ctx, tm.db); ok {
 		return fn(ctx)
 	}
 
@@ -75,8 +74,9 @@ func (tm *TransactionManager) WithTransaction(ctx context.Context, fn func(ctx c
 	if err != nil {
 		return fmt.Errorf("sqlite: begin transaction: %w", err)
 	}
+	defer tx.Rollback()
 
-	txCtx := context.WithValue(ctx, txKey{}, tx)
+	txCtx := dbtransaction.With(ctx, tm.db, tx)
 
 	err = fn(txCtx)
 	if err != nil {
@@ -94,16 +94,12 @@ func (tm *TransactionManager) WithTransaction(ctx context.Context, fn func(ctx c
 }
 
 func getExecutor(ctx context.Context, db *sql.DB) Executor {
-	if tx, ok := ctx.Value(txKey{}).(*sql.Tx); ok && tx != nil {
+	if tx, ok := dbtransaction.From(ctx, db); ok {
 		return tx
 	}
 	return db
 }
 
 func TxFromContext(ctx context.Context) (*sql.Tx, bool) {
-	tx, ok := ctx.Value(txKey{}).(*sql.Tx)
-	if !ok || tx == nil {
-		return nil, false
-	}
-	return tx, true
+	return dbtransaction.Current(ctx)
 }

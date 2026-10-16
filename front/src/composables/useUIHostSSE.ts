@@ -9,6 +9,7 @@ import { browserClientPluginRuntime, type BrowserDeclarativeClientPackage } from
 import { resolveUIHostDeviceId } from "../ui-runtime/deviceIdentity";
 import { executeStyleCommand } from "../ui-runtime/styleCommand";
 import { resolveHostEnvironment } from "./useHostEnvironment";
+import { deliverScheduledBrowserNotification, registerScheduledBrowserEndpoint, type ScheduledBrowserEnvelope } from '../runtime/scheduled-notifications';
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -50,7 +51,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   let hostSessionId = "";
   let notificationSettingsCheckedAt = 0;
   let notificationsAllowed = false;
-  const proactiveNotificationIds = new Set<string>();
+
   const disposeMainStyleCommand = window.amitiaDesktop?.onUIStyleCommand?.((data) => {
     void handleStyleCommand(new MessageEvent("ui_style_command", { data }));
   });
@@ -522,33 +523,24 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     return notificationsAllowed;
   }
 
-  async function handleProactiveNotification(data: string): Promise<void> {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    try {
-      const payload = JSON.parse(data) as Record<string, unknown>;
-      const content = String(payload.content ?? "").trim();
-      if (!content || !await notificationAllowedForThisDevice()) return;
-      const messageId = String(payload.messageId ?? "").trim();
-      if (messageId) {
-        if (proactiveNotificationIds.has(messageId)) return;
-        proactiveNotificationIds.add(messageId);
-        if (proactiveNotificationIds.size > DEDUP_MAX_SIZE) {
-          const first = proactiveNotificationIds.values().next().value;
-          if (first) proactiveNotificationIds.delete(first);
-        }
-      }
-      new Notification("Amitia", {
-        body: content.slice(0, 240),
-        tag: messageId ? `proactive-${messageId}` : undefined,
-      });
-    } catch {
-      // Malformed proactive data must not affect the UI Host stream.
-    }
-  }
-
   function dispatchEvent(eventName: string, data: string) {
     const event = new MessageEvent(eventName, { data });
     switch (eventName) {
+      case "scheduled_notification": {
+        if (window.amitiaDesktop) break;
+        const envelope = parseEnvelope(event);
+        if (!envelope || !envelope.payload || !shouldProcess(envelope)) break;
+        void deliverScheduledBrowserNotification(envelope as ScheduledBrowserEnvelope, {
+          allowed: notificationAllowedForThisDevice,
+          acknowledge: async (state) => {
+            const path = '/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack';
+            const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) }));
+            if (!response.ok) throw new Error('通知回执未确认');
+          },
+          navigate: (target) => { if (isNavigationAllowed(target)) void router.push(target); },
+        }).catch(() => {});
+        break;
+      }
       case "ui_notify":
         handleNotify(event);
         break;
@@ -563,12 +555,6 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         break;
       case "ui_style_command":
         void handleStyleCommand(event);
-        break;
-      case "proactive_message":
-        window.dispatchEvent(
-          new CustomEvent("amitia:proactive-message", { detail: data }),
-        );
-        void handleProactiveNotification(data);
         break;
       case "extension_installed":
       case "extension_uninstalled":
@@ -639,6 +625,16 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       }
       if (version !== connectionVersion || controller.signal.aborted) return;
       await registerHostSession();
+      if (!window.amitiaDesktop) {
+        const deviceId = await resolveUIHostDeviceId();
+        const path = '/api/notifications/devices/register';
+        const permitted = typeof Notification !== 'undefined' && Notification.permission === 'granted' && await notificationAllowedForThisDevice();
+        await registerScheduledBrowserEndpoint(deviceId, permitted, async (input) => {
+          const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }));
+          if (!response.ok) throw new Error('浏览器通知通道未确认注册');
+          return response.json();
+        });
+      }
       if (version !== connectionVersion || controller.signal.aborted) return;
       isConnected.value = true;
       reconnectAttempts = 0;

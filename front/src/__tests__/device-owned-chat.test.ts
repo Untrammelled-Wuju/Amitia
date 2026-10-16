@@ -22,6 +22,21 @@ function stream(events: unknown[], split = false) {
 }
 
 describe("device owned chat stream", () => {
+	it("accepts scoped task progress without ending or changing reply text", async () => {
+	  const seen: any[] = [];
+	  const result = { requestId: "request", conversationId: "conversation", executionScope: scope, saved: true, reply: "你好", memoryStatus: "saved" };
+	  const response = await consumeOwnedChatStream(stream([{ type: "started", executionScope: scope, conversationId: "conversation" }, { type: "task", executionScope: scope, conversationId: "conversation", task: { coordinationId: "coordination-a", status: "running" } }, { type: "delta", executionScope: scope, text: "你好" }, { type: "completed", data: result }]), "request", event => seen.push(event));
+	  expect(response.reply).toBe("你好");
+	  expect(seen.map(event => event.type)).toEqual(["started", "task", "delta", "completed"]);
+	});
+	it("rejects task events from other scope, conversation and invalid task states", async () => {
+	  for (const change of [{ executionScope: { ...scope, coreId: "other" } }, { executionScope: { ...scope, roleId: "other" } }, { executionScope: { ...scope, resourceOwnerId: "other" } }, { conversationId: "other" }, { task: { coordinationId: "coordination-a", status: "invented" } }, { task: { status: "running" } }]) {
+	    const event = { type: "task", executionScope: scope, conversationId: "conversation", task: { coordinationId: "coordination-a", status: "running" }, ...change };
+	    const seen: any[] = [];
+	    await expect(consumeOwnedChatStream(stream([{ type: "started", executionScope: scope, conversationId: "conversation" }, event]), "request", value => seen.push(value))).rejects.toThrow();
+	    expect(seen).toHaveLength(1);
+	  }
+	});
   it("拒绝首帧及后续帧跨realm或原编辑角色同ID变更", async () => {
     const original = { ...scope, authorizationRealm: "mesh" };
     await expect(consumeOwnedChatStream(stream([{ type: "started", executionScope: { ...original, roleRevision: 2 } }]), "request", () => {}, original)).rejects.toThrow("迟到回复");

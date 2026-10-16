@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/worktree-checkpoint-v1.schema.json",
+  "title": "Task Worktree Verified Checkpoint V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "worktreeId", "taskId", "conversationId", "baseHead", "head", "revision", "createdAt"],
+  "properties": {
+    "version": {"const": 1},
+    "worktreeId": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "taskId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "conversationId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "baseHead": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+    "head": {"type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"},
+    "revision": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "tests": {
+      "type": "array", "maxItems": 6,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["profile", "revision", "startedAt", "durationMillis", "exitCode", "passed", "logExcerpt", "outputDigest"],
+        "properties": {
+          "profile": {"type": "string", "enum": ["go", "go-race"]},
+          "revision": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "startedAt": {"type": "string", "format": "date-time"},
+          "durationMillis": {"type": "integer", "minimum": 0},
+          "exitCode": {"type": "integer"},
+          "passed": {"type": "boolean"},
+          "logExcerpt": {"type": "string", "maxLength": 9000},
+          "outputDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "outputTruncated": {"type": "boolean"}
+        }
+      }
+    },
+    "approvedAt": {"type": "string", "format": "date-time"},
+    "approvedBy": {"type": "string", "minLength": 1, "maxLength": 128}
+  },
+  "allOf": [
+    {"if": {"required": ["approvedAt"]}, "then": {"required": ["approvedBy", "tests"], "properties": {"tests": {"minItems": 1}}}}
+  ]
+}

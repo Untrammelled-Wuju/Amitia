@@ -503,7 +503,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
           _divider(),
           _switch(
             '限制敏感主动提及',
-            '主动消息中减少敏感主题触发',
+            '主动任务中减少敏感主题触发',
             _preventSensitiveProactiveMention,
             (v) => setState(() => _preventSensitiveProactiveMention = v),
           ),

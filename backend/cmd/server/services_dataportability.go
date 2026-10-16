@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
 
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
+	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/tts"
@@ -61,4 +65,29 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 
 	log.Info("DataPortability Coordinator initialized", "contributors", len(contributors))
 	return coord, nil
+}
+
+func registerReminderDataPortability(services *AppServices, dataDir string) error {
+	if services.Reminders == nil || services.DataPortability == nil {
+		return nil
+	}
+	signer, err := agent.NewIdentityStore(dataDir).CryptoSigner()
+	if err != nil {
+		return err
+	}
+	contributor := reminder.NewTaskBackupContributor(func(ctx context.Context) (*reminder.Service, reminder.Caller, error) {
+		actor, ok := auth.FromContext(ctx)
+		if !ok || actor == nil || actor.SpaceID == "" {
+			return nil, reminder.Caller{}, reminder.ErrForbidden
+		}
+		device := actor.DeviceID.String()
+		if device == "" && actor.IsLocalTrusted && actor.PrincipalType == auth.PrincipalLocalUI && services.DeviceMesh != nil {
+			device = services.DeviceMesh.LocalDeviceID
+		}
+		if device == "" {
+			return nil, reminder.Caller{}, reminder.ErrForbidden
+		}
+		return services.Reminders, reminder.Caller{SpaceID: actor.SpaceID.String(), DeviceID: device}, nil
+	}, signer)
+	return services.DataPortability.RegisterContributors(contributor)
 }

@@ -16,6 +16,8 @@ func (c *MultiAgentCoordinator) persistCoordinationSnapshot(ctx context.Context,
 	defer ac.persistMu.Unlock()
 	c.mu.Lock()
 	ref := &MultiAgentRecoveryRef{
+		OwnedScope: ac.ownedScope, DispatchFingerprint: ac.dispatchFingerprint,
+		ExecutionCoreID: ac.executionCoreID, ResourceOwnerID: ac.resourceOwnerID,
 		CoordinationID: string(ac.id), ParentGoalID: ac.parentGoalID,
 		ParentGoalRevision: ac.parentGoalRev, Status: string(ac.status),
 		Strategy: ac.strategy, CompletionPlan: ac.completionPlan,
@@ -84,7 +86,11 @@ func (c *MultiAgentCoordinator) restoreCoordinationFromRecord(record *Interactio
 	if c.goals == nil {
 		return fmt.Errorf("multi_agent: goal registry unavailable during recovery")
 	}
-	if _, found := c.goals.Get(ref.ParentGoalID); !found {
+	if err := validateRecoveredWorkerPlan(ref, c.policy.MaxAssignments, c.policy.MaxDepth); err != nil {
+		return err
+	}
+	goal, found := c.goals.Get(ref.ParentGoalID)
+	if !found {
 		scope := record.Scope.Normalize()
 		if ref.ParentGoalSpaceID == "" || ref.ParentGoalConversationID == "" ||
 			ref.ParentGoalSpaceID != scope.SpaceID || ref.ParentGoalConversationID != scope.ConversationID {
@@ -98,9 +104,18 @@ func (c *MultiAgentCoordinator) restoreCoordinationFromRecord(record *Interactio
 		}); err != nil {
 			return fmt.Errorf("multi_agent: restore parent goal: %w", err)
 		}
+		goal, found = c.goals.Get(ref.ParentGoalID)
+		if !found {
+			return fmt.Errorf("multi_agent: parent goal vanished during recovery")
+		}
+	}
+	if err := validateRecoveredParent(record, ref, goal); err != nil {
+		return err
 	}
 	now := time.Now().UTC()
 	ac := &activeCoordination{
+		ownedScope: ref.OwnedScope, dispatchFingerprint: ref.DispatchFingerprint,
+		executionCoreID: ref.ExecutionCoreID, resourceOwnerID: ref.ResourceOwnerID,
 		id:           CoordinationID(ref.CoordinationID),
 		parentGoalID: ref.ParentGoalID, parentGoalRev: ref.ParentGoalRevision,
 		parentInteractionID: record.ID, status: CoordinationStatus(ref.Status),
@@ -109,7 +124,8 @@ func (c *MultiAgentCoordinator) restoreCoordinationFromRecord(record *Interactio
 		workspaceName:     ref.WorkspaceName, workspaceKind: ref.WorkspaceKind,
 		workspaceRootURI: ref.WorkspaceRootURI,
 		strategy:         ref.Strategy, completionPlan: ref.CompletionPlan,
-		depth: ref.Depth, deadlineAt: ref.DeadlineAt,
+		cancelConfirmed: CoordinationStatus(ref.Status) == CoordinationCancelled,
+		depth:           ref.Depth, deadlineAt: ref.DeadlineAt,
 		assignments: make([]*AgentAssignment, 0, len(ref.AssignmentRefs)),
 		createdAt:   now, updatedAt: now,
 	}

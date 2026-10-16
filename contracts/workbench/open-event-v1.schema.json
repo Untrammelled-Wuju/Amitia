@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/open-event-v1.schema.json",
+  "title": "Agent UI Workbench Open Event v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "version",
+    "eventId",
+    "eventSequence",
+    "conversationId",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "conversationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "const": "workbench.open"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "files",
+            "file",
+            "git",
+            "diff",
+            "browser",
+            "terminal",
+            "tasks"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "resourceUri": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "workspaceUri": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "targetDeviceId": {
+          "type": "string",
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9_:.-]*$"
+        },
+        "focus": {
+          "enum": [
+            "activate",
+            "background"
+          ]
+        },
+        "forceNew": {
+          "type": "boolean"
+        },
+        "operationId": {
+          "type": "string",
+          "maxLength": 140
+        },
+        "taskId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,127})?$"
+        },
+        "browserRef": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^(?:[A-Za-z0-9_-]{32})?$"
+        },
+        "originDeviceId": {
+          "type": "string",
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9_:.-]*$"
+        },
+        "shared": {
+          "type": "boolean"
+        },
+        "readOnly": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "tasks"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "resourceUri": {
+                "maxLength": 0
+              },
+              "workspaceUri": {
+                "maxLength": 0
+              },
+              "targetDeviceId": {
+                "maxLength": 0
+              },
+              "browserRef": {
+                "maxLength": 0
+              },
+              "taskId": {
+                "maxLength": 0
+              },
+              "originDeviceId": {
+                "maxLength": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

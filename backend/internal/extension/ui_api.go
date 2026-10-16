@@ -134,6 +134,9 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 	if container.ScopeSnapshotCreator != nil {
 		handler.SetScopeSnapshotCreator(container.ScopeSnapshotCreator)
 	}
+	if container.ContextualScopeSnapshotCreator != nil {
+		handler.SetContextualScopeSnapshotCreator(container.ContextualScopeSnapshotCreator)
+	}
 
 	if container.SchemaRegistry != nil {
 		handler.SetSchemaLookup(func(extensionID, contributionID string) (json.RawMessage, bool) {

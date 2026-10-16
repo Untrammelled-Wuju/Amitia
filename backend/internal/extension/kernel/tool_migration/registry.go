@@ -244,9 +244,9 @@ func DefaultToolSpecs() []*ToolContributionSpec {
 			Permissions:    voicePerms,
 		},
 		{
-			ToolID:         "builtin/core/schedule",
-			LegacyToolID:   "schedule",
-			ModelToolName:  "schedule",
+			ToolID:         "builtin.schedule.create",
+			LegacyToolID:   "create_schedule",
+			ModelToolName:  "create_schedule",
 			Module:         ModuleCoreTools,
 			Namespace:      "core",
 			Title:          "调度任务",

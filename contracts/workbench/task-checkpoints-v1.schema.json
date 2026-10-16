@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/task-checkpoints-v1.schema.json",
+  "title": "Workbench sampled durable task checkpoints v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "conversationId",
+    "coordinationId",
+    "source",
+    "records",
+    "truncated"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": 1
+    },
+    "conversationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "coordinationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "source": {
+      "const": "sampled-durable-checkpoints"
+    },
+    "records": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "updatedAt",
+          "interactionStatus",
+          "coordinationStatus",
+          "assignmentCount",
+          "completedCount",
+          "failedCount",
+          "parentTerminal",
+          "consistent"
+        ],
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "interactionStatus": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "coordinationStatus": {
+            "enum": [
+              "planning",
+              "running",
+              "waiting",
+              "aggregating",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "paused"
+            ]
+          },
+          "assignmentCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "completedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "failedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "parentTerminal": {
+            "type": "boolean"
+          },
+          "consistent": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  }
+}

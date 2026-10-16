@@ -120,6 +120,13 @@ func (m *MisfireService) ApplyMisfirePolicy(ctx context.Context, def *ScheduleCo
 	}
 
 	result := &MisfireActionResult{}
+	if policy.GracePeriod > 0 && detection.LatestMissed != nil && m.clock.Now().Sub(*detection.LatestMissed) > policy.GracePeriod {
+		result.Action = "expired_window"
+		result.SkippedCount = detection.MissedCount
+		result.SkipAll = true
+		m.recordMisfire(ctx, def, detection, string(policy.Policy), result.Action, result.SkippedCount)
+		return result, nil
+	}
 
 	switch policy.Policy {
 	case MisfirePolicySkip:

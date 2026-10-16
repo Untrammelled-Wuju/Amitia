@@ -88,6 +88,24 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 		return
 	}
 	group := router.Group("/notifications")
+	group.POST("/scheduled/:id/ack", func(c *gin.Context) {
+		spaceID, deviceID, ok := actorScope(c, "")
+		if !ok {
+			return
+		}
+		var request struct {
+			State string `json:"state"`
+		}
+		if c.ShouldBindJSON(&request) != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "通知回执无效"})
+			return
+		}
+		if err := runtime.AcknowledgeScheduled(c.Request.Context(), spaceID, deviceID, c.Param("id"), request.State); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "无法确认当前设备的通知"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": gin.H{"confirmed": true, "state": request.State}})
+	})
 	group.GET("/capabilities", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": runtime.Capabilities()})
 	})
@@ -129,6 +147,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			}
 		}
 		now := time.Now().UTC()
+		mobileNotifications := request.Platform != "desktop" && request.Platform != "web"
 		endpoint := &DeviceEndpoint{
 			SpaceID:                      spaceID,
 			DeviceID:                     deviceID,
@@ -152,9 +171,9 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			LiveActivityPushToStartToken: strings.TrimSpace(request.LiveActivityPushToStartToken),
 			PushEnabled:                  boolDefault(request.PushEnabled, true),
 			SystemNotificationsEnabled:   boolDefault(request.SystemNotificationsEnabled, true),
-			MessagePushEnabled:           boolDefault(request.MessagePushEnabled, true),
-			ExecutionActivityEnabled:     boolDefault(request.ExecutionActivityEnabled, true),
-			CallPushEnabled:              boolDefault(request.CallPushEnabled, true),
+			MessagePushEnabled:           boolDefault(request.MessagePushEnabled, mobileNotifications),
+			ExecutionActivityEnabled:     boolDefault(request.ExecutionActivityEnabled, mobileNotifications),
+			CallPushEnabled:              boolDefault(request.CallPushEnabled, mobileNotifications),
 			ReminderPushEnabled:          boolDefault(request.ReminderPushEnabled, true),
 			PreviewMode:                  previewMode,
 			SoundEnabled:                 boolDefault(request.SoundEnabled, true),
@@ -251,10 +270,16 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
-		registered, _ := runtime.repo.GetDevice(c.Request.Context(), spaceID, deviceID)
-		if registered != nil {
-			go runtime.CatchUpLiveActivity(*registered)
+		if err := runtime.repo.CancelPendingOutboxByPreferences(c.Request.Context(), spaceID, deviceID, !endpoint.PushEnabled || !endpoint.SystemNotificationsEnabled, !endpoint.MessagePushEnabled, !endpoint.ExecutionActivityEnabled, !endpoint.CallPushEnabled, !endpoint.ReminderPushEnabled); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "通知偏好尚未同步到待投递队列"})
+			return
 		}
+		registered, err := runtime.repo.GetDeviceForPlatform(c.Request.Context(), spaceID, deviceID, request.Platform)
+		if err != nil || registered == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "通知设备保存未确认"})
+			return
+		}
+		go runtime.CatchUpLiveActivity(*registered)
 		c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": registered})
 	})
 	group.POST("/devices/:deviceId/test", func(c *gin.Context) {
@@ -319,7 +344,7 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			c.Request.Context(),
 			spaceID,
 			deviceID,
-			!current.PushEnabled,
+			!current.PushEnabled || !current.SystemNotificationsEnabled,
 			!current.MessagePushEnabled,
 			!current.ExecutionActivityEnabled,
 			!current.CallPushEnabled,

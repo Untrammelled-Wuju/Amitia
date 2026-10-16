@@ -41,6 +41,26 @@ func (r *AmitiaDataRootResolver) DataRoot() string {
 func (r *AmitiaDataRootResolver) ResolveRoot(mount workspace.WorkspaceMount) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if mount.Kind == workspace.WorkspaceKindLocal {
+		if mount.LocalRoot == "" {
+			return "", fmt.Errorf("%w: local workspace root is missing", ErrGitOperationUnsupported)
+		}
+		canonical, err := filepath.EvalSymlinks(mount.LocalRoot)
+		if err != nil {
+			return "", err
+		}
+		canonical, err = filepath.Abs(canonical)
+		if err != nil {
+			return "", err
+		}
+		if filepath.Clean(canonical) != filepath.Clean(mount.LocalRoot) {
+			return "", fmt.Errorf("%w: local workspace root has changed", ErrGitOperationUnsupported)
+		}
+		return canonical, nil
+	}
+	if mount.Kind != workspace.WorkspaceKindIsolated {
+		return "", fmt.Errorf("%w: unsupported workspace kind", ErrGitOperationUnsupported)
+	}
 	cfg, err := ParseGitMountConfig(mount.BackendConfig)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid isolated mount config: %v", ErrIsolatedCreateFailed, err)

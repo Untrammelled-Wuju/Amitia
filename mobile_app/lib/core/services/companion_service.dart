@@ -230,88 +230,9 @@ class CompanionService {
     );
   }
 
-  Future<List<Map<String, dynamic>>> activeMessageTasksToday({
-    String? characterId,
-  }) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/companion/active-message/tasks/today',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-    if (resp == null) return [];
-    return resp
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList(growable: false);
-  }
-
-  Future<Map<String, dynamic>?> regenerateActiveMessageTasks({
-    String? characterId,
-  }) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/companion/active-message/tasks/regenerate',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> runActiveMessageTask(
-    int id, {
-    String? characterId,
-  }) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/companion/active-message/tasks/$id/run',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> cancelActiveMessageTask(
-    int id, {
-    String? characterId,
-  }) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/companion/active-message/tasks/$id/cancel',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-  }
-
   Future<Map<String, dynamic>?> processDelayedReplies({String? characterId}) {
     return _api.post<Map<String, dynamic>>(
       '/api/companion/delayed-replies/process',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> processActiveMessagesDebug({
-    String? characterId,
-  }) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/companion/debug/process-active-messages',
-      queryParameters: {
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> triggerDailyRegenerationDebug({
-    String? characterId,
-  }) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/companion/debug/trigger-daily-regeneration',
       queryParameters: {
         if (characterId != null && characterId.isNotEmpty)
           'characterId': characterId,

@@ -13,6 +13,7 @@ const (
 	TriggerTypeCron     TriggerType = "cron"
 	TriggerTypeInterval TriggerType = "interval"
 	TriggerTypeOneShot  TriggerType = "one_shot"
+	TriggerTypeCalendar TriggerType = "calendar"
 )
 
 type ExecutionOwner string
@@ -29,6 +30,7 @@ const (
 	TargetTypeWorkflow       TargetType = "workflow"
 	TargetTypeTask           TargetType = "task"
 	TargetTypeRuntimeHandler TargetType = "runtime_handler"
+	TargetTypeHostWorkload   TargetType = "host_workload"
 )
 
 type IdempotencyMode string
@@ -157,11 +159,21 @@ type OneShotTriggerDefinition struct {
 	RunAt time.Time `json:"runAt"`
 }
 
+type CalendarTriggerDefinition struct {
+	WallTime  string    `json:"wallTime,omitempty"`
+	Frequency string    `json:"frequency"`
+	AnchorAt  time.Time `json:"anchorAt"`
+	Weekdays  []int     `json:"weekdays,omitempty"`
+}
+
 type ScheduleTriggerDefinition struct {
-	Type     TriggerType                `json:"type"`
-	Cron     *CronTriggerDefinition     `json:"cron,omitempty"`
-	Interval *IntervalTriggerDefinition `json:"interval,omitempty"`
-	OneShot  *OneShotTriggerDefinition  `json:"oneShot,omitempty"`
+	RestoredOccurrences int                        `json:"restoredOccurrences,omitempty"`
+	MaxOccurrences      int                        `json:"maxOccurrences,omitempty"`
+	Type                TriggerType                `json:"type"`
+	Cron                *CronTriggerDefinition     `json:"cron,omitempty"`
+	Interval            *IntervalTriggerDefinition `json:"interval,omitempty"`
+	OneShot             *OneShotTriggerDefinition  `json:"oneShot,omitempty"`
+	Calendar            *CalendarTriggerDefinition `json:"calendar,omitempty"`
 }
 
 type ScheduleTargetDefinition struct {
@@ -172,8 +184,9 @@ type ScheduleTargetDefinition struct {
 }
 
 type ScheduleMisfirePolicy struct {
-	Policy     MisfirePolicy `json:"policy"`
-	MaxCatchUp int           `json:"maxCatchUp"`
+	Policy      MisfirePolicy `json:"policy"`
+	MaxCatchUp  int           `json:"maxCatchUp"`
+	GracePeriod time.Duration `json:"gracePeriod,omitempty"`
 }
 
 type ScheduleOverlapPolicy struct {
@@ -196,9 +209,10 @@ type ScheduleJitterPolicy struct {
 }
 
 type ScheduleConcurrencyPolicy struct {
-	MaxConcurrentRuns int `json:"maxConcurrentRuns"`
-	PerExtensionLimit int `json:"perExtensionLimit"`
-	PerTargetLimit    int `json:"perTargetLimit"`
+	SerializationKey  string `json:"serializationKey,omitempty"`
+	MaxConcurrentRuns int    `json:"maxConcurrentRuns"`
+	PerExtensionLimit int    `json:"perExtensionLimit"`
+	PerTargetLimit    int    `json:"perTargetLimit"`
 }
 
 type PermissionRequirement = permission.PermissionRequirement

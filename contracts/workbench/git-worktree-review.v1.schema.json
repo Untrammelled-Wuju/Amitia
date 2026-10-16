@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://u-ai.dev/contracts/workbench/git-worktree-review.v1.schema.json",
+  "title": "U-Ai Worktree Task Review Request V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceUri", "id", "taskId", "conversationId"],
+  "properties": {
+    "workspaceUri": {"type": "string", "pattern": "^amitia://workspace/@", "maxLength": 4096},
+    "id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "taskId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "conversationId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "expectedHead": {"type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$"}
+  }
+}

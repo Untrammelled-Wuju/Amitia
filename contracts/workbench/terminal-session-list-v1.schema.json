@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/terminal-session-list-v1.schema.json",
+  "title": "Workbench Owner Scoped Terminal Session List V1",
+  "type": "array",
+  "maxItems": 6,
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "mode",
+      "running",
+      "exitCode",
+      "createdAt"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{40}$"
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "pty",
+          "conpty",
+          "pipe"
+        ]
+      },
+      "running": {
+        "type": "boolean"
+      },
+      "exitCode": {
+        "type": "integer",
+        "minimum": -1
+      },
+      "createdAt": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "taskId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      },
+      "workspaceUri": {
+        "type": "string",
+        "pattern": "^amitia://workspace/@[A-Za-z0-9_-]{1,128}/$"
+      }
+    }
+  }
+}

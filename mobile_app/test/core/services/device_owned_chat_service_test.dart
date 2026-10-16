@@ -1238,6 +1238,30 @@ void main() {
     );
   });
 
+  test('任务事件不结束聊天且必须匹配当前归属和真实会话', () async {
+    final task = {'type': 'task', 'executionScope': scope(), 'conversationId': 'conversation', 'task': {'coordinationId': 'task-a', 'status': 'running'}};
+    final events = await decodeOwnedChatStream(bytes([
+      {'type': 'started', 'executionScope': scope(), 'conversationId': 'conversation'},
+      task,
+      {'type': 'delta', 'executionScope': scope(), 'text': '回复'},
+      {'type': 'completed', 'data': {'saved': true, 'requestId': 'request', 'executionScope': scope(), 'reply': '回复'}},
+    ]), 'request').toList();
+    expect(events.map((event) => event['type']), ['started', 'task', 'delta', 'completed']);
+    for (final change in [
+      {'conversationId': 'other'},
+      {'executionScope': {...scope(), 'coreId': 'other'}},
+      {'executionScope': {...scope(), 'resourceOwnerId': 'other'}},
+      {'executionScope': {...scope(), 'roleId': 'other'}},
+      {'task': {'coordinationId': 'task-a', 'status': 'invented'}},
+      {'task': {'status': 'running'}},
+    ]) {
+      await expectLater(decodeOwnedChatStream(bytes([
+        {'type': 'started', 'executionScope': scope(), 'conversationId': 'conversation'},
+        {...task, ...change},
+      ]), 'request').toList(), throwsStateError);
+    }
+  });
+
   test('连接截断不能当作回复成功', () async {
     expect(
       () => decodeOwnedChatStream(

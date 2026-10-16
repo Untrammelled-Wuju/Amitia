@@ -1,88 +1,86 @@
-import assert from "node:assert/strict";
-
-let extension = null;
-globalThis.defineExtension = (value) => {
-  extension = value;
-};
-await import(`../src/index.mjs?runtime-test=${Date.now()}`);
-assert.ok(extension);
-
-const state = { value: null, version: 0 };
-let toolHandler = null;
-
-const host = {
-  async call(method, input) {
-    if (method === "host.state.get") {
-      return state.version > 0
-        ? { found: true, value: structuredClone(state.value), version: state.version }
-        : { found: false, version: 0 };
-    }
-    if (method === "host.state.cas") {
-      if (input.expectedVersion !== state.version) return { swapped: false };
-      state.value = structuredClone(input.newValue);
-      state.version += 1;
-      return { swapped: true };
-    }
-    if (method === "host.conversation.message.send") {
-      if (String(input.content || "").includes("empty")) {
-        return { content: "", requestId: input.requestId };
-      }
-      return { content: "主动消息运行时测试回复", requestId: input.requestId };
-    }
-    throw new Error(`unexpected host call: ${method}`);
-  },
-};
-
-await extension.activate({
-  host,
-  log: { info() {}, warn() {} },
-  handlers: {
-    bindTool(name, handler) {
-      assert.equal(name, "command");
-      toolHandler = handler;
-    },
-  },
-});
-
-const command = (action, payload = {}) =>
-  toolHandler({ action, payload: { ...payload, scope: { spaceId: "user-1", characterId: "char-1" } } });
-
-const settings = await command("settings.get");
-assert.equal(settings.enabled, true);
-const updatedSettings = await command("settings.update", { activeLevel: 55, minInterval: 5 });
-assert.equal(updatedSettings.activeLevel, 55);
-
-const created = await command("rules.create", {
-  name: "运行时测试规则",
-  characterId: "char-1",
-  conversationId: "conv-1",
-  channel: "web",
-  promptTemplate: "测试消息",
-});
-assert.equal(created.id, 1);
-assert.equal((await command("rules.list", { characterId: "char-1" })).length, 1);
-assert.equal((await command("rules.toggle", { id: created.id })).enabled, false);
-assert.equal((await command("rules.toggle", { id: created.id })).enabled, true);
-assert.equal((await command("rules.update", { id: created.id, name: "更新后的规则" })).name, "更新后的规则");
-assert.equal((await command("rules.test", { id: created.id })).ok, true);
-assert.equal((await command("rules.trigger", { id: created.id })).ok, true);
-assert.ok((await command("rules.messages", { id: created.id })).length >= 1);
-assert.ok((await command("history.list", { page: 1, pageSize: 20 })).total >= 1);
-assert.equal((await command("queue.summary")).backpressure, false);
-
-const presets = await command("presets.reset", { characterId: "char-1" });
-assert.equal(presets.count, 6);
-const status = await command("status");
-assert.equal(status.totalRuleCount, 6);
-assert.equal(status.enabledRuleCount, 6);
-
-const presetRules = await command("rules.list");
-await command("rules.update", { id: presetRules[0].id, promptTemplate: "empty" });
-await assert.rejects(
-  () => command("rules.trigger", { id: presetRules[0].id }),
-  /主动消息被宿主抑制或未生成内容/,
-);
-assert.equal((await command("rules.delete", { id: presetRules[1].id })).deleted, true);
-
+import assert from 'node:assert/strict';
+let extension;
+globalThis.defineExtension = value => { extension = value; };
+await import('../src/index.mjs');
+const states = new Map();
+const tasks = new Map();
+const calls = [];
+let handler;
+let failSave = false;
+let failUpdate = false;
+let failCAS = false;
+const host = { async call(method, input) {
+  calls.push({ method, input: structuredClone(input) });
+  if (method === 'host.state.get') return states.get(input.key) || { found: false, version: 0 };
+  if (method === 'host.state.cas') {
+    if (failCAS) return { swapped: false };
+    const current = states.get(input.key);
+    if ((current?.version || 0) !== input.expectedVersion) return { swapped: false };
+    states.set(input.key, { found: true, value: structuredClone(input.newValue), version: input.expectedVersion + 1 });
+    return { swapped: true };
+  }
+  const action = method.replace('host.proactive_task.', '');
+  if (action === 'create') {
+    if (failSave) return {};
+    const item = { ...input, id: 'task-' + input.requestId, generation: 1, ownerId: 'cloud-core', saved: true, enabled: input.enabled === false ? 0 : 1 };
+    tasks.set(item.id, item);
+    return structuredClone(item);
+  }
+  if (action === 'list') return { items: [...tasks.values()].filter(item => item.state !== 'cancelled'), total: tasks.size };
+  if (action === 'history') return { items: [], total: 0 };
+  if (action === 'status') return { totalRuleCount: [...tasks.values()].filter(item => item.state !== 'cancelled').length, schedulerRunning: true };
+  if (action === 'queue') return { pendingCount: 0, backpressure: false };
+  if (action === 'clear') return { clearedCount: 0 };
+  const item = tasks.get(input.id);
+  if (!item) throw Error('not found');
+  if (action === 'get') return structuredClone(item);
+  if (action === 'preview') return { tested: true, messageContent: item.content };
+  if (input.generation !== item.generation) throw Error('version conflict');
+  if (action === 'execute') return { triggerId: 'trigger-1', status: 'waiting' };
+  if (action === 'update') {
+    if (failUpdate) throw Error('update unavailable');
+    Object.assign(item, input, { enabled: input.enabled === false ? 0 : 1 });
+  }
+  else if (action === 'pause') Object.assign(item, { paused: true, enabled: 0 });
+  else if (action === 'resume') Object.assign(item, { paused: false, enabled: 1 });
+  else if (action === 'cancel') Object.assign(item, { state: 'cancelled', enabled: 0 });
+  else throw Error('unexpected method ' + method);
+  item.generation++;
+  return structuredClone(item);
+} };
+await extension.activate({ host, log: { info() {} }, handlers: { bindTool(name, value) { assert.equal(name, 'command'); handler = value; } } });
+const command = (action, payload = {}) => handler({ action, payload: { ...payload, scope: { characterId: 'role-1' } } });
+assert.equal((await command('settings.get')).enabled, true);
+const created = await command('rules.create', { name: '测试', requestId: 'stable-create', characterId: 'role-1' });
+assert.equal(created.id, 'task-stable-create');
+assert.equal((await command('rules.toggle', { id: created.id })).enabled, false);
+assert.equal((await command('rules.toggle', { id: created.id })).enabled, true);
+assert.equal((await command('rules.update', { id: created.id, name: '更新' })).name, '更新');
+assert.equal((await command('rules.test', { id: created.id })).tested, true);
+assert.equal(calls.some(call => call.method === 'host.proactive_task.execute'), false);
+const accepted = await command('rules.trigger', { id: created.id });
+assert.equal(accepted.accepted, true);
+assert.equal(accepted.triggered, false);
+assert.equal(accepted.state, 'waiting');
+await command('settings.update', { maxPerDay: 8 });
+assert.equal(tasks.get(created.id).policy.maxPerDay, 8);
+failUpdate = true;
+await assert.rejects(() => command('settings.update', { maxPerDay: 12 }), /update unavailable/);
+assert.equal((await command('settings.get')).maxPerDay, 8);
+failUpdate = false;
+failCAS = true;
+await assert.rejects(() => command('settings.update', { maxPerDay: 13 }), /发生冲突/);
+assert.equal(tasks.get(created.id).policy.maxPerDay, 8);
+failCAS = false;
+const configured = await command('rules.update', { id: created.id, timezone: 'America/New_York', endAt: '2030-01-01T09:00:00-05:00', maxOccurrences: 4, channelTargetsText: '[{"channelId":"wechat","peerId":"peer-1"}]' });
+assert.equal(configured.timezone, 'America/New_York');
+assert.equal(configured.maxOccurrences, 4);
+assert.equal(configured.channelTargets[0].peerId, 'peer-1');
+await assert.rejects(() => command('rules.update', { id: created.id, channelTargetsText: '[{"channelId":"wechat"}]' }), /渠道目标/);
+assert.equal((await command('presets.reset')).count, 6);
+assert.equal((await command('status')).totalRuleCount, 6);
+failSave = true;
+await assert.rejects(() => command('rules.create', { name: '失败' }), /保存未确认/);
+assert.equal(calls.some(call => call.method === 'host.conversation.message.send'), false);
 await extension.deactivate();
-console.log("proactive-runtime=ok");
+console.log('proactive-runtime=ok');

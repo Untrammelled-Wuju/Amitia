@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/open-tab-v1.schema.json",
+  "title": "Workbench Open Tab Command v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "conversationId",
+    "kind"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": 1
+    },
+    "conversationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "files",
+        "file",
+        "git",
+        "diff",
+        "browser",
+        "terminal",
+        "tasks"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 140
+    },
+    "resourceUri": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "workspaceUri": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "targetDeviceId": {
+      "type": "string",
+      "maxLength": 140,
+      "pattern": "^[A-Za-z0-9_:.-]*$"
+    },
+    "focus": {
+      "type": "string",
+      "enum": [
+        "activate",
+        "background"
+      ]
+    },
+    "forceNew": {
+      "type": "boolean"
+    },
+    "operationId": {
+      "type": "string",
+      "maxLength": 140
+    },
+    "resourceGeneration": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "browserRef": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^(?:[A-Za-z0-9_-]{32})?$"
+    },
+    "taskId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,127})?$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "tasks"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "resourceUri": {
+            "maxLength": 0
+          },
+          "workspaceUri": {
+            "maxLength": 0
+          },
+          "targetDeviceId": {
+            "maxLength": 0
+          },
+          "browserRef": {
+            "maxLength": 0
+          },
+          "taskId": {
+            "maxLength": 0
+          }
+        }
+      }
+    }
+  ]
+}

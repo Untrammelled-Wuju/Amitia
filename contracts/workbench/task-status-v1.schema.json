@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/task-status-v1.schema.json",
+  "title": "Workbench durable multi-agent task list v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "conversationId",
+    "source",
+    "tasks",
+    "truncated",
+    "summary"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": 1
+    },
+    "conversationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "source": {
+      "const": "durable-checkpoint"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "tasks": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/task"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "active",
+        "paused",
+        "succeeded",
+        "failed",
+        "runtimeObserved",
+        "checkpointOnly",
+        "needsReconciliation",
+        "codingWorkersRequiringReview"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "active": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "paused": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runtimeObserved": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checkpointOnly": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "needsReconciliation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "codingWorkersRequiringReview": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "liveObservationTruncated": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coordinationId",
+        "status",
+        "updatedAt",
+        "recoveryState",
+        "assignmentCount",
+        "completedCount",
+        "failedCount",
+        "assignments"
+      ],
+      "properties": {
+        "coordinationId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recoveryState": {
+          "enum": [
+            "checkpoint-only",
+            "needs-reconciliation",
+            "runtime-observed"
+          ]
+        },
+        "assignmentCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "completedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assignments": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "status",
+              "role",
+              "objective",
+              "reviewRequired"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "objective": {
+                "type": "string",
+                "maxLength": 220
+              },
+              "reviewRequired": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "recoveryReason": {
+          "enum": [
+            "parent-state-conflict",
+            "runtime-checkpoint-conflict"
+          ]
+        }
+      }
+    }
+  }
+}

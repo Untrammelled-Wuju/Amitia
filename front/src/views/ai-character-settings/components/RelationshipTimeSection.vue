@@ -100,7 +100,7 @@
             v-model="settings.allowProactiveReference"
             :disabled="!settings.enabled"
           />
-          <div class="field-help">允许主动消息在符合规则时引用相识时长或关系节奏。</div>
+          <div class="field-help">允许主动任务在符合规则时引用相识时长或关系节奏。</div>
         </el-form-item>
         <el-form-item label="允许提及重逢">
           <el-switch

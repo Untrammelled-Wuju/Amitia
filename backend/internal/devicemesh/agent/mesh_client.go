@@ -766,7 +766,7 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 			}
 		})
 		defer stop()
-		if c.conf.ExecutionJournal != nil && invoke.Handler != "coordination.data" {
+		if c.conf.ExecutionJournal != nil && invoke.Handler != "coordination.data" && invoke.Handler != RemoteBrowserReadHandler {
 			return c.conf.ExecutionJournal.Execute(current, invoke, func() (*protocol.RuntimeResultPayload, error) { return run(current) })
 		}
 		return run(current)

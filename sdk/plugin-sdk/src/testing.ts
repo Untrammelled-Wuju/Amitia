@@ -28,6 +28,7 @@ export interface MockHostOptions {
   };
   readonly secretBackend?: SecretBackend;
   readonly storageBackend?: StorageBackend;
+  readonly hostCall?: (method: string, input: unknown) => Promise<unknown>;
 }
 
 export interface MockHost {
@@ -67,6 +68,10 @@ export function createMockHost(
   let currentScope = scope;
 
   const hostBridge: HostBridgeLike = {
+    call: async (method, input) => {
+      if (!options.hostCall) throw new Error("mock host call handler is not configured");
+      return options.hostCall(method, input);
+    },
     invokeTool: async (_request) => {
       return { ok: true, value: undefined, durationMs: 0 };
     },

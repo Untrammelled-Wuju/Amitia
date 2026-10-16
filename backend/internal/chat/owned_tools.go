@@ -17,6 +17,10 @@ type OwnedToolRuntime interface {
 	Execute(context.Context, business.Inference, string, string, json.RawMessage) (ToolResult, error)
 }
 
+type OwnedTurnRuntime interface {
+	BeginOwnedTurn(context.Context, business.Inference) (context.Context, func(context.Context, business.Generation, error) error, error)
+}
+
 func (s *service) SetOwnedToolRuntime(runtime OwnedToolRuntime) { s.ownedToolRuntime = runtime }
 
 func (s *service) generateOwnedWithTools(ctx context.Context, inference business.Inference, cfg *ModelConfig, messages []map[string]interface{}, sink *ownedReplySink) (business.Generation, error) {
@@ -28,6 +32,20 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			return business.Generation{}, err
 		}
 	}
+	filtered := make([]tool.Tool, 0, len(definitions))
+	bufferNativeOutput := false
+	for _, definition := range definitions {
+		if ownedNativeTaskTool(definition.Function.Name) {
+			if inference.InternalWorker {
+				continue
+			}
+		}
+		filtered = append(filtered, definition)
+	}
+	definitions = filtered
+	modelSink := sink
+	verification := agentVerificationGate{}
+	var nativeStatus, nativeCoordination string
 	modelDefinitions, toolAliases := prepareAgentModelTools(definitions)
 	allowed := map[string]bool{}
 	for _, definition := range definitions {
@@ -42,17 +60,38 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return partial(err)
 		}
-		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(ctx, cfg, messages, modelDefinitions, sink)
+		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(ctx, cfg, messages, modelDefinitions, modelSink)
 		totalTokens += tokens
 		if err != nil {
 			return partial(err)
 		}
 		if len(calls) == 0 {
-			if strings.TrimSpace(sink.text.String()) == "" {
+			if strings.TrimSpace(modelSink.text.String()) == "" && nativeCoordination == "" {
 				return partial(errors.New("模型未返回内容或能力调用，不能判定任务已完成"))
 			}
 			if err := coordination.ValidateCurrent(ctx); err != nil {
 				return partial(err)
+			}
+			if bufferNativeOutput {
+				finalText := modelSink.text.String()
+				if nativeCoordination != "" {
+					switch {
+					case verification.PendingDelegation():
+						finalText = fmt.Sprintf("多 Agent 任务 %s 已进入后台执行，当前状态为 %s，尚未完成。可在工作台查看任务进度和检查点。", nativeCoordination, nativeStatus)
+					case nativeStatus == "failed" || nativeStatus == "cancelled":
+						finalText = fmt.Sprintf("多 Agent 任务 %s 当前状态为 %s，不能视为工作已完成。请在工作台查看结果与检查点后处理。", nativeCoordination, nativeStatus)
+					default:
+						finalText = fmt.Sprintf("多 Agent 任务 %s 的 Worker 已返回结果，仍需父任务审核、验证与合并确认，不能视为代码工作已完成。可在工作台查看结果与检查点。", nativeCoordination)
+					}
+				}
+				if err := sink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: finalText}); err != nil {
+					return partial(err)
+				}
+				if modelSink.reasoning.Len() > 0 && nativeCoordination == "" {
+					if err := sink.Emit(ctx, ModelEvent{Type: ModelEventReasoningSummaryDelta, TextDelta: modelSink.reasoning.String()}); err != nil {
+						return partial(err)
+					}
+				}
 			}
 			return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens}, nil
 		}
@@ -79,7 +118,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			if original, exists := toolAliases[modelName]; exists {
 				modelName = original
 			}
-			if !allowed[modelName] {
+			if !allowed[modelName] || inference.InternalWorker && ownedNativeTaskTool(modelName) {
 				return partial(errors.New("模型调用了未授权的设备能力，已拦截"))
 			}
 			seen[call.ID] = true
@@ -97,10 +136,31 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			if len(result.Output) > 0 {
 				output = string(result.Output)
 			}
-			if outcome := toolResultToOutcome(result, true); outcome.HasError {
+			outcome := toolResultToOutcome(result, true)
+			verification.Observe(modelName, call.Function.Arguments, outcome)
+			if ownedNativeTaskTool(modelName) && !outcome.HasError {
+				var task struct {
+					CoordinationID string `json:"coordinationId"`
+					Status         string `json:"status"`
+				}
+				if json.Unmarshal(outcome.Output, &task) == nil && task.CoordinationID != "" {
+					nativeCoordination, nativeStatus = task.CoordinationID, task.Status
+					if !bufferNativeOutput {
+						bufferNativeOutput = true
+						stagedInference := inference
+						stagedInference.Emit = nil
+						modelSink = &ownedReplySink{inference: stagedInference}
+					}
+				}
+			}
+			if outcome.HasError {
 				output = fmt.Sprintf("能力调用未成功：%s: %s", outcome.ErrorCode, outcome.ErrorMessage)
 			}
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": output})
 		}
 	}
+}
+
+func ownedNativeTaskTool(name string) bool {
+	return name == "harness_multi_agent_delegate" || name == "harness_multi_agent_status" || name == "harness_multi_agent_wait"
 }

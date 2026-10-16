@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"sort"
 	"time"
 
@@ -141,6 +142,10 @@ type RecoveryMindRef struct {
 }
 
 type MultiAgentRecoveryRef struct {
+	OwnedScope               *coordination.ExecutionScope   `json:"ownedScope,omitempty"`
+	DispatchFingerprint      string                         `json:"dispatchFingerprint,omitempty"`
+	ExecutionCoreID          string                         `json:"executionCoreId,omitempty"`
+	ResourceOwnerID          string                         `json:"resourceOwnerId,omitempty"`
 	CoordinationID           string                         `json:"coordinationId"`
 	ParentGoalID             string                         `json:"parentGoalId"`
 	ParentGoalRevision       int64                          `json:"parentGoalRevision"`
@@ -202,6 +207,7 @@ type ParentTurnRecoveryRef struct {
 }
 
 type RecoveryDescriptor struct {
+	OwnedTurn     *OwnedTurnRecoveryRef          `json:"ownedTurn,omitempty"`
 	SchemaVersion int                            `json:"schemaVersion"`
 	Requirement   RecoveryRequirement            `json:"requirement"`
 	Revision      int64                          `json:"revision"`
@@ -253,6 +259,10 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 	}
 	writeKVI := func(k string, v int64) {
 		writeKV(k, fmt.Sprintf("%d", v))
+	}
+	if d.OwnedTurn != nil {
+		encoded, _ := json.Marshal(d.OwnedTurn)
+		writeKV("ownedTurn", string(encoded))
 	}
 	writeKV("interaction.id", d.Interaction.InteractionID)
 	writeKV("interaction.status", string(d.Interaction.Status))
@@ -315,6 +325,13 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 		writeKV("mind.snapshotVersion", d.Mind.SnapshotVersion)
 	}
 	if d.MultiAgent != nil {
+		if d.MultiAgent.OwnedScope != nil {
+			encoded, _ := json.Marshal(d.MultiAgent.OwnedScope)
+			writeKV("multiAgent.ownedScope", string(encoded))
+		}
+		if d.MultiAgent.DispatchFingerprint != "" {
+			writeKV("multiAgent.dispatchFingerprint", d.MultiAgent.DispatchFingerprint)
+		}
 		writeKV("multiAgent.coordId", d.MultiAgent.CoordinationID)
 		writeKV("multiAgent.parentGoalId", d.MultiAgent.ParentGoalID)
 		writeKVI("multiAgent.parentGoalRev", d.MultiAgent.ParentGoalRevision)
@@ -344,6 +361,8 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 			writeKV("multiAgent.deadlineAt", d.MultiAgent.DeadlineAt.UTC().Format(time.RFC3339Nano))
 		}
 		for _, attribute := range []struct{ name, value string }{
+			{"executionCoreId", d.MultiAgent.ExecutionCoreID},
+			{"resourceOwnerId", d.MultiAgent.ResourceOwnerID},
 			{"workspaceId", d.MultiAgent.WorkspaceID},
 			{"permissionMode", d.MultiAgent.PermissionMode},
 			{"workspaceDeviceId", d.MultiAgent.WorkspaceDeviceID},

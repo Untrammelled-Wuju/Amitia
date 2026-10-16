@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/u-ai/backend/pkg/sse"
 )
 
 type PushProvider interface {
@@ -94,7 +95,7 @@ func (g *PushGateway) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 	if g == nil {
 		return ProviderResult{ErrorCode: "gateway_unavailable", ErrorMessage: "push gateway unavailable"}
 	}
-	if g.preferNative && g.native != nil && g.native.Available(ctx) {
+	if !strings.EqualFold(endpoint.Platform, "desktop") && !strings.EqualFold(endpoint.Platform, "web") && g.preferNative && g.native != nil && g.native.Available(ctx) {
 		result := g.native.Send(ctx, endpoint, envelope)
 		if result.Accepted {
 			return result
@@ -102,6 +103,12 @@ func (g *PushGateway) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 	}
 	var result ProviderResult
 	switch strings.ToLower(endpoint.Platform) {
+	case "desktop", "web":
+		count := sse.Global.SendToDevice(endpoint.SpaceID, endpoint.DeviceID, "scheduled_notification", map[string]interface{}{"requestId": envelope.NotificationID, "payload": map[string]interface{}{"title": envelope.Title, "body": envelope.Body, "conversationId": envelope.ConversationID, "characterId": envelope.CharacterID, "messageId": envelope.MessageID, "sound": envelope.Sound, "ownerId": envelope.SpaceID}, "expiresAt": time.Now().Add(envelope.TTL).UTC().Format(time.RFC3339Nano)})
+		if count == 0 {
+			return ProviderResult{Provider: "desktop-sse", ErrorCode: "device_offline", ErrorMessage: "桌面通知通道离线"}
+		}
+		return ProviderResult{Provider: "desktop-sse", ProviderMessageID: envelope.NotificationID, Accepted: true}
 	case "android":
 		result = g.sendAndroid(ctx, endpoint, envelope)
 	case "ios":

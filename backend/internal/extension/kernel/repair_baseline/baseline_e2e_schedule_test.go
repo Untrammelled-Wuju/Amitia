@@ -120,7 +120,7 @@ func TestBaseline_E2E_Schedule_EnableDisable(t *testing.T) {
 		t.Fatalf("enabled schedule must have status 'enabled', got %s", state.Status)
 	}
 
-	if err := container.ScheduleService.Disable(ctx, "test-enable", 1); err != nil {
+	if err := container.ScheduleService.Disable(ctx, "test-enable", state.Generation); err != nil {
 		t.Fatalf("Disable must succeed (Phase 10 section 19.5.7): %v", err)
 	}
 	_, state, _ = container.ScheduleService.GetSchedule(ctx, "test-enable")
@@ -325,7 +325,11 @@ func TestBaseline_E2E_Schedule_PauseResume(t *testing.T) {
 		t.Fatalf("Enable must succeed: %v", err)
 	}
 
-	if err := container.ScheduleService.Pause(ctx, "test-pause", 1); err != nil {
+	_, enabledState, err := container.ScheduleService.GetSchedule(ctx, "test-pause")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := container.ScheduleService.Pause(ctx, "test-pause", enabledState.Generation); err != nil {
 		t.Fatalf("Pause must succeed: %v", err)
 	}
 	_, state, _ := container.ScheduleService.GetSchedule(ctx, "test-pause")
@@ -333,7 +337,7 @@ func TestBaseline_E2E_Schedule_PauseResume(t *testing.T) {
 		t.Fatalf("paused schedule must have Paused=true")
 	}
 
-	if err := container.ScheduleService.Resume(ctx, "test-pause", 1); err != nil {
+	if err := container.ScheduleService.Resume(ctx, "test-pause", state.Generation); err != nil {
 		t.Fatalf("Resume must succeed: %v", err)
 	}
 	_, state, _ = container.ScheduleService.GetSchedule(ctx, "test-pause")

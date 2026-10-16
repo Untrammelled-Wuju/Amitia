@@ -104,7 +104,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :max="100"
         />
         <div class="slider-hint">
-          数值越高，AI 越可能主动延续话题或提醒你。 系统会自动管理主动消息频率。
+          数值越高，AI 越可能主动延续话题或提醒你。 系统会自动管理主动任务频率。
         </div>
         <SliderRow
           :model-value="modelValue.teasing"

@@ -1366,7 +1366,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                   ),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('允许主动消息提及'),
+                    title: const Text('允许主动任务提及'),
                     value: allowProactiveMention,
                     onChanged: (value) =>
                         setSheetState(() => allowProactiveMention = value),
@@ -1914,7 +1914,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
       case 'relationship_reconnect':
         return '关系重连';
       case 'reply_to_recent_proactive':
-        return '回应主动消息';
+        return '回应主动任务';
       default:
         return value.isEmpty ? '重逢' : value;
     }

@@ -69,6 +69,7 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
   var saved = false;
   var total = 0;
   String? transcription;
+  String conversationId = '';
   await for (final chunk in source.transform(utf8.decoder)) {
     total += utf8.encode(chunk).length;
     if (total > 4 * 1024 * 1024) throw StateError('回复数据超出接收上限');
@@ -93,12 +94,13 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
         'started',
         'transcribed',
         'delta',
+        'task',
         'completed',
         'interrupted',
         'failed',
       ].contains(type))
         throw StateError('未知的回复事件');
-      if (type == 'started' || type == 'delta' || type == 'transcribed') {
+      if (type == 'started' || type == 'delta' || type == 'transcribed' || type == 'task') {
         final rawScope = event['executionScope'];
         if (rawScope is! Map) throw StateError('回复缺少执行范围');
         final current = _scopeStamp(
@@ -108,6 +110,7 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
         if (type == 'started') {
           if (scopeStamp.isNotEmpty) throw StateError('重复的回复开始事件');
           scopeStamp = current;
+          conversationId = (event['conversationId'] ?? '').toString();
         } else if (scopeStamp.isEmpty || current != scopeStamp) {
           throw StateError('服务提供者、角色或数据归属已变化，迟到回复已拦截');
         }
@@ -119,6 +122,12 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
               utf8.encode(text).length > 65536)
             throw StateError('语音转写事件无效');
           transcription = text;
+        }
+        if (type == 'task') {
+          final task = event['task'];
+          if (conversationId.isEmpty || event['conversationId'] != conversationId || task is! Map || task['coordinationId'] is! String || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(task['coordinationId'] as String) || !const {'planning', 'running', 'waiting', 'aggregating', 'succeeded', 'failed', 'cancelled', 'paused'}.contains(task['status'])) {
+            throw StateError('任务事件归属或状态无效');
+          }
         }
       } else {
         final result = event['data'];
@@ -1316,6 +1325,7 @@ class DeviceOwnedChatService {
           );
           yield {
             ...event,
+            if (event['type'] == 'task') 'sourceApi': _api,
             'sourceConversationId': id,
             'conversationId': reference,
             if (result is Map)

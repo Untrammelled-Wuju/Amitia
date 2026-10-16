@@ -127,7 +127,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
         Icons.forum_outlined,
       ),
       const _DrawerSearchPage(
-        '日程提醒',
+        '主动任务',
         AppRoutes.reminders,
         Icons.notifications_none,
       ),

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "schema-ui/1",
   "type": "document",
-  "title": "主动消息（手机端）",
+  "title": "主动任务（手机端）",
   "lifecycle": {
     "onMount": [
       {
@@ -74,7 +74,7 @@
                   "id": "mobile-proactive-enabled",
                   "type": "switch",
                   "props": {
-                    "activeText": "启用主动消息"
+                    "activeText": "启用主动任务"
                   },
                   "bindings": [
                     {
@@ -165,8 +165,125 @@
                           "activeLevel": "$form.settings.activeLevel",
                           "maxPerDay": "$form.settings.maxPerDay",
                           "quietStart": "$form.settings.quietStart",
-                          "quietEnd": "$form.settings.quietEnd"
+                          "quietEnd": "$form.settings.quietEnd",
+                          "minInterval": "$form.settings.minInterval",
+                          "maxDailyCalls": "$form.settings.maxDailyCalls",
+                          "unrepliedSlowdownEnabled": "$form.settings.unrepliedSlowdownEnabled",
+                          "unrepliedSlowdownAfter": "$form.settings.unrepliedSlowdownAfter",
+                          "unrepliedCooldownMultiplier": "$form.settings.unrepliedCooldownMultiplier",
+                          "unrepliedRecoveryOnReply": "$form.settings.unrepliedRecoveryOnReply"
                         }
+                      },
+                      "statePath": "dashboard"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-minInterval",
+                  "type": "field",
+                  "props": {
+                    "label": "最短间隔（分钟）",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.minInterval",
+                      "source": "form",
+                      "default": 60
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-maxDailyCalls",
+                  "type": "field",
+                  "props": {
+                    "label": "每日模型调用上限",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.maxDailyCalls",
+                      "source": "form",
+                      "default": 10
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-unrepliedSlowdownEnabled",
+                  "type": "switch",
+                  "props": {
+                    "label": "未回复时减缓"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.unrepliedSlowdownEnabled",
+                      "source": "form",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-unrepliedSlowdownAfter",
+                  "type": "field",
+                  "props": {
+                    "label": "连续未回复次数",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.unrepliedSlowdownAfter",
+                      "source": "form",
+                      "default": 2
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-unrepliedCooldownMultiplier",
+                  "type": "field",
+                  "props": {
+                    "label": "未回复冷却倍数",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.unrepliedCooldownMultiplier",
+                      "source": "form",
+                      "default": 2
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-unrepliedRecoveryOnReply",
+                  "type": "switch",
+                  "props": {
+                    "label": "回复后恢复"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.unrepliedRecoveryOnReply",
+                      "source": "form",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-reset-presets",
+                  "type": "button",
+                  "props": {
+                    "text": "恢复当前角色预设"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "presets.reset",
+                        "ui_state": true,
+                        "payload": {}
                       },
                       "statePath": "dashboard"
                     }
@@ -213,8 +330,7 @@
                   "id": "mobile-proactive-rule-id",
                   "type": "field",
                   "props": {
-                    "label": "规则 ID",
-                    "variant": "number"
+                    "label": "规则 ID"
                   },
                   "bindings": [
                     {
@@ -249,6 +365,92 @@
                       "path": "rule.scheduleCron",
                       "source": "form",
                       "default": "0 9 * * *"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-quietEnd",
+                  "type": "field",
+                  "props": {
+                    "label": "静默结束"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.quietEnd",
+                      "source": "form",
+                      "default": "07:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-quietStart",
+                  "type": "field",
+                  "props": {
+                    "label": "静默开始"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.quietStart",
+                      "source": "form",
+                      "default": "23:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-maxOccurrences",
+                  "type": "field",
+                  "props": {
+                    "label": "最多执行次数（0 不限）",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.maxOccurrences",
+                      "source": "form",
+                      "default": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-endAt",
+                  "type": "field",
+                  "props": {
+                    "label": "结束时间（含时区，可留空）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.endAt",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-channelTargetsText",
+                  "type": "field",
+                  "props": {
+                    "label": "已接入渠道目标（JSON）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.channelTargetsText",
+                      "source": "form",
+                      "default": "[]"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-timezone",
+                  "type": "field",
+                  "props": {
+                    "label": "时区（IANA）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.timezone",
+                      "source": "form",
+                      "default": "Asia/Shanghai"
                     }
                   ]
                 },
@@ -288,9 +490,17 @@
                           "ruleType": "custom",
                           "scheduleCron": "$form.rule.scheduleCron",
                           "channel": "all",
-                          "maxPerDay": 1,
-                          "randomMinutes": 0,
-                          "promptTemplate": "$form.rule.promptTemplate"
+                          "maxPerDay": "$form.rule.maxPerDay",
+                          "randomMinutes": "$form.rule.randomMinutes",
+                          "promptTemplate": "$form.rule.promptTemplate",
+                          "timezone": "$form.rule.timezone",
+                          "channelTargetsText": "$form.rule.channelTargetsText",
+                          "endAt": "$form.rule.endAt",
+                          "maxOccurrences": "$form.rule.maxOccurrences",
+                          "quietStart": "$form.rule.quietStart",
+                          "quietEnd": "$form.rule.quietEnd",
+                          "conversationId": "$form.rule.conversationId",
+                          "systemNotification": "$form.rule.systemNotification"
                         }
                       },
                       "statePath": "dashboard"
@@ -340,6 +550,122 @@
                       "statePath": "dashboard"
                     }
                   ]
+                },
+                {
+                  "id": "unified-rule-conversationId",
+                  "type": "field",
+                  "props": {
+                    "label": "目标对话 ID（留空新建）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.conversationId",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-maxPerDay",
+                  "type": "field",
+                  "props": {
+                    "label": "规则每日上限",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.maxPerDay",
+                      "source": "form",
+                      "default": 1
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-randomMinutes",
+                  "type": "field",
+                  "props": {
+                    "label": "随机偏移分钟",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.randomMinutes",
+                      "source": "form",
+                      "default": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-systemNotification",
+                  "type": "switch",
+                  "props": {
+                    "label": "系统通知"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.systemNotification",
+                      "source": "form",
+                      "default": true
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-test",
+                  "type": "button",
+                  "props": {
+                    "text": "预览内容"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "rules.test",
+                        "ui_state": false,
+                        "payload": {
+                          "id": "$form.rule.id"
+                        }
+                      },
+                      "statePath": "preview"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-rule-trigger",
+                  "type": "button",
+                  "props": {
+                    "text": "立即触发（查看历史结果）"
+                  },
+                  "actions": [
+                    {
+                      "action_id": "command",
+                      "target": "tool",
+                      "input": {
+                        "action": "rules.trigger",
+                        "ui_state": true,
+                        "payload": {
+                          "id": "$form.rule.id"
+                        }
+                      },
+                      "statePath": "dashboard"
+                    }
+                  ]
+                },
+                {
+                  "id": "mobile-proactive-preview",
+                  "type": "key_value",
+                  "props": {
+                    "title": "预览（不发送）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "items",
+                      "source": "state",
+                      "sourcePath": "preview"
+                    }
+                  ]
                 }
               ]
             },
@@ -367,6 +693,10 @@
                       {
                         "prop": "state",
                         "label": "状态"
+                      },
+                      {
+                        "prop": "result",
+                        "label": "保存与分目标投递结果"
                       }
                     ]
                   },

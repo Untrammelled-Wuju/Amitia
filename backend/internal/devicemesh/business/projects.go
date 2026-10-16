@@ -69,6 +69,9 @@ func (e *Engine) CreateProject(ctx context.Context, request Request, input Creat
 		return ProjectResponse{}, err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
+	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+		return ProjectResponse{}, err
+	}
 	if summaryAuthority(*request.ExpectedScope) != summaryAuthority(scope) {
 		return ProjectResponse{}, coordination.ErrScopeExpired
 	}

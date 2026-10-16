@@ -1,7 +1,9 @@
 package git
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/u-ai/backend/internal/gitworktree"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +15,41 @@ type GitHandler struct {
 
 func NewGitHandler(controller *GitController) *GitHandler {
 	return &GitHandler{controller: controller}
+}
+
+func (h *GitHandler) CreateTaskWorktree(ctx context.Context, req WorktreeCreateRequest) (*gitworktree.Entry, error) {
+	if h == nil || h.controller == nil || req.TaskID == "" || req.ConversationID == "" {
+		return nil, gitworktree.ErrInvalidArgument
+	}
+	return h.controller.WorktreeCreate(ctx, req)
+}
+
+func (h *GitHandler) ListTaskWorktrees(ctx context.Context, workspaceURI string) ([]gitworktree.Entry, error) {
+	if h == nil || h.controller == nil || workspaceURI == "" {
+		return nil, gitworktree.ErrInvalidArgument
+	}
+	return h.controller.WorktreeList(ctx, workspaceURI)
+}
+
+func (h *GitHandler) ReviewTaskWorktree(ctx context.Context, req WorktreeReviewRequest) (*WorktreeReviewResult, error) {
+	if h == nil || h.controller == nil {
+		return nil, gitworktree.ErrInvalidArgument
+	}
+	return h.controller.WorktreeReview(ctx, req)
+}
+
+func (h *GitHandler) ReadTaskCheckpoint(ctx context.Context, req WorktreeCheckpointRequest) (*gitworktree.ReviewCheckpoint, error) {
+	if h == nil || h.controller == nil {
+		return nil, gitworktree.ErrInvalidArgument
+	}
+	return h.controller.WorktreeCheckpointRead(ctx, req)
+}
+
+func (h *GitHandler) ReadTaskMergeAudit(ctx context.Context, req WorktreeMergeRequest) (*gitworktree.MergeAudit, error) {
+	if h == nil || h.controller == nil {
+		return nil, gitworktree.ErrInvalidArgument
+	}
+	return h.controller.WorktreeMergeAudit(ctx, req)
 }
 
 func (h *GitHandler) RegisterRoutes(r gin.IRouter) {
@@ -30,6 +67,18 @@ func (h *GitHandler) RegisterRoutes(r gin.IRouter) {
 		git.POST("/pull", h.handlePull)
 		git.POST("/push", h.handlePush)
 		git.POST("/remotes", h.handleListRemotes)
+		git.POST("/worktrees", h.handleWorktreeList)
+		git.POST("/worktrees/create", h.handleWorktreeCreate)
+		git.POST("/worktrees/remove", h.handleWorktreeRemove)
+		git.POST("/worktrees/release", h.handleWorktreeRelease)
+		git.POST("/worktrees/review", h.handleWorktreeReview)
+		git.POST("/worktrees/checkpoints/prepare", h.handleCheckpointPrepare)
+		git.POST("/worktrees/checkpoints/read", h.handleCheckpointRead)
+		git.POST("/worktrees/checkpoints/test", h.handleCheckpointTest)
+		git.POST("/worktrees/checkpoints/approve", h.handleCheckpointApprove)
+		git.POST("/worktrees/merges/preview", h.handleWorktreeMergePreview)
+		git.POST("/worktrees/merges/apply", h.handleWorktreeMergeApply)
+		git.POST("/worktrees/merges/audit", h.handleWorktreeMergeAudit)
 	}
 	isolated := r.Group("/workspaces/isolated")
 	{

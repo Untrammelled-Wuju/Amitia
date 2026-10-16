@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/terminal-lifecycle-v1.schema.json",
+  "title": "Workbench Terminal Lifecycle V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sessionId",
+    "latestSequence",
+    "truncated",
+    "events",
+    "scope"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "workspaceUri": {
+      "type": "string",
+      "pattern": "^amitia://workspace/@[A-Za-z0-9_-]{1,128}/$"
+    },
+    "latestSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "scope": {
+      "const": "live-session-memory-only"
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "kind",
+          "at"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "kind": {
+            "enum": [
+              "session.started",
+              "session.resized",
+              "process.exited"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "exitCode": {
+            "type": "integer"
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 120
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 300
+          }
+        }
+      }
+    }
+  }
+}

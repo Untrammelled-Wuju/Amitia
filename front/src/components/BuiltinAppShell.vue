@@ -17,8 +17,10 @@ SPDX-License-Identifier: AGPL-3.0-only
             </span>
           </header>
 
+          <div class="workbench-content-row" :class="{ 'workbench-content-row--chat': isChatPage }">
           <div
             class="content-scroll"
+            :inert="isChatPage && workbench.visible && (isMobile || windowWidth < 1024)"
             :class="{ 'no-padding': isContentPaddingDisabled }"
           >
             <div
@@ -33,6 +35,8 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <slot />
               </UIProviderHost>
             </div>
+          </div>
+          <WorkbenchDock v-if="isChatPage && workbench.visible" :mobile="isMobile || windowWidth < 1024" />
           </div>
         </main>
       </div>
@@ -49,6 +53,8 @@ import SideNav from "./SideNav.vue";
 import MobileNav from "./MobileNav.vue";
 import UIProviderHost from "./ui-runtime/UIProviderHost.vue";
 import BuiltinWorkspaceHost from "./ui-runtime/BuiltinWorkspaceHost.vue";
+import WorkbenchDock from "./workbench/WorkbenchDock.vue";
+import { useWorkbenchStore, type WorkbenchOpenCommand } from "@/stores/workbench";
 import { useTheme } from "../composables/useTheme";
 import {
   apiClient,
@@ -59,6 +65,11 @@ import { useExtensionUIStore } from "@/stores/extensionUI";
 import { isDesktopShell } from "../runtime/runtime-capabilities";
 
 const router = useRouter();
+const workbench = useWorkbenchStore();
+function handleWorkbenchOpen(event: Event) {
+  const detail = (event as CustomEvent<WorkbenchOpenCommand>).detail;
+  workbench.openCommand(detail);
+}
 const { items: navigationItems } = useUINavigationRegistry();
 let healthInterval: number | null = null;
 const {
@@ -179,6 +190,7 @@ async function fetchSpaceProfile() {
 }
 
 onMounted(() => {
+  window.addEventListener('amitia:workbench:open', handleWorkbenchOpen);
   window.addEventListener("resize", handleWindowResize);
   fetchHealth();
   fetchActiveCharacter();
@@ -193,6 +205,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('amitia:workbench:open', handleWorkbenchOpen);
   if (healthInterval !== null) {
     window.clearInterval(healthInterval);
     healthInterval = null;
@@ -235,6 +248,8 @@ onUnmounted(() => {
   border-top-left-radius: 20px;
 }
 
+.workbench-content-row {display:flex;flex:1;min-height:0;min-width:0;position:relative}
+.workbench-content-row .content-scroll {min-width:0;flex:1}
 .app-content {
   flex: 1;
   display: flex;

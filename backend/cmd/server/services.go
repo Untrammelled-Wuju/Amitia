@@ -37,6 +37,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationprojection "github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
+	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/platform"
 
@@ -128,6 +129,7 @@ type AppServices struct {
 	DB                           *gorm.DB
 	DeviceMesh                   *devicemesh.Runtime
 	OwnedBusiness                *business.Engine
+	Reminders                    *reminder.Service
 	ClosureGate                  *Stage2ClosureGateAdapter
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
@@ -196,6 +198,7 @@ type AppServices struct {
 	PauseResumeService           *interaction.PauseResumeService
 	BackgroundTaskCoordinator    *interaction.BackgroundTaskCoordinator
 	MultiAgentCoordinator        *interaction.MultiAgentCoordinator
+	WorkbenchTaskTracker         interaction.InteractionTracker
 	GameCenterService            *management.GameCenterManagementService
 	MediaService                 *media.Service
 	WorkspaceRegistry            *workspace.Registry
@@ -751,8 +754,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	backgroundTaskCoordinator := interaction.NewBackgroundTaskCoordinator(tracker, recoveryDescriptor, kernelContainer.TaskRuntimeService)
 	_ = backgroundTaskCoordinator
 	_ = pauseResumeService
-	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewAsyncUnifiedEntryWorkerRunner(entry, tracker), pauseResumeService, interaction.DefaultMultiAgentPolicy())
+	ownedWorkerPort := &ownedWorkerEnginePort{}
+	codingAllocator := &codingWorkerWorktreeAllocator{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
+	ownedWorkerRunner := newOwnedMultiAgentWorkerRunner(ownedWorkerPort, tracker, interaction.NewAsyncUnifiedEntryWorkerRunner(entry, tracker))
+	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewCodingWorktreeWorkerRunner(ownedWorkerRunner, codingAllocator), pauseResumeService, interaction.DefaultMultiAgentPolicy())
 	chatToolRuntime.ConfigureMultiAgent(multiAgentCoordinator, tracker, goalRegistry)
+	codingReviewer := &codingWorktreeReviewerService{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
+	chatToolRuntime.multiAgent.worktreeReviewer = codingReviewer
+	chatToolRuntime.multiAgent.terminalReader = newCodingTaskTerminalReader()
 	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer, recoveryDescriptor)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
@@ -1251,6 +1260,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		PauseResumeService:           pauseResumeService,
 		BackgroundTaskCoordinator:    backgroundTaskCoordinator,
 		MultiAgentCoordinator:        multiAgentCoordinator,
+		WorkbenchTaskTracker:         tracker,
 		Browser:                      browserProvider,
 		MediaService:                 mediaService,
 		WorkspaceRegistry:            workspaceRegistry,
@@ -1335,6 +1345,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("Core 缺少设备归属计算端口")
 		}
 		services.OwnedBusiness = business.NewEngine(deviceMeshRuntime.Coordination, deviceMeshRuntime, ownedModel)
+		ownedWorkerPort.engine = services.OwnedBusiness
+		codingAllocator.services = services
+		codingReviewer.services = services
+		multiAgentCoordinator.SetOwnedExecution(services.OwnedBusiness.WithExecutionScope)
 		kernelMemQuerySvc.engine = services.OwnedBusiness
 		if setter, ok := services.Chat.(interface {
 			SetCanonicalMemoryRuntime(chat.CanonicalMemoryRuntime)
@@ -1345,7 +1359,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			reflectionMemoryAdapter.runtime = runtime
 		}
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
-			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services})
+			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: chatToolRuntime.multiAgent})
 		}
 		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
 		ownedDataHandler, ownedDataErr := newDeviceOwnedDataHandler(services, mcpDataDirectory(ctx))
@@ -1354,6 +1368,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		localRuntimeDispatcher.RegisterCancellable("coordination.data", ownedDataHandler)
 		registerSourceTaskHostEventDispatcher(localRuntimeDispatcher, services)
+		registerDeviceWorkbenchBrowserHandler(localRuntimeDispatcher, services)
+		registerDeviceCodingWorktreeHandler(localRuntimeDispatcher, services)
 		extension.RegisterDeviceWorkflowMeshHandlers(localRuntimeDispatcher, services.Extension)
 		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshResolveHandler, newDesktopPetBehaviorMeshResolveHandler(services))
 		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshHandler, newDesktopPetBehaviorMeshInvokeHandler(services))
@@ -1513,6 +1529,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	if services.RuntimeProfile.IsCore() {
 		services.DeviceMesh.BusinessCoordinationReady = true
+	}
+	if err := wireReminderService(services); err != nil {
+		return nil, err
+	}
+	if err := registerReminderDataPortability(services, mcpDataDirectory(ctx)); err != nil {
+		return nil, fmt.Errorf("register unified reminder backup: %w", err)
 	}
 	return services, nil
 }

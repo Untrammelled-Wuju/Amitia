@@ -15,6 +15,7 @@ type InteractionMetadataUpdate struct {
 	CommitToken           *string
 	CommitOwner           *string
 	ResultMessageIDs      *string
+	ResultRef             *string
 	DeliveryIntentIDs     *string
 	CorrelationID         *string
 	CausationID           *string

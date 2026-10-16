@@ -1711,6 +1711,11 @@ func (r *Runtime) deliverOutbox(ctx context.Context, id string) {
 	nextAttemptAt := time.Now().UTC()
 	if result.Accepted {
 		status = "accepted"
+	} else if result.ErrorCode == "device_offline" && !row.ExpiresAt.IsZero() {
+		nextAttemptAt = time.Now().UTC().Add(time.Duration(1<<minInt(attemptCount, 8)) * time.Second)
+		if nextAttemptAt.Before(row.ExpiresAt) {
+			status = "retry"
+		}
 	} else if retryableProviderResult(result) && attemptCount < 6 {
 		nextAttemptAt = time.Now().UTC().Add(time.Duration(1<<minInt(attemptCount, 6)) * time.Second)
 		if row.ExpiresAt.IsZero() || nextAttemptAt.Before(row.ExpiresAt) {
@@ -1775,7 +1780,7 @@ func minInt(left, right int) int {
 
 func retryableProviderResult(result ProviderResult) bool {
 	switch result.ErrorCode {
-	case "network_error", "request_failed", "live_activity_token_pending":
+	case "network_error", "request_failed", "live_activity_token_pending", "device_offline":
 		return true
 	}
 	if strings.HasPrefix(result.ErrorCode, "http_") {

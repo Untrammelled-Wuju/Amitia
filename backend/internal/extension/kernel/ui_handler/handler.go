@@ -1,6 +1,7 @@
 package ui_handler
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -55,22 +56,23 @@ type ResourceLinkResolver interface {
 }
 
 type HTTPHandler struct {
-	uiHost                *ui_contribution.UIHost
-	slotRegistry          *extension_slots.SlotRegistry
-	pageHost              *extension_page_host.PageHost
-	sandboxHost           *sandbox_webui.Host
-	providerRegistry      *ui_provider.Registry
-	providerContext       func(*http.Request, string) ui_provider.ResolveContext
-	providerBroadcaster   func(string, map[string]interface{})
-	authorizer            *permission.UISessionAuthorizer
-	schemaLookup          func(extensionID, contributionID string) (json.RawMessage, bool)
-	scopeSnapshotCreator  func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
-	dialogResolver        DialogResolver
-	clientRuntimeResolver ClientRuntimeCommandResolver
-	clipboardResolver     ClipboardResolver
-	hostRegistry          *host_registry.HostRegistry
-	extRoot               string
-	resourceLinks         ResourceLinkResolver
+	uiHost                         *ui_contribution.UIHost
+	slotRegistry                   *extension_slots.SlotRegistry
+	pageHost                       *extension_page_host.PageHost
+	sandboxHost                    *sandbox_webui.Host
+	providerRegistry               *ui_provider.Registry
+	providerContext                func(*http.Request, string) ui_provider.ResolveContext
+	providerBroadcaster            func(string, map[string]interface{})
+	authorizer                     *permission.UISessionAuthorizer
+	schemaLookup                   func(extensionID, contributionID string) (json.RawMessage, bool)
+	scopeSnapshotCreator           func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
+	contextualScopeSnapshotCreator func(context.Context, string, string, int64, string, string) (string, error)
+	dialogResolver                 DialogResolver
+	clientRuntimeResolver          ClientRuntimeCommandResolver
+	clipboardResolver              ClipboardResolver
+	hostRegistry                   *host_registry.HostRegistry
+	extRoot                        string
+	resourceLinks                  ResourceLinkResolver
 }
 
 func NewHTTPHandler(
@@ -120,6 +122,10 @@ func (h *HTTPHandler) SetSchemaLookup(fn func(extensionID, contributionID string
 
 func (h *HTTPHandler) SetScopeSnapshotCreator(fn func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)) {
 	h.scopeSnapshotCreator = fn
+}
+
+func (h *HTTPHandler) SetContextualScopeSnapshotCreator(fn func(context.Context, string, string, int64, string, string) (string, error)) {
+	h.contextualScopeSnapshotCreator = fn
 }
 
 func (h *HTTPHandler) SetDialogResolver(r DialogResolver) {
@@ -917,7 +923,14 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		return
 	}
 	var scopeSnapshotID string
-	if h.scopeSnapshotCreator != nil {
+	if h.contextualScopeSnapshotCreator != nil {
+		var err error
+		scopeSnapshotID, err = h.contextualScopeSnapshotCreator(r.Context(), string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, req.CharacterID, req.ConversationID)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "scope_snapshot_failed", err.Error())
+			return
+		}
+	} else if h.scopeSnapshotCreator != nil {
 		var err error
 		scopeSnapshotID, err = h.scopeSnapshotCreator(string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, req.CharacterID, req.ConversationID)
 		if err != nil {

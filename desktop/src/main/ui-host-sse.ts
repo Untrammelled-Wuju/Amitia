@@ -1,6 +1,7 @@
 import { Notification, BrowserWindow, dialog } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type { BusinessCoreClient } from "./business-core-client";
+import { getMeshIdentity } from "./device-mesh/local-agent-client";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -68,6 +69,23 @@ export class UIHostSSE {
     const path = "/api/proactive-sse?clientId=electron-ui-host";
 
     try {
+      const identity = await getMeshIdentity();
+      if (identity?.deviceId) {
+        const response = await this.businessCore.fetch('/api/notifications/devices');
+        if (!response.ok) throw new Error('桌面通知配置读取失败');
+        const body = await response.json() as { data?: Array<{ deviceId: string; platform: string }> };
+        if (!Array.isArray(body.data)) throw new Error('桌面通知配置响应无效');
+        if (!body.data.some(endpoint => endpoint.deviceId === identity.deviceId && endpoint.platform === 'desktop')) {
+          const preference = await this.businessCore.fetch('/api/browser-notifications/status?deviceId=' + encodeURIComponent(identity.deviceId));
+          if (!preference.ok) throw new Error('桌面通知偏好读取失败');
+          const preferenceBody = await preference.json() as { data?: { enabled?: boolean } };
+          if (typeof preferenceBody.data?.enabled !== 'boolean') throw new Error('桌面通知偏好响应无效');
+          const registration = await this.businessCore.fetch('/api/notifications/devices/register', { method: 'POST', body: JSON.stringify({ deviceId: identity.deviceId, platform: 'desktop', preferredProvider: 'desktop-sse', systemNotificationsEnabled: preferenceBody.data.enabled }) });
+          if (!registration.ok) throw new Error('桌面通知通道注册失败');
+          const receipt = await registration.json() as { data?: { id?: string; deviceId?: string; platform?: string } };
+          if (!receipt.data?.id || receipt.data.deviceId !== identity.deviceId || receipt.data.platform !== 'desktop') throw new Error('桌面通知通道保存未确认');
+        }
+      }
       const response = await this.businessCore.fetch(path, {
         method: "GET",
         headers: {
@@ -132,6 +150,9 @@ export class UIHostSSE {
     }
     if (!this.shouldProcess(envelope)) return;
     switch (eventName) {
+      case "scheduled_notification":
+        this.handleScheduledNotification(envelope);
+        break;
       case "ui_notify":
         this.handleNotify(envelope);
         break;
@@ -171,6 +192,28 @@ export class UIHostSSE {
     const body = (envelope.payload.body as string) || "";
     const notif = new Notification({ title, body });
     notif.show();
+  }
+
+  private handleScheduledNotification(envelope: SSEEventEnvelope): void {
+    const payload = envelope.payload;
+    if (!payload) return;
+    const acknowledge = (state: string) => {
+      void this.businessCore.fetch('/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack', { method: 'POST', body: JSON.stringify({ state }) }).catch(() => {});
+    };
+    if (!Notification.isSupported()) { acknowledge('display_failed'); return; }
+    const notification = new Notification({ title: String(payload.title || 'Amitia'), body: String(payload.body || ''), silent: payload.sound === false });
+    notification.on('show', () => acknowledge('displayed'));
+    notification.on('failed', () => acknowledge('display_failed'));
+    notification.on('click', () => {
+      acknowledge('clicked');
+      const win = this.mainWindow();
+      if (!win || win.isDestroyed()) return;
+      win.show();
+      win.focus();
+      const conversation = String(payload.conversationId || '');
+      if (conversation) win.webContents.send(IPC_CHANNELS.uiNavigate, '/chat?conversationId=' + encodeURIComponent(conversation) + '&characterId=' + encodeURIComponent(String(payload.characterId || '')) + '&ownerId=' + encodeURIComponent(String(payload.ownerId || '')));
+    });
+    notification.show();
   }
 
   private async handleDialog(envelope: SSEEventEnvelope): Promise<void> {

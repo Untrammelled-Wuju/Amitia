@@ -163,11 +163,27 @@ func (h *Handler) readResource(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "uri is required"})
 		return
 	}
-	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
-	maxBytes, _ := strconv.ParseInt(c.DefaultQuery("maxBytes", "1048576"), 10, 64)
+	offset, offsetErr := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	maxBytes, sizeErr := strconv.ParseInt(c.DefaultQuery("maxBytes", "1048576"), 10, 64)
+	if offsetErr != nil || sizeErr != nil || offset < 0 || maxBytes <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file read range"})
+		return
+	}
+	if maxBytes > MaxDirectRead {
+		maxBytes = MaxDirectRead
+	}
+	if offset > (1<<63-1)-maxBytes {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file read range"})
+		return
+	}
 	result, err := h.service.Read(c.Request.Context(), uri, ReadOptions{Offset: offset, MaxBytes: maxBytes, Encoding: c.DefaultQuery("encoding", "utf-8")})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	if c.Query("rawBytes") == "1" {
+		c.JSON(http.StatusOK, buildReadChunkResponse(result, offset, maxBytes))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"resource": result.Resource, "isText": result.IsText, "content": string(result.Content)})

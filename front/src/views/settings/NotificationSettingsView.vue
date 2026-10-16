@@ -22,13 +22,41 @@ import ReplyNotificationSettings from '@/components/ReplyNotificationSettings.vu
 import { ElMessage } from 'element-plus';
 import { apiClient } from '@/composables/useApi';
 import { resolveUIHostDeviceId } from '@/ui-runtime/deviceIdentity';
+import { registerScheduledBrowserEndpoint, registerScheduledDesktopEndpoint } from '@/runtime/scheduled-notifications';
 const loading = ref(false); const saving = ref(false);
 const settings = reactive<any>({ enabled: false });
 const status = reactive<any>({ subscribed: false, subscriptionId: '' });
 let deviceId = '';
 async function ensureDeviceId(){ if (!deviceId) deviceId = await resolveUIHostDeviceId(); return deviceId; }
-async function load(){ loading.value=true; try { const id=await ensureDeviceId(); const [s,st]=await Promise.all([apiClient.get('/api/browser-notifications/settings',{params:{deviceId:id}}),apiClient.get('/api/browser-notifications/status',{params:{deviceId:id}})]); Object.assign(settings,s.data||{}); Object.assign(status,st.data||{});} finally {loading.value=false;} }
-async function saveSettings(){ saving.value=true; try{ const id=await ensureDeviceId(); await apiClient.put('/api/browser-notifications/settings',{...settings,deviceId:id},{params:{deviceId:id}}); ElMessage.success('通知设置已保存'); await load(); } finally{saving.value=false;} }
+async function load() {
+  loading.value = true;
+  try {
+    const id = await ensureDeviceId();
+    const [s, st] = await Promise.all([apiClient.get('/api/browser-notifications/settings', { params: { deviceId: id } }), apiClient.get('/api/browser-notifications/status', { params: { deviceId: id } })]);
+    if (typeof s.data?.enabled !== 'boolean' || typeof st.data?.subscribed !== 'boolean') throw new Error('通知设置响应无效');
+    Object.assign(settings, s.data);
+    Object.assign(status, st.data);
+  } finally { loading.value = false; }
+}
+async function syncReminderNotifications() {
+  const id = await ensureDeviceId();
+  const register = (input: Record<string, unknown>) => apiClient.post('/api/notifications/devices/register', input);
+  if (window.amitiaDesktop) {
+    await registerScheduledDesktopEndpoint(id, settings.enabled === true, register);
+  } else {
+    await registerScheduledBrowserEndpoint(id, typeof Notification !== 'undefined' && Notification.permission === 'granted' && settings.enabled === true && status.subscribed === true, register);
+  }
+}
+async function saveSettings() {
+  saving.value = true;
+  try {
+    const id = await ensureDeviceId();
+    await apiClient.put('/api/browser-notifications/settings', { ...settings, deviceId: id }, { params: { deviceId: id } });
+    await load();
+    await syncReminderNotifications();
+    ElMessage.success('通知设置已保存');
+  } finally { saving.value = false; }
+}
 async function subscribe(){
   saving.value=true;
   try{
@@ -42,11 +70,12 @@ async function subscribe(){
     const id=await ensureDeviceId();
     const r=await apiClient.post('/api/browser-notifications/subscribe',{deviceId:id});
     Object.assign(status,r.data||{});
-    ElMessage.success('通知订阅已启用');
     await load();
+    await syncReminderNotifications();
+    ElMessage.success('通知订阅已启用');
   } finally{saving.value=false;}
 }
-async function unsubscribe(){ saving.value=true; try{ const id=await ensureDeviceId(); await apiClient.post('/api/browser-notifications/unsubscribe',{deviceId:id}); ElMessage.success('通知订阅已取消'); await load(); } finally{saving.value=false;} }
+async function unsubscribe(){ saving.value=true; try{ const id=await ensureDeviceId(); await apiClient.post('/api/browser-notifications/unsubscribe',{deviceId:id}); await load(); await syncReminderNotifications(); ElMessage.success('通知订阅已取消'); } finally{saving.value=false;} }
 async function test(){
   saving.value=true;
   try{

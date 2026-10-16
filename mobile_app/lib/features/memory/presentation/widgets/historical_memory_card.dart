@@ -668,7 +668,7 @@ class HistoricalMemoryCard extends StatelessWidget {
     switch (type) {
       case '对话':
         return context.accentPrimary;
-      case '主动消息':
+      case '主动任务':
         return context.info;
       case '记忆形成':
         return context.success;
@@ -687,7 +687,7 @@ class HistoricalMemoryCard extends StatelessWidget {
     switch (type) {
       case '对话':
         return Icons.chat_bubble_outline;
-      case '主动消息':
+      case '主动任务':
         return Icons.notifications_active_outlined;
       case '记忆形成':
         return Icons.memory;
@@ -706,7 +706,7 @@ class HistoricalMemoryCard extends StatelessWidget {
     switch (type) {
       case '对话':
         return BadgeType.accent;
-      case '主动消息':
+      case '主动任务':
         return BadgeType.info;
       case '记忆形成':
         return BadgeType.success;

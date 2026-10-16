@@ -3,349 +3,550 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="reminders-page">
-    <div class="page-header">
-      <h2 class="page-title">日程提醒</h2>
-      <el-tag :type="schedulerRunning ? 'success' : 'danger'" size="small">
-        {{ schedulerRunning ? "调度器运行中" : "调度器已停止" }}
-      </el-tag>
-    </div>
-
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
-      style="margin-bottom: 16px"
-    >
-      <template #title
-        >到达提醒时间后会自动发送消息。一次性提醒发送后自动关闭，重复提醒会按规则循环。</template
-      >
-    </el-alert>
-
-    <!-- Filter tabs -->
-    <div class="filter-tabs">
-      <el-radio-group
-        v-model="activeGroup"
-        size="small"
-        @change="onGroupChange"
-      >
-        <el-radio-button value="">全部</el-radio-button>
-        <el-radio-button value="overdue">已过期</el-radio-button>
-        <el-radio-button value="upcoming">即将触发</el-radio-button>
-        <el-radio-button value="completed">已完成</el-radio-button>
-        <el-radio-button value="disabled">已停用</el-radio-button>
-      </el-radio-group>
-      <el-select
-        v-model="filterCharacterId"
-        placeholder="全部角色"
-        clearable
-        size="small"
-        style="width: 140px"
-        @change="onFilterCharacter"
-        :loading="loadingChars"
-      >
-        <el-option
-          v-for="c in characterOptions"
-          :key="c.id"
-          :label="c.name"
-          :value="c.id"
-        />
-      </el-select>
-    </div>
-
-    <!-- Status bar -->
-    <el-card shadow="never" class="section-card">
-      <template #header>
-        <div class="card-header-row">
-          <span class="section-title">状态</span>
-          <span
-            style="
-              margin-left: 16px;
-              font-size: 13px;
-              color: var(--ac-color-text-muted);
-            "
-            >自动清理</span
-          >
-          <el-select
-            v-model="cleanupDays"
-            size="small"
-            style="width: 90px; margin-left: 6px"
-            @change="setCleanupConfig"
-          >
-            <el-option label="从不" value="0" />
-            <el-option label="1天" value="1" />
-            <el-option label="3天" value="3" />
-            <el-option label="7天" value="7" />
-            <el-option label="14天" value="14" />
-            <el-option label="30天" value="30" />
-          </el-select>
-          <el-button type="primary" size="small" @click="fetchStatus"
-            >刷新</el-button
-          >
-        </div>
-      </template>
-      <div class="status-grid">
-        <div class="status-item">
-          <span class="status-label">调度器</span
-          ><el-tag :type="schedulerRunning ? 'success' : 'info'" size="small">{{
-            schedulerRunning ? "运行中" : "已停止"
-          }}</el-tag>
-        </div>
-        <div class="status-item">
-          <span class="status-label">提醒总数</span
-          ><span class="status-value">{{ totalCount }}</span>
-        </div>
-        <div class="status-item">
-          <span class="status-label">待触发</span
-          ><span class="status-value" style="color: var(--el-color-warning)">{{
-            dueCount
-          }}</span>
+  <main class="task-workspace" aria-labelledby="task-page-title">
+    <header class="workspace-header">
+      <div>
+        <p class="eyebrow">陪伴，按时发生</p>
+        <h1 id="task-page-title">主动任务</h1>
+        <p class="page-description">安排角色在合适的时间发来消息，让每一件约定都有回应。</p>
+      </div>
+      <div class="header-actions">
+        <el-button :icon="Refresh" :loading="refreshing" @click="refreshWorkspace">刷新</el-button
+        ><el-button type="primary" :icon="Plus" :loading="openingEditor" @click="openCreate"
+          >新建任务</el-button
+        >
+      </div>
+    </header>
+    <section class="overview" aria-label="任务概览">
+      <div class="overview-item">
+        <span class="metric-icon"
+          ><el-icon><Calendar /></el-icon
+        ></span>
+        <div>
+          <span class="metric-label">全部任务</span
+          ><strong>{{ statusLoaded ? totalCount : "—" }}</strong>
         </div>
       </div>
-    </el-card>
-
-    <!-- Prospective Memory Panel -->
-    <ProspectivePanel
-      @refresh="fetchAll"
-      @clear-backpressure="clearBackpressure"
-    />
-
-    <!-- Reminder list -->
-    <el-card shadow="never" class="section-card">
-      <template #header>
-        <div class="card-header-row">
-          <span class="section-title">提醒列表</span>
-          <el-button type="primary" size="small" @click="openCreate"
-            >新建提醒</el-button
-          >
+      <div class="overview-item">
+        <span class="metric-icon success"
+          ><el-icon><CircleCheck /></el-icon
+        ></span>
+        <div>
+          <span class="metric-label">已启用</span
+          ><strong>{{ statusLoaded ? enabledCount : "—" }}</strong>
         </div>
-      </template>
-
-      <el-table
-        :data="filteredReminders"
-        stripe
-        size="small"
-        v-loading="loading"
-        empty-text="暂无提醒"
-      >
-        <el-table-column
-          prop="title"
-          label="标题"
-          min-width="120"
-          show-overflow-tooltip
-        />
-        <el-table-column label="启用" width="70">
-          <template #default="{ row }"
-            ><el-switch
-              :model-value="row.enabled"
-              size="small"
-              @change="(val: boolean) => toggleReminder(row, val)"
-          /></template>
-        </el-table-column>
-        <el-table-column label="渠道" width="70">
-          <template #default="{ row }"
-            ><el-tag type="info" size="small">{{
-              row.channel || "web"
-            }}</el-tag
-            ></template
+      </div>
+      <div class="overview-item">
+        <span class="metric-icon warning"
+          ><el-icon><Timer /></el-icon
+        ></span>
+        <div>
+          <span class="metric-label">已到执行时间</span
+          ><strong>{{ statusLoaded ? dueCount : "—" }}</strong>
+        </div>
+      </div>
+      <div class="scheduler-state">
+        <el-tag
+          :type="statusLoaded ? (schedulerRunning ? 'success' : 'danger') : 'info'"
+          effect="light"
+          round
+          >{{
+            statusLoaded ? (schedulerRunning ? "调度运行中" : "调度已停止") : "状态未确认"
+          }}</el-tag
+        ><span>执行与投递结果可在历史中查看</span>
+      </div>
+    </section>
+    <section class="workspace-content">
+      <el-tabs v-model="activeView" class="workspace-tabs">
+        <el-tab-pane label="任务列表" name="tasks">
+          <div class="list-toolbar">
+            <el-input
+              v-model="searchText"
+              :prefix-icon="Search"
+              clearable
+              placeholder="搜索任务、内容或角色"
+              aria-label="搜索任务"
+              class="task-search"
+            />
+            <el-select
+              v-model="filterCharacterId"
+              placeholder="全部角色"
+              clearable
+              :loading="loadingChars"
+              aria-label="筛选角色"
+              class="role-filter"
+              ><el-option
+                v-for="role in characterOptions"
+                :key="role.id"
+                :label="role.name"
+                :value="role.id"
+            /></el-select>
+            <el-select v-model="activeGroup" aria-label="筛选任务状态" class="state-filter"
+              ><el-option label="全部状态" value="" /><el-option
+                label="即将执行"
+                value="upcoming" /><el-option label="已到期" value="overdue" /><el-option
+                label="已结束"
+                value="completed" /><el-option label="暂停 / 停用" value="disabled"
+            /></el-select>
+          </div>
+          <el-alert
+            v-if="listError"
+            :title="listError"
+            type="error"
+            :closable="false"
+            show-icon
+            class="load-error"
+            ><el-button link type="primary" @click="fetchReminders">重新加载</el-button></el-alert
           >
-        </el-table-column>
-        <el-table-column label="提醒时间" width="155">
-          <template #default="{ row }">{{ row.remindAt }}</template>
-        </el-table-column>
-        <el-table-column label="重复" width="80">
-          <template #default="{ row }">{{
-            repeatLabel(row.repeatRule)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="角色" width="100">
-          <template #default="{ row }">
-            <span v-if="row.characterName" style="font-size: 12px">{{
-              row.characterName
-            }}</span>
-            <span
-              v-else
-              style="color: var(--el-text-color-placeholder); font-size: 12px"
-              >—</span
+          <el-table
+            :data="filteredReminders"
+            v-loading="loading"
+            class="task-table"
+            :row-style="{ height: '88px' }"
+          >
+            <el-table-column label="任务" min-width="240"
+              ><template #default="{ row }"
+                ><button class="task-title" @click="showDetail(row)">{{ row.title }}</button>
+                <p class="task-description">
+                  {{ row.content || "到期后由角色发送消息" }}
+                </p></template
+              ></el-table-column
             >
-          </template>
-        </el-table-column>
-        <el-table-column label="关联对话" width="120" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span v-if="row.conversationTitle" style="font-size: 12px">{{
-              row.conversationTitle
-            }}</span>
-            <span
-              v-else
-              style="color: var(--el-text-color-placeholder); font-size: 12px"
-              >—</span
+            <el-table-column label="所属角色" min-width="140"
+              ><template #default="{ row }"
+                ><span class="role-name">{{ roleLabel(row) }}</span>
+                <p class="cell-secondary">{{ sourceLabel(row.source) }}</p></template
+              ></el-table-column
             >
-          </template>
-        </el-table-column>
-        <el-table-column label="上次触发" width="155">
-          <template #default="{ row }">{{
-            row.lastTriggeredAt || "从未"
-          }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
-          <template #default="{ row }">
-            <el-button link size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button
-              link
-              size="small"
-              type="warning"
-              @click="testReminder(row)"
-              >测试</el-button
+            <el-table-column label="下次执行" min-width="185"
+              ><template #default="{ row }"
+                ><span>{{
+                  row.enabled && !row.paused && row.state === "enabled"
+                    ? row.localRemindAt || row.remindAt || "待调度"
+                    : "—"
+                }}</span>
+                <p class="cell-secondary">
+                  {{ repeatLabel(row.repeatRule) }} · {{ row.timezone }}
+                </p></template
+              ></el-table-column
             >
-            <el-button link size="small" type="success" @click="triggerNow(row)"
-              >立即发送</el-button
+            <el-table-column label="状态" width="105"
+              ><template #default="{ row }"
+                ><el-tag :type="taskTone(row)" effect="light" round>{{
+                  taskLabel(row)
+                }}</el-tag></template
+              ></el-table-column
             >
-            <el-popconfirm title="确定删除？" @confirm="deleteReminder(row)">
-              <template #reference
-                ><el-button link size="small" type="danger"
-                  >删除</el-button
-                ></template
-              >
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- Trigger History Panel -->
-    <TriggerHistoryPanel @refresh="fetchAll" />
-
-    <!-- Create/Edit Dialog -->
+            <el-table-column label="操作" width="154" align="right"
+              ><template #default="{ row }"
+                ><div class="row-actions">
+                  <el-button
+                    link
+                    type="primary"
+                    :disabled="openingEditor || pendingActions.has(row.id)"
+                    @click="openEdit(row)"
+                    >编辑</el-button
+                  ><el-dropdown
+                    trigger="click"
+                    @command="(command: string) => taskCommand(command, row)"
+                    ><el-button
+                      text
+                      :icon="MoreFilled"
+                      :disabled="pendingActions.has(row.id)"
+                      :aria-label="'更多操作：' + row.title"
+                    /><template #dropdown
+                      ><el-dropdown-menu
+                        ><el-dropdown-item command="preview">预览与检查</el-dropdown-item
+                        ><el-dropdown-item
+                          command="trigger"
+                          :disabled="!row.enabled || row.paused || row.state !== 'enabled'"
+                          >立即执行</el-dropdown-item
+                        ><el-dropdown-item
+                          command="pause"
+                          :disabled="!row.enabled || row.state === 'expired'"
+                          >{{ row.paused ? "恢复任务" : "暂停任务" }}</el-dropdown-item
+                        ><el-dropdown-item command="delete" divided
+                          >取消任务</el-dropdown-item
+                        ></el-dropdown-menu
+                      ></template
+                    ></el-dropdown
+                  >
+                </div></template
+              ></el-table-column
+            >
+            <template #empty
+              ><div v-if="listError" class="task-empty">
+                <h3>暂时无法读取任务</h3>
+                <p>请检查连接后重新加载，已有任务不会被修改。</p>
+                <el-button @click="fetchReminders">重新加载</el-button>
+              </div>
+              <div v-else class="task-empty">
+                <span class="empty-icon"
+                  ><el-icon><Calendar /></el-icon
+                ></span>
+                <h3>
+                  {{
+                    searchText || filterCharacterId || activeGroup
+                      ? "没有匹配的任务"
+                      : "为下一次陪伴安排时间"
+                  }}
+                </h3>
+                <p>
+                  {{
+                    searchText || filterCharacterId || activeGroup
+                      ? "尝试调整搜索内容或筛选条件。"
+                      : "创建第一项任务，由角色在约定的时间向你发送消息。"
+                  }}
+                </p>
+                <el-button
+                  v-if="searchText || filterCharacterId || activeGroup"
+                  @click="
+                    searchText = '';
+                    filterCharacterId = '';
+                    activeGroup = '';
+                  "
+                  >清除筛选</el-button
+                ><el-button v-else :icon="Plus" :loading="openingEditor" @click="openCreate"
+                  >新建任务</el-button
+                >
+              </div></template
+            >
+          </el-table>
+          <footer class="list-footer">
+            <span>显示 {{ filteredReminders.length }} 项任务</span
+            ><span>一次性任务执行后结束，重复任务按规则继续</span>
+          </footer>
+        </el-tab-pane>
+        <el-tab-pane label="待执行" name="upcoming"
+          ><ProspectivePanel
+            ref="prospectivePanel"
+            @refresh="fetchAll"
+            @clear-backpressure="clearBackpressure"
+        /></el-tab-pane>
+        <el-tab-pane label="执行历史" name="history"
+          ><div class="history-preferences">
+            <span>自动清理终态历史</span
+            ><el-select v-model="cleanupDays" aria-label="历史保留时间" @change="setCleanupConfig"
+              ><el-option label="不自动清理" value="0" /><el-option
+                v-for="days in [1, 3, 7, 14, 30]"
+                :key="days"
+                :label="days + ' 天后'"
+                :value="String(days)"
+            /></el-select>
+          </div>
+          <TriggerHistoryPanel ref="historyPanel" @refresh="fetchAll"
+        /></el-tab-pane>
+      </el-tabs>
+    </section>
+    <el-drawer
+      v-model="detailVisible"
+      title="任务详情"
+      size="min(520px, 100vw)"
+      class="task-detail-drawer"
+    >
+      <template v-if="selectedTask"
+        ><div class="detail-heading">
+          <el-tag :type="taskTone(selectedTask)" round>{{ taskLabel(selectedTask) }}</el-tag>
+          <h2>{{ selectedTask.title }}</h2>
+          <p>{{ selectedTask.content || "到期后由角色发送消息" }}</p>
+        </div>
+        <el-descriptions :column="1" class="task-details"
+          ><el-descriptions-item label="所属角色">{{
+            roleLabel(selectedTask)
+          }}</el-descriptions-item
+          ><el-descriptions-item label="关联对话">{{
+            selectedTask.conversationTitle || selectedTask.conversationId || "任务专属对话"
+          }}</el-descriptions-item
+          ><el-descriptions-item label="执行时间">{{
+            selectedTask.localRemindAt || selectedTask.remindAt || "—"
+          }}</el-descriptions-item
+          ><el-descriptions-item label="时区">{{ selectedTask.timezone }}</el-descriptions-item
+          ><el-descriptions-item label="重复规则"
+            >{{ repeatLabel(selectedTask.repeatRule)
+            }}<span v-if="selectedTask.recurrence?.intervalSeconds">
+              · {{ selectedTask.recurrence.intervalSeconds }} 秒</span
+            ><span v-if="selectedTask.recurrence?.weekdays?.length">
+              · 星期 {{ selectedTask.recurrence.weekdays.join("、") }}</span
+            ></el-descriptions-item
+          ><el-descriptions-item label="结束条件"
+            >{{ selectedTask.endAt || "不限结束时间" }} ·
+            {{
+              selectedTask.maxOccurrences
+                ? "最多 " + selectedTask.maxOccurrences + " 次"
+                : "不限次数"
+            }}</el-descriptions-item
+          ><el-descriptions-item label="发送目标"
+            >所属角色对话
+            <div v-for="(target, index) in selectedTask.channelTargets" :key="index">
+              {{ target.channelId }} · {{ target.peerId }}
+            </div></el-descriptions-item
+          ><el-descriptions-item label="系统通知">{{
+            selectedTask.systemNotification ? "已开启" : "已关闭"
+          }}</el-descriptions-item
+          ><el-descriptions-item label="运行位置">{{
+            modeLabel(selectedTask.executionMode)
+          }}</el-descriptions-item
+          ><el-descriptions-item label="任务来源">{{
+            sourceLabel(selectedTask.source)
+          }}</el-descriptions-item
+          ><el-descriptions-item label="上次执行">{{
+            selectedTask.lastTriggeredAt || "尚未执行"
+          }}</el-descriptions-item
+          ><el-descriptions-item label="执行归属">{{
+            selectedTask.ownerId
+          }}</el-descriptions-item></el-descriptions
+        >
+        <div class="detail-controls">
+          <span>启用任务</span
+          ><el-switch
+            :model-value="selectedTask.enabled"
+            :disabled="pendingActions.has(selectedTask.id)"
+            aria-label="启用任务"
+            @change="(value: boolean) => toggleReminder(selectedTask!, value)"
+          />
+        </div>
+        <div class="drawer-actions">
+          <el-button @click="openEdit(selectedTask)" :loading="openingEditor">编辑任务</el-button
+          ><el-button
+            :icon="ArrowRight"
+            @click="
+              detailVisible = false;
+              activeView = 'history';
+            "
+            >查看执行历史</el-button
+          >
+        </div></template
+      >
+      <el-empty v-else description="任务已变更，请刷新列表" />
+    </el-drawer>
     <el-dialog
       v-model="dialogVisible"
-      :title="isEditing ? '编辑提醒' : '新建提醒'"
-      width="520px"
+      :title="isEditing ? '编辑任务' : '新建主动任务'"
+      width="min(720px, calc(100vw - 40px))"
       destroy-on-close
       :close-on-click-modal="false"
+      class="task-editor"
     >
-      <el-form :model="form" label-position="top" size="small">
-        <el-form-item label="标题" required
-          ><el-input
-            v-model="form.title"
-            placeholder="例如：生日快乐提醒"
-            maxlength="50"
-        /></el-form-item>
-        <el-form-item label="内容">
-          <el-input
-            v-model="form.content"
-            type="textarea"
-            :rows="3"
-            placeholder="自定义提醒内容（可选）"
-            maxlength="300"
-            show-word-limit
-          />
-        </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="发送渠道">
-              <el-select v-model="form.channel" style="width: 100%"
-                ><el-option label="Web 端" value="web"
-              /></el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="重复规则">
-              <el-select v-model="form.repeatRule" style="width: 100%"
-                ><el-option label="不重复" value="none" /><el-option
-                  label="每天"
-                  value="daily" /><el-option label="每周" value="weekly"
-              /></el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="关联对话">
-          <el-select
-            v-model="form.conversationId"
-            placeholder="不关联"
-            clearable
-            filterable
-            style="width: 100%"
-            :loading="loadingConvs"
+      <el-form :model="form" label-position="top" @submit.prevent="saveReminder">
+        <section class="editor-section">
+          <h3><span>01</span> 任务内容</h3>
+          <el-form-item label="任务名称" required
+            ><el-input
+              v-model="form.title"
+              placeholder="例如：每晚睡前的一句晚安"
+              maxlength="50" /></el-form-item
+          ><el-form-item label="消息内容"
+            ><el-input
+              v-model="form.content"
+              type="textarea"
+              :rows="3"
+              placeholder="填写希望角色发送的内容，也可以留空"
+              maxlength="300"
+              show-word-limit
+          /></el-form-item>
+        </section>
+        <section class="editor-section">
+          <h3><span>02</span> 执行时间</h3>
+          <div class="form-grid">
+            <el-form-item label="首次执行时间" required
+              ><el-date-picker
+                v-model="form.remindAt"
+                type="datetime"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                placeholder="选择日期和时间" /></el-form-item
+            ><el-form-item label="重复规则"
+              ><el-select v-model="form.repeatRule"
+                ><el-option
+                  v-for="(label, key) in repeatLabels"
+                  :key="key"
+                  :label="label"
+                  :value="key" /></el-select
+            ></el-form-item>
+          </div>
+          <el-form-item label="执行时区" required
+            ><el-input v-model="form.timezone" placeholder="例如：Asia/Shanghai" />
+            <p class="field-hint">按此时区执行，更换设备时区不会改变已保存的任务。</p></el-form-item
+          ><el-form-item v-if="form.repeatRule === 'weekdays'" label="指定星期"
+            ><el-checkbox-group v-model="form.weekdays"
+              ><el-checkbox-button
+                v-for="(label, i) in ['一', '二', '三', '四', '五', '六', '日']"
+                :key="i"
+                :value="i + 1"
+                >周{{ label }}</el-checkbox-button
+              ></el-checkbox-group
+            ></el-form-item
+          ><el-form-item v-if="form.repeatRule === 'interval'" label="执行间隔（秒）"
+            ><el-input-number v-model="form.intervalSeconds" :min="60" :step="60" /></el-form-item
+          ><el-collapse v-model="advancedSections" class="advanced-options"
+            ><el-collapse-item name="limits" title="结束条件（可选）"
+              ><div class="form-grid">
+                <el-form-item label="结束时间"
+                  ><el-date-picker
+                    v-model="form.endAt"
+                    type="datetime"
+                    value-format="YYYY-MM-DD HH:mm:ss"
+                    placeholder="不限制" /></el-form-item
+                ><el-form-item label="最多执行次数"
+                  ><el-input-number v-model="form.maxOccurrences" :min="0" />
+                  <p class="field-hint">0 表示不限制次数</p></el-form-item
+                >
+              </div></el-collapse-item
+            ></el-collapse
           >
-            <el-option
-              v-for="c in conversationOptions"
-              :key="c.id"
-              :label="c.title"
-              :value="c.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="提醒时间" required>
-          <el-date-picker
-            v-model="form.remindAt"
-            type="datetime"
-            format="YYYY-MM-DD HH:mm:ss"
-            value-format="YYYY-MM-DD HH:mm:ss"
-            placeholder="选择日期时间"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="启用"
-          ><el-switch v-model="form.enabled"
-        /></el-form-item>
+        </section>
+        <section class="editor-section">
+          <h3><span>03</span> 发送目标</h3>
+          <div class="form-grid">
+            <el-form-item label="所属角色" required
+              ><el-select
+                v-model="form.characterId"
+                placeholder="选择角色"
+                filterable
+                :loading="loadingChars"
+                @change="
+                  () => {
+                    form.conversationId = '';
+                    fetchConversationOptions();
+                  }
+                "
+                ><el-option
+                  v-for="role in characterOptions"
+                  :key="role.id"
+                  :label="role.name"
+                  :value="role.id" /></el-select></el-form-item
+            ><el-form-item label="关联对话"
+              ><el-select
+                v-model="form.conversationId"
+                placeholder="自动创建任务专属对话"
+                clearable
+                filterable
+                :loading="loadingConvs"
+                ><el-option
+                  v-for="conversation in conversationOptions"
+                  :key="conversation.id"
+                  :label="conversation.title"
+                  :value="conversation.id" /></el-select
+            ></el-form-item>
+          </div>
+          <div class="channel-heading">
+            <span>附加发送渠道</span
+            ><el-button
+              :icon="Plus"
+              text
+              type="primary"
+              :disabled="!channelOptions.length"
+              @click="form.channelTargets.push({ channelId: '', peerId: '' })"
+              >添加渠道</el-button
+            >
+          </div>
+          <p v-if="!channelOptions.length" class="field-hint">
+            暂无已接入渠道，任务仍会发送到角色对话。
+          </p>
+          <div v-for="(target, i) in form.channelTargets" :key="i" class="channel-row">
+            <el-select
+              v-model="target.channelId"
+              placeholder="选择渠道"
+              :aria-label="'附加渠道 ' + (i + 1)"
+              ><el-option
+                v-for="id in channelOptions"
+                :key="id"
+                :label="id"
+                :value="id" /></el-select
+            ><el-input
+              v-model="target.peerId"
+              placeholder="接收方标识（必填）"
+              :aria-label="'接收方标识 ' + (i + 1)"
+            /><el-button text type="danger" @click="form.channelTargets.splice(i, 1)"
+              >移除</el-button
+            >
+          </div>
+          <div class="toggle-setting">
+            <div>
+              <strong>系统通知</strong>
+              <p>受设备通知权限与偏好设置控制</p>
+            </div>
+            <el-switch v-model="form.systemNotification" aria-label="系统通知" />
+          </div>
+          <div class="toggle-setting">
+            <div>
+              <strong>保存后启用</strong>
+              <p>关闭后保留任务，暂不自动执行</p>
+            </div>
+            <el-switch v-model="form.enabled" aria-label="保存后启用" />
+          </div>
+        </section>
       </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveReminder" :loading="saving">{{
-          isEditing ? "保存" : "创建"
-        }}</el-button>
-      </template>
+      <template #footer
+        ><el-button :disabled="saving" @click="dialogVisible = false">取消</el-button
+        ><el-button type="primary" :loading="saving" @click="saveReminder">{{
+          isEditing ? "保存修改" : "创建任务"
+        }}</el-button></template
+      >
     </el-dialog>
-
-    <!-- Test Result Dialog -->
-    <el-dialog v-model="testVisible" title="测试结果" width="480px">
-      <template v-if="testResult">
-        <el-descriptions :column="1" border size="small">
-          <el-descriptions-item label="标题">{{
-            testResult.title
-          }}</el-descriptions-item>
-          <el-descriptions-item label="渠道">{{
-            testResult.channel || "web"
-          }}</el-descriptions-item>
-          <el-descriptions-item label="消息内容"
-            ><div class="msg-preview">
-              {{ testResult.messageContent }}
-            </div></el-descriptions-item
-          >
-          <el-descriptions-item label="安全检查">
-            <el-tag
-              :type="testResult.safetyCheck?.safe ? 'success' : 'danger'"
-              size="small"
-              >{{ testResult.safetyCheck?.safe ? "通过" : "未通过" }}</el-tag
-            >
-            <span
-              v-if="!testResult.safetyCheck?.safe"
-              style="margin-left: 8px; color: var(--el-color-danger)"
-              >{{ testResult.safetyCheck?.reason }}</span
-            >
-          </el-descriptions-item>
-        </el-descriptions>
-      </template>
-    </el-dialog>
-  </div>
+    <el-dialog v-model="testVisible" title="预览与检查" width="min(520px, calc(100vw - 40px))"
+      ><template v-if="testResult"
+        ><el-alert
+          title="仅检查配置与权限，不会生成或发送消息"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+        <h3>{{ testResult.title }}</h3>
+        <div class="msg-preview">{{ testResult.messageContent || "未设置自定义内容" }}</div>
+        <p>
+          <el-tag :type="testResult.authorizationCheck?.allowed ? 'success' : 'danger'">{{
+            testResult.authorizationCheck?.allowed ? "检查通过" : "检查未通过"
+          }}</el-tag>
+        </p>
+        <p>{{ testResult.authorizationCheck?.reason }}</p></template
+      ></el-dialog
+    >
+  </main>
 </template>
-
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import {
+  Plus,
+  Refresh,
+  Search,
+  MoreFilled,
+  Timer,
+  CircleCheck,
+  Calendar,
+  ArrowRight,
+} from "@element-plus/icons-vue";
 import { request } from "../../composables/request";
+import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
 import type { ReminderGroup } from "../../types";
 import ProspectivePanel from "./components/ProspectivePanel.vue";
 import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue";
+import { requireSavedTask, currentOwnerConversations, validateChannelTargets } from "./contract";
 
 interface Reminder {
-  id: number;
+  id: string;
+  generation: number;
+  ownerId: string;
+  executionMode: string;
+  source: string;
+  state: string;
+  localRemindAt: string;
+  timezone: string;
+  localAnchorAt: string;
+  endAt: string;
+  maxOccurrences: number;
+  systemNotification: boolean;
+  paused: boolean;
+  recurrence: { type: string; weekdays?: number[]; intervalSeconds?: number };
+  channelTargets: Array<{ channelId: string; peerId: string }>;
   title: string;
   content: string;
   channel: string;
   conversationId: string | null;
   characterId: string | null;
   characterName?: string;
+  conversationTitle?: string;
   remindAt: string;
   repeatRule: string;
   enabled: boolean;
@@ -353,12 +554,111 @@ interface Reminder {
   createdAt: string;
   updatedAt: string;
 }
+const owned = useDeviceOwnedConversation();
+const channelOptions = ref<string[]>([]);
+const prospectivePanel = ref<InstanceType<typeof ProspectivePanel>>();
+const historyPanel = ref<InstanceType<typeof TriggerHistoryPanel>>();
+const editorCore = ref("");
+function saved(value: any): Reminder {
+  return requireSavedTask(value);
+}
 const reminders = ref<Reminder[]>([]);
 const loading = ref(false);
+const activeView = ref("tasks");
+const searchText = ref("");
+const listError = ref("");
+const statusLoaded = ref(false);
+const refreshing = ref(false);
+const openingEditor = ref(false);
+const detailVisible = ref(false);
+const selectedId = ref("");
+const advancedSections = ref<string[]>([]);
+const selectedTask = computed(() => reminders.value.find((item) => item.id === selectedId.value));
+const enabledCount = ref(0);
+const pendingActions = ref(new Set<string>());
+function taskLabel(row: Reminder): string {
+  if (row.paused) return "已暂停";
+  return (
+    (
+      {
+        enabled: "待执行",
+        disabled: "已停用",
+        expired: "已结束",
+        uninstalled: "已取消",
+        cancelled: "已取消",
+      } as Record<string, string>
+    )[row.state] || row.state
+  );
+}
+function taskTone(row: Reminder): "success" | "info" | "warning" {
+  return row.paused ? "warning" : row.enabled && row.state === "enabled" ? "success" : "info";
+}
+function showDetail(row: Reminder) {
+  selectedId.value = row.id;
+  detailVisible.value = true;
+}
+function roleLabel(row: Reminder) {
+  return (
+    row.characterName ||
+    characterOptions.value.find((role) => role.id === row.characterId)?.name ||
+    "未命名角色"
+  );
+}
+function modeLabel(value: string) {
+  return (
+    (
+      { local: "本地", cloud: "云端", delegated: "设备协同", device: "设备" } as Record<
+        string,
+        string
+      >
+    )[value] || value
+  );
+}
+function sourceLabel(value: string) {
+  return (
+    ({ manual: "手动创建", chat: "聊天创建", plugin: "插件创建" } as Record<string, string>)[
+      value
+    ] || value
+  );
+}
+async function taskCommand(command: string, row: Reminder) {
+  if (pendingActions.value.has(row.id)) return;
+  if (command === "delete") {
+    try {
+      await ElMessageBox.confirm("取消后不再执行，已产生的执行历史会保留。", "取消这项任务？", {
+        confirmButtonText: "取消任务",
+        cancelButtonText: "保留任务",
+        type: "warning",
+      });
+    } catch {
+      return;
+    }
+  }
+  pendingActions.value.add(row.id);
+  try {
+    if (command === "preview") await testReminder(row);
+    if (command === "trigger") await triggerNow(row);
+    if (command === "pause") await pauseReminder(row);
+    if (command === "delete") {
+      await deleteReminder(row);
+      detailVisible.value = false;
+    }
+  } finally {
+    pendingActions.value.delete(row.id);
+  }
+}
+async function refreshWorkspace() {
+  refreshing.value = true;
+  try {
+    await fetchAll();
+  } finally {
+    refreshing.value = false;
+  }
+}
 const saving = ref(false);
 const dialogVisible = ref(false);
 const isEditing = ref(false);
-const editingId = ref<number | null>(null);
+const editingId = ref<string | null>(null);
 const testVisible = ref(false);
 const testResult = ref<any>(null);
 const schedulerRunning = ref(false);
@@ -376,13 +676,23 @@ const repeatLabels: Record<string, string> = {
   none: "不重复",
   daily: "每天",
   weekly: "每周",
+  monthly: "每月",
+  weekdays: "指定星期",
+  interval: "自定义间隔",
 };
 function repeatLabel(r: string): string {
   return repeatLabels[r] || r;
 }
 
 const filteredReminders = computed(() => {
-  let list = reminders.value;
+  const query = searchText.value.trim().toLocaleLowerCase();
+  let list = reminders.value.filter(
+    (row) =>
+      !query ||
+      [row.title, row.content, roleLabel(row)].some((value) =>
+        value?.toLocaleLowerCase().includes(query),
+      ),
+  );
   if (filterCharacterId.value) {
     list = list.filter((r) => r.characterId === filterCharacterId.value);
   }
@@ -390,16 +700,26 @@ const filteredReminders = computed(() => {
   switch (activeGroup.value) {
     case "overdue":
       return list.filter(
-        (r) => r.enabled && r.remindAt && new Date(r.remindAt) < now,
+        (r) =>
+          r.enabled &&
+          !r.paused &&
+          r.state === "enabled" &&
+          r.remindAt &&
+          new Date(r.remindAt) < now,
       );
     case "upcoming":
       return list.filter(
-        (r) => r.enabled && r.remindAt && new Date(r.remindAt) >= now,
+        (r) =>
+          r.enabled &&
+          !r.paused &&
+          r.state === "enabled" &&
+          r.remindAt &&
+          new Date(r.remindAt) >= now,
       );
     case "completed":
-      return list.filter((r) => !r.enabled && r.lastTriggeredAt);
+      return list.filter((r) => r.state === "expired");
     case "disabled":
-      return list.filter((r) => !r.enabled && !r.lastTriggeredAt);
+      return list.filter((r) => r.state === "disabled" || r.paused);
     default:
       return list;
   }
@@ -414,6 +734,15 @@ const form = ref({
   remindAt: null as any,
   repeatRule: "none",
   enabled: true,
+  generation: 0,
+  requestId: crypto.randomUUID(),
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  weekdays: [] as number[],
+  intervalSeconds: 3600,
+  endAt: "",
+  maxOccurrences: 0,
+  systemNotification: true,
+  channelTargets: [] as Array<{ channelId: string; peerId: string }>,
 });
 function resetForm() {
   form.value = {
@@ -425,31 +754,37 @@ function resetForm() {
     remindAt: null as any,
     repeatRule: "none",
     enabled: true,
+    generation: 0,
+    requestId: crypto.randomUUID(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    weekdays: [] as number[],
+    intervalSeconds: 3600,
+    endAt: "",
+    maxOccurrences: 0,
+    systemNotification: true,
+    channelTargets: [] as Array<{ channelId: string; peerId: string }>,
   };
 }
 
-function onGroupChange() {
-  /* computed handles filtering */
-}
-function onFilterCharacter() {
-  /* computed handles filtering */
-}
-
 async function fetchAll() {
-  await Promise.all([fetchReminders(), fetchStatus()]);
+  await Promise.all([
+    fetchReminders(),
+    fetchStatus(),
+    prospectivePanel.value?.refresh(),
+    historyPanel.value?.refresh(),
+  ]);
 }
 
 async function fetchReminders() {
-  loading.value = true;
+  loading.value = reminders.value.length === 0;
+  listError.value = "";
   try {
-    const res: any = await request.get("/api/reminders");
-    const raw = Array.isArray(res) ? res : res?.items || res?.data || res || [];
-    reminders.value = raw.map((item: any) => ({
-      ...item,
-      enabled: !!item.enabled,
-    }));
-  } catch {
-    reminders.value = [];
+    const res: any = await request.get("/api/reminders", { params: { kind: "user_reminder" } });
+    if (!Array.isArray(res)) throw new Error("服务未返回任务列表");
+    const raw = res;
+    reminders.value = raw.map(saved);
+  } catch (error: any) {
+    listError.value = error?.message || "任务列表加载失败";
   } finally {
     loading.value = false;
   }
@@ -457,22 +792,33 @@ async function fetchReminders() {
 
 async function fetchStatus() {
   try {
-    const res: any = await request.get("/api/reminders/status");
+    const res: any = await request.get("/api/reminders/status", {
+      params: { kind: "user_reminder" },
+    });
+    if (!res || typeof res.schedulerRunning !== "boolean") throw new Error("调度状态响应无效");
     const d = res;
     schedulerRunning.value = d?.schedulerRunning ?? false;
     totalCount.value = d?.total ?? 0;
     dueCount.value = d?.dueNow ?? 0;
-  } catch {}
+    enabledCount.value = d?.enabled ?? 0;
+    statusLoaded.value = true;
+  } catch (error: any) {
+    statusLoaded.value = false;
+    schedulerRunning.value = false;
+    ElMessage.error(error?.message || "无法读取调度状态");
+  }
 }
 
 async function fetchConversationOptions() {
   loadingConvs.value = true;
   try {
-    const r: any = await request.get("/api/web-chat/conversations");
-    conversationOptions.value =
-      r?.items || r?.data || r?.conversations || r || [];
-  } catch {
+    const role = form.value.characterId;
+    conversationOptions.value = role
+      ? currentOwnerConversations(await owned.conversations(role), owned.coreId.value)
+      : [];
+  } catch (error: any) {
     conversationOptions.value = [];
+    ElMessage.error(error?.message || "会话加载失败");
   } finally {
     loadingConvs.value = false;
   }
@@ -481,24 +827,43 @@ async function fetchConversationOptions() {
 async function fetchCharacterOptions() {
   loadingChars.value = true;
   try {
-    const r = await request.get("/api/characters");
-    characterOptions.value = Array.isArray(r) ? r : r?.data || [];
-  } catch {
+    await owned.refresh();
+    characterOptions.value = owned.roles.value;
+  } catch (error: any) {
     characterOptions.value = [];
+    ElMessage.error(error?.message || "角色加载失败");
   } finally {
     loadingChars.value = false;
   }
 }
 
-function openCreate() {
+async function loadEditorContext() {
+  await fetchCharacterOptions();
+  editorCore.value = owned.coreId.value;
+  const channels: any = await request.get("/api/reminders/channels");
+  if (!Array.isArray(channels) || channels.some((id: any) => typeof id !== "string"))
+    throw new Error("渠道响应无效");
+  channelOptions.value = channels.filter((id: string) => id !== "web");
+  await fetchConversationOptions();
+}
+async function openCreate() {
+  if (openingEditor.value) return;
   isEditing.value = false;
   editingId.value = null;
   resetForm();
-  dialogVisible.value = true;
-  fetchConversationOptions();
-  fetchCharacterOptions();
+  advancedSections.value = [];
+  openingEditor.value = true;
+  try {
+    await loadEditorContext();
+    dialogVisible.value = true;
+  } catch (error: any) {
+    ElMessage.error(error.message);
+  } finally {
+    openingEditor.value = false;
+  }
 }
-function openEdit(row: Reminder) {
+async function openEdit(row: Reminder) {
+  if (openingEditor.value) return;
   isEditing.value = true;
   editingId.value = row.id;
   form.value = {
@@ -507,19 +872,34 @@ function openEdit(row: Reminder) {
     channel: row.channel,
     conversationId: row.conversationId || "",
     characterId: row.characterId || "",
-    remindAt: row.remindAt,
+    remindAt: row.localAnchorAt,
     repeatRule: row.repeatRule,
     enabled: !!row.enabled,
+    generation: row.generation,
+    requestId: crypto.randomUUID(),
+    timezone: row.timezone,
+    weekdays: row.recurrence.weekdays || [],
+    intervalSeconds: row.recurrence.intervalSeconds || 3600,
+    endAt: row.endAt || "",
+    maxOccurrences: row.maxOccurrences || 0,
+    systemNotification: row.systemNotification,
+    channelTargets: (row.channelTargets || []).map((target) => ({ ...target })),
   };
-  dialogVisible.value = true;
-  fetchConversationOptions();
-  fetchCharacterOptions();
+  advancedSections.value = row.endAt || row.maxOccurrences ? ["limits"] : [];
+  openingEditor.value = true;
+  try {
+    await loadEditorContext();
+    dialogVisible.value = true;
+  } catch (error: any) {
+    ElMessage.error(error.message);
+  } finally {
+    openingEditor.value = false;
+  }
 }
 async function fetchCleanupConfig() {
   try {
     const r = await request.get("/api/reminders/cleanup-config");
-    const rd = (r as any)?.data;
-    cleanupDays.value = (rd?.data?.cleanupDays ?? rd?.cleanupDays) || "0";
+    cleanupDays.value = String((r as any).cleanupDays);
   } catch {
     cleanupDays.value = "0";
   }
@@ -527,7 +907,8 @@ async function fetchCleanupConfig() {
 
 async function setCleanupConfig(val: string) {
   try {
-    await request.put("/api/reminders/cleanup-config", { cleanupDays: val });
+    const result: any = await request.put("/api/reminders/cleanup-config", { cleanupDays: val });
+    if (String(result?.cleanupDays) !== val) throw new Error("服务未确认清理策略保存");
     ElMessage.success("已更新");
   } catch (err: any) {
     ElMessage.error(err?.message || "设置失败");
@@ -535,16 +916,25 @@ async function setCleanupConfig(val: string) {
 }
 
 async function saveReminder() {
+  if (saving.value) return;
   if (!form.value.title.trim()) {
     ElMessage.warning("请输入标题");
     return;
   }
   if (!form.value.remindAt) {
-    ElMessage.warning("请选择提醒时间");
+    ElMessage.warning("请选择执行时间");
+    return;
+  }
+  if (!form.value.characterId) {
+    ElMessage.warning("请选择所属角色");
     return;
   }
   saving.value = true;
   try {
+    await owned.refresh();
+    if (owned.coreId.value !== editorCore.value)
+      throw new Error("执行核心已变化，请重新打开编辑页面");
+    validateChannelTargets(form.value.channelTargets, channelOptions.value);
     const payload = {
       title: form.value.title.trim(),
       content: form.value.content,
@@ -554,13 +944,25 @@ async function saveReminder() {
       remindAt: form.value.remindAt,
       repeatRule: form.value.repeatRule,
       enabled: form.value.enabled,
+      generation: form.value.generation,
+      requestId: form.value.requestId,
+      timezone: form.value.timezone,
+      recurrence: {
+        type: form.value.repeatRule,
+        weekdays: form.value.weekdays,
+        intervalSeconds: form.value.intervalSeconds,
+      },
+      endAt: form.value.endAt || "",
+      maxOccurrences: form.value.maxOccurrences,
+      systemNotification: form.value.systemNotification,
+      channelTargets: form.value.channelTargets,
     };
     if (isEditing.value && editingId.value) {
-      await request.put(`/api/reminders/${editingId.value}`, payload);
-      ElMessage.success("提醒已更新");
+      saved(await request.put(`/api/reminders/${editingId.value}`, payload));
+      ElMessage.success("任务已更新");
     } else {
-      await request.post("/api/reminders", payload);
-      ElMessage.success("提醒已创建");
+      saved(await request.post("/api/reminders", payload));
+      ElMessage.success("任务已创建");
     }
     dialogVisible.value = false;
     await fetchReminders();
@@ -573,6 +975,8 @@ async function saveReminder() {
 }
 
 async function toggleReminder(row: Reminder, nextValue?: boolean) {
+  if (pendingActions.value.has(row.id)) return;
+  pendingActions.value.add(row.id);
   const prev = row.enabled;
   const id = row.id;
   const updateLocal = (v: boolean) => {
@@ -581,7 +985,10 @@ async function toggleReminder(row: Reminder, nextValue?: boolean) {
   };
   updateLocal(typeof nextValue === "boolean" ? nextValue : !row.enabled);
   try {
-    const res: any = await request.post(`/api/reminders/${id}/toggle`);
+    const res = saved(
+      await request.post(`/api/reminders/${id}/toggle`, { generation: row.generation }),
+    );
+    Object.assign(row, res);
     const newVal = res?.enabled != null ? !!res.enabled : !prev;
     updateLocal(newVal);
     ElMessage.success(newVal ? "已启用" : "已停用");
@@ -589,12 +996,30 @@ async function toggleReminder(row: Reminder, nextValue?: boolean) {
   } catch (err: any) {
     updateLocal(prev);
     ElMessage.error(err?.message || "操作失败");
+  } finally {
+    pendingActions.value.delete(row.id);
+  }
+}
+
+async function pauseReminder(row: Reminder) {
+  try {
+    saved(
+      await request.post("/api/reminders/" + row.id + "/action", {
+        generation: row.generation,
+        action: row.paused ? "resume" : "pause",
+      }),
+    );
+    await fetchAll();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "操作失败");
   }
 }
 
 async function deleteReminder(row: Reminder) {
   try {
-    await request.delete(`/api/reminders/${row.id}`);
+    saved(
+      await request.delete(`/api/reminders/${row.id}`, { data: { generation: row.generation } }),
+    );
     ElMessage.success("已删除");
     await fetchReminders();
     await fetchStatus();
@@ -606,6 +1031,7 @@ async function deleteReminder(row: Reminder) {
 async function testReminder(row: Reminder) {
   try {
     const res: any = await request.post(`/api/reminders/${row.id}/test`);
+    if (res?.tested !== true || res.id !== row.id) throw new Error("服务未返回有效预览结果");
     testResult.value = res;
     testVisible.value = true;
   } catch (err: any) {
@@ -615,8 +1041,11 @@ async function testReminder(row: Reminder) {
 
 async function triggerNow(row: Reminder) {
   try {
-    await request.post(`/api/reminders/${row.id}/trigger`);
-    ElMessage.success("已发送");
+    const result: any = await request.post("/api/reminders/" + row.id + "/trigger", {
+      generation: row.generation,
+    });
+    if (result?.accepted !== true || !result.triggerId) throw new Error("任务未受理");
+    ElMessage.success("任务已受理，请在执行历史查看发送结果");
     await fetchReminders();
     await fetchStatus();
   } catch (err: any) {
@@ -626,7 +1055,8 @@ async function triggerNow(row: Reminder) {
 
 async function clearBackpressure() {
   try {
-    await request.post("/api/reminders/clear-backpressure");
+    const result: any = await request.post("/api/reminders/clear-backpressure?kind=user_reminder");
+    if (!Number.isInteger(result?.clearedCount)) throw new Error("服务未确认熔断清理结果");
     ElMessage.success("背压标记已清除");
   } catch (err: any) {
     ElMessage.error(err?.message || "操作失败");
@@ -659,59 +1089,435 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
-.page-header {
+.task-workspace {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px;
+  color: var(--tp-text);
+}
+.workspace-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.page-title {
-  margin: 0;
-  font-size: 24px;
-  color: var(--ac-color-text);
-}
-.section-card {
-  margin-bottom: 16px;
-}
-.section-title {
-  font-weight: 600;
-  font-size: var(--ac-font-size-base);
-}
-.card-header-row {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
+  gap: 24px;
+  margin-bottom: 28px;
 }
-.status-grid {
-  display: flex;
-  gap: 32px;
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--tp-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
 }
-.status-item {
+h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.3;
+  letter-spacing: -0.5px;
+  font-weight: 650;
+}
+.page-description {
+  margin: 10px 0 0;
+  color: var(--tp-text-secondary);
+  line-height: 1.6;
+  font-size: 14px;
+}
+.header-actions,
+.row-actions,
+.drawer-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.status-label {
-  color: var(--ac-color-text-secondary);
-  font-size: var(--ac-font-size-sm);
+.header-actions {
+  flex-shrink: 0;
 }
-.status-value {
+.overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr)) minmax(200px, 1.2fr);
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 1px solid var(--tp-border-light);
+  border-radius: 16px;
+  background: var(--tp-panel);
+  gap: 24px;
+}
+.overview-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.metric-icon,
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--tp-primary-soft);
+  color: var(--tp-primary);
+  font-size: 21px;
+  flex-shrink: 0;
+}
+.metric-icon.success {
+  background: var(--tp-success-soft);
+  color: var(--tp-success);
+}
+.metric-icon.warning {
+  background: var(--tp-warning-soft);
+  color: var(--tp-warning);
+}
+.metric-label {
+  display: block;
+  font-size: 13px;
+  color: var(--tp-text-secondary);
+  margin-bottom: 5px;
+}
+.overview strong {
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.scheduler-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 9px;
+  padding-left: 24px;
+  border-left: 1px solid var(--tp-border-light);
+}
+.scheduler-state > span:last-child {
+  color: var(--tp-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.workspace-content {
+  border: 1px solid var(--tp-border-light);
+  border-radius: 16px;
+  background: var(--tp-panel);
+  overflow: hidden;
+}
+.workspace-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 6px 24px 0;
+}
+.workspace-tabs :deep(.el-tabs__item) {
+  height: 52px;
+  font-size: 14px;
+}
+.workspace-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+  background: var(--tp-border-light);
+}
+.workspace-tabs :deep(.el-tabs__content) {
+  padding: 24px;
+}
+.list-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.task-search {
+  max-width: 360px;
+  margin-right: auto;
+}
+.role-filter {
+  width: 160px;
+}
+.state-filter {
+  width: 150px;
+}
+.task-table {
+  --el-table-header-bg-color: var(--tp-panel-soft);
+  --el-table-border-color: var(--tp-border-light);
+  --el-table-row-hover-bg-color: var(--tp-control);
+  font-size: 14px;
+}
+.task-table :deep(th.el-table__cell) {
+  height: 44px;
+  color: var(--tp-text-secondary);
+  font-weight: 500;
+}
+.task-title {
+  display: block;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--tp-text);
+  text-align: left;
+  font: inherit;
   font-weight: 600;
-  font-size: var(--ac-font-size-lg);
-  color: var(--ac-color-primary);
+  line-height: 1.5;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.task-title:hover {
+  color: var(--tp-primary);
+}
+.task-description {
+  margin: 6px 0 0;
+  color: var(--tp-text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.cell-secondary {
+  margin: 5px 0 0;
+  color: var(--tp-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.row-actions {
+  justify-content: flex-end;
+}
+.row-actions :deep(.el-button) {
+  min-height: 36px;
+}
+.list-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 18px;
+  color: var(--tp-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.task-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 16px;
+  line-height: 1.5;
+}
+.empty-icon {
+  width: 60px;
+  height: 60px;
+  font-size: 28px;
+  border-radius: 18px;
+  margin-bottom: 12px;
+}
+.task-empty h3 {
+  color: var(--tp-text);
+  font-size: 17px;
+  margin: 8px 0;
+}
+.task-empty p {
+  color: var(--tp-text-secondary);
+  font-size: 14px;
+  margin: 0 0 24px;
+}
+.history-preferences {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: var(--tp-text-secondary);
+}
+.history-preferences .el-select {
+  width: 148px;
+}
+.load-error {
+  margin-bottom: 16px;
+}
+.editor-section {
+  margin-bottom: 24px;
+}
+.editor-section h3 {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 20px;
+  font-size: 15px;
+}
+.editor-section h3 > span {
+  color: var(--tp-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.editor-section + .editor-section {
+  border-top: 1px solid var(--tp-border-light);
+  padding-top: 24px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 20px;
+}
+.form-grid > * {
+  min-width: 0;
+}
+.editor-section :deep(.el-select),
+.editor-section :deep(.el-date-editor.el-input),
+.editor-section :deep(.el-input-number) {
+  width: 100%;
+}
+.field-hint {
+  margin: 6px 0 0;
+  color: var(--tp-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.advanced-options {
+  border: 0;
+}
+.advanced-options :deep(.el-collapse-item__header) {
+  border: 0;
+  color: var(--tp-text-secondary);
+}
+.advanced-options :deep(.el-collapse-item__wrap) {
+  border: 0;
+}
+.channel-heading,
+.toggle-setting,
+.detail-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.channel-heading {
+  font-size: 14px;
+}
+.channel-row {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+.toggle-setting {
+  margin-top: 18px;
+  background: var(--tp-panel-soft);
+  padding: 14px 16px;
+  border-radius: 10px;
+}
+.toggle-setting strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.toggle-setting p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tp-text-secondary);
+}
+.detail-heading {
+  margin-bottom: 28px;
+}
+.detail-heading h2 {
+  margin: 16px 0 10px;
+  line-height: 1.4;
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+.detail-heading p {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--tp-text-secondary);
+}
+.task-details {
+  overflow-wrap: anywhere;
+}
+.task-details :deep(.el-descriptions__label) {
+  display: inline-block;
+  min-width: 82px;
+  color: var(--tp-text-secondary);
+}
+.detail-controls {
+  margin-top: 20px;
+  padding: 16px 0;
+  border-top: 1px solid var(--tp-border-light);
+  font-size: 14px;
+}
+.drawer-actions {
+  margin-top: 16px;
+  flex-wrap: wrap;
 }
 .msg-preview {
   white-space: pre-wrap;
-  padding: 8px;
-  background: var(--ac-color-surface-hover);
-  border-radius: var(--ac-radius-sm);
-  font-size: var(--ac-font-size-sm);
+  background: var(--tp-panel-soft);
+  padding: 16px;
+  border-radius: 10px;
+  line-height: 1.7;
 }
-.filter-tabs {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+.task-workspace :deep(button:focus-visible),
+.task-title:focus-visible {
+  outline: 2px solid var(--tp-primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.task-workspace :deep(.el-button),
+.task-title {
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+@media (max-width: 1100px) {
+  .task-workspace {
+    padding: 24px;
+  }
+  .overview {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .scheduler-state {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    border-left: 0;
+    border-top: 1px solid var(--tp-border-light);
+    padding: 16px 0 0;
+  }
+}
+@media (max-width: 760px) {
+  .task-workspace {
+    padding: 16px;
+  }
+  .workspace-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .overview {
+    gap: 16px;
+    padding: 16px;
+  }
+  .overview-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .list-toolbar {
+    flex-wrap: wrap;
+  }
+  .task-search {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  .role-filter,
+  .state-filter {
+    flex: 1;
+    min-width: 130px;
+  }
+  .workspace-tabs :deep(.el-tabs__content) {
+    padding: 16px;
+  }
+  .list-footer {
+    flex-direction: column;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .channel-row {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-workspace :deep(*),
+  .task-title {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 </style>

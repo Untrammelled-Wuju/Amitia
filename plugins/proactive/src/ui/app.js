@@ -103,6 +103,9 @@ function fillSettings(settings) {
   $("quiet-end").value = text(settings.quietEnd, "07:00");
   $("channel").value = text(settings.channel, "all");
   $("unreplied-enabled").checked = settings.unrepliedSlowdownEnabled !== false;
+  $("unreplied-after").value = number(settings.unrepliedSlowdownAfter, 2);
+  $("unreplied-multiplier").value = number(settings.unrepliedCooldownMultiplier, 2);
+  $("unreplied-recovery").checked = settings.unrepliedRecoveryOnReply !== false;
   syncRangeOutputs();
 }
 
@@ -140,7 +143,7 @@ function renderRules() {
         </div>
       </article>
     `).join("")
-    : '<div class="empty">暂无主动消息规则，点击“新建规则”开始配置。</div>';
+    : '<div class="empty">暂无主动任务规则，点击“新建规则”开始配置。</div>';
 }
 
 function renderHistory() {
@@ -148,10 +151,11 @@ function renderHistory() {
     ? state.history.map((item) => `
       <div class="list-item">
         <div>
-          <div class="list-title">${escapeHTML(text(item.title, text(item.triggerType, "主动消息")))}</div>
+          <div class="list-title">${escapeHTML(text(item.title, text(item.triggerType, "主动任务")))}</div>
           <div class="list-meta">${escapeHTML(text(item.createdAt))}${text(item.lastError) ? ` · ${escapeHTML(item.lastError)}` : ""}</div>
+          ${(item.result?.targets || []).map(target => `<div class="list-meta">${escapeHTML(text(target.kind))} ${escapeHTML(text(target.id))} · ${escapeHTML(({ delivered: "已投递", displayed: "已显示", clicked: "已点击", queued: "已排队", pending: "待投递", failed: "失败", blocked: "已阻断", suppressed: "已抑制", unknown: "结果未知" })[target.state] || text(target.state))}${target.error ? ` · ${escapeHTML(target.error)}` : ""}</div>`).join("")}
         </div>
-        <span class="badge ${text(item.state) === "sent" || text(item.state) === "success" ? "sent" : text(item.state) === "failed" ? "failed" : ""}">${escapeHTML(text(item.state, "unknown"))}</span>
+        <span class="badge ${text(item.state) === "completed" ? "sent" : ["failed", "blocked", "unknown", "partial"].includes(text(item.state)) ? "failed" : ""}">${escapeHTML(({ completed: "执行完成", waiting: "待执行", running: "执行中", retry_wait: "等待重试", failed: "失败", blocked: "已阻断", unknown: "结果未知", partial: "部分投递", skipped: "策略跳过", cancelled: "已取消" })[item.state] || text(item.state, "未知"))}</span>
       </div>
     `).join("")
     : '<div class="empty">暂无运行历史</div>';
@@ -159,8 +163,8 @@ function renderHistory() {
 
 function render() {
   $("subtitle").textContent = state.context.characterName
-    ? `${state.context.characterName} 的主动消息规则与发送状态`
-    : "主动消息规则、参数与发送状态";
+    ? `${state.context.characterName} 的主动任务规则与发送状态`
+    : "主动任务规则、参数与发送状态";
   renderMetrics();
   renderRules();
   renderHistory();
@@ -178,11 +182,12 @@ async function load() {
       call("queue.summary"),
       call("history.list", { page: 1, pageSize: 5 }),
     ]);
-    fillSettings(settings || {});
-    state.rules = Array.isArray(rules) ? rules : [];
-    state.status = status || {};
-    state.queue = queue || {};
-    state.history = Array.isArray(history?.items) ? history.items : [];
+    if (!settings || !Array.isArray(rules) || !status || !queue || !Array.isArray(history?.items)) throw new Error("主动任务响应不完整");
+    fillSettings(settings);
+    state.rules = rules;
+    state.status = status;
+    state.queue = queue;
+    state.history = history.items;
     setMessage("已更新");
     render();
   } catch (error) {
@@ -203,19 +208,29 @@ async function saveSettings(enabled = $("master-enabled").checked) {
     quietEnd: $("quiet-end").value,
     channel: $("channel").value,
     unrepliedSlowdownEnabled: $("unreplied-enabled").checked,
+    unrepliedSlowdownAfter: number($("unreplied-after").value, 2),
+    unrepliedCooldownMultiplier: number($("unreplied-multiplier").value, 2),
+    unrepliedRecoveryOnReply: $("unreplied-recovery").checked,
   };
   const saved = await call("settings.update", payload);
   fillSettings(saved || payload);
-  toast("主动消息参数已保存");
+  toast("主动任务参数已保存");
 }
 
 function openRuleDialog(rule = null) {
-  $("rule-dialog-title").textContent = rule ? "编辑主动消息规则" : "新建主动消息规则";
+  $("rule-dialog-title").textContent = rule ? "编辑主动任务规则" : "新建主动任务规则";
   $("rule-id").value = text(rule?.id);
   $("rule-name").value = text(rule?.name);
   $("rule-type").value = text(rule?.ruleType, "daily_greeting");
   $("rule-cron").value = text(rule?.scheduleCron, "0 9 * * *");
   $("rule-channel").value = text(rule?.channel, "all");
+  $("rule-conversation").value = text(rule?.conversationId, state.context.conversationId || "");
+  $("rule-timezone").value = text(rule?.timezone, Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai");
+  $("rule-targets").value = JSON.stringify(rule?.channelTargets || []);
+  $("rule-end").value = text(rule?.endAt);
+  $("rule-max-occurrences").value = number(rule?.maxOccurrences, 0);
+  $("rule-notification").checked = rule?.systemNotification !== false;
+  $("rule-form").dataset.requestId = rule?.requestId || `proactive-ui-${crypto.randomUUID()}`;
   $("rule-quiet-start").value = text(rule?.quietStart, "23:00");
   $("rule-quiet-end").value = text(rule?.quietEnd, "07:00");
   $("rule-max-per-day").value = number(rule?.maxPerDay, 1);
@@ -232,11 +247,18 @@ function closeRuleDialog() {
 
 async function saveRule() {
   const payload = {
-    id: number($("rule-id").value, 0),
+    id: String($("rule-id").value || ""),
     name: $("rule-name").value.trim(),
     ruleType: $("rule-type").value,
     scheduleCron: $("rule-cron").value.trim(),
     channel: $("rule-channel").value,
+    conversationId: $("rule-conversation").value.trim(),
+    timezone: $("rule-timezone").value.trim(),
+    channelTargetsText: $("rule-targets").value,
+    endAt: $("rule-end").value.trim(),
+    maxOccurrences: number($("rule-max-occurrences").value, 0),
+    systemNotification: $("rule-notification").checked,
+    requestId: $("rule-form").dataset.requestId,
     quietStart: $("rule-quiet-start").value,
     quietEnd: $("rule-quiet-end").value,
     maxPerDay: number($("rule-max-per-day").value, 1),
@@ -262,16 +284,18 @@ async function ruleCommand(rule, command) {
     await call("rules.toggle", { id: rule.id });
   } else if (command === "test") {
     const result = await call("rules.test", { id: rule.id });
-    alert(text(result?.content, "测试完成，未返回预览内容"));
+    alert(text(result?.messageContent, text(result?.content, "预览未返回内容")));
     return;
   } else if (command === "trigger") {
-    await call("rules.trigger", { id: rule.id });
+    const result = await call("rules.trigger", { id: rule.id });
+    if (result?.accepted !== true || !result.triggerId) throw new Error("执行请求未确认");
+    toast("执行请求已受理，请在历史中查看实际结果");
   }
   await load();
 }
 
 async function resetPresets() {
-  if (!confirm("恢复系统预设会替换当前角色的主动消息规则，继续吗？")) return;
+  if (!confirm("恢复系统预设会替换当前角色的主动任务规则，继续吗？")) return;
   await call("presets.reset");
   await load();
   toast("系统预设已恢复");

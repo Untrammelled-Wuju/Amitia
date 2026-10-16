@@ -3,10 +3,10 @@
   "extension": {
     "id": "com.amitia/proactive",
     "name": {
-      "default": "主动消息"
+      "default": "主动任务"
     },
     "description": {
-      "default": "为角色提供主动消息规则、调度、发送、历史记录和独立启停能力。"
+      "default": "为角色提供主动任务规则、调度、发送、历史记录和独立启停能力。"
     },
     "version": "1.0.9",
     "license": "AGPL-3.0-only",
@@ -37,18 +37,18 @@
       "ios"
     ]
   },
-  "placement": "device",
+  "placement": "hybrid",
   "modules": [
     {
       "id": "proactive-runtime",
       "name": {
-        "default": "主动消息运行时"
+        "default": "主动任务运行时"
       },
       "description": {
-        "default": "在插件自有状态命名空间中管理规则、设置、调度与历史。"
+        "default": "使用宿主唯一调度账本管理主动任务，支持本地与云端。"
       },
       "type": "javascript",
-      "placement": "device",
+      "placement": "core",
       "runtime": {
         "type": "javascript",
         "entryPoint": "dist/index.js",
@@ -65,14 +65,20 @@
           "id": "proactive-command",
           "kind": "tool",
           "name": {
-            "default": "主动消息命令"
+            "default": "主动任务命令"
           },
           "description": {
-            "default": "主动消息插件的内部控制入口。"
+            "default": "主动任务插件的内部控制入口。"
           },
           "requiredPermissions": [
             "storage.state.read",
-            "storage.state.write"
+            "storage.state.write",
+            "proactive_task.read",
+            "proactive_task.create",
+            "proactive_task.manage",
+            "proactive_task.execute",
+            "ui.notify",
+            "message.send"
           ],
           "spec": {
             "toolId": "com.amitia/proactive/command",
@@ -88,8 +94,20 @@
                   "type": "string"
                 },
                 "payload": {
-                  "type": "object"
-                }
+                  "type": "object",
+                  "properties": {
+                    "scope": {
+                      "type": "object",
+                      "properties": {
+                        "characterId": { "type": "string" },
+                        "conversationId": { "type": "string" }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "ui_state": { "type": "boolean" }
               },
               "additionalProperties": false
             },
@@ -111,22 +129,22 @@
     {
       "id": "proactive-ui",
       "name": {
-        "default": "主动消息页面"
+        "default": "主动任务页面"
       },
       "description": {
-        "default": "在角色详情中管理主动消息开关、参数、规则和运行历史。"
+        "default": "在角色详情中管理主动任务开关、参数、规则和运行历史。"
       },
       "type": "data_only",
-      "placement": "device",
+      "placement": "hybrid",
       "contributions": [
         {
           "id": "proactive-character-tab",
           "kind": "ui_page",
           "name": {
-            "default": "主动消息"
+            "default": "主动任务"
           },
           "description": {
-            "default": "配置角色主动消息规则和发送策略。"
+            "default": "配置角色主动任务规则和发送策略。"
           },
           "spec": {
             "contribution_id": "proactive-character-tab",
@@ -140,10 +158,10 @@
             "contract_version": 1,
             "display": {
               "title": {
-                "default": "主动消息"
+                "default": "主动任务"
               },
               "description": {
-                "default": "管理主动消息开关、全局参数、规则和运行历史。"
+                "default": "管理主动任务开关、全局参数、规则和运行历史。"
               },
               "icon": "message"
             },
@@ -173,7 +191,7 @@
               {
                 "action_id": "command",
                 "title": {
-                  "default": "执行主动消息操作"
+                  "default": "执行主动任务操作"
                 },
                 "target": {
                   "type": "tool",
@@ -194,10 +212,10 @@
           "id": "proactive-character-tab-mobile",
           "kind": "ui_page",
           "name": {
-            "default": "主动消息"
+            "default": "主动任务"
           },
           "description": {
-            "default": "配置角色主动消息规则和发送策略。"
+            "default": "配置角色主动任务规则和发送策略。"
           },
           "spec": {
             "contribution_id": "proactive-character-tab-mobile",
@@ -211,10 +229,10 @@
             "contract_version": 1,
             "display": {
               "title": {
-                "default": "主动消息"
+                "default": "主动任务"
               },
               "description": {
-                "default": "管理主动消息开关、全局参数、规则和运行历史。"
+                "default": "管理主动任务开关、全局参数、规则和运行历史。"
               },
               "icon": "message"
             },
@@ -243,7 +261,7 @@
               {
                 "action_id": "command",
                 "title": {
-                  "default": "执行主动消息操作"
+                  "default": "执行主动任务操作"
                 },
                 "target": {
                   "type": "tool",
@@ -264,10 +282,10 @@
           "id": "proactive-page",
           "kind": "ui_page",
           "name": {
-            "default": "主动消息"
+            "default": "主动任务"
           },
           "description": {
-            "default": "管理主动消息规则、全局参数、测试触发和运行历史。"
+            "default": "管理主动任务规则、全局参数、测试触发和运行历史。"
           },
           "requiredPermissions": [
             "tool.invoke"
@@ -284,10 +302,10 @@
             "contract_version": 1,
             "display": {
               "title": {
-                "default": "主动消息"
+                "default": "主动任务"
               },
               "description": {
-                "default": "管理主动消息规则、全局参数、测试触发和运行历史。"
+                "default": "管理主动任务规则、全局参数、测试触发和运行历史。"
               },
               "icon": "notification"
             },
@@ -312,7 +330,7 @@
               {
                 "action_id": "command",
                 "title": {
-                  "default": "执行主动消息操作"
+                  "default": "执行主动任务操作"
                 },
                 "target": {
                   "type": "tool",
@@ -330,10 +348,10 @@
           "id": "proactive-desktop-page",
           "kind": "ui_page",
           "name": {
-            "default": "主动消息"
+            "default": "主动任务"
           },
           "description": {
-            "default": "管理主动消息规则、全局参数、测试触发和运行历史。"
+            "default": "管理主动任务规则、全局参数、测试触发和运行历史。"
           },
           "requiredPermissions": [
             "tool.invoke"
@@ -350,10 +368,10 @@
             "contract_version": 1,
             "display": {
               "title": {
-                "default": "主动消息"
+                "default": "主动任务"
               },
               "description": {
-                "default": "管理主动消息规则、全局参数、测试触发和运行历史。"
+                "default": "管理主动任务规则、全局参数、测试触发和运行历史。"
               },
               "icon": "notification"
             },
@@ -379,7 +397,7 @@
               {
                 "action_id": "command",
                 "title": {
-                  "default": "执行主动消息操作"
+                  "default": "执行主动任务操作"
                 },
                 "target": {
                   "type": "tool",
@@ -397,7 +415,7 @@
           "id": "proactive-routes",
           "kind": "ui_provider",
           "name": {
-            "default": "主动消息路由"
+            "default": "主动任务路由"
           },
           "spec": {
             "providerId": "proactive-routes",
@@ -429,7 +447,7 @@
                   "path": "/characters/:id/proactive",
                   "providerId": "proactive-page-provider",
                   "capability": "page.provider",
-                  "title": "主动消息",
+                  "title": "主动任务",
                   "priority": 230
                 }
               ]
@@ -440,7 +458,7 @@
           "id": "proactive-page-provider",
           "kind": "ui_provider",
           "name": {
-            "default": "主动消息页面 Provider"
+            "default": "主动任务页面 Provider"
           },
           "spec": {
             "providerId": "proactive-page-provider",
@@ -483,13 +501,13 @@
   "permissions": [
     {
       "name": "storage.state.read",
-      "reason": "读取插件自有规则、设置和历史。",
+      "reason": "读取主动任务设置；规则与历史由宿主账本查询。",
       "required": true,
       "scope": "extension"
     },
     {
       "name": "storage.state.write",
-      "reason": "保存插件自有规则、设置和历史。",
+      "reason": "保存主动任务设置；规则与历史由宿主管理。",
       "required": true,
       "scope": "extension"
     },
@@ -501,7 +519,37 @@
     },
     {
       "name": "tool.invoke",
-      "reason": "通过声明的主动消息工具执行页面操作。",
+      "reason": "通过声明的主动任务工具执行页面操作。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.read",
+      "reason": "通过统一主动任务服务管理规则、执行和系统通知。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.create",
+      "reason": "通过统一主动任务服务管理规则、执行和系统通知。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.manage",
+      "reason": "通过统一主动任务服务管理规则、执行和系统通知。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "proactive_task.execute",
+      "reason": "通过统一主动任务服务管理规则、执行和系统通知。",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "ui.notify",
+      "reason": "通过统一主动任务服务管理规则、执行和系统通知。",
       "required": true,
       "scope": "extension"
     }

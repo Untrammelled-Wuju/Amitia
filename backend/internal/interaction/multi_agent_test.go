@@ -343,16 +343,18 @@ func TestMultiAgentCoordinator_OnAssignmentTerminal_RequireAll(t *testing.T) {
 	id2 := ac.assignments[1].ID
 
 	_ = c.OnAssignmentTerminal(context.Background(), id1, AgentAssignmentResult{
-		AssignmentID: id1,
-		Status:       AssignmentSucceeded,
+		AssignmentID:       id1,
+		ChildInteractionID: ac.assignments[0].ChildInteractionID,
+		Status:             AssignmentSucceeded,
 	})
 	if ac.status == CoordinationAggregating {
 		t.Fatal("should not aggregate yet - second assignment still pending")
 	}
 
 	_ = c.OnAssignmentTerminal(context.Background(), id2, AgentAssignmentResult{
-		AssignmentID: id2,
-		Status:       AssignmentSucceeded,
+		AssignmentID:       id2,
+		ChildInteractionID: ac.assignments[1].ChildInteractionID,
+		Status:             AssignmentSucceeded,
 	})
 	if ac.status != CoordinationSucceeded {
 		t.Fatalf("expected succeeded, got %s", ac.status)
@@ -384,8 +386,9 @@ func TestMultiAgentCoordinator_OnAssignmentTerminal_FirstSuccess(t *testing.T) {
 	id1 := ac.assignments[0].ID
 
 	_ = c.OnAssignmentTerminal(context.Background(), id1, AgentAssignmentResult{
-		AssignmentID: id1,
-		Status:       AssignmentSucceeded,
+		AssignmentID:       id1,
+		ChildInteractionID: ac.assignments[0].ChildInteractionID,
+		Status:             AssignmentSucceeded,
 	})
 
 	if ac.status != CoordinationSucceeded {

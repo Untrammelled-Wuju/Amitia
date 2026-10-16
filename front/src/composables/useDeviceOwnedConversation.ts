@@ -7,6 +7,7 @@ import { conversationReference, parseConversationReference, ownedConversationRow
 import { createOwnedConversationExport } from "@/runtime/device-owned-export";
 import { OwnedChatStateChangedError } from "@/runtime/owned-chat-poll";
 import { memoryRecordScope, memoryStorageRole } from "@/runtime/owned-memory-scope";
+import { ownedWorkbenchTaskChange, workbenchTaskEventName } from "@/runtime/owned-workbench-task-event";
 
 interface MeshRole { id: string; name: string; revision: number }
 export interface OwnedProjectWorkspace { id: string; deviceId: string; name: string; kind: string; rootUri: string; readOnly?: boolean }
@@ -433,7 +434,12 @@ export function useDeviceOwnedConversation() {
     try {
       const response = await streamOwnedChat(wireRequest, controller.signal, (event) => {
         if (captured !== revision) return;
-        onEvent(publicEvent(event));
+		const mapped = publicEvent(event);
+		if (mapped.type === "task" && mapped.executionScope?.coreId === coreId.value && mapped.executionScope?.roleId === request.characterId) {
+		  const change = ownedWorkbenchTaskChange(mapped);
+		  if (change) window.dispatchEvent(new CustomEvent(workbenchTaskEventName, { detail: change }));
+		}
+        onEvent(mapped);
       });
       if (captured !== revision) throw new Error("服务状态已变化，迟到回复已拦截");
       return { ...response, resourceConversationId: response.conversationId, conversationId: conversationReference(response.conversationOrigin || origin || { ownerId: response.executionScope.resourceOwnerId, id: response.conversationId }) };

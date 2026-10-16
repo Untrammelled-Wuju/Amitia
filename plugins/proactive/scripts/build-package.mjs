@@ -23,9 +23,9 @@ const stagingRoot = join(packageRoot, ".package-staging");
 const outputDir =
   readOption("--output") ||
   process.env.AMITIA_PLUGIN_OUTPUT_DIR ||
-  join("..", "..", "Plugin", "Character");
+  join("..", "..", "plugin", "character");
 const manifestInfo = JSON.parse(readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"));
-const outputFile = join(outputDir, `amitia-\u4e3b\u52a8\u6d88\u606f-${manifestInfo.extension.version}.amitiax`);
+const outputFile = join(outputDir, `amitia-主动任务-${manifestInfo.extension.version}.amitiax`);
 const moduleID = "proactive-runtime";
 const moduleRoot = join(stagingRoot, "modules", moduleID);
 const generatedAt = "2026-01-01T00:00:00Z";

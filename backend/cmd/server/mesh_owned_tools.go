@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat"
@@ -19,7 +20,11 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
-type meshOwnedToolRuntime struct{ services *AppServices }
+type meshOwnedToolRuntime struct {
+	services *AppServices
+	native   *chatMultiAgentRuntime
+	parentMu sync.Mutex
+}
 
 type ownedToolResultDocument struct {
 	Scope       coordination.ExecutionScope  `json:"executionScope"`
@@ -103,10 +108,36 @@ func (r *meshOwnedToolRuntime) Tools(ctx context.Context, inference business.Inf
 			allowed = append(allowed, definition)
 		}
 	}
+	for _, definition := range available {
+		if isChatMultiAgentTool(definition.Function.Name) {
+			return nil, errors.New("原生任务工具名称与已注册能力冲突")
+		}
+	}
+	if r.native != nil {
+		allowed = append(allowed, r.native.ModelTools(ctx, r.nativeScope(ctx, inference))...)
+	}
 	return allowed, nil
 }
 
 func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.Inference, call, name string, input json.RawMessage) (chat.ToolResult, error) {
+	if isChatMultiAgentTool(name) {
+		if r.native == nil || inference.InternalWorker {
+			return chat.ToolResult{}, coordination.ErrWrongOwner
+		}
+		if err := r.services.OwnedBusiness.WithExecutionScope(ctx, inference.Scope, func(context.Context) error { return nil }); err != nil {
+			return chat.ToolResult{}, err
+		}
+		result := r.native.Execute(ctx, name, input, r.nativeScope(ctx, inference))
+		if result.Error == nil && inference.Emit != nil {
+			var task business.TaskEvent
+			if json.Unmarshal(result.Output, &task) == nil && task.CoordinationID != "" {
+				if err := inference.Emit(business.Event{Type: "task", Task: &task}); err != nil {
+					return result, err
+				}
+			}
+		}
+		return result, nil
+	}
 	definition, err := r.definition(ctx, inference, name)
 	if err != nil {
 		return chat.ToolResult{}, err

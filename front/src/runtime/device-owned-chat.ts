@@ -47,7 +47,8 @@ export interface OwnedChatResponse {
 }
 
 export interface OwnedChatEvent {
-  type: "started" | "transcribed" | "delta" | "completed" | "interrupted" | "failed";
+  type: "started" | "transcribed" | "delta" | "task" | "completed" | "interrupted" | "failed";
+	task?: { coordinationId: string; status: string };
   executionScope?: OwnedExecutionScope;
   conversationId?: string;
   text?: string;
@@ -103,6 +104,7 @@ export async function consumeOwnedChatStream(
   let terminal = false;
   let totalBytes = 0;
   let transcription: string | undefined;
+	let conversationId = "";
   const processFrame = (frame: string) => {
     const lines = frame.split(/\r?\n/).filter((line) => line.startsWith("data:"));
     if (!lines.length) return;
@@ -110,12 +112,13 @@ export async function consumeOwnedChatStream(
     const event = JSON.parse(lines.map((line) => line.slice(5).trimStart()).join("\n")) as OwnedChatEvent;
     const suppliedScope = event.executionScope || event.data?.executionScope;
     if (expectedExecutionScope && suppliedScope && !sameOwnedAuthority(expectedExecutionScope, suppliedScope)) throw new Error("服务提供者、角色或数据归属已变化，迟到回复已拦截");
-    if (!["started", "transcribed", "delta", "completed", "interrupted", "failed"].includes(event.type)) throw new Error("未知的回复事件");
-    if (event.type === "started" || event.type === "delta" || event.type === "transcribed") {
+    if (!["started", "transcribed", "delta", "task", "completed", "interrupted", "failed"].includes(event.type)) throw new Error("未知的回复事件");
+    if (event.type === "started" || event.type === "delta" || event.type === "transcribed" || event.type === "task") {
       const current = scopeFingerprint(validateScope(event.executionScope, requestId));
       if (event.type === "started") {
         if (fingerprint) throw new Error("重复的回复开始事件");
         fingerprint = current;
+		conversationId = event.conversationId || "";
       } else if (!fingerprint || current !== fingerprint) {
         throw new Error("服务提供者、角色或数据归属已变化，迟到回复已拦截");
       }
@@ -123,6 +126,7 @@ export async function consumeOwnedChatStream(
         if (transcription !== undefined || typeof event.text !== "string" || !event.text.trim() || new TextEncoder().encode(event.text).byteLength > 65536) throw new Error("语音转写事件无效");
         transcription = event.text;
       }
+	  if (event.type === "task" && (!conversationId || event.conversationId !== conversationId || !event.task || typeof event.task.coordinationId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(event.task.coordinationId) || !["planning", "running", "waiting", "aggregating", "succeeded", "failed", "cancelled", "paused"].includes(event.task.status))) throw new Error("任务事件归属或状态无效");
     } else {
       if (event.data?.executionScope) {
         const current = scopeFingerprint(validateScope(event.data.executionScope, requestId));

@@ -222,6 +222,90 @@ class WorkspaceService {
       'author': {'name': authorName, 'email': authorEmail},
   });
 
+  Future<Map<String, dynamic>> gitWorktrees(String workspaceUri) =>
+      _postMap('/api/workspaces/git/worktrees', {'workspaceUri': workspaceUri});
+
+  Future<Map<String, dynamic>> createGitWorktree(
+    String workspaceUri, {
+    String name = '',
+    String branch = '',
+    String refName = 'HEAD',
+    String taskId = '',
+    String conversationId = '',
+  }) {
+    if (taskId.isEmpty != conversationId.isEmpty) {
+      throw ArgumentError('taskId and conversationId must be provided together');
+    }
+    return _postMap('/api/workspaces/git/worktrees/create', {
+    'workspaceUri': workspaceUri,
+    'name': name,
+    'branch': branch,
+    'ref': refName,
+    if (taskId.isNotEmpty && conversationId.isNotEmpty) 'taskId': taskId,
+    if (taskId.isNotEmpty && conversationId.isNotEmpty) 'conversationId': conversationId,
+    });
+  }
+
+  Future<Map<String, dynamic>> releaseGitWorktree(String workspaceUri, String id, String taskId, String conversationId) =>
+      _postMap('/api/workspaces/git/worktrees/release', {
+        'workspaceUri': workspaceUri,
+        'id': id,
+        'taskId': taskId,
+        'conversationId': conversationId,
+      });
+
+  Future<Map<String, dynamic>> reviewGitWorktree(String workspaceUri, String id, String taskId, String conversationId, String expectedHead) =>
+      _postMap('/api/workspaces/git/worktrees/review', {
+        'workspaceUri': workspaceUri,
+        'id': id,
+        'taskId': taskId,
+        'conversationId': conversationId,
+        'expectedHead': expectedHead,
+      });
+
+  Future<Map<String, dynamic>> prepareGitWorktreeCheckpoint(String workspaceUri, String id, String taskId, String conversationId) =>
+      _postMap('/api/workspaces/git/worktrees/checkpoints/prepare', {
+        'workspaceUri': workspaceUri, 'id': id, 'taskId': taskId, 'conversationId': conversationId,
+      });
+
+  Future<Map<String, dynamic>> readGitWorktreeCheckpoint(String workspaceUri, String id, String taskId, String conversationId) =>
+      _postMap('/api/workspaces/git/worktrees/checkpoints/read', {
+        'workspaceUri': workspaceUri, 'id': id, 'taskId': taskId, 'conversationId': conversationId,
+      });
+
+  Future<Map<String, dynamic>> testGitWorktreeCheckpoint(String workspaceUri, String id, String taskId, String conversationId, String revision, String profile) =>
+      _postMap('/api/workspaces/git/worktrees/checkpoints/test', {
+        'workspaceUri': workspaceUri, 'id': id, 'taskId': taskId, 'conversationId': conversationId,
+        'revision': revision, 'profile': profile,
+      });
+
+  Future<Map<String, dynamic>> approveGitWorktreeCheckpoint(String workspaceUri, String id, String taskId, String conversationId, String revision) =>
+      _postMap('/api/workspaces/git/worktrees/checkpoints/approve', {
+        'workspaceUri': workspaceUri, 'id': id, 'taskId': taskId, 'conversationId': conversationId,
+        'revision': revision,
+      });
+
+  Future<Map<String, dynamic>> previewGitWorktreeMerge(String workspaceUri, String id, String taskId, String conversationId) =>
+      _postMap('/api/workspaces/git/worktrees/merges/preview', {
+        'workspaceUri': workspaceUri, 'id': id, 'taskId': taskId, 'conversationId': conversationId,
+      });
+
+  Future<Map<String, dynamic>> applyGitWorktreeMerge(String workspaceUri, String id, String taskId, String conversationId, String planId) =>
+      _postMap('/api/workspaces/git/worktrees/merges/apply', {
+        'workspaceUri': workspaceUri, 'id': id, 'taskId': taskId, 'conversationId': conversationId, 'planId': planId,
+      });
+
+  Future<Map<String, dynamic>> readGitWorktreeMergeAudit(String workspaceUri, String id, String taskId, String conversationId) =>
+      _postMap('/api/workspaces/git/worktrees/merges/audit', {
+        'workspaceUri': workspaceUri, 'id': id, 'taskId': taskId, 'conversationId': conversationId,
+      });
+
+  Future<Map<String, dynamic>> removeGitWorktree(String workspaceUri, String id) =>
+      _postMap('/api/workspaces/git/worktrees/remove', {
+        'workspaceUri': workspaceUri,
+        'id': id,
+      });
+
   Future<Map<String, dynamic>> gitBranches(String workspaceUri) =>
       _postMap('/api/workspaces/git/branches', {'workspaceUri': workspaceUri});
 

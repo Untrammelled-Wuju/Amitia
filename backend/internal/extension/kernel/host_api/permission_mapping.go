@@ -67,6 +67,9 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 }
 
 func RoutePermissionForMethod(method Method) []PermissionRequirement {
+	if permission, _, ok := scheduledMethod(method); ok {
+		return []PermissionRequirement{{Name: permission, Resource: "schedule"}}
+	}
 	entries, ok := DefaultPermissionMapping()[method]
 	if !ok {
 		return nil
@@ -79,6 +82,9 @@ func RoutePermissionForMethod(method Method) []PermissionRequirement {
 }
 
 func RouteScopeForMethod(method Method) ScopePolicy {
+	if _, _, ok := scheduledMethod(method); ok {
+		return ScopePolicy{Namespaced: true}
+	}
 	switch method {
 	case MethodStateGet, MethodStateCAS, MethodStateDelete, MethodStateList:
 		return ScopePolicy{Namespaced: true}
@@ -120,6 +126,9 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 }
 
 func IsDataRouteMethod(method Method) bool {
+	if _, _, ok := scheduledMethod(method); ok {
+		return true
+	}
 	switch method {
 	case MethodStateGet, MethodStateCAS, MethodStateDelete, MethodStateList,
 		MethodResourceOpen, MethodResourceRead, MethodResourceWrite, MethodResourceClose, MethodResourceStat, MethodResourceLink, MethodResourceDelete,
@@ -132,6 +141,12 @@ func IsDataRouteMethod(method Method) bool {
 }
 
 func RouteRiskForMethod(method Method) RiskLevel {
+	if _, action, ok := scheduledMethod(method); ok {
+		if action == "read" {
+			return RiskLow
+		}
+		return RiskMedium
+	}
 	switch method {
 	case MethodStateCAS, MethodStateDelete, MethodResourceWrite:
 		return RiskMedium
@@ -157,6 +172,15 @@ func RouteRiskForMethod(method Method) RiskLevel {
 }
 
 func RouteSideEffectForMethod(method Method) SideEffectLevel {
+	if _, action, ok := scheduledMethod(method); ok {
+		if action == "read" {
+			return SideEffectReadOnly
+		}
+		if action == "execute" {
+			return SideEffectExternal
+		}
+		return SideEffectWrite
+	}
 	switch method {
 	case MethodStateGet, MethodStateList, MethodResourceOpen, MethodResourceRead, MethodResourceStat,
 		MethodResourceLink, MethodCharacterRead, MethodCharacterList, MethodConversationRead, MethodMemoryQuery, MethodScheduleList, MethodExtensionDataRead, MethodVectorSearch:

@@ -11,6 +11,8 @@ const List<String> _deviceLocalApiPrefixes = <String>[
   '/api/local/workflow-runs',
   '/api/local/workspaces',
   '/api/workspaces',
+  '/api/workbench/browser',
+  '/api/workbench/terminal',
   '/api/storage',
   '/api/native-bridge/backend-action',
   '/internal/device-mesh',

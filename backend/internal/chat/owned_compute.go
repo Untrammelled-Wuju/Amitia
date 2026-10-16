@@ -196,7 +196,34 @@ func (s *service) TranscribeOwnedAudio(ctx context.Context, inference business.I
 	return asr.RecognizePrivateAudio(ctx, cfg, data, attachment.MIME, "")
 }
 
-func (s *service) GenerateOwnedReply(ctx context.Context, inference business.Inference) (business.Generation, error) {
+func (s *service) GenerateOwnedReply(ctx context.Context, inference business.Inference) (generation business.Generation, resultErr error) {
+	if lifecycle, ok := s.ownedToolRuntime.(OwnedTurnRuntime); ok && !inference.InternalWorker && !inference.ScheduledMessage {
+		var finish func(context.Context, business.Generation, error) error
+		var err error
+		ctx, finish, err = lifecycle.BeginOwnedTurn(ctx, inference)
+		if err != nil {
+			return business.Generation{}, err
+		}
+		if inference.RegisterCompletion != nil {
+			inference.RegisterCompletion(finish)
+		} else {
+			defer func() {
+				cause := resultErr
+				if current := context.Cause(ctx); current != nil {
+					cause = current
+				}
+				finishContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				if err := finish(finishContext, generation, cause); err != nil && resultErr == nil {
+					resultErr = err
+				}
+			}()
+		}
+	}
+	return s.generateOwnedReply(ctx, inference)
+}
+
+func (s *service) generateOwnedReply(ctx context.Context, inference business.Inference) (business.Generation, error) {
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return business.Generation{}, err
 	}
@@ -219,6 +246,20 @@ func (s *service) GenerateOwnedReply(ctx context.Context, inference business.Inf
 	}
 	applyReasoningCapabilities(cfg)
 	sink := &ownedReplySink{inference: inference}
+	if inference.ScheduledMessage {
+		messages[0]["content"] = fmt.Sprint(messages[0]["content"]) + "\n本次是用户已授权的日程提醒或主动任务，只生成发送给用户的自然消息，不执行工具、脚本、设备操作，也不新增任务。"
+		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(ctx, cfg, messages, []tool.Tool{}, sink)
+		if err != nil {
+			return business.Generation{}, err
+		}
+		if len(calls) > 0 {
+			return business.Generation{}, errors.New("定时消息禁止执行工具")
+		}
+		if sink.text.Len() > 0 {
+			text = sink.text.String()
+		}
+		return business.Generation{Text: text, Reasoning: sink.reasoning.String(), Tokens: tokens}, nil
+	}
 	return s.generateOwnedWithTools(ctx, inference, cfg, messages, sink)
 }
 

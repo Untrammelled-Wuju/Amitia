@@ -77,7 +77,7 @@ export function resolveNavigationIcon(name?: string): Component {
 
 const builtinItems: UINavigationItem[] = [
   { id: "character.manage", route: "/character", label: "角色管理", icon: User, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 20, mobile: true, match: ["/character"] },
-  { id: "character.reminders", route: "/reminders", label: "日程提醒", icon: Calendar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 25 },
+  { id: "character.reminders", route: "/reminders", label: "主动任务", icon: Calendar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 25 },
   { id: "character.profiles", route: "/profiles", label: "用户画像", icon: Avatar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 30 },
   { id: "character.world-book", route: "/world-book", label: "世界书", icon: Collection, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 35 },
   { id: "memory.manager", route: "/memory-manager", label: "记忆总览", icon: List, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 55, mobile: true, match: ["/memory", "/memory-manager"] },

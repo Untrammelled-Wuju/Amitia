@@ -124,6 +124,10 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	if err != nil {
 		return nil, err
 	}
+	toolInputPayload, err = e.injectToolUIScope(ctx, toolID, toolInputPayload, execCtx)
+	if err != nil {
+		return nil, err
+	}
 	callID := fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString())
 	executionContext := uiActionExecutionContext(ctx, execCtx)
 	toolInput, _ := json.Marshal(map[string]any{
@@ -266,6 +270,40 @@ func (e *UIActionExecutor) declaredToolInputProperties(ctx context.Context, tool
 		declared[key] = true
 	}
 	return declared, true
+}
+
+func (e *UIActionExecutor) injectToolUIScope(ctx context.Context, toolID string, input json.RawMessage, execCtx UIActionExecContext) (json.RawMessage, error) {
+	if e.toolRegistry == nil {
+		return input, nil
+	}
+	definition, ok := e.toolRegistry.Get(ctx, toolID)
+	if !ok {
+		return input, nil
+	}
+	var schema struct {
+		Properties map[string]struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"properties"`
+	}
+	if json.Unmarshal(definition.InputSchema, &schema) != nil || len(schema.Properties["payload"].Properties["scope"]) == 0 {
+		return input, nil
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(input, &fields); err != nil {
+		return nil, err
+	}
+	payload := map[string]json.RawMessage{}
+	if len(fields["payload"]) > 0 && string(fields["payload"]) != "null" {
+		if err := json.Unmarshal(fields["payload"], &payload); err != nil {
+			return nil, err
+		}
+	}
+	if payload == nil {
+		payload = map[string]json.RawMessage{}
+	}
+	payload["scope"], _ = json.Marshal(map[string]string{"characterId": execCtx.CharacterID, "conversationId": execCtx.ConversationID})
+	fields["payload"], _ = json.Marshal(payload)
+	return json.Marshal(fields)
 }
 
 func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) permission.PermissionExecutionContext {

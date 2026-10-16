@@ -84,6 +84,7 @@ type Generation struct {
 }
 
 type Event struct {
+	Task           *TaskEvent                  `json:"task,omitempty"`
 	Type           string                      `json:"type"`
 	ConversationID string                      `json:"conversationId,omitempty"`
 	Scope          coordination.ExecutionScope `json:"executionScope"`
@@ -91,7 +92,15 @@ type Event struct {
 	Reasoning      bool                        `json:"reasoning,omitempty"`
 }
 
+type TaskEvent struct {
+	CoordinationID string `json:"coordinationId"`
+	Status         string `json:"status"`
+}
+
 type Inference struct {
+	RegisterCompletion func(func(context.Context, Generation, error) error) `json:"-"`
+	InternalWorker     bool
+	ScheduledMessage   bool
 	ConsolidateMemory  bool
 	Quote              *ReviewedQuote
 	Attachments        []Attachment
@@ -266,6 +275,9 @@ func conversationProjectID(snapshot coordination.DataSnapshot, conversationID st
 }
 
 func (e *Engine) resolveRunProject(ctx context.Context, scope coordination.ExecutionScope, request Request, snapshot coordination.DataSnapshot) (string, []ProjectWorkspace, string, error) {
+	if worker, ok := ctx.Value(workerContextKey{}).(workerContext); ok {
+		return "", append([]ProjectWorkspace(nil), worker.Workspaces...), worker.PrimaryID, nil
+	}
 	conversationProject := conversationProjectID(snapshot, request.ConversationID)
 	projectID := strings.TrimSpace(request.ProjectID)
 	if projectID == "" {
@@ -316,7 +328,7 @@ func (e *Engine) Interrupt(space, device, request string) bool {
 	return exists
 }
 
-func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event) error) (Response, error) {
+func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event) error) (finalResponse Response, finalErr error) {
 	if e.coordination == nil || e.data == nil || e.model == nil {
 		return Response{}, errors.New("业务服务尚未初始化")
 	}
@@ -549,6 +561,26 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		return nil
 	}
 	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent}
+	_, inference.InternalWorker = ctx.Value(workerContextKey{}).(workerContext)
+	var completeTurn func(context.Context, Generation, error) error
+	inference.RegisterCompletion = func(finish func(context.Context, Generation, error) error) { completeTurn = finish }
+	defer func() {
+		if completeTurn == nil {
+			return
+		}
+		cause := finalErr
+		if current := context.Cause(ctx); current != nil {
+			cause = current
+		}
+		if cause == nil && (!finalResponse.Saved || finalResponse.Interrupted) {
+			cause = ErrInterrupted
+		}
+		finishContext, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer finishCancel()
+		if err := completeTurn(finishContext, finalResponse.Generation, cause); err != nil && finalErr == nil {
+			finalErr = err
+		}
+	}()
 	if err := emitCurrent(Event{Type: "started"}); err != nil {
 		cancel(err)
 	}

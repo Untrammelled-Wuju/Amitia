@@ -20,6 +20,7 @@ import {
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
+import { publishWorkbenchEvent } from "@/runtime/workbench-agent-event";
 
 interface ConversationSnapshot {
   version: number;
@@ -69,7 +70,6 @@ export function useConversationRuntime(
   let abortController: AbortController | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
-  let proactiveListener: ((event: Event) => void) | null = null;
   let snapshotEpoch = 0;
   let disposed = false;
 
@@ -261,6 +261,7 @@ export function useConversationRuntime(
     }
     if (result !== "applied") return;
     syncReducerState();
+    publishWorkbenchEvent(event, String(conversationId.value || ""));
     if (event.requestId) pendingAssistantRequests.delete(String(event.requestId));
 
     if (event.type === "approval.requested") {
@@ -500,36 +501,10 @@ export function useConversationRuntime(
     }
   }
 
-  function connectProactiveMessages() {
-    if (proactiveListener) return;
-    proactiveListener = (event) => {
-      if (owned.enabled.value) return;
-      const data = (event as CustomEvent<string>).detail;
-      if (!data) return;
-      try {
-        const message = normalizeRealtimeMessage(JSON.parse(data));
-        if (String(message?.conversationId || "") !== String(conversationId.value || "")) return;
-        const index = persistedMessages.value.findIndex((candidate) => String(candidate?.id || "") === String(message?.id || ""));
-        if (index >= 0) persistedMessages.value[index] = { ...persistedMessages.value[index], ...message };
-        else persistedMessages.value.push(message);
-        persistedMessages.value.sort(compareChatMessages);
-        scrollToBottom();
-      } catch {}
-    };
-    window.addEventListener("amitia:proactive-message", proactiveListener);
-  }
-
-  function disconnectProactiveMessages() {
-    if (!proactiveListener) return;
-    window.removeEventListener("amitia:proactive-message", proactiveListener);
-    proactiveListener = null;
-  }
-
   function cleanup() {
     disposed = true;
     automationStatus.value = null;
     disconnect();
-    disconnectProactiveMessages();
     if (renderTimer) {
       clearTimeout(renderTimer);
       renderTimer = null;
@@ -555,7 +530,5 @@ export function useConversationRuntime(
     clear,
     beginPendingAssistant,
     failPendingAssistant,
-    connectProactiveMessages,
-    disconnectProactiveMessages,
   };
 }

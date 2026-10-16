@@ -6,6 +6,13 @@ import (
 )
 
 func (c *MultiAgentCoordinator) resumeReservedWorker(ctx context.Context, ac *activeCoordination, assignment AgentAssignment) error {
+	return c.withOwnedExecution(ctx, ac, func(ctx context.Context) error { return c.resumeAuthorizedWorker(ctx, ac, assignment) })
+}
+
+func (c *MultiAgentCoordinator) resumeAuthorizedWorker(ctx context.Context, ac *activeCoordination, assignment AgentAssignment) error {
+	if err := c.requireDispatchableParent(ctx, ac); err != nil {
+		return err
+	}
 	reserved, ok := c.starter.(interface{ WorkerInteractionID(WorkerRunRequest) string })
 	if !ok || assignment.Status != AssignmentRunning || assignment.ChildInteractionID == "" {
 		return nil
@@ -18,7 +25,8 @@ func (c *MultiAgentCoordinator) resumeReservedWorker(ctx context.Context, ac *ac
 		return err
 	}
 	request := WorkerRunRequest{
-		CoordinationID: string(ac.id), AssignmentID: assignment.ID,
+		OwnedScope:     ac.ownedScope,
+		CoordinationID: string(ac.id), AssignmentID: assignment.ID, WorkerRole: assignment.WorkerRef.Role,
 		ParentInteractionID: ac.parentInteractionID, ParentGoalID: ac.parentGoalID,
 		ParentGoalRevision: ac.parentGoalRev, CharacterID: assignment.WorkerRef.CharacterID,
 		ConversationID: conversationID, SpaceID: spaceID, WorkspaceID: ac.workspaceID,

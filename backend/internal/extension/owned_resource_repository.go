@@ -42,6 +42,9 @@ func (r *Repository) RegisterOwnedSideEffects(ctx context.Context, scope Executi
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, effect := range effects {
+			if effect.Type == "schedule_create" {
+				continue
+			}
 			if !effect.Confirmed || strings.TrimSpace(effect.TargetID) == "" {
 				continue
 			}
@@ -52,27 +55,9 @@ func (r *Repository) RegisterOwnedSideEffects(ctx context.Context, scope Executi
 			}).Create(&record).Error; err != nil {
 				return err
 			}
-			if effect.Type == "schedule_create" && tx.Migrator().HasTable("schedules") && tx.Migrator().HasColumn("schedules", "source_extension_id") {
-				updates := map[string]interface{}{"source_extension_id": scope.ExtensionID, "source_extension_version": scope.ExtensionVersion, "source_run_id": scope.RunID, "owner_scope_type": owner.Type, "owner_scope_id": owner.ID}
-				if tx.Migrator().HasColumn("schedules", "source_type") {
-					updates["source_type"] = "extension"
-				}
-				if err := tx.Table("schedules").Where("id = ?", effect.TargetID).Updates(updates).Error; err != nil {
-					return err
-				}
-			}
 		}
 		return nil
 	})
-}
-
-func (r *Repository) CountOwnedResources(ctx context.Context, extensionID, scopeType, scopeID string) (int64, error) {
-	if !r.db.Migrator().HasTable(&ownedResourceRecord{}) {
-		return 0, nil
-	}
-	var count int64
-	err := r.db.WithContext(ctx).Model(&ownedResourceRecord{}).Where("extension_id = ? AND owner_scope_type = ? AND owner_scope_id = ? AND resource_type = ? AND status IN ?", extensionID, scopeType, scopeID, "schedule_create", []string{"active", "cleanup_failed"}).Count(&count).Error
-	return count, err
 }
 
 func (r *Repository) CleanupOwnedResources(ctx context.Context, extensionID, scopeType, scopeID string) error {
@@ -80,23 +65,14 @@ func (r *Repository) CleanupOwnedResources(ctx context.Context, extensionID, sco
 		return nil
 	}
 	var records []ownedResourceRecord
-	if err := r.db.WithContext(ctx).Where("extension_id = ? AND owner_scope_type = ? AND owner_scope_id = ? AND status IN ?", extensionID, scopeType, scopeID, []string{"active", "cleanup_failed"}).Find(&records).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("extension_id = ? AND owner_scope_type = ? AND owner_scope_id = ? AND resource_type <> ? AND status IN ?", extensionID, scopeType, scopeID, "schedule_create", []string{"active", "cleanup_failed"}).Find(&records).Error; err != nil {
 		return err
 	}
 	failures := []string{}
 	for _, record := range records {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			if record.ResourceType == "schedule_create" && tx.Migrator().HasTable("schedules") {
-				if err := tx.Table("schedules").Where("id = ?", record.ResourceID).Delete(nil).Error; err != nil {
-					return err
-				}
-			}
-			status := "retained"
-			if record.ResourceType == "schedule_create" {
-				status = "cleaned"
-			}
-			return tx.Model(&ownedResourceRecord{}).Where("id = ?", record.ID).Updates(map[string]interface{}{"status": status, "cleanup_attempts": gorm.Expr("cleanup_attempts + 1"), "last_error": "", "updated_at": now, "cleaned_at": now}).Error
+			return tx.Model(&ownedResourceRecord{}).Where("id = ?", record.ID).Updates(map[string]interface{}{"status": "retained", "cleanup_attempts": gorm.Expr("cleanup_attempts + 1"), "last_error": "", "updated_at": now, "cleaned_at": now}).Error
 		})
 		if err != nil {
 			failures = append(failures, record.ResourceType+":"+record.ResourceID)
@@ -114,7 +90,7 @@ func (r *Repository) RetryOwnedResourceCleanup(ctx context.Context) {
 		return
 	}
 	var records []ownedResourceRecord
-	if r.db.WithContext(ctx).Where("status = ? AND cleanup_attempts < ?", "cleanup_failed", 3).Find(&records).Error != nil {
+	if r.db.WithContext(ctx).Where("status = ? AND resource_type <> ? AND cleanup_attempts < ?", "cleanup_failed", "schedule_create", 3).Find(&records).Error != nil {
 		return
 	}
 	seen := map[string]bool{}
@@ -125,23 +101,5 @@ func (r *Repository) RetryOwnedResourceCleanup(ctx context.Context) {
 		}
 		seen[key] = true
 		_ = r.CleanupOwnedResources(ctx, record.ExtensionID, record.OwnerScopeType, record.OwnerScopeID)
-	}
-}
-
-func (r *Repository) CompensateUnownedSideEffects(ctx context.Context, scope ExecutionScope, effects []SideEffectRecord) {
-	for _, effect := range effects {
-		if !effect.Confirmed || effect.Type != "schedule_create" || strings.TrimSpace(effect.TargetID) == "" {
-			continue
-		}
-		if r.db.WithContext(ctx).Table("schedules").Where("id = ?", effect.TargetID).Delete(nil).Error == nil {
-			continue
-		}
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		owner := PermissionScope{Type: ScopeGlobal}
-		if scope.CharacterID != "" {
-			owner = PermissionScope{Type: ScopeCharacter, ID: scope.CharacterID}
-		}
-		record := ownedResourceRecord{ID: uuid.NewString(), ExtensionID: scope.ExtensionID, ExtensionVersion: scope.ExtensionVersion, ResourceType: effect.Type, ResourceID: effect.TargetID, OwnerScopeType: string(owner.Type), OwnerScopeID: owner.ID, SourceRunID: scope.RunID, Status: "cleanup_failed", CleanupAttempts: 1, LastError: ErrPackageUninstallFailed, CreatedAt: now, UpdatedAt: now}
-		_ = r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "extension_id"}, {Name: "resource_type"}, {Name: "resource_id"}}, DoUpdates: clause.Assignments(map[string]interface{}{"status": "cleanup_failed", "cleanup_attempts": gorm.Expr("cleanup_attempts + 1"), "last_error": ErrPackageUninstallFailed, "updated_at": now})}).Create(&record).Error
 	}
 }

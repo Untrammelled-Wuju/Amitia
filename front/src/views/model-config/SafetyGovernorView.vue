@@ -83,7 +83,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="switch-row">
             <el-switch v-model="config.preventSensitiveProactiveMention" />
             <span class="switch-hint"
-              >主动消息中不提及用户标记为敏感或禁止谈论的记忆</span
+              >主动任务中不提及用户标记为敏感或禁止谈论的记忆</span
             >
           </div>
         </el-form-item>

@@ -1722,6 +1722,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: "schedule not found"},
 					}, nil
 				}
+				if scheduleDef.Target.Type == schedule.TargetTypeHostWorkload {
+					return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "业务任务须通过统一任务接口管理"}}, nil
+				}
 				if scheduleDef.ExtensionID != string(req.RuntimeIdentity.ExtensionID) {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
@@ -1761,9 +1764,15 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
 					}, nil
 				}
+				technical := make([]*schedule.ScheduleContributionDefinition, 0, len(defs))
+				for _, definition := range defs {
+					if definition.Target.Type != schedule.TargetTypeHostWorkload {
+						technical = append(technical, definition)
+					}
+				}
 				output, _ := json.Marshal(map[string]any{
-					"schedules": defs,
-					"total":     len(defs),
+					"schedules": technical,
+					"total":     len(technical),
 				})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,

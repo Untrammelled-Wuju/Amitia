@@ -14,11 +14,14 @@ type ScheduleScanner struct {
 	calc    *ScheduleCalculator
 	planner *TriggerPlanner
 
-	mu      sync.Mutex
-	ctx     context.Context
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
-	running bool
+	mu                 sync.Mutex
+	ctx                context.Context
+	cancel             context.CancelFunc
+	wg                 sync.WaitGroup
+	running            bool
+	maintenance        func(context.Context) error
+	maintenanceLast    time.Time
+	maintenanceRunning bool
 }
 
 func NewScheduleScanner(store ScheduleStore, clock Clock, config ScheduleConfig, calc *ScheduleCalculator, planner *TriggerPlanner) *ScheduleScanner {
@@ -76,21 +79,41 @@ func (s *ScheduleScanner) loop() {
 }
 
 func (s *ScheduleScanner) scanOnce() {
-	now := s.clock.Now()
-	states, err := s.store.ListDueStates(s.ctx, now, s.config.ScanBatchSize)
-	if err != nil {
-		return
-	}
-	for _, state := range states {
-		if state == nil {
-			continue
-		}
-		s.processDueState(state)
-	}
+	_, _ = s.ScanOnce(s.ctx)
 }
 
-func (s *ScheduleScanner) processDueState(state *ScheduleState) {
-	def, err := s.store.GetDefinition(s.ctx, state.ScheduleID)
+func (s *ScheduleScanner) SetMaintenance(maintenance func(context.Context) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.maintenance = maintenance
+	s.maintenanceLast = time.Time{}
+}
+
+func (s *ScheduleScanner) runMaintenance(ctx context.Context) error {
+	now := s.clock.Now()
+	s.mu.Lock()
+	if s.maintenance == nil || s.maintenanceRunning || !s.maintenanceLast.IsZero() && now.Before(s.maintenanceLast.Add(time.Hour)) {
+		s.mu.Unlock()
+		return nil
+	}
+	maintenance := s.maintenance
+	s.maintenanceRunning = true
+	s.mu.Unlock()
+	err := maintenance(ctx)
+	s.mu.Lock()
+	s.maintenanceRunning = false
+	if err == nil {
+		s.maintenanceLast = now
+	}
+	s.mu.Unlock()
+	return err
+}
+
+func (s *ScheduleScanner) processDueState(ctx context.Context, state *ScheduleState) {
+	if !state.Enabled || state.Paused || state.Status != DefinitionStatusEnabled {
+		return
+	}
+	def, err := s.store.GetDefinition(ctx, state.ScheduleID)
 	if err != nil || def == nil {
 		return
 	}
@@ -98,56 +121,47 @@ func (s *ScheduleScanner) processDueState(state *ScheduleState) {
 		return
 	}
 	if def.EndAt != nil && s.clock.Now().After(*def.EndAt) {
-		s.handleExpired(state)
-		return
-	}
-	result, err := s.calc.CalculateNext(def, state)
-	if err != nil {
-		return
-	}
-	if result == nil || result.NextScheduledAt == nil {
-		s.handleExpired(state)
+		s.handleExpired(ctx, state)
 		return
 	}
 	now := s.clock.Now()
-	if result.NextScheduledAt.After(now) {
-		s.updateNextRun(state, result)
+	if state.NextScheduledAt == nil || state.NextScheduledAt.After(now) {
 		return
 	}
-	trigger, err := s.planner.PlanTrigger(def, state, false)
+	if state.NextEffectiveAt != nil && state.NextEffectiveAt.After(now) {
+		return
+	}
+	trigger, err := s.planner.PlanTriggerContext(ctx, def, state, false)
 	if err != nil {
 		return
 	}
 	if trigger == nil {
 		nextResult, err := s.calc.CalculateNext(def, state)
 		if err == nil && nextResult != nil {
-			s.updateNextRun(state, nextResult)
+			s.updateNextRun(ctx, state, nextResult)
 		}
 		return
 	}
 }
 
-func (s *ScheduleScanner) handleExpired(state *ScheduleState) {
+func (s *ScheduleScanner) handleExpired(ctx context.Context, state *ScheduleState) {
 	now := s.clock.Now()
 	state.Status = DefinitionStatusExpired
 	state.NextScheduledAt = nil
 	state.NextEffectiveAt = nil
 	state.UpdatedAt = now
-	_ = s.store.PutState(s.ctx, state)
+	_ = s.store.PutState(ctx, state)
 }
 
-func (s *ScheduleScanner) updateNextRun(state *ScheduleState, result *NextRunResult) {
+func (s *ScheduleScanner) updateNextRun(ctx context.Context, state *ScheduleState, result *NextRunResult) {
 	now := s.clock.Now()
 	state.NextScheduledAt = result.NextScheduledAt
 	state.NextEffectiveAt = result.NextEffectiveAt
 	state.UpdatedAt = now
-	_ = s.store.PutState(s.ctx, state)
+	_ = s.store.PutState(ctx, state)
 }
 
 func (s *ScheduleScanner) ScanOnce(ctx context.Context) (ScanResult, error) {
-	prevCtx := s.ctx
-	s.ctx = ctx
-	defer func() { s.ctx = prevCtx }()
 	now := s.clock.Now()
 	states, err := s.store.ListDueStates(ctx, now, s.config.ScanBatchSize)
 	if err != nil {
@@ -158,9 +172,9 @@ func (s *ScheduleScanner) ScanOnce(ctx context.Context) (ScanResult, error) {
 		if state == nil {
 			continue
 		}
-		s.processDueState(state)
+		s.processDueState(ctx, state)
 	}
-	return result, nil
+	return result, s.runMaintenance(ctx)
 }
 
 type TriggerPlanner struct {
@@ -186,23 +200,51 @@ func NewTriggerPlanner(store ScheduleStore, clock Clock, config ScheduleConfig, 
 }
 
 func (p *TriggerPlanner) PlanTrigger(def *ScheduleContributionDefinition, state *ScheduleState, manual bool) (*ScheduleTriggerRecord, error) {
-	now := p.clock.Now()
+	return p.PlanTriggerContext(p.ctx(), def, state, manual)
+}
 
-	result, err := p.calc.CalculateNext(def, state)
-	if err != nil {
-		return nil, err
+func (p *TriggerPlanner) PlanTriggerContext(ctx context.Context, def *ScheduleContributionDefinition, state *ScheduleState, manual bool) (*ScheduleTriggerRecord, error) {
+	var trigger *ScheduleTriggerRecord
+	err := withScheduleTransaction(ctx, p.store, func(ctx context.Context) error {
+		fresh, err := p.store.GetState(ctx, state.ScheduleID)
+		if err != nil {
+			return err
+		}
+		if fresh == nil || fresh.Generation != state.Generation {
+			return ErrGenerationMismatch
+		}
+		current, err := p.store.GetDefinition(ctx, def.ScheduleID)
+		if err != nil {
+			return err
+		}
+		trigger, err = p.planTrigger(ctx, current, fresh, manual)
+		return err
+	})
+	return trigger, err
+}
+
+func (p *TriggerPlanner) planTrigger(ctx context.Context, def *ScheduleContributionDefinition, state *ScheduleState, manual bool) (*ScheduleTriggerRecord, error) {
+	now := p.clock.Now()
+	if !state.Enabled || state.Paused || state.Status != DefinitionStatusEnabled {
+		return nil, ErrScheduleNotEnabled
 	}
-	if result == nil || result.NextScheduledAt == nil {
-		if !manual {
-			return nil, nil
+	occurrences := 0
+	if !manual && def.Trigger.MaxOccurrences > 0 {
+		var err error
+		occurrences, err = countScheduledTriggers(ctx, p.store, def.ScheduleID)
+		if err != nil {
+			return nil, err
+		}
+		if occurrences >= def.Trigger.MaxOccurrences {
+			return nil, ErrScheduleExpired
 		}
 	}
 
 	var scheduledAt time.Time
 	if manual {
 		scheduledAt = now
-	} else if result != nil && result.NextScheduledAt != nil {
-		scheduledAt = *result.NextScheduledAt
+	} else if state.NextScheduledAt != nil {
+		scheduledAt = *state.NextScheduledAt
 	} else {
 		return nil, nil
 	}
@@ -213,19 +255,19 @@ func (p *TriggerPlanner) PlanTrigger(def *ScheduleContributionDefinition, state 
 
 	idempotencyKey := GenerateIdempotencyKey(def.ScheduleID, scheduledAt, state.Generation)
 
-	existing, err := p.store.GetTriggerByIdempotencyKey(p.ctx(), idempotencyKey)
+	existing, err := p.store.GetTriggerByIdempotencyKey(ctx, idempotencyKey)
 	if err == nil && existing != nil {
 		return nil, ErrIdempotencyConflict
 	}
 
-	overlapDecision, err := p.checkOverlap(def, state)
+	overlapDecision, err := p.checkOverlapContext(ctx, def, state)
 	if err != nil {
 		return nil, err
 	}
 
 	var effectiveAt time.Time
-	if result != nil && result.NextEffectiveAt != nil && !manual {
-		effectiveAt = *result.NextEffectiveAt
+	if state.NextEffectiveAt != nil && !manual {
+		effectiveAt = *state.NextEffectiveAt
 	} else {
 		effectiveAt = scheduledAt
 	}
@@ -241,12 +283,11 @@ func (p *TriggerPlanner) PlanTrigger(def *ScheduleContributionDefinition, state 
 		Generation:      state.Generation,
 		Manual:          manual,
 		OverlapDecision: overlapDecision,
-		DSTDecision:     result.DSTDecision,
 		CreatedAt:       now.UTC(),
 		UpdatedAt:       now.UTC(),
 	}
 
-	created, err := createTriggerIfAbsent(p.ctx(), p.store, trigger)
+	created, err := createTriggerIfAbsent(ctx, p.store, trigger)
 	if err != nil {
 		return nil, err
 	}
@@ -255,11 +296,25 @@ func (p *TriggerPlanner) PlanTrigger(def *ScheduleContributionDefinition, state 
 	}
 
 	newState := *state
-	newState.LastScheduledAt = &scheduledAt
-	newState.NextScheduledAt = nil
-	newState.NextEffectiveAt = nil
+	if !manual {
+		newState.LastScheduledAt = &scheduledAt
+		newState.NextScheduledAt = nil
+		newState.NextEffectiveAt = nil
+		if def.Trigger.Type != TriggerTypeOneShot && (def.Trigger.MaxOccurrences == 0 || occurrences+1 < def.Trigger.MaxOccurrences) {
+			result, err := p.calc.CalculateNext(def, &newState)
+			if err != nil {
+				return nil, err
+			}
+			if result != nil {
+				newState.NextScheduledAt = result.NextScheduledAt
+				newState.NextEffectiveAt = result.NextEffectiveAt
+			}
+		}
+	}
 	newState.UpdatedAt = now.UTC()
-	_ = p.store.PutState(p.ctx(), &newState)
+	if err := p.store.PutState(ctx, &newState); err != nil {
+		return nil, err
+	}
 
 	return trigger, nil
 }
@@ -269,10 +324,14 @@ func (p *TriggerPlanner) ctx() context.Context {
 }
 
 func (p *TriggerPlanner) checkOverlap(def *ScheduleContributionDefinition, state *ScheduleState) (string, error) {
+	return p.checkOverlapContext(p.ctx(), def, state)
+}
+
+func (p *TriggerPlanner) checkOverlapContext(ctx context.Context, def *ScheduleContributionDefinition, state *ScheduleState) (string, error) {
 	if def.OverlapPolicy.Policy == OverlapPolicyAllow {
 		return "allowed", nil
 	}
-	activeCount, err := p.store.CountActiveRuns(p.ctx(), def.ScheduleID)
+	activeCount, err := p.store.CountActiveRuns(ctx, def.ScheduleID)
 	if err != nil {
 		return "", err
 	}
@@ -287,7 +346,7 @@ func (p *TriggerPlanner) checkOverlap(def *ScheduleContributionDefinition, state
 	case OverlapPolicyQueueOne:
 		return "queued_one", nil
 	case OverlapPolicyReplace:
-		runs, err := p.store.ListRunsBySchedule(p.ctx(), def.ScheduleID, 10)
+		runs, err := p.store.ListRunsBySchedule(ctx, def.ScheduleID, 10)
 		if err != nil {
 			return "", err
 		}

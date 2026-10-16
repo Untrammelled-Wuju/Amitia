@@ -81,6 +81,12 @@ func setupToolTestDB(t *testing.T) (*gorm.DB, *gorm.DB, func()) {
 func TestConcurrentSchedulesKeepChannelContext(t *testing.T) {
 	gormDB, _, cleanup := setupToolTestDB(t)
 	t.Cleanup(cleanup)
+	var received sync.Map
+	SetScheduleCreator(func(_ context.Context, execution ToolExecutionContext, _ map[string]interface{}) (string, error) {
+		received.Store(execution.Channel, execution.CharacterID)
+		return "reminder-" + execution.CharacterID, nil
+	})
+	t.Cleanup(func() { SetScheduleCreator(nil) })
 	var wg sync.WaitGroup
 	for _, item := range []struct {
 		characterID string
@@ -113,7 +119,9 @@ func TestConcurrentSchedulesKeepChannelContext(t *testing.T) {
 	if err := db.QueryRow("SELECT COUNT(*) FROM schedules WHERE channel = 'qq'").Scan(&qqCount); err != nil {
 		t.Fatal(err)
 	}
-	if wechatCount != 1 || qqCount != 1 {
+	wechatRole, hasWechat := received.Load("wechat")
+	qqRole, hasQQ := received.Load("qq")
+	if wechatCount != 0 || qqCount != 0 || !hasWechat || !hasQQ || wechatRole != "char-a" || qqRole != "char-b" {
 		t.Fatalf("schedule channel context not preserved: wechat=%d qq=%d", wechatCount, qqCount)
 	}
 }
@@ -256,6 +264,10 @@ func TestExecuteMemoryWithContextInheritsCancelledContext(t *testing.T) {
 }
 
 func TestToolResultAuditTablesAreWritten(t *testing.T) {
+	SetScheduleCreator(func(_ context.Context, execution ToolExecutionContext, _ map[string]interface{}) (string, error) {
+		return "reminder-" + execution.RequestID, nil
+	})
+	t.Cleanup(func() { SetScheduleCreator(nil) })
 	gormDB, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)

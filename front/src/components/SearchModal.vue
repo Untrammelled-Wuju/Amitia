@@ -94,7 +94,7 @@ const pageItems = [
     to: "/settings/data",
     icon: DataAnalysis,
   },
-  { label: "日程提醒", desc: "主动陪伴提醒", to: "/reminders", icon: Clock },
+  { label: "主动任务", desc: "安排角色定时发送消息", to: "/reminders", icon: Clock },
   {
     label: "角色管理",
     desc: "AI 角色编辑",

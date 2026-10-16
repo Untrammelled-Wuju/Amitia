@@ -6,6 +6,6 @@
   "scripts": {
     "build": "node scripts/build-package.mjs",
     "verify": "node scripts/verify-package.mjs",
-    "test": "node scripts/test-runtime.mjs"
+    "test": "node scripts/test-runtime.mjs && node scripts/test-ui-contract.mjs"
   }
 }

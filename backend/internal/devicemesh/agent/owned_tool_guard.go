@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -11,9 +12,23 @@ import (
 
 type RuntimeExecutionGuard func(context.Context, protocol.RuntimeInvokePayload, func(context.Context) (*protocol.RuntimeResultPayload, error)) (*protocol.RuntimeResultPayload, error)
 
+const RemoteBrowserReadHandler = "workbench.browser.observe"
+
 func NewOwnedToolGuard(db *sql.DB, dataDir string, roleGuards ...coordination.SourceRoleExecutionGuard) RuntimeExecutionGuard {
 	credentials := NewCredentialStore(dataDir)
 	return func(ctx context.Context, invocation protocol.RuntimeInvokePayload, run func(context.Context) (*protocol.RuntimeResultPayload, error)) (*protocol.RuntimeResultPayload, error) {
+		if invocation.Handler == RemoteBrowserReadHandler && invocation.RuntimeType == "browser" && invocation.AuthorityCallID == "" && len(invocation.OwnedExecutionScope) == 0 && invocation.InvocationID != "" {
+			credential, err := credentials.LoadCredential()
+			if err != nil || credential == nil || invocation.SpaceID != credential.SpaceID || invocation.DeviceID != credential.DeviceID || invocation.RuntimeID != credential.RuntimeID || !time.Now().Before(credential.ExpiresAt) {
+				return nil, coordination.ErrWrongOwner
+			}
+			result, executeErr := run(ctx)
+			refreshed, credentialErr := credentials.LoadCredential()
+			if credentialErr != nil || refreshed == nil || refreshed.CredentialID != credential.CredentialID || refreshed.Credential != credential.Credential || refreshed.SpaceID != invocation.SpaceID || refreshed.DeviceID != invocation.DeviceID || refreshed.RuntimeID != invocation.RuntimeID || !time.Now().Before(refreshed.ExpiresAt) {
+				return nil, coordination.ErrWrongOwner
+			}
+			return result, executeErr
+		}
 		var scope coordination.ExecutionScope
 		if db == nil || invocation.AuthorityCallID == "" || len(invocation.AuthorityCallID) > 512 || len(invocation.OwnedExecutionScope) > 64<<10 || json.Unmarshal(invocation.OwnedExecutionScope, &scope) != nil {
 			return nil, coordination.ErrWrongOwner

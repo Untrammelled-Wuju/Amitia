@@ -1,5 +1,6 @@
 import { AmitiaError, TimeoutError, CancelledError, DependencyUnavailableError, RuntimeUnavailableError } from "./errors";
 import type { RuntimeScope } from "./runtime";
+import { createScheduledTaskClient, type ScheduledTaskClient } from "./scheduled-tasks";
 
 export interface HostToolCallRequest {
   readonly toolId: string;
@@ -60,6 +61,8 @@ export interface HostDesktopClipboardRequest {
 }
 
 export interface HostClient {
+	readonly reminders: ScheduledTaskClient;
+	readonly proactiveTasks: ScheduledTaskClient;
   readonly tools: HostToolClient;
   readonly network: HostNetworkClient;
   readonly messages: HostMessageClient;
@@ -151,6 +154,7 @@ export interface HostClipboardClient {
 }
 
 export interface HostBridgeLike {
+	call?(method: string,input: unknown): Promise<unknown>;
   invokeTool(request: HostToolCallRequest): Promise<HostToolCallResponse>;
   listTools?(): Promise<HostToolDescriptor[]>;
   networkRequest(request: HostNetworkRequest): Promise<HostNetworkResponse>;
@@ -167,6 +171,8 @@ export interface HostBridgeLike {
 }
 
 export class DefaultHostClient implements HostClient {
+	readonly reminders: ScheduledTaskClient;
+	readonly proactiveTasks: ScheduledTaskClient;
   readonly resources?: HostResourceClient;
   readonly vectors?: HostVectorClient;
 
@@ -216,6 +222,12 @@ export class DefaultHostClient implements HostClient {
     _scope: RuntimeScope,
     _traceId: string,
   ) {
+	const transport = {call: async (method: string,input: unknown): Promise<unknown> => {
+		if (!this.bridge.call) throw new Error("统一任务 Host API 传输未接通");
+		return this.bridge.call(method,input);
+	}};
+	this.reminders = createScheduledTaskClient(transport,"reminder");
+	this.proactiveTasks = createScheduledTaskClient(transport,"proactive_task");
     if (this.bridge.resourceLink) {
       this.resources = {
         link: async (request) => this.bridge.resourceLink!(request),

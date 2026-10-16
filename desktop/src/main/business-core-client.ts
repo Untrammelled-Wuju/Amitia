@@ -1,5 +1,5 @@
 import { getDesktopAuthHeaders, getLocalAdminHeaders } from "./backend-session-client";
-import { getMeshCloudAuth } from "./device-mesh/local-agent-client";
+import { getMeshCloudAuth, getMeshIdentity } from "./device-mesh/local-agent-client";
 
 export interface BusinessCoreProbeResult {
   reachable: boolean;
@@ -34,7 +34,8 @@ export class BusinessCoreClient {
       };
     }
     try {
-      return getDesktopAuthHeaders();
+      const identity = await getMeshIdentity();
+      return { ...getDesktopAuthHeaders(), ...(identity?.deviceId ? { 'X-Amitia-Device-ID': identity.deviceId } : {}) };
     } catch {
       return {};
     }

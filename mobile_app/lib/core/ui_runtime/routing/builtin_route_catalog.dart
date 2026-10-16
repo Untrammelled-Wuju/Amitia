@@ -234,8 +234,8 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const PluginUnavailablePage(
-        title: '主动消息',
-        description: '请安装并启用主动消息插件后配置规则、调度和运行历史。',
+        title: '主动任务',
+        description: '请安装并启用主动任务插件后配置规则、调度和运行历史。',
         fallbackRoute: AppRoutes.characters,
       ),
     ),

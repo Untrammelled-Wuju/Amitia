@@ -75,6 +75,9 @@ import (
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/vision"
+	"github.com/u-ai/backend/internal/workbenchbrowser"
+	"github.com/u-ai/backend/internal/workbenchtasks"
+	"github.com/u-ai/backend/internal/workbenchterminal"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
@@ -566,7 +569,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
-		reminder.RegisterRouter(apiGroup, ctx.DB, services.Chat)
+		reminderDeviceID := ""
+		if services.DeviceMesh != nil {
+			reminderDeviceID = services.DeviceMesh.LocalDeviceID
+		}
+		reminder.RegisterRouter(apiGroup, services.Reminders, reminderDeviceID)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		channelAccess := system.ChannelAvailabilityFunc(func(channelID string) bool {
 			if services.KernelContainer == nil || services.KernelContainer.ChannelResolver == nil {
@@ -645,8 +652,19 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.Artifact != nil && services.Artifact.Handler != nil {
 			services.Artifact.Handler.Register(apiGroup)
 		}
+		if services.Browser != nil && services.RuntimeProfile != runtimeprofile.ProfileCloudCore {
+			workbenchbrowser.NewHandler(services.Browser).RegisterRoutes(apiGroup)
+		}
+		if services.WorkbenchTaskTracker != nil {
+			workbenchtasks.NewHandler(services.WorkbenchTaskTracker, services.MultiAgentCoordinator).WithConversationAccess(workbenchConversationAccess(services, spaceID)).RegisterRoutes(apiGroup)
+		}
 		if services.WorkspaceService != nil {
 			workspace.NewHandler(services.WorkspaceService).RegisterRoutes(apiGroup)
+			if services.RuntimeProfile != runtimeprofile.ProfileCloudCore {
+				terminalHandler := workbenchterminal.NewHandler(services.WorkspaceService, workbenchTerminalTaskVerifier(services.WorkspaceGitHandler))
+				terminalHandler.RegisterRoutes(apiGroup)
+				terminalHandler.RegisterStreamRoute(r)
+			}
 		}
 		if services.WorkspaceGitHandler != nil {
 			services.WorkspaceGitHandler.RegisterRoutes(apiGroup)
@@ -672,6 +690,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			apiGroup.Any("/wasm/*wasmPath", gin.WrapH(wasmMux))
 		}
 		registerCloudGameCenterGateway(apiGroup, services)
+		registerCloudWorkbenchBrowserGateway(apiGroup, services)
 		if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
 			log.Info("[GameCenter] GameHost detected, registering game-center routes")
 			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)

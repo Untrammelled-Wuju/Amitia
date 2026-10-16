@@ -38,6 +38,8 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/local/workflow-runs",
   "/api/local/workspaces",
   "/api/workspaces",
+  "/api/workbench/browser",
+  "/api/workbench/terminal",
   "/api/storage",
   "/media",
   "/api/artifacts/v1/previews",

@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/terminal-task-receipts-v1.schema.json",
+  "title": "Workbench Task Terminal Receipts V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taskId",
+    "conversationId",
+    "receipts",
+    "verification",
+    "summary"
+  ],
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "conversationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "verification": {
+      "const": "terminal-metadata-only-not-test-evidence"
+    },
+    "receipts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessionId",
+          "taskId",
+          "conversationId",
+          "workspaceUri",
+          "mode",
+          "startedAt",
+          "updatedAt",
+          "state",
+          "latestSequence",
+          "evidenceKind"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "conversationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "workspaceUri": {
+            "type": "string",
+            "pattern": "^amitia://workspace/@[A-Za-z0-9_-]{1,128}/$"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "pty",
+              "conpty",
+              "pipe"
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "exited",
+              "closed",
+              "revoked",
+              "interrupted"
+            ]
+          },
+          "exitCode": {
+            "type": "integer"
+          },
+          "latestSequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "evidenceKind": {
+            "const": "terminal-lifecycle-metadata-not-test-proof"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "running",
+        "exited",
+        "interrupted",
+        "revoked",
+        "closed",
+        "latestState",
+        "verificationKind"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        },
+        "running": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "interrupted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revoked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "closed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "latestState": {
+          "enum": [
+            "none",
+            "running",
+            "exited",
+            "interrupted",
+            "revoked",
+            "closed"
+          ]
+        },
+        "latestSessionId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "lastExitCode": {
+          "type": "integer"
+        },
+        "verificationKind": {
+          "const": "lifecycle-only-not-test-proof"
+        }
+      }
+    }
+  }
+}

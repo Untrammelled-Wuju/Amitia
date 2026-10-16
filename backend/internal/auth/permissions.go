@@ -4,6 +4,7 @@ package auth
 
 const (
 	PermSystemAdmin              = "system.admin"
+	PermWorkbenchBrowserControl  = "workbench.browser.control"
 	PermDesktopPetRead           = "desktop_pet.read"
 	PermDesktopPetWrite          = "desktop_pet.write"
 	PermDesktopPetGenerate       = "desktop_pet.generate"
@@ -38,7 +39,7 @@ func StandardPermissions() []string {
 // by the Capability Gateway and permission broker at invocation time.
 func OwnerDevicePermissions() []string {
 	return append(StandardPermissions(),
-		PermSystemAdmin,
+		PermSystemAdmin, PermWorkbenchBrowserControl,
 		PermDesktopPetBehaviorAdmin,
 		PermDesktopPetMigrate,
 		PermDesktopPetRepair,

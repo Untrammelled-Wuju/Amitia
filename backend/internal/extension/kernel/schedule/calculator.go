@@ -3,11 +3,13 @@ package schedule
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata"
 )
 
 type ScheduleCalculator struct {
@@ -23,15 +25,6 @@ func NewScheduleCalculator(clock Clock) *ScheduleCalculator {
 
 func (c *ScheduleCalculator) CalculateNext(def *ScheduleContributionDefinition, state *ScheduleState) (*NextRunResult, error) {
 	now := c.clock.Now()
-
-	if def.StartAt != nil && now.Before(*def.StartAt) {
-		next := *def.StartAt
-		return &NextRunResult{
-			NextScheduledAt:   &next,
-			NextEffectiveAt:   &next,
-			CalculationReason: "before_start_at",
-		}, nil
-	}
 
 	if def.EndAt != nil && now.After(*def.EndAt) {
 		return &NextRunResult{
@@ -53,9 +46,9 @@ func (c *ScheduleCalculator) CalculateNext(def *ScheduleContributionDefinition, 
 
 	var baseTime time.Time
 	if lastScheduledAt != nil {
-		baseTime = lastScheduledAt.Add(time.Minute)
+		baseTime = *lastScheduledAt
 	} else if def.StartAt != nil {
-		baseTime = *def.StartAt
+		baseTime = def.StartAt.Add(-time.Nanosecond)
 	} else {
 		baseTime = now
 	}
@@ -70,6 +63,11 @@ func (c *ScheduleCalculator) CalculateNext(def *ScheduleContributionDefinition, 
 		nextScheduled, dstDecision, err = c.nextInterval(def, loc, baseTime, now)
 	case TriggerTypeOneShot:
 		nextScheduled, dstDecision, err = c.nextOneShot(def, loc, now)
+		if state != nil && state.LastScheduledAt != nil && def.Trigger.OneShot != nil && !state.LastScheduledAt.Before(def.Trigger.OneShot.RunAt) {
+			nextScheduled = nil
+		}
+	case TriggerTypeCalendar:
+		nextScheduled, dstDecision, err = c.nextCalendar(def, loc, baseTime, now)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrInvalidTriggerType, def.Trigger.Type)
 	}
@@ -95,13 +93,20 @@ func (c *ScheduleCalculator) CalculateNext(def *ScheduleContributionDefinition, 
 			DSTDecision:       dstDecision,
 		}, nil
 	}
+	if def.StartAt != nil && nextScheduled.Before(*def.StartAt) {
+		return nil, fmt.Errorf("%w: occurrence precedes start", ErrInvalidOneShotTime)
+	}
 
 	nextEffective := c.applyJitter(def, *nextScheduled)
+	reason := "calculated"
+	if def.StartAt != nil && now.Before(*def.StartAt) {
+		reason = "before_start_at"
+	}
 
 	return &NextRunResult{
 		NextScheduledAt:   nextScheduled,
 		NextEffectiveAt:   &nextEffective,
-		CalculationReason: "calculated",
+		CalculationReason: reason,
 		DSTDecision:       dstDecision,
 	}, nil
 }
@@ -165,6 +170,10 @@ func (c *ScheduleCalculator) nextInterval(def *ScheduleContributionDefinition, l
 		} else {
 			anchor = now
 		}
+	}
+	if anchor.After(now) && !baseTime.After(anchor) {
+		utcAnchor := anchor.UTC()
+		return &utcAnchor, "no_dst_transition", nil
 	}
 
 	var base time.Time
@@ -256,25 +265,27 @@ func GenerateIdempotencyKey(scheduleID string, scheduledAt time.Time, generation
 }
 
 func GenerateDefinitionHash(def *ScheduleContributionDefinition) string {
-	h := sha256.New()
-	h.Write([]byte(def.ScheduleID))
-	h.Write([]byte(def.Name))
-	h.Write([]byte(def.Trigger.Type))
-	if def.Trigger.Cron != nil {
-		h.Write([]byte(def.Trigger.Cron.Expression))
+	copy := *def
+	copy.DefinitionHash = ""
+	copy.EnabledByDefault = false
+	if copy.Target.Type == TargetTypeHostWorkload {
+		var input map[string]json.RawMessage
+		if json.Unmarshal(copy.Target.InputTemplate, &input) == nil {
+			delete(input, "archiveHistory")
+			copy.Target.InputTemplate, _ = json.Marshal(input)
+		}
 	}
-	if def.Trigger.Interval != nil {
-		h.Write([]byte(fmt.Sprintf("%d", def.Trigger.Interval.Interval)))
-		h.Write([]byte(def.Trigger.Interval.AnchorAt.Format(time.RFC3339Nano)))
+	if copy.StartAt != nil {
+		utc := copy.StartAt.UTC()
+		copy.StartAt = &utc
 	}
-	if def.Trigger.OneShot != nil {
-		h.Write([]byte(def.Trigger.OneShot.RunAt.Format(time.RFC3339Nano)))
+	if copy.EndAt != nil {
+		utc := copy.EndAt.UTC()
+		copy.EndAt = &utc
 	}
-	h.Write([]byte(def.Target.Type))
-	h.Write([]byte(def.Target.TargetID))
-	h.Write([]byte(def.Timezone))
-	h.Write([]byte(def.Version))
-	return hex.EncodeToString(h.Sum(nil))[:32]
+	encoded, _ := json.Marshal(copy)
+	hash := sha256.Sum256(encoded)
+	return hex.EncodeToString(hash[:])[:32]
 }
 
 type cronSchedule struct {

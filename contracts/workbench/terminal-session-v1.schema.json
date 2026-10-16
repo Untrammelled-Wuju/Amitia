@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workbench Terminal Session V1",
+  "type": "object",
+  "required": [
+    "id",
+    "mode",
+    "running",
+    "exitCode",
+    "data",
+    "cursor",
+    "truncated"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "pty",
+        "conpty",
+        "pipe"
+      ]
+    },
+    "running": {
+      "type": "boolean"
+    },
+    "exitCode": {
+      "type": "integer",
+      "minimum": -1
+    },
+    "data": {
+      "type": "string",
+      "contentEncoding": "base64"
+    },
+    "cursor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "taskId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "workspaceUri": {
+      "type": "string",
+      "pattern": "^amitia://workspace/@[A-Za-z0-9_-]{1,128}/$"
+    }
+  },
+  "additionalProperties": false
+}

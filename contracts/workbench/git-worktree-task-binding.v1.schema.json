@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://u-ai.dev/contracts/workbench/git-worktree-task-binding.v1.schema.json",
+  "title": "U-Ai Worktree Task Binding V1",
+  "description": "Task correlation carried by the managed Worktree API. Identifiers are not access tokens; callers are separately authenticated by the workspace API.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceUri", "id", "taskId", "conversationId"],
+  "properties": {
+    "workspaceUri": {"type": "string", "pattern": "^amitia://workspace/@", "maxLength": 4096},
+    "id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "taskId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "conversationId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
+  }
+}

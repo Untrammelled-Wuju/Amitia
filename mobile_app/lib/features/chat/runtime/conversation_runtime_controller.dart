@@ -15,6 +15,7 @@ import '../../../core/settings/chat_permission_preferences.dart';
 import '../../../shared/models/models.dart';
 import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
 import 'agent_event_reducer.dart';
+import '../../workbench/runtime/workbench_mobile_events.dart';
 import 'automation_status.dart';
 import 'conversation_message_ledger.dart';
 
@@ -630,6 +631,8 @@ class ConversationRuntimeController extends ChangeNotifier {
             ),
           );
           if (wasDraft) _conversationUpdateEpoch++;
+        } else if (type == 'task') {
+          if (accepted) WorkbenchMobileEvents.taskChanged(event, coreId: _conversationCoreId, characterId: _characterId ?? '', conversationId: _conversationId ?? '');
         } else if (type == 'transcribed') {
           final current = _messages.findById(
             pending.id,
@@ -858,6 +861,9 @@ class ConversationRuntimeController extends ChangeNotifier {
   void _handleAppliedEvent(AgentUIEvent event) {
     _automationStateUncertain = false;
     final type = event.type;
+    if (type == 'workbench.open') {
+      unawaited(WorkbenchMobileEvents.ingest(event));
+    }
     if (type == 'approval.requested') {
       final approvalId = (event.payload['approvalId'] ?? '').toString().trim();
       if (approvalId.isNotEmpty) {

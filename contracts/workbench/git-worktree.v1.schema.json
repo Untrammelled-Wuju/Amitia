@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://u-ai.dev/contracts/workbench/git-worktree.v1.schema.json",
+  "title": "U-Ai Managed Git Worktree API V1",
+  "description": "Managed Worktree entry including optional persisted task correlation. A task binding is metadata, not authorization; the API must independently authenticate the caller.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "head",
+    "detached",
+    "managed",
+    "locked",
+    "prunable"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "head": {
+      "type": "string"
+    },
+    "branch": {
+      "type": "string"
+    },
+    "detached": {
+      "type": "boolean"
+    },
+    "managed": {
+      "type": "boolean"
+    },
+    "locked": {
+      "type": "boolean"
+    },
+    "prunable": {
+      "type": "boolean"
+    },
+    "workspaceUri": {
+      "type": "string",
+      "pattern": "^amitia://workspace/@"
+    },
+    "taskBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "taskId",
+        "conversationId",
+        "boundAt"
+      ],
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "conversationId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "boundAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "baseHead": {"type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$"}
+      }
+    }
+  }
+}

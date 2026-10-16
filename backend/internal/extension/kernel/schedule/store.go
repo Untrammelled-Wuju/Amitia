@@ -12,6 +12,15 @@ type TriggerCreateStore interface {
 	CreateTriggerIfAbsent(ctx context.Context, record *ScheduleTriggerRecord) (created bool, err error)
 }
 
+type TriggerLeaseHeartbeatStore interface {
+	RenewTriggerLease(context.Context, string, string, time.Time) (bool, error)
+	ReleaseOwnedTriggerLease(context.Context, string, string) error
+}
+
+type TriggerHistoryCleanupStore interface {
+	CleanTriggerRunHistory(context.Context, string) error
+}
+
 func createTriggerIfAbsent(ctx context.Context, store ScheduleStore, record *ScheduleTriggerRecord) (bool, error) {
 	if strong, ok := store.(TriggerCreateStore); ok {
 		return strong.CreateTriggerIfAbsent(ctx, record)
@@ -76,4 +85,48 @@ type ScheduleStore interface {
 	ListQuarantines(ctx context.Context) ([]*ScheduleQuarantineRecord, error)
 
 	DeleteAllByExtension(ctx context.Context, extensionID string) error
+}
+
+type TransactionalScheduleStore interface {
+	WithTransaction(context.Context, func(context.Context) error) error
+}
+
+type OccurrenceCounter interface {
+	CountScheduledTriggers(context.Context, string) (int, error)
+}
+
+func countScheduledTriggers(ctx context.Context, store ScheduleStore, id string) (int, error) {
+	def, err := store.GetDefinition(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	restored := 0
+	if def != nil {
+		restored = def.Trigger.RestoredOccurrences
+	}
+	if restored < 0 {
+		return 0, ErrInvalidTriggerType
+	}
+	if counter, ok := store.(OccurrenceCounter); ok {
+		count, err := counter.CountScheduledTriggers(ctx, id)
+		if count < 0 || restored > int(^uint(0)>>1)-count {
+			return 0, ErrInvalidTriggerType
+		}
+		return count + restored, err
+	}
+	triggers, err := store.ListTriggersBySchedule(ctx, id, -1)
+	count := restored
+	for _, trigger := range triggers {
+		if !trigger.Manual {
+			count++
+		}
+	}
+	return count, err
+}
+
+func withScheduleTransaction(ctx context.Context, store ScheduleStore, fn func(context.Context) error) error {
+	if transactional, ok := store.(TransactionalScheduleStore); ok {
+		return transactional.WithTransaction(ctx, fn)
+	}
+	return fn(ctx)
 }

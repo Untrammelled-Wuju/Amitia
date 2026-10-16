@@ -15,7 +15,7 @@ var ErrProviderCycle = errors.New("服务提供者连接形成循环，拒绝绑
 func (s *Service) Provider(ctx context.Context) (string, int64, error) {
 	var core string
 	var epoch int64
-	err := s.db.QueryRowContext(ctx, `SELECT core_id,epoch FROM kernel_device_provider_binding WHERE id=1`).Scan(&core, &epoch)
+	err := currentQueryExecutor(ctx, s.db).QueryRowContext(ctx, `SELECT core_id,epoch FROM kernel_device_provider_binding WHERE id=1`).Scan(&core, &epoch)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", 0, nil
 	}

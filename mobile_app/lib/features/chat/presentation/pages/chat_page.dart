@@ -60,6 +60,7 @@ import '../widgets/agent_approval_guard.dart';
 import '../widgets/automation_status_indicator.dart';
 import '../widgets/floating_chat_composer_layout.dart';
 import 'realtime_call_page.dart';
+import '../../../workbench/presentation/pages/workbench_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
@@ -3101,6 +3102,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               actions: providerActions,
               fallback: _ChatTopBar(
                 onOpenDrawer: () => _openDrawer(context),
+                onOpenWorkbench: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  useSafeArea: true,
+                  showDragHandle: true,
+                  builder: (sheetContext) => SizedBox(
+                    height: MediaQuery.sizeOf(sheetContext).height * 0.8,
+                    child: WorkbenchPage(
+                      characterId: characterId,
+                      conversationId: conversationId,
+                      onExpand: () {
+                        Navigator.of(sheetContext).pop();
+                        Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => WorkbenchPage(conversationId: conversationId, characterId: characterId)));
+                      },
+                    ),
+                  ),
+                ),
                 onCallSelected: (mode) => _handleCallOption(
                   characterId,
                   characterName,
@@ -3590,12 +3608,14 @@ class _ChatScrollFade extends StatelessWidget {
 
 class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenDrawer;
+  final VoidCallback onOpenWorkbench;
   final ValueChanged<String> onCallSelected;
   final ValueChanged<int> onMoreSelected;
   final Widget? extensionActions;
 
   const _ChatTopBar({
     required this.onOpenDrawer,
+    required this.onOpenWorkbench,
     required this.onCallSelected,
     required this.onMoreSelected,
     this.extensionActions,
@@ -3631,6 +3651,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const Spacer(),
+            IconButton(tooltip: '工作区', onPressed: onOpenWorkbench, icon: const Icon(Icons.space_dashboard_outlined)),
             if (extensionActions != null) ...[
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 180),

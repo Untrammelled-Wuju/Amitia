@@ -53,6 +53,14 @@ func (api *ScheduleAPI) protectUserWorkflowSchedules(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "schedule not found"})
 		return
 	}
+	if scheduleID != "" {
+		if svc := api.service(c); svc != nil {
+			if def, _, err := svc.GetSchedule(c.Request.Context(), scheduleID); err == nil && def.Target.Type == schedule.TargetTypeHostWorkload {
+				c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "schedule not found"})
+				return
+			}
+		}
+	}
 	c.Next()
 }
 
@@ -105,7 +113,7 @@ func (api *ScheduleAPI) listSchedules(c *gin.Context) {
 	}
 	items := make([]scheduleListItem, 0, len(defs))
 	for _, def := range defs {
-		if def == nil || strings.HasPrefix(def.ScheduleID, userWorkflowSchedulePrefix) {
+		if def == nil || def.Target.Type == schedule.TargetTypeHostWorkload || strings.HasPrefix(def.ScheduleID, userWorkflowSchedulePrefix) {
 			continue
 		}
 		state, stateErr := svc.GetScheduleState(c.Request.Context(), def.ScheduleID)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -18,6 +19,16 @@ type ScheduleRepository struct {
 
 func NewScheduleRepository(db *sql.DB) *ScheduleRepository {
 	return &ScheduleRepository{db: db}
+}
+
+func (r *ScheduleRepository) WithTransaction(ctx context.Context, fn func(context.Context) error) error {
+	return NewTransactionManager(r.db).WithTransaction(ctx, fn)
+}
+
+func (r *ScheduleRepository) CountScheduledTriggers(ctx context.Context, id string) (int, error) {
+	var count int
+	err := getExecutor(ctx, r.db).QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_schedule_triggers WHERE schedule_id = ? AND manual = 0`, id).Scan(&count)
+	return count, err
 }
 
 var _ schedule.ScheduleStore = (*ScheduleRepository)(nil)
@@ -156,7 +167,7 @@ func (r *ScheduleRepository) GetDefinition(ctx context.Context, scheduleID strin
 	`, scheduleID)
 	def, err := scanScheduleDefinition(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("sqlite: schedule definition not found: %s: %w", scheduleID, schedule.ErrScheduleNotFound)
 		}
 		return nil, err
@@ -275,7 +286,7 @@ func (r *ScheduleRepository) GetState(ctx context.Context, scheduleID string) (*
 	`, scheduleID)
 	state, err := scanScheduleState(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("sqlite: schedule state not found: %s: %w", scheduleID, schedule.ErrScheduleNotFound)
 		}
 		return nil, err
@@ -447,7 +458,7 @@ func (r *ScheduleRepository) GetTrigger(ctx context.Context, triggerID string) (
 	`, triggerID)
 	record, err := scanScheduleTrigger(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("sqlite: schedule trigger not found: %s: %w", triggerID, schedule.ErrTriggerNotFound)
 		}
 		return nil, err
@@ -467,7 +478,7 @@ func (r *ScheduleRepository) GetTriggerByIdempotencyKey(ctx context.Context, key
 	`, key)
 	record, err := scanScheduleTrigger(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("sqlite: schedule trigger not found by idempotency key: %s: %w", key, schedule.ErrTriggerNotFound)
 		}
 		return nil, err
@@ -533,7 +544,7 @@ func (r *ScheduleRepository) ListTriggersByStatuses(ctx context.Context, statuse
 	if len(statuses) == 0 {
 		return nil, nil
 	}
-	if limit <= 0 {
+	if limit == 0 {
 		limit = 100
 	}
 	placeholders := make([]string, len(statuses))
@@ -602,7 +613,8 @@ func (r *ScheduleRepository) AcquireTriggerLease(ctx context.Context, triggerID 
 	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_schedule_triggers
 		SET lease_owner = ?, lease_expires_at = ?, status = 'leased', updated_at = ?
-		WHERE trigger_id = ? AND (lease_owner IS NULL OR lease_expires_at <= ?)
+		WHERE trigger_id = ? AND status IN ('waiting', 'due', 'retry_wait')
+		  AND (lease_owner IS NULL OR lease_expires_at <= ?)
 	`, owner, expiresAt.UTC(), now, triggerID, now)
 	if err != nil {
 		return false, fmt.Errorf("sqlite: acquire schedule trigger lease: %w", err)
@@ -628,18 +640,55 @@ func (r *ScheduleRepository) ReleaseTriggerLease(ctx context.Context, triggerID 
 	return nil
 }
 
-func (r *ScheduleRepository) ReclaimExpiredLeases(ctx context.Context, now time.Time) (int, error) {
+func (r *ScheduleRepository) RenewTriggerLease(ctx context.Context, triggerID, owner string, expiresAt time.Time) (bool, error) {
 	ex := getExecutor(ctx, r.db)
-	res, err := ex.ExecContext(ctx, `
-		UPDATE extension_schedule_triggers
-		SET lease_owner = NULL, lease_expires_at = NULL, status = 'waiting', updated_at = ?
-		WHERE lease_expires_at <= ? AND status = 'leased'
-	`, now.UTC(), now.UTC())
+	res, err := ex.ExecContext(ctx, `UPDATE extension_schedule_triggers SET lease_expires_at = ?, updated_at = ? WHERE trigger_id = ? AND lease_owner = ? AND status IN ('leased','triggering','running')`, expiresAt.UTC(), time.Now().UTC(), triggerID, owner)
 	if err != nil {
-		return 0, fmt.Errorf("sqlite: reclaim expired schedule trigger leases: %w", err)
+		return false, err
 	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
+	count, err := res.RowsAffected()
+	return count == 1, err
+}
+
+func (r *ScheduleRepository) ReleaseOwnedTriggerLease(ctx context.Context, triggerID, owner string) error {
+	ex := getExecutor(ctx, r.db)
+	_, err := ex.ExecContext(ctx, `UPDATE extension_schedule_triggers SET lease_owner = NULL, lease_expires_at = NULL, updated_at = ? WHERE trigger_id = ? AND lease_owner = ?`, time.Now().UTC(), triggerID, owner)
+	return err
+}
+
+func (r *ScheduleRepository) CleanTriggerRunHistory(ctx context.Context, triggerID string) error {
+	return r.WithTransaction(ctx, func(ctx context.Context) error {
+		ex := getExecutor(ctx, r.db)
+		if _, err := ex.ExecContext(ctx, `DELETE FROM extension_schedule_runs WHERE trigger_id = ? AND EXISTS (SELECT 1 FROM extension_schedule_triggers WHERE trigger_id = ? AND status IN ('completed','cancelled','expired','skipped') AND lease_owner IS NULL)`, triggerID, triggerID); err != nil {
+			return err
+		}
+		_, err := ex.ExecContext(ctx, `UPDATE extension_schedule_triggers SET error_message = NULL, scope_snapshot_id = '', permission_snapshot_id = '', dependency_snapshot_id = '' WHERE trigger_id = ? AND status IN ('completed','cancelled','expired','skipped') AND lease_owner IS NULL`, triggerID)
+		return err
+	})
+}
+
+func (r *ScheduleRepository) ReclaimExpiredLeases(ctx context.Context, now time.Time) (int, error) {
+	var count int
+	err := r.WithTransaction(ctx, func(ctx context.Context) error {
+		ex := getExecutor(ctx, r.db)
+		if _, err := ex.ExecContext(ctx, `UPDATE extension_schedule_runs SET status = 'recovery_required', finished_at = ?, updated_at = ? WHERE status IN ('triggering','running') AND trigger_id IN (SELECT trigger_id FROM extension_schedule_triggers WHERE lease_expires_at <= ? AND status IN ('leased','triggering','running'))`, now.UTC(), now.UTC(), now.UTC()); err != nil {
+			return err
+		}
+		res, err := ex.ExecContext(ctx, `
+		UPDATE extension_schedule_triggers
+		SET lease_owner = NULL, lease_expires_at = NULL,
+		status = CASE WHEN status = 'leased' OR EXISTS (SELECT 1 FROM extension_schedule_definitions d WHERE d.schedule_id = extension_schedule_triggers.schedule_id AND json_extract(d.target_json, '$.idempotencyMode') IN ('idempotent','conditionally_idempotent')) THEN 'waiting' ELSE 'quarantined' END,
+		updated_at = ?
+		WHERE lease_expires_at <= ? AND status IN ('leased','triggering','running')
+	`, now.UTC(), now.UTC())
+		if err != nil {
+			return fmt.Errorf("sqlite: reclaim expired schedule trigger leases: %w", err)
+		}
+		n, err := res.RowsAffected()
+		count = int(n)
+		return err
+	})
+	return count, err
 }
 
 func (r *ScheduleRepository) DeleteTriggersBySchedule(ctx context.Context, scheduleID string) error {
@@ -708,7 +757,7 @@ func (r *ScheduleRepository) GetRun(ctx context.Context, runID string) (*schedul
 	`, runID)
 	run, err := scanScheduleRun(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("sqlite: schedule run not found: %s: %w", runID, schedule.ErrScheduleNotFound)
 		}
 		return nil, err
@@ -952,7 +1001,7 @@ func (r *ScheduleRepository) GetCircuit(ctx context.Context, scheduleID string) 
 		&lastFailCode, &lastFailTime, &openedAt, &record.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("sqlite: get schedule circuit: %w", err)

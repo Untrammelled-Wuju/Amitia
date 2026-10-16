@@ -7,6 +7,7 @@ export * from "./events";
 export * from "./hooks";
 export * from "./tasks";
 export * from "./host";
+export * from "./scheduled-tasks";
 export * from "./storage";
 export * from "./secrets";
 export * from "./ui";

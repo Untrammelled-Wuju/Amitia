@@ -133,6 +133,17 @@ func CommitCurrent(ctx context.Context, commit func() error) error {
 			return err
 		}
 	}
+	if held, ok := ctx.Value(heldAuthorityKey{}).(*Service); ok && held != nil {
+		if service, _ := ctx.Value(authorityServiceKey{}).(*Service); held == service {
+			if err := held.validateRequestAuthorities(ctx); err != nil {
+				return err
+			}
+			if err := ValidateCurrent(ctx); err != nil {
+				return err
+			}
+			return commit()
+		}
+	}
 	if guarded, ok := ctx.Value(commitKey{}).(func(context.Context, func() error) error); ok {
 		return guarded(ctx, commit)
 	}
@@ -182,7 +193,7 @@ func (s *Service) InitializeCoreConsole(ctx context.Context, space, device strin
 
 func (s *Service) Get(ctx context.Context, space, device string) (Policy, error) {
 	p := Policy{DeviceID: device, ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}
-	err := s.db.QueryRowContext(ctx, `SELECT coordinated, mode_revision, administrator, permission_revision, selected_role, provider_epoch FROM kernel_device_coordination WHERE space_id=? AND device_id=?`, space, device).Scan(&p.Coordinated, &p.ModeRevision, &p.Administrator, &p.PermissionRevision, &p.SelectedRole, &p.ProviderEpoch)
+	err := currentQueryExecutor(ctx, s.db).QueryRowContext(ctx, `SELECT coordinated, mode_revision, administrator, permission_revision, selected_role, provider_epoch FROM kernel_device_coordination WHERE space_id=? AND device_id=?`, space, device).Scan(&p.Coordinated, &p.ModeRevision, &p.Administrator, &p.PermissionRevision, &p.SelectedRole, &p.ProviderEpoch)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, nil
 	}
@@ -460,7 +471,7 @@ func (s *Service) Validate(ctx context.Context, scope ExecutionScope) error {
 		return ErrWrongOwner
 	}
 	var trusted string
-	err = s.db.QueryRowContext(ctx, `SELECT trust_state FROM kernel_devices WHERE space_id=? AND device_id=?`, scope.SpaceID, scope.InitiatorDeviceID).Scan(&trusted)
+	err = currentQueryExecutor(ctx, s.db).QueryRowContext(ctx, `SELECT trust_state FROM kernel_devices WHERE space_id=? AND device_id=?`, scope.SpaceID, scope.InitiatorDeviceID).Scan(&trusted)
 	if err != nil {
 		return err
 	}
@@ -468,7 +479,7 @@ func (s *Service) Validate(ctx context.Context, scope ExecutionScope) error {
 		return fmt.Errorf("%w: %s", ErrScopeExpired, runtimeidentity.DeviceID(scope.InitiatorDeviceID))
 	}
 	if target != scope.InitiatorDeviceID {
-		if err := s.db.QueryRowContext(ctx, `SELECT trust_state FROM kernel_devices WHERE space_id=? AND device_id=?`, scope.SpaceID, target).Scan(&trusted); err != nil {
+		if err := currentQueryExecutor(ctx, s.db).QueryRowContext(ctx, `SELECT trust_state FROM kernel_devices WHERE space_id=? AND device_id=?`, scope.SpaceID, target).Scan(&trusted); err != nil {
 			return err
 		}
 		if trusted != "trusted" {

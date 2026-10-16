@@ -419,8 +419,8 @@ class _NotificationSettingsPageState
                         : (value) => _update(callPushEnabled: value),
                   ),
                   AmitiaSwitchTile(
-                    title: '提醒与主动消息',
-                    subtitle: '接收日程、学习、角色主动消息等提醒',
+                    title: '提醒与主动任务',
+                    subtitle: '接收日程、学习、角色主动任务等提醒',
                     value: _reminderPushEnabled,
                     onChanged: !_pushEnabled || _updating
                         ? null

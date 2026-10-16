@@ -9,13 +9,17 @@ type CoordinationSnapshot struct {
 	CoordinationID      string                           `json:"coordinationId"`
 	ParentInteractionID string                           `json:"parentInteractionId"`
 	Status              CoordinationStatus               `json:"status"`
+	SourceWorkspaceURI  string                           `json:"-"`
 	Assignments         []CoordinationAssignmentSnapshot `json:"assignments"`
+	VerificationSummary *CodingWorkerEvidenceSummary     `json:"verificationSummary,omitempty"`
 }
 
 type CoordinationAssignmentSnapshot struct {
 	AssignmentID       string                `json:"assignmentId"`
 	ChildInteractionID string                `json:"childInteractionId,omitempty"`
 	Status             AgentAssignmentStatus `json:"status"`
+	WorkerRole         string                `json:"workerRole,omitempty"`
+	WorktreeReview     *CodingWorktreeReview `json:"worktreeReview,omitempty"`
 	Objective          string                `json:"objective"`
 	ResultRef          string                `json:"resultRef,omitempty"`
 	Error              string                `json:"error,omitempty"`
@@ -36,12 +40,15 @@ func (c *MultiAgentCoordinator) Snapshot(ctx context.Context, coordinationID str
 	}
 	out := CoordinationSnapshot{
 		CoordinationID: coordinationID, ParentInteractionID: ac.parentInteractionID,
-		Status: ac.status, Assignments: make([]CoordinationAssignmentSnapshot, 0, len(ac.assignments)),
+		Status: ac.status, SourceWorkspaceURI: ac.workspaceRootURI,
+		Assignments: make([]CoordinationAssignmentSnapshot, 0, len(ac.assignments)),
 	}
+	identities := make(map[string]AgentAssignment, len(ac.assignments))
 	for _, a := range ac.assignments {
+		identities[a.ID] = AgentAssignment{ID: a.ID, ChildInteractionID: a.ChildInteractionID, WorkerRef: a.WorkerRef}
 		out.Assignments = append(out.Assignments, CoordinationAssignmentSnapshot{
 			AssignmentID: a.ID, ChildInteractionID: a.ChildInteractionID, Status: a.Status,
-			Objective: a.Objective, Error: a.Error,
+			WorkerRole: a.WorkerRef.Role, Objective: a.Objective, Error: a.Error,
 		})
 	}
 	c.mu.Unlock()
@@ -56,6 +63,16 @@ func (c *MultiAgentCoordinator) Snapshot(ctx context.Context, coordinationID str
 				return CoordinationSnapshot{}, fmt.Errorf("multi_agent: read worker result: %w", err)
 			}
 			if found && child != nil {
+				if err := validateTerminalChildSnapshot(child, *assignment); err != nil {
+					return CoordinationSnapshot{}, err
+				}
+				spaceID, conversationID, scopeErr := c.resolveWorkerScope(ctx, ac)
+				if scopeErr != nil {
+					return CoordinationSnapshot{}, scopeErr
+				}
+				if err := validateReconciledChildScope(child, identities[assignment.AssignmentID], spaceID, conversationID); err != nil {
+					return CoordinationSnapshot{}, err
+				}
 				assignment.ResultRef = child.ResultRef
 				if assignment.Error == "" && child.ErrorMessage != "" {
 					assignment.Error = child.ErrorMessage

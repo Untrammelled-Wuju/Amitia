@@ -26,9 +26,9 @@ type productionResourceTransfer struct {
 	screenshotPolicy ScreenshotPolicy
 	uploadPolicy     UploadPolicy
 
-	mu        sync.RWMutex
-	downloads map[BrowserDownloadID]*downloadRecord
-	guidMap   map[string]BrowserDownloadID
+	mu         sync.RWMutex
+	downloads  map[BrowserDownloadID]*downloadRecord
+	guidMap    map[string]BrowserDownloadID
 	subscribed bool
 }
 
@@ -96,10 +96,10 @@ func (r *productionResourceTransfer) ensureDownloadSubscription() {
 
 	client.SubscribeEvent("Browser.downloadProgress", func(params json.RawMessage) {
 		var evt struct {
-			GUID         string  `json:"guid"`
-			TotalBytes   float64 `json:"totalBytes"`
+			GUID          string  `json:"guid"`
+			TotalBytes    float64 `json:"totalBytes"`
 			ReceivedBytes float64 `json:"receivedBytes"`
-			State        string  `json:"state"`
+			State         string  `json:"state"`
 		}
 		if err := json.Unmarshal(params, &evt); err != nil || evt.GUID == "" {
 			return
@@ -632,4 +632,138 @@ func (r *productionResourceTransfer) FindPendingDownload(sessionID BrowserSessio
 	}
 
 	return found, nil
+}
+
+type BrowserScreenshotBytes interface {
+	ScreenshotBytes(ctx context.Context, request BrowserScreenshotRequest) ([]byte, *BrowserError)
+}
+
+func (r *productionResourceTransfer) ScreenshotBytes(ctx context.Context, request BrowserScreenshotRequest) ([]byte, *BrowserError) {
+	if err := ctx.Err(); err != nil {
+		return nil, &BrowserError{Code: ErrCodeInvalidRequest, Message: "context cancelled", Cause: err}
+	}
+	if request.SessionID == "" || request.TabID == "" {
+		return nil, &BrowserError{Code: ErrCodeInvalidRequest, Message: "browser session and tab required"}
+	}
+	if request.Format != ScreenshotFormatJPEG && request.Format != ScreenshotFormatPNG {
+		return nil, &BrowserError{Code: ErrCodeScreenshotInvalidFormat, Message: "unsupported screenshot format"}
+	}
+	if !IsValidScreenshotQuality(request.Format, request.Quality) {
+		return nil, &BrowserError{Code: ErrCodeScreenshotInvalidQuality, Message: "invalid screenshot quality"}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	resolved, err := r.tabs.ResolveTab(ctx, request.SessionID, request.TabID)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.dom.EnableDOM(ctx, resolved.TargetID); err != nil {
+		return nil, &BrowserError{Code: ErrCodeScreenshotFailed, Message: "enable DOM failed", Cause: err}
+	}
+	client := r.dom.GetClient()
+	if client == nil {
+		return nil, &BrowserError{Code: ErrCodeScreenshotFailed, Message: "CDP client unavailable"}
+	}
+	sessionID := r.dom.GetSession(resolved.TargetID)
+	if sessionID == "" {
+		if engine := r.tabMgr.engine(); engine != nil {
+			if controller, ok := engine.Pages().(*chromiumPageController); ok {
+				sessionID = controller.ensureSession(ctx, client, resolved.TargetID)
+			}
+		}
+	}
+	if sessionID == "" {
+		return nil, &BrowserError{Code: ErrCodeScreenshotFailed, Message: "CDP session unavailable"}
+	}
+	params := map[string]interface{}{"format": request.Format}
+	if request.Format == ScreenshotFormatJPEG {
+		params["quality"] = request.Quality
+	}
+	var result struct {
+		Data string `json:"data"`
+	}
+	if err := client.Call(ctx, "Page.captureScreenshot", sessionID, params, &result); err != nil {
+		return nil, &BrowserError{Code: ErrCodeScreenshotFailed, Message: "screenshot capture failed", Cause: err}
+	}
+	if result.Data == "" || len(result.Data) > 16*1024*1024 {
+		return nil, &BrowserError{Code: ErrCodeScreenshotTooLarge, Message: "screenshot empty or exceeds transfer limit"}
+	}
+	data, errDecode := base64.StdEncoding.DecodeString(result.Data)
+	if errDecode != nil || len(data) > 12*1024*1024 {
+		return nil, &BrowserError{Code: ErrCodeScreenshotFailed, Message: "invalid screenshot image"}
+	}
+	return data, nil
+}
+
+type BrowserScreenInput interface {
+	ScreenClick(ctx context.Context, session BrowserSessionID, tab BrowserTabID, x, y float64) *BrowserError
+	ScreenText(ctx context.Context, session BrowserSessionID, tab BrowserTabID, text string) *BrowserError
+	ScreenScroll(ctx context.Context, session BrowserSessionID, tab BrowserTabID, amount float64) *BrowserError
+}
+
+func (r *productionResourceTransfer) inputTarget(ctx context.Context, session BrowserSessionID, tab BrowserTabID) (*cdpClient, string, *BrowserError) {
+	resolved, err := r.tabs.ResolveTab(ctx, session, tab)
+	if err != nil {
+		return nil, "", err
+	}
+	client := r.dom.GetClient()
+	if client == nil {
+		return nil, "", &BrowserError{Code: ErrCodeBrowserRuntimeNotReady, Message: "browser is not connected"}
+	}
+	cdpSession := r.dom.GetSession(resolved.TargetID)
+	if cdpSession == "" {
+		if engine := r.tabMgr.engine(); engine != nil {
+			if controller, ok := engine.Pages().(*chromiumPageController); ok {
+				cdpSession = controller.ensureSession(ctx, client, resolved.TargetID)
+			}
+		}
+	}
+	if cdpSession == "" {
+		return nil, "", &BrowserError{Code: ErrCodeBrowserRuntimeNotReady, Message: "browser tab unavailable"}
+	}
+	return client, cdpSession, nil
+}
+
+func (r *productionResourceTransfer) ScreenClick(ctx context.Context, session BrowserSessionID, tab BrowserTabID, x, y float64) *BrowserError {
+	if x < 0 || y < 0 || x > 16384 || y > 16384 {
+		return &BrowserError{Code: ErrCodeInvalidRequest, Message: "pointer outside viewport"}
+	}
+	client, cdpSession, err := r.inputTarget(ctx, session, tab)
+	if err != nil {
+		return err
+	}
+	for _, kind := range []string{"mousePressed", "mouseReleased"} {
+		if sendErr := client.Call(ctx, "Input.dispatchMouseEvent", cdpSession, map[string]any{"type": kind, "x": x, "y": y, "button": "left", "clickCount": 1}, nil); sendErr != nil {
+			return &BrowserError{Code: ErrCodeInteractionFailed, Message: "browser click failed", Cause: sendErr}
+		}
+	}
+	return nil
+}
+
+func (r *productionResourceTransfer) ScreenText(ctx context.Context, session BrowserSessionID, tab BrowserTabID, text string) *BrowserError {
+	if len(text) == 0 || len(text) > 2048 {
+		return &BrowserError{Code: ErrCodeInvalidRequest, Message: "text length invalid"}
+	}
+	client, cdpSession, err := r.inputTarget(ctx, session, tab)
+	if err != nil {
+		return err
+	}
+	if sendErr := client.Call(ctx, "Input.insertText", cdpSession, map[string]any{"text": text}, nil); sendErr != nil {
+		return &BrowserError{Code: ErrCodeInteractionFailed, Message: "browser text entry failed", Cause: sendErr}
+	}
+	return nil
+}
+
+func (r *productionResourceTransfer) ScreenScroll(ctx context.Context, session BrowserSessionID, tab BrowserTabID, amount float64) *BrowserError {
+	if amount < -1200 || amount > 1200 {
+		return &BrowserError{Code: ErrCodeInvalidRequest, Message: "scroll amount invalid"}
+	}
+	client, cdpSession, err := r.inputTarget(ctx, session, tab)
+	if err != nil {
+		return err
+	}
+	if sendErr := client.Call(ctx, "Input.dispatchMouseEvent", cdpSession, map[string]any{"type": "mouseWheel", "x": 400, "y": 300, "deltaX": 0, "deltaY": amount}, nil); sendErr != nil {
+		return &BrowserError{Code: ErrCodeInteractionFailed, Message: "browser scroll failed", Cause: sendErr}
+	}
+	return nil
 }

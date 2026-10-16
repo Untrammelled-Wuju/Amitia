@@ -228,6 +228,7 @@ func DefaultMigrations() []Migration {
 		ConversationReadStateMigration(),
 		GlobalMemoryPolicyMigration(),
 		RetireLegacyMemoryDataMigration(),
+		RetireLegacyReminderDataMigration(),
 	}
 }
 

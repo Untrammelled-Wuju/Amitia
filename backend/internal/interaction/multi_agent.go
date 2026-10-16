@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/decision"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
 type CoordinationID string
@@ -131,25 +132,27 @@ type AssignmentError struct {
 }
 
 type WorkerRunRequest struct {
-	CoordinationID       string `json:"coordinationId"`
-	AssignmentID         string `json:"assignmentId"`
-	ParentInteractionID  string `json:"parentInteractionId"`
-	ParentGoalID         string `json:"parentGoalId"`
-	ParentGoalRevision   int64  `json:"parentGoalRevision"`
-	CharacterID          string `json:"characterId"`
-	ConversationID       string `json:"conversationId"`
-	Source               string `json:"source"`
-	SpaceID              string `json:"spaceId"`
-	PermissionMode       string `json:"permissionMode,omitempty"`
-	WorkspaceID          string `json:"workspaceId,omitempty"`
-	WorkspaceDeviceID    string `json:"workspaceDeviceId,omitempty"`
-	WorkspaceName        string `json:"workspaceName,omitempty"`
-	WorkspaceKind        string `json:"workspaceKind,omitempty"`
-	WorkspaceRootURI     string `json:"workspaceRootUri,omitempty"`
-	Objective            string `json:"objective"`
-	ExpectedOutcome      string `json:"expectedOutcome"`
-	CoordinationDepth    int    `json:"coordinationDepth"`
-	InternalSourceMarker string `json:"-"`
+	OwnedScope           *coordination.ExecutionScope `json:"ownedScope,omitempty"`
+	CoordinationID       string                       `json:"coordinationId"`
+	AssignmentID         string                       `json:"assignmentId"`
+	WorkerRole           string                       `json:"workerRole,omitempty"`
+	ParentInteractionID  string                       `json:"parentInteractionId"`
+	ParentGoalID         string                       `json:"parentGoalId"`
+	ParentGoalRevision   int64                        `json:"parentGoalRevision"`
+	CharacterID          string                       `json:"characterId"`
+	ConversationID       string                       `json:"conversationId"`
+	Source               string                       `json:"source"`
+	SpaceID              string                       `json:"spaceId"`
+	PermissionMode       string                       `json:"permissionMode,omitempty"`
+	WorkspaceID          string                       `json:"workspaceId,omitempty"`
+	WorkspaceDeviceID    string                       `json:"workspaceDeviceId,omitempty"`
+	WorkspaceName        string                       `json:"workspaceName,omitempty"`
+	WorkspaceKind        string                       `json:"workspaceKind,omitempty"`
+	WorkspaceRootURI     string                       `json:"workspaceRootUri,omitempty"`
+	Objective            string                       `json:"objective"`
+	ExpectedOutcome      string                       `json:"expectedOutcome"`
+	CoordinationDepth    int                          `json:"coordinationDepth"`
+	InternalSourceMarker string                       `json:"-"`
 }
 
 type AgentWorkerRunner interface {
@@ -165,19 +168,24 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now().UTC() }
 
 type MultiAgentCoordinator struct {
-	tracker  InteractionTracker
-	goals    *decision.GoalRegistry
-	recovery *RecoveryDescriptorService
-	starter  AgentWorkerRunner
-	pauseSvc *PauseResumeService
-	policy   MultiAgentPolicy
-	clock    CoordinatorClock
+	tracker        InteractionTracker
+	goals          *decision.GoalRegistry
+	recovery       *RecoveryDescriptorService
+	starter        AgentWorkerRunner
+	pauseSvc       *PauseResumeService
+	policy         MultiAgentPolicy
+	clock          CoordinatorClock
+	ownedExecution func(context.Context, coordination.ExecutionScope, func(context.Context) error) error
 
 	mu            sync.Mutex
 	coordinations map[string]*activeCoordination
 }
 
 type activeCoordination struct {
+	ownedScope          *coordination.ExecutionScope
+	dispatchFingerprint string
+	executionCoreID     string
+	resourceOwnerID     string
 	dispatchMu          sync.Mutex
 	persistMu           sync.Mutex
 	id                  CoordinationID
@@ -191,6 +199,7 @@ type activeCoordination struct {
 	workspaceKind       string
 	workspaceRootURI    string
 	status              CoordinationStatus
+	cancelConfirmed     bool
 	strategy            CoordinationStrategy
 	completionPlan      CoordinationCompletionPolicy
 	depth               int
@@ -224,6 +233,10 @@ func NewMultiAgentCoordinator(
 }
 
 type StartCoordinationRequest struct {
+	OwnedScope          *coordination.ExecutionScope
+	DispatchFingerprint string
+	ExecutionCoreID     string
+	ResourceOwnerID     string
 	ParentInteractionID string
 	ParentGoalID        string
 	ParentGoalRevision  int64
@@ -288,6 +301,9 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 	coordID := CoordinationID(uuid.NewString())
 	now := c.clock.Now()
 	ac := &activeCoordination{
+		ownedScope: req.OwnedScope, dispatchFingerprint: req.DispatchFingerprint,
+		executionCoreID:     req.ExecutionCoreID,
+		resourceOwnerID:     req.ResourceOwnerID,
 		id:                  coordID,
 		parentGoalID:        req.ParentGoalID,
 		parentGoalRev:       req.ParentGoalRevision,
@@ -306,6 +322,10 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 		assignments:         make([]*AgentAssignment, 0, len(req.Objectives)),
 		createdAt:           now,
 		updatedAt:           now,
+	}
+	if req.OwnedScope != nil {
+		scope := *req.OwnedScope
+		ac.ownedScope = &scope
 	}
 
 	assignmentIDs := make([]string, 0, len(req.Objectives))
@@ -458,6 +478,13 @@ func (c *MultiAgentCoordinator) dependenciesSatisfied(ac *activeCoordination, a 
 }
 
 func (c *MultiAgentCoordinator) startOneAssignment(ctx context.Context, ac *activeCoordination, a *AgentAssignment) error {
+	return c.withOwnedExecution(ctx, ac, func(ctx context.Context) error { return c.startAuthorizedAssignment(ctx, ac, a) })
+}
+
+func (c *MultiAgentCoordinator) startAuthorizedAssignment(ctx context.Context, ac *activeCoordination, a *AgentAssignment) error {
+	if err := c.requireDispatchableParent(ctx, ac); err != nil {
+		return err
+	}
 	if c.starter == nil {
 		return fmt.Errorf("multi_agent: no worker starter configured")
 	}
@@ -467,8 +494,10 @@ func (c *MultiAgentCoordinator) startOneAssignment(ctx context.Context, ac *acti
 	}
 	now := c.clock.Now()
 	addr := WorkerRunRequest{
+		OwnedScope:          ac.ownedScope,
 		CoordinationID:      string(ac.id),
 		AssignmentID:        a.ID,
+		WorkerRole:          a.WorkerRef.Role,
 		ParentInteractionID: ac.parentInteractionID,
 		ParentGoalID:        ac.parentGoalID,
 		ParentGoalRevision:  ac.parentGoalRev,
@@ -499,6 +528,9 @@ func (c *MultiAgentCoordinator) startOneAssignment(ctx context.Context, ac *acti
 		a.ChildInteractionID = ""
 		c.mu.Unlock()
 		return fmt.Errorf("multi_agent: persist worker intent before dispatch: %w", err)
+	}
+	if err := c.requireDispatchableParent(ctx, ac); err != nil {
+		return err
 	}
 	childID, err := c.starter.StartWorker(ctx, addr)
 	c.mu.Lock()
@@ -556,6 +588,10 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 		return fmt.Errorf("multi_agent: unknown assignment %s", assignmentID)
 	}
 
+	if err := validateTerminalAssignmentResult(target, assignmentID, result); err != nil {
+		c.mu.Unlock()
+		return err
+	}
 	if target.Status.IsTerminal() {
 		c.mu.Unlock()
 		return nil
@@ -753,6 +789,28 @@ func (c *MultiAgentCoordinator) deriveCoordinationOutcome(ac *activeCoordination
 
 func (c *MultiAgentCoordinator) Reconcile(ctx context.Context, coordinationID string) error {
 	c.mu.Lock()
+	ac := c.coordinations[coordinationID]
+	c.mu.Unlock()
+	if ac == nil {
+		return nil
+	}
+	if cancelled, err := c.parentCancellationRequested(ctx, ac); err != nil {
+		return err
+	} else if cancelled {
+		return c.Cancel(ctx, coordinationID)
+	}
+	err := c.withOwnedExecution(ctx, ac, func(ctx context.Context) error { return c.reconcileAuthorized(ctx, coordinationID) })
+	if err != nil {
+		return c.stopRevokedOwnedCoordination(ctx, ac, err)
+	}
+	if err == nil && ac.ownedScope != nil {
+		return FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID)
+	}
+	return err
+}
+
+func (c *MultiAgentCoordinator) reconcileAuthorized(ctx context.Context, coordinationID string) error {
+	c.mu.Lock()
 	ac, ok := c.coordinations[coordinationID]
 	if !ok || ac.status.IsTerminal() {
 		c.mu.Unlock()
@@ -783,6 +841,15 @@ func (c *MultiAgentCoordinator) Reconcile(ctx context.Context, coordinationID st
 		record, found, err := c.tracker.Get(ctx, assignment.ChildInteractionID)
 		if err != nil {
 			return fmt.Errorf("multi_agent: fetch child interaction %s: %w", assignment.ChildInteractionID, err)
+		}
+		if found && record != nil {
+			spaceID, conversationID, scopeErr := c.resolveWorkerScope(ctx, ac)
+			if scopeErr != nil {
+				return scopeErr
+			}
+			if scopeErr := validateReconciledChildScope(record, assignment, spaceID, conversationID); scopeErr != nil {
+				return scopeErr
+			}
 		}
 		if !found || record == nil || record.Status == InteractionStatusReceived {
 			if err := c.resumeReservedWorker(ctx, ac, assignment); err != nil {
@@ -858,7 +925,7 @@ func (c *MultiAgentCoordinator) ReconcilePendingCoordinations(ctx context.Contex
 	var records []*InteractionRecord
 	if err := c.tracker.Range(ctx, func(record *InteractionRecord) bool {
 		if record != nil && record.RecoveryDescriptor != nil && record.RecoveryDescriptor.MultiAgent != nil {
-			if !CoordinationStatus(record.RecoveryDescriptor.MultiAgent.Status).IsTerminal() {
+			if !CoordinationStatus(record.RecoveryDescriptor.MultiAgent.Status).IsTerminal() || record.RecoveryDescriptor.OwnedTurn != nil && !record.IsTerminal() && OwnedReplySettled(record.ResultRef) {
 				records = append(records, record)
 			}
 		}
@@ -889,26 +956,71 @@ func (c *MultiAgentCoordinator) Cancel(ctx context.Context, coordinationID strin
 	if !ok {
 		return nil
 	}
-	if ac.status.IsTerminal() {
+	ac.dispatchMu.Lock()
+	defer ac.dispatchMu.Unlock()
+	c.mu.Lock()
+	if ac.status.IsTerminal() && (ac.status != CoordinationCancelled || ac.cancelConfirmed) {
+		finalizeOwned := ac.status == CoordinationCancelled && ac.ownedScope != nil
+		c.mu.Unlock()
+		if finalizeOwned {
+			return FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID)
+		}
 		return nil
 	}
+	c.mu.Unlock()
+	if c.tracker != nil && ac.parentInteractionID != "" {
+		if err := c.tracker.RequestCancel(ctx, ac.parentInteractionID, "coordination_cancelled"); err != nil {
+			return err
+		}
+	}
+	c.mu.Lock()
 	now := c.clock.Now()
 	ac.status = CoordinationCancelled
 	ac.updatedAt = now
-
+	var children []string
 	for _, a := range ac.assignments {
-		if a.Status.IsTerminal() {
+		if a.Status.IsTerminal() && a.Status != AssignmentCancelled {
 			continue
 		}
 		if a.ChildInteractionID != "" {
-			_ = c.tracker.RequestCancel(ctx, a.ChildInteractionID, "coordination_cancelled")
+			children = append(children, a.ChildInteractionID)
 		}
 		if !a.Status.IsTerminal() {
 			a.Status = AssignmentCancelled
 			a.UpdatedAt = now
 		}
 	}
-	return c.persistCoordinationSnapshot(ctx, ac)
+	c.mu.Unlock()
+	var failures []error
+	for _, childID := range children {
+		if c.tracker != nil {
+			if err := c.tracker.RequestCancel(ctx, childID, "coordination_cancelled"); err != nil && !errors.Is(err, ErrInteractionNotFound) {
+				failures = append(failures, err)
+			}
+		}
+		if worker, ok := c.starter.(interface {
+			CancelWorker(context.Context, string) error
+		}); ok {
+			if err := worker.CancelWorker(ctx, childID); err != nil {
+				failures = append(failures, err)
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return errors.Join(failures...)
+	}
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	ac.cancelConfirmed = true
+	c.mu.Unlock()
+	if ac.ownedScope != nil && len(failures) == 0 {
+		if err := FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
 }
 
 func (c *MultiAgentCoordinator) Pause(ctx context.Context, coordinationID string) error {

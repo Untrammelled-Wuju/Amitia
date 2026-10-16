@@ -119,7 +119,7 @@
                 />
               </div>
               <div class="field-help">
-                主动消息是否可投递始终按用户当地时间判断。
+                主动任务是否可投递始终按用户当地时间判断。
               </div>
             </el-form-item>
             <el-form-item label="节日感知">

@@ -2,438 +2,379 @@ package reminder
 
 import (
 	"context"
-	"fmt"
-	"strconv"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/chat"
-	"gorm.io/gorm"
+	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 )
 
-type Dispatcher interface {
-	ProcessMessage(ctx context.Context, req *chat.ProcessMessageRequest) (*chat.ProcessMessageResponse, error)
+const UserReminder = "user_reminder"
+const ProactiveTask = "proactive_task"
+const TargetID = "builtin.reminder.fire"
+
+var ErrUnavailable = errors.New("提醒服务未就绪")
+var ErrForbidden = errors.New("无权访问该任务")
+
+type Dependencies struct {
+	Scheduler     *schedule.ScheduleService
+	OwnerID       string
+	Mode          string
+	Authorize     func(context.Context, Caller, *Reminder) (json.RawMessage, error)
+	Deliver       func(context.Context, *Reminder, string) (DeliveryResult, error)
+	PluginActive  func(context.Context, string, string) error
+	CheckPolicy   func(context.Context, *Reminder, []TriggerHistory) (string, error)
+	Settings      SettingStore
+	ResolveTarget func(context.Context, TargetResult) (TargetResult, error)
+	Channels      func(context.Context, Caller) ([]string, error)
 }
 
-type Service struct {
-	db       *gorm.DB
-	repo     *Repository
-	dispatch Dispatcher
-	mu       sync.Mutex
-	running  bool
-	ticking  bool
-}
+type Service struct{ deps Dependencies }
 
-func NewService(db *gorm.DB, dispatch Dispatcher) *Service {
-	return &Service{db: db, repo: NewRepository(db), dispatch: dispatch}
-}
-
-func (s *Service) Start(ctx context.Context) {
-	s.mu.Lock()
-	if s.running {
-		s.mu.Unlock()
-		return
+func NewService(deps Dependencies) *Service {
+	s := &Service{deps: deps}
+	if deps.Scheduler != nil {
+		deps.Scheduler.GetExecutor().RegisterTargetAdapter(schedule.NewHostWorkloadAdapter(s.Execute))
 	}
-	s.running = true
-	s.mu.Unlock()
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		s.processDue(ctx)
-		for {
-			select {
-			case <-ctx.Done():
-				s.mu.Lock()
-				s.running = false
-				s.mu.Unlock()
-				return
-			case <-ticker.C:
-				s.processDue(ctx)
-			}
+	return s
+}
+
+func (s *Service) Ready() bool {
+	return s != nil && s.deps.Scheduler != nil && s.deps.Authorize != nil && s.deps.Deliver != nil && s.deps.OwnerID != ""
+}
+func (s *Service) Running() bool { return s.Ready() && s.deps.Scheduler.IsRunning() }
+
+func (s *Service) authorize(ctx context.Context, caller Caller, item *Reminder) error {
+	if !s.Ready() {
+		return ErrUnavailable
+	}
+	if err := s.checkOwnership(caller, item); err != nil {
+		return err
+	}
+	if item.Caller.PluginID != "" && s.deps.PluginActive != nil {
+		if err := s.deps.PluginActive(ctx, item.Caller.PluginID, item.Caller.ModuleID); err != nil {
+			return err
 		}
-	}()
+	}
+	_, err := s.deps.Authorize(ctx, caller, item)
+	return err
 }
 
-func (s *Service) Running() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.running
+func (s *Service) checkOwnership(caller Caller, item *Reminder) error {
+	if caller.RoleScope != "" && caller.RoleScope != item.CharacterID || caller.ConversationScope != "" && caller.ConversationScope != item.ConversationID {
+		return ErrForbidden
+	}
+	if caller.SpaceID == "" || caller.DeviceID == "" || item.Caller.SpaceID != caller.SpaceID || item.OwnerID != s.deps.OwnerID {
+		return ErrForbidden
+	}
+	if caller.PluginID != "" && (item.Caller.PluginID != caller.PluginID || item.Caller.ModuleID != caller.ModuleID || item.Caller.DeviceID != caller.DeviceID) {
+		return ErrForbidden
+	}
+	return nil
 }
 
-func (s *Service) List(spaceID string) ([]Reminder, error) {
-	items, err := s.repo.List(spaceID)
+func decode(def *schedule.ScheduleContributionDefinition) (*Reminder, error) {
+	if def == nil || def.Target.Type != schedule.TargetTypeHostWorkload || def.Target.TargetID != TargetID {
+		return nil, schedule.ErrScheduleNotFound
+	}
+	var item Reminder
+	if err := json.Unmarshal(def.Target.InputTemplate, &item); err != nil {
+		return nil, err
+	}
+	if item.ID != def.ScheduleID || (item.Kind != UserReminder && item.Kind != ProactiveTask) {
+		return nil, ErrForbidden
+	}
+	return &item, nil
+}
+
+func (s *Service) Find(ctx context.Context, caller Caller, id string) (*Reminder, error) {
+	if !s.Ready() {
+		return nil, ErrUnavailable
+	}
+	def, state, err := s.deps.Scheduler.GetSchedule(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	for index := range items {
-		s.hydrate(&items[index])
+	item, err := decode(def)
+	if err != nil {
+		return nil, err
 	}
+	if err := s.checkOwnership(caller, item); err != nil {
+		return nil, err
+	}
+	if item.Caller.DeviceID != caller.DeviceID {
+		if _, err := s.deps.Authorize(ctx, caller, item); err != nil {
+			return nil, ErrForbidden
+		}
+	}
+	if state == nil {
+		return nil, ErrUnavailable
+	}
+	item.Generation, item.State, item.Paused = state.Generation, string(state.Status), state.Paused
+	item.Enabled = 0
+	if state.Enabled && !state.Paused && state.Status == schedule.DefinitionStatusEnabled {
+		item.Enabled = 1
+	}
+	item.RemindAt = ""
+	if state.NextScheduledAt != nil {
+		item.RemindAt = state.NextScheduledAt.UTC().Format(time.RFC3339Nano)
+		if loc, err := time.LoadLocation(item.Timezone); err == nil {
+			item.LocalRemindAt = state.NextScheduledAt.In(loc).Format("2006-01-02 15:04:05")
+		}
+	}
+	if state.LastTriggeredAt != nil {
+		value := state.LastTriggeredAt.UTC().Format(time.RFC3339Nano)
+		item.LastTriggeredAt = &value
+	}
+	item.UpdatedAt = state.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	item.Saved = true
+	return item, nil
+}
+
+func (s *Service) List(ctx context.Context, caller Caller, kind string) ([]Reminder, error) {
+	return s.list(ctx, caller, kind, false)
+}
+
+func (s *Service) list(ctx context.Context, caller Caller, kind string, cancelled bool) ([]Reminder, error) {
+	if !s.Ready() {
+		return nil, ErrUnavailable
+	}
+	if caller.SpaceID == "" || caller.DeviceID == "" {
+		return nil, ErrForbidden
+	}
+	if kind != "" && kind != UserReminder && kind != ProactiveTask {
+		return nil, errors.New("任务类型无效")
+	}
+	defs, err := s.deps.Scheduler.ListAllSchedules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := []Reminder{}
+	for _, def := range defs {
+		item, err := decode(def)
+		if err != nil || (kind != "" && item.Kind != kind) || item.Caller.SpaceID != caller.SpaceID {
+			continue
+		}
+		if caller.RoleScope != "" && caller.RoleScope != item.CharacterID || caller.ConversationScope != "" && caller.ConversationScope != item.ConversationID {
+			continue
+		}
+		if caller.PluginID != "" && (item.Caller.PluginID != caller.PluginID || item.Caller.ModuleID != caller.ModuleID) {
+			continue
+		}
+		visible, err := s.Find(ctx, caller, item.ID)
+		if err != nil {
+			if errors.Is(err, ErrForbidden) {
+				continue
+			}
+			return nil, err
+		}
+		if cancelled || visible.State != string(schedule.DefinitionStatusUninstalled) {
+			items = append(items, *visible)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].RemindAt < items[j].RemindAt })
 	return items, nil
 }
 
-func (s *Service) Find(id int, spaceID string) (*Reminder, error) {
-	item, err := s.repo.Find(id, spaceID)
+func requestHash(caller Caller, request CreateReminderRequest) string {
+	encoded, _ := json.Marshal(struct {
+		Caller  Caller
+		Request CreateReminderRequest
+	}{caller, request})
+	hash := sha256.Sum256(encoded)
+	return hex.EncodeToString(hash[:])
+}
+
+func (s *Service) Create(ctx context.Context, caller Caller, request CreateReminderRequest, source string) (*Reminder, error) {
+	if !s.Ready() {
+		return nil, ErrUnavailable
+	}
+	if caller.SpaceID == "" || caller.DeviceID == "" {
+		return nil, ErrForbidden
+	}
+	if request.RequestID == "" || len(request.RequestID) > 128 {
+		return nil, errors.New("创建任务必须提供有效请求编号")
+	}
+	id := "reminder-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(caller.SpaceID+"\x00"+caller.DeviceID+"\x00"+caller.PluginID+"\x00"+caller.ModuleID+"\x00"+request.RequestID)).String()
+	if existing, _, err := s.deps.Scheduler.GetSchedule(ctx, id); err == nil {
+		item, err := decode(existing)
+		if err != nil {
+			return nil, err
+		}
+		var stored struct {
+			CreateHash string `json:"createHash"`
+		}
+		_ = json.Unmarshal(existing.Target.InputTemplate, &stored)
+		if stored.CreateHash != requestHash(caller, request) {
+			return nil, schedule.ErrIdempotencyConflict
+		}
+		return s.Find(ctx, caller, item.ID)
+	} else if !errors.Is(err, schedule.ErrScheduleNotFound) {
+		return nil, err
+	}
+	item, def, err := s.build(ctx, caller, request, id, source, false)
 	if err != nil {
 		return nil, err
 	}
-	s.hydrate(item)
-	return item, nil
-}
-
-func (s *Service) Create(req *CreateReminderRequest, spaceID string) (*Reminder, error) {
-	title := strings.TrimSpace(req.Title)
-	remindAt := strings.TrimSpace(req.RemindAt)
-	if title == "" || remindAt == "" {
-		return nil, fmt.Errorf("标题和提醒时间不能为空")
-	}
-	parsed, err := parseTime(remindAt)
-	if err != nil {
-		return nil, fmt.Errorf("提醒时间格式无效")
-	}
-	if !parsed.After(time.Now()) {
-		return nil, fmt.Errorf("提醒时间不能早于当前时间")
-	}
-	channel := strings.TrimSpace(req.Channel)
-	if channel == "" {
-		channel = "web"
-	}
-	repeatRule := strings.TrimSpace(req.RepeatRule)
-	if repeatRule == "" {
-		repeatRule = "none"
-	}
-	enabled := 1
-	if req.Enabled != nil && !*req.Enabled {
-		enabled = 0
-	}
-	item := &Reminder{
-		SpaceID:        spaceID,
-		Title:          title,
-		Content:        strings.TrimSpace(req.Content),
-		Channel:        channel,
-		ConversationID: strings.TrimSpace(req.ConversationID),
-		CharacterID:    strings.TrimSpace(req.CharacterID),
-		RemindAt:       parsed.Format("2006-01-02 15:04:05"),
-		RepeatRule:     repeatRule,
-		Enabled:        enabled,
-		CreatedAt:      nowString(),
-		UpdatedAt:      nowString(),
-	}
-	if err := s.repo.Create(item); err != nil {
-		return nil, fmt.Errorf("创建提醒失败: %w", err)
-	}
-	return item, nil
-}
-
-func (s *Service) Update(id int, spaceID string, updates map[string]interface{}) (*Reminder, error) {
-	if len(updates) == 0 {
-		return nil, fmt.Errorf("没有可更新的字段")
-	}
-	allowed := map[string]string{
-		"title":           "title",
-		"content":         "content",
-		"channel":         "channel",
-		"conversationId":  "conversation_id",
-		"conversation_id": "conversation_id",
-		"characterId":     "character_id",
-		"character_id":    "character_id",
-		"remindAt":        "remind_at",
-		"remind_at":       "remind_at",
-		"repeatRule":      "repeat_rule",
-		"repeat_rule":     "repeat_rule",
-		"enabled":         "enabled",
-	}
-	clean := make(map[string]interface{}, len(updates))
-	for key, value := range updates {
-		if column := allowed[key]; column != "" {
-			clean[column] = value
-		}
-	}
-	clean["updated_at"] = nowString()
-	if err := s.repo.Update(id, spaceID, clean); err != nil {
-		return nil, fmt.Errorf("更新提醒失败: %w", err)
-	}
-	return s.Find(id, spaceID)
-}
-
-func (s *Service) Delete(id int, spaceID string) error {
-	return s.repo.Delete(id, spaceID)
-}
-
-func (s *Service) Toggle(id int, spaceID string) (*Reminder, error) {
-	item, err := s.repo.Toggle(id, spaceID)
+	encoded, err := json.Marshal(struct {
+		*Reminder
+		CreateHash string `json:"createHash"`
+	}{item, requestHash(caller, request)})
 	if err != nil {
 		return nil, err
 	}
-	s.hydrate(item)
-	return item, nil
-}
-
-func (s *Service) Status(spaceID string) (map[string]interface{}, error) {
-	items, err := s.List(spaceID)
-	if err != nil {
+	def.Target.InputTemplate = encoded
+	if err := s.deps.Scheduler.InstallHostDefinition(ctx, def); err != nil {
+		if errors.Is(err, schedule.ErrIdempotencyConflict) {
+			return s.Create(ctx, caller, request, source)
+		}
 		return nil, err
 	}
-	enabled := 0
-	dueNow := 0
-	now := time.Now()
-	for _, item := range items {
-		if item.Enabled == 1 {
-			enabled++
-			if parsed, parseErr := parseTime(item.RemindAt); parseErr == nil && !parsed.After(now) {
-				dueNow++
-			}
-		}
-	}
-	return map[string]interface{}{
-		"schedulerRunning": s.Running(),
-		"total":            len(items),
-		"enabled":          enabled,
-		"dueNow":           dueNow,
-	}, nil
+	return s.Find(ctx, caller, id)
 }
 
-func (s *Service) Test(item *Reminder) map[string]interface{} {
-	content := item.Content
-	if content == "" {
-		content = fmt.Sprintf("[提醒测试] %s", item.Title)
+func (s *Service) build(ctx context.Context, caller Caller, request CreateReminderRequest, id, source string, updating bool) (*Reminder, *schedule.ScheduleContributionDefinition, error) {
+	if strings.TrimSpace(request.Title) == "" || len(request.Title) > 512 || len(request.Content) > 128<<10 || strings.TrimSpace(request.CharacterID) == "" {
+		return nil, nil, errors.New("标题、所属角色或内容无效")
 	}
-	return map[string]interface{}{
-		"id":             item.ID,
-		"tested":         true,
-		"title":          item.Title,
-		"remindAt":       item.RemindAt,
-		"messageContent": content,
-		"channel":        item.Channel,
-		"conversationId": s.resolveConversation(item),
-		"safetyCheck": map[string]interface{}{
-			"safe":   true,
-			"reason": "",
-		},
+	if request.Kind == "" {
+		request.Kind = UserReminder
 	}
-}
-
-func (s *Service) TriggerNow(ctx context.Context, item *Reminder) (string, string, error) {
-	if item == nil {
-		return "", "", fmt.Errorf("提醒不存在")
+	if request.Kind != UserReminder && request.Kind != ProactiveTask {
+		return nil, nil, errors.New("任务类型无效")
 	}
-	conversationID := s.resolveConversation(item)
-	if conversationID == "" {
-		return "", "", fmt.Errorf("没有可用对话")
+	if request.Timezone == "" {
+		request.Timezone = "Asia/Shanghai"
 	}
-	if s.dispatch == nil {
-		return "", "", fmt.Errorf("消息生成服务不可用")
-	}
-	prompt := item.Content
-	if prompt == "" {
-		prompt = fmt.Sprintf("请用自然的语气提醒用户：%s", item.Title)
-	}
-	requestID := fmt.Sprintf("reminder:%d:%d", item.ID, time.Now().UnixNano())
-	response, err := s.dispatch.ProcessMessage(ctx, &chat.ProcessMessageRequest{
-		SpaceID:                  item.SpaceID,
-		CharacterID:              item.CharacterID,
-		ConversationID:           conversationID,
-		Channel:                  item.Channel,
-		Message:                  prompt,
-		Source:                   "proactive",
-		ProactiveTaskInstruction: prompt,
-		RequestID:                requestID,
-		IsInternal:               true,
-	})
+	loc, err := time.LoadLocation(request.Timezone)
 	if err != nil {
-		return "", "", err
+		return nil, nil, errors.New("时区必须为有效 IANA 名称")
 	}
-	messageID := ""
-	if len(response.MessageIDs) > 0 {
-		messageID = response.MessageIDs[0]
+	anchor, err := parseTime(request.RemindAt, loc)
+	if err != nil || (!updating && !anchor.After(time.Now())) {
+		return nil, nil, errors.New("提醒时间必须为未来的有效时间")
 	}
-	return messageID, conversationID, nil
-}
-
-func (s *Service) History(spaceID string, page, pageSize int, state string) ([]TriggerHistory, int64, error) {
-	return s.repo.ListHistory(spaceID, page, pageSize, state)
-}
-
-func (s *Service) QueueSummary(spaceID string) (map[string]interface{}, error) {
-	items, err := s.List(spaceID)
-	if err != nil {
-		return nil, err
-	}
-	pending := 0
-	for _, item := range items {
-		if item.Enabled == 1 {
-			pending++
+	wallAnchor := anchor.In(loc).Format("2006-01-02 15:04:05")
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if wall, err := time.Parse(layout, request.RemindAt); err == nil {
+			wallAnchor = wall.Format("2006-01-02 15:04:05")
+			break
 		}
 	}
-	return map[string]interface{}{
-		"depth":          len(items),
-		"pendingCount":   pending,
-		"recentFailures": 0,
-		"backpressure":   false,
-	}, nil
-}
-
-func (s *Service) GetCleanupDays() string {
-	var value string
-	err := s.db.Table("app_settings").Select("value").Where("key = ? AND deleted_at IS NULL", "reminder_cleanup_days").Scan(&value).Error
-	if err != nil || strings.TrimSpace(value) == "" {
-		return "0"
+	rule := request.Recurrence
+	if rule.Type == "" {
+		rule.Type = request.RepeatRule
 	}
-	return value
-}
-
-func (s *Service) SetCleanupDays(value string) error {
-	days, err := strconv.Atoi(strings.TrimSpace(value))
-	if err != nil || days < 0 {
-		return fmt.Errorf("自动清理天数无效")
+	if rule.Type == "" {
+		rule.Type = "none"
 	}
-	normalized := strconv.Itoa(days)
-	return s.db.Exec(`INSERT INTO app_settings(key, value, revision, deleted_at, updated_at)
-		VALUES('reminder_cleanup_days', ?, 1, NULL, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value, revision = app_settings.revision + 1, deleted_at = NULL, updated_at = excluded.updated_at`,
-		normalized, nowString()).Error
-}
-
-func (s *Service) CleanupHistory(spaceID string) {
-	days, err := strconv.Atoi(s.GetCleanupDays())
-	if err != nil || days <= 0 {
-		return
+	trigger := schedule.ScheduleTriggerDefinition{MaxOccurrences: request.MaxOccurrences}
+	if request.MaxOccurrences < 0 {
+		return nil, nil, errors.New("结束次数不能小于零")
 	}
-	_ = s.repo.DeleteHistoryBefore(spaceID, time.Now().AddDate(0, 0, -days))
-}
-
-func (s *Service) processDue(ctx context.Context) {
-	s.mu.Lock()
-	if s.ticking {
-		s.mu.Unlock()
-		return
-	}
-	s.ticking = true
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		s.ticking = false
-		s.mu.Unlock()
-	}()
-
-	items, err := s.repo.Due(50)
-	if err != nil {
-		return
-	}
-	for index := range items {
-		item := &items[index]
-		historyID := uuid.NewString()
-		now := nowString()
-		history := &TriggerHistory{
-			ID:          historyID,
-			SpaceID:     item.SpaceID,
-			TriggerID:   strconv.Itoa(item.ID),
-			TriggerType: "reminder",
-			Title:       item.Title,
-			Channel:     item.Channel,
-			State:       "sending",
-			Priority:    "normal",
-			Reason:      "到达提醒时间",
-			CreatedAt:   now,
-			UpdatedAt:   now,
+	switch rule.Type {
+	case "none":
+		trigger.Type = schedule.TriggerTypeOneShot
+		trigger.OneShot = &schedule.OneShotTriggerDefinition{RunAt: anchor}
+	case "daily", "weekly", "monthly", "weekdays":
+		trigger.Type = schedule.TriggerTypeCalendar
+		trigger.Calendar = &schedule.CalendarTriggerDefinition{Frequency: rule.Type, AnchorAt: anchor, Weekdays: rule.Weekdays, WallTime: wallAnchor[11:]}
+	case "interval":
+		if rule.IntervalSeconds < 60 || rule.IntervalSeconds > 365*86400 {
+			return nil, nil, errors.New("间隔须为 60 秒至 365 天")
 		}
-		_ = s.repo.CreateHistory(history)
-		_, _, triggerErr := s.TriggerNow(ctx, item)
-		if triggerErr != nil {
-			_ = s.repo.UpdateHistory(historyID, map[string]interface{}{
-				"state": "failed", "attempt_count": 1, "last_error": triggerErr.Error(), "updated_at": nowString(),
-			})
-			continue
+		trigger.Type = schedule.TriggerTypeInterval
+		trigger.Interval = &schedule.IntervalTriggerDefinition{AnchorAt: anchor, Interval: time.Duration(rule.IntervalSeconds) * time.Second}
+	case "cron":
+		if request.Kind != ProactiveTask {
+			return nil, nil, errors.New("Cron 仅用于主动任务规则")
 		}
-		_ = s.repo.UpdateHistory(historyID, map[string]interface{}{
-			"state": "sent", "attempt_count": 1, "updated_at": nowString(),
-		})
-		s.advance(item)
-	}
-}
-
-func (s *Service) advance(item *Reminder) {
-	updates := map[string]interface{}{
-		"last_triggered_at": nowString(),
-		"updated_at":        nowString(),
-	}
-	switch item.RepeatRule {
-	case "daily", "weekly":
-		current, err := parseTime(item.RemindAt)
-		if err == nil {
-			step := 24 * time.Hour
-			if item.RepeatRule == "weekly" {
-				step = 7 * 24 * time.Hour
-			}
-			next := current.Add(step)
-			for !next.After(time.Now()) {
-				next = next.Add(step)
-			}
-			updates["remind_at"] = next.Format("2006-01-02 15:04:05")
-			updates["enabled"] = 1
-		}
+		trigger.Type = schedule.TriggerTypeCron
+		trigger.Cron = &schedule.CronTriggerDefinition{Expression: rule.Cron}
 	default:
-		updates["enabled"] = 0
+		return nil, nil, errors.New("重复规则无效")
 	}
-	_ = s.repo.Update(item.ID, item.SpaceID, updates)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	item := &Reminder{ID: id, Caller: caller, OwnerID: s.deps.OwnerID, ExecutionMode: s.deps.Mode, Kind: request.Kind, Source: source, Title: strings.TrimSpace(request.Title), Content: strings.TrimSpace(request.Content), ConversationID: request.ConversationID, CharacterID: request.CharacterID, TargetDeviceID: request.TargetDeviceID, AnchorAt: anchor.UTC().Format(time.RFC3339Nano), RemindAt: anchor.UTC().Format(time.RFC3339Nano), RepeatRule: rule.Type, Recurrence: rule, Timezone: request.Timezone, EndAt: request.EndAt, MaxOccurrences: request.MaxOccurrences, Channel: strings.TrimSpace(request.Channel), Channels: request.Channels, SystemNotification: true, Policy: request.Policy, RequestID: request.RequestID, CreatedAt: now, UpdatedAt: now, Enabled: 1}
+	if item.Channel == "" || item.Channel == "all" {
+		item.Channel = "web"
+	}
+	item.CreatedBy = caller
+	item.LocalAnchorAt = wallAnchor
+	item.ChannelTargets = request.ChannelTargets
+	if request.SystemNotification != nil {
+		item.SystemNotification = *request.SystemNotification
+	}
+	if request.Enabled != nil && !*request.Enabled {
+		item.Enabled = 0
+	}
+	if item.Kind == ProactiveTask && item.Policy == nil {
+		return nil, nil, errors.New("主动任务必须提供执行策略")
+	}
+	if item.Policy != nil {
+		policy := item.Policy
+		if policy.ActiveLevel < 0 || policy.ActiveLevel > 100 || policy.MinInterval < 0 || policy.MinInterval > 525600 || policy.MaxPerDay < 0 || policy.MaxPerDay > 100000 || policy.MaxDailyCalls < 0 || policy.MaxDailyCalls > 100000 || policy.RuleMaxPerDay < 0 || policy.RuleMaxPerDay > 100000 || policy.UnrepliedSlowdownAfter < 0 || policy.UnrepliedSlowdownAfter > 100000 || policy.UnrepliedCooldownMultiplier < 0 || policy.UnrepliedCooldownMultiplier > 100 {
+			return nil, nil, errors.New("主动任务频率策略超出允许范围")
+		}
+		for _, value := range []string{policy.QuietStart, policy.QuietEnd, policy.RuleQuietStart, policy.RuleQuietEnd} {
+			if value == "" {
+				continue
+			}
+			if _, err := time.Parse("15:04", value); err != nil {
+				return nil, nil, errors.New("安静时段须使用 HH:mm 格式")
+			}
+		}
+	}
+	if caller.PluginID != "" && s.deps.PluginActive != nil {
+		if err := s.deps.PluginActive(ctx, caller.PluginID, caller.ModuleID); err != nil {
+			return nil, nil, err
+		}
+	}
+	binding, err := s.deps.Authorize(ctx, caller, item)
+	if err != nil {
+		return nil, nil, err
+	}
+	item.Binding = binding
+	def := &schedule.ScheduleContributionDefinition{ScheduleID: id, ContributionID: id, ExtensionID: caller.PluginID, ModuleID: caller.ModuleID, Name: item.Title, Description: item.Kind, Trigger: trigger, Target: schedule.ScheduleTargetDefinition{Type: schedule.TargetTypeHostWorkload, TargetID: TargetID, IdempotencyMode: schedule.IdempotencyModeConditionallyIdem}, Timezone: item.Timezone, EnabledByDefault: item.Enabled == 1, MisfirePolicy: schedule.ScheduleMisfirePolicy{Policy: schedule.MisfirePolicyFireOnce, MaxCatchUp: 1, GracePeriod: 24 * time.Hour}, JitterPolicy: schedule.ScheduleJitterPolicy{SeedMode: "disabled"}, DSTSpringPolicy: schedule.DSTSpringNextValidTime, DSTFallPolicy: schedule.DSTFallFireOnceFirst, ExecutionOwner: schedule.ExecutionOwnerBackend, ScopeRule: schedule.ScopeRule{ScopeType: "host_user"}}
+	if request.EndAt != "" {
+		end, err := parseTime(request.EndAt, loc)
+		if err != nil || end.Before(anchor) {
+			return nil, nil, errors.New("结束时间不能早于开始时间")
+		}
+		def.EndAt = &end
+		item.EndAt = end.UTC().Format(time.RFC3339Nano)
+	}
+	if item.Kind == ProactiveTask && item.Policy != nil {
+		key := sha256.Sum256([]byte(item.Caller.SpaceID + "\x00" + item.CharacterID))
+		def.ConcurrencyPolicy = schedule.DefaultConcurrencyPolicy()
+		def.ConcurrencyPolicy.SerializationKey = "proactive:" + hex.EncodeToString(key[:])
+		if item.Policy.RandomMinutes < 0 || item.Policy.RandomMinutes > 120 {
+			return nil, nil, errors.New("随机延迟须为 0 至 120 分钟")
+		}
+		if item.Policy.RandomMinutes > 0 {
+			def.JitterPolicy = schedule.ScheduleJitterPolicy{Enabled: true, MaxDelay: time.Duration(item.Policy.RandomMinutes) * time.Minute, SeedMode: "schedule_id_scheduled_at"}
+		}
+	}
+	if rule.Type == "cron" {
+		def.StartAt = &anchor
+	}
+	return item, def, nil
 }
 
-func (s *Service) resolveConversation(item *Reminder) string {
-	if item == nil {
-		return ""
+func parseTime(value string, loc *time.Location) (time.Time, error) {
+	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return parsed, nil
 	}
-	if item.ConversationID != "" {
-		return item.ConversationID
-	}
-	query := ownerQuery(s.db.Table("conversations").Select("id"), item.SpaceID).Where("deleted_at IS NULL")
-	if item.CharacterID != "" {
-		query = query.Where("character_id = ?", item.CharacterID)
-	}
-	var conversationID string
-	if err := query.Order("updated_at DESC").Limit(1).Scan(&conversationID).Error; err == nil && conversationID != "" {
-		return conversationID
-	}
-	if item.Channel != "" {
-		query = ownerQuery(s.db.Table("conversations").Select("id"), item.SpaceID).Where("channel = ? AND deleted_at IS NULL", item.Channel)
-		if item.CharacterID != "" {
-			query = query.Where("character_id = ?", item.CharacterID)
-		}
-		if err := query.Order("updated_at DESC").Limit(1).Scan(&conversationID).Error; err == nil {
-			return conversationID
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			normalized, _ := schedule.NormalizeCalendarWallTime(parsed, loc)
+			return normalized, nil
 		}
 	}
-	return ""
-}
-
-func (s *Service) hydrate(item *Reminder) {
-	if item == nil {
-		return
-	}
-	if item.ConversationID != "" {
-		var title string
-		if err := s.db.Table("conversations").Select("title").Where("id = ?", item.ConversationID).Scan(&title).Error; err == nil {
-			item.ConversationTitle = title
-		}
-	}
-	if item.CharacterID != "" {
-		var name string
-		if err := s.db.Table("characters").Select("name").Where("id = ?", item.CharacterID).Scan(&name).Error; err == nil {
-			item.CharacterName = name
-		}
-	}
-}
-
-func parseTime(value string) (time.Time, error) {
-	layouts := []string{
-		"2006-01-02 15:04:05",
-		time.RFC3339,
-		"2006-01-02T15:04:05",
-	}
-	for _, layout := range layouts {
-		if parsed, err := time.ParseInLocation(layout, value, time.Local); err == nil {
-			return parsed, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("invalid time")
+	return time.Time{}, errors.New("时间格式无效")
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/decision"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/interaction"
 )
@@ -24,7 +25,7 @@ type harnessTestWorker struct {
 func (w *harnessTestWorker) StartWorker(ctx context.Context, req interaction.WorkerRunRequest) (string, error) {
 	w.started = append(w.started, req)
 	scope := interaction.InteractionScope{
-		SpaceID: req.SpaceID, CharacterID: req.CharacterID, ConversationID: req.ConversationID,
+		SpaceID: req.SpaceID, CharacterID: req.CharacterID, ConversationID: "multi-agent-worker-" + req.AssignmentID,
 		RequestID: "ma-" + req.AssignmentID, Source: "multi_agent", Channel: "web",
 	}
 	rec := interaction.NewInteractionRecord(scope)
@@ -54,6 +55,9 @@ func testMultiAgentModelRuntime(t *testing.T) (*chatToolRuntimeAdapter, *harness
 	workers := &harnessTestWorker{tracker: tracker}
 	goals := decision.NewGoalRegistry()
 	coordinator := interaction.NewMultiAgentCoordinator(tracker, goals, nil, workers, nil, interaction.DefaultMultiAgentPolicy())
+	coordinator.SetOwnedExecution(func(ctx context.Context, owned coordination.ExecutionScope, run func(context.Context) error) error {
+		return run(coordination.WithScope(ctx, owned))
+	})
 	adapter := &chatToolRuntimeAdapter{}
 	adapter.ConfigureMultiAgent(coordinator, tracker, goals)
 	scope := chat.SkillScope{
@@ -84,6 +88,23 @@ func TestChatHarnessMultiAgentToolsHonorWorkspaceAuthorization(t *testing.T) {
 	got := a.executeMultiAgentTool(context.Background(), multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect the api endpoints","Add durable worker tests"]}`), scope)
 	if got.Error == nil || got.Error.Code != "MULTI_AGENT_NOT_AUTHORIZED" {
 		t.Fatalf("unauthorized delegation accepted: %+v", got)
+	}
+}
+
+func TestChatHarnessMultiAgentPersistsOwnedTaskBinding(t *testing.T) {
+	a, _, scope, tracker := testMultiAgentModelRuntime(t)
+	ctx := coordination.WithScope(t.Context(), coordination.ExecutionScope{SpaceID: scope.SpaceID, RoleID: scope.CharacterID, CoreID: "execution-core", ResourceOwnerID: "device-owner"})
+	result := a.executeMultiAgentTool(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect the api endpoints","Add durable worker tests"]}`), scope)
+	if result.Error != nil {
+		t.Fatalf("delegation failed: %+v", result.Error)
+	}
+	parent, found, err := tracker.GetByRequestID(ctx, scope.SpaceID, scope.RequestID)
+	if err != nil || !found || parent.RecoveryDescriptor == nil || parent.RecoveryDescriptor.MultiAgent == nil {
+		t.Fatalf("missing parent binding: %v", err)
+	}
+	binding := parent.RecoveryDescriptor.MultiAgent
+	if binding.ExecutionCoreID != "execution-core" || binding.ResourceOwnerID != "device-owner" {
+		t.Fatalf("owner binding not persisted: %+v", binding)
 	}
 }
 

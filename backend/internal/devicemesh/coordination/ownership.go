@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/u-ai/backend/internal/dbtransaction"
 	"time"
 )
 
@@ -115,11 +116,15 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	if len(payload) > 4<<20 {
 		return Acknowledgement{}, ErrPendingLimit
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return Acknowledgement{}, err
+	tx, _ := dbtransaction.From(ctx, s.db)
+	ownedTransaction := tx == nil
+	if ownedTransaction {
+		tx, err = s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return Acknowledgement{}, err
+		}
+		defer tx.Rollback()
 	}
-	defer tx.Rollback()
 	if err := s.validateSourceCommitAuthority(ctx, tx, commit); err != nil {
 		return Acknowledgement{}, err
 	}
@@ -374,8 +379,10 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	if _, err = tx.ExecContext(ctx, `UPDATE kernel_device_owned_inbox SET ack=?,committed_at=? WHERE owner_id=? AND request_id=?`, encoded, time.Now().UTC().Format(time.RFC3339Nano), s.ownerID, scope.RequestID); err != nil {
 		return Acknowledgement{}, err
 	}
-	if err = tx.Commit(); err != nil {
-		return Acknowledgement{}, err
+	if ownedTransaction {
+		if err = tx.Commit(); err != nil {
+			return Acknowledgement{}, err
+		}
 	}
 	return ack, nil
 }
@@ -561,7 +568,7 @@ func (s *OwnershipStore) Get(ctx context.Context, kind, id string) (*Resource, e
 		return nil, ErrWrongOwner
 	}
 	resource := &Resource{OwnerID: s.ownerID, Kind: kind, ID: id}
-	err := s.db.QueryRowContext(ctx, `SELECT role_id,source_id,revision,deleted,CAST(body AS BLOB) FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND resource_id=?`, s.ownerID, kind, id).Scan(&resource.RoleID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body)
+	err := currentQueryExecutor(ctx, s.db).QueryRowContext(ctx, `SELECT role_id,source_id,revision,deleted,CAST(body AS BLOB) FROM kernel_device_owned_resources WHERE owner_id=? AND kind=? AND resource_id=?`, s.ownerID, kind, id).Scan(&resource.RoleID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

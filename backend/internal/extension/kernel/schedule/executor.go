@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type ScheduleExecutor struct {
 	dependencyChecker DependencyChecker
 
 	leaseOwner string
+	active     map[string]int
 
 	mu      sync.Mutex
 	ctx     context.Context
@@ -73,7 +75,8 @@ func NewScheduleExecutor(
 		scopeChecker:      scopeChecker,
 		dependencyChecker: dependencyChecker,
 		targetAdapters:    map[TargetType]TargetAdapter{},
-		leaseOwner:        "amitia-schedule-executor-backend",
+		leaseOwner:        "amitia-schedule-executor-" + uuid.NewString(),
+		active:            map[string]int{},
 	}
 }
 
@@ -119,7 +122,8 @@ func (e *ScheduleExecutor) executionLoop() {
 		case <-e.ctx.Done():
 			return
 		case <-ticker.C:
-			_ = e.retry.ProcessDueRetries(e.ctx, e)
+			e.wg.Add(1)
+			go func() { defer e.wg.Done(); _ = e.retry.ProcessDueRetries(e.ctx, e) }()
 			e.processDueTriggers()
 		}
 	}
@@ -135,7 +139,11 @@ func (e *ScheduleExecutor) processDueTriggers() {
 		if trigger == nil {
 			continue
 		}
-		go e.Execute(e.ctx, trigger)
+		e.wg.Add(1)
+		go func(trigger *ScheduleTriggerRecord) {
+			defer e.wg.Done()
+			_, _ = e.Execute(e.ctx, trigger)
+		}(trigger)
 	}
 }
 
@@ -148,6 +156,10 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 	if def.ExecutionOwner != ExecutionOwnerBackend {
 		return e.blockTrigger(ctx, trigger, ErrCodeExecutionOwnerDenied, "execution owner is not backend")
 	}
+	if !e.reserveExecution(def) {
+		return &ExecuteResult{TriggerID: trigger.TriggerID, Status: trigger.Status, ErrorCode: "CONCURRENCY_LIMIT", ErrorMessage: "execution concurrency limit reached"}, nil
+	}
+	defer e.releaseExecution(def)
 
 	isOpen, err := e.circuit.IsOpen(ctx, def.ScheduleID)
 	if err == nil && isOpen {
@@ -166,11 +178,10 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		return e.blockTrigger(ctx, trigger, ErrCodeGenerationMismatch, "generation mismatch")
 	}
 
-	leaseOwner := fmt.Sprintf("amitia-schedule-executor-%s", string(def.ExecutionOwner))
+	leaseOwner := e.leaseOwner
 	if trigger.LeaseOwner != nil && *trigger.LeaseOwner != leaseOwner &&
 		trigger.LeaseExpiresAt != nil && trigger.LeaseExpiresAt.After(e.clock.Now().UTC()) {
-		return e.quarantineTrigger(ctx, trigger, def, QuarantineDualScheduler,
-			fmt.Sprintf("trigger leased by %s", *trigger.LeaseOwner))
+		return &ExecuteResult{TriggerID: trigger.TriggerID, Status: trigger.Status, ErrorCode: ErrCodeLeaseFailed, ErrorMessage: "trigger is already leased"}, nil
 	}
 
 	acquired, err := e.leaseManager.AcquireLease(ctx, trigger.TriggerID, leaseOwner)
@@ -179,8 +190,7 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		if getErr == nil && freshTrigger != nil && freshTrigger.LeaseOwner != nil &&
 			*freshTrigger.LeaseOwner != leaseOwner &&
 			freshTrigger.LeaseExpiresAt != nil && freshTrigger.LeaseExpiresAt.After(e.clock.Now().UTC()) {
-			return e.quarantineTrigger(ctx, trigger, def, QuarantineDualScheduler,
-				fmt.Sprintf("trigger leased by %s", *freshTrigger.LeaseOwner))
+			return &ExecuteResult{TriggerID: trigger.TriggerID, Status: freshTrigger.Status, ErrorCode: ErrCodeLeaseFailed, ErrorMessage: "trigger is already leased"}, nil
 		}
 		return &ExecuteResult{
 			TriggerID:    trigger.TriggerID,
@@ -189,8 +199,21 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 			ErrorMessage: "lease acquisition failed",
 		}, nil
 	}
+	leaseExpires := e.clock.Now().Add(e.config.LeaseDuration)
+	trigger.LeaseOwner = &leaseOwner
+	trigger.LeaseExpiresAt = &leaseExpires
+	executionCtx, cancelExecution := context.WithCancel(ctx)
+	stopHeartbeat := e.maintainLease(executionCtx, trigger, leaseOwner, cancelExecution)
 	defer func() {
-		_ = e.leaseManager.ReleaseLease(ctx, trigger.TriggerID)
+		cancelExecution()
+		stopHeartbeat()
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if strong, ok := e.store.(TriggerLeaseHeartbeatStore); ok {
+			_ = strong.ReleaseOwnedTriggerLease(cleanup, trigger.TriggerID, leaseOwner)
+		} else {
+			_ = e.leaseManager.ReleaseLease(cleanup, trigger.TriggerID)
+		}
 	}()
 
 	if trigger.OverlapDecision == "replace_cancellable" {
@@ -213,7 +236,7 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 	}
 
 	var scopeSnapshotID string
-	if e.scopeChecker != nil {
+	if e.scopeChecker != nil && def.Target.Type != TargetTypeHostWorkload {
 		allowed, reason, err := e.scopeChecker.CheckScope(ctx, def.ScheduleID, def.ScopeRule)
 		if err != nil || !allowed {
 			return e.failTrigger(ctx, trigger, ErrCodeScopeDenied, reason)
@@ -224,7 +247,7 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		}
 		scopeSnapshotID = snapshotID
 	}
-	if e.scopeChecker == nil && def.ScopeRule.ScopeType != "" && def.ScopeRule.ScopeType != "global" {
+	if e.scopeChecker == nil && def.Target.Type != TargetTypeHostWorkload && def.ScopeRule.ScopeType != "" && def.ScopeRule.ScopeType != "global" {
 		return e.failTrigger(ctx, trigger, ErrCodeScopeDenied, "scope checker not configured")
 	}
 
@@ -253,7 +276,9 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 	trigger.ScopeSnapshotID = scopeSnapshotID
 	trigger.DependencySnapshotID = depSnapshotID
 	trigger.UpdatedAt = now.UTC()
-	_ = e.store.PutTrigger(ctx, trigger)
+	if err := e.store.PutTrigger(ctx, trigger); err != nil {
+		return nil, err
+	}
 
 	runID := "run-" + uuid.NewString()
 	run := &ScheduleRunRecord{
@@ -273,7 +298,19 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		return e.failTrigger(ctx, trigger, ErrCodeTargetExecutionFailed, "failed to create run record")
 	}
 
-	targetResult, err := adapter.Execute(ctx, def, trigger)
+	current, err := e.store.GetState(ctx, trigger.ScheduleID)
+	if err != nil || current == nil || !current.Enabled || current.Paused || current.Generation != trigger.Generation {
+		run.Status = RunStatusCancelled
+		finish := e.clock.Now().UTC()
+		run.FinishedAt = &finish
+		run.UpdatedAt = finish
+		_ = e.store.PutRun(ctx, run)
+		return e.blockTrigger(ctx, trigger, ErrCodeGenerationMismatch, "schedule changed before target execution")
+	}
+	targetResult, err := adapter.Execute(executionCtx, def, trigger)
+	if err == nil && executionCtx.Err() != nil {
+		err = executionCtx.Err()
+	}
 
 	finishTime := e.clock.Now()
 	run.FinishedAt = &finishTime
@@ -294,6 +331,9 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		}, nil
 	}
 
+	if targetResult == nil {
+		return nil, errors.New("target returned no execution receipt")
+	}
 	if targetResult.Success {
 		run.Status = RunStatusCompleted
 		if targetResult.OperationID != "" {
@@ -305,18 +345,29 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		if len(targetResult.ResultJSON) > 0 {
 			run.ResultJSON = targetResult.ResultJSON
 		}
-		_ = e.store.PutRun(ctx, run)
-		_ = e.circuit.HandleExecutionResult(ctx, def.ScheduleID, true, "")
-
 		trigger.Status = RunStatusCompleted
 		trigger.OperationID = strPtr(targetResult.OperationID)
 		if targetResult.InvocationID != "" {
 			trigger.InvocationID = strPtr(targetResult.InvocationID)
 		}
 		trigger.UpdatedAt = finishTime.UTC()
-		_ = e.store.PutTrigger(ctx, trigger)
-
-		e.updateScheduleStateOnSuccess(ctx, def, state, trigger, finishTime)
+		if err := withScheduleTransaction(ctx, e.store, func(ctx context.Context) error {
+			if err := e.guardOwnedLease(ctx, trigger.TriggerID, leaseOwner); err != nil {
+				return err
+			}
+			if err := e.store.PutRun(ctx, run); err != nil {
+				return err
+			}
+			if err := e.store.PutTrigger(ctx, trigger); err != nil {
+				return err
+			}
+			if err := e.circuit.HandleExecutionResult(ctx, def.ScheduleID, true, ""); err != nil {
+				return err
+			}
+			return e.updateScheduleStateOnSuccess(ctx, def, state, trigger, finishTime)
+		}); err != nil {
+			return nil, err
+		}
 
 		return &ExecuteResult{
 			TriggerID:    trigger.TriggerID,
@@ -435,18 +486,40 @@ func (e *ScheduleExecutor) blockTrigger(ctx context.Context, trigger *ScheduleTr
 	}, nil
 }
 
-func (e *ScheduleExecutor) updateScheduleStateOnSuccess(ctx context.Context, def *ScheduleContributionDefinition, state *ScheduleState, trigger *ScheduleTriggerRecord, finishTime time.Time) {
+func (e *ScheduleExecutor) updateScheduleStateOnSuccess(ctx context.Context, def *ScheduleContributionDefinition, state *ScheduleState, trigger *ScheduleTriggerRecord, finishTime time.Time) error {
+	return withScheduleTransaction(ctx, e.store, func(ctx context.Context) error {
+		fresh, err := e.store.GetState(ctx, state.ScheduleID)
+		if err != nil {
+			return err
+		}
+		if fresh.Generation != trigger.Generation {
+			return nil
+		}
+		return e.recordScheduleSuccess(ctx, def, fresh, trigger, finishTime)
+	})
+}
+
+func (e *ScheduleExecutor) recordScheduleSuccess(ctx context.Context, def *ScheduleContributionDefinition, state *ScheduleState, trigger *ScheduleTriggerRecord, finishTime time.Time) error {
 	now := e.clock.Now()
 	state.LastTriggeredAt = &trigger.ScheduledAt
 	state.LastFinishedAt = &finishTime
 	state.LastResult = "success"
 	state.FailureCount = 0
 
-	if def.Trigger.Type == TriggerTypeOneShot {
+	limitReached := false
+	if !trigger.Manual && def.Trigger.MaxOccurrences > 0 {
+		count, err := countScheduledTriggers(ctx, e.store, def.ScheduleID)
+		if err != nil {
+			return err
+		}
+		limitReached = count >= def.Trigger.MaxOccurrences
+	}
+	if (def.Trigger.Type == TriggerTypeOneShot || limitReached) && !trigger.Manual {
+		state.Enabled = false
 		state.Status = DefinitionStatusExpired
 		state.NextScheduledAt = nil
 		state.NextEffectiveAt = nil
-	} else {
+	} else if !trigger.Manual && state.NextScheduledAt == nil {
 		result, err := e.calc.CalculateNext(def, state)
 		if err == nil && result != nil {
 			state.NextScheduledAt = result.NextScheduledAt
@@ -454,7 +527,7 @@ func (e *ScheduleExecutor) updateScheduleStateOnSuccess(ctx context.Context, def
 		}
 	}
 	state.UpdatedAt = now.UTC()
-	_ = e.store.PutState(ctx, state)
+	return e.store.PutState(ctx, state)
 }
 
 func (e *ScheduleExecutor) cancelActiveRuns(ctx context.Context, scheduleID string) error {
@@ -488,4 +561,94 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func (e *ScheduleExecutor) guardOwnedLease(ctx context.Context, triggerID, owner string) error {
+	current, err := e.store.GetTrigger(ctx, triggerID)
+	if err != nil {
+		return err
+	}
+	if current == nil || current.LeaseOwner == nil || *current.LeaseOwner != owner || current.LeaseExpiresAt == nil || !current.LeaseExpiresAt.After(e.clock.Now()) {
+		return ErrLeaseExpired
+	}
+	return nil
+}
+
+func (e *ScheduleExecutor) reserveExecution(def *ScheduleContributionDefinition) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	global := e.config.GlobalMaxConcurrent
+	if global <= 0 {
+		global = DefaultScheduleConfig().GlobalMaxConcurrent
+	}
+	perExtension := e.config.PerExtensionLimit
+	if perExtension <= 0 {
+		perExtension = DefaultScheduleConfig().PerExtensionLimit
+	}
+	perSchedule := e.config.PerScheduleLimit
+	if perSchedule <= 0 {
+		perSchedule = DefaultScheduleConfig().PerScheduleLimit
+	}
+	if def.ConcurrencyPolicy.MaxConcurrentRuns > 0 && def.ConcurrencyPolicy.MaxConcurrentRuns < perSchedule {
+		perSchedule = def.ConcurrencyPolicy.MaxConcurrentRuns
+	}
+	if e.active["global"] >= global || e.active["extension:"+def.ExtensionID] >= perExtension || e.active["schedule:"+def.ScheduleID] >= perSchedule {
+		return false
+	}
+	if def.ConcurrencyPolicy.SerializationKey != "" && e.active["group:"+def.ConcurrencyPolicy.SerializationKey] > 0 {
+		return false
+	}
+	e.active["global"]++
+	e.active["extension:"+def.ExtensionID]++
+	e.active["schedule:"+def.ScheduleID]++
+	if def.ConcurrencyPolicy.SerializationKey != "" {
+		e.active["group:"+def.ConcurrencyPolicy.SerializationKey]++
+	}
+	return true
+}
+
+func (e *ScheduleExecutor) releaseExecution(def *ScheduleContributionDefinition) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.active["global"]--
+	e.active["extension:"+def.ExtensionID]--
+	e.active["schedule:"+def.ScheduleID]--
+	if def.ConcurrencyPolicy.SerializationKey != "" {
+		e.active["group:"+def.ConcurrencyPolicy.SerializationKey]--
+	}
+}
+
+func (e *ScheduleExecutor) maintainLease(ctx context.Context, trigger *ScheduleTriggerRecord, owner string, cancel context.CancelFunc) func() {
+	store, ok := e.store.(TriggerLeaseHeartbeatStore)
+	if !ok {
+		return func() {}
+	}
+	interval := e.config.LeaseDuration / 3
+	if interval <= 0 {
+		interval = DefaultScheduleConfig().LeaseDuration / 3
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				state, err := e.store.GetState(ctx, trigger.ScheduleID)
+				if err != nil || state == nil || !state.Enabled || state.Paused || state.Generation != trigger.Generation {
+					cancel()
+					return
+				}
+				ok, err := store.RenewTriggerLease(ctx, trigger.TriggerID, owner, e.clock.Now().Add(e.config.LeaseDuration))
+				if err != nil || !ok {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return func() { <-done }
 }

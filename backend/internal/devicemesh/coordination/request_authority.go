@@ -108,7 +108,10 @@ func (s *Service) validateRequestAuthorities(ctx context.Context) error {
 		if !ok || service != s || !owned {
 			return ErrWrongOwner
 		}
-		if err := s.Validate(request, scope); err != nil {
+		if err := context.Cause(request); err != nil {
+			return err
+		}
+		if err := s.Validate(ctx, scope); err != nil {
 			return err
 		}
 	}

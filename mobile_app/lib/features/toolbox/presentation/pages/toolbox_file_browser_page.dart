@@ -4,7 +4,6 @@ import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
@@ -42,7 +41,9 @@ class _FileItem {
 }
 
 class ToolboxFileBrowserPage extends ConsumerStatefulWidget {
-  const ToolboxFileBrowserPage({super.key});
+  final bool embedded;
+  final void Function(String resourceUri, String workspaceUri, String title)? onOpenFile;
+  const ToolboxFileBrowserPage({super.key, this.embedded = false, this.onOpenFile});
 
   @override
   ConsumerState<ToolboxFileBrowserPage> createState() => _ToolboxFileBrowserPageState();
@@ -54,6 +55,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
   final List<String> _history = [];
   String? _currentUri;
   String? _currentMountName;
+  String? _currentMountRoot;
   bool _loading = true;
   String? _error;
 
@@ -119,6 +121,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
   Future<void> _openMount(_WorkspaceMount mount) async {
     _history.clear();
     _currentMountName = mount.name;
+    _currentMountRoot = mount.rootUri;
     await _openUri(mount.rootUri, pushHistory: false);
   }
 
@@ -171,6 +174,10 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
 
   Future<void> _showFile(_FileItem item) async {
     if (!item.readable) return;
+    if (widget.onOpenFile != null) {
+      widget.onOpenFile!(item.uri, _currentMountRoot ?? '', item.name);
+      return;
+    }
     try {
       final api = ref.read(backendServiceProvider);
       final resp = await api.get<Map<String, dynamic>>(
@@ -215,7 +222,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
       child: AmitiaScaffold(
         appBar: AmitiaAppBar(
           title: '文件浏览',
-          showBackButton: true,
+          showBackButton: !widget.embedded,
           fallbackRoute: AppRoutes.settingsMaintenanceCategory,
         ),
         body: _loading

@@ -93,6 +93,9 @@ func (r *RetryService) ShouldRetry(ctx context.Context, def *ScheduleContributio
 	if !state.Enabled || state.Paused {
 		return &RetryDecision{ShouldRetry: false, Reason: "schedule_not_active"}, nil
 	}
+	if state.Generation != trigger.Generation {
+		return &RetryDecision{ShouldRetry: false, Reason: "generation_mismatch"}, nil
+	}
 
 	if def.EndAt != nil && r.clock.Now().After(*def.EndAt) {
 		return &RetryDecision{ShouldRetry: false, Reason: "past_end_at"}, nil
@@ -169,17 +172,20 @@ func (r *RetryService) ScheduleRetry(ctx context.Context, def *ScheduleContribut
 		CreatedAt:   now.UTC(),
 	}
 
-	if err := r.store.PutRetry(ctx, record); err != nil {
-		return nil, err
-	}
-
 	updates := map[string]any{
 		"status":        RunStatusRetryWait,
 		"attempt":       trigger.Attempt + 1,
 		"error_code":    errorCode,
 		"error_message": errorMessage,
 	}
-	_ = r.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusRetryWait, updates)
+	if err := withScheduleTransaction(ctx, r.store, func(ctx context.Context) error {
+		if err := r.store.PutRetry(ctx, record); err != nil {
+			return err
+		}
+		return r.store.UpdateTriggerStatus(ctx, trigger.TriggerID, RunStatusRetryWait, updates)
+	}); err != nil {
+		return nil, err
+	}
 
 	return record, nil
 }
@@ -195,14 +201,28 @@ func (r *RetryService) ProcessDueRetries(ctx context.Context, executor *Schedule
 			continue
 		}
 		trigger, err := r.store.GetTrigger(ctx, retry.TriggerID)
-		if err != nil || trigger == nil {
-			_ = r.store.DeleteRetry(ctx, retry.RetryID)
+		if err != nil {
+			return err
+		}
+		if trigger == nil {
+			if err := r.store.DeleteRetry(ctx, retry.RetryID); err != nil {
+				return err
+			}
 			continue
 		}
-		if executor != nil {
-			_, _ = executor.Execute(ctx, trigger)
+		if executor == nil {
+			continue
 		}
-		_ = r.store.DeleteRetry(ctx, retry.RetryID)
+		result, err := executor.Execute(ctx, trigger)
+		if err != nil {
+			return err
+		}
+		if result == nil || result.ErrorCode == "CONCURRENCY_LIMIT" || result.ErrorCode == ErrCodeLeaseFailed {
+			continue
+		}
+		if err := r.store.DeleteRetry(ctx, retry.RetryID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

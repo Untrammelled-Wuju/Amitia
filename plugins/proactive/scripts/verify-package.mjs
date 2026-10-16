@@ -6,7 +6,7 @@ import { inflateRawSync } from "node:zlib";
 const packageFile =
   process.argv[2] ||
   process.env.AMITIA_PROACTIVE_PACKAGE ||
-  join("..", "..", "Plugin", "Character", "amitia-\u4e3b\u52a8\u6d88\u606f-1.0.8.amitiax");
+  join("..", "..", "plugin", "character", `amitia-主动任务-${JSON.parse(readFileSync('amitia-extension.json', 'utf8')).extension.version}.amitiax`);
 
 function readEntries(buffer) {
   const entries = new Map();
@@ -98,9 +98,18 @@ function main() {
   if (permissions.some((permission) => permission.name === "proactive.dispatch")) {
     throw new Error("legacy proactive.dispatch permission must not be present");
   }
+  for (const name of ['proactive_task.read', 'proactive_task.create', 'proactive_task.manage', 'proactive_task.execute', 'ui.notify']) {
+    if (!permissions.some(permission => permission.name === name)) throw new Error(`${name} permission missing`);
+  }
+  if (manifest.placement !== 'hybrid') throw new Error('proactive extension must support local and cloud owners');
+  const command = manifest.modules.flatMap(module => module.contributions || []).find(item => item.spec?.handlerName === 'command');
+  if (!command?.spec?.inputSchema?.properties?.payload?.properties?.scope) throw new Error('trusted UI scope input missing');
   const runtimeSource = entries.get("modules/proactive-runtime/dist/index.js").toString("utf8");
-  if (!runtimeSource.includes("host.conversation.message.send")) {
-    throw new Error("conversation message host call missing");
+  if (!runtimeSource.includes("host.proactive_task.create") || !runtimeSource.includes("host.proactive_task.execute")) {
+    throw new Error("unified proactive task host calls missing");
+  }
+  if (runtimeSource.includes("setInterval(") || runtimeSource.includes("setTimeout(") || runtimeSource.includes("host.conversation.message.send")) {
+    throw new Error("independent proactive scheduling or delivery must not be present");
   }
   if (runtimeSource.includes("host.proactive.dispatch")) {
     throw new Error("legacy proactive host call must not be present");

@@ -875,6 +875,16 @@ func (f *ToolFacade) SetLocalDeviceID(deviceID runtimeidentity.DeviceID) {
 	}
 }
 
+// WorkbenchOriginDeviceID reports the device that owns locally executed
+// browser tools. It is set from the runtime identity, never from an LLM
+// supplied argument. A missing identity must not be replaced by a guess.
+func (f *ToolFacade) WorkbenchOriginDeviceID() string {
+	if f == nil {
+		return ""
+	}
+	return f.localDeviceID.String()
+}
+
 func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition, scope InvocationScope) resolvedExecution {
 	owned := false
 	if scope.ExecContext != nil {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "schema-ui/1",
   "type": "document",
-  "title": "主动消息（桌面端）",
+  "title": "主动任务（桌面端）",
   "lifecycle": {
     "onMount": [
       {
@@ -159,7 +159,7 @@
                   "id": "proactive-enabled",
                   "type": "switch",
                   "props": {
-                    "activeText": "启用主动消息"
+                    "activeText": "启用主动任务"
                   },
                   "bindings": [
                     {
@@ -205,7 +205,7 @@
                   "id": "proactive-max-per-day",
                   "type": "slider",
                   "props": {
-                    "label": "每天最多主动消息",
+                    "label": "每天最多主动任务",
                     "min": 1,
                     "max": 24
                   },
@@ -270,7 +270,7 @@
                     "label": "发送通道",
                     "options": [
                       {
-                        "label": "全部/自动",
+                        "label": "所属角色对话",
                         "value": "all"
                       },
                       {
@@ -332,10 +332,59 @@
                           "quietStart": "$form.settings.quietStart",
                           "quietEnd": "$form.settings.quietEnd",
                           "channel": "$form.settings.channel",
-                          "unrepliedSlowdownEnabled": "$form.settings.unrepliedSlowdownEnabled"
+                          "unrepliedSlowdownEnabled": "$form.settings.unrepliedSlowdownEnabled",
+                          "unrepliedSlowdownAfter": "$form.settings.unrepliedSlowdownAfter",
+                          "unrepliedCooldownMultiplier": "$form.settings.unrepliedCooldownMultiplier",
+                          "unrepliedRecoveryOnReply": "$form.settings.unrepliedRecoveryOnReply"
                         }
                       },
                       "statePath": "dashboard"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-unrepliedSlowdownAfter",
+                  "type": "field",
+                  "props": {
+                    "label": "连续未回复次数",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.unrepliedSlowdownAfter",
+                      "source": "form",
+                      "default": 2
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-unrepliedCooldownMultiplier",
+                  "type": "field",
+                  "props": {
+                    "label": "未回复冷却倍数",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.unrepliedCooldownMultiplier",
+                      "source": "form",
+                      "default": 2
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-setting-unrepliedRecoveryOnReply",
+                  "type": "switch",
+                  "props": {
+                    "label": "回复后恢复"
+                  },
+                  "bindings": [
+                    {
+                      "path": "settings.unrepliedRecoveryOnReply",
+                      "source": "form",
+                      "default": true
                     }
                   ]
                 }
@@ -475,7 +524,7 @@
                     "label": "发送通道",
                     "options": [
                       {
-                        "label": "全部/自动",
+                        "label": "所属角色对话",
                         "value": "all"
                       },
                       {
@@ -531,6 +580,92 @@
                   ]
                 },
                 {
+                  "id": "unified-rule-quietEnd",
+                  "type": "field",
+                  "props": {
+                    "label": "静默结束"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.quietEnd",
+                      "source": "form",
+                      "default": "07:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-quietStart",
+                  "type": "field",
+                  "props": {
+                    "label": "静默开始"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.quietStart",
+                      "source": "form",
+                      "default": "23:00"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-maxOccurrences",
+                  "type": "field",
+                  "props": {
+                    "label": "最多执行次数（0 不限）",
+                    "variant": "number",
+                    "min": 0
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.maxOccurrences",
+                      "source": "form",
+                      "default": 0
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-endAt",
+                  "type": "field",
+                  "props": {
+                    "label": "结束时间（含时区，可留空）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.endAt",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-channelTargetsText",
+                  "type": "field",
+                  "props": {
+                    "label": "已接入渠道目标（JSON）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.channelTargetsText",
+                      "source": "form",
+                      "default": "[]"
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-timezone",
+                  "type": "field",
+                  "props": {
+                    "label": "时区（IANA）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.timezone",
+                      "source": "form",
+                      "default": "Asia/Shanghai"
+                    }
+                  ]
+                },
+                {
                   "id": "proactive-rule-prompt",
                   "type": "field",
                   "props": {
@@ -572,7 +707,15 @@
                               "channel": "$form.rule.channel",
                               "maxPerDay": "$form.rule.maxPerDay",
                               "randomMinutes": "$form.rule.randomMinutes",
-                              "promptTemplate": "$form.rule.promptTemplate"
+                              "promptTemplate": "$form.rule.promptTemplate",
+                              "timezone": "$form.rule.timezone",
+                              "channelTargetsText": "$form.rule.channelTargetsText",
+                              "endAt": "$form.rule.endAt",
+                              "maxOccurrences": "$form.rule.maxOccurrences",
+                              "quietStart": "$form.rule.quietStart",
+                              "quietEnd": "$form.rule.quietEnd",
+                              "conversationId": "$form.rule.conversationId",
+                              "systemNotification": "$form.rule.systemNotification"
                             }
                           },
                           "statePath": "dashboard"
@@ -604,7 +747,7 @@
                       "id": "proactive-rule-test",
                       "type": "button",
                       "props": {
-                        "text": "测试"
+                        "text": "预览（不发送）"
                       },
                       "actions": [
                         {
@@ -619,6 +762,12 @@
                           "statePath": "testResult"
                         }
                       ]
+                    },
+                    {
+                      "id": "proactive-rule-preview-result",
+                      "type": "key_value",
+                      "props": { "title": "预览内容（不发送）" },
+                      "bindings": [{ "path": "items", "source": "state", "sourcePath": "testResult" }]
                     },
                     {
                       "id": "proactive-rule-trigger",
@@ -665,6 +814,34 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "id": "unified-rule-conversationId",
+                  "type": "field",
+                  "props": {
+                    "label": "目标对话 ID（留空新建）"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.conversationId",
+                      "source": "form",
+                      "default": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "unified-rule-systemNotification",
+                  "type": "switch",
+                  "props": {
+                    "label": "系统通知"
+                  },
+                  "bindings": [
+                    {
+                      "path": "rule.systemNotification",
+                      "source": "form",
+                      "default": true
+                    }
+                  ]
                 }
               ]
             },
@@ -696,6 +873,10 @@
                       {
                         "prop": "lastError",
                         "label": "错误"
+                      },
+                      {
+                        "prop": "result",
+                        "label": "保存与分目标投递结果"
                       }
                     ]
                   },

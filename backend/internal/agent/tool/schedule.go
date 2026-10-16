@@ -1,109 +1,58 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
 package tool
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
-
-	"github.com/google/uuid"
-	"strings"
-	"time"
+	"sync"
 )
 
-var toolDB *sql.DB
+type ScheduleCreator func(context.Context, ToolExecutionContext, map[string]interface{}) (string, error)
 
-func SetDB(db *sql.DB) {
-	toolDB = db
+var scheduleCreator struct {
+	sync.RWMutex
+	create ScheduleCreator
+}
+
+func SetScheduleCreator(create ScheduleCreator) {
+	scheduleCreator.Lock()
+	defer scheduleCreator.Unlock()
+	scheduleCreator.create = create
 }
 
 func init() {
-	Register(Tool{
-		Type: "function",
-		Function: Function{
-			Name:        "create_schedule",
-			Description: "创建一条待办日程。当用户提到要做某事、约时间、定闹钟、提醒等时调用。可以创建单次或重复日程。",
-			Parameters: Parameters{
-				Type: "object",
-				Properties: map[string]Property{
-					"title": {
-						Type:        "string",
-						Description: "日程标题",
-					},
-					"description": {
-						Type:        "string",
-						Description: "日程详细描述",
-					},
-					"due_time": {
-						Type:        "string",
-						Description: "截止时间，格式 YYYY-MM-DD HH:MM，如 2025-01-15 14:30",
-					},
-					"repeat": {
-						Type:        "string",
-						Description: "重复规则：none/daily/weekly/monthly",
-					},
-					"channel": {
-						Type:        "string",
-						Description: "发送通知的 channelId；all 表示宿主默认渠道",
-					},
-				},
-				Required: []string{"title", "due_time"},
-			},
-		},
-	}, createSchedule)
+	var definition Tool
+	err := json.Unmarshal([]byte(`{"type":"function","function":{"name":"create_schedule","description":"仅在用户明确要求定闹钟、安排日程或提醒时创建任务。保存到统一提醒系统，到期在当前角色对话提醒；不要把普通聊天中的意向自动安排为提醒。","parameters":{"type":"object","required":["title","due_time","timezone"],"additionalProperties":false,"properties":{"title":{"type":"string","minLength":1,"maxLength":512},"description":{"type":"string","maxLength":131072},"due_time":{"type":"string","description":"未来时间，优先使用带时区偏移的 ISO8601 时间"},"timezone":{"type":"string","description":"IANA 时区，例如 Asia/Shanghai"},"repeat":{"type":"string","enum":["none","daily","weekly","monthly","weekdays","interval"]},"recurrence":{"type":"object","properties":{"type":{"type":"string","enum":["none","daily","weekly","monthly","weekdays","interval"]},"weekdays":{"type":"array","items":{"type":"integer","minimum":1,"maximum":7}},"intervalSeconds":{"type":"integer","minimum":60,"maximum":31536000}},"additionalProperties":false},"end_at":{"type":"string"},"max_occurrences":{"type":"integer","minimum":0},"channel":{"type":"string","description":"web 为角色对话；其他渠道必须同时提供明确接收对象"},"channel_targets":{"type":"array","items":{"type":"object","required":["channelId","peerId"],"properties":{"channelId":{"type":"string"},"peerId":{"type":"string"}},"additionalProperties":false}}}}}}`), &definition)
+	if err != nil {
+		panic(err)
+	}
+	Register(definition, createSchedule)
 }
 
-func createSchedule(callCtx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult {
-	if err := callCtx.Err(); err != nil {
+func createSchedule(ctx context.Context, execution ToolExecutionContext, args map[string]interface{}) ToolCallResult {
+	if err := ctx.Err(); err != nil {
 		return CancelledResult(err.Error())
 	}
-	scopedCtx, scopeErr := requireScopedWrite(execCtx)
+	scoped, scopeErr := requireScopedWrite(execution)
 	if scopeErr != nil {
 		return *scopeErr
 	}
-	execCtx = scopedCtx
-	if toolDB == nil {
-		return ErrorResult("database_not_initialized", "ERROR: database not initialized")
+	scheduleCreator.RLock()
+	create := scheduleCreator.create
+	scheduleCreator.RUnlock()
+	if create == nil {
+		return ErrorResult("schedule_unavailable", "统一提醒服务未接通")
 	}
-
-	title, _ := args["title"].(string)
-	desc, _ := args["description"].(string)
-	dueTime, _ := args["due_time"].(string)
-	repeat, _ := args["repeat"].(string)
-	channel, _ := args["channel"].(string)
-	if channel == "" {
-		channel = execCtx.Channel
-	}
-	if title == "" || dueTime == "" {
-		return ErrorResult("invalid_args", "ERROR: title and due_time are required")
-	}
-	if repeat == "" {
-		repeat = "none"
-	}
-	if channel == "" {
-		channel = "all"
-	}
-	title = strings.TrimSpace(title)
-	desc = strings.TrimSpace(desc)
-	now := time.Now().Format("2006-01-02 15:04:05")
-	id := fmt.Sprintf("sched-%s", uuid.New().String())
-	_, err := toolDB.Exec(
-		"INSERT INTO schedules (id, title, description, due_time, repeat_mode, channel, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
-		id, title, desc, dueTime, repeat, channel, now, now,
-	)
+	id, err := create(ctx, scoped, args)
 	if err != nil {
-		return ErrorResult("database_error", fmt.Sprintf("ERROR: %s", err.Error()))
+		return ErrorResult("schedule_create_failed", err.Error())
 	}
-	result := TextResult(fmt.Sprintf("OK 已创建日程：%s（截止 %s）", title, dueTime))
+	if id == "" {
+		return ErrorResult("schedule_unconfirmed", "提醒保存未确认")
+	}
+	result := TextResult(fmt.Sprintf("OK 已创建提醒，任务编号：%s。可在日程提醒页面查看和管理。", id))
 	result.ExternalOperationID = id
 	result.SideEffects = []ToolSideEffect{{Type: "schedule_create", TargetID: id, Confirmed: true}}
-	result.Audit = map[string]interface{}{"channel": channel, "repeat": repeat, "due_time": dueTime, "character_id": execCtx.CharacterID, "conversation_id": execCtx.ConversationID}
+	result.Audit = map[string]interface{}{"character_id": scoped.CharacterID, "conversation_id": scoped.ConversationID, "request_id": scoped.RequestID}
 	return result
-}
-
-var activeScheduleVar *bool
-
-func SetActiveSchedule(v *bool) {
-	activeScheduleVar = v
 }

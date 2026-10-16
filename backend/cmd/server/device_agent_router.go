@@ -29,6 +29,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/system"
+	"github.com/u-ai/backend/internal/workbenchterminal"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/app"
 )
@@ -189,6 +190,9 @@ func registerDeviceAgentDesktopPetRoutes(
 			security.AuthMethodLocalToken,
 		))
 		workspace.NewHandler(services.WorkspaceService).RegisterRoutes(deviceWorkspace)
+		terminalHandler := workbenchterminal.NewHandler(services.WorkspaceService, workbenchTerminalTaskVerifier(services.WorkspaceGitHandler))
+		terminalHandler.RegisterRoutes(deviceWorkspace)
+		terminalHandler.RegisterStreamRoute(r)
 		if services.WorkspaceGitHandler != nil {
 			services.WorkspaceGitHandler.RegisterRoutes(deviceWorkspace)
 		}

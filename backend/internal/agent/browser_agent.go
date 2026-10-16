@@ -11,9 +11,12 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/browseragent"
+	"github.com/u-ai/backend/internal/conversationstream"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/workbenchbrowser"
 )
 
 type plannedBrowserAction struct {
@@ -109,6 +112,33 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 		input, _ := json.Marshal(map[string]any{"sessionId": sessionID, "tabId": tabID, "url": req.StartURL, "waitUntil": "load", "timeoutMs": 30000})
 		if _, err := s.browserAgentExecute(ctx, scope, runKey, 0, "browser_navigate", input); err != nil {
 			return result, err
+		}
+		if strings.TrimSpace(execCtx.ConversationID) != "" {
+			browserRef := workbenchbrowser.ExposeAgentTab(execCtx.SpaceID, execCtx.ConversationID, browser.BrowserSessionID(sessionID), browser.BrowserTabID(tabID))
+			// The device id comes from the initialized local ToolFacade, not the
+			// prompt or any browser page data. Clients can use this origin to
+			// select the Device Mesh observation route without guessing.
+			originDeviceID := s.toolFacade.WorkbenchOriginDeviceID()
+			if browserRef != "" && !req.KeepSession {
+				defer workbenchbrowser.RevokeAgentTab(browserRef)
+			}
+			_, _ = conversationstream.DefaultManager().Publish(ctx, conversationstream.AgentUIEvent{
+				ConversationID: execCtx.ConversationID,
+				RequestID:      execCtx.RequestID,
+				CallID:         execCtx.ToolCallID,
+				Type:           "workbench.open",
+				Payload: map[string]any{
+					"kind":           "browser",
+					"resourceUri":    req.StartURL,
+					"title":          "Agent 网页预览",
+					"focus":          "background",
+					"operationId":    "browser-agent:" + runKey,
+					"shared":         browserRef != "",
+					"browserRef":     browserRef,
+					"readOnly":       browserRef != "",
+					"originDeviceId": originDeviceID,
+				},
+			}, true)
 		}
 	}
 
@@ -223,6 +253,22 @@ func browserAgentScope(execCtx tool.ToolExecutionContext) extensionkernel.Invoca
 }
 
 func (s *service) browserAgentExecute(ctx context.Context, scope extensionkernel.InvocationScope, runKey string, index int, toolID string, input json.RawMessage) (json.RawMessage, error) {
+	// Yield the tab at tool boundaries while an authorized user holds a short
+	// control lease. Observation tools remain available; never block cleanup.
+	if browserAgentMutatesTab(toolID) {
+		var target struct {
+			SessionID string `json:"sessionId"`
+			TabID     string `json:"tabId"`
+		}
+		if err := json.Unmarshal(input, &target); err != nil {
+			return nil, err
+		}
+		finish, err := workbenchbrowser.BeginAgentTabMutation(ctx, browser.BrowserSessionID(target.SessionID), browser.BrowserTabID(target.TabID))
+		if err != nil {
+			return nil, err
+		}
+		defer finish()
+	}
 	callID := fmt.Sprintf("%s:browser:%s:%d", runKey, toolID, index)
 	idempotency := fmt.Sprintf("browser-agent:%s:%s:%d", runKey, toolID, index)
 	toolResult, found := s.toolFacade.ExecuteTool(ctx, capability.CapabilityID(toolID), input, scope, callID, idempotency)
@@ -420,4 +466,14 @@ func browserHistoryForPlanner(history []browseragent.Step, limit int) []browsera
 		return history
 	}
 	return history[len(history)-limit:]
+}
+
+// browserAgentMutatesTab limits lease gating to actions that change the page.
+// Snapshot/inspection and session cleanup must never wait for a user lease.
+func browserAgentMutatesTab(toolID string) bool {
+	switch toolID {
+	case "browser_navigate", "browser_navigate_back", "browser_navigate_forward", "browser_interact_click", "browser_interact_input", "browser_interact_select", "browser_interact_scroll":
+		return true
+	}
+	return false
 }

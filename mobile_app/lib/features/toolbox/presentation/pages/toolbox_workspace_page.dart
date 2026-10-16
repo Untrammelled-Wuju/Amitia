@@ -13,7 +13,9 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/services/workspace_service.dart';
 
 class ToolboxWorkspacePage extends ConsumerStatefulWidget {
-  const ToolboxWorkspacePage({super.key});
+  final bool embedded;
+  final void Function(String resourceUri, String workspaceUri, String title)? onOpenDiff;
+  const ToolboxWorkspacePage({super.key, this.embedded = false, this.onOpenDiff});
 
   @override
   ConsumerState<ToolboxWorkspacePage> createState() => _ToolboxWorkspacePageState();
@@ -107,6 +109,257 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
   }
 
 
+
+  Future<void> _createGitWorktree(
+    WorkspaceMountDto workspace, {
+    required Future<void> Function() refresh,
+  }) async {
+    final nameController = TextEditingController();
+    final branchController = TextEditingController();
+    final refController = TextEditingController(text: 'HEAD');
+    final taskController = TextEditingController();
+    final conversationController = TextEditingController();
+    try {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('创建 Git Worktree'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: nameController, maxLength: 100, decoration: const InputDecoration(labelText: '显示名称（可选）')),
+              TextField(controller: branchController, maxLength: 80, decoration: const InputDecoration(labelText: '新分支（可选）', helperText: '留空则创建 detached HEAD 工作树')),
+              TextField(controller: refController, maxLength: 160, decoration: const InputDecoration(labelText: '起始提交')),
+              TextField(controller: taskController, maxLength: 128, decoration: const InputDecoration(labelText: '关联任务 ID（可选）')),
+              TextField(controller: conversationController, maxLength: 128, decoration: const InputDecoration(labelText: '对应对话 ID（绑定时必填）')),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('创建')),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+      if (taskController.text.trim().isEmpty != conversationController.text.trim().isEmpty) {
+        throw StateError('任务 ID 和对话 ID 必须同时填写');
+      }
+      await ref.read(workspaceServiceProvider).createGitWorktree(
+        workspace.rootUri,
+        name: nameController.text.trim(),
+        branch: branchController.text.trim(),
+        refName: refController.text.trim().isEmpty ? 'HEAD' : refController.text.trim(),
+        taskId: taskController.text.trim(),
+        conversationId: conversationController.text.trim(),
+      );
+      await refresh();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已创建并注册 Git Worktree')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('创建失败：$e')));
+    } finally {
+      nameController.dispose(); branchController.dispose(); refController.dispose(); taskController.dispose(); conversationController.dispose();
+    }
+  }
+
+  Future<void> _removeGitWorktree(
+    WorkspaceMountDto workspace,
+    String id, {
+    required Future<void> Function() refresh,
+  }) async {
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('安全删除 Worktree'),
+        content: const Text('仅能删除 U-Ai 创建的 Worktree；如果有未提交变更或锁定，后端会拒绝删除。不会执行强制删除。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(workspaceServiceProvider).removeGitWorktree(workspace.rootUri, id);
+      await refresh();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Worktree 已删除')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除被拒绝：$e')));
+    }
+  }
+
+  Future<void> _reviewGitWorktree(WorkspaceMountDto workspace, Map<String, dynamic> tree) async {
+    final binding = tree['taskBinding'];
+    if (binding is! Map || tree['id'] == null) return;
+    try {
+      final result = await ref.read(workspaceServiceProvider).reviewGitWorktree(
+        workspace.rootUri,
+        tree['id'].toString(),
+        (binding['taskId'] ?? '').toString(),
+        (binding['conversationId'] ?? '').toString(),
+        (tree['head'] ?? '').toString(),
+      );
+      if (!mounted) return;
+      final diff = result['diff'] is Map ? Map<String, dynamic>.from(result['diff'] as Map) : <String, dynamic>{};
+      final stats = diff['stats'] is Map ? Map<String, dynamic>.from(diff['stats'] as Map) : <String, dynamic>{};
+      final files = (diff['files'] as List<dynamic>? ?? const []).whereType<Map>();
+      final lines = files.map((file) => (file['patch'] ?? '[文本 Diff 不可用]').toString()).join('\n').split('\n');
+      final preview = lines.take(1200).join('\n');
+      await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+        title: Text('任务 ${binding['taskId']} · Worktree 审查'),
+        content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${stats['filesChanged'] ?? 0} 个文件 · +${stats['insertions'] ?? 0} / -${stats['deletions'] ?? 0}'),
+            if (result['reviewIncomplete'] == true) const Text('注意：未跟踪文件、旧绑定缺少起点或截断内容未完整覆盖，不可直接自动合并。'),
+            if ((result['conflictedCount'] as num? ?? 0) > 0) Text('存在 ${result['conflictedCount']} 个冲突'),
+            const SizedBox(height: 12),
+            SelectableText(preview.isEmpty ? '没有可展示的文本差异' : preview),
+          ],
+        ))),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+      ));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('审查失败：$e')));
+    }
+  }
+
+  Future<void> _checkpointGitWorktree(WorkspaceMountDto workspace, Map<String, dynamic> tree) async {
+    final binding = tree['taskBinding'];
+    final id = (tree['id'] ?? '').toString();
+    if (binding is! Map || id.isEmpty) return;
+    final taskId = (binding['taskId'] ?? '').toString();
+    final conversationId = (binding['conversationId'] ?? '').toString();
+    try {
+      final service = ref.read(workspaceServiceProvider);
+      Map<String, dynamic> checkpoint = await service.prepareGitWorktreeCheckpoint(workspace.rootUri, id, taskId, conversationId);
+      if (!mounted) return;
+      await showDialog<void>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (dialogContext, update) {
+        final tests = (checkpoint['tests'] as List<dynamic>? ?? const []).whereType<Map>().toList();
+        final approved = checkpoint['approvedAt'] != null;
+        final passed = tests.isNotEmpty && tests.last['passed'] == true;
+        return AlertDialog(
+          title: Text('任务 $taskId · 提交验收'),
+          content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('固定提交：${checkpoint['head']}'),
+              Text(approved ? '已批准 · ${checkpoint['approvedBy'] ?? ''}' : '尚未批准'),
+              const Text('执行测试前请确认仓库代码可信。测试在本机 Runtime 执行，最长 90 秒。'),
+              ...tests.map((test) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${test['profile']} · ${test['passed'] == true ? '通过' : '失败'} · exit ${test['exitCode']}'),
+                SelectableText((test['logExcerpt'] ?? '').toString(), maxLines: 20),
+              ])),
+            ],
+          ))),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+            if (!approved) TextButton(onPressed: () async {
+              final allowed = await showDialog<bool>(context: dialogContext, builder: (confirmContext) => AlertDialog(
+                title: const Text('运行 Go 验证'),
+                content: const Text('将实际执行 go test ./... 并记录退出码与日志。确认工作树代码可信后继续。'),
+                actions: [TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(confirmContext, true), child: const Text('运行'))],
+              ));
+              if (allowed != true) return;
+              try {
+                final updated = await service.testGitWorktreeCheckpoint(workspace.rootUri, id, taskId, conversationId, (checkpoint['revision'] ?? '').toString(), 'go');
+                if (dialogContext.mounted) update(() => checkpoint = updated);
+              } catch (e) {
+                if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('验证失败：$e')));
+              }
+            }, child: const Text('运行 Go 测试')),
+            if (!approved && passed) FilledButton(onPressed: () async {
+              final allowed = await showDialog<bool>(context: dialogContext, builder: (confirmContext) => AlertDialog(
+                title: const Text('批准固定提交'),
+                content: const Text('确认人工批准这一提交及测试证据？不会自动合并代码。'),
+                actions: [TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(confirmContext, true), child: const Text('批准'))],
+              ));
+              if (allowed != true) return;
+              try {
+                final updated = await service.approveGitWorktreeCheckpoint(workspace.rootUri, id, taskId, conversationId, (checkpoint['revision'] ?? '').toString());
+                if (dialogContext.mounted) update(() => checkpoint = updated);
+              } catch (e) {
+                if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('批准失败：$e')));
+              }
+            }, child: const Text('人工批准')),
+            if (approved) TextButton(onPressed: () async {
+              try {
+                final audit = await service.readGitWorktreeMergeAudit(workspace.rootUri, id, taskId, conversationId);
+                if (dialogContext.mounted) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('合并审计：${audit['result'] ?? '未知'} · ${audit['appliedHead'] ?? '目标提交待核对'}')));
+                }
+              } catch (e) {
+                if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('读取合并审计失败：$e')));
+              }
+            }, child: const Text('查看合并记录')),
+            if (approved) FilledButton(onPressed: () async {
+              try {
+                final plan = await service.previewGitWorktreeMerge(workspace.rootUri, id, taskId, conversationId);
+                if (!dialogContext.mounted) return;
+                final branch = (plan['targetBranch'] ?? '').toString();
+                final source = (plan['sourceHead'] ?? '').toString();
+                final target = (plan['targetHead'] ?? '').toString();
+                final planId = (plan['planId'] ?? '').toString();
+                if (branch.isEmpty || planId.isEmpty) throw StateError('预检结果不完整');
+                final confirmed = await showDialog<bool>(context: dialogContext, builder: (confirmContext) => AlertDialog(
+                  title: const Text('确认快进合并'),
+                  content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('目标分支：$branch'),
+                    Text('目标提交：$target'),
+                    Text('来源提交：$source'),
+                    Text('变更文件：${plan['filesChanged']}'),
+                    const Text('本地目标工作树必须干净，且仅允许 fast-forward。此操作将修改目标分支和文件，不会推送远端。请确认已检查目标仓库。'),
+                  ])),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('取消')),
+                    FilledButton(onPressed: () => Navigator.pop(confirmContext, true), child: const Text('确认本地合并')),
+                  ],
+                ));
+                if (confirmed != true) return;
+                final result = await service.applyGitWorktreeMerge(workspace.rootUri, id, taskId, conversationId, planId);
+                if (dialogContext.mounted) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('合并审计：${result['result'] ?? '未知'}')));
+                  Navigator.pop(dialogContext);
+                }
+              } catch (e) {
+                if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('合并未确认成功：$e。请先核对审计与目标 HEAD，勿盲目重试。')));
+              }
+            }, child: const Text('预检并快进合并')),
+          ],
+        );
+      }));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法创建检查点：$e')));
+    }
+  }
+
+  Future<void> _releaseGitWorktree(WorkspaceMountDto workspace, String id, Map<String, dynamic> binding, {required Future<void> Function() refresh}) async {
+    final taskID = (binding['taskId'] ?? '').toString();
+    final conversationID = (binding['conversationId'] ?? '').toString();
+    if (id.isEmpty || taskID.isEmpty || conversationID.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('解除任务绑定'),
+        content: Text('解除任务 $taskID 的工作树绑定？不会删除工作树或 Git 分支。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('解绑')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(workspaceServiceProvider).releaseGitWorktree(workspace.rootUri, id, taskID, conversationID);
+      await refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('任务绑定已解除')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('解绑失败：$e')));
+    }
+  }
 
   Future<void> _showCreateIsolated() async {
     final nameCtrl = TextEditingController();
@@ -286,6 +539,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
     Map<String, dynamic>? remotes;
     Map<String, dynamic>? log;
     String? error;
+    Map<String, dynamic>? worktrees;
     bool loading = true;
 
     Future<void> refresh(StateSetter setSheetState) async {
@@ -296,12 +550,14 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
           svc.gitBranches(workspace.rootUri),
           svc.gitRemotes(workspace.rootUri),
           svc.gitLog(workspace.rootUri, limit: 30),
+          svc.gitWorktrees(workspace.rootUri),
         ]);
         setSheetState(() {
           status = values[0];
           branches = values[1];
           remotes = values[2];
           log = values[3];
+          worktrees = values[4];
           loading = false;
         });
       } catch (e) {
@@ -323,6 +579,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
           final branchItems = (branches?['branches'] as List<dynamic>? ?? const []).whereType<Map>().toList();
           final remoteItems = (remotes?['remotes'] as List<dynamic>? ?? remotes?['items'] as List<dynamic>? ?? const []).whereType<Map>().toList();
           final commits = (log?['entries'] as List<dynamic>? ?? const []).whereType<Map>().toList();
+          final worktreeItems = (worktrees?['entries'] as List<dynamic>? ?? const []).whereType<Map>().toList();
           return SafeArea(
             child: SizedBox(
               height: MediaQuery.sizeOf(sheetContext).height * .9,
@@ -374,6 +631,43 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                             ],
                           ),
                           SizedBox(height: AppSpacing.lg),
+                          Row(children: [
+                            Expanded(child: Text('Git Worktree', style: AppTypography.cardTitle(sheetContext))),
+                            AmitiaButton(label: '创建', isSecondary: true, icon: Icons.account_tree_outlined,
+                              onPressed: workspace.readOnly ? null : () => _createGitWorktree(workspace, refresh: () => refresh(setSheetState))),
+                          ]),
+                          Text('每个 Worktree 为独立的本机工作区，不支持强制删除。', style: AppTypography.caption(sheetContext)),
+                          ...worktreeItems.map((raw) {
+                            final tree = Map<String, dynamic>.from(raw);
+                            final managed = tree['managed'] == true;
+                            final id = (tree['id'] ?? '').toString();
+                            final binding = tree['taskBinding'] is Map ? Map<String, dynamic>.from(tree['taskBinding'] as Map) : null;
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              leading: Icon(managed ? Icons.account_tree : Icons.source_outlined),
+                              title: Text((tree['branch'] ?? '').toString().isEmpty ? 'detached HEAD' : tree['branch'].toString()),
+                              subtitle: Text('${tree['managed'] == true ? 'U-Ai 管理' : '外部 Worktree'} · ${binding != null ? '任务 ${binding['taskId']} · ' : ''}${tree['path'] ?? ''}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                              trailing: managed && id.isNotEmpty
+                                  ? Wrap(children: [
+                                      if (binding != null) IconButton(
+                                        icon: const Icon(Icons.rate_review_outlined),
+                                        tooltip: '只读审查 Git Diff',
+                                        onPressed: () => _reviewGitWorktree(workspace, tree),
+                                      ),
+                                      if (binding != null && !workspace.readOnly) IconButton(
+                                        tooltip: '提交验收与测试',
+                                        icon: const Icon(Icons.fact_check_outlined),
+                                        onPressed: () => _checkpointGitWorktree(workspace, tree),
+                                      ),
+                                      if (!workspace.readOnly && tree['locked'] != true && tree['prunable'] != true)
+                                        IconButton(icon: Icon(binding == null ? Icons.delete_outline : Icons.link_off), tooltip: binding == null ? '安全删除' : '解除任务绑定',
+                                          onPressed: () => binding == null ? _removeGitWorktree(workspace, id, refresh: () => refresh(setSheetState)) : _releaseGitWorktree(workspace, id, binding, refresh: () => refresh(setSheetState))),
+                                    ])
+                                  : null,
+                            );
+                          }),
+                          SizedBox(height: AppSpacing.lg),
                           Text('变更', style: AppTypography.cardTitle(sheetContext)),
                           if (entries.isEmpty)
                             Padding(padding: EdgeInsets.symmetric(vertical: AppSpacing.md), child: Text('没有未提交变更', style: AppTypography.caption(sheetContext)))
@@ -389,6 +683,11 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                                 trailing: AmitiaPopupMenuButton<String>(
                                   onSelected: (value) async {
                                     if (value == 'diff') {
+                                      if (widget.onOpenDiff != null) {
+                                        Navigator.of(sheetContext).pop();
+                                        widget.onOpenDiff!(uri, workspace.rootUri, uri.split('/').last);
+                                        return;
+                                      }
                                       final diff = await svc.gitDiff(workspace.rootUri, paths: [uri]);
                                       if (mounted) await _showRawJson('Diff · $uri', diff);
                                     } else if (value == 'stage') {
@@ -588,7 +887,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '工作区',
-        showBackButton: true,
+        showBackButton: !widget.embedded,
         fallbackRoute: AppRoutes.settingsMaintenanceCategory,
         actions: [
           IconButton(onPressed: _loading ? null : _showCreateIsolated, icon: const Icon(Icons.add), tooltip: '创建隔离工作区'),

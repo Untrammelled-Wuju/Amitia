@@ -169,7 +169,11 @@ func TestBaseline_Security_OldGenerationReplay(t *testing.T) {
 	updatedDef := makeScheduleDefinition("replay-test", extID, schedule.TriggerTypeOneShot, schedule.TargetTypeTool)
 	updatedDef.Trigger.Interval = nil
 	updatedDef.Version = "2.0.0"
-	if err := container.ScheduleService.Update(ctx, "replay-test", 1, updatedDef); err != nil {
+	_, enabledState, err := container.ScheduleService.GetSchedule(ctx, "replay-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := container.ScheduleService.Update(ctx, "replay-test", enabledState.Generation, updatedDef); err != nil {
 		t.Fatalf("Update to generation 2 must succeed: %v", err)
 	}
 

@@ -60,7 +60,7 @@ func (r *Repository) UpsertDevice(ctx context.Context, endpoint *DeviceEndpoint)
 	endpoint.SpaceID = strings.TrimSpace(endpoint.SpaceID)
 	endpoint.DeviceID = strings.TrimSpace(endpoint.DeviceID)
 	endpoint.Platform = strings.ToLower(strings.TrimSpace(endpoint.Platform))
-	if endpoint.SpaceID == "" || endpoint.DeviceID == "" || (endpoint.Platform != "android" && endpoint.Platform != "ios") {
+	if endpoint.SpaceID == "" || endpoint.DeviceID == "" || (endpoint.Platform != "android" && endpoint.Platform != "ios" && endpoint.Platform != "desktop" && endpoint.Platform != "web") {
 		return errors.New("invalid notification device identity")
 	}
 	now := time.Now().UTC()
@@ -616,7 +616,7 @@ func (r *Repository) UpdateOutbox(ctx context.Context, id string, values map[str
 	}
 	update["updated_at"] = time.Now().UTC()
 	return r.db.WithContext(ctx).Model(&NotificationOutbox{}).
-		Where("id = ?", strings.TrimSpace(id)).
+		Where("id = ? AND status NOT IN (?, ?, ?)", strings.TrimSpace(id), "displayed", "clicked", "display_failed").
 		Updates(update).Error
 }
 

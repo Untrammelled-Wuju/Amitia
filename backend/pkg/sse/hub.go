@@ -11,11 +11,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/auth"
 )
 
 type Client struct {
 	ID        string
 	SpaceID   string
+	DeviceID  string
+	key       string
 	Events    chan map[string]interface{}
 	closeOnce sync.Once
 }
@@ -48,16 +51,24 @@ func (h *Hub) Subscribe(clientID string) *Client {
 }
 
 func (h *Hub) SubscribeScoped(clientID string, spaceID string) *Client {
+	return h.SubscribeDevice(clientID, spaceID, "")
+}
+
+func (h *Hub) SubscribeDevice(clientID, spaceID, deviceID string) *Client {
 	clientID = strings.TrimSpace(clientID)
 	if clientID == "" {
 		clientID = newAnonymousClientID()
 	}
 
-	c := &Client{ID: clientID, SpaceID: strings.TrimSpace(spaceID), Events: make(chan map[string]interface{}, 20)}
+	c := &Client{ID: clientID, SpaceID: strings.TrimSpace(spaceID), DeviceID: strings.TrimSpace(deviceID), Events: make(chan map[string]interface{}, 20)}
+	c.key = clientID
+	if c.SpaceID != "" && c.DeviceID != "" {
+		c.key = c.SpaceID + "\x00" + c.DeviceID + "\x00" + clientID
+	}
 
 	h.mu.Lock()
-	previous := h.clients[clientID]
-	h.clients[clientID] = c
+	previous := h.clients[c.key]
+	h.clients[c.key] = c
 	h.mu.Unlock()
 
 	// A reconnect using the same stable client ID atomically replaces the old
@@ -77,9 +88,9 @@ func (h *Hub) Unsubscribe(clientID string) {
 	}
 
 	h.mu.Lock()
-	client := h.clients[clientID]
+	client := h.clientLocked(clientID)
 	if client != nil {
-		delete(h.clients, clientID)
+		delete(h.clients, client.key)
 	}
 	h.mu.Unlock()
 
@@ -95,8 +106,8 @@ func (h *Hub) UnsubscribeClient(client *Client) {
 	}
 
 	h.mu.Lock()
-	if current, ok := h.clients[client.ID]; ok && current == client {
-		delete(h.clients, client.ID)
+	if current, ok := h.clients[client.key]; ok && current == client {
+		delete(h.clients, client.key)
 	}
 	h.mu.Unlock()
 
@@ -147,6 +158,26 @@ func (h *Hub) HasClients() bool {
 	return len(h.clients) > 0
 }
 
+func (h *Hub) SendToDevice(spaceID, deviceID, event string, data map[string]interface{}) int {
+	if strings.TrimSpace(spaceID) == "" || strings.TrimSpace(deviceID) == "" {
+		return 0
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	delivered := 0
+	for _, client := range h.clients {
+		if client.SpaceID != spaceID || client.DeviceID != deviceID {
+			continue
+		}
+		select {
+		case client.Events <- map[string]interface{}{"event": event, "data": data}:
+			delivered++
+		default:
+		}
+	}
+	return delivered
+}
+
 func (h *Hub) ClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -156,8 +187,8 @@ func (h *Hub) ClientCount() int {
 func (h *Hub) SendToClient(clientID string, event string, data map[string]interface{}) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	c, ok := h.clients[clientID]
-	if !ok {
+	c := h.clientLocked(clientID)
+	if c == nil {
 		return false
 	}
 	msg := map[string]interface{}{"event": event, "data": data}
@@ -175,7 +206,7 @@ func (h *Hub) SendToClients(clientIDs []string, event string, data map[string]in
 	msg := map[string]interface{}{"event": event, "data": data}
 	delivered := 0
 	for _, id := range clientIDs {
-		if c, ok := h.clients[id]; ok {
+		if c := h.clientLocked(id); c != nil {
 			select {
 			case c.Events <- msg:
 				delivered++
@@ -189,18 +220,30 @@ func (h *Hub) SendToClients(clientIDs []string, event string, data map[string]in
 func (h *Hub) ClientExists(clientID string) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	_, ok := h.clients[clientID]
-	return ok
+	return h.clientLocked(clientID) != nil
 }
 
 func (h *Hub) ListClientIDs() []string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	ids := make([]string, 0, len(h.clients))
-	for id := range h.clients {
-		ids = append(ids, id)
+	for _, client := range h.clients {
+		ids = append(ids, client.ID)
 	}
 	return ids
+}
+
+func (h *Hub) clientLocked(id string) *Client {
+	var result *Client
+	for _, client := range h.clients {
+		if client.ID == id {
+			if result != nil {
+				return nil
+			}
+			result = client
+		}
+	}
+	return result
 }
 
 func SSEHandler(c *gin.Context) {
@@ -213,7 +256,16 @@ func SSEHandler(c *gin.Context) {
 	if raw, ok := c.Get("spaceId"); ok && raw != nil {
 		spaceID = strings.TrimSpace(fmt.Sprint(raw))
 	}
-	client := Global.SubscribeScoped(c.Query("clientId"), spaceID)
+	deviceID := ""
+	if actor, ok := auth.FromContext(c.Request.Context()); ok && actor != nil {
+		spaceID = actor.SpaceID.String()
+		deviceID = actor.DeviceID.String()
+		if deviceID == "" && actor.IsLocalTrusted {
+			deviceID = strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
+		}
+	}
+	clientID := c.Query("clientId")
+	client := Global.SubscribeDevice(clientID, spaceID, deviceID)
 	defer Global.UnsubscribeClient(client)
 
 	c.Writer.Flush()

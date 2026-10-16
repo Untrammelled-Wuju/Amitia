@@ -1,0 +1,405 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amitia.untrammelled.top/contracts/workbench/coding-worker-review-v1.schema.json",
+  "title": "Coding Worker Git Review Summary V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "state",
+    "filesChanged",
+    "insertions",
+    "deletions",
+    "untrackedCount",
+    "conflictedCount",
+    "reviewIncomplete",
+    "requiresApproval"
+  ],
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "ready",
+        "incomplete",
+        "unavailable"
+      ]
+    },
+    "worktreeId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "workspaceUri": {
+      "type": "string",
+      "pattern": "^amitia://workspace/@[^/?#]+/?$"
+    },
+    "baselineHead": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "currentHead": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "filesChanged": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "insertions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "deletions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "untrackedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "conflictedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reviewIncomplete": {
+      "type": "boolean"
+    },
+    "requiresApproval": {
+      "const": true
+    },
+    "errorCode": {
+      "type": "string",
+      "enum": [
+        "WORKSPACE_SCOPE_UNAVAILABLE",
+        "WORKTREE_REVIEW_UNAVAILABLE"
+      ]
+    },
+    "checkpointRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "testState": {
+      "type": "string",
+      "enum": [
+        "not_run",
+        "passed",
+        "failed"
+      ]
+    },
+    "testProfile": {
+      "type": "string",
+      "enum": [
+        "go",
+        "go-race"
+      ]
+    },
+    "testExitCode": {
+      "type": "integer"
+    },
+    "approvalState": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved"
+      ]
+    },
+    "mergeState": {
+      "type": "string",
+      "enum": [
+        "not_attempted",
+        "pending",
+        "applied",
+        "failed-needs-review",
+        "unavailable"
+      ]
+    },
+    "mergeTargetBranch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "mergeAppliedHead": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$"
+    },
+    "terminal": {
+      "$ref": "#/$defs/terminalDiagnostics"
+    },
+    "verificationGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "code",
+        "eligibleForMerge",
+        "confirmedMerged",
+        "manualActionRequired"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "blocked",
+            "waiting",
+            "approved",
+            "merged"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "enum": [
+            "WORKER_NOT_FINISHED",
+            "WORKER_FAILED_OR_CANCELLED",
+            "REVIEW_INCOMPLETE_OR_UNAVAILABLE",
+            "VERIFIED_TEST_REQUIRED",
+            "TEST_FAILED",
+            "HUMAN_APPROVAL_REQUIRED",
+            "MERGE_AUDIT_INCONSISTENT",
+            "MERGE_REQUIRES_RECONCILIATION",
+            "READY_FOR_MANUAL_MERGE",
+            "MERGE_CONFIRMED"
+          ]
+        },
+        "eligibleForMerge": {
+          "type": "boolean"
+        },
+        "confirmedMerged": {
+          "type": "boolean"
+        },
+        "manualActionRequired": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "ready"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "worktreeId",
+          "workspaceUri",
+          "currentHead"
+        ],
+        "properties": {
+          "reviewIncomplete": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "incomplete"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "worktreeId",
+          "workspaceUri",
+          "currentHead"
+        ],
+        "properties": {
+          "reviewIncomplete": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "unavailable"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "errorCode"
+        ],
+        "properties": {
+          "reviewIncomplete": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "approvalState": {
+            "const": "approved"
+          }
+        },
+        "required": [
+          "approvalState"
+        ]
+      },
+      "then": {
+        "required": [
+          "checkpointRevision",
+          "testState"
+        ],
+        "properties": {
+          "testState": {
+            "const": "passed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "testState": {
+            "const": "passed"
+          }
+        },
+        "required": [
+          "testState"
+        ]
+      },
+      "then": {
+        "required": [
+          "checkpointRevision",
+          "testProfile"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "mergeState"
+        ],
+        "properties": {
+          "mergeState": {
+            "const": "applied"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "checkpointRevision",
+          "approvalState",
+          "mergeAppliedHead"
+        ],
+        "properties": {
+          "approvalState": {
+            "const": "approved"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "terminalDiagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "verificationKind",
+        "total",
+        "exited",
+        "closed",
+        "revoked",
+        "unverifiedActive"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "none",
+            "recorded",
+            "unavailable"
+          ]
+        },
+        "verificationKind": {
+          "const": "terminal-lifecycle-metadata-not-test-proof"
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "closed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "revoked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unverifiedActive": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lastExitCode": {
+          "type": "integer"
+        },
+        "latestState": {
+          "type": "string",
+          "enum": [
+            "running",
+            "unverified",
+            "exited",
+            "closed",
+            "revoked",
+            "interrupted"
+          ]
+        },
+        "errorCode": {
+          "const": "TERMINAL_DIAGNOSTICS_UNAVAILABLE"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "unavailable"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "required": [
+              "errorCode"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "recorded"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "total": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

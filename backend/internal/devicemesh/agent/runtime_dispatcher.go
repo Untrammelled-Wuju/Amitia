@@ -166,7 +166,7 @@ func (d *defaultRuntimeDispatcher) ResolveContext(handlerName string) Cancellabl
 		reliable := func(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
 			return base(ctx, invoke)
 		}
-		if handlerName != "coordination.data" {
+		if handlerName != "coordination.data" && handlerName != RemoteBrowserReadHandler {
 			reliable = d.withReliability(reliable)
 		}
 		return reliable(invoke)

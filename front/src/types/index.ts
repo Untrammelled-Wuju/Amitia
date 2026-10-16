@@ -503,7 +503,8 @@ export interface TriggerHistory {
   triggerType: string;
   title: string;
   channel: string;
-  state: "pending" | "sending" | "sent" | "failed" | "cancelled";
+  state: string;
+  result?: { messageSaved?: boolean; messageId?: string; targets?: Array<{ kind: string; id: string; state: string; error?: string }> };
   priority: string;
   reason: string;
   attemptCount: number;

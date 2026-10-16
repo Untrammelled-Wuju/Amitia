@@ -53,8 +53,10 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 		if req.ReservedInteractionID != "" {
 			return nil, fmt.Errorf("orchestrator: reserved interaction %s is missing; refusing to run untracked side effects", req.ReservedInteractionID)
 		}
-		record = NewInteractionRecord(scope)
-		if err := o.tracker.Create(ctx, record); err != nil {
+		candidate := NewInteractionRecord(scope)
+		var created bool
+		record, created, err = RegisterInteraction(ctx, o.tracker, candidate)
+		if err != nil {
 			if errors.Is(err, ErrDuplicateRequest) {
 				if existing, ok, getErr := o.tracker.GetByRequestID(ctx, scope.SpaceID, scope.RequestID); getErr != nil {
 					return nil, getErr
@@ -63,6 +65,9 @@ func (o *Orchestrator) Process(ctx context.Context, req *ProcessRequest) (*Orche
 				}
 			}
 			return nil, err
+		}
+		if !created {
+			return o.handleIdempotentHit(record)
 		}
 	}
 	var releaseExecution func()

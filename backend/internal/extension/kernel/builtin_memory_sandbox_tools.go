@@ -35,7 +35,7 @@ func registerBuiltinMemorySandboxTools(ctx context.Context, registry *capability
 	}
 	for _, definition := range append(tool.GetAll(), tool.GetMemoryTools()...) {
 		name := definition.Function.Name
-		if name != "save_memory" && name != "save_profile" && name != "save_episodic_memory" && name != "summarize_memories" && name != "request_memory_consolidation" {
+		if name != "save_memory" && name != "save_profile" && name != "save_episodic_memory" && name != "summarize_memories" && name != "request_memory_consolidation" && name != "create_schedule" {
 			continue
 		}
 		schema, err := json.Marshal(definition.Function.Parameters)
@@ -46,7 +46,14 @@ func registerBuiltinMemorySandboxTools(ctx context.Context, registry *capability
 		if name == "summarize_memories" {
 			permission, side, approval = "memory.read", capability.SideEffectReadOnly, false
 		}
-		specs = append(specs, builtinMemorySandboxToolSpec{id: "builtin.memory." + name, modelName: name, name: name, description: definition.Function.Description, input: string(schema), permissions: []capability.PermissionRequirement{{Capability: permission, Risk: string(capability.RiskMedium)}}, risk: capability.RiskMedium, side: side, approval: approval, background: true, idempotent: true, timeout: 90 * time.Second, maxOutput: 256 * 1024})
+		id := "builtin.memory." + name
+		if name == "create_schedule" {
+			id = "builtin.schedule.create"
+			permission = "schedule.create"
+			side = capability.SideEffectWrite
+			approval = true
+		}
+		specs = append(specs, builtinMemorySandboxToolSpec{id: id, modelName: name, name: name, description: definition.Function.Description, input: string(schema), permissions: []capability.PermissionRequirement{{Capability: permission, Risk: string(capability.RiskMedium)}}, risk: capability.RiskMedium, side: side, approval: approval, background: true, idempotent: true, timeout: 90 * time.Second, maxOutput: 256 * 1024})
 	}
 	for _, spec := range specs {
 		def := capability.ToolDefinition{
@@ -57,7 +64,7 @@ func registerBuiltinMemorySandboxTools(ctx context.Context, registry *capability
 			ToolVersion: capability.ToolVersion{SchemaVersion: 1, Revision: "builtin-v1"}, ModelExposure: capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"memory", "sandbox", "automation"}, Priority: 44},
 			ExecutionPolicy: capability.ToolExecutionPolicy{Timeout: spec.timeout, MaxConcurrency: 2, Idempotent: spec.idempotent, ApprovalRequired: spec.approval, AllowBackground: spec.background},
 			ResultPolicy:    capability.ToolResultPolicy{SanitizeError: true, MaxOutputBytes: spec.maxOutput}, Runtime: capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeBuiltin, RuntimeID: "builtin", HandlerName: spec.modelName},
-			Metadata: map[string]interface{}{"deviceMeshOwnershipAware": strings.HasPrefix(spec.id, "builtin.memory.")},
+			Metadata: map[string]interface{}{"deviceMeshOwnershipAware": strings.HasPrefix(spec.id, "builtin.memory.") || spec.id == "builtin.schedule.create"},
 		}
 		if err := registry.Register(ctx, def); err != nil {
 			return fmt.Errorf("register builtin memory/sandbox tool %s: %w", spec.modelName, err)

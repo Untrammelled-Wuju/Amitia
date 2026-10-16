@@ -7,8 +7,9 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/reminder.dart';
+import '../../../../core/models/character.dart';
+import '../../../../core/models/conversation.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -65,9 +66,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         _error = null;
       });
     } catch (error) {
-      if (showLoading && mounted)
+      if (mounted)
         setState(() {
           _error = error.toString();
+          _reminders = const [];
           _loading = false;
         });
     } finally {
@@ -94,14 +96,14 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '日程提醒',
+        title: '主动任务',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           AmitiaIconButton(
             icon: Icons.monitor_heart_outlined,
             onPressed: _showSchedulerPanel,
           ),
-          AmitiaIconButton(icon: Icons.add, onPressed: () => _showEditor(null)),
+          AmitiaIconButton(icon: Icons.add, onPressed: () => _openEditor(null)),
         ],
       ),
       body: SafeArea(
@@ -130,10 +132,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                   : _visible.isEmpty
                   ? AmitiaEmptyState(
                       icon: Icons.notifications_none,
-                      title: '暂无提醒',
-                      subtitle: '创建一个一次性或重复提醒',
-                      actionText: '新建提醒',
-                      onAction: () => _showEditor(null),
+                      title: '暂无主动任务',
+                      subtitle: '创建一个一次性或重复任务',
+                      actionText: '新建任务',
+                      onAction: () => _openEditor(null),
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -227,7 +229,11 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 ),
               ),
               AmitiaStatusBadge(
-                label: reminder.isEnabled ? '启用' : '停用',
+                label: reminder.paused
+                    ? '已暂停'
+                    : reminder.isEnabled
+                    ? '启用'
+                    : reminder.state,
                 type: reminder.isEnabled
                     ? BadgeType.success
                     : BadgeType.neutral,
@@ -240,7 +246,8 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             runSpacing: AppSpacing.xs,
             children: [
               AmitiaStatusBadge(
-                label: _formatTime(reminder.remindAt),
+                label:
+                    '${_formatTime(reminder.localRemindAt.isEmpty ? reminder.remindAt : reminder.localRemindAt)} ${reminder.timezone}',
                 type: BadgeType.accent,
               ),
               AmitiaStatusBadge(label: repeatLabel, type: BadgeType.info),
@@ -261,6 +268,15 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             ],
           ),
           SizedBox(height: AppSpacing.sm),
+          Text(
+            '执行核心：${reminder.ownerId} · ${reminder.executionMode} · 来源：${reminder.source}',
+            style: AppTypography.caption(context),
+          ),
+          if (reminder.endAt.isNotEmpty || reminder.maxOccurrences > 0)
+            Text(
+              '结束：${reminder.endAt.isEmpty ? '不限时间' : reminder.endAt} · 次数：${reminder.maxOccurrences == 0 ? '不限' : reminder.maxOccurrences}',
+              style: AppTypography.caption(context),
+            ),
           Wrap(
             spacing: AppSpacing.sm,
             children: [
@@ -285,9 +301,14 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 label: Text(reminder.isEnabled ? '停用' : '启用'),
               ),
               TextButton.icon(
-                onPressed: () => _showEditor(reminder),
+                onPressed: () => _openEditor(reminder),
                 icon: const Icon(Icons.edit_outlined, size: 16),
                 label: const Text('编辑'),
+              ),
+              TextButton.icon(
+                onPressed: () => _pause(reminder),
+                icon: const Icon(Icons.pause, size: 16),
+                label: Text(reminder.paused ? '恢复' : '暂停'),
               ),
               TextButton.icon(
                 onPressed: () => _delete(reminder),
@@ -310,25 +331,86 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     'daily': '每天',
     'weekly': '每周',
     'monthly': '每月',
-    'yearly': '每年',
+    'weekdays': '指定星期',
+    'interval': '自定义间隔',
   };
+
+  Future<void> _openEditor(ReminderDto? existing) async {
+    try {
+      await _showEditor(existing);
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('打开编辑失败：$error')));
+    }
+  }
 
   Future<void> _showEditor(ReminderDto? existing) async {
     final titleController = TextEditingController(text: existing?.title ?? '');
     final contentController = TextEditingController(
       text: existing?.content ?? '',
     );
+    final requestId =
+        'mobile-reminder-${DateTime.now().microsecondsSinceEpoch}';
+    final timezoneController = TextEditingController(
+      text: existing?.timezone ?? 'Asia/Shanghai',
+    );
+    final intervalController = TextEditingController(
+      text: (existing?.recurrence['intervalSeconds'] ?? 3600).toString(),
+    );
+    final endController = TextEditingController(text: existing?.endAt ?? '');
+    final countController = TextEditingController(
+      text: (existing?.maxOccurrences ?? 0).toString(),
+    );
+    final weekdays = <int>{
+      ...(existing?.recurrence['weekdays'] as List? ?? []).cast<int>(),
+    };
+    var systemNotification = existing?.systemNotification ?? true;
     var selectedConversationId = existing?.conversationId ?? '';
     var selectedCharacterId = existing?.characterId ?? '';
-    var channel = existing?.channel ?? 'web';
+    const channel = 'web';
+    final service = ref.read(reminderServiceProvider);
+    final availableChannels = await service.channels();
+    final peers = <String, TextEditingController>{};
+    for (final target in existing?.channelTargets ?? []) {
+      if (target is Map)
+        peers[target['channelId'].toString()] = TextEditingController(
+          text: target['peerId'].toString(),
+        );
+    }
+    final selectedChannels = peers.keys.toSet();
     var repeatRule = existing?.repeatRule ?? 'none';
     var remindAt =
-        _parseBackendTime(existing?.remindAt) ??
+        DateTime.tryParse(existing?.localAnchorAt ?? '') ??
         DateTime.now().add(const Duration(minutes: 10));
 
-    var characters = await ref.read(characterServiceProvider).list();
-    var conversations = await ref.read(chatServiceProvider).listConversations();
+    final owned = ref.read(chatServiceProvider).owned;
+    await owned.refresh();
+    final editorCore = owned.coreId;
+    final characters = owned.roles
+        .map(
+          (item) => CharacterDto(
+            id: item['id'].toString(),
+            name: (item['name'] ?? item['id']).toString(),
+          ),
+        )
+        .toList();
+    if (selectedCharacterId.isEmpty && characters.length == 1)
+      selectedCharacterId = characters.single.id;
+    if (!characters.any((item) => item.id == selectedCharacterId)) {
+      selectedCharacterId = '';
+    }
+    List<ConversationDto> conversations = selectedCharacterId.isEmpty
+        ? []
+        : (await owned.conversations(
+            characterId: selectedCharacterId,
+          )).where((item) => item.sourceOwnerId == editorCore).toList();
     if (!mounted) return;
+    for (final item in conversations) {
+      if (item.sourceResourceId == selectedConversationId)
+        selectedConversationId = item.id;
+    }
     final knownCharacterIds = characters.map((item) => item.id).toSet();
     if (selectedCharacterId.isNotEmpty &&
         !knownCharacterIds.contains(selectedCharacterId)) {
@@ -365,24 +447,24 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    existing == null ? '新建提醒' : '编辑提醒',
+                    existing == null ? '新建任务' : '编辑任务',
                     style: AppTypography.sectionTitle(context),
                   ),
                   SizedBox(height: AppSpacing.lg),
                   AmitiaTextField(
                     controller: titleController,
-                    hintText: '提醒标题',
+                    hintText: '任务标题',
                   ),
                   SizedBox(height: AppSpacing.md),
                   AmitiaTextField(
                     controller: contentController,
                     maxLines: 3,
-                    hintText: '提醒内容（可选）',
+                    hintText: '消息内容（可选）',
                   ),
                   SizedBox(height: AppSpacing.md),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text('提醒时间', style: AppTypography.label(context)),
+                    title: Text('执行时间', style: AppTypography.label(context)),
                     subtitle: Text(
                       _formatBackendTime(remindAt),
                       style: AppTypography.body(context),
@@ -392,7 +474,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                       final date = await showDatePicker(
                         context: sheetContext,
                         initialDate: remindAt,
-                        firstDate: DateTime.now(),
+                        firstDate: DateTime(2000),
                         lastDate: DateTime.now().add(
                           const Duration(days: 3650),
                         ),
@@ -435,24 +517,43 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                     },
                   ),
                   SizedBox(height: AppSpacing.md),
-                  DropdownButtonFormField<String>(
-                    value: channel,
-                    decoration: const InputDecoration(
-                      labelText: '渠道',
-                      border: OutlineInputBorder(),
+                  const Text('默认发送至角色对话，可附加已接入渠道'),
+                  ...{
+                    ...availableChannels.where((item) => item != 'web'),
+                    ...selectedChannels,
+                  }.map(
+                    (id) => Column(
+                      children: [
+                        CheckboxListTile(
+                          title: Text(
+                            availableChannels.contains(id) ? id : '$id（已断开）',
+                          ),
+                          value: selectedChannels.contains(id),
+                          onChanged: (value) => setSheetState(() {
+                            if (value == true) {
+                              selectedChannels.add(id);
+                              peers.putIfAbsent(
+                                id,
+                                () => TextEditingController(),
+                              );
+                            } else {
+                              selectedChannels.remove(id);
+                            }
+                          }),
+                        ),
+                        if (selectedChannels.contains(id))
+                          AmitiaTextField(
+                            controller: peers[id],
+                            hintText: '$id 接收方标识（必填）',
+                          ),
+                      ],
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'web', child: Text('Web / App')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setSheetState(() => channel = value);
-                    },
                   ),
                   SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
                     value: selectedCharacterId,
                     decoration: const InputDecoration(
-                      labelText: '目标角色（可选）',
+                      labelText: '所属角色（必选）',
                       border: OutlineInputBorder(),
                     ),
                     items: [
@@ -464,9 +565,32 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                         ),
                       ),
                     ],
-                    onChanged: (value) => setSheetState(() {
-                      selectedCharacterId = value ?? '';
-                    }),
+                    onChanged: (value) async {
+                      final role = value ?? '';
+                      setSheetState(() {
+                        selectedCharacterId = role;
+                        selectedConversationId = '';
+                        conversations = [];
+                      });
+                      try {
+                        final next = role.isEmpty
+                            ? <ConversationDto>[]
+                            : await owned.conversations(characterId: role);
+                        if (sheetContext.mounted && selectedCharacterId == role)
+                          setSheetState(
+                            () => conversations = next
+                                .where(
+                                  (item) => item.sourceOwnerId == owned.coreId,
+                                )
+                                .toList(),
+                          );
+                      } catch (error) {
+                        if (sheetContext.mounted)
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            SnackBar(content: Text('加载会话失败：$error')),
+                          );
+                      }
+                    },
                   ),
                   SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
@@ -493,6 +617,48 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                     }),
                   ),
                   SizedBox(height: AppSpacing.lg),
+                  AmitiaTextField(
+                    controller: timezoneController,
+                    hintText: 'IANA 时区，如 Asia/Shanghai',
+                  ),
+                  if (repeatRule == 'interval')
+                    AmitiaTextField(
+                      controller: intervalController,
+                      hintText: '重复间隔（秒）',
+                    ),
+                  if (repeatRule == 'weekdays')
+                    Wrap(
+                      children: List.generate(7, (index) {
+                        final day = index + 1;
+                        return FilterChip(
+                          label: Text(
+                            ['一', '二', '三', '四', '五', '六', '日'][index],
+                          ),
+                          selected: weekdays.contains(day),
+                          onSelected: (value) => setSheetState(() {
+                            if (value) {
+                              weekdays.add(day);
+                            } else {
+                              weekdays.remove(day);
+                            }
+                          }),
+                        );
+                      }),
+                    ),
+                  AmitiaTextField(
+                    controller: endController,
+                    hintText: '结束时间（可选，带时区的 ISO 8601）',
+                  ),
+                  AmitiaTextField(
+                    controller: countController,
+                    hintText: '最多执行次数，0 表示不限制',
+                  ),
+                  SwitchListTile(
+                    title: const Text('系统通知'),
+                    value: systemNotification,
+                    onChanged: (value) =>
+                        setSheetState(() => systemNotification = value),
+                  ),
                   AmitiaButton(
                     label: existing == null ? '创建' : '保存',
                     isFullWidth: true,
@@ -503,21 +669,76 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                         ).showSnackBar(const SnackBar(content: Text('标题不能为空')));
                         return;
                       }
-                      if (!remindAt.isAfter(DateTime.now()) &&
-                          existing == null) {
+                      if (selectedCharacterId.isEmpty) {
                         ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          const SnackBar(content: Text('提醒时间必须晚于当前时间')),
+                          const SnackBar(content: Text('请选择所属角色')),
                         );
+                        return;
+                      }
+                      try {
+                        await owned.refresh();
+                      } catch (error) {
+                        if (sheetContext.mounted)
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            SnackBar(content: Text('执行核心校验失败：$error')),
+                          );
+                        return;
+                      }
+                      if (!sheetContext.mounted) return;
+                      if (owned.coreId != editorCore) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          const SnackBar(content: Text('执行核心已变化，请重新打开编辑页面')),
+                        );
+                        return;
+                      }
+                      if (selectedChannels.any(
+                        (id) =>
+                            !availableChannels.contains(id) ||
+                            peers[id]!.text.trim().isEmpty,
+                      )) {
+                        if (sheetContext.mounted)
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            const SnackBar(content: Text('请选择已接入渠道并填写接收方标识')),
+                          );
                         return;
                       }
                       final data = <String, dynamic>{
                         'title': titleController.text.trim(),
                         'content': contentController.text.trim(),
                         'channel': channel,
-                        'conversationId': selectedConversationId,
+                        'conversationId': selectedConversationId.isEmpty
+                            ? ''
+                            : conversations
+                                  .firstWhere(
+                                    (item) => item.id == selectedConversationId,
+                                  )
+                                  .sourceResourceId,
                         'characterId': selectedCharacterId,
                         'remindAt': _formatBackendTime(remindAt),
                         'repeatRule': repeatRule,
+                        'requestId': requestId,
+                        'generation': existing?.generation ?? 0,
+                        'timezone': timezoneController.text.trim(),
+                        'recurrence': {
+                          'type': repeatRule,
+                          if (repeatRule == 'weekdays')
+                            'weekdays': weekdays.toList()..sort(),
+                          if (repeatRule == 'interval')
+                            'intervalSeconds':
+                                int.tryParse(intervalController.text) ?? 0,
+                        },
+                        'endAt': endController.text.trim(),
+                        'maxOccurrences':
+                            int.tryParse(countController.text) ?? -1,
+                        'systemNotification': systemNotification,
+                        'channelTargets': selectedChannels
+                            .map(
+                              (id) => {
+                                'channelId': id,
+                                'peerId': peers[id]!.text.trim(),
+                              },
+                            )
+                            .toList(),
                       };
                       try {
                         final service = ref.read(reminderServiceProvider);
@@ -546,23 +767,31 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     );
     titleController.dispose();
     contentController.dispose();
+    timezoneController.dispose();
+    intervalController.dispose();
+    endController.dispose();
+    countController.dispose();
+    for (final peer in peers.values) {
+      peer.dispose();
+    }
   }
 
-  String? _characterNameFor(List<dynamic> characters, String characterId) {
-    for (final character in characters) {
-      if (character.id == characterId) return character.name.toString();
+  Future<void> _pause(ReminderDto reminder) async {
+    try {
+      await ref
+          .read(reminderServiceProvider)
+          .action(
+            reminder.id,
+            reminder.generation,
+            reminder.paused ? 'resume' : 'pause',
+          );
+      await _load();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败：$error')));
     }
-    return null;
-  }
-
-  dynamic _conversationById(
-    List<dynamic> conversations,
-    String conversationId,
-  ) {
-    for (final conversation in conversations) {
-      if (conversation.id == conversationId) return conversation;
-    }
-    return null;
   }
 
   Future<void> _test(ReminderDto reminder) async {
@@ -572,7 +801,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('提醒测试结果'),
+          title: const Text('任务测试结果'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -582,7 +811,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               _detail('目标会话', (result['conversationId'] ?? '').toString()),
               _detail('消息内容', (result['messageContent'] ?? '').toString()),
               _detail(
-                '提醒时间',
+                '执行时间',
                 (result['remindAt'] ?? reminder.remindAt).toString(),
               ),
             ],
@@ -610,19 +839,14 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
 
   Future<void> _trigger(ReminderDto reminder) async {
     try {
-      final result = await ref
+      await ref
           .read(reminderServiceProvider)
-          .trigger(reminder.id);
+          .trigger(reminder.id, reminder.generation);
       await _load();
       if (mounted) {
-        final conversationId = (result['conversationId'] ?? '').toString();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              conversationId.isEmpty ? '提醒已触发' : '提醒已触发到会话 $conversationId',
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('任务已受理，请在执行历史查看发送结果')));
       }
     } catch (error) {
       if (mounted)
@@ -634,7 +858,9 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
 
   Future<void> _toggle(ReminderDto reminder) async {
     try {
-      await ref.read(reminderServiceProvider).toggle(reminder.id);
+      await ref
+          .read(reminderServiceProvider)
+          .toggle(reminder.id, reminder.generation);
       await _load();
     } catch (error) {
       if (mounted)
@@ -648,7 +874,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('删除提醒'),
+        title: const Text('删除任务'),
         content: Text('确定删除“${reminder.title}”吗？'),
         actions: [
           TextButton(
@@ -663,8 +889,17 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(reminderServiceProvider).delete(reminder.id);
-    await _load();
+    try {
+      await ref
+          .read(reminderServiceProvider)
+          .delete(reminder.id, reminder.generation);
+      await _load();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+    }
   }
 
   Future<void> _showSchedulerPanel() async {
@@ -708,9 +943,14 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         expand: false,
         builder: (sheetContext, controller) => ListView(
           controller: controller,
-          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            0,
+            AppSpacing.xl,
+            AppSpacing.xl,
+          ),
           children: [
-            Text('提醒调度器', style: AppTypography.sectionTitle(context)),
+            Text('任务调度器', style: AppTypography.sectionTitle(context)),
             SizedBox(height: AppSpacing.md),
             Wrap(
               spacing: AppSpacing.sm,
@@ -746,11 +986,18 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 label: '清除背压标记',
                 isSecondary: true,
                 onPressed: () async {
-                  await service.clearBackpressure();
-                  if (sheetContext.mounted)
-                    ScaffoldMessenger.of(
-                      sheetContext,
-                    ).showSnackBar(const SnackBar(content: Text('背压标记已清除')));
+                  try {
+                    await service.clearBackpressure();
+                    if (sheetContext.mounted)
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        const SnackBar(content: Text('已重置熔断，请检查阻断及结果未知的任务')),
+                      );
+                  } catch (error) {
+                    if (sheetContext.mounted)
+                      ScaffoldMessenger.of(
+                        sheetContext,
+                      ).showSnackBar(SnackBar(content: Text('清理失败：$error')));
+                  }
                 },
               ),
             ],
@@ -767,22 +1014,29 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               label: '保存清理策略',
               isSecondary: true,
               onPressed: () async {
-                await service.setCleanupConfig(
-                  cleanupController.text.trim().isEmpty
-                      ? '0'
-                      : cleanupController.text.trim(),
-                );
-                if (sheetContext.mounted)
-                  ScaffoldMessenger.of(
-                    sheetContext,
-                  ).showSnackBar(const SnackBar(content: Text('清理策略已更新')));
+                try {
+                  await service.setCleanupConfig(
+                    cleanupController.text.trim().isEmpty
+                        ? '0'
+                        : cleanupController.text.trim(),
+                  );
+                  if (sheetContext.mounted)
+                    ScaffoldMessenger.of(
+                      sheetContext,
+                    ).showSnackBar(const SnackBar(content: Text('清理策略已更新')));
+                } catch (error) {
+                  if (sheetContext.mounted)
+                    ScaffoldMessenger.of(
+                      sheetContext,
+                    ).showSnackBar(SnackBar(content: Text('保存失败：$error')));
+                }
               },
             ),
             SizedBox(height: AppSpacing.lg),
-            Text('前瞻记忆', style: AppTypography.cardTitle(context)),
+            Text('待执行任务', style: AppTypography.cardTitle(context)),
             SizedBox(height: AppSpacing.sm),
             if (prospective.isEmpty)
-              Text('暂无待触发前瞻记忆', style: AppTypography.caption(context))
+              Text('暂无待执行任务', style: AppTypography.caption(context))
             else
               ...prospective.map(
                 (item) => ListTile(
@@ -794,6 +1048,10 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               ),
             SizedBox(height: AppSpacing.lg),
             Text('最近触发历史', style: AppTypography.cardTitle(context)),
+            TextButton(
+              onPressed: _showHistory,
+              child: const Text('查看全部执行历史与分目标结果'),
+            ),
             SizedBox(height: AppSpacing.sm),
             ...((history['items'] as List?) ?? const []).whereType<Map>().map(
               (item) => ListTile(
@@ -807,6 +1065,146 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             ),
           ],
         ),
+      ),
+    );
+    cleanupController.dispose();
+  }
+
+  Future<void> _showHistory() async {
+    var page = 1;
+    var state = '';
+    var loading = false;
+    var initialLoad = true;
+    var total = 0;
+    var rows = <Map<String, dynamic>>[];
+    String? error;
+    final service = ref.read(reminderServiceProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, update) {
+          Future<void> load() async {
+            update(() {
+              loading = true;
+              error = null;
+            });
+            try {
+              final result = await service.triggerHistory(
+                page: page,
+                state: state,
+              );
+              if (!sheetContext.mounted) return;
+              update(() {
+                rows = (result['items'] as List)
+                    .map((item) => Map<String, dynamic>.from(item as Map))
+                    .toList();
+                total = (result['total'] as num).toInt();
+              });
+            } catch (value) {
+              if (sheetContext.mounted)
+                update(() {
+                  error = value.toString();
+                  rows = [];
+                });
+            } finally {
+              if (sheetContext.mounted) update(() => loading = false);
+            }
+          }
+
+          if (initialLoad) {
+            initialLoad = false;
+            scheduleMicrotask(load);
+          }
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(sheetContext).size.height * .85,
+              child: Column(
+                children: [
+                  const ListTile(title: Text('执行历史')),
+                  DropdownButton<String>(
+                    value: state,
+                    items:
+                        const {
+                              '': '全部',
+                              'waiting': '待处理',
+                              'running': '执行中',
+                              'completed': '已完成',
+                              'partial': '部分完成',
+                              'blocked': '已阻断',
+                              'skipped': '已跳过',
+                              'failed': '失败',
+                              'cancelled': '已取消',
+                            }.entries
+                            .map(
+                              (entry) => DropdownMenuItem(
+                                value: entry.key,
+                                child: Text(entry.value),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: loading
+                        ? null
+                        : (value) {
+                            state = value ?? '';
+                            page = 1;
+                            unawaited(load());
+                          },
+                  ),
+                  TextButton(
+                    onPressed: loading ? null : load,
+                    child: const Text('加载 / 刷新'),
+                  ),
+                  if (error != null)
+                    Text(error!, style: TextStyle(color: context.error)),
+                  if (loading) const LinearProgressIndicator(),
+                  Expanded(
+                    child: ListView(
+                      children: rows.map((item) {
+                        final result = item['result'] is Map
+                            ? item['result'] as Map
+                            : const {};
+                        final targets = result['targets'] is List
+                            ? result['targets'] as List
+                            : const [];
+                        return ListTile(
+                          title: Text('${item['title']} · ${item['state']}'),
+                          subtitle: Text(
+                            '${item['createdAt']}\n${item['lastError'] ?? ''}\n${targets.map((target) => '${target['kind']} ${target['id']}：${target['state']} ${target['error'] ?? ''}').join('\n')}',
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: loading || page <= 1
+                            ? null
+                            : () {
+                                page--;
+                                unawaited(load());
+                              },
+                        child: const Text('上一页'),
+                      ),
+                      Text('$page / ${total == 0 ? 1 : (total / 20).ceil()}'),
+                      TextButton(
+                        onPressed: loading || page * 20 >= total
+                            ? null
+                            : () {
+                                page++;
+                                unawaited(load());
+                              },
+                        child: const Text('下一页'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

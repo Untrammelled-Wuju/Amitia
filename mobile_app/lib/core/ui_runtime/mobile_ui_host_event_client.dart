@@ -10,11 +10,8 @@ import '../artifact/artifact_providers.dart' show createAuthenticatedDio;
 import '../backend_connection/backend_connection_availability.dart';
 import '../backend_connection/backend_connection_config.dart';
 import '../backend_connection/providers/backend_connection_providers.dart';
-import '../native_bridge/native_bridge_platform_dispatcher.dart';
-import '../native_bridge/providers/native_bridge_relay_provider.dart';
 import '../services/extension_service.dart';
 import '../services/providers.dart';
-import '../services/system_service.dart';
 import '../settings/ui_style_command_service.dart';
 import 'ui_device_identity.dart';
 import 'ui_runtime_invalidation.dart';
@@ -72,8 +69,6 @@ final mobileUIHostEventClientProvider = Provider<MobileUIHostEventClient?>((
   final client = MobileUIHostEventClient(
     config: availability.config,
     extensionService: ref.read(extensionServiceProvider),
-    systemService: ref.read(systemServiceProvider),
-    nativeDispatcher: ref.read(nativeBridgePlatformDispatcherProvider),
     applyStyleCommand: (action, expectedRevision, changes) {
       return ref
           .read(uiStyleCommandServiceProvider)
@@ -106,8 +101,6 @@ class MobileUIHostEventClient {
   MobileUIHostEventClient({
     required this.config,
     required ExtensionService extensionService,
-    required SystemService systemService,
-    required NativeBridgePlatformDispatcher nativeDispatcher,
     required Future<Map<String, dynamic>> Function(
       String action,
       int expectedRevision,
@@ -122,8 +115,6 @@ class MobileUIHostEventClient {
     applyClientRuntimeSnapshot,
     required void Function(String conversationId) invalidateClientRuntime,
   }) : _extensionService = extensionService,
-       _systemService = systemService,
-       _nativeDispatcher = nativeDispatcher,
        _applyStyleCommand = applyStyleCommand,
        _activeConversationId = activeConversationId,
        _applyClientRuntimeSnapshot = applyClientRuntimeSnapshot,
@@ -131,8 +122,6 @@ class MobileUIHostEventClient {
 
   final BackendConnectionConfig config;
   final ExtensionService _extensionService;
-  final SystemService _systemService;
-  final NativeBridgePlatformDispatcher _nativeDispatcher;
   final Future<Map<String, dynamic>> Function(
     String action,
     int expectedRevision,
@@ -148,7 +137,6 @@ class MobileUIHostEventClient {
   static String? _processHostClientId;
 
   final Set<String> _processedRequestIds = <String>{};
-  final Set<String> _processedProactiveMessageIds = <String>{};
   Dio? _dio;
   CancelToken? _cancelToken;
   Timer? _heartbeatTimer;
@@ -160,8 +148,6 @@ class MobileUIHostEventClient {
   int _connectionVersion = 0;
   bool _disposed = false;
   bool _starting = false;
-  DateTime? _notificationSettingsCheckedAt;
-  bool _notificationsEnabled = false;
 
   Future<void> start() async {
     if (_disposed || _starting) return;
@@ -293,11 +279,6 @@ class MobileUIHostEventClient {
       if (eventType != 'extension_rollback_failed') {
         UIRuntimeInvalidationBus.notifyChanged();
       }
-      return;
-    }
-
-    if (eventType == 'proactive_message') {
-      unawaited(_handleProactiveMessage(envelope));
       return;
     }
 
@@ -460,61 +441,6 @@ class MobileUIHostEventClient {
     }
   }
 
-  Future<void> _handleProactiveMessage(Map<String, dynamic> payload) async {
-    final messageId = (payload['messageId'] ?? '').toString().trim();
-    if (messageId.isNotEmpty) {
-      if (!_processedProactiveMessageIds.add(messageId)) return;
-      if (_processedProactiveMessageIds.length > 200) {
-        _processedProactiveMessageIds.remove(
-          _processedProactiveMessageIds.first,
-        );
-      }
-    }
-    final content = (payload['content'] ?? '').toString().trim();
-    if (content.isEmpty || !await _notificationAllowed()) return;
-    final platform = _nativeNotificationPlatform();
-    if (platform == null) return;
-    try {
-      await _nativeDispatcher.execute(<String, dynamic>{
-        'protocolVersion': 1,
-        'requestId':
-            'proactive-${messageId.isEmpty ? DateTime.now().microsecondsSinceEpoch : messageId}',
-        'platform': platform,
-        'operation': 'notification.post',
-        'payload': <String, dynamic>{
-          'title': 'Amitia',
-          'body': content,
-          'channel': 'amitia_agent',
-          'silent': false,
-          if ((payload['conversationId'] ?? '').toString().trim().isNotEmpty)
-            'conversationId': payload['conversationId'].toString().trim(),
-        },
-      });
-    } catch (_) {
-      // Notification delivery must not destabilize the global SSE connection.
-    }
-  }
-
-  Future<bool> _notificationAllowed() async {
-    final now = DateTime.now();
-    final last = _notificationSettingsCheckedAt;
-    if (last != null && now.difference(last) < const Duration(seconds: 30)) {
-      return _notificationsEnabled;
-    }
-    try {
-      final device = await _systemService.notificationDevice(
-        deviceId: _deviceId,
-      );
-      _notificationsEnabled =
-          device?['pushEnabled'] == true &&
-          device?['reminderPushEnabled'] == true;
-    } catch (_) {
-      _notificationsEnabled = false;
-    }
-    _notificationSettingsCheckedAt = now;
-    return _notificationsEnabled;
-  }
-
   void _scheduleReconnect() {
     if (_disposed || _reconnectTimer != null) return;
     _heartbeatTimer?.cancel();
@@ -580,16 +506,6 @@ class MobileUIHostEventClient {
       TargetPlatform.macOS => 'darwin',
       TargetPlatform.linux => 'linux',
       TargetPlatform.fuchsia => 'web',
-    };
-  }
-
-  static String? _nativeNotificationPlatform() {
-    if (kIsWeb) return null;
-    return switch (defaultTargetPlatform) {
-      TargetPlatform.android => 'android',
-      TargetPlatform.iOS => 'ios',
-      TargetPlatform.windows => 'windows',
-      _ => null,
     };
   }
 }

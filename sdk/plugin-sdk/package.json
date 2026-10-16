@@ -47,6 +47,10 @@
       "types": "./dist/host.d.ts",
       "import": "./dist/host.js"
     },
+    "./scheduled-tasks": {
+      "types": "./dist/scheduled-tasks.d.ts",
+      "import": "./dist/scheduled-tasks.js"
+    },
     "./storage": {
       "types": "./dist/storage.d.ts",
       "import": "./dist/storage.js"
@@ -89,6 +93,7 @@
     "dev": "tsc --watch",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
+    "test:scheduled-tasks": "node scripts/test-scheduled-tasks.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
