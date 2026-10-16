@@ -13,8 +13,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@zxing/browser": "^0.1.5",
     "@element-plus/icons-vue": "^2.3.0",
+    "@zxing/browser": "^0.1.5",
     "axios": "^1.7.4",
     "dompurify": "^3.4.15",
     "echarts": "^6.1.0",
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",
+    "@types/node": "^26.6.5",
     "@vitejs/plugin-vue": "^5.0.0",
     "@vue/compiler-sfc": "3.5.35",
     "@vue/test-utils": "^2.4.0",

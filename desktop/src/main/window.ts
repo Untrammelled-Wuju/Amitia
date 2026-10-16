@@ -82,10 +82,6 @@ export function createMainWindow(): BrowserWindow {
     },
   });
 
-  win.once("ready-to-show", () => {
-    win.show();
-  });
-
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (
       url.startsWith("http://") ||
@@ -105,22 +101,48 @@ export function createMainWindow(): BrowserWindow {
     }
   });
 
-  if (isDevMode()) {
-    void waitForDevServer().then((ok) => {
-      if (ok) {
-        void win.loadURL(DEV_SERVER_URL);
-        win.webContents.openDevTools({ mode: "detach" });
-      } else {
-        win.loadURL(
-          `data:text/html,<html><body style="background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui"><div style="text-align:center"><h1 style="font-size:20px;margin-bottom:8px">无法连接到开发服务器</h1><p style="color:#888;margin-bottom:24px">${DEV_SERVER_URL || "未配置 VITE_DEV_SERVER_URL"}</p><button onclick="location.reload()" style="padding:8px 24px;background:#4a6cf7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">重试</button></div></body></html>`,
-        );
-      }
+  return win;
+}
+
+export async function revealMainWindow(win: BrowserWindow): Promise<void> {
+  const firstPaint = new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 3000);
+    win.once("ready-to-show", () => {
+      clearTimeout(timer);
+      resolve();
     });
-  } else {
-    void win.loadURL(`${APP_PROTOCOL_ORIGIN}/#/`);
+  });
+
+  try {
+    await loadMainRenderer(win);
+  } catch (error) {
+    console.error("[AmitiaDesktop] 主界面加载失败:", error);
   }
 
-  return win;
+  await firstPaint;
+
+  if (!win.isDestroyed()) {
+    win.show();
+    win.focus();
+  }
+}
+
+async function loadMainRenderer(win: BrowserWindow): Promise<void> {
+  if (!isDevMode()) {
+    await win.loadURL(`${APP_PROTOCOL_ORIGIN}/#/`);
+    return;
+  }
+
+  const ready = await waitForDevServer();
+  if (ready) {
+    await win.loadURL(DEV_SERVER_URL);
+    win.webContents.openDevTools({ mode: "detach" });
+    return;
+  }
+
+  await win.loadURL(
+    `data:text/html,<html><body style="background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui"><div style="text-align:center"><h1 style="font-size:20px;margin-bottom:8px">无法连接到开发服务器</h1><p style="color:#888;margin-bottom:24px">${DEV_SERVER_URL || "未配置 VITE_DEV_SERVER_URL"}</p><button onclick="location.reload()" style="padding:8px 24px;background:#4a6cf7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">重试</button></div></body></html>`,
+  );
 }
 
 function isAllowedNavigation(url: string): boolean {

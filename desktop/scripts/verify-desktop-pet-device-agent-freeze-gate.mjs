@@ -75,7 +75,9 @@ const [
 // Device Agent must host the complete desktop-pet runtime body and fail closed.
 assert(
   runtimeComponents.includes("profilesDeviceLocal") &&
-    runtimeComponents.includes("Required: config.AppCfg.DesktopPetRuntime.Enabled"),
+    runtimeComponents.includes("c.services.RuntimePolicy.DesktopPet") &&
+    runtimeComponents.includes("config.AppCfg.DesktopPetRuntime.Enabled") &&
+    runtimeComponents.includes("Required: enabled,"),
   "DesktopPet component must be required when enabled and available in local/device-agent profiles",
 );
 for (const required of [

@@ -65,7 +65,6 @@ func TestLegacyWebChatRegisteredCoreBoundary(t *testing.T) {
 		}
 	})
 	RegisterSystemRouter(router.Group("/api"), &app.AppContext{DB: db}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	RegisterVoiceEntryRouter(router.Group("/api"), db, nil, nil, nil)
 	router.GET("/api/device-mesh/v1/business/boundary-probe", func(c *gin.Context) { c.Status(204) })
 	request := func(method, path, core, stamp string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader("{"))
@@ -101,7 +100,7 @@ func TestLegacyWebChatRegisteredCoreBoundary(t *testing.T) {
 				t.Fatalf("%s %s %s: %d %s", stage, route.Method, path, rec.Code, rec.Body.String())
 			}
 		}
-		if count != 34 {
+		if count != 5 {
 			t.Fatalf("legacy route count %d", count)
 		}
 	}
@@ -128,13 +127,13 @@ func TestLegacyWebChatRegisteredCoreBoundary(t *testing.T) {
 		status       int
 		body         string
 	}{
-		{"GET", "/api/web-chat/conversations/core-chat", 200, "private Core conversation"},
+		{"GET", "/api/web-chat/conversations/core-chat", 404, "404 page not found"},
 		{"POST", "/api/voice/upload", 200, "缺少音频文件"},
 		{"POST", "/api/image/upload", 200, "缺少图片文件"},
 		{"POST", "/api/video/upload", 200, "缺少视频文件"},
 		{"POST", "/api/voice/transcribe", 200, "缺少audioUrl"},
-		{"POST", "/api/voice/session", 200, "invalid request"},
-		{"POST", "/api/voice/turn", 200, "invalid request"},
+		{"POST", "/api/voice/session", 404, "404 page not found"},
+		{"POST", "/api/voice/turn", 404, "404 page not found"},
 	} {
 		rec := request(scenario.method, scenario.path, "core-space", stamp)
 		if rec.Code != scenario.status || !strings.Contains(rec.Body.String(), scenario.body) {
@@ -152,7 +151,7 @@ func TestLegacyWebChatRegisteredCoreBoundary(t *testing.T) {
 	}
 	assertBoundary("regranted-old-intent", "core-space", stamp, 409)
 	local = true
-	if rec := request("GET", "/api/web-chat/conversations/core-chat", "", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "private Core conversation") {
+	if rec := request("GET", "/api/web-chat/conversations/core-chat", "", ""); rec.Code != 404 {
 		t.Fatalf("local %d %s", rec.Code, rec.Body.String())
 	}
 }

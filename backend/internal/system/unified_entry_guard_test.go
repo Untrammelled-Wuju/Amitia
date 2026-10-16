@@ -7,44 +7,27 @@ import (
 	"testing"
 )
 
-func TestExternalTextEntrypointsUseUnifiedEntry(t *testing.T) {
-	webHandler := readGuardFile(t, "webchat_handler.go")
-	if strings.Contains(webHandler, "func (h *Handler) WebChatSend(") || strings.Contains(webHandler, "WebChatSendStream") {
-		t.Fatal("legacy blocking/fake-stream web chat entrypoints must be removed")
-	}
-	if !strings.Contains(webHandler, "func (h *Handler) WebChatSubmitMessage(") {
-		t.Fatal("formal web chat command endpoint is missing")
-	}
-	if !strings.Contains(webHandler, "h.handleUnifiedEntryWithWorkspace") {
-		t.Fatal("WebChatSubmitMessage must call UnifiedEntry.Handle")
-	}
-
-	agentService := readGuardFile(t, "..", "agent", "service.go")
-	if strings.Contains(agentService, "chatSvc.ProcessMessage") {
-		t.Fatal("Agent webhook must not call chatSvc.ProcessMessage directly")
-	}
-	if !strings.Contains(agentService, "s.unifiedEntry.Handle") {
-		t.Fatal("Agent webhook must call UnifiedEntry.Handle")
-	}
-
+func TestExternalTextEntrypointsUseOwnedExecution(t *testing.T) {
 	serverRouter := readGuardFile(t, "..", "..", "cmd", "server", "router.go")
+	services := readGuardFile(t, "..", "..", "cmd", "server", "services.go")
 	chatRouter := readGuardFile(t, "..", "chat", "router.go")
-	chatHandler := readGuardFile(t, "..", "chat", "handler.go")
-	if !strings.Contains(serverRouter, "agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)") {
-		t.Fatal("Agent router must be registered with services.UnifiedEntry")
+	systemRouter := readGuardFile(t, "router.go")
+	agentRouter := readGuardFile(t, "..", "agent", "router.go")
+	for _, text := range []string{chatRouter, systemRouter, agentRouter} {
+		for _, route := range []string{`POST("/chat"`, `POST("/web-chat/messages"`, `POST("/agent/webhook"`, `POST("/agent/test"`, `POST("/voice/turn"`} {
+			if strings.Contains(text, route) {
+				t.Fatalf("legacy entry registered: %s", route)
+			}
+		}
 	}
-	if !strings.Contains(serverRouter, "system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry") {
-		t.Fatal("System router must be registered with services.UnifiedEntry")
+	if strings.Contains(serverRouter, "RegisterVoiceEntryRouter") || strings.Contains(serverRouter, "RegisterChatRouter") {
+		t.Fatal("server still registers legacy entry")
 	}
-	if !strings.Contains(serverRouter, "chat.RegisterChatRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry)") &&
-		!strings.Contains(serverRouter, "chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry") {
-		t.Fatal("Chat router must be registered with services.UnifiedEntry")
+	if !strings.Contains(serverRouter, "chat.RegisterModelRouter") {
+		t.Fatal("model configuration routes were lost")
 	}
-	if !strings.Contains(chatRouter, "func RegisterChatRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, entry *interaction.UnifiedEntry)") {
-		t.Fatal("Chat router must accept UnifiedEntry")
-	}
-	if !strings.Contains(chatHandler, "h.unifiedEntry.Handle") {
-		t.Fatal("Chat handler must call UnifiedEntry.Handle")
+	if !strings.Contains(services, "SetEntryExecutor") {
+		t.Fatal("source entry does not use owned executor")
 	}
 }
 

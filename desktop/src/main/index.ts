@@ -3,13 +3,15 @@ import { join } from "node:path";
 import { initLogger, closeLogger } from "./logger";
 import { ConfigStore } from "./config-store";
 import { registerIpcHandlers } from "./ipc-handlers";
-import { createMainWindow } from "./window";
+import { createMainWindow, revealMainWindow } from "./window";
+import { closeSplashWindow, showSplashWindow } from "./splash";
 import { createAppTray } from "./tray";
 import { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import type { DeploymentModeConfig } from "../shared/types";
 import type { RuntimeStatus } from "../shared/types";
 import {
   ensureDataAndConfig,
+  waitForCoreReadiness,
 } from "./core-manager";
 import { ensureAmitiaDataDir, getAmitiaDataDir, isDevMode } from "./path-manager";
 import { ensureDesktopInstanceID } from "./desktop-identity";
@@ -90,6 +92,7 @@ if (!lock) {
       return;
     }
 
+    showSplashWindow();
     await enterMainApp();
   });
 
@@ -99,13 +102,19 @@ if (!lock) {
     }
   });
 
+  app.on("will-quit", () => {
+    closeSplashWindow();
+  });
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       if (mainWindow) {
         mainWindow.show();
       } else {
-        mainWindow = createMainWindow();
-        registerRealtimeMediaHandlers(() => mainWindow);
+        const win = createMainWindow();
+        mainWindow = win;
+        registerRealtimeMediaHandlers(() => win);
+        void revealMainWindow(win);
       }
     }
   });
@@ -145,8 +154,9 @@ async function enterMainApp(): Promise<void> {
     registerAppProtocol(join(app.getAppPath(), "dist", "renderer"));
   }
 
-  mainWindow = createMainWindow();
-  registerRealtimeMediaHandlers(() => mainWindow);
+  const mainWin = createMainWindow();
+  mainWindow = mainWin;
+  registerRealtimeMediaHandlers(() => mainWin);
   registerRealtimeCallWindowHandlers(() => mainWindow);
   const trayResult = createAppTray(
     mainWindow,
@@ -213,6 +223,11 @@ async function enterMainApp(): Promise<void> {
     notifyStatus(runtimeManager, "failed", String(err));
   }
 
+  const coreReady = await waitForCoreReadiness();
+  if (!coreReady) {
+    console.warn("[AmitiaDesktop] 核心未就绪, 直接显示主界面");
+  }
+
   mainWindow.on("close", (event) => {
     if (!quitting) {
       event.preventDefault();
@@ -235,6 +250,9 @@ async function enterMainApp(): Promise<void> {
       return;
     }
   });
+
+  await revealMainWindow(mainWin);
+  closeSplashWindow();
 }
 
 ipcMain.handle("app:enter-main", async () => {

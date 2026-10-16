@@ -23,7 +23,7 @@ func TestReconciledChildMustMatchDurableAssignmentScope(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			altered := *record
+			altered := InteractionRecord{ID: record.ID, Scope: record.Scope}
 			c.modify(&altered)
 			if err := validateReconciledChildScope(&altered, assignment, "space-a", "parent-conversation"); err == nil {
 				t.Fatal("reconciliation accepted a child from different identity")

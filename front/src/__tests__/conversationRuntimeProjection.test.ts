@@ -15,6 +15,11 @@ vi.mock("@/composables/useApi", () => ({
   useApi: () => ({ get: mocks.get }),
 }));
 
+vi.mock("@/runtime/owned-chat-management", () => ({
+  ownedChatRuntimeRequest: (...args: any[]) => mocks.get(...args),
+  prepareOwnedChatRequest: vi.fn(),
+}));
+
 vi.mock("@/runtime/runtime-adapter", () => ({
   resolveApiUrl: vi.fn(async (value: string) => value),
 }));
@@ -89,6 +94,7 @@ describe("conversation runtime projection", () => {
     runtime.cleanup();
   });
   it("only notifies completed root turns once", async () => {
+    mocks.get.mockResolvedValue({ version: 1, messages: [], turns: [] });
     mocks.notifyReplyCompleted.mockClear();
     mocks.get.mockResolvedValue({ version: 1, turns: [], lastEventSequence: 5 });
     for (const candidate of [

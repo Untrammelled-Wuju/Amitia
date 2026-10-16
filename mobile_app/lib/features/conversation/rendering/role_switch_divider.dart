@@ -10,20 +10,27 @@ class AmitiaRoleSwitchDivider extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 20),
-      child: Row(
-        children: [
-          Expanded(child: Divider(color: colorScheme.outlineVariant)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              '当前对话角色已切换为 $characterName',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(child: Divider(color: colorScheme.outlineVariant)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * 4 / 6,
+                ),
+                child: Text(
+                  '当前对话角色已切换为 $characterName',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
             ),
-          ),
-          Expanded(child: Divider(color: colorScheme.outlineVariant)),
-        ],
+            Expanded(child: Divider(color: colorScheme.outlineVariant)),
+          ],
+        ),
       ),
     );
   }

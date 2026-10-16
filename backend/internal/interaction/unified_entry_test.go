@@ -58,6 +58,7 @@ func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
+	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
 
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:        "web",
@@ -100,6 +101,7 @@ func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
+	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
 
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:        "web",
@@ -147,6 +149,7 @@ func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
 			State:          ScopeBindingStateActive,
 		},
 	}}), temporal.SystemClock{})
+	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
 
 	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
 		Channel:   "wechat",
@@ -194,6 +197,8 @@ func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
+	executor := &orchestratorEntryExecutor{entry: entry, orchestrator: orch}
+	entry.SetEntryExecutor(executor)
 	entry.SetBackpressureConfig(BackpressureConfig{
 		MaxQueueDepth: -1,
 		WarningRatio:  2,
@@ -219,7 +224,82 @@ func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	if status := entry.GetBackpressureStatus(); status != BackpressureNormal {
 		t.Fatalf("unexpected backpressure status: %s", status)
 	}
+	if executor.requests == nil {
+		t.Fatal("canonical executor was not invoked")
+	}
 }
+
+type orchestratorEntryExecutor struct {
+	entry        *UnifiedEntry
+	orchestrator *Orchestrator
+	requests     []*UnifiedEntryRequest
+	scope        InteractionScope
+	entered      chan struct{}
+	release      chan struct{}
+}
+
+func (e *orchestratorEntryExecutor) ExecuteEntry(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
+	resolution, err := e.entry.ResolveScope(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	e.requests = append(e.requests, req)
+	scope := resolution.Scope
+	return e.orchestrator.Process(ctx, &ProcessRequest{
+		CharacterID:              scope.CharacterID,
+		ConversationID:           scope.ConversationID,
+		ThreadID:                 scope.ThreadID,
+		SpaceID:                  scope.SpaceID,
+		Channel:                  scope.Channel,
+		PeerID:                   scope.PeerID,
+		Source:                   resolution.Source,
+		DeviceTimezone:           req.DeviceTimezone,
+		Message:                  req.Message,
+		SessionID:                req.SessionID,
+		RequestID:                req.RequestID,
+		ReservedInteractionID:    req.ReservedInteractionID,
+		RecoverExistingTurn:      req.RecoverExistingTurn,
+		TurnID:                   req.TurnID,
+		ExecutionID:              req.ExecutionID,
+		AudioUrl:                 req.AudioUrl,
+		AudioDuration:            req.AudioDuration,
+		VoiceMessage:             req.VoiceMessage,
+		ExpressionPlan:           req.ExpressionPlan,
+		ImageUrl:                 req.ImageUrl,
+		VideoUrl:                 req.VideoUrl,
+		ImageContext:             req.ImageContext,
+		ReplyToMessageID:         req.ReplyToMessageID,
+		ModelConfigID:            req.ModelConfigID,
+		ReasoningEffort:          req.ReasoningEffort,
+		MessageStyle:             req.MessageStyle,
+		ReasoningEnabled:         req.ReasoningEnabled,
+		PermissionMode:           req.PermissionMode,
+		IsInternal:               req.IsInternal,
+		SuppressReplyPersistence: req.SuppressReplyPersistence,
+		ForceRegenerate:          req.ForceRegenerate,
+		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
+		ProactiveTimeContext:     req.ProactiveTimeContext,
+		ProactiveRecentContext:   req.ProactiveRecentContext,
+		ProactiveRelationship:    req.ProactiveRelationship,
+		ProactiveEmotion:         req.ProactiveEmotion,
+		ProactiveMemory:          req.ProactiveMemory,
+	})
+}
+
+func (e *orchestratorEntryExecutor) CancelEntryScope(scope InteractionScope) int {
+	e.scope = scope
+	if e.entered != nil {
+		close(e.entered)
+	}
+	if e.release != nil {
+		<-e.release
+	}
+	return 1
+}
+
+func (e *orchestratorEntryExecutor) EntryInteractionActive(string) bool { return false }
+
+func (e *orchestratorEntryExecutor) EntryReady() bool { return true }
 
 func TestUnifiedEntryBackpressureRecoveryTimeoutCapsCooldown(t *testing.T) {
 	state := &BackpressureState{QueueDepth: 10}
@@ -285,6 +365,13 @@ func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
 	tracker := newBlockingListTracker()
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
+	executor := &orchestratorEntryExecutor{
+		entry:        entry,
+		orchestrator: orch,
+		entered:      make(chan struct{}),
+		release:      make(chan struct{}),
+	}
+	entry.SetEntryExecutor(executor)
 
 	done := make(chan struct{})
 	go func() {
@@ -293,9 +380,12 @@ func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
 	}()
 
 	select {
-	case <-tracker.entered:
+	case <-executor.entered:
 	case <-time.After(time.Second):
-		t.Fatal("cancel did not enter tracker")
+		t.Fatal("cancel did not reach the canonical executor")
+	}
+	if executor.scope.Channel != "web" || executor.scope.PeerID != "peer-1" {
+		t.Fatalf("cancel scope was not delegated: %#v", executor.scope)
 	}
 
 	configDone := make(chan struct{})
@@ -316,7 +406,7 @@ func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
 		t.Fatal("backpressure config was blocked by cancel")
 	}
 
-	close(tracker.release)
+	close(executor.release)
 	select {
 	case <-done:
 	case <-time.After(time.Second):

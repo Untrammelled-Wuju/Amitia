@@ -214,6 +214,14 @@ const api = {
   getCurrentVersion(): Promise<string> {
     return ipcRenderer.invoke("update:get-current-version");
   },
+  getUpdateChannel(): Promise<{ allowBetaChannel: boolean }> {
+    return ipcRenderer.invoke("update:get-channel");
+  },
+  setUpdateChannel(
+    allowBetaChannel: boolean,
+  ): Promise<{ allowBetaChannel: boolean }> {
+    return ipcRenderer.invoke("update:set-channel", allowBetaChannel);
+  },
   openGiteeRelease(): Promise<void> {
     return ipcRenderer.invoke("update:open-gitee-release");
   },

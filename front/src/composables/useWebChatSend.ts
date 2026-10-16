@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type Ref, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { useApi } from "./useApi";
-import { resolveApiUrl } from "../runtime/runtime-adapter";
-import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { useConversationWorkspace } from "./useConversationWorkspace";
@@ -13,6 +10,7 @@ import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAttachment, ownedAttachmentURL, type OwnedAttachment } from "@/runtime/device-owned-attachments";
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
+import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -40,7 +38,6 @@ export function useWebChatSend(
   beginPendingAssistant?: (requestId: string, characterId?: string) => void,
   failPendingAssistant?: (requestId: string) => void,
 ) {
-  const { post, del } = useApi();
   const owned = useDeviceOwnedConversation();
   const { messageStyle } = useChatAppearancePreference();
   const { currentWorkspace, getWorkspaceRequestFields } = useConversationWorkspace();
@@ -76,19 +73,7 @@ export function useWebChatSend(
 				await doActualSend("[语音]", undefined, true, undefined, attachment);
 				return;
 			}
-      const formData = new FormData();
-      formData.append("audio", blob, "voice.webm");
-      const [url, init] = await Promise.all([
-        resolveApiUrl("/api/voice/upload"),
-        createAuthenticatedFetchInit("/api/voice/upload", { method: "POST", body: formData }),
-      ]);
-      const res = await fetch(url, init);
-      if (!res.ok) throw new Error("Voice upload failed");
-      const data = await res.json();
-      const audioUrl = data?.data?.audioUrl || data?.audioUrl || "";
-      if (!audioUrl) throw new Error("No audioUrl returned");
-      pendingAudioUrl.value = audioUrl;
-      await doActualSend(typeof transcript === "string" && transcript.trim() ? transcript : "[语音]", audioUrl, true);
+      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } catch (err: any) {
       console.error("[Voice] upload failed:", err);
       ElMessage.error(err?.message || "语音发送失败");
@@ -108,38 +93,7 @@ export function useWebChatSend(
       await doActualSend(text.trim() || "[图片]");
       return;
     }
-    let resourceUri = imageBase64;
-    let file = currentImageFile.value;
-    if (!file && imageBase64.startsWith("data:")) {
-      try {
-        const blob = await fetch(imageBase64).then((response) => response.blob());
-        file = new File([blob], "image.png", {
-          type: blob.type || "image/png",
-        });
-      } catch {
-        file = null;
-      }
-    }
-    if (file) {
-      try {
-        const form = new FormData();
-        form.append("kind", "image");
-        form.append("source", "chat_upload");
-        form.append("file", file, file.name);
-        const response = await post<any>("/api/artifacts/v1", form);
-        const artifact = response?.artifact ?? response;
-        const artifactId = String(artifact?.artifactId ?? artifact?.id ?? "").trim();
-        if (!artifactId) throw new Error("图片上传结果缺少 artifactId");
-        resourceUri = `amitia://artifacts/${artifactId}`;
-      } catch (error: any) {
-        ElMessage.error(error?.response?.data?.message || error?.message || "图片上传失败");
-        throw error;
-      }
-    }
-    currentImageBase64.value = null;
-    currentImageFile.value = null;
-    pendingImageBase64.value = resourceUri;
-    await doActualSend(text && text.trim() ? text : "[图片]");
+    throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   }
 
   async function handleSend(text: string, imageBase64?: string, videoBase64?: string) {
@@ -202,7 +156,6 @@ export function useWebChatSend(
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
     });
-    if (!owned.enabled.value) beginPendingAssistant?.(requestEnvelope.requestId, characterId.value);
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
@@ -237,7 +190,7 @@ export function useWebChatSend(
           const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(originalReply.fullContent))), (value) => value.toString(16).padStart(2, "0")).join("");
           quote = { ownerId: originalReply.ownerId, characterId: originalReply.characterId, conversationId: source?.id || originalReply.sourceConversationId, messageId: originalReply.id, expectedRevision: originalReply.sourceRevision, contentHash, expectedExecutionScope: originalReply.executionScope };
         }
-        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, ...(draftProjectId ? { projectId: draftProjectId } : {}), characterId: expectedExecutionScope.roleId, permissionMode: permissionMode?.value || undefined, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
+        const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, ...(draftProjectId ? { projectId: draftProjectId } : {}), characterId: expectedExecutionScope.roleId, permissionMode: permissionMode?.value || undefined, modelConfigId: modelConfigId?.value, reasoningEffort: reasoningEffort?.value, reasoningEnabled: reasoningEnabled?.value, messageStyle: messageStyle.value, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
           if (convId.value !== activeConversation || characterId.value !== originalRole) return;
           if (event.type === "started") {
             const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
@@ -271,47 +224,7 @@ export function useWebChatSend(
         await onConversationCreated?.(response.conversationId);
         return;
       }
-			if (ownedAudio || ownedExtra) throw new Error("设备服务状态已变化，附件未发送");
-      const result = await post<any>("/api/web-chat/messages", {
-        requestId: requestEnvelope.requestId,
-        sessionId: requestEnvelope.sessionId,
-        deviceTimezone: requestEnvelope.deviceTimezone,
-        clientMessageId: requestEnvelope.requestId,
-        conversationId: convId.value || undefined,
-        projectId: currentWorkspace.value?.projectId || undefined,
-        characterId: characterId.value || undefined,
-        content: sendContent,
-        imageUrl: imgUrl || "",
-        audioUrl: finalAudioUrl || "",
-        voiceMessage: voiceMessage ?? !!finalAudioUrl,
-        videoUrl: finalVideoUrl || "",
-        replyToMessageId: replyTarget?.value?.id || undefined,
-        modelConfigId: modelConfigId?.value || undefined,
-        reasoningEffort: reasoningEffort?.value || undefined,
-        messageStyle: messageStyle.value,
-        reasoningEnabled: reasoningEnabled?.value,
-        permissionMode: permissionMode?.value || undefined,
-        ...getWorkspaceRequestFields(),
-      });
-      const authoritativeConversationId = String(result?.conversationId || convId.value || "");
-      const localIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
-      if (localIndex >= 0) {
-        messages.value[localIndex] = {
-          ...messages.value[localIndex],
-          id: result?.userMessageId || userMsgLocalId,
-          conversationId: authoritativeConversationId,
-          clientMessageId: result?.clientMessageId || requestEnvelope.requestId,
-          turnId: result?.turnId || undefined,
-          executionId: result?.executionId || undefined,
-          status: "queued",
-        };
-      }
-      if (authoritativeConversationId && !convId.value) {
-        convId.value = authoritativeConversationId;
-        localStorage.setItem("webchat-conv-id", authoritativeConversationId);
-        await onConversationCreated?.(authoritativeConversationId);
-      }
-      if (replyTarget) replyTarget.value = null;
+      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } catch (err: any) {
       const errMsg = err?.message || "发送失败";
       failPendingAssistant?.(requestEnvelope.requestId);
@@ -333,31 +246,24 @@ export function useWebChatSend(
   async function handleFileSend(file: File) { const attachment = await ownedFileAttachment(file, file.name); await doActualSend(`[文件] ${file.name}`, undefined, undefined, undefined, undefined, attachment); }
 
   async function handleStop() {
-    if (owned.enabled.value) { await owned.interrupt().catch((error) => ElMessage.error(error?.message || "停止失败")); return; }
-    const conversationId = String(convId.value || "").trim();
-    const turnId = String(activeTurnId?.value || "").trim();
-    if (!conversationId || !turnId) return;
     try {
-      await post(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/interrupt`);
-    } catch (err: any) {
-      ElMessage.error(err?.message || "停止失败");
-    }
+      if (activeTurnId?.value && convId.value) await ownedChatRuntimeRequest("interrupt", { conversationId: convId.value, turnId: activeTurnId.value }, characterId.value);
+      else await owned.interrupt();
+    } catch (error: any) { ElMessage.error(error?.message || "停止失败"); }
   }
 
   async function handleRetry(msg: any) {
     if (sending.value) return;
-    if (owned.enabled.value) { ElMessage.info("请继续发送新消息；已发起的请求不会自动重放。记忆保存任务会单独重试。"); return; }
-    const turnId = String(msg?.turnId || msg?.assistantTurn?.id || "").trim();
-    const conversationId = String(convId.value || "").trim();
-    if (!conversationId || !turnId) {
-      ElMessage.warning("该消息缺少可重试的 Turn 信息");
+    const turnId = msg.assistantTurn?.id || msg.turnId;
+    if (!turnId || !convId.value) {
+      if (msg.role === "user" && msg.status === "failed" && !msg.imageUrl && !msg.audioUrl && !msg.videoUrl && !msg.attachments?.length) await doActualSend(msg.content);
+      else ElMessage.error("当前消息缺少原执行记录，请重新加载对话后再重试");
       return;
     }
     try {
-      await post(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/retry`, { messageStyle: messageStyle.value });
-    } catch (err: any) {
-      ElMessage.error(err?.message || "重试失败");
-    }
+      await ownedChatRuntimeRequest("retry", { conversationId: convId.value, turnId }, characterId.value);
+      window.dispatchEvent(new CustomEvent("amitia:owned-runtime-refresh", { detail: { conversationId: convId.value } }));
+    } catch (error: any) { ElMessage.error(error?.message || "重试失败"); }
   }
 
   async function handleClear() {
@@ -371,8 +277,7 @@ export function useWebChatSend(
       if (convId.value !== conversationId || characterId.value !== roleId) return;
       disconnectRuntime();
       if (conversationId) {
-        if (owned.enabled.value) await owned.edit("conversation", conversationId, {}, { clear: true, characterId: roleId });
-        else await del(`/api/web-chat/conversations/${conversationId}/messages`);
+        await owned.edit("conversation", conversationId, {}, { clear: true, characterId: roleId });
       }
       if (convId.value !== conversationId || characterId.value !== roleId) return;
       messages.value = [];

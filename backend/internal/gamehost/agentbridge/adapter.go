@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
@@ -222,12 +223,18 @@ func (a *RuntimeAdapter) bindInvocationContext(peer ipc.Peer, invocation capabil
 	if a == nil || a.sessions == nil {
 		return
 	}
-	a.sessions.Bind(SessionScope{
+	scope := SessionScope{
 		PluginID: peer.PluginID, RuntimeID: peer.RuntimeID, ServiceID: peer.ServiceID, Generation: peer.Generation,
 		SpaceID: invocation.SpaceID, CharacterID: invocation.CharacterID,
 		ConversationID: invocation.ConversationID, Channel: invocation.Channel,
 		HostSessionID: invocation.SessionID,
-	})
+	}
+	if invocation.ExecContext != nil && invocation.ExecContext.Metadata != nil {
+		if owned, ok := invocation.ExecContext.Metadata["deviceMeshScope"].(coordination.ExecutionScope); ok {
+			scope.OwnedScope = &owned
+		}
+	}
+	a.sessions.Bind(scope)
 }
 
 func (a *RuntimeAdapter) ensurePeerReady(ctx context.Context, peer ipc.Peer) error {

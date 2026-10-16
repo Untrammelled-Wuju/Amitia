@@ -141,6 +141,8 @@ type AppServices struct {
 	Vision                       vision.Service
 	Chat                         chat.Service
 	UnifiedEntry                 *interaction.UnifiedEntry
+	ChatRuntime                  *interaction.Orchestrator
+	OwnedIngress                 *ownedChatIngress
 	Continuity                   *continuity.Repository
 	ContinuityCoordinator        *continuity.WaitCoordinator
 	ContinuityBridge             *continuity.RuntimeBridge
@@ -601,8 +603,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		baseURL := "http://" + config.AppCfg.Server.Addr()
 		toolFacade.SetSkillResourceHandler(extension.NewSkillResourceAdapter(extensionRuntime.AgentSkills, baseURL))
 	}
-	chatToolRuntime := newChatToolRuntimeAdapter(toolFacade)
-	chatSvc.SetToolRuntime(chatToolRuntime)
 	extensionContextProvider := newKernelExtensionContextProvider(toolFacade)
 	if setter, ok := interface{}(chatSvc).(interface {
 		SetExtensionContextProvider(extensioncontext.Provider)
@@ -756,12 +756,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	_ = pauseResumeService
 	ownedWorkerPort := &ownedWorkerEnginePort{}
 	codingAllocator := &codingWorkerWorktreeAllocator{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
-	ownedWorkerRunner := newOwnedMultiAgentWorkerRunner(ownedWorkerPort, tracker, interaction.NewAsyncUnifiedEntryWorkerRunner(entry, tracker))
+	ownedWorkerRunner := newOwnedMultiAgentWorkerRunner(ownedWorkerPort, tracker)
 	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewCodingWorktreeWorkerRunner(ownedWorkerRunner, codingAllocator), pauseResumeService, interaction.DefaultMultiAgentPolicy())
-	chatToolRuntime.ConfigureMultiAgent(multiAgentCoordinator, tracker, goalRegistry)
+	nativeMultiAgent := &chatMultiAgentRuntime{coordinator: multiAgentCoordinator, tracker: tracker, goals: goalRegistry}
 	codingReviewer := &codingWorktreeReviewerService{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
-	chatToolRuntime.multiAgent.worktreeReviewer = codingReviewer
-	chatToolRuntime.multiAgent.terminalReader = newCodingTaskTerminalReader()
+	nativeMultiAgent.worktreeReviewer = codingReviewer
+	nativeMultiAgent.terminalReader = newCodingTaskTerminalReader()
 	registerAgentReconciliation(reconciliationEngine, goalRegistry, kernelContainer, recoveryDescriptor)
 	cbRegistry := mindruntime.NewCircuitBreakerRegistry()
 	cbRegistry.Register("qdrant", mindruntime.DefaultCircuitBreakerConfig())
@@ -1201,6 +1201,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Vision:                       visionSvc,
 		Chat:                         chatSvc,
 		UnifiedEntry:                 entry,
+		ChatRuntime:                  orch,
 		Continuity:                   continuityRepo,
 		ContinuityCoordinator:        continuityCoordinator,
 		ContinuityBridge:             continuityBridge,
@@ -1345,6 +1346,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("Core 缺少设备归属计算端口")
 		}
 		services.OwnedBusiness = business.NewEngine(deviceMeshRuntime.Coordination, deviceMeshRuntime, ownedModel)
+		services.OwnedIngress = newOwnedChatIngress(services, localSpace.SpaceID())
+		entry.SetEntryExecutor(services.OwnedIngress)
+		continuityCoordinator.SetDispatcher(&continuityWakeDispatcher{entry: entry, bindLocal: services.OwnedIngress.bindLocalSource})
+		if kernelContainer != nil && kernelContainer.GameHost != nil {
+			kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry, defaultCharacterProvider: defaultCharProvider, bindLocal: services.OwnedIngress.bindLocalSource, withOwner: services.OwnedBusiness.WithExecutionScope})
+		}
 		ownedWorkerPort.engine = services.OwnedBusiness
 		codingAllocator.services = services
 		codingReviewer.services = services
@@ -1359,7 +1366,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			reflectionMemoryAdapter.runtime = runtime
 		}
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
-			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: chatToolRuntime.multiAgent})
+			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: nativeMultiAgent})
 		}
 		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
 		ownedDataHandler, ownedDataErr := newDeviceOwnedDataHandler(services, mcpDataDirectory(ctx))

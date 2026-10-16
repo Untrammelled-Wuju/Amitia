@@ -69,6 +69,7 @@ import '../../../features/settings/presentation/pages/temporal_settings_page.dar
 import '../../../features/settings/presentation/pages/model_config_page.dart';
 import '../../../features/settings/presentation/pages/safety_page.dart';
 import '../../../features/settings/presentation/pages/maintenance_page.dart';
+import '../../../features/settings/presentation/pages/user_feedback_page.dart';
 import '../../../features/settings/presentation/pages/storage_page.dart';
 import '../../../features/settings/presentation/pages/user_settings_page.dart';
 import '../../../features/settings/presentation/pages/devices_page.dart';
@@ -658,6 +659,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const MaintenancePage(),
+    ),
+  ),
+  GoRoute(
+    path: '/settings/user-feedback',
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: const UserFeedbackPage(),
     ),
   ),
   GoRoute(

@@ -33,36 +33,25 @@ func (p *ownedWorkerEnginePort) RunWorker(ctx context.Context, scope coordinatio
 }
 
 type ownedMultiAgentWorkerRunner struct {
-	engine   ownedWorkerEngine
-	tracker  interaction.InteractionTracker
-	fallback interaction.AgentWorkerRunner
-	mu       sync.Mutex
-	active   map[string]context.CancelFunc
-	closed   bool
-	wg       sync.WaitGroup
+	engine  ownedWorkerEngine
+	tracker interaction.InteractionTracker
+	mu      sync.Mutex
+	active  map[string]context.CancelFunc
+	closed  bool
+	wg      sync.WaitGroup
 }
 
-func newOwnedMultiAgentWorkerRunner(engine ownedWorkerEngine, tracker interaction.InteractionTracker, fallback interaction.AgentWorkerRunner) *ownedMultiAgentWorkerRunner {
-	return &ownedMultiAgentWorkerRunner{engine: engine, tracker: tracker, fallback: fallback, active: make(map[string]context.CancelFunc)}
+func newOwnedMultiAgentWorkerRunner(engine ownedWorkerEngine, tracker interaction.InteractionTracker) *ownedMultiAgentWorkerRunner {
+	return &ownedMultiAgentWorkerRunner{engine: engine, tracker: tracker, active: make(map[string]context.CancelFunc)}
 }
 
 func (r *ownedMultiAgentWorkerRunner) WorkerInteractionID(req interaction.WorkerRunRequest) string {
-	if req.OwnedScope == nil {
-		if fallback, ok := r.fallback.(interface {
-			WorkerInteractionID(interaction.WorkerRunRequest) string
-		}); ok {
-			return fallback.WorkerInteractionID(req)
-		}
-	}
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("amitia-multi-agent:"+req.AssignmentID)).String()
 }
 
 func (r *ownedMultiAgentWorkerRunner) StartWorker(ctx context.Context, req interaction.WorkerRunRequest) (string, error) {
 	if req.OwnedScope == nil {
-		if r.fallback == nil {
-			return "", errors.New("multi_agent: legacy worker runtime unavailable")
-		}
-		return r.fallback.StartWorker(ctx, req)
+		return "", errors.New("multi_agent: worker缺少经过验证的数据归属")
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -175,12 +164,7 @@ func (r *ownedMultiAgentWorkerRunner) CancelWorker(ctx context.Context, childID 
 	if owned {
 		return r.cancelRecord(ctx, childID)
 	}
-	if fallback, ok := r.fallback.(interface {
-		CancelWorker(context.Context, string) error
-	}); ok {
-		return fallback.CancelWorker(ctx, childID)
-	}
-	return nil
+	return r.cancelRecord(ctx, childID)
 }
 
 func (r *ownedMultiAgentWorkerRunner) cancelRecord(ctx context.Context, childID string) error {
@@ -213,9 +197,6 @@ func (r *ownedMultiAgentWorkerRunner) WorkerIsActive(childID string) bool {
 	if active {
 		return true
 	}
-	if fallback, ok := r.fallback.(interface{ WorkerIsActive(string) bool }); ok {
-		return fallback.WorkerIsActive(childID)
-	}
 	return false
 }
 
@@ -232,9 +213,6 @@ func (r *ownedMultiAgentWorkerRunner) Shutdown(ctx context.Context) error {
 	case <-done:
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-	if fallback, ok := r.fallback.(interface{ Shutdown(context.Context) error }); ok {
-		return fallback.Shutdown(ctx)
 	}
 	return nil
 }

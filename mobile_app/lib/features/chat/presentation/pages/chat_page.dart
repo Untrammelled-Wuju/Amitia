@@ -3651,7 +3651,18 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const Spacer(),
-            IconButton(tooltip: '工作区', onPressed: onOpenWorkbench, icon: const Icon(Icons.space_dashboard_outlined)),
+            Tooltip(
+              message: '工作区',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onOpenWorkbench,
+                child: const _ChatTopBarButton(
+                  icon: Icons.space_dashboard_outlined,
+                  size: 44,
+                  iconSize: 22,
+                ),
+              ),
+            ),
             if (extensionActions != null) ...[
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 180),
@@ -3910,40 +3921,47 @@ class _ChatErrorNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 38),
-      child: Row(
-        children: [
-          Expanded(child: Divider(color: context.borderPrimary, height: 1)),
-          const SizedBox(width: 10),
-          Flexible(
-            flex: 4,
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: title,
-                    style: TextStyle(
-                      color: context.error,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const TextSpan(text: '  '),
-                  TextSpan(
-                    text: detail,
-                    style: TextStyle(color: context.textTertiary, fontSize: 11),
-                  ),
-                ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(child: Divider(color: context.borderPrimary, height: 1)),
+            const SizedBox(width: 10),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth * 4 / 6,
               ),
-              textAlign: TextAlign.center,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: title,
+                      style: TextStyle(
+                        color: context.error,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const TextSpan(text: '  '),
+                    TextSpan(
+                      text: detail,
+                      style: TextStyle(
+                        color: context.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
-          ),
-          if (onRetry != null) ...[
-            const SizedBox(width: 8),
-            TextButton(onPressed: onRetry, child: const Text('重试')),
+            if (onRetry != null) ...[
+              const SizedBox(width: 8),
+              TextButton(onPressed: onRetry, child: const Text('重试')),
+            ],
+            const SizedBox(width: 10),
+            Expanded(child: Divider(color: context.borderPrimary, height: 1)),
           ],
-          const SizedBox(width: 10),
-          Expanded(child: Divider(color: context.borderPrimary, height: 1)),
-        ],
+        ),
       ),
     );
   }

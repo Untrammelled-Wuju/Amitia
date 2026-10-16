@@ -33,7 +33,10 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	allowed := map[string]bool{}
 	switch edit.Kind {
 	case "conversation":
-		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "lastReadTurnSequence": true}
+		allowed = map[string]bool{"title": true, "archived": true, "pinned": true, "lastReadTurnSequence": true, "modelConfigId": true, "reasoningEffort": true, "reasoningEnabled": true, "permissionMode": true, "messageStyle": true}
+		if err := validateSettingsChanges(edit.Changes); err != nil {
+			return coordination.Acknowledgement{}, err
+		}
 	case "project":
 		if edit.ExpectedScope == nil {
 			return coordination.Acknowledgement{}, errors.New("项目修改缺少原数据归属，请重新加载")

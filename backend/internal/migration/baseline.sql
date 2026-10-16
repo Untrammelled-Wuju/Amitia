@@ -5938,3 +5938,47 @@ CREATE TABLE IF NOT EXISTS search_credential_cleanup (
     last_error TEXT NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_feedback_tickets (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    contact TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT '',
+    client_type TEXT NOT NULL DEFAULT '',
+    app_version TEXT NOT NULL DEFAULT '',
+    runtime_mode TEXT NOT NULL DEFAULT '',
+    os_info TEXT NOT NULL DEFAULT '',
+    device_hash TEXT NOT NULL DEFAULT '',
+    locale TEXT NOT NULL DEFAULT '',
+    timezone TEXT NOT NULL DEFAULT '',
+    include_logs INTEGER NOT NULL DEFAULT 1,
+    log_line_count INTEGER NOT NULL DEFAULT 0,
+    diagnostics TEXT NOT NULL DEFAULT '',
+    upload_url TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    remote_id TEXT NOT NULL DEFAULT '',
+    remote_url TEXT NOT NULL DEFAULT '',
+    screenshot_name TEXT NOT NULL DEFAULT '',
+    screenshot_path TEXT NOT NULL DEFAULT '',
+    screenshot_size INTEGER NOT NULL DEFAULT 0,
+    has_screenshot INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    uploaded_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_user_feedback_tickets_space ON user_feedback_tickets(space_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_user_feedback_tickets_status ON user_feedback_tickets(status, attempts);
+
+CREATE TABLE IF NOT EXISTS kernel_security_audit_outbox (
+    event_id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT ''
+);

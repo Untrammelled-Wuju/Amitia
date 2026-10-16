@@ -6,7 +6,6 @@ import 'package:dio/dio.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../models/conversation.dart';
 import '../models/project.dart';
-import '../native_bridge/device_timezone_cache.dart';
 import 'device_owned_chat_service.dart';
 
 class ChatSubmitResult {
@@ -227,72 +226,42 @@ class ChatService {
 
   ChatService(
     this._api, {
+    DeviceOwnedChatService? owned,
     String Function()? providerKey,
     Future<Map<String, dynamic>?> Function()? providerTransition,
-  }) : owned = DeviceOwnedChatService(
-         _api,
-         providerKey: providerKey,
-         providerTransition: providerTransition,
-       );
+  }) : owned =
+           owned ??
+           DeviceOwnedChatService(
+             _api,
+             providerKey: providerKey,
+             providerTransition: providerTransition,
+           );
+
+  Future<void> _requireOwned() async {
+    if (!await owned.refresh())
+      throw StateError(owned.notice.isEmpty ? '设备对话服务尚未就绪' : owned.notice);
+  }
 
   Future<List<ConversationDto>> listConversations() async {
-    if (await owned.refresh()) return owned.conversations();
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations',
-      queryParameters: const {'page': 1, 'pageSize': 200},
-    );
-    final rows = resp?['items'];
-    if (rows is! List) return const [];
-    return rows
-        .whereType<Map>()
-        .map((row) => ConversationDto.fromJson(Map<String, dynamic>.from(row)))
-        .toList(growable: false);
+    await _requireOwned();
+    return owned.conversations();
   }
 
   Future<List<ConversationDto>> archivedConversations({
     String projectId = '',
     String keyword = '',
   }) async {
-    if (await owned.refresh()) {
-      final search = keyword.trim().toLowerCase();
-      final rows = await owned.conversations(keyword: search);
-      return rows
-          .where(
-            (row) =>
-                row.archivedAt.isNotEmpty &&
-                (projectId.isEmpty || row.projectId == projectId),
-          )
-          .toList();
-    }
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations',
-      queryParameters: {
-        'page': 1,
-        'pageSize': 200,
-        'archivedOnly': true,
-        if (projectId.trim().isNotEmpty) 'projectId': projectId.trim(),
-        if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
-      },
+    await _requireOwned();
+    final rows = await owned.conversations(
+      keyword: keyword.trim().toLowerCase(),
     );
-    final rows = resp?['items'];
-    if (rows is! List) return const [];
     return rows
-        .whereType<Map>()
-        .map((row) => ConversationDto.fromJson(Map<String, dynamic>.from(row)))
-        .where((conversation) => conversation.channel == 'web')
-        .toList(growable: false);
-  }
-
-  Future<ConversationDto?> createRealtimeConversation({
-    String? projectId,
-  }) async {
-    final id = projectId?.trim() ?? '';
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/realtime-conversations',
-      data: <String, dynamic>{if (id.isNotEmpty) 'projectId': id},
-    );
-    if (resp == null) return null;
-    return ConversationDto.fromJson(resp);
+        .where(
+          (row) =>
+              row.archivedAt.isNotEmpty &&
+              (projectId.isEmpty || row.projectId == projectId),
+        )
+        .toList();
   }
 
   Future<void> updateConversationModelSettings(
@@ -301,9 +270,10 @@ class ChatService {
     required String reasoningEffort,
     required bool reasoningEnabled,
   }) async {
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$conversationId',
-      data: <String, dynamic>{
+    await owned.edit(
+      'conversation',
+      conversationId,
+      changes: <String, dynamic>{
         'modelConfigId': modelConfigId,
         'reasoningEffort': reasoningEffort,
         'reasoningEnabled': reasoningEnabled,
@@ -315,88 +285,75 @@ class ChatService {
     String conversationId,
     String permissionMode,
   ) async {
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$conversationId',
-      data: <String, dynamic>{'permissionMode': permissionMode},
+    await owned.edit(
+      'conversation',
+      conversationId,
+      changes: <String, dynamic>{'permissionMode': permissionMode},
     );
   }
 
   Future<ConversationSidebarDto> conversationSidebar() async {
-    if (await owned.refresh()) {
-      final rows = (await owned.conversations())
-          .where((row) => row.archivedAt.isEmpty)
-          .toList();
-      final projects = (await owned.projects())
-          .where((project) => !project.readOnly)
-          .toList(growable: false);
-      final grouped = projects
-          .map(
-            (project) => ProjectDto(
-              id: project.id,
-              name: project.name,
-              workspaceId: project.workspaceId,
-              deviceId: project.deviceId,
-              rootUri: project.rootUri,
-              workspaceKind: project.workspaceKind,
-              pinnedAt: project.pinnedAt,
-              ownerId: project.ownerId,
-              roleId: project.roleId,
-              revision: project.revision,
-              readOnly: project.readOnly,
-              workspaces: project.workspaces,
-              primaryWorkspaceId: project.primaryWorkspaceId,
-              hiddenAt: project.hiddenAt,
-              executionScope: project.executionScope,
-              conversations: rows
-                  .where(
-                    (row) =>
-                        row.projectId == project.id &&
-                        row.sourceOwnerId == project.ownerId &&
-                        row.characterId == project.roleId,
-                  )
-                  .toList(),
-            ),
+    await _requireOwned();
+    final rows = (await owned.conversations())
+        .where((row) => row.archivedAt.isEmpty)
+        .toList();
+    final projects = (await owned.projects())
+        .where((project) => !project.readOnly)
+        .toList(growable: false);
+    final grouped = projects
+        .map(
+          (project) => ProjectDto(
+            id: project.id,
+            name: project.name,
+            workspaceId: project.workspaceId,
+            deviceId: project.deviceId,
+            rootUri: project.rootUri,
+            workspaceKind: project.workspaceKind,
+            pinnedAt: project.pinnedAt,
+            ownerId: project.ownerId,
+            roleId: project.roleId,
+            revision: project.revision,
+            readOnly: project.readOnly,
+            workspaces: project.workspaces,
+            primaryWorkspaceId: project.primaryWorkspaceId,
+            hiddenAt: project.hiddenAt,
+            executionScope: project.executionScope,
+            conversations: rows
+                .where(
+                  (row) =>
+                      row.projectId == project.id &&
+                      row.sourceOwnerId == project.ownerId &&
+                      row.characterId == project.roleId,
+                )
+                .toList(),
+          ),
+        )
+        .toList();
+    final groupedIds = grouped
+        .expand((project) => project.conversations)
+        .map((row) => row.id)
+        .toSet();
+    return ConversationSidebarDto(
+      pinned: rows
+          .where(
+            (row) => row.pinnedAt.isNotEmpty && !groupedIds.contains(row.id),
           )
-          .toList();
-      final groupedIds = grouped
-          .expand((project) => project.conversations)
-          .map((row) => row.id)
-          .toSet();
-      return ConversationSidebarDto(
-        pinned: rows
-            .where(
-              (row) => row.pinnedAt.isNotEmpty && !groupedIds.contains(row.id),
-            )
-            .toList(),
-        recent: rows
-            .where(
-              (row) => row.pinnedAt.isEmpty && !groupedIds.contains(row.id),
-            )
-            .toList(),
-        projects: grouped.where((project) => project.hiddenAt.isEmpty).toList(),
-        removedProjects: grouped
-            .where((project) => project.hiddenAt.isNotEmpty)
-            .toList(),
-      );
-    }
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/sidebar',
-      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+          .toList(),
+      recent: rows
+          .where((row) => row.pinnedAt.isEmpty && !groupedIds.contains(row.id))
+          .toList(),
+      projects: grouped.where((project) => project.hiddenAt.isEmpty).toList(),
+      removedProjects: grouped
+          .where((project) => project.hiddenAt.isNotEmpty)
+          .toList(),
     );
-    return ConversationSidebarDto.fromJson(resp ?? const <String, dynamic>{});
   }
 
   Future<List<ConversationDto>> channelConversations() async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/channels',
-      fromJson: (e) => Map<String, dynamic>.from(e as Map),
-    );
-    final rows = resp?['items'];
-    if (rows is! List) return const [];
-    return rows
-        .whereType<Map>()
-        .map((row) => ConversationDto.fromJson(Map<String, dynamic>.from(row)))
-        .toList(growable: false);
+    await _requireOwned();
+    return (await owned.conversations())
+        .where((row) => row.channel.isNotEmpty && row.channel != 'web')
+        .toList();
   }
 
   Future<ProjectDto> createProject({
@@ -408,39 +365,21 @@ class ChatService {
     String primaryWorkspaceId = '',
     Map<String, dynamic>? expectedScope,
   }) async {
-    if (await owned.refresh()) {
-      if (expectedScope == null) throw StateError('请先加载项目创建表单的数据归属');
-      return owned.createProject(
-        name,
-        expectedScope: expectedScope,
-        workspaces: workspaces,
-        primaryWorkspaceId: primaryWorkspaceId,
-      );
-    }
-    if (expectedScope != null) throw StateError('原 Core 项目表单不能提交到本机');
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/projects',
-      data: <String, dynamic>{
-        'name': name.trim(),
-        'workspaceId': workspaceId.trim(),
-        'deviceId': deviceId.trim(),
-        'rootUri': rootUri.trim(),
-      },
-      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+    await _requireOwned();
+    if (expectedScope == null) throw StateError('请先加载项目创建表单的数据归属');
+    return owned.createProject(
+      name,
+      expectedScope: expectedScope,
+      workspaces: workspaces,
+      primaryWorkspaceId: primaryWorkspaceId,
     );
-    if (resp == null) throw StateError('创建项目失败：后端未返回结果');
-    return ProjectDto.fromJson(resp);
   }
 
   Future<void> hideProject(String projectId, {ProjectDto? project}) async {
-    if (await owned.refresh()) {
-      if (project == null || project.id != projectId)
-        throw StateError('请重新加载项目归属后再移除');
-      return owned.editProject(project, changes: const {'hidden': true});
-    }
-    await _api.delete(
-      '/api/web-chat/projects/${Uri.encodeComponent(projectId)}',
-    );
+    await _requireOwned();
+    if (project == null || project.id != projectId)
+      throw StateError('请重新加载项目归属后再移除');
+    return owned.editProject(project, changes: const {'hidden': true});
   }
 
   Future<void> deleteProject(String projectId, {ProjectDto? project}) {
@@ -456,51 +395,37 @@ class ChatService {
     bool? hidden,
     ProjectDto? project,
   }) async {
-    if (await owned.refresh()) {
-      if (project == null || project.id != projectId)
-        throw StateError('请重新加载项目归属后再修改');
-      return owned.editProject(
-        project,
-        changes: {
-          if (name != null) 'title': name.trim(),
-          if (pinned != null) 'pinned': pinned,
-          if (hidden != null) 'hidden': hidden,
-          if (workspaces != null)
-            'workspaces': workspaces
-                .map((workspace) => workspace.toJson())
-                .toList(),
-          if (primaryWorkspaceId != null)
-            'primaryWorkspaceId': primaryWorkspaceId,
-        },
-      );
-    }
-    await _api.patch<Map<String, dynamic>>(
-      '/api/web-chat/projects/${Uri.encodeComponent(projectId)}',
-      data: <String, dynamic>{
-        if (name != null) 'name': name.trim(),
+    await _requireOwned();
+    if (project == null || project.id != projectId)
+      throw StateError('请重新加载项目归属后再修改');
+    return owned.editProject(
+      project,
+      changes: {
+        if (name != null) 'title': name.trim(),
         if (pinned != null) 'pinned': pinned,
+        if (hidden != null) 'hidden': hidden,
+        if (workspaces != null)
+          'workspaces': workspaces
+              .map((workspace) => workspace.toJson())
+              .toList(),
+        if (primaryWorkspaceId != null)
+          'primaryWorkspaceId': primaryWorkspaceId,
       },
     );
   }
 
   Future<Map<String, dynamic>> projectLocation(String projectId) async {
-    if (await owned.refresh()) {
-      final project = (await owned.projects())
-          .where((item) => item.id == projectId)
-          .firstOrNull;
-      final primary = project?.workspaces
-          .where((item) => item.id == project?.primaryWorkspaceId)
-          .firstOrNull;
-      final workspaceId = primary?.id ?? project?.workspaceId ?? '';
-      if (workspaceId.isEmpty) throw StateError('项目没有可用工作区');
-      final resp = await _api.get<Map<String, dynamic>>(
-        '/api/workspaces/${Uri.encodeComponent(workspaceId)}/location',
-        fromJson: (e) => Map<String, dynamic>.from(e as Map),
-      );
-      return resp ?? <String, dynamic>{};
-    }
+    await _requireOwned();
+    final project = (await owned.projects())
+        .where((item) => item.id == projectId)
+        .firstOrNull;
+    final primary = project?.workspaces
+        .where((item) => item.id == project?.primaryWorkspaceId)
+        .firstOrNull;
+    final workspaceId = primary?.id ?? project?.workspaceId ?? '';
+    if (workspaceId.isEmpty) throw StateError('项目没有可用工作区');
     final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/projects/${Uri.encodeComponent(projectId)}/location',
+      '/api/workspaces/${Uri.encodeComponent(workspaceId)}/location',
       fromJson: (e) => Map<String, dynamic>.from(e as Map),
     );
     return resp ?? <String, dynamic>{};
@@ -520,43 +445,8 @@ class ChatService {
     int beforeSequence = 0,
     int limit = 50,
   }) async {
-    if (await owned.refresh()) {
-      return owned.allMessages(conversationId, characterId: characterId);
-    }
-    final result = await getMessageHistory(
-      conversationId,
-      beforeSequence: beforeSequence,
-      limit: limit,
-    );
-    return result.items;
-  }
-
-  Future<MessageHistoryPageDto> getMessageHistory(
-    String conversationId, {
-    int beforeSequence = 0,
-    int limit = 50,
-  }) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/messages',
-      queryParameters: <String, dynamic>{
-        if (beforeSequence > 0) 'beforeSequence': beforeSequence,
-        'limit': limit,
-      },
-    );
-    final rows = resp?['items'];
-    final items = rows is! List
-        ? const <MessageDto>[]
-        : rows
-              .whereType<Map>()
-              .map((row) => MessageDto.fromJson(Map<String, dynamic>.from(row)))
-              .toList(growable: false);
-    return MessageHistoryPageDto(
-      items: items,
-      nextBefore:
-          (resp?['nextBefore'] as num?)?.toInt() ??
-          (items.isEmpty ? 0 : items.first.sequence),
-      hasMore: resp?['hasMore'] == true,
-    );
+    await _requireOwned();
+    return owned.allMessages(conversationId, characterId: characterId);
   }
 
   Future<AssistantTurnPageDto> getAssistantTurnPage(
@@ -564,9 +454,10 @@ class ChatService {
     int before = 0,
     int limit = 50,
   }) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns',
-      queryParameters: <String, dynamic>{
+    final resp = await owned.runtime(
+      'turns',
+      body: <String, dynamic>{
+        'conversationId': conversationId,
         if (before > 0) 'before': before,
         'limit': limit,
       },
@@ -576,8 +467,10 @@ class ChatService {
         ? rows
               .whereType<Map>()
               .map(
-                (row) =>
-                    AssistantTurnDto.fromJson(Map<String, dynamic>.from(row)),
+                (row) => AssistantTurnDto.fromJson({
+                  ...Map<String, dynamic>.from(row),
+                  'conversationId': conversationId,
+                }),
               )
               .toList(growable: false)
         : const <AssistantTurnDto>[];
@@ -599,13 +492,20 @@ class ChatService {
   Future<ConversationSnapshotDto> conversationSnapshot(
     String conversationId,
   ) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/snapshot',
+    final resp = await owned.runtime(
+      'snapshot',
+      body: {'conversationId': conversationId},
     );
-    if (resp == null) {
-      throw StateError('会话快照未返回结果');
-    }
-    return ConversationSnapshotDto.fromJson(resp);
+    return ConversationSnapshotDto.fromJson({
+      ...resp,
+      if (resp['conversation'] is Map)
+        'conversation': {...resp['conversation'] as Map, 'id': conversationId},
+      if (resp['turns'] is List)
+        'turns': (resp['turns'] as List)
+            .whereType<Map>()
+            .map((row) => {...row, 'conversationId': conversationId})
+            .toList(),
+    });
   }
 
   Stream<ChatStreamEvent> conversationEvents({
@@ -613,51 +513,35 @@ class ChatService {
     required int afterSequence,
     required ChatStreamCancellation cancellation,
   }) async* {
-    final stream = await _api.getStream(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/events',
-      queryParameters: <String, dynamic>{
-        if (afterSequence > 0) 'afterSequence': afterSequence,
-      },
-      headers: <String, String>{
-        'Accept': 'text/event-stream',
-        if (afterSequence > 0) 'Last-Event-ID': '$afterSequence',
-      },
-      cancelToken: cancellation.token,
-    );
-    yield* _decodeEventStream(stream);
+    await for (final event in owned.runtimeEvents(
+      conversationId: conversationId,
+      afterSequence: afterSequence,
+      cancellation: cancellation.token,
+    )) {
+      yield ChatStreamEvent(
+        event['event'].toString(),
+        Map<String, dynamic>.from(event['data'] as Map),
+      );
+    }
   }
 
   Future<bool> deleteConversation(String id) async {
-    if (owned.enabled) {
-      await owned.edit('conversation', id, deleted: true);
-      return true;
-    }
-    await _api.delete('/api/web-chat/conversations/$id');
+    await _requireOwned();
+    await owned.edit('conversation', id, deleted: true);
     return true;
   }
 
   Future<void> renameConversation(String id, String title) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty) throw ArgumentError('会话标题不能为空');
-    if (owned.enabled) {
-      await owned.edit('conversation', id, changes: {'title': trimmed});
-      return;
-    }
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$id',
-      data: {'title': trimmed},
-    );
+    await _requireOwned();
+    await owned.edit('conversation', id, changes: {'title': trimmed});
   }
 
   Future<void> setConversationPinned(String id, bool pinned) async {
-    if (owned.enabled) {
-      await owned.edit('conversation', id, changes: {'pinned': pinned});
-      return;
-    }
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$id',
-      data: {'pinned': pinned},
-    );
+    await _requireOwned();
+    await owned.edit('conversation', id, changes: {'pinned': pinned});
+    return;
   }
 
   Future<void> markConversationRead(
@@ -665,64 +549,47 @@ class ChatService {
     int lastTerminalTurnSequence = 0,
     String? characterId,
   }) async {
-    if (owned.enabled) {
-      var terminalSequence = lastTerminalTurnSequence;
-      if (terminalSequence <= 0) {
-        final role = owned.selectRole(characterId);
-        final result = await owned.query(id, characterId: role);
-        final snapshot = result['snapshot'];
-        if (snapshot is Map) {
-          for (final row
-              in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
-            if (row['kind'] != 'conversation' || row['body'] is! Map) continue;
-            final body = Map<String, dynamic>.from(row['body'] as Map);
-            terminalSequence =
-                (body['lastTerminalTurnSequence'] as num?)?.toInt() ?? 0;
-            break;
-          }
+    await _requireOwned();
+    var terminalSequence = lastTerminalTurnSequence;
+    if (terminalSequence <= 0) {
+      final role = owned.selectRole(characterId);
+      final result = await owned.query(id, characterId: role);
+      final snapshot = result['snapshot'];
+      if (snapshot is Map) {
+        for (final row
+            in (snapshot['resources'] as List? ?? []).whereType<Map>()) {
+          if (row['kind'] != 'conversation' || row['body'] is! Map) continue;
+          final body = Map<String, dynamic>.from(row['body'] as Map);
+          terminalSequence =
+              (body['lastTerminalTurnSequence'] as num?)?.toInt() ?? 0;
+          break;
         }
       }
-      await owned.edit(
-        'conversation',
-        id,
-        changes: {'lastReadTurnSequence': terminalSequence},
-      );
-      return;
     }
-    await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(id)}/read',
-      data: const <String, dynamic>{},
+    await owned.edit(
+      'conversation',
+      id,
+      changes: {'lastReadTurnSequence': terminalSequence},
     );
+    return;
   }
 
   Future<void> archiveConversation(String id) async {
-    if (owned.enabled) {
-      await owned.edit('conversation', id, changes: {'archived': true});
-      return;
-    }
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$id',
-      data: {'archived': true},
-    );
+    await _requireOwned();
+    await owned.edit('conversation', id, changes: {'archived': true});
+    return;
   }
 
   Future<void> restoreArchivedConversation(String id) async {
-    if (owned.enabled) {
-      await owned.edit('conversation', id, changes: {'archived': false});
-      return;
-    }
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/conversations/$id',
-      data: {'archived': false},
-    );
+    await _requireOwned();
+    await owned.edit('conversation', id, changes: {'archived': false});
+    return;
   }
 
   Future<void> deleteMessages(String conversationId) async {
-    if (owned.enabled) {
-      await owned.edit('conversation', conversationId, clear: true);
-      return;
-    }
-    await _api.delete('/api/chats/conversations/$conversationId/messages');
+    await _requireOwned();
+    await owned.edit('conversation', conversationId, clear: true);
+    return;
   }
 
   Future<void> deleteMessage(
@@ -731,23 +598,21 @@ class ChatService {
     String? expectedOwnerId,
     int? expectedRevision,
   }) async {
-    if (owned.enabled) {
-      if (expectedScope == null ||
-          expectedOwnerId == null ||
-          expectedRevision == null) {
-        throw StateError('消息缺少原始数据来源，请重新加载后再操作');
-      }
-      await owned.edit(
-        'message',
-        messageId,
-        deleted: true,
-        expectedScope: expectedScope,
-        expectedOwnerId: expectedOwnerId,
-        expectedRevision: expectedRevision,
-      );
-      return;
+    await _requireOwned();
+    if (expectedScope == null ||
+        expectedOwnerId == null ||
+        expectedRevision == null) {
+      throw StateError('消息缺少原始数据来源，请重新加载后再操作');
     }
-    await _api.delete('/api/chats/messages/$messageId');
+    await owned.edit(
+      'message',
+      messageId,
+      deleted: true,
+      expectedScope: expectedScope,
+      expectedOwnerId: expectedOwnerId,
+      expectedRevision: expectedRevision,
+    );
+    return;
   }
 
   Future<void> updateMessage(
@@ -757,55 +622,38 @@ class ChatService {
     String? expectedOwnerId,
     int? expectedRevision,
   }) async {
-    if (owned.enabled) {
-      if (expectedScope == null ||
-          expectedOwnerId == null ||
-          expectedRevision == null) {
-        throw StateError('消息缺少原始数据来源，请重新加载后再操作');
-      }
-      await owned.edit(
-        'message',
-        messageId,
-        changes: {'content': content.trim()},
-        expectedScope: expectedScope,
-        expectedOwnerId: expectedOwnerId,
-        expectedRevision: expectedRevision,
-      );
-      return;
+    await _requireOwned();
+    if (expectedScope == null ||
+        expectedOwnerId == null ||
+        expectedRevision == null) {
+      throw StateError('消息缺少原始数据来源，请重新加载后再操作');
     }
-    await _api.put<Map<String, dynamic>>(
-      '/api/web-chat/messages/$messageId',
-      data: {'content': content.trim()},
+    await owned.edit(
+      'message',
+      messageId,
+      changes: {'content': content.trim()},
+      expectedScope: expectedScope,
+      expectedOwnerId: expectedOwnerId,
+      expectedRevision: expectedRevision,
     );
-  }
-
-  Future<void> deleteAllConversations() async {
-    await _api.delete('/api/chats/all');
+    return;
   }
 
   Future<Map<String, dynamic>?> conversationSummary(
     String conversationId,
   ) async {
-    if (owned.enabled) {
-      return owned.conversationSummary(conversationId);
-    }
-    return _api.get<Map<String, dynamic>>(
-      '/api/chats/conversations/$conversationId/summary',
-    );
+    await _requireOwned();
+    return owned.conversationSummary(conversationId);
   }
 
   Future<Map<String, dynamic>?> generateConversationSummary(
     String conversationId, {
     String characterId = '',
   }) async {
-    if (await owned.refresh()) {
-      return owned.generateConversationSummary(
-        conversationId,
-        characterId: characterId,
-      );
-    }
-    return _api.post<Map<String, dynamic>>(
-      '/api/chats/conversations/$conversationId/summary/generate',
+    await _requireOwned();
+    return owned.generateConversationSummary(
+      conversationId,
+      characterId: characterId,
     );
   }
 
@@ -813,15 +661,13 @@ class ChatService {
     String conversationId, {
     String? displayedViewId,
   }) async {
-    if (owned.enabled) {
-      await owned.editConversationSummary(
-        conversationId,
-        deleted: true,
-        displayedViewId: displayedViewId,
-      );
-      return;
-    }
-    await _api.delete('/api/chats/conversations/$conversationId/summary');
+    await _requireOwned();
+    await owned.editConversationSummary(
+      conversationId,
+      deleted: true,
+      displayedViewId: displayedViewId,
+    );
+    return;
   }
 
   Future<Map<String, dynamic>?> updateConversationSummary(
@@ -829,18 +675,13 @@ class ChatService {
     String summaryText, {
     String? displayedViewId,
   }) async {
-    if (owned.enabled) {
-      await owned.editConversationSummary(
-        conversationId,
-        text: summaryText,
-        displayedViewId: displayedViewId,
-      );
-      return {'summaryText': summaryText.trim()};
-    }
-    return _api.put<Map<String, dynamic>>(
-      '/api/chats/conversations/$conversationId/summary',
-      data: {'summaryText': summaryText.trim()},
+    await _requireOwned();
+    await owned.editConversationSummary(
+      conversationId,
+      text: summaryText,
+      displayedViewId: displayedViewId,
     );
+    return {'summaryText': summaryText.trim()};
   }
 
   Future<String> exportConversation(
@@ -848,72 +689,46 @@ class ChatService {
     String format = 'markdown',
     String characterId = '',
   }) async {
-    if (await owned.refresh()) {
-      final rows = await owned.allMessages(
-        conversationId,
-        characterId: characterId,
-      );
-      if (format == 'json') {
-        return jsonEncode({
-          'conversationId': conversationId,
-          'messages': rows
-              .map(
-                (row) => {
-                  'id': row.id,
-                  'ownerId': row.sourceOwnerId,
-                  'role': row.role,
-                  'content': row.content,
-                  'createdAt': row.createdAt,
-                  if (row.imageUrl.isNotEmpty) 'imageUrl': row.imageUrl,
-                  if (row.audioUrl.isNotEmpty) 'audioUrl': row.audioUrl,
-                },
-              )
-              .toList(),
-        });
-      }
-      return rows
-          .map(
-            (row) =>
-                '## ${row.role == 'user'
-                    ? '用户'
-                    : row.role == 'assistant'
-                    ? '助手'
-                    : '系统'}\n\n${row.content}\n',
-          )
-          .join('\n');
+    await _requireOwned();
+    final rows = await owned.allMessages(
+      conversationId,
+      characterId: characterId,
+    );
+    if (format == 'json') {
+      return jsonEncode({
+        'conversationId': conversationId,
+        'messages': rows
+            .map(
+              (row) => {
+                'id': row.id,
+                'ownerId': row.sourceOwnerId,
+                'role': row.role,
+                'content': row.content,
+                'createdAt': row.createdAt,
+                if (row.imageUrl.isNotEmpty) 'imageUrl': row.imageUrl,
+                if (row.audioUrl.isNotEmpty) 'audioUrl': row.audioUrl,
+              },
+            )
+            .toList(),
+      });
     }
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/chats/export',
-      data: {
-        'format': format == 'json' ? 'json' : 'markdown',
-        'conversationIds': [conversationId],
-      },
-    );
-    return (resp?['exportUrl'] ?? '').toString();
-  }
-
-  Future<List<Map<String, dynamic>>> messageFeedback(String messageId) async {
-    final resp = await _api.get<dynamic>('/api/messages/$messageId/feedback');
-    return _mapList(resp);
-  }
-
-  Future<List<Map<String, dynamic>>> recentFeedback({int limit = 100}) async {
-    final resp = await _api.get<dynamic>(
-      '/api/messages/feedback/recent',
-      queryParameters: {'limit': limit},
-    );
-    return _mapList(resp, keys: const ['items']);
+    return rows
+        .map(
+          (row) =>
+              '## ${row.role == 'user'
+                  ? '用户'
+                  : row.role == 'assistant'
+                  ? '助手'
+                  : '系统'}\n\n${row.content}\n',
+        )
+        .join('\n');
   }
 
   Future<Map<String, dynamic>?> contextPreview(String conversationId) {
-    return _api.get<Map<String, dynamic>>(
-      '/api/agent/context-preview',
-      queryParameters: {'conversationId': conversationId},
+    return owned.management(
+      'context-preview',
+      body: {'conversationId': conversationId},
     );
-  }
-
-  Future<Map<String, dynamic>?> messagePsyche(String messageId) {
-    return _api.get<Map<String, dynamic>>('/api/psyche/messages/$messageId');
   }
 
   Future<List<MessageDto>> searchMessages(
@@ -922,9 +737,9 @@ class ChatService {
     int page = 1,
     int pageSize = 50,
   }) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/chats/search',
-      queryParameters: {
+    final resp = await owned.management(
+      'search',
+      body: {
         'keyword': keyword,
         'page': page,
         'pageSize': pageSize,
@@ -942,140 +757,35 @@ class ChatService {
 
   ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
 
-  Stream<ChatStreamEvent> _decodeEventStream(Stream<List<int>> source) async* {
-    final text = source.transform(utf8.decoder);
-    var buffer = '';
-    await for (final chunk in text) {
-      buffer += chunk;
-      while (true) {
-        final boundary = _eventBoundary(buffer);
-        if (boundary == null) break;
-        final block = buffer.substring(0, boundary.$1);
-        buffer = buffer.substring(boundary.$1 + boundary.$2);
-        final event = _parseEventBlock(block);
-        if (event != null) yield event;
-      }
-    }
-    final tail = buffer.trim();
-    if (tail.isEmpty) return;
-    final event = _parseEventBlock(tail);
-    if (event != null) {
-      yield event;
-      return;
-    }
-    final raw = jsonDecode(tail);
-    if (raw is! Map) throw StateError('聊天流返回格式无效');
-    final map = Map<String, dynamic>.from(raw);
-    final payload = map['data'];
-    if (payload is Map && (payload['status'] ?? '').toString() == 'queued') {
-      yield ChatStreamEvent('queued', Map<String, dynamic>.from(payload));
-      return;
-    }
-    final message = (map['message'] ?? map['msg'] ?? '聊天请求失败').toString();
-    throw StateError(message);
-  }
-
-  (int, int)? _eventBoundary(String value) {
-    int? bestIndex;
-    var bestLength = 0;
-    for (final separator in const <String>['\r\n\r\n', '\n\n', '\r\r']) {
-      final index = value.indexOf(separator);
-      if (index >= 0 && (bestIndex == null || index < bestIndex)) {
-        bestIndex = index;
-        bestLength = separator.length;
-      }
-    }
-    return bestIndex == null ? null : (bestIndex, bestLength);
-  }
-
-  ChatStreamEvent? _parseEventBlock(String block) {
-    String? type;
-    final dataLines = <String>[];
-    final normalized = block.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    for (final line in normalized.split('\n')) {
-      if (line.startsWith('event:')) {
-        type = line.substring(6).trim();
-      } else if (line.startsWith('data:')) {
-        dataLines.add(line.substring(5).trimLeft());
-      }
-    }
-    if (type == null || type.isEmpty || dataLines.isEmpty) return null;
-    final decoded = jsonDecode(dataLines.join('\n'));
-    if (decoded is! Map) return null;
-    return ChatStreamEvent(type, Map<String, dynamic>.from(decoded));
-  }
-
-  Future<ChatSubmitResult> submitMessage({
+  Future<void> sendNotificationReply({
     required String message,
-    String? clientMessageId,
-    String? conversationId,
-    String? characterId,
-    String? imageUrl,
-    String? audioUrl,
-    double audioDuration = 0,
-    String? videoUrl,
-    String? replyToMessageId,
-    int? modelConfigId,
-    String? reasoningEffort,
-    bool? reasoningEnabled,
-    String? permissionMode,
-    String messageStyle = 'flow',
-    ConversationWorkspaceDto? workspace,
+    required String clientMessageId,
+    required String conversationId,
+    String characterId = '',
+    String expectedCoreId = '',
   }) async {
-    final now = DateTime.now().microsecondsSinceEpoch;
-    final normalizedClientMessageId = clientMessageId?.trim() ?? '';
-    final requestId = normalizedClientMessageId.isEmpty
-        ? 'mobile-$now'
-        : normalizedClientMessageId;
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/messages',
-      data: {
-        'content': message,
-        'messageStyle': messageStyle,
-        if (conversationId != null && conversationId.isNotEmpty)
-          'conversationId': conversationId,
-        if (characterId != null && characterId.isNotEmpty)
-          'characterId': characterId,
-        if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
-        if (audioUrl != null && audioUrl.isNotEmpty) ...{
-          'audioUrl': audioUrl,
-          'audioDuration': audioDuration,
-          'voiceMessage': true,
-        },
-        if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
-        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
-          'replyToMessageId': replyToMessageId,
-        if (modelConfigId != null && modelConfigId > 0)
-          'modelConfigId': modelConfigId,
-        if (reasoningEffort != null && reasoningEffort.isNotEmpty)
-          'reasoningEffort': reasoningEffort,
-        if (reasoningEnabled != null) 'reasoningEnabled': reasoningEnabled,
-        if (permissionMode != null && permissionMode.isNotEmpty)
-          'permissionMode': permissionMode,
-        if (workspace != null && workspace.projectId.isNotEmpty)
-          'projectId': workspace.projectId,
-        if (workspace != null &&
-            workspace.projectId.isEmpty) ...<String, dynamic>{
-          'workspaceId': workspace.workspaceId,
-          if (workspace.deviceId.isNotEmpty)
-            'workspaceDeviceId': workspace.deviceId,
-        },
-        'source': 'mobile',
-        'requestId': requestId,
-        'clientMessageId': requestId,
-        if (DeviceTimezoneCache.hasValue)
-          'deviceTimezone': DeviceTimezoneCache.ianaTimezone,
-      },
-    );
-    if (resp == null) {
-      throw StateError('消息提交未返回结果');
+    await _requireOwned();
+    if (expectedCoreId.isNotEmpty && owned.coreId != expectedCoreId) throw StateError('通知所属Core已变化，不能向当前服务发送原通知回复');
+    final requestId = clientMessageId.trim();
+    if (requestId.isEmpty || conversationId.isEmpty) throw ArgumentError('通知回复缺少原会话及请求编号');
+    Map<String, dynamic>? completed;
+    await for (final event in owned.send(
+      requestId: requestId,
+      message: message,
+      conversationId: conversationId,
+      characterId: characterId,
+    )) {
+      if (event['type'] == 'completed' && event['data'] is Map) {
+        completed = Map<String, dynamic>.from(event['data'] as Map);
+      }
     }
-    return ChatSubmitResult.fromJson(resp);
+    if (completed?['saved'] != true) throw StateError('消息尚未获得数据所有者保存确认');
   }
 
   Future<void> interruptTurn(String conversationId, String turnId) async {
-    await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/interrupt',
+    await owned.runtime(
+      'interrupt',
+      body: {'conversationId': conversationId, 'turnId': turnId},
     );
   }
 
@@ -1084,9 +794,13 @@ class ChatService {
     String turnId,
     String content,
   ) async {
-    await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/steer',
-      data: <String, dynamic>{'content': content.trim()},
+    await owned.runtime(
+      'steer',
+      body: {
+        'conversationId': conversationId,
+        'turnId': turnId,
+        'content': content.trim(),
+      },
     );
   }
 
@@ -1095,13 +809,14 @@ class ChatService {
     String turnId, {
     String messageStyle = 'flow',
   }) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/retry',
-      data: {'messageStyle': messageStyle},
+    final resp = await owned.runtime(
+      'retry',
+      body: {
+        'conversationId': conversationId,
+        'turnId': turnId,
+        'messageStyle': messageStyle,
+      },
     );
-    if (resp == null) {
-      throw StateError('重试未返回结果');
-    }
     return ChatSubmitResult.fromJson(<String, dynamic>{
       ...resp,
       'userMessageId': resp['userMessageId'] ?? '',
@@ -1114,29 +829,15 @@ class ChatService {
     String approvalId,
     bool approved,
   ) async {
-    await _api.post<Map<String, dynamic>>(
-      '/api/web-chat/conversations/${Uri.encodeComponent(conversationId)}/turns/${Uri.encodeComponent(turnId)}/approvals/${Uri.encodeComponent(approvalId)}',
-      data: <String, dynamic>{'approved': approved},
+    await owned.runtime(
+      'approval',
+      body: {
+        'conversationId': conversationId,
+        'turnId': turnId,
+        'approvalId': approvalId,
+        'approved': approved,
+      },
     );
   }
 
-  List<Map<String, dynamic>> _mapList(
-    dynamic resp, {
-    List<String> keys = const [],
-  }) {
-    dynamic raw = resp;
-    if (raw is Map) {
-      for (final key in keys) {
-        if (raw[key] is List) {
-          raw = raw[key];
-          break;
-        }
-      }
-    }
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList(growable: false);
-  }
 }

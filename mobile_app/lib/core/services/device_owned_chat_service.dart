@@ -100,7 +100,10 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
         'failed',
       ].contains(type))
         throw StateError('未知的回复事件');
-      if (type == 'started' || type == 'delta' || type == 'transcribed' || type == 'task') {
+      if (type == 'started' ||
+          type == 'delta' ||
+          type == 'transcribed' ||
+          type == 'task') {
         final rawScope = event['executionScope'];
         if (rawScope is! Map) throw StateError('回复缺少执行范围');
         final current = _scopeStamp(
@@ -125,7 +128,23 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
         }
         if (type == 'task') {
           final task = event['task'];
-          if (conversationId.isEmpty || event['conversationId'] != conversationId || task is! Map || task['coordinationId'] is! String || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$').hasMatch(task['coordinationId'] as String) || !const {'planning', 'running', 'waiting', 'aggregating', 'succeeded', 'failed', 'cancelled', 'paused'}.contains(task['status'])) {
+          if (conversationId.isEmpty ||
+              event['conversationId'] != conversationId ||
+              task is! Map ||
+              task['coordinationId'] is! String ||
+              !RegExp(
+                r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$',
+              ).hasMatch(task['coordinationId'] as String) ||
+              !const {
+                'planning',
+                'running',
+                'waiting',
+                'aggregating',
+                'succeeded',
+                'failed',
+                'cancelled',
+                'paused',
+              }.contains(task['status'])) {
             throw StateError('任务事件归属或状态无效');
           }
         }
@@ -182,7 +201,7 @@ class DeviceOwnedChatService {
     String Function()? providerKey,
     Future<Map<String, dynamic>?> Function()? providerTransition,
     String providerStateKey = 'amitia.mesh.provider-state',
-  }) : _providerKey = providerKey ?? (() => ''),
+  }) : _providerKey = providerKey ?? (() => 'device-local'),
        _providerTransition = providerTransition,
        _providerStateKey = providerStateKey;
 
@@ -201,6 +220,7 @@ class DeviceOwnedChatService {
   CancelToken? _active;
   String _requestId = '';
   String _binding = '';
+  String _selectedRole = '';
   bool _refreshing = false;
   final _resources = <String, Map<String, dynamic>>{};
   final _summaryViews = <String, Map<String, dynamic>>{};
@@ -337,11 +357,12 @@ class DeviceOwnedChatService {
     final selected =
         (requested?.trim().isNotEmpty == true
                 ? requested
-                : policy?['selectedRole'] ?? '')
+                : policy?['selectedRole'] ?? _selectedRole)
             .toString();
     if (selected.isNotEmpty) {
       if (!roles.any((role) => role['id'] == selected))
         throw StateError('所选角色不存在或已停用，请重新选择角色');
+      _selectedRole = selected;
       return selected;
     }
     if (roles.isEmpty) throw StateError('没有可用角色，拒绝调用');
@@ -638,6 +659,128 @@ class DeviceOwnedChatService {
   }
 
   static int _editSequence = 0;
+
+  Future<Map<String, dynamic>> management(
+    String operation, {
+    Map<String, dynamic> body = const {},
+    bool post = false,
+    String characterId = '',
+    String group = 'chat-management',
+  }) async {
+    if (!await refresh())
+      throw StateError(notice.isEmpty ? '设备对话服务尚未就绪' : notice);
+    final captured = revision;
+    final role = selectRole(
+      characterId.isNotEmpty ? characterId : body['characterId']?.toString(),
+    );
+    final view = await data('working', characterId: role);
+    final current = Map<String, dynamic>.from(view['executionScope'] as Map);
+    final expected = body['expectedExecutionScope'] is Map
+        ? Map<String, dynamic>.from(body['expectedExecutionScope'] as Map)
+        : current;
+    if (_authorityStamp(expected) != _authorityStamp(current)) {
+      throw StateError('服务或数据归属已变化，请重新预览后操作');
+    }
+    final origin = parseConversationReference(
+      body['conversationId']?.toString() ?? '',
+    );
+    final payload = <String, dynamic>{
+      'requestId':
+          'chat-control-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
+      ...body,
+      if (origin != null) 'conversationId': origin['id'],
+      if (origin != null) 'conversationOwnerId': origin['ownerId'],
+      'targetDeviceId': expected['targetDeviceId'],
+      'characterId': role,
+      'expectedExecutionScope': expected,
+    };
+    final path = '/api/device-mesh/v1/business/$group/$operation';
+    final result = await _api.post<Map<String, dynamic>>(path, data: payload);
+    if (captured != revision ||
+        result?['executionScope'] is! Map ||
+        _authorityStamp(result!['executionScope'] as Map) !=
+            _authorityStamp(expected)) {
+      throw StateError('服务或数据归属已变化，管理结果已丢弃');
+    }
+    return result;
+  }
+
+  Future<Map<String, dynamic>> runtime(
+    String operation, {
+    Map<String, dynamic> body = const {},
+    String characterId = '',
+  }) {
+    return management(
+      operation,
+      body: body,
+      characterId: characterId,
+      group: 'chat-runtime',
+    );
+  }
+
+  Stream<Map<String, dynamic>> runtimeEvents({
+    required String conversationId,
+    required int afterSequence,
+    required CancelToken cancellation,
+  }) async* {
+    if (!await refresh()) throw StateError('设备对话服务尚未就绪');
+    final captured = revision;
+    final role = selectRole(null);
+    final view = await data('working', characterId: role);
+    final expected = Map<String, dynamic>.from(view['executionScope'] as Map);
+    final origin = parseConversationReference(conversationId);
+    final stream = await _api.postStream(
+      '/api/device-mesh/v1/business/chat-runtime/events',
+      data: {
+        'requestId':
+            'events-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
+        'conversationId': origin?['id'] ?? conversationId,
+        if (origin != null) 'conversationOwnerId': origin['ownerId'],
+        'characterId': role,
+        'targetDeviceId': expected['targetDeviceId'],
+        'expectedExecutionScope': expected,
+        'afterSequence': afterSequence,
+      },
+      headers: {'Accept': 'text/event-stream'},
+      cancelToken: cancellation,
+    );
+    var buffer = '';
+    await for (final chunk in stream.transform(utf8.decoder)) {
+      buffer += chunk;
+      if (buffer.length > 4 * 1024 * 1024) throw StateError('运行事件数据超出接收上限');
+      while (true) {
+        final boundary = RegExp(r'\r?\n\r?\n').firstMatch(buffer);
+        if (boundary == null) break;
+        final frame = buffer.substring(0, boundary.start);
+        buffer = buffer.substring(boundary.end);
+        final lines = frame.split(RegExp(r'\r?\n'));
+        final eventType = lines
+            .where((line) => line.startsWith('event:'))
+            .map((line) => line.substring(6).trim())
+            .firstOrNull;
+        final dataLines = lines
+            .where((line) => line.startsWith('data:'))
+            .map((line) => line.substring(5).trimLeft())
+            .toList();
+        if (dataLines.isEmpty) continue;
+        final raw = jsonDecode(dataLines.join('\n'));
+        if (raw is! Map ||
+            raw['executionScope'] is! Map ||
+            captured != revision ||
+            _authorityStamp(raw['executionScope'] as Map) !=
+                _authorityStamp(expected)) {
+          throw StateError('运行事件的数据归属已变化');
+        }
+        yield {
+          'event': eventType ?? 'agent_ui_event',
+          'data': {
+            ...Map<String, dynamic>.from(raw),
+            'conversationId': conversationId,
+          },
+        };
+      }
+    }
+  }
 
   static String _authorityStamp(Map scope) => jsonEncode(
     _authorityFields
@@ -1255,6 +1398,11 @@ class DeviceOwnedChatService {
     String? conversationId,
     String? projectId,
     String? characterId,
+    int? modelConfigId,
+    String? reasoningEffort,
+    bool? reasoningEnabled,
+    String? permissionMode,
+    String? messageStyle,
     Map<String, dynamic>? context,
     List<Map<String, dynamic>>? attachments,
     Map<String, dynamic>? quote,
@@ -1288,6 +1436,11 @@ class DeviceOwnedChatService {
           'requestId': requestId,
           'message': message,
           'characterId': role,
+          if (modelConfigId != null) 'modelConfigId': modelConfigId,
+          if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
+          if (reasoningEnabled != null) 'reasoningEnabled': reasoningEnabled,
+          if (permissionMode != null) 'permissionMode': permissionMode,
+          if (messageStyle != null) 'messageStyle': messageStyle,
           'expectedExecutionScope': expectedScope,
           if (quote != null) 'quote': quote,
           if (quote != null &&

@@ -65,7 +65,7 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
-$projectPorts = @(18899, 18998, 18000, 19178, 15178, 15179)
+$projectPorts = @(18899, 18880, 18000, 19178, 15178, 15179)
 if ($adminMySQLConfig -and $adminMySQLConfig.managed -and $adminMySQLConfig.port) {
     $projectPorts += [int]$adminMySQLConfig.port
 }
@@ -286,7 +286,7 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Format-Table -AutoSize
 
 Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-    Where-Object { $_.LocalPort -in 13306, 18899, 18998, 18000, 19178, 15178, 15179 } |
+    Where-Object { $_.LocalPort -in 13306, 18899, 18880, 18000, 19178, 15178, 15179 } |
     Format-Table LocalPort, OwningProcess -AutoSize
 
 $startupHealthy = $true
@@ -299,7 +299,7 @@ try {
 }
 
 try {
-    $adminHealth = Invoke-RestMethod -Uri "http://127.0.0.1:18998/readyz" -TimeoutSec 5
+    $adminHealth = Invoke-RestMethod -Uri "http://127.0.0.1:18880/readyz" -TimeoutSec 5
     Write-Host "管理服务健康检查: $($adminHealth | ConvertTo-Json -Compress)" -ForegroundColor Green
 } catch {
     $startupHealthy = $false

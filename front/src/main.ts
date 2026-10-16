@@ -16,6 +16,7 @@ import App from "./App.vue";
 import router from "./router";
 import { getRuntimeConnection } from "./runtime/runtime-adapter";
 import { initializeRuntimeCapabilities, shouldRegisterServiceWorker } from "./runtime/runtime-capabilities";
+import { installClientErrorTracking } from "./runtime/client-error-tracker";
 import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index";
 import { useExtensionUIStore } from "./stores/extensionUI";
 import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
@@ -27,6 +28,7 @@ async function bootstrap() {
   app.use(pinia);
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
+  installClientErrorTracking(app);
   const extensionUI = useExtensionUIStore(pinia);
   await initializeRuntimeCapabilities(true);
   await router.isReady();

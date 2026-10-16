@@ -30,7 +30,9 @@ func TestRecoveredParentMustMatchSpaceConversationAndGoalRevision(t *testing.T) 
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			nextRec, nextRef, nextGoal := *rec, *ref, goal
+			nextRec := InteractionRecord{ID: rec.ID, Scope: rec.Scope}
+			nextRef := *ref
+			nextGoal := goal
 			c.mutate(&nextRec, &nextRef, &nextGoal)
 			if err := validateRecoveredParent(&nextRec, &nextRef, nextGoal); err == nil {
 				t.Fatal("invalid recovered identity allowed")

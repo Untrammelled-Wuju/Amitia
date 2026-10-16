@@ -55,13 +55,13 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { Connection, Refresh } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
-import { useApi } from "@/composables/useApi";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import UIProviderHost from "@/components/ui-runtime/UIProviderHost.vue";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
 import { useChannelPresentations } from "@/ui-runtime/channelPresentation";
 import ChannelMessageBubble from "./ChannelMessageBubble.vue";
 
-const { get } = useApi();
+const owned = useDeviceOwnedConversation();
 const router = useRouter();
 const { presentations, byChannel, store } = useChannelPresentations();
 const conversations = ref<any[]>([]);
@@ -108,8 +108,9 @@ const selectedConversation = computed(
 async function loadConversations() {
   loading.value = true;
   try {
-    const response = await get<any>("/api/web-chat/channels");
-    conversations.value = response?.items || [];
+    if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    const role = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
+    conversations.value = (await owned.conversations(role)).filter((item) => item.channel && item.channel !== "web");
     if (selectedId.value && !conversations.value.some((item) => item.id === selectedId.value)) {
       selectedId.value = "";
       messages.value = [];
@@ -123,11 +124,7 @@ async function selectConversation(conversation: any) {
   selectedId.value = conversation.id;
   messageLoading.value = true;
   try {
-    const response = await get<any>(
-      `/api/web-chat/conversations/${encodeURIComponent(conversation.id)}/messages`,
-      { page: 1, pageSize: 200 },
-    );
-    messages.value = response?.items || [];
+    messages.value = await owned.allMessages(conversation.id, conversation.characterId || owned.selectInitialRole());
     requestAnimationFrame(() => {
       if (messageListRef.value) messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
     });

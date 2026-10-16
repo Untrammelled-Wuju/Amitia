@@ -89,8 +89,10 @@ func (c *MeshClient) sessionGeneration() int64 {
 
 func NewMeshClient(conf MeshClientConfig) *MeshClient {
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+	proxy := http.ProxyFromEnvironment
 	if conf.TLSConfig != nil {
 		tlsConfig = conf.TLSConfig.Clone()
+		proxy = nil
 	}
 	clientCtx, cancelClient := context.WithCancel(context.Background())
 	return &MeshClient{
@@ -98,7 +100,7 @@ func NewMeshClient(conf MeshClientConfig) *MeshClient {
 		dialer: &websocket.Dialer{
 			HandshakeTimeout: meshprotocol.HelloTimeoutSeconds * time.Second,
 			TLSClientConfig:  tlsConfig,
-			Proxy:            http.ProxyFromEnvironment,
+			Proxy:            proxy,
 		},
 		state:         NewConnectionManager(),
 		stopCh:        make(chan struct{}),

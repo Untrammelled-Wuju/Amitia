@@ -70,6 +70,10 @@ export interface OwnedChatRequest {
   historicalRoleId?: string;
   targetDeviceId?: string;
   permissionMode?: string;
+  modelConfigId?: number;
+  reasoningEffort?: string;
+  reasoningEnabled?: boolean;
+  messageStyle?: string;
   message: string;
 }
 

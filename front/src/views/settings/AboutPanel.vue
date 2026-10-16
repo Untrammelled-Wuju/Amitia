@@ -28,6 +28,23 @@ SPDX-License-Identifier: AGPL-3.0-only
           >
         </div>
       </div>
+      <div class="about-channel">
+        <div class="about-channel-copy">
+          <span class="about-channel-title">接收测试版更新</span>
+          <span class="about-channel-hint">
+            {{
+              allowBetaChannel
+                ? "已加入测试通道，测试版与正式版更新都会提示"
+                : "开启后检查更新会包含测试版，测试版与正式版更新都会提示"
+            }}
+          </span>
+        </div>
+        <el-switch
+          :model-value="allowBetaChannel"
+          :disabled="!isDesktop || channelSaving"
+          @change="handleChannelChange"
+        />
+      </div>
     </el-card>
 
     <el-card v-if="releaseNotes" shadow="never" class="section-card">
@@ -66,6 +83,8 @@ const version = ref("—");
 const checking = ref(false);
 const releaseNotes = ref("");
 const isDesktop = ref(false);
+const allowBetaChannel = ref(false);
+const channelSaving = ref(false);
 const { logoUrl } = useBrandLogo();
 
 let updateHandled = false;
@@ -80,6 +99,23 @@ async function handleCheckUpdate() {
   }
 }
 
+async function handleChannelChange(value: string | number | boolean) {
+  if (!window.amitiaDesktop) return;
+  const next = value === true;
+  channelSaving.value = true;
+  try {
+    const result = await window.amitiaDesktop.setUpdateChannel(next);
+    allowBetaChannel.value = result?.allowBetaChannel === true;
+    ElMessage.success(
+      allowBetaChannel.value ? "已加入测试版通道" : "已回到正式版通道",
+    );
+  } catch {
+    ElMessage.error("切换更新通道失败");
+  } finally {
+    channelSaving.value = false;
+  }
+}
+
 onMounted(async () => {
   isDesktop.value = isDesktopShell();
 
@@ -91,6 +127,13 @@ onMounted(async () => {
     version.value = await api.getCurrentVersion();
   } catch {
     version.value = "—";
+  }
+
+  try {
+    const channel = await api.getUpdateChannel();
+    allowBetaChannel.value = channel?.allowBetaChannel === true;
+  } catch {
+    allowBetaChannel.value = false;
   }
 
   api.getReleaseNotes().then((notes) => {
@@ -127,6 +170,32 @@ onMounted(async () => {
 .section-card {
   margin-bottom: 12px;
   border: 1px solid var(--ac-color-border-light);
+}
+
+.about-channel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ac-color-border-light);
+}
+
+.about-channel-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.about-channel-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.about-channel-hint {
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .about-app {

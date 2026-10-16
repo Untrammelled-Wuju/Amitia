@@ -23,9 +23,11 @@ func TestCheckpointHistoryScopeIntegrityAndStatus(t *testing.T) {
 	wrongParent := taskRecord("a", "c", "coord", "running")
 	wrongParent.ID = "wrong"
 	wrongParent.RecoveryDescriptor.MultiAgent.ParentGoalSpaceID = "b"
-	duplicate := *good
+	duplicate := taskRecord("a", "c", "coord", "running")
+	duplicate.ID = good.ID
+	duplicate.UpdatedAt = good.UpdatedAt
 	duplicate.Status = "completed"
-	result, err := ListCheckpoints(context.Background(), taskRecordReader{records: []*interaction.InteractionRecord{older, good, otherSpace, otherConv, otherTask, wrongParent, &duplicate}}, "a", "c", "coord")
+	result, err := ListCheckpoints(context.Background(), taskRecordReader{records: []*interaction.InteractionRecord{older, good, otherSpace, otherConv, otherTask, wrongParent, duplicate}}, "a", "c", "coord")
 	if err != nil || len(result.Records) != 2 || result.Records[0].CoordinationStatus != "running" || result.Records[0].ParentTerminal || !result.Records[1].ParentTerminal {
 		t.Fatalf("history scoped: %+v %v", result, err)
 	}

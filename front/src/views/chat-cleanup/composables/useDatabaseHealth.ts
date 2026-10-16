@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive } from "vue";
 import { ElMessage } from "element-plus";
-import { apiClient } from "../../../composables/useApi";
+import { ownedManagementRequest } from "@/runtime/owned-chat-management";
 
 export function useDatabaseHealth() {
   const stats = reactive({
@@ -16,26 +16,10 @@ export function useDatabaseHealth() {
 
   async function loadStats() {
     try {
-      const res = await apiClient.get("/api/chats/stats");
-      const d = res.data?.data || res.data;
-      stats.totalConversations = d?.totalConversations ?? 0;
-
-      const emptyRes = await apiClient.post("/api/chats/cleanup/preview", {
-        channels: [],
-        sources: [],
-      });
-      const ed = emptyRes.data?.data || emptyRes.data;
-      stats.totalMessages = ed?.messageCount ?? 0;
-
-      try {
-        const vRes = await apiClient.post("/api/chats/cleanup/vacuum");
-        const vd = vRes.data?.data || vRes.data;
-        if (vd?.sizeAfterFormatted) {
-          stats.dbSize = vd.sizeBeforeFormatted || vd.sizeAfterFormatted;
-        }
-      } catch {
-        stats.dbSize = "--";
-      }
+      const d = await ownedManagementRequest("stats");
+      stats.totalConversations = d.totalConversations;
+      stats.totalMessages = d.totalMessages;
+      stats.dbSize = d.dbSizeFormatted || "--";
     } catch {
       stats.totalConversations = 0;
       stats.totalMessages = 0;
@@ -46,8 +30,7 @@ export function useDatabaseHealth() {
   async function runVacuum() {
     vacuumLoading.value = true;
     try {
-      const res = await apiClient.post("/api/chats/cleanup/vacuum");
-      const d = res.data?.data || res.data;
+      const d = await ownedManagementRequest("cleanup/vacuum", { requestId: crypto.randomUUID() }, "post");
       vacuumResult.value = d;
       ElMessage.success(`优化完成，释放 ${d.freedFormatted}`);
     } catch (err: any) {

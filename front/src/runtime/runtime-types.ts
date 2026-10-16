@@ -141,6 +141,10 @@ export interface AmitiaDesktopAPI {
   installUpdateNow(): Promise<void>;
   cancelAndEnter(): Promise<void>;
   getCurrentVersion(): Promise<string>;
+  getUpdateChannel(): Promise<{ allowBetaChannel: boolean }>;
+  setUpdateChannel(
+    allowBetaChannel: boolean,
+  ): Promise<{ allowBetaChannel: boolean }>;
   openGiteeRelease(): Promise<void>;
   getReleaseNotes(): Promise<string>;
   onUpdateChecking(callback: () => void): () => void;

@@ -49,6 +49,9 @@ func (r *ContextLoaderRegistry) Stats() []LoaderStats {
 }
 
 func (r *ContextLoaderRegistry) LoadAll(ctx context.Context, scope InteractionScope, version string) ContextSnapshot {
+	if snapshot, ok := ownedContextFromContext(ctx); ok {
+		return snapshot
+	}
 	snapshot := ContextSnapshot{
 		Version:     version,
 		AssembledAt: time.Now(),

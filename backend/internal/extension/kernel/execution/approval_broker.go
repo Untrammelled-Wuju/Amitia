@@ -21,6 +21,7 @@ const (
 )
 
 type ApprovalRequest struct {
+	RuntimeKey     string         `json:"-"`
 	ID             string         `json:"id"`
 	SpaceID        string         `json:"-"`
 	ConversationID string         `json:"conversationId"`

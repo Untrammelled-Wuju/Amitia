@@ -229,6 +229,8 @@ func DefaultMigrations() []Migration {
 		GlobalMemoryPolicyMigration(),
 		RetireLegacyMemoryDataMigration(),
 		RetireLegacyReminderDataMigration(),
+		UserFeedbackTicketsMigration(),
+		KernelSecurityAuditOutboxMigration(),
 	}
 }
 
@@ -958,6 +960,24 @@ func TaskRunPauseColumnsMigration() Migration {
 			s.AddColumn("extension_task_runs", "pause_requested_at", "DATETIME")
 			s.AddColumn("extension_task_runs", "paused_at", "DATETIME")
 			s.AddColumn("extension_task_runs", "resumed_at", "DATETIME")
+			return nil
+		},
+	}
+}
+
+func KernelSecurityAuditOutboxMigration() Migration {
+	return Migration{
+		Version: "20261016002",
+		Name:    "create_kernel_security_audit_outbox",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS kernel_security_audit_outbox (
+				event_id TEXT PRIMARY KEY,
+				space_id TEXT NOT NULL,
+				payload_json TEXT NOT NULL,
+				occurred_at TEXT NOT NULL,
+				attempts INTEGER NOT NULL DEFAULT 0,
+				last_error TEXT NOT NULL DEFAULT ''
+			)`)
 			return nil
 		},
 	}

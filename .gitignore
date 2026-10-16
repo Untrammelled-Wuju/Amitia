@@ -58,6 +58,22 @@ runtime/out/dependencies/surrealdb/2.3.8/linux-arm64/surreal
 mobile_app/android/app/src/main/assets/runtime-package/amitia-runtime-1.0.0.zip
 runtime/out/runtime-package/android-arm64/amitia-runtime-current-android-arm64.zip
 
+# Build staging, per-module Gradle outputs and compiled server binaries
+mobile_app/android/*/intermediates/
+mobile_app/android/*/tmp/
+mobile_app/android/*/generated/
+mobile_app/android/*/outputs/
+mobile_app/android/*/kotlinToolingMetadata/
+mobile_app/android/app/deeplink.json
+mobile_app/android/.kotlin/
+amitia-aidl-stage/
+backend/artifacts/
+backend/*.exe
+backend/admin-server*
+backend/server-linux-arm64.codex*
+__pycache__/
+*.pyc
+
 # Generated extension candidates, packages and source archives
 backend/testdata/extensions/**/dist-candidate-*/
 /Plugin/

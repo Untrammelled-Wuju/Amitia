@@ -49,6 +49,7 @@ func TestAsyncWorkerReopensDurableReservationFromSQLite(t *testing.T) {
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, reopened, nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
+	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
 	runner := NewAsyncUnifiedEntryWorkerRunner(entry, reopened).(*asyncUnifiedEntryWorkerRunner)
 	defer func() { close(processor.release); _ = runner.Shutdown(context.Background()) }()
 	resumed, err := runner.StartWorker(ctx, req)

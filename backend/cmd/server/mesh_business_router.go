@@ -26,6 +26,8 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	registerMeshRealtimeInvitationRouter(mesh, services, coreID)
 	registerMeshProjectRouter(mesh, services, coreID)
 	registerMeshMemoryManagementRouter(mesh, services, coreID)
+	registerMeshChatManagementRouter(mesh, services, coreID)
+	registerMeshChatRuntimeRouter(mesh, services, coreID)
 	registerMeshTaskOwnerRouter(mesh, services)
 	registerMeshTaskSubmissionRouter(mesh, services, coreID)
 	mesh.POST("/continuity/signals", func(c *gin.Context) {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive } from "vue";
 import { ElMessage } from "element-plus";
-import { apiClient } from "../../../composables/useApi";
+import { ownedManagementRequest } from "@/runtime/owned-chat-management";
 
 export function useChatCleanup() {
   const form = reactive({
@@ -32,8 +32,7 @@ export function useChatCleanup() {
       if (form.sources.length > 0) payload.sources = form.sources;
       payload.includeMemories = form.includeMemories;
 
-      const res = await apiClient.post("/api/chats/cleanup/preview", payload);
-      const d = res.data?.data || res.data;
+      const d = await ownedManagementRequest("cleanup/preview", payload, "post");
       previewResult.value = d;
       ElMessage.success(
         `预览完成：${d.conversationCount} 个会话，${d.messageCount} 条消息`,
@@ -52,11 +51,13 @@ export function useChatCleanup() {
       return;
     confirmLoading.value = true;
     try {
-      const res = await apiClient.post("/api/chats/cleanup/confirm", {
+      const d = await ownedManagementRequest("cleanup/confirm", {
         previewId: previewResult.value.previewId,
         confirmText: "确认清理",
-      });
-      const d = res.data?.data || res.data;
+        requestId: crypto.randomUUID(),
+        characterId: previewResult.value.executionScope.roleId,
+        expectedExecutionScope: previewResult.value.executionScope,
+      }, "post");
       cleanupResult.value = d;
       ElMessage.success("清理完成");
     } catch (err: any) {

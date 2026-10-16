@@ -156,7 +156,10 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	snapshot := coordination.DataSnapshot{OwnerID: p.ownerID, Role: role, Resources: make([]coordination.Resource, 0), NextCursors: make(map[string]string)}
 	usableMemories := make(map[string]bool)
-	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "project"} {
+	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "project", "tool-result"} {
+		if kind == "tool-result" && !query.RuntimeTurns {
+			continue
+		}
 		if kind == "project" && query.ResourceKind != "project" {
 			continue
 		}
@@ -398,6 +401,12 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	if query.ResourceKind == "message" || query.ResourceKind == "conversation" {
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
+	}
+	if !query.Management && query.ResourceKind == "" {
+		snapshot.RuntimeContext, err = p.ownedRuntimeContext(ctx, scope, query.ConversationID)
+		if err != nil {
+			return snapshot, err
+		}
 	}
 	return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 }

@@ -19,8 +19,17 @@ interface MeshQueryResult { conversationReference?: string; conversationOrigin?:
 
 const enabled = ref(false);
 const roles = ref<MeshRole[]>([]);
+export const ownedConversationSwitchNotice = "会话已切换，原回复已中断";
 function readProviderState(): { coreId: string; notice: string; changeId?: string } {
-  try { return JSON.parse(localStorage.getItem("amitia.mesh.provider-state") || "{}"); } catch { return { coreId: "", notice: "" }; }
+  try {
+    const state = JSON.parse(localStorage.getItem("amitia.mesh.provider-state") || "{}");
+    const storedNotice = String(state?.notice || "");
+    return {
+      coreId: String(state?.coreId || ""),
+      notice: storedNotice === ownedConversationSwitchNotice ? "" : storedNotice,
+      changeId: state?.changeId,
+    };
+  } catch { return { coreId: "", notice: "" }; }
 }
 const coreId = ref(String(readProviderState().coreId || ""));
 const roleOwnerId = ref("");
@@ -28,6 +37,7 @@ const policy = ref<MeshPolicy | null>(null);
 const notice = ref(String(readProviderState().notice || ""));
 const unavailableNotice = "云端服务暂不可用，当前回复已中断；不会自动切换到本机模型。";
 let persistentNotice = notice.value === unavailableNotice ? "" : notice.value;
+let transientNotice = "";
 let providerChangeId = String(readProviderState().changeId || "");
 let activeController: AbortController | null = null;
 let activeRequest = "";
@@ -71,7 +81,12 @@ function stopLocal(message: string, temporary = false) {
   activeController = null;
   activeRequest = "";
   notice.value = message;
-  if (!temporary) persistentNotice = message;
+  if (temporary) {
+    transientNotice = message;
+  } else {
+    persistentNotice = message;
+    transientNotice = "";
+  }
   saveProviderState();
   window.dispatchEvent(new CustomEvent("amitia:execution-scope-changed", { detail: { reason: message } }));
 }
@@ -418,6 +433,10 @@ export function useDeviceOwnedConversation() {
   async function send(request: OwnedChatRequest, onEvent: (event: OwnedChatEvent) => void) {
     if (activeController) throw new Error("当前回复尚未结束");
     if (!enabled.value) throw new Error("设备对话服务尚未就绪");
+    if (transientNotice && notice.value === transientNotice) {
+      notice.value = "";
+      transientNotice = "";
+    }
     const origin = parseConversationReference(request.conversationId || "");
     const controller = new AbortController();
     activeController = controller;

@@ -12,12 +12,21 @@ import (
 )
 
 type continuityWakeDispatcher struct {
-	entry *interaction.UnifiedEntry
+	entry     *interaction.UnifiedEntry
+	bindLocal func(context.Context, string) (context.Context, func(), error)
 }
 
 func (d *continuityWakeDispatcher) DispatchContinuityWake(ctx context.Context, wake continuity.WakeRequest) error {
 	if d == nil || d.entry == nil {
 		return nil
+	}
+	if d.bindLocal != nil {
+		current, finish, err := d.bindLocal(ctx, wake.SpaceID)
+		if err != nil {
+			return err
+		}
+		defer finish()
+		ctx = current
 	}
 	_, err := d.entry.Handle(ctx, &interaction.UnifiedEntryRequest{
 		Channel:                  wake.Channel,

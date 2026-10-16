@@ -16,10 +16,11 @@ import (
 )
 
 type Server struct {
-	cfg    Config
-	db     *gorm.DB
-	router *gin.Engine
-	login  *loginLimiter
+	cfg      Config
+	db       *gorm.DB
+	router   *gin.Engine
+	login    *loginLimiter
+	feedback *ingestLimiter
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -30,8 +31,8 @@ func NewServer(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	server := &Server{cfg: cfg, db: db, login: newLoginLimiter()}
-	for _, directory := range []string{cfg.PublishRoot, cfg.DesktopPublishDir, cfg.AndroidPublishDir} {
+	server := &Server{cfg: cfg, db: db, login: newLoginLimiter(), feedback: newIngestLimiter(30, 10*time.Minute)}
+	for _, directory := range []string{cfg.PublishRoot, cfg.DesktopPublishDir, cfg.AndroidPublishDir, cfg.FeedbackDir} {
 		if err := os.MkdirAll(directory, 0o755); err != nil {
 			_ = server.Close()
 			return nil, err
@@ -75,6 +76,7 @@ func (s *Server) buildRouter() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "mysql", "time": time.Now()})
 	})
 	router.POST("/api/v1/admin/auth/login", s.handleLogin)
+	router.POST("/api/v1/feedbacks", s.handleIngestFeedback)
 	protected := router.Group("/api/v1/admin")
 	protected.Use(s.authMiddleware())
 	protected.Use(requireMutationToken)
@@ -92,6 +94,10 @@ func (s *Server) buildRouter() *gin.Engine {
 	protected.POST("/releases/:id/rollout", requirePublisher, s.handlePauseRelease)
 	protected.POST("/releases/:id/rollback", requirePublisher, s.handleRollbackDesktop)
 	protected.GET("/audit-logs", s.handleAuditLogs)
+	protected.GET("/feedbacks", s.handleListFeedbacks)
+	protected.GET("/feedbacks-export", s.handleExportFeedbacks)
+	protected.GET("/feedbacks/:id", s.handleGetFeedback)
+	protected.GET("/feedbacks/:id/screenshot", s.handleFeedbackScreenshot)
 	protected.GET("/settings", requireAdmin, s.handleSettings)
 	s.registerWebRoutes(router)
 	return router

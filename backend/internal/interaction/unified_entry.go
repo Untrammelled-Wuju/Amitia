@@ -13,7 +13,6 @@ import (
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/continuity"
 	coreexec "github.com/u-ai/backend/internal/execution"
-	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -148,6 +147,7 @@ type UnifiedEntryRequest struct {
 }
 
 type UnifiedEntry struct {
+	canonical    EntryExecutor
 	orchestrator *Orchestrator
 	resolver     ScopeResolver
 	execService  *coreexec.ExecutionService
@@ -156,6 +156,19 @@ type UnifiedEntry struct {
 	bpState      *BackpressureState
 	mu           sync.Mutex
 	clock        temporal.Clock
+}
+
+type EntryExecutor interface {
+	ExecuteEntry(context.Context, *UnifiedEntryRequest) (*OrchestrationResult, error)
+	CancelEntryScope(InteractionScope) int
+	EntryInteractionActive(string) bool
+	EntryReady() bool
+}
+
+func (e *UnifiedEntry) SetEntryExecutor(executor EntryExecutor) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.canonical = executor
 }
 
 func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver, clock temporal.Clock) *UnifiedEntry {
@@ -181,6 +194,9 @@ func (e *UnifiedEntry) SetContinuityResolver(resolver *continuity.Resolver) {
 }
 
 func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
+	if req == nil {
+		return nil, ErrOrchestratorInvalidScope
+	}
 	e.mu.Lock()
 	now := e.clock.Now()
 	if now.Before(e.bpState.CooldownUntil) {
@@ -190,8 +206,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	e.bpState.QueueDepth++
 	e.bpState.updateStatusLocked(e.bpCfg)
 	status := e.bpState.Status
-	execService := e.execService
-	continuityResolver := e.continuity
+	canonical := e.canonical
 	e.mu.Unlock()
 
 	defer func() {
@@ -214,139 +229,13 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	if originActor != nil {
 		ctx = auth.WithActor(ctx, originActor)
 	}
-
-	requestID := stableRequestID(req.RequestID)
-	source := parseOptionalEntrySource(req.Source)
-	scopeInput := ScopeResolveInput{
-		SpaceID:        req.SpaceID,
-		CharacterID:    req.CharacterID,
-		ConversationID: req.ConversationID,
-		Channel:        req.Channel,
-		PeerID:         req.PeerID,
-		SessionID:      req.SessionID,
-		RequestID:      requestID,
-		Source:         source,
+	if canonical != nil {
+		copied := *req
+		copied.RequestID = stableRequestID(req.RequestID)
+		return canonical.ExecuteEntry(ctx, &copied)
 	}
 
-	resolution, err := e.resolver.Resolve(ctx, scopeInput)
-	if err != nil {
-		return nil, err
-	}
-
-	if continuityResolver != nil {
-		continuityResolution, continuityErr := continuityResolver.Resolve(ctx, continuity.ResolveInput{
-			SpaceID:        resolution.Scope.SpaceID,
-			CharacterID:    resolution.Scope.CharacterID,
-			ConversationID: resolution.Scope.ConversationID,
-			WorkspaceID:    req.WorkspaceID,
-			ThreadID:       req.ThreadID,
-			Message:        req.Message,
-			SuppressCreate: req.IsInternal || source == string(EntrySourceProactive) || source == string(EntrySourceRuntime),
-		})
-		if continuityErr != nil {
-			log.Printf("[unified_entry] continuity resolution degraded: %v", continuityErr)
-		} else if continuityResolution.Thread != nil {
-			resolution.Scope.ThreadID = continuityResolution.Thread.ID
-			req.ThreadID = continuityResolution.Thread.ID
-		}
-	}
-
-	var execCtx *coreexec.ExecutionContext
-	if execService != nil {
-		rootID := ""
-		spaceID := req.SpaceID
-		if spaceID == "" {
-			spaceID = resolution.Scope.SpaceID
-		}
-		var created coreexec.ExecutionContext
-		if req.RecoverExistingTurn {
-			created = execService.ResumeExecutionIdentity(ctx, rootID, spaceID, strings.TrimSpace(req.ExecutionID))
-		} else {
-			created = execService.StartExecution(ctx, rootID, spaceID)
-		}
-		created.ConversationID = resolution.Scope.ConversationID
-		if strings.TrimSpace(req.ExecutionID) == "" {
-			req.ExecutionID = created.ExecutionID
-		}
-		created.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
-		if created.Metadata == nil {
-			created.Metadata = make(map[string]any)
-		}
-		if resolution.Scope.ThreadID != "" {
-			created.Metadata["threadId"] = resolution.Scope.ThreadID
-		}
-		if originActor != nil {
-			created.Metadata[coreexec.MetadataOriginPrincipalType] = string(originActor.PrincipalType)
-			created.Metadata[coreexec.MetadataOriginDeviceID] = string(originActor.DeviceID)
-			created.Metadata[coreexec.MetadataOriginRuntimeID] = string(originActor.RuntimeID)
-			created.Metadata[coreexec.MetadataOriginSessionID] = originActor.SessionID
-			created.Metadata[coreexec.MetadataOriginRuntimeSessionID] = string(originActor.RuntimeSessionID)
-		}
-		if created.WorkspaceID != "" {
-			created.Metadata["workspaceName"] = strings.TrimSpace(req.WorkspaceName)
-			created.Metadata["workspaceKind"] = strings.TrimSpace(req.WorkspaceKind)
-			created.Metadata["workspaceRootUri"] = strings.TrimSpace(req.WorkspaceRootURI)
-			created.Metadata["workspaceDeviceId"] = strings.TrimSpace(req.WorkspaceDeviceID)
-		}
-		if deviceID := strings.TrimSpace(req.WorkspaceDeviceID); deviceID != "" {
-			created.RuntimeTarget = &coreexec.RuntimeTarget{
-				Placement: "device",
-				SpaceID:   runtimeidentity.SpaceID(spaceID),
-				DeviceID:  runtimeidentity.DeviceID(deviceID),
-			}
-		}
-		execCtx = &created
-		if continuityResolver != nil && resolution.Scope.ThreadID != "" {
-			_ = continuityResolver.Bind(resolution.Scope.ThreadID, "execution", created.ExecutionID, "unified_entry", 1)
-			_ = continuityResolver.Bind(resolution.Scope.ThreadID, "request", requestID, "unified_entry", 1)
-			if strings.TrimSpace(req.ExecutionID) != "" && req.ExecutionID != created.ExecutionID {
-				_ = continuityResolver.Bind(resolution.Scope.ThreadID, "execution", req.ExecutionID, "request", 1)
-			}
-		}
-	}
-
-	procReq := &ProcessRequest{
-		CharacterID:              resolution.Scope.CharacterID,
-		ConversationID:           resolution.Scope.ConversationID,
-		ThreadID:                 resolution.Scope.ThreadID,
-		Message:                  req.Message,
-		Channel:                  resolution.Scope.Channel,
-		Source:                   resolution.Source,
-		PeerID:                   resolution.Scope.PeerID,
-		SpaceID:                  resolution.Scope.SpaceID,
-		DeviceTimezone:           req.DeviceTimezone,
-		SessionID:                resolution.Scope.SessionID,
-		RequestID:                requestID,
-		ReservedInteractionID:    req.ReservedInteractionID,
-		RecoverExistingTurn:      req.RecoverExistingTurn,
-		TurnID:                   req.TurnID,
-		ExecutionID:              req.ExecutionID,
-		AudioUrl:                 req.AudioUrl,
-		AudioDuration:            req.AudioDuration,
-		VoiceMessage:             req.VoiceMessage,
-		ExpressionPlan:           req.ExpressionPlan,
-		ImageUrl:                 req.ImageUrl,
-		VideoUrl:                 req.VideoUrl,
-		ImageContext:             req.ImageContext,
-		ReplyToMessageID:         req.ReplyToMessageID,
-		ModelConfigID:            req.ModelConfigID,
-		ReasoningEffort:          req.ReasoningEffort,
-		MessageStyle:             req.MessageStyle,
-		ReasoningEnabled:         req.ReasoningEnabled,
-		PermissionMode:           req.PermissionMode,
-		IsInternal:               req.IsInternal,
-		SuppressReplyPersistence: req.SuppressReplyPersistence,
-		ForceRegenerate:          req.ForceRegenerate,
-		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
-		ProactiveTimeContext:     req.ProactiveTimeContext,
-		ProactiveRecentContext:   req.ProactiveRecentContext,
-		ProactiveRelationship:    req.ProactiveRelationship,
-		ProactiveEmotion:         req.ProactiveEmotion,
-		ProactiveMemory:          req.ProactiveMemory,
-		ExecContext:              execCtx,
-	}
-
-	return e.orchestrator.Process(ctx, procReq)
+	return nil, ErrOrchestratorNotReady
 }
 
 func (e *UnifiedEntry) ResolveScope(ctx context.Context, req *UnifiedEntryRequest) (ScopeResolution, error) {
@@ -371,17 +260,29 @@ func (e *UnifiedEntry) GetBackpressureStatus() BackpressureStatus {
 }
 
 func (e *UnifiedEntry) IsOrchestratorReady() bool {
-	if e == nil || e.orchestrator == nil {
+	if e == nil {
 		return false
 	}
-	return e.orchestrator.IsReady()
+	e.mu.Lock()
+	canonical := e.canonical
+	e.mu.Unlock()
+	if canonical != nil {
+		return canonical.EntryReady()
+	}
+	return false
 }
 
 func (e *UnifiedEntry) IsInteractionActive(interactionID string) bool {
-	if e == nil || e.orchestrator == nil || e.orchestrator.cancels == nil {
+	if e == nil {
 		return false
 	}
-	return e.orchestrator.cancels.IsRegistered(interactionID)
+	e.mu.Lock()
+	canonical := e.canonical
+	e.mu.Unlock()
+	if canonical != nil {
+		return canonical.EntryInteractionActive(interactionID)
+	}
+	return false
 }
 
 func (e *UnifiedEntry) SetBackpressureConfig(cfg BackpressureConfig) {
@@ -397,13 +298,19 @@ func (e *UnifiedEntry) CancelByPeer(channel, peerID string) int {
 		Channel: channel,
 		PeerID:  peerID,
 	}.Normalize()
-	count := e.orchestrator.CancelByScope(scope)
+	count := e.CancelByScope(scope)
 	log.Printf("[unified_entry] cancelled %d interactions for channel=%s peer=%s", count, channel, peerID)
 	return count
 }
 
 func (e *UnifiedEntry) CancelByScope(scope InteractionScope) int {
-	return e.orchestrator.CancelByScope(scope)
+	e.mu.Lock()
+	canonical := e.canonical
+	e.mu.Unlock()
+	if canonical != nil {
+		return canonical.CancelEntryScope(scope)
+	}
+	return 0
 }
 
 func normalizeBackpressureConfig(cfg BackpressureConfig) BackpressureConfig {

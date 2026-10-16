@@ -10,6 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -33,6 +36,15 @@ func newRuntimeModulesTestRouter(t *testing.T) *gin.Engine {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("actorContext", &auth.ActorContext{
+			PrincipalType: auth.PrincipalLocalUI,
+			SpaceID:       runtimeidentity.SpaceID(requestidentity.CanonicalSpaceID()),
+			IsLocalTrusted: true,
+			Permissions:   auth.OwnerDevicePermissions(),
+		})
+		c.Next()
+	})
 	group := router.Group("")
 	RegisterSystemRouter(group, &app.AppContext{DB: db}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return router

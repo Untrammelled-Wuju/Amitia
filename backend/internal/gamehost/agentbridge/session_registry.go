@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
@@ -23,6 +24,7 @@ const (
 // process services and those services are allowed to reuse the same opaque
 // plugin-session identifier without overwriting each other's Agent context.
 type SessionScope struct {
+	OwnedScope      *coordination.ExecutionScope
 	PluginSessionID string
 	PluginID        domain.PluginID
 	RuntimeID       domain.RuntimeInstanceID
@@ -66,6 +68,10 @@ func servicePrefix(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceI
 }
 
 func (r *SessionRegistry) Bind(scope SessionScope) {
+	if scope.OwnedScope != nil {
+		copied := *scope.OwnedScope
+		scope.OwnedScope = &copied
+	}
 	if r == nil || scope.RuntimeID == "" || scope.ServiceID == "" {
 		return
 	}
@@ -105,6 +111,10 @@ func (r *SessionRegistry) Bind(scope SessionScope) {
 			existing.ConversationID = scope.ConversationID
 			existing.Channel = scope.Channel
 			existing.HostSessionID = scope.HostSessionID
+			if scope.OwnedScope != nil {
+				copied := *scope.OwnedScope
+				existing.OwnedScope = &copied
+			}
 			existing.UpdatedAt = scope.UpdatedAt
 			r.sessions[existingKey] = existing
 		}

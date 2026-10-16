@@ -118,66 +118,25 @@ export function useWebChatScroll(
 
   async function loadOlderMessages() {
     if (isLoadingHistory.value || !hasMoreHistory.value || !convId.value) return;
-    if (owned.enabled.value) {
-      const conversation = convId.value;
-      const role = characterId?.value || owned.selectInitialRole();
-      if (!role || !owned.hasMore(conversation, role)) { hasMoreHistory.value = false; return; }
-      isLoadingHistory.value = true;
-      const el = msgAreaRef.value?.rootEl;
-      const previousHeight = el?.scrollHeight || 0;
-      try {
-        const result = await owned.query(conversation, role, true);
-        if (conversation !== convId.value || role !== characterId?.value) return;
-        const older = owned.messages(result);
-        const seen = new Set(messages.value.map((message) => message.uiKey || `${message.ownerId}:${message.id}`));
-        messages.value = [...older.filter((message) => !seen.has(message.uiKey)), ...messages.value];
-        hasMoreHistory.value = owned.hasMore(conversation, role);
-        await nextTick();
-        if (el) el.scrollTop = el.scrollHeight - previousHeight;
-      } finally { isLoadingHistory.value = false; }
-      return;
-    }
-    if (historyBeforeSequence.value <= 0) {
-      const sequences = messages.value
-        .map((message) => Number(message?.sequence || 0))
-        .filter((sequence) => sequence > 0);
-      if (sequences.length === 0) {
-        hasMoreHistory.value = false;
-        return;
-      }
-      historyBeforeSequence.value = Math.min(...sequences);
-    }
+    if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    const conversation = convId.value;
+    const role = characterId?.value || owned.selectInitialRole();
+    if (!role || !owned.hasMore(conversation, role)) { hasMoreHistory.value = false; return; }
     isLoadingHistory.value = true;
+    const el = msgAreaRef.value?.rootEl;
+    const previousHeight = el?.scrollHeight || 0;
     try {
-      const [r] = await Promise.all([
-        get<any>(
-          `/api/web-chat/conversations/${convId.value}/messages`,
-          {
-            beforeSequence: historyBeforeSequence.value,
-            limit: HISTORY_PAGE_SIZE,
-          },
-        ),
-        loadOlderTurns?.(),
-      ]);
-      const older = (r?.items || []).map(normalizeRealtimeMessage);
-      const el = msgAreaRef.value?.rootEl;
-      const prevHeight = el?.scrollHeight || 0;
-      if (older.length > 0) {
-        attachLocalImages(older);
-        messages.value = mergeMessageCollections(messages.value, older);
-        const responseCursor = Number(r?.nextBefore || 0);
-        historyBeforeSequence.value = responseCursor > 0
-          ? responseCursor
-          : Math.min(...older.map((message: any) => Number(message?.sequence || 0)).filter((sequence: number) => sequence > 0));
-        nextTick(() => {
-          if (el) el.scrollTop = el.scrollHeight - prevHeight;
-        });
-      }
-      hasMoreHistory.value = r?.hasMore === true;
-    } catch {
-    } finally {
-      isLoadingHistory.value = false;
-    }
+      const result = await owned.query(conversation, role, true);
+      if (conversation !== convId.value || (characterId?.value && role !== characterId.value)) return;
+      const older = owned.messages(result);
+      const seen = new Set(messages.value.map((message) => message.uiKey || `${message.ownerId}:${message.id}`));
+      messages.value = [...older.filter((message) => !seen.has(message.uiKey)), ...messages.value];
+      hasMoreHistory.value = owned.hasMore(conversation, role);
+      await nextTick();
+      if (el) el.scrollTop = el.scrollHeight - previousHeight;
+    } finally { isLoadingHistory.value = false; }
+
+
   }
 
   function onMsgTouchStart(e: TouchEvent) {

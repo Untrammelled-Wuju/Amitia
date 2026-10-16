@@ -152,6 +152,7 @@ func TestGenericParentTurnRecoveryRestartsOriginalInteraction(t *testing.T) {
 	orch.SetReady(true)
 	entry := interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil), temporal.SystemClock{})
 	entry.SetExecutionService(coreexec.NewExecutionService())
+	entry.SetEntryExecutor(&recoveredParentEntryExecutor{entry: entry, orchestrator: orch})
 	runner := newParentTurnRecoveryRuntime()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

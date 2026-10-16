@@ -191,3 +191,44 @@ func TestValidateArtifactName(t *testing.T) {
 		t.Fatal("invalid desktop artifact name should fail")
 	}
 }
+
+func TestSelectAndroidChannelRelease(t *testing.T) {
+	candidates := []UpdateRelease{
+		{ID: 1, Channel: ChannelStable, VersionCode: 6},
+		{ID: 2, Channel: ChannelBeta, VersionCode: 7},
+		{ID: 3, Channel: ChannelAlpha, VersionCode: 8},
+	}
+	if got := selectAndroidChannelRelease(ChannelStable, candidates); got == nil || got.ID != 1 {
+		t.Fatalf("stable 通道应只选 stable 记录: %+v", got)
+	}
+	if got := selectAndroidChannelRelease(ChannelBeta, candidates); got == nil || got.ID != 2 {
+		t.Fatalf("beta 通道应选 stable/beta 中版本号最高记录: %+v", got)
+	}
+	if got := selectAndroidChannelRelease(ChannelAlpha, candidates); got == nil || got.ID != 3 {
+		t.Fatalf("alpha 通道应选三条通道中版本号最高记录: %+v", got)
+	}
+	fallback := []UpdateRelease{
+		{ID: 4, Channel: ChannelStable, VersionCode: 9},
+		{ID: 5, Channel: ChannelBeta, VersionCode: 3},
+	}
+	if got := selectAndroidChannelRelease(ChannelBeta, fallback); got == nil || got.ID != 4 {
+		t.Fatalf("beta 通道应累进到更高版本号的 stable 记录: %+v", got)
+	}
+	if got := selectAndroidChannelRelease(ChannelStable, fallback); got == nil || got.ID != 4 {
+		t.Fatalf("stable 通道不应选 beta 记录: %+v", got)
+	}
+	tie := []UpdateRelease{
+		{ID: 6, Channel: ChannelStable, VersionCode: 10},
+		{ID: 7, Channel: ChannelStable, VersionCode: 10},
+	}
+	if got := selectAndroidChannelRelease(ChannelStable, tie); got == nil || got.ID != 7 {
+		t.Fatalf("版本号相同时应选较新记录: %+v", got)
+	}
+	onlyBeta := []UpdateRelease{{ID: 8, Channel: ChannelBeta, VersionCode: 11}}
+	if got := selectAndroidChannelRelease(ChannelStable, onlyBeta); got != nil {
+		t.Fatalf("stable 通道不应选 beta 记录: %+v", got)
+	}
+	if got := selectAndroidChannelRelease(ChannelAlpha, onlyBeta); got == nil || got.ID != 8 {
+		t.Fatalf("alpha 通道应选 beta 记录: %+v", got)
+	}
+}

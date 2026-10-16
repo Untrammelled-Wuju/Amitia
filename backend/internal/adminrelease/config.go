@@ -31,6 +31,9 @@ type Config struct {
 	AndroidManifestKeyPath       string
 	AndroidManifestKeyPassphrase string
 	AdminWebDir                  string
+	FeedbackDir                  string
+	FeedbackToken                string
+	FeedbackMaxBytes             int64
 }
 
 type MySQLConfig struct {
@@ -53,7 +56,7 @@ func LoadConfigFromEnv() Config {
 	desktopDir := envOrDefault("AMITIA_ADMIN_DESKTOP_PUBLISH_DIR", filepath.Join(publishRoot, "amitia"))
 	androidDir := envOrDefault("AMITIA_ADMIN_ANDROID_PUBLISH_DIR", filepath.Join(publishRoot, "amitia", "android"))
 	cfg := Config{
-		Addr:    envOrDefault("AMITIA_ADMIN_ADDR", "127.0.0.1:18998"),
+		Addr:    envOrDefault("AMITIA_ADMIN_ADDR", "127.0.0.1:18880"),
 		DataDir: dataDir,
 		MySQL: MySQLConfig{
 			Host:            envOrDefault("AMITIA_ADMIN_MYSQL_HOST", "127.0.0.1"),
@@ -82,6 +85,9 @@ func LoadConfigFromEnv() Config {
 		AndroidManifestKeyPath:       os.Getenv("AMITIA_ADMIN_ANDROID_MANIFEST_KEY_PATH"),
 		AndroidManifestKeyPassphrase: os.Getenv("AMITIA_ADMIN_ANDROID_MANIFEST_KEY_PASSPHRASE"),
 		AdminWebDir:                  envOrDefault("AMITIA_ADMIN_WEB_DIR", filepath.Join(root, "admin-system", "dist")),
+		FeedbackDir:                  envOrDefault("AMITIA_ADMIN_FEEDBACK_DIR", filepath.Join(dataDir, "feedbacks")),
+		FeedbackToken:                strings.TrimSpace(os.Getenv("AMITIA_ADMIN_FEEDBACK_TOKEN")),
+		FeedbackMaxBytes:             int64(envInt64("AMITIA_ADMIN_FEEDBACK_MAX_BYTES", 32*1024*1024)),
 	}
 	return cfg
 }
@@ -116,6 +122,9 @@ func (c Config) Validate() error {
 	}
 	if c.MaxUploadBytes <= 0 {
 		return errors.New("上传大小限制必须大于 0")
+	}
+	if c.FeedbackMaxBytes <= 0 {
+		return errors.New("反馈接收大小限制必须大于 0")
 	}
 	return nil
 }

@@ -18,6 +18,7 @@ type Role struct {
 
 type DataQuery struct {
 	Management             bool      `json:"management,omitempty"`
+	RuntimeTurns           bool      `json:"runtimeTurns,omitempty"`
 	Vector                 []float32 `json:"vector,omitempty"`
 	VectorModel            string    `json:"vectorModel,omitempty"`
 	Cursor                 string    `json:"cursor,omitempty"`
@@ -46,13 +47,14 @@ func NormalizeConversationSearch(value string) (string, error) {
 const OwnedConversationSearchPredicate = ` AND (instr(lower(COALESCE(json_extract(CAST(body AS TEXT),'$.title'),'')),?)>0 OR EXISTS (SELECT 1 FROM kernel_device_owned_resources AS matched WHERE matched.owner_id=kernel_device_owned_resources.owner_id AND matched.role_id=kernel_device_owned_resources.role_id AND matched.kind='message' AND matched.deleted=0 AND json_extract(CAST(matched.body AS TEXT),'$.conversationId')=kernel_device_owned_resources.resource_id AND instr(lower(COALESCE(json_extract(CAST(matched.body AS TEXT),'$.content'),'')),?)>0))`
 
 type DataSnapshot struct {
-	NextCursors         map[string]string `json:"nextCursors,omitempty"`
-	OwnerID             string            `json:"ownerId"`
-	Role                Role              `json:"role"`
-	Resources           []Resource        `json:"resources"`
-	LegacyMessages      []json.RawMessage `json:"legacyMessages,omitempty"`
-	LegacySummary       json.RawMessage   `json:"legacySummary,omitempty"`
-	LegacyConversations []json.RawMessage `json:"legacyConversations,omitempty"`
+	RuntimeContext      map[string]json.RawMessage `json:"runtimeContext,omitempty"`
+	NextCursors         map[string]string          `json:"nextCursors,omitempty"`
+	OwnerID             string                     `json:"ownerId"`
+	Role                Role                       `json:"role"`
+	Resources           []Resource                 `json:"resources"`
+	LegacyMessages      []json.RawMessage          `json:"legacyMessages,omitempty"`
+	LegacySummary       json.RawMessage            `json:"legacySummary,omitempty"`
+	LegacyConversations []json.RawMessage          `json:"legacyConversations,omitempty"`
 }
 
 type DataPort interface {
@@ -117,6 +119,19 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	}
 	if len(snapshot.Resources) > 4096 || len(snapshot.LegacyMessages) > 256 || len(snapshot.LegacyConversations) > 256 {
 		return ErrPendingLimit
+	}
+	if len(snapshot.RuntimeContext) > 10 {
+		return ErrPendingLimit
+	}
+	for key, value := range snapshot.RuntimeContext {
+		switch key {
+		case "psyche", "relationship", "life", "needs", "unresolvedThreads", "temporal", "continuity", "beliefs", "memories":
+		default:
+			return ErrWrongOwner
+		}
+		if len(value) > 256<<10 || !json.Valid(value) {
+			return ErrPendingLimit
+		}
 	}
 	if len(snapshot.NextCursors) > 16 {
 		return ErrPendingLimit

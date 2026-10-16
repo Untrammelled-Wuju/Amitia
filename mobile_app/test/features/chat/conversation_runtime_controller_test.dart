@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/services/chat_service.dart';
+import 'package:amitia_app/core/services/device_owned_chat_service.dart';
 import 'package:amitia_app/core/settings/chat_permission_preferences.dart';
 import 'package:amitia_app/core/settings/chat_appearance_preferences.dart';
 import 'package:amitia_app/features/chat/runtime/conversation_runtime_controller.dart';
@@ -12,8 +13,48 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBackendApi extends Fake implements BackendServiceApi {}
 
+class _FakeOwnedService extends DeviceOwnedChatService {
+  _FakeOwnedService() : super(_FakeBackendApi()) {
+    enabled = true;
+    coreId = 'core';
+  }
+
+  late _FakeChatService owner;
+
+  Map<String, dynamic> scope() => {'coreId': coreId, 'roleId': 'role', 'resourceOwnerId': 'device', 'roleOwnerId': 'device'};
+
+  @override
+  Future<bool> refresh() async => enabled;
+
+  @override
+  Future<void> poll() async {}
+
+  @override
+  Future<Map<String, dynamic>> query(String conversationId, {String? characterId, bool older = false, String keyword = ''}) async => {'conversationId': conversationId, 'executionScope': scope()};
+
+  @override
+  List<MessageDto> messages(Map<String, dynamic> result) => owner.snapshotMessages?.call(result['conversationId'].toString()) ?? [];
+
+  @override
+  bool hasMore(String conversationId, {String? characterId, String keyword = ''}) => false;
+
+  @override
+  Stream<Map<String, dynamic>> send({required String requestId, required String message, String? conversationId, String? projectId, String? characterId, int? modelConfigId, String? reasoningEffort, bool? reasoningEnabled, String? permissionMode, String? messageStyle, Map<String, dynamic>? context, List<Map<String, dynamic>>? attachments, Map<String, dynamic>? quote}) async* {
+    if (owner.submitError != null) throw owner.submitError!;
+    owner.submitCount++;
+    owner.submittedMessage = message;
+    owner.submittedStyle = messageStyle ?? '';
+    owner.submittedRequestId = requestId;
+    final id = conversationId?.isNotEmpty == true ? conversationId! : 'conversation-1';
+    yield {'type': 'started', 'conversationId': id, 'executionScope': scope()};
+    yield {'type': 'completed', 'data': {'conversationId': id, 'executionScope': scope(), 'reply': '回答', 'saved': true, 'memoryStatus': 'completed'}};
+  }
+}
+
 class _FakeChatService extends ChatService {
-  _FakeChatService(this.events, {this.submitError}) : super(_FakeBackendApi());
+  _FakeChatService(this.events, {this.submitError}) : super(_FakeBackendApi(), owned: _FakeOwnedService()) {
+    (owned as _FakeOwnedService).owner = this;
+  }
 
   final StreamController<ChatStreamEvent> events;
   final Object? submitError;
@@ -43,41 +84,6 @@ class _FakeChatService extends ChatService {
     int? expectedRevision,
   }) async {
     await mutation?.future;
-  }
-
-  @override
-  Future<ChatSubmitResult> submitMessage({
-    required String message,
-    String? clientMessageId,
-    String? conversationId,
-    String? characterId,
-    String? imageUrl,
-    String? audioUrl,
-    double audioDuration = 0,
-    String? videoUrl,
-    String? replyToMessageId,
-    int? modelConfigId,
-    String? reasoningEffort,
-    bool? reasoningEnabled,
-    String? permissionMode,
-    String messageStyle = 'flow',
-    ConversationWorkspaceDto? workspace,
-  }) async {
-    if (submitError != null) throw submitError!;
-    submitCount += 1;
-    submittedMessage = message;
-    submittedStyle = messageStyle;
-    submittedRequestId = clientMessageId ?? 'request-1';
-    return ChatSubmitResult(
-      conversationId: conversationId?.isNotEmpty == true
-          ? conversationId!
-          : 'conversation-1',
-      userMessageId: 'message-user-1',
-      requestId: clientMessageId ?? 'request-1',
-      turnId: 'turn-1',
-      executionId: 'execution-1',
-      status: 'queued',
-    );
   }
 
   @override
@@ -225,7 +231,7 @@ void main() {
     controller.dispose();
     await events.close();
   });
-  test('Command ACK 不在客户端伪造 Turn 状态，queued 必须来自服务端事件', () async {
+  test('Owned保存回执不伪造Turn状态，运行状态只接受服务端事件', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events);
     final controller = ConversationRuntimeController(service);
@@ -241,14 +247,14 @@ void main() {
       controller.messages
           .singleWhere((message) => message.role == MessageRole.user)
           .id,
-      'message-user-1',
+      isNotEmpty,
     );
     final placeholder = controller.messages.singleWhere(
       (message) => message.role == MessageRole.assistant,
     );
     expect(placeholder.renderId, 'request:${service.submittedRequestId}');
     expect(placeholder.assistantTurn, isNull);
-    expect(placeholder.status, MessageStatus.queued);
+    expect(placeholder.status, MessageStatus.delivered);
 
     events.add(
       ChatStreamEvent(
@@ -304,6 +310,7 @@ void main() {
   test('Core解绑后原内联附件不能回退为本地模型请求', () async {
     final events = StreamController<ChatStreamEvent>.broadcast();
     final service = _FakeChatService(events);
+    service.owned.enabled = false;
     final controller = ConversationRuntimeController(service);
     await controller.sendImage(
       resourceUri: 'data:image/png;base64,AQID',
@@ -323,7 +330,7 @@ void main() {
     );
     expect(service.submitCount, 0);
     expect(controller.messages, isEmpty);
-    expect(controller.lastError.toString(), contains('原附件未发送'));
+    expect(controller.lastError.toString(), contains('设备对话服务尚未就绪'));
     controller.dispose();
     await events.close();
   });

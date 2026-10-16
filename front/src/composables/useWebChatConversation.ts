@@ -91,9 +91,10 @@ export function useWebChatConversation(
       convTitle.value = conversation?.title || "历史对话";
       hasMoreHistory.value = owned.hasMore(conversationID, characterId.value);
       await chatStore.markConversationRead(conversationID, Number(grouped?.lastTerminalTurnSequence || 0)).catch(() => undefined);
+      connectSSE();
       return;
     }
-    connectSSE();
+    throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   }
 
   async function fetchConversations() {
@@ -106,13 +107,7 @@ export function useWebChatConversation(
         conversations.value = rows;
         return;
       }
-      const r = await get<any>("/api/web-chat/conversations", {
-        pageSize: 100,
-      });
-      const items = r?.conversations || r?.items || [];
-      conversations.value = items;
-      const webConv = items.find((x: any) => x.id === convId.value);
-      if (webConv) webMsgCount.value = webConv?.messageCount || 0;
+      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } catch {
       conversations.value = [];
     }
@@ -124,16 +119,7 @@ export function useWebChatConversation(
   }
 
   async function fetchWebMsgCount() {
-    if (owned.enabled.value) return;
-    if (!convId.value) return;
-    try {
-      const convs = await get<any>("/api/web-chat/conversations", {
-        pageSize: 50,
-      });
-      const items = convs?.conversations || convs?.items || [];
-      const wc = items.find((x: any) => x.id === convId.value);
-      if (wc) webMsgCount.value = wc?.messageCount || 0;
-    } catch {}
+    webMsgCount.value = messages.value.filter((message) => ["user", "assistant"].includes(message.role)).length;
   }
 
   async function refreshCharacters() {
@@ -143,15 +129,7 @@ export function useWebChatConversation(
         characters.value = owned.roles.value;
         return;
       }
-      const chars = await get<any[]>("/api/characters");
-      if (Array.isArray(chars)) {
-        characters.value = chars;
-        saveCache("/api/characters", chars);
-        if (characterId.value) {
-          const current = chars.find((c: any) => c.id === characterId.value);
-          if (current) selectCharacter(current);
-        }
-      }
+      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } catch {}
   }
 
@@ -163,15 +141,7 @@ export function useWebChatConversation(
         const result = await owned.conversationSummary(id, characterId.value);
         return String(result?.summaryText || result?.summary_text || "").trim();
       }
-      const response = await get<any>(
-        `/api/chats/conversations/${encodeURIComponent(id)}/summary`,
-      );
-      return String(
-        response?.summaryText ??
-          response?.summary_text ??
-          response?.summary ??
-          "",
-      ).trim();
+      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } catch {
       return "";
     }

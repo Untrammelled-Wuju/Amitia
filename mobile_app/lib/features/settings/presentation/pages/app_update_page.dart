@@ -9,6 +9,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/app_update/app_update_models.dart';
+import '../../../../core/app_update/app_update_preferences.dart';
 import '../../../../core/app_update/app_update_providers.dart';
 import '../../../../core/app_update/app_update_service.dart';
 import '../../../../core/ui_runtime/ui_client_info.dart';
@@ -33,6 +34,7 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
   bool _appPolling = false;
   bool _downloadReady = false;
   bool _installStarted = false;
+  bool _includeTest = false;
   String? _appError;
   String? _appMessage;
   Timer? _downloadTimer;
@@ -42,8 +44,22 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
   @override
   void initState() {
     super.initState();
-    unawaited(_checkAppUpdate(silent: true));
+    unawaited(_initializeUpdateState());
     unawaited(_consumeInstallResult());
+  }
+
+  Future<void> _initializeUpdateState() async {
+    final includeTest = await AppUpdatePreferences.loadIncludeTest();
+    if (mounted) {
+      setState(() => _includeTest = includeTest);
+    }
+    await _checkAppUpdate(silent: true);
+  }
+
+  Future<void> _setIncludeTest(bool value) async {
+    setState(() => _includeTest = value);
+    await AppUpdatePreferences.saveIncludeTest(value);
+    await _checkAppUpdate();
   }
 
   @override
@@ -86,7 +102,12 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
                 '运行架构',
                 _clientArchitecture.isEmpty ? '—' : _clientArchitecture,
               ),
-              MapEntry('更新通道', AppUpdateService.updateChannel),
+              MapEntry(
+                '更新通道',
+                AppUpdateService.resolveChannels(
+                  includeTest: _includeTest,
+                ).join(' / '),
+              ),
               const MapEntry('更新来源', '自建渠道'),
             ],
           ),
@@ -191,6 +212,18 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
               style: AppTypography.caption(context),
             ),
           ],
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: _includeTest,
+            onChanged: _appChecking || _appDownloading ? null : _setIncludeTest,
+            title: Text('接收测试版更新', style: AppTypography.body(context)),
+            subtitle: Text(
+              _includeTest
+                  ? '已加入测试通道，测试版与正式版更新都会自动提示'
+                  : '开启后会检查测试版，测试版与正式版更新都会自动提示',
+              style: AppTypography.caption(context),
+            ),
+          ),
           const SizedBox(height: 12),
           AmitiaButton(
             label: _appChecking ? '检查中...' : '检查应用更新',
@@ -246,7 +279,7 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     });
     try {
       final service = ref.read(appUpdateServiceProvider);
-      final result = await service.check();
+      final result = await service.check(includeTest: _includeTest);
       if (!mounted) return;
       setState(() {
         _installedApp = result.installed;

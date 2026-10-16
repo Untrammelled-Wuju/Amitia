@@ -1,10 +1,14 @@
 import '../backend_transport/backend_service_api.dart';
 import '../models/safety.dart';
+import 'device_owned_chat_service.dart';
 
 class SystemService {
   final BackendServiceApi _api;
 
-  SystemService(this._api);
+  final DeviceOwnedChatService _owned;
+
+  SystemService(this._api, {DeviceOwnedChatService? owned})
+    : _owned = owned ?? DeviceOwnedChatService(_api);
 
   Future<Map<String, dynamic>?> health() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/health');
@@ -105,51 +109,40 @@ class SystemService {
   }
 
   Future<Map<String, dynamic>?> chatStats() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/chats/stats');
-    return resp;
+    return _owned.management('stats');
   }
 
   Future<Map<String, dynamic>?> chatCompressionStatus(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/chats/conversations/$id/compression-status',
+    return _owned.management(
+      'compression-status',
+      body: {'conversationId': id},
     );
-    return resp;
   }
 
   Future<Map<String, dynamic>?> cleanupPreview([
     Map<String, dynamic>? data,
   ]) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/chats/cleanup/preview',
-      data: data ?? const <String, dynamic>{},
-    );
-    return resp;
+    return _owned.management('cleanup/preview', body: data ?? {}, post: true);
   }
 
   Future<Map<String, dynamic>?> cleanupConfirm(
     Map<String, dynamic> data,
   ) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/chats/cleanup/confirm',
-      data: data,
-    );
-    return resp;
+    return _owned.management('cleanup/confirm', body: data, post: true);
   }
 
   Future<bool> cleanupVacuum() async {
-    await _api.post('/api/chats/cleanup/vacuum');
+    await _owned.management(
+      'cleanup/vacuum',
+      body: {'requestId': 'vacuum-${DateTime.now().microsecondsSinceEpoch}'},
+      post: true,
+    );
     return true;
   }
 
   Future<Map<String, dynamic>?> export(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/chats/export',
-      data: data,
-    );
-    return resp;
+    return _owned.management('export', body: data, post: true);
   }
-
-
 
   Future<Map<String, dynamic>?> pipelineStatus() async {
     final characterId = await _firstCharacterId();
@@ -178,8 +171,10 @@ class SystemService {
       final body = resource['body'];
       final content = body is Map ? body['content'] : null;
       if (content is Map) {
-        if (content['nodes'] is List) nodes += (content['nodes'] as List).length;
-        if (content['edges'] is List) edges += (content['edges'] as List).length;
+        if (content['nodes'] is List)
+          nodes += (content['nodes'] as List).length;
+        if (content['edges'] is List)
+          edges += (content['edges'] as List).length;
       }
     }
     return <String, dynamic>{
@@ -231,25 +226,24 @@ class SystemService {
                 .toString(),
             'target': (item['target'] ?? item['object'] ?? item['to'] ?? '')
                 .toString(),
-            'relation': (item['relation'] ??
-                    item['predicate'] ??
-                    item['label'] ??
-                    '')
-                .toString(),
+            'relation':
+                (item['relation'] ?? item['predicate'] ?? item['label'] ?? '')
+                    .toString(),
           });
         }
       } else {
         final target = content['target'] ?? content['object'] ?? content['to'];
         if (target != null) {
           edges.add(<String, dynamic>{
-            'source': (content['source'] ??
-                    content['subject'] ??
-                    content['from'] ??
-                    '')
-                .toString(),
+            'source':
+                (content['source'] ??
+                        content['subject'] ??
+                        content['from'] ??
+                        '')
+                    .toString(),
             'target': target.toString(),
-            'relation':
-                (content['relation'] ?? content['predicate'] ?? '').toString(),
+            'relation': (content['relation'] ?? content['predicate'] ?? '')
+                .toString(),
           });
         }
       }
@@ -277,9 +271,11 @@ class SystemService {
           .where((node) => visible.contains(node['id']?.toString() ?? ''))
           .toList(growable: false),
       'edges': edges
-          .where((edge) =>
-              visible.contains(edge['source']?.toString() ?? '') &&
-              visible.contains(edge['target']?.toString() ?? ''))
+          .where(
+            (edge) =>
+                visible.contains(edge['source']?.toString() ?? '') &&
+                visible.contains(edge['target']?.toString() ?? ''),
+          )
           .toList(growable: false),
     };
   }
@@ -313,7 +309,6 @@ class SystemService {
         .where((row) => row['kind'] == 'graph')
         .toList(growable: false);
   }
-
 }
 
 class SafetyService {

@@ -484,11 +484,14 @@ class NotificationCoordinator with WidgetsBindingObserver {
     }
     final reply = interaction.reply?.trim();
     if (reply != null && reply.isNotEmpty && conversationId != null) {
+      final source = Uri.tryParse(interaction.deepLink ?? '');
       final pending = PendingNotificationReply(
         id: 'notification-${DateTime.now().microsecondsSinceEpoch}',
         conversationId: conversationId,
         message: reply,
         createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+        characterId: source?.queryParameters['characterId'] ?? '',
+        coreId: source?.queryParameters['ownerId'] ?? '',
       );
       await _replyOutbox.put(pending);
       await _sendPendingReply(pending);
@@ -562,10 +565,12 @@ class NotificationCoordinator with WidgetsBindingObserver {
   Future<bool> _sendPendingReply(PendingNotificationReply pending) async {
     if (_disposed || _suppressRegistration) return false;
     try {
-      await _chat.submitMessage(
+      await _chat.sendNotificationReply(
         message: pending.message,
         conversationId: pending.conversationId,
         clientMessageId: pending.id,
+        characterId: pending.characterId,
+        expectedCoreId: pending.coreId,
       );
       await _replyOutbox.remove(pending.id);
       return true;

@@ -7,7 +7,7 @@
 - 发布业务源码：`backend/internal/adminrelease/`
 - 管理数据：MySQL `amitia_admin`
 - 本地受管 MySQL：`127.0.0.1:13306`
-- 管理服务端口：`18998`
+- 管理服务端口：`18880`
 - 管理前端开发端口：`15179`
 
 客户端更新地址保持不变：
@@ -29,7 +29,7 @@
 ## 环境变量
 
 ```text
-AMITIA_ADMIN_ADDR=127.0.0.1:18998
+AMITIA_ADMIN_ADDR=127.0.0.1:18880
 AMITIA_ADMIN_MYSQL_HOST=127.0.0.1
 AMITIA_ADMIN_MYSQL_PORT=3306
 AMITIA_ADMIN_MYSQL_USER=amitia_admin
@@ -79,6 +79,30 @@ AMITIA_ADMIN_COOKIE_SECURE=true
 4. 发布后服务端生成 `<channel>.json`，使用 RSA SHA-256 生成 `<channel>.json.sig`。
 
 上传顺序固定为 APK、签名文件、通道清单。手机端客户端不会接受低于已安装 `versionCode` 的清单。
+
+## 服务器部署
+
+服务器端管理库使用 `deploy/mysql/amitia-admin-seed.sql` 初始化，可在管理服务首次启动前后执行，重复执行不会产生重复账号：
+
+```bash
+mysql --host=<host> --port=<port> --user=root --password=<password> < deploy/mysql/amitia-admin-seed.sql
+```
+
+脚本执行结果：
+
+- 创建 `amitia_admin` 库（utf8mb4 / utf8mb4_unicode_ci）以及 `admin_users`、`admin_sessions`、`update_releases`、`update_release_artifacts`、`admin_audit_logs` 五张表，表结构与迁移 `202609240001` 完全一致
+- 写入默认管理员 `untrammelled` / `925011Mc`，口令为 argon2id（m=65536,t=3,p=2），与 `hashPassword` 输出格式一致；账号已存在时同步刷新口令、角色与启用状态
+- 清空 `admin_sessions`，凭据变更后旧会话立即失效
+
+脚本不写 `schema_migrations` 记录，迁移版本与校验值仍由管理服务启动时自行登记；库中已存在管理员账号时 `bootstrapAdmin` 直接跳过，与脚本写入的账号不冲突。
+
+MySQL 业务账号不写入该脚本，凭据仅通过环境变量注入：
+
+```text
+AMITIA_ADMIN_MYSQL_USER=amitia_admin
+AMITIA_ADMIN_MYSQL_PASSWORD=<secret>
+AMITIA_ADMIN_MYSQL_DATABASE=amitia_admin
+```
 
 ## 本地验证
 

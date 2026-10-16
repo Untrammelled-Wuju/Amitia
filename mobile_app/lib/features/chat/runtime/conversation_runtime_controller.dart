@@ -59,7 +59,6 @@ class ConversationRuntimeController extends ChangeNotifier {
   ChatStreamCancellation? _eventCancellation;
   bool _loadingSnapshot = false;
   bool _loadingOlderMessages = false;
-  int _messageBeforeSequence = 0;
   bool _hasMoreMessageHistory = false;
   bool _hasMoreTurnHistory = false;
   bool _automationStateUncertain = false;
@@ -350,91 +349,12 @@ class ConversationRuntimeController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if ((audioUrl ?? '').startsWith('data:') ||
-        (imageUrl ?? '').startsWith('data:') ||
-        (videoUrl ?? '').startsWith('data:') ||
-        (localMessage.resourceUri ?? '').startsWith('data:')) {
-      _lastError = StateError('设备服务状态已变化，原附件未发送');
-      notifyListeners();
-      return;
-    }
-    final requestId = _localId('mobile-');
-    final pending = _cloneMessage(
-      localMessage,
-      renderId: requestId,
-      sequence: _nextLocalSequence(),
-      status: MessageStatus.sending,
+    _lastError = StateError(
+      _chatService.owned.notice.isNotEmpty
+          ? _chatService.owned.notice
+          : '设备对话服务尚未就绪',
     );
-    _messages.upsert(pending);
-    final assistantPlaceholder = _assistantPlaceholder(requestId);
-    if (assistantPlaceholder != null) {
-      _messages.upsert(assistantPlaceholder);
-    }
-    _lastError = null;
-    _sending = true;
     notifyListeners();
-    try {
-      await _appearancePreferences?.init();
-      final result = await _chatService.submitMessage(
-        message: message,
-        clientMessageId: requestId,
-        conversationId: _conversationId,
-        characterId: _characterId,
-        imageUrl: imageUrl,
-        audioUrl: audioUrl,
-        audioDuration: audioDuration,
-        videoUrl: videoUrl,
-        replyToMessageId: replyToMessageId,
-        modelConfigId: _modelConfigId,
-        reasoningEffort: _reasoningEffort,
-        reasoningEnabled: _reasoningEnabled,
-        permissionMode: _permissionMode,
-        messageStyle: _appearancePreferences?.messageStyle.name ?? 'flow',
-        workspace: _workspace,
-      );
-      final authoritativeConversation = result.conversationId.trim();
-      if (authoritativeConversation.isEmpty) {
-        throw StateError('消息提交未返回会话ID');
-      }
-      final wasDraft = (_conversationId?.trim() ?? '').isEmpty;
-      _conversationId = authoritativeConversation;
-      final current = _messages.findByRenderId(
-        requestId,
-        role: MessageRole.user,
-      );
-      if (current != null) {
-        _messages.upsert(
-          _cloneMessage(
-            current,
-            id: result.userMessageId.trim().isEmpty
-                ? current.id
-                : result.userMessageId.trim(),
-            status: MessageStatus.queued,
-          ),
-        );
-      }
-      if (wasDraft) {
-        _conversationUpdateEpoch++;
-      }
-      _connectEventStream(authoritativeConversation);
-      notifyListeners();
-    } catch (error, stackTrace) {
-      debugPrint('Chat command failed [${error.runtimeType}]: $error');
-      for (final line in stackTrace.toString().split('\n').take(16)) {
-        debugPrint(line);
-      }
-      _lastError = error;
-      _messages.removeById(_assistantRenderId(requestId));
-      final current = _messages.findByRenderId(
-        requestId,
-        role: MessageRole.user,
-      );
-      if (current != null) {
-        _messages.upsert(_cloneMessage(current, status: MessageStatus.error));
-      }
-      _sending = false;
-      notifyListeners();
-    }
   }
 
   Future<void> _pollOwnedState() async {
@@ -593,6 +513,7 @@ class ConversationRuntimeController extends ChangeNotifier {
 
     notifyListeners();
     try {
+      await _appearancePreferences?.init();
       await for (final event in _chatService.owned.send(
         requestId: requestId,
         message: message,
@@ -600,6 +521,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         projectId: draftProjectId,
         characterId: _characterId,
         context: previousContext,
+        modelConfigId: _modelConfigId,
+        reasoningEffort: _reasoningEffort,
+        reasoningEnabled: _reasoningEnabled,
+        permissionMode: _permissionMode,
+        messageStyle: _appearancePreferences?.messageStyle.name ?? 'flow',
         attachments: attachments,
         quote: quotedMessage == null
             ? null
@@ -616,6 +542,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           final scope = event['executionScope'] as Map;
           acceptedScope = Map<String, dynamic>.from(scope);
           _realtimeScope = Map.unmodifiable(acceptedScope);
+          _connectEventStream(_conversationId!);
           _characterId = scope['roleId'].toString();
           _conversationCoreId = scope['coreId'].toString();
           _messages.remove(pending);
@@ -632,7 +559,13 @@ class ConversationRuntimeController extends ChangeNotifier {
           );
           if (wasDraft) _conversationUpdateEpoch++;
         } else if (type == 'task') {
-          if (accepted) WorkbenchMobileEvents.taskChanged(event, coreId: _conversationCoreId, characterId: _characterId ?? '', conversationId: _conversationId ?? '');
+          if (accepted)
+            WorkbenchMobileEvents.taskChanged(
+              event,
+              coreId: _conversationCoreId,
+              characterId: _characterId ?? '',
+              conversationId: _conversationId ?? '',
+            );
         } else if (type == 'transcribed') {
           final current = _messages.findById(
             pending.id,
@@ -775,7 +708,6 @@ class ConversationRuntimeController extends ChangeNotifier {
       if (approvalId.isEmpty) continue;
       _pendingApprovals[approvalId] = Map<String, dynamic>.from(approval);
     }
-    _messageBeforeSequence = snapshot.messageNextBefore;
     _hasMoreMessageHistory = snapshot.hasMoreMessages;
     _oldestTurnSequence = snapshot.turnNextBefore > 0
         ? snapshot.turnNextBefore
@@ -998,6 +930,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       _messages.upsert(
         ChatMessage(
           id: existing?.id ?? renderId,
+          sourceOwnerId: existing?.sourceOwnerId ?? '',
+          sourceConversationId: existing?.sourceConversationId ?? '',
+          sourceScope: existing?.sourceScope,
+          sourceRevision: existing?.sourceRevision,
           renderId: renderId,
           characterId: characterId,
           role: MessageRole.assistant,
@@ -1100,11 +1036,9 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
     var changed = false;
     try {
-      if (_chatService.owned.enabled) {
-        if (!_chatService.owned.hasMore(conv, characterId: _characterId)) {
-          _hasMoreMessageHistory = false;
-          return false;
-        }
+      if (!await _chatService.owned.refresh())
+        throw StateError('设备对话服务尚未就绪，请恢复连接后加载历史记录');
+      if (_chatService.owned.hasMore(conv, characterId: _characterId)) {
         final result = await _chatService.owned.query(
           conv,
           characterId: _characterId,
@@ -1114,42 +1048,23 @@ class ConversationRuntimeController extends ChangeNotifier {
         for (final dto in _chatService.owned.messages(result)) {
           changed = _messages.upsert(_messageFromDto(dto)) || changed;
         }
-        _hasMoreMessageHistory = _chatService.owned.hasMore(
-          conv,
-          characterId: _characterId,
-        );
-        _hasMoreTurnHistory = false;
-        if (changed) notifyListeners();
-        return changed;
       }
-      if (_hasMoreMessageHistory && _messageBeforeSequence > 0) {
-        final page = await _chatService.getMessageHistory(
-          conv,
-          beforeSequence: _messageBeforeSequence,
-          limit: 50,
-        );
-        if (_disposed || _conversationId != conv) return false;
-        _messageBeforeSequence = page.nextBefore;
-        _hasMoreMessageHistory = page.hasMore;
-        for (final dto in page.items) {
-          changed = _messages.upsert(_messageFromDto(dto)) || changed;
-        }
-      }
-      if (_hasMoreTurnHistory && _oldestTurnSequence > 0) {
-        final turnPage = await _chatService.getAssistantTurnPage(
+      _hasMoreMessageHistory = _chatService.owned.hasMore(
+        conv,
+        characterId: _characterId,
+      );
+      if (_hasMoreTurnHistory) {
+        final page = await _chatService.getAssistantTurnPage(
           conv,
           before: _oldestTurnSequence,
-          limit: 50,
         );
         if (_disposed || _conversationId != conv) return false;
-        _agentReducer.mergeTurns(turnPage.items);
-        if (turnPage.items.isNotEmpty) {
-          _oldestTurnSequence = turnPage.items.first.sequence;
-          changed = true;
-        }
-        _hasMoreTurnHistory = turnPage.hasMore;
+        _agentReducer.mergeTurns(page.items);
+        _oldestTurnSequence = page.nextBefore;
+        _hasMoreTurnHistory = page.hasMore;
+        changed = changed || page.items.isNotEmpty;
+        _projectTurns();
       }
-      _projectTurns();
       if (changed) notifyListeners();
       return changed;
     } finally {
@@ -1394,22 +1309,12 @@ class ConversationRuntimeController extends ChangeNotifier {
         await _chatService
             .markConversationRead(id, characterId: _characterId)
             .catchError((Object _) {});
+        await _refreshSnapshot(id);
+        _connectEventStream(id);
         notifyListeners();
         return;
       }
-      final snapshot = await _chatService.conversationSnapshot(id);
-      if (_disposed || _conversationId != id) return;
-      _applySnapshot(snapshot);
-      await _chatService
-          .markConversationRead(
-            id,
-            lastTerminalTurnSequence:
-                snapshot.conversation?.lastTerminalTurnSequence ?? 0,
-            characterId: _characterId,
-          )
-          .catchError((Object _) {});
-      _conversationUpdateEpoch++;
-      _connectEventStream(id);
+      throw StateError('设备对话服务尚未就绪，请恢复连接后加载对话');
     } catch (error) {
       _lastError = error;
       notifyListeners();
@@ -1437,12 +1342,8 @@ class ConversationRuntimeController extends ChangeNotifier {
           'title': '实时通话',
         });
       } else {
-        _realtimeScope = null;
-        conversation = await _chatService.createRealtimeConversation(
-          projectId: projectId,
-        );
+        throw StateError('设备对话服务尚未就绪，无法发起通话');
       }
-      if (conversation == null) return false;
       _disconnectRuntime();
       _conversationId = conversation.id;
       _characterId = characterId;
@@ -1519,7 +1420,6 @@ class ConversationRuntimeController extends ChangeNotifier {
   }
 
   void _resetHistory() {
-    _messageBeforeSequence = 0;
     _hasMoreMessageHistory = false;
     _hasMoreTurnHistory = false;
     _oldestTurnSequence = 0;
@@ -1753,21 +1653,6 @@ class ConversationRuntimeController extends ChangeNotifier {
   String _assistantRenderIdForTurn(AssistantTurnDto turn) {
     final renderId = _assistantRenderId(turn.requestId);
     return renderId.isEmpty ? 'turn:${turn.id}' : renderId;
-  }
-
-  ChatMessage? _assistantPlaceholder(String requestId) {
-    final renderId = _assistantRenderId(requestId);
-    if (renderId.isEmpty) return null;
-    return ChatMessage(
-      id: renderId,
-      renderId: renderId,
-      characterId: _characterId?.trim() ?? '',
-      role: MessageRole.assistant,
-      type: MessageType.text,
-      content: '',
-      time: DateTime.now(),
-      status: MessageStatus.queued,
-    );
   }
 
   bool _isLiveAssistantMessage(ChatMessage message) {

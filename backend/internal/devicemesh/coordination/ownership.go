@@ -47,13 +47,14 @@ type Resource struct {
 }
 
 type Mutation struct {
-	Kind             string          `json:"kind"`
-	ID               string          `json:"id"`
-	RoleID           string          `json:"roleId"`
-	SourceID         string          `json:"sourceId,omitempty"`
-	ExpectedRevision int64           `json:"expectedRevision"`
-	Deleted          bool            `json:"deleted"`
-	Body             json.RawMessage `json:"body"`
+	KeepConversationMemories bool            `json:"keepConversationMemories,omitempty"`
+	Kind                     string          `json:"kind"`
+	ID                       string          `json:"id"`
+	RoleID                   string          `json:"roleId"`
+	SourceID                 string          `json:"sourceId,omitempty"`
+	ExpectedRevision         int64           `json:"expectedRevision"`
+	Deleted                  bool            `json:"deleted"`
+	Body                     json.RawMessage `json:"body"`
 }
 
 type Commit struct {
@@ -189,7 +190,11 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	type changedMessage struct{ conversation, request string }
 	changedMessages := []changedMessage{}
 	deletedConversations := []string{}
+	keepConversationMemories := map[string]bool{}
 	for _, mutation := range commit.Mutations {
+		if mutation.KeepConversationMemories && (mutation.Kind != "conversation" || !mutation.Deleted) {
+			return Acknowledgement{}, ErrWrongOwner
+		}
 		expectedRole := StorageRole(scope, mutation.Kind)
 		if commit.MemoryTransfer != nil {
 			expectedRole = commit.MemoryTransfer.ToRoleID
@@ -219,6 +224,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		}
 		if mutation.Kind == "conversation" && mutation.Deleted {
 			deletedConversations = append(deletedConversations, mutation.ID)
+			keepConversationMemories[mutation.ID] = mutation.KeepConversationMemories
 		}
 		if mutation.Kind == "conversation" && !mutation.Deleted && revision > 0 {
 			var previousBody []byte
@@ -297,6 +303,15 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		ack.Versions[key] = revision + 1
 	}
 	for _, conversation := range deletedConversations {
+		if keepConversationMemories[conversation] {
+			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind IN ('message','summary','working','checkpoint','tool-result') AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
+				return Acknowledgement{}, err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind='checkpoint' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.mutations[0].body.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
+				return Acknowledgement{}, err
+			}
+			continue
+		}
 		rows, err := tx.QueryContext(ctx, `SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id=? AND (role_id=? OR json_extract(CAST(body AS TEXT),'$.executionScope.roleId')=?) AND kind='memory' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, scope.RoleID, conversation)
 		if err != nil {
 			return Acknowledgement{}, err
@@ -473,6 +488,12 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 		return nil, "", ErrWrongOwner
 	}
 	switch kind {
+	case "tool-result":
+		if !query.Management || !query.RuntimeTurns || query.ConversationID == "" {
+			return []Resource{}, "", nil
+		}
+		statement += ` AND (json_extract(CAST(body AS TEXT),'$.conversationId')=? OR json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (SELECT substr(resource_id,6) FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='checkpoint' AND deleted=0 AND substr(resource_id,1,5)='turn/' AND json_extract(CAST(body AS TEXT),'$.conversationId')=?))`
+		arguments = append(arguments, query.ConversationID, s.ownerID, role, query.ConversationID)
 	case "message", "summary", "working":
 		if query.ConversationID == "" {
 			return []Resource{}, "", nil
@@ -492,7 +513,10 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			arguments = append(arguments, query.ConversationID)
 		}
 	case "checkpoint":
-		if query.Management && query.ResourceKind == "checkpoint" {
+		if query.Management && query.RuntimeTurns && query.ConversationID != "" {
+			statement += ` AND substr(resource_id,1,5)='turn/' AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`
+			arguments = append(arguments, query.ConversationID)
+		} else if query.Management && query.ResourceKind == "checkpoint" {
 			statement += ` AND substr(resource_id,1,17)='memory-candidate/'`
 		} else if query.RequestID == "" {
 			return []Resource{}, "", nil

@@ -9,18 +9,24 @@ class PendingNotificationReply {
     required this.conversationId,
     required this.message,
     required this.createdAtMillis,
+    this.characterId = '',
+    this.coreId = '',
   });
 
   final String id;
   final String conversationId;
   final String message;
   final int createdAtMillis;
+  final String characterId;
+  final String coreId;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'id': id,
     'conversationId': conversationId,
     'message': message,
     'createdAtMillis': createdAtMillis,
+    'characterId': characterId,
+    'coreId': coreId,
   };
 
   static PendingNotificationReply? fromJson(Map<String, dynamic> json) {
@@ -38,6 +44,8 @@ class PendingNotificationReply {
       conversationId: conversationId,
       message: message,
       createdAtMillis: createdAtMillis,
+      characterId: (json['characterId'] ?? '').toString(),
+      coreId: (json['coreId'] ?? '').toString(),
     );
   }
 }

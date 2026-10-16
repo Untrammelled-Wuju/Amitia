@@ -27,6 +27,7 @@ export const settingsGroups = [
     { label: "界面提供者", path: "/settings/ui-providers" },
     { label: "维护诊断", path: "/settings/maintenance" },
     { label: "运行日志", path: "/settings/system-logs" },
+    { label: "问题反馈", path: "/settings/feedback" },
     { label: "Prompt Trace", path: "/settings/prompt-trace" },
     { label: "高级系统", path: "/settings/advanced" },
   ] },

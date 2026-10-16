@@ -185,6 +185,11 @@ List<SettingsCategory> buildSettingsCategories({
           route: AppRoutes.settingsMaintenance,
         ),
         SettingItem(
+          title: '问题反馈',
+          icon: Icons.feedback_outlined,
+          route: AppRoutes.settingsUserFeedback,
+        ),
+        SettingItem(
           title: '文件浏览',
           icon: Icons.folder_outlined,
           route: AppRoutes.toolboxFileBrowser,

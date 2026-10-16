@@ -17,7 +17,6 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/extension"
-	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/personality"
 	promptir "github.com/u-ai/backend/internal/prompt"
@@ -572,23 +571,6 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}, nil
 }
 
-func requestedReasoningEnabled(supported bool, requested *bool) bool {
-	if !supported {
-		return false
-	}
-	if requested == nil {
-		return true
-	}
-	return *requested
-}
-
-func resolveExpressionChannel(channel string, voiceMessage bool) expression.ChannelKind {
-	if voiceMessage {
-		return expression.ChannelVoice
-	}
-	return expression.ChannelWeb
-}
-
 func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) {
 	if result.HasExistingUser {
 		return
@@ -605,77 +587,6 @@ func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) 
 	s.startPostProcessing(ctx, result.Trace, result.SpaceID, result.ConversationID, result.ThreadID, result.ExecutionID, result.CharacterID, result.Source, result.RequestID, result.UserMessageContent, result.PipelineMessages, result.Reply, result.RecallEvidence)
 }
 
-func applyExpressionLengthLimit(reply string, rt *interaction.RuntimeAssembly) string {
-
-	if rt == nil || rt.ExpressionPlan == nil {
-		return reply
-	}
-	ep := rt.ExpressionPlan
-	switch ep.Length {
-	case "short":
-		return truncateToRuneLimit(reply, 120)
-	case "medium":
-		return truncateToRuneLimit(reply, 350)
-	case "long":
-		return truncateToRuneLimit(reply, 800)
-	default:
-		return reply
-	}
-}
-
-func proactiveScene(source string) string {
-	if source == "proactive" {
-		return promptir.ProactiveSceneSection()
-	}
-	return ""
-}
-
-func mergeContext(a, b string) string {
-	if a == "" {
-		return b
-	}
-	if b == "" {
-		return a
-	}
-	return a + "\n\n" + b
-}
-
-func renderPluginContributions(contributions []ContextContribution) (string, []string) {
-	parts := make([]string, 0, len(contributions))
-	sources := make([]string, 0, len(contributions))
-	for _, contribution := range contributions {
-		parts = append(parts, "来源: "+contribution.Source+"\n"+contribution.Content)
-		sources = append(sources, contribution.Source)
-	}
-	return strings.Join(parts, "\n\n"), sources
-}
-
-func truncateToRuneLimit(s string, limit int) string {
-	runes := []rune(s)
-	if len(runes) <= limit {
-		return s
-	}
-	return string(runes[:limit])
-}
-
-func buildAdultIntimacyRaw(runtime *interaction.RuntimeAssembly, personalityPresetID, userMessage string) string {
-	label := ""
-	if input := buildEmotionFusionInput(runtime); input != nil {
-		label = input.PrimaryLabel
-	}
-
-	gate := promptir.IntimacyGate(userMessage, label)
-	switch gate {
-	case "hard_stop":
-		return ""
-	case "rejection":
-		return promptir.BuildIntimacyDowngradeSection()
-	case "blocked_emotion":
-		return ""
-	}
-
-	return promptir.BuildAdultIntimacyDefaultSection(personalityPresetID)
-}
 func assistantMaxSequence(msgs []Message) int64 {
 	if len(msgs) == 0 {
 		return 0
@@ -699,16 +610,4 @@ func extractAssistantReplies(history []map[string]string) []string {
 		}
 	}
 	return replies
-}
-
-func buildProactiveEmotionFromPsyche(runtime *interaction.RuntimeAssembly) string {
-	if !runtimegate.IsEnabled(runtimegate.EmotionExtensionID) {
-		return ""
-	}
-	if runtime == nil || runtime.Context.Psyche.Status != interaction.LoadStatusReady {
-		return ""
-	}
-	p := runtime.Context.Psyche.Value
-	return fmt.Sprintf("情绪：{\"valence\":%.2f,\"arousal\":%.2f,\"dominance\":%.2f}\n心情：{\"moodValence\":%.2f,\"moodArousal\":%.2f}\n压力：%.0f\n精力：%.0f",
-		p.Valence, p.Arousal, p.Dominance, p.MoodValence, p.MoodArousal, p.Stress*100, (1-p.Fatigue)*100)
 }

@@ -117,6 +117,41 @@ var adminMigrations = []mysqlMigration{
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 		},
 	},
+	{
+		Version: "202610160001",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS user_feedbacks (
+				id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+				ticket_id VARCHAR(64) NOT NULL,
+				category VARCHAR(32) NOT NULL DEFAULT '',
+				title VARCHAR(200) NOT NULL DEFAULT '',
+				platform VARCHAR(64) NOT NULL DEFAULT '',
+				client_type VARCHAR(32) NOT NULL DEFAULT '',
+				app_version VARCHAR(64) NOT NULL DEFAULT '',
+				core_version VARCHAR(64) NOT NULL DEFAULT '',
+				runtime_mode VARCHAR(32) NOT NULL DEFAULT '',
+				os_info VARCHAR(255) NOT NULL DEFAULT '',
+				contact VARCHAR(200) NOT NULL DEFAULT '',
+				device_hash VARCHAR(128) NOT NULL DEFAULT '',
+				log_line_count INT NOT NULL DEFAULT 0,
+				error_line_count INT NOT NULL DEFAULT 0,
+				redacted_count INT NOT NULL DEFAULT 0,
+				has_screenshot TINYINT(1) NOT NULL DEFAULT 0,
+				screenshot_name VARCHAR(255) NOT NULL DEFAULT '',
+				screenshot_path VARCHAR(512) NOT NULL DEFAULT '',
+				screenshot_size BIGINT NOT NULL DEFAULT 0,
+				client_created_at VARCHAR(64) NOT NULL DEFAULT '',
+				payload LONGTEXT NOT NULL,
+				received_at DATETIME(6) NOT NULL,
+				PRIMARY KEY (id),
+				UNIQUE KEY uk_user_feedbacks_ticket_id (ticket_id),
+				KEY idx_user_feedbacks_category (category),
+				KEY idx_user_feedbacks_platform (platform),
+				KEY idx_user_feedbacks_device_hash (device_hash),
+				KEY idx_user_feedbacks_received_at (received_at)
+			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+		},
+	},
 }
 
 func OpenDatabase(config MySQLConfig) (*gorm.DB, error) {

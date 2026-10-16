@@ -139,6 +139,7 @@ const pageTitleOverrides: Record<string, string> = {
   "/realtime-voice": "实时语音",
   "/long-running": "长期运行维护",
   "/settings/system-logs": "系统运行日志",
+  "/settings/feedback": "问题反馈",
   "/settings/prompt-trace": "Prompt Trace",
   "/logs": "归档对话",
 };

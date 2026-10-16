@@ -137,14 +137,7 @@ export const useChatStore = defineStore("chat", () => {
       sidebar.value={pinned:ungrouped.filter((row)=>Boolean(row.pinnedAt)),recent:ungrouped.filter((row)=>!row.pinnedAt),projects:visibleProjects,removedProjects};
       return;
     }
-    const response = await apiClient.get<SidebarData>("/api/web-chat/sidebar");
-    const data = response.data || { pinned: [], recent: [], projects: [], removedProjects: [] };
-    sidebar.value = {
-      pinned: (data.pinned || []).filter((item) => item.channel === "web"),
-      recent: (data.recent || []).filter((item) => item.channel === "web"),
-      projects: (data.projects || []).map(normalizeProjectRow),
-      removedProjects: data.removedProjects || [],
-    };
+    throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   }
 
 
@@ -165,9 +158,7 @@ export const useChatStore = defineStore("chat", () => {
       await fetchSidebar();
       return projectRow(created);
     }
-    const response = await apiClient.post<ProjectItem>("/api/web-chat/projects", input);
-    await fetchSidebar();
-    return response.data;
+    throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   }
 
   async function updateProject(projectId: string, input: Partial<Pick<ProjectItem, "name" | "workspaces" | "primaryWorkspaceId">> & { pinned?: boolean; hidden?: boolean }, intent?: ProjectItem) {
@@ -179,8 +170,7 @@ export const useChatStore = defineStore("chat", () => {
       await fetchSidebar();
       return;
     }
-    await apiClient.patch(`/api/web-chat/projects/${encodeURIComponent(projectId)}`, input);
-    await fetchSidebar();
+    throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   }
 
   async function hideProject(projectId: string, intent?: ProjectItem) {
@@ -197,20 +187,17 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function renameConversation(conversationId: string, title: string) {
-    if (owned.enabled.value) await owned.edit("conversation",conversationId,{title});
-    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { title });
+    await owned.edit("conversation",conversationId,{title});
     await fetchSidebar();
   }
 
   async function setConversationPinned(conversationId: string, pinned: boolean) {
-    if (owned.enabled.value) await owned.edit("conversation",conversationId,{pinned});
-    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { pinned });
+    await owned.edit("conversation",conversationId,{pinned});
     await fetchSidebar();
   }
 
   async function archiveConversation(conversationId: string) {
-    if (owned.enabled.value) await owned.edit("conversation",conversationId,{archived:true});
-    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { archived: true });
+    await owned.edit("conversation",conversationId,{archived:true});
     if (currentConversationId.value === conversationId) {
       currentConversationId.value = null;
       currentProjectId.value = "";
@@ -220,15 +207,13 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function restoreConversation(conversationId: string) {
-    if (owned.enabled.value) await owned.edit("conversation",conversationId,{archived:false});
-    else await apiClient.put(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`, { archived: false });
+    await owned.edit("conversation",conversationId,{archived:false});
     await fetchSidebar();
     archivedRevision.value += 1;
   }
 
   async function deleteConversation(conversationId: string) {
-    if (owned.enabled.value) await owned.edit("conversation",conversationId,{}, {deleted:true});
-    else await apiClient.delete(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}`);
+    await owned.edit("conversation",conversationId,{}, {deleted:true});
     if (currentConversationId.value === conversationId) {
       currentConversationId.value = null;
       currentProjectId.value = "";
@@ -252,7 +237,7 @@ export const useChatStore = defineStore("chat", () => {
       }
       await owned.edit("conversation",conversationId,{lastReadTurnSequence:terminalSequence});
     } else {
-      await apiClient.post(`/api/web-chat/conversations/${encodeURIComponent(conversationId)}/read`);
+      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     }
     if (conversation) {
       conversation.hasUnread = false;

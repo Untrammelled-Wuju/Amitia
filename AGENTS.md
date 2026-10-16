@@ -11,6 +11,12 @@ Git 安装路径：C:\Code\Git\Git\bin\git.exe
 禁止修改编译后产物，任何代码修改只允许在源码中进行修改。
 禁止修改编译后产物，任何代码修改只允许在源码中进行修改。
 禁止修改编译后产物，任何代码修改只允许在源码中进行修改。
+
+禁止在有xx系统的情况下，重复造第二套相同的系统，优先对原系统进行修改，如果修改难度超过重构难度那就进行局部重构，遇到已有两套系统的情况优先进行询问，或者遇到无法抉择的情况也优先进行询问。
+
+
+开发一个功能时，如果了解到的信息不够支持进行开发，优先询问用户，当拿到充足的信息后，有100%把握一次性完成开发后再进行开发。
+
 用户提出的任何修改需求需要先结合项目进行详细的分析后再进行修改。
 任何的修改不要使用3000端口(CCX)，项目中使用的端口应避开3000。
 禁止拉取git。
@@ -77,6 +83,17 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 构建前的测试范围必须基于本次源码差异确定，只运行修改文件所属模块的定向测试；禁止默认运行 `go test ./...`、前端全量测试或其他无关模块测试。
 
+构建门禁（release:gate）执行规则：
+
+- 后端门禁只做编译级校验加改动包定向测试：`go mod verify`、`go vet ./...`、`go build ./cmd/server`，以及由源码差异推导出的改动包 `go test`；构建流程中禁止默认执行 `go test ./...`。
+- 差异推导默认以 HEAD 为基准并包含工作区改动；工作区干净时用 `AMITIA_RELEASE_BASE_REF` 指定基线提交，推导为空则不执行后端测试。
+- 前端门禁只执行 `typecheck` 与 `build`，默认不执行前端测试；需要时用 `AMITIA_RELEASE_FRONT_TEST_FILES` 显式指定要跑的测试文件，禁止默认执行前端全量测试。
+- 编译级校验通过即可执行 `pnpm dist:win` 产出发布产物；不得为了"保险"执行未改动模块的测试。
+- 门禁环境变量：`AMITIA_RELEASE_BASE_REF`（差异基准提交）、`AMITIA_RELEASE_GO_TEST_PACKAGES`（显式指定后端测试包）、`AMITIA_RELEASE_FRONT_TEST_FILES`（显式指定前端测试文件）、`AMITIA_RELEASE_FULL_GO_TESTS=1`、`AMITIA_RELEASE_FULL_FRONT_TESTS=1`、`AMITIA_RELEASE_RACE_CHECKS=1`、`AMITIA_RELEASE_SKIP_FRONT_TESTS=1`、`AMITIA_RELEASE_PLAN_ONLY=1`（只打印本次门禁范围，不执行任何命令）。
+- GitHub Actions 的 Backend Full Test Gate 仍按工作流执行全量后端测试，与本地发布门禁相互独立。
+- 桌面端构建前先跑一次范围预检确认门禁内容（不执行任何命令）：在 desktop 目录用项目内 node 执行 `scripts/verify-release-prerequisites.mjs`，并设置 `AMITIA_RELEASE_PLAN_ONLY=1`；随后按预检结果执行 `pnpm dist:win`。
+- 已知与本轮改动无关的陈旧用例：`internal/search` 的超时断言停留在 `timeoutpolicy` 之前、`internal/system` 仍在断言已删除的 legacy web-chat 路由、`internal/psyche_testdata` 未注入统一入口执行器。它们不在定向门禁范围内，重建对应模块时一并修复。
+
 必须根据差异生成面向用户的更新日志。桌面端更新 desktop/release-notes.md；Android Release 更新对应发布说明。生成内容作为本次发布版本的更新说明。
 
 构建、安装和验证全部通过后，必须更新本文件中的发布基线记录，包含平台、版本、源码基线提交编号、提交日志和记录时间。该记录变更需单独提交，且不得作为下一次发布差异对比的目标提交。
@@ -126,6 +143,78 @@ SSH发布流程：
 - 服务器Nginx配置中 /amitia/ 路径必须配置正确的MIME类型和charset utf-8
 - 宝塔安全组必须放行FTP 21端口和被动模式端口范围（39000-40000）
 
+管理端（Amitia 更新管理）构建与部署流程：
+
+上线位置：
+
+- 站点根：/www/wwwroot/amitia.untrammelled.top（www:www 755），访问入口 https://amitia.untrammelled.top/
+- 更新通道仍在同目录 amitia/ 子目录，桌面端 latest.yml、Android beta.json 由管理服务写入该目录
+- 后端安装目录：/www/server/amitia-admin（admin-server 与 amitia-admin.env，env 必须 chmod 600）
+- 服务：systemd 单元 amitia-admin.service，User=www，Restart=always，enabled
+- 数据库：服务器 MySQL 5.7，库名与用户名均为 amitia_admin，初始化使用 deploy/mysql/amitia-admin-seed.sql
+- 管理服务默认监听 127.0.0.1:18880（AMITIA_ADMIN_ADDR），开发代理 target 在 admin-system/vite.config.ts
+- 管理前端请求走同源 /api/v1/admin，服务器上必须由 nginx 将 /api/ 反代到 127.0.0.1:18880，否则页面能开但无法登录
+
+本地构建（全部使用项目内 Node 与固定 Go 路径）：
+
+1. 前端：在 admin-system 目录用项目内 node 执行 vite build，产物为 admin-system/dist
+2. 后端：GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o admin-server-linux-amd64 ./cmd/admin-server
+3. 打包内容：dist/、admin-server、deploy/mysql/amitia-admin-seed.sql，并用 PowerShell Get-FileHash 生成 SHA256SUMS
+
+上传与替换：
+
+1. 用 codexdeploy 账号与专用私钥执行 ssh，在 /tmp 下创建 amitia-admin-<yyyyMMdd-HHmmss> 暂存目录（生产目录 codexdeploy 无写权限）
+2. 用 scp -r 把 dist、admin-server、SQL、SHA256SUMS 上传到该暂存目录
+3. 上传后必须在该目录执行 sha256sum -c SHA256SUMS，逐文件确认 OK 后再交付替换命令
+4. 由用户在宝塔 root 终端执行替换：静态文件落到站点根、后端 install 到 /www/server/amitia-admin、写入 env 与 systemd 单元并 enable --now
+5. 站点根目录放静态文件时禁止使用 cp -a <dir>/. ./（会把源目录权限 700 覆盖到站点根，导致 codexdeploy 无法读取且面板操作异常），用 cp -a <dir>/* ./ 或在复制后 chmod 755
+6. 站点根存在宝塔受保护的 .user.ini（chattr +i），chown -R 会报 Operation not permitted，授权时只对本次新增文件与目录执行
+
+nginx 要求：
+
+- server 块内需要 location ^~ /api/ 反代到 127.0.0.1:18880（含 proxy_read_timeout 与 client_max_body_size 4096m，桌面安装包为 GB 级）
+- 需要 location / 配 try_files $uri $uri/ /index.html，否则 /login、/settings 等前端直链返回 404
+- 宝塔「伪静态」文件 /www/server/panel/vhost/rewrite/<域名>.conf 由 vhost 以 server 级 include 引入，其中的 rewrite 会先于 location 匹配执行，必须保持为空
+- 修改 vhost 或伪静态后必须 nginx -t 校验并 nginx -s reload，再从服务器本机复测
+
+发布验收：
+
+- 在服务器本机执行：curl -sk -o /dev/null -w '%{http_code}' -H 'Host: <域名>' https://127.0.0.1<path>
+- 必须覆盖 /、/login、/settings、/assets/ 下的入口 JS、/api/v1/admin/auth/me（未登录应为 401）、/amitia/latest.yml
+- 必须实际提交一次 POST /api/v1/admin/auth/login，确认返回 200「登录成功」且 Set-Cookie 带 HttpOnly、Secure、SameSite=Strict
+- 服务必须 systemctl is-active 与 is-enabled 同时为 active/enabled，并确认监听 127.0.0.1:18880
+
+可复用部署流程（2026-10-16 管理端上线时已完整执行并验证）：
+
+本地构建与打包：
+
+1. 在 admin-system 目录用项目内 Node 执行 vite build，产物为 admin-system/dist
+2. 在 backend 目录执行：GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o admin-server-linux-amd64 ./cmd/admin-server
+3. 在 artifacts/admin-deploy-<yyyyMMdd-HHmmss> 下组装 dist/、admin-server（由 admin-server-linux-amd64 改名）、amitia-admin-seed.sql
+4. 用 PowerShell Get-FileHash -Algorithm SHA256 生成 SHA256SUMS，每行格式为「小写哈希 + 两个空格 + 相对路径」；哈希必须转小写，大写哈希会导致远端 sha256sum -c 校验失败
+
+上传（Paramiko，禁用 agent 与自动查找密钥）：
+
+1. sftp 在 /tmp/admin-deploy-<yyyyMMdd-HHmmss> 建目录并递归上传全部文件，admin-server 上传后 chmod 755
+2. 远端执行 cd <暂存目录> && sha256sum -c SHA256SUMS，逐文件 OK 后才能向用户交付替换命令
+3. Windows 下禁止把含中文的本地路径写入 ascii 编码的临时文件再读取（会被替换成 ? 导致上传空跑），改用环境变量传参
+
+宝塔 root 终端替换命令：
+
+1. cp -a dist/index.html 覆盖站点根 index.html；rm -rf 站点根/assets 后 cp -a dist/assets 落到站点根
+2. chown -R www:www 站点根/index.html 与 assets；chmod 755 站点根与 assets；find assets -type f -exec chmod 644 {} +
+3. systemctl stop amitia-admin；install -m 0755 -o www -g www admin-server /www/server/amitia-admin/admin-server；chown www:www /www/server/amitia-admin；systemctl start amitia-admin
+4. 数据库无需手工操作：新二进制启动时会自动执行 adminMigrations，创建 user_feedbacks 等新表
+5. 禁止重新执行 deploy/mysql/amitia-admin-seed.sql，它会重置管理员密码并删除全部管理会话，仅用于首次初始化
+
+替换后必须验收：
+
+1. ls 站点根/assets | grep <本次新增前端分块名>，确认新页面分块已就位
+2. 服务器本机 curl 必须覆盖 /、/login、/settings、/feedback、/api/v1/admin/auth/me（未登录 401）
+3. 读取 /www/server/amitia-admin/amitia-admin.env 后执行 SHOW TABLES LIKE '<新表名>'，确认增量迁移已生效
+4. curl -F 'payload={...}' https://127.0.0.1/api/v1/feedbacks 必须返回 {"code":200,"msg":"反馈已接收"}；返回 404「接口不存在」说明新二进制没有生效
+5. 公网复测必须加 --noproxy '*'，本机 7890 代理会让请求超时并误判为服务异常
+
 启动项目前必须先杀一遍项目占用（环境除外）
 
 Electron 桌面端启动时会自动通过 CoreManager 拉起后端服务（AmitiaCore.exe），无需手动单独启动后端。
@@ -171,7 +260,6 @@ Android Release 构建方法：
 - APK 构建使用单个 Gradle worker，关闭 Gradle 并行构建；Kotlin 在 Gradle 同一进程中编译。
 - 构建前检查并停止遗留的 Gradle/Kotlin 构建进程，避免重复构建；核验新进程使用的实际内存参数。
 - 禁止为 APK 构建启用自动 JVM 堆转储，避免内存不足时生成大体积转储文件。
-
 1. 禁止使用 scripts/build-apk.ps1 的临时源码复制流程。正式构建必须使用项目根目录中的同一份源码。
 2. 项目位于中文路径时，统一从 R: 盘符映射构建。R: 必须映射到 D:\桌面\跟进项目\U-Ai，先执行 subst.exe 检查；缺少映射时执行 subst.exe R: "D:\桌面\跟进项目\U-Ai"。R: 只是同一源码目录的盘符映射，不是源码副本，禁止将源码复制到其他目录构建。
 3. 当前进程必须配置正式签名环境变量 AMITIA_KEYSTORE_PATH、AMITIA_KEYSTORE_PASSWORD、AMITIA_KEY_ALIAS、AMITIA_KEY_PASSWORD。密钥和密码只能通过环境变量注入，禁止写入 AGENTS.md、源码、配置、日志或构建产物。
@@ -196,12 +284,12 @@ Android Release 构建方法：
    - APK 仅包含 arm64-v8a
    - APK 内 assets/runtime-package/amitia-runtime-1.0.0.zip 的 SHA-256 与构建输入一致
 10. 安装流程：
-   - adb devices -l
-   - adb shell pm list packages 检查 com.amitia.amitia_app.debug；存在时先执行 adb uninstall com.amitia.amitia_app.debug
-   - adb install -r <APK路径>
-   - adb shell dumpsys package com.amitia.amitia_app 复核版本，并再次确认 debug 包不存在
-   - adb shell am start -W -n com.amitia.amitia_app/.MainActivity 启动应用
-   - adb shell ps -A 与 adb shell dumpsys activity activities 复核应用进程和前台页面
+    - adb devices -l
+    - adb shell pm list packages 检查 com.amitia.amitia_app.debug；存在时先执行 adb uninstall com.amitia.amitia_app.debug
+    - adb install -r <APK路径>
+    - adb shell dumpsys package com.amitia.amitia_app 复核版本，并再次确认 debug 包不存在
+    - adb shell am start -W -n com.amitia.amitia_app/.MainActivity 启动应用
+    - adb shell ps -A 与 adb shell dumpsys activity activities 复核应用进程和前台页面
 11. 正式 APK 必须复制到 artifacts/apk/，文件名使用 amitia-<version>-release-arm64-v8a-<yyyyMMdd-HHmmss>.apk，并记录文件大小和 SHA-256。
 
 源码副本规则：

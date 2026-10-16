@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/app"
@@ -55,7 +56,7 @@ func configurationDB(t *testing.T) (*gorm.DB, *coordination.Service) {
 	}
 	kernelDB.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = kernelDB.Close() })
-	for _, statement := range []string{coordination.PolicySchema, coordination.ProviderSchema, coordination.RemoteAuthoritySchema, coordination.CancelledAuthoritySchema, coordination.SourceAuthoritySchema, `CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT NOT NULL,trust_state TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)`} {
+	for _, statement := range []string{coordination.PolicySchema, coordination.ProviderSchema, coordination.RemoteAuthoritySchema, coordination.CancelledAuthoritySchema, coordination.SourceAuthoritySchema, audit.Schema, `CREATE TABLE kernel_devices(device_id TEXT PRIMARY KEY,space_id TEXT NOT NULL,trust_state TEXT NOT NULL,created_at TEXT NOT NULL,last_seen_at TEXT NOT NULL)`} {
 		if _, err := kernelDB.Exec(statement); err != nil {
 			t.Fatal(err)
 		}

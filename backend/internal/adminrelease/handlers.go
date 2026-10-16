@@ -93,8 +93,8 @@ func (s *Server) handleChangePassword(c *gin.Context) {
 		util.ErrorResponse(c, 400, "密码参数无效", nil)
 		return
 	}
-	if len(body.NewPassword) < 12 {
-		util.ErrorResponse(c, 400, "新密码至少需要 12 个字符", nil)
+	if len(body.NewPassword) < 6 {
+		util.ErrorResponse(c, 400, "新密码至少需要 6 个字符", nil)
 		return
 	}
 	if body.NewPassword == body.CurrentPassword {

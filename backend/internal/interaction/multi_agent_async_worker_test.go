@@ -41,6 +41,7 @@ func newAsyncWorkerFixture(t *testing.T) (*asyncUnifiedEntryWorkerRunner, *InMem
 	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
+	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
 	runner, ok := NewAsyncUnifiedEntryWorkerRunner(entry, tracker).(*asyncUnifiedEntryWorkerRunner)
 	if !ok {
 		t.Fatal("async runner has unexpected type")

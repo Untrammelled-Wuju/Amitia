@@ -23,6 +23,7 @@ import 'extension_task_service.dart';
 import 'extension_view_invalidator.dart';
 import 'system_service.dart';
 import 'search_api_service.dart';
+import 'user_feedback_service.dart';
 import 'channel_service.dart';
 import 'workspace_service.dart';
 import 'device_mesh_service.dart';
@@ -71,7 +72,7 @@ final chatServiceProvider = Provider<ChatService>(
       final config = ref.read(mobileDeploymentConfigProvider);
       return config.mode == MobileDeploymentMode.cloud
           ? config.remoteCoreUri ?? ''
-          : '';
+          : 'device-local';
     },
     providerTransition: () async {
       final localApi = ref.read(rawDeviceLocalBackendServiceApiProvider);
@@ -217,7 +218,10 @@ final sourceTaskApprovalServiceProvider = Provider<ExtensionTaskService>((ref) {
 });
 
 final systemServiceProvider = Provider<SystemService>(
-  (ref) => SystemService(_getDynamicServiceApi(ref)),
+  (ref) => SystemService(
+    _getDynamicServiceApi(ref),
+    owned: ref.read(chatServiceProvider).owned,
+  ),
 );
 
 final searchApiServiceProvider = Provider<SearchApiService>(
@@ -307,6 +311,10 @@ final localDeviceMeshStatusProvider =
 
 final privacyServiceProvider = Provider<PrivacyService>(
   (ref) => PrivacyService(_getDynamicServiceApi(ref)),
+);
+
+final userFeedbackServiceProvider = Provider<UserFeedbackService>(
+  (ref) => UserFeedbackService(_getDynamicServiceApi(ref)),
 );
 
 final moodServiceProvider = Provider<MoodService>(

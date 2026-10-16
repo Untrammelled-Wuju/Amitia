@@ -16,6 +16,16 @@ const STATIC_SOURCES = [
     to: "dist/renderer/pet.html",
     recursive: false,
   },
+  {
+    from: "src/renderer/splash.html",
+    to: "dist/renderer/splash.html",
+    recursive: false,
+  },
+  {
+    from: "src/renderer/assets",
+    to: "dist/renderer/assets",
+    recursive: true,
+  },
 ];
 
 function copyStaticAssets() {

@@ -15,18 +15,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     <el-dialog v-if="boundCallScope" v-model="callActive" data-amitia-ui="component.dialog" fullscreen :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" destroy-on-close>
       <RealtimeCallDialog :mode="callMode" voice-type="" resource-id="" :conversation-id="boundCallConversation" :character-id="boundCallScope.roleId" :expected-execution-scope="boundCallScope" :historical-role-id="boundCallHistoricalRole" :char-name="charName" :char-avatar="charAvatar" @close="handleEndCall" @conversation-saved="handleOwnedCallSaved" />
     </el-dialog>
-    <section class="chat-surface" data-amitia-ui="chat.surface">
-    <el-alert v-if="owned.notice.value" :title="owned.notice.value" type="warning" show-icon :closable="false" />
+    <section ref="chatSurfaceRef" class="chat-surface" :class="{ 'chat-surface--sidebar': conversationSidebarVisible }" data-amitia-ui="chat.surface">
     <AutomationStatusIndicator :status="automationStatus" />
-<ChatBanners
-      :model-missing="modelMissing"
-      :is-offline="isOffline"
-      :import-context="importContext"
-      :show-import-detail="showImportDetail"
-      @close-import="importContext = null"
-    />
 
-    <div class="chat-header-region">
+    <div ref="chatHeaderRef" class="chat-header-region">
     <UIProviderHost
       capability="conversation.header"
       :fallback="ChatHeaderBar"
@@ -50,7 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-call="handleEndCall"
       @start-call="handleStartCall"
       @view-summary="handleViewSummary"
-    ><template #extension-actions><button type="button" class="sidebar-toggle-btn" aria-label="切换工作区" title="工作区" @click="workbench.toggleVisible()">工作区</button><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
+    ><template #extension-actions><button type="button" class="sidebar-toggle-btn" aria-label="切换工作区" title="工作区" @click="workbench.toggleVisible()"><el-icon><GridIcon /></el-icon></button><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
     </div>
       <div class="chat-body-wrapper">
       <ExtensionSlot
@@ -102,6 +94,11 @@ SPDX-License-Identifier: AGPL-3.0-only
         :pull-loading="pullLoading"
         :pull-text="pullText"
         :characters="characters"
+        :notice="owned.notice.value"
+        :model-missing="modelMissing"
+        :is-offline="isOffline"
+        :import-context="importContext"
+        :show-import-detail="showImportDetail"
         :extension-context="chatExtensionContext"
         :provider-actions="conversationHostActions"
         @scroll="onScroll"
@@ -112,6 +109,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         @retry="handleRetry"
         @reply="handleSetReply"
         @edit="handleEditMessage"
+        @close-import="importContext = null"
+        @toggle-import-detail="showImportDetail = !showImportDetail"
         @scroll-to-bottom="scrollToBottom(true)"
       />
       <aside v-if="hasConversationSidebar && !isSmallViewport && !workbench.visible" class="chat-sidebar-region provider-sidebar-region">
@@ -144,7 +143,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         :has-status-extensions="hasStatusExtensions"
       />
     </div>
-    <div class="composer-region" data-amitia-ui="chat.composer"><UIProviderHost
+    <div class="chat-scroll-fade chat-scroll-fade--top" aria-hidden="true"></div>
+    <div class="chat-scroll-fade chat-scroll-fade--bottom" aria-hidden="true"></div>
+    <div ref="composerRegionRef" class="composer-region" data-amitia-ui="chat.composer"><UIProviderHost
       capability="conversation.composer"
       :fallback="ChatInput"
       :context="chatExtensionContext"
@@ -201,7 +202,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Menu as MenuIcon } from "@element-plus/icons-vue";
+import { Grid as GridIcon, Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useChatStore } from "@/stores/chat";
@@ -211,7 +212,7 @@ import AutomationStatusIndicator from "../../components/AutomationStatusIndicato
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
-import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
+import { ownedConversationSwitchNotice, useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
 import { OwnedChatStateChangedError, pollOwnedChat } from "@/runtime/owned-chat-poll";
 import { useConversationWorkspace } from "../../composables/useConversationWorkspace";
 import {
@@ -219,7 +220,6 @@ import {
   normalizeChatPermissionMode,
   saveChatPermissionMode,
 } from "../../composables/useChatPermissionPreference";
-import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import RealtimeCallDialog from "../../components/RealtimeCallDialog.vue";
 import type { OwnedChatResponse, OwnedExecutionScope } from "../../runtime/device-owned-chat";
@@ -433,6 +433,30 @@ function updateViewport() {
   isSmallViewport.value = window.innerWidth < 1024;
 }
 
+const chatSurfaceRef = ref<HTMLElement>();
+const chatHeaderRef = ref<HTMLElement>();
+const composerRegionRef = ref<HTMLElement>();
+const conversationSidebarVisible = computed(() => hasConversationSidebar.value && !isSmallViewport.value && !workbench.visible);
+let chatLayoutObserver: ResizeObserver | null = null;
+
+function syncChatLayoutVars() {
+  const surface = chatSurfaceRef.value;
+  if (!surface) return;
+  const headerHeight = chatHeaderRef.value?.getBoundingClientRect().height ?? 0;
+  const composerHeight = composerRegionRef.value?.getBoundingClientRect().height ?? 0;
+  surface.style.setProperty("--chat-header-h", `${Math.round(headerHeight)}px`);
+  surface.style.setProperty("--chat-composer-h", `${Math.round(composerHeight)}px`);
+}
+
+function startChatLayoutObserver() {
+  if (typeof ResizeObserver === "undefined") return;
+  chatLayoutObserver = new ResizeObserver(() => syncChatLayoutVars());
+  for (const element of [chatHeaderRef.value, composerRegionRef.value]) {
+    if (element) chatLayoutObserver.observe(element);
+  }
+  syncChatLayoutVars();
+}
+
 const msgAreaRef = ref<InstanceType<typeof MessagesArea>>();
 const inputRef = ref<InstanceType<typeof ChatInput>>();
 
@@ -471,25 +495,7 @@ async function handleNewChat(event?: CustomEvent) {
 async function handleFileSend(file: File) {
   if (!file) return;
   try { if (await owned.refresh()) { if (!characterId.value) { ElMessage.warning("请先选择调用角色"); return; } await handleOwnedFileSend(file); return; } } catch (error: any) { ElMessage.error(error?.message || "文件发送失败"); return; }
-  if (!convId.value || !characterId.value) {
-    ElMessage.warning("请先选择角色和会话");
-    return;
-  }
-  try {
-    const form = new FormData();
-    form.append("kind", "file");
-    form.append("source", "chat_upload");
-    form.append("file", file, file.name);
-    const response = await post<any>("/api/artifacts/v1", form);
-    const artifact = response?.artifact ?? response;
-    const artifactId = String(artifact?.artifactId ?? artifact?.id ?? "").trim();
-    if (!artifactId) throw new Error("上传结果缺少 artifactId");
-    const filename = String(artifact?.filename || file.name || "文件");
-    const resourceUri = `amitia://artifacts/${artifactId}`;
-    await handleSend(`[文件] ${filename}\n${resourceUri}`);
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.message || error?.message || "文件上传失败");
-  }
+  ElMessage.error(owned.notice.value || "设备对话服务尚未就绪，附件未发送");
 }
 
 function findConversationMessage(messageId: string, ownerId?: string) {
@@ -506,7 +512,7 @@ async function deleteConversationMessage(messageId: string, ownerId?: string) {
     if (!message?.executionScope || !message?.ownerId || !message?.sourceRevision) throw new Error("该消息缺少原始数据来源，请重新加载或在原设备管理历史数据");
     await owned.edit("message", id, {}, { deleted: true, characterId: message.executionScope.roleId, expectedExecutionScope: message.executionScope, expectedOwnerId: message.ownerId, expectedRevision: message.sourceRevision });
   }
-  else await del(`/api/chats/messages/${encodeURIComponent(id)}`);
+  else throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   const index = persistedMessages.value.findIndex((item: any) => String(item.id) === id && (ownerId === undefined || item.ownerId === ownerId));
   if (index >= 0) persistedMessages.value.splice(index, 1);
 }
@@ -516,6 +522,7 @@ async function handleEditMessage(msg: any) {
   msg = JSON.parse(JSON.stringify(msg));
   try {
     const bound = await owned.refresh();
+    if (!bound) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     const result = await ElMessageBox.prompt("修改后将更新当前用户消息内容。", "修改消息", {
       inputValue: String(msg.content || ""),
       inputType: "textarea",
@@ -527,9 +534,8 @@ async function handleEditMessage(msg: any) {
     const content = String(result.value || "").trim();
     if (!content || content === String(msg.content || "")) return;
     if (bound && (!msg.executionScope || !msg.ownerId || !msg.sourceRevision)) throw new Error("该消息缺少原始数据来源，请重新加载或在原设备管理历史数据");
-    const updated = bound
-      ? (await owned.edit("message", msg.id, { content }, { characterId: msg.executionScope.roleId, expectedExecutionScope: msg.executionScope, expectedOwnerId: msg.ownerId, expectedRevision: msg.sourceRevision }), { content, sourceRevision: msg.sourceRevision + 1 })
-      : await put<any>(`/api/web-chat/messages/${encodeURIComponent(msg.id)}`, { content });
+    await owned.edit("message", msg.id, { content }, { characterId: msg.executionScope.roleId, expectedExecutionScope: msg.executionScope, expectedOwnerId: msg.ownerId, expectedRevision: msg.sourceRevision });
+    const updated = { content, sourceRevision: msg.sourceRevision + 1, updatedAt: new Date().toISOString() };
     const index = persistedMessages.value.findIndex((item: any) => String(item.id) === String(msg.id) && item.ownerId === msg.ownerId);
     if (index >= 0) {
       persistedMessages.value[index] = {
@@ -576,7 +582,6 @@ function handleSetReply(msg: any) {
 
 async function loadLlmModels() {
   try {
-    if (await owned.refresh()) { llmModels.value = []; return; }
     const models = await get<any[]>("/api/model/available");
     llmModels.value = Array.isArray(models)
       ? models.filter((model: any) => {
@@ -635,7 +640,6 @@ function saveModelSettingsDraft(
 }
 
 async function handlePermissionModeChange(mode: string) {
-  if (await owned.refresh()) { ElMessage.info("调用权限由当前 Core 管理，请通过云端管理页面修改"); return; }
   const next = normalizeChatPermissionMode(mode);
   selectedPermissionMode.value = next;
   saveChatPermissionMode(next);
@@ -648,8 +652,8 @@ async function handlePermissionModeChange(mode: string) {
     return;
   }
   try {
-    await put(
-      `/api/web-chat/conversations/${encodeURIComponent(convId.value)}`,
+    await owned.edit(
+      "conversation", convId.value,
       { permissionMode: next },
     );
   } catch {
@@ -663,7 +667,6 @@ async function handleModelSettingChange(
   reasoningEffort: string,
   reasoningEnabled: boolean,
 ) {
-  if (await owned.refresh()) { ElMessage.info("模型配置由当前 Core 管理，请通过云端管理页面修改"); return; }
   const nextModelId = Number(modelId || 0);
   const nextReasoningEffort = reasoningEffort || "high";
   const nextReasoningEnabled = reasoningEnabled === true;
@@ -681,8 +684,8 @@ async function handleModelSettingChange(
     return;
   }
   try {
-    await put(
-      `/api/web-chat/conversations/${encodeURIComponent(convId.value)}`,
+    await owned.edit(
+      "conversation", convId.value,
       {
         modelConfigId: nextModelId,
         reasoningEffort: nextReasoningEffort,
@@ -700,7 +703,6 @@ function handleModelSettingPreviewChange(
   reasoningEffort: string,
   reasoningEnabled: boolean,
 ) {
-  if (owned.enabled.value) return;
   selectedModelId.value = Number(modelId || 0);
   selectedReasoningEffort.value = reasoningEffort || "high";
   selectedReasoningEnabled.value = reasoningEnabled === true;
@@ -771,7 +773,7 @@ function resetConversationMessages() {
 }
 
 function disconnectAndResetConversation() {
-  if (owned.enabled.value && sending.value) owned.stopLocal("会话已切换，原回复已中断");
+  if (owned.enabled.value && sending.value) owned.stopLocal(ownedConversationSwitchNotice, true);
   disconnectSSE();
   resetConversationMessages();
 }
@@ -813,11 +815,9 @@ const {
       path: "/chat",
       query: { conversationId },
     });
-    if (owned.enabled.value) { await fetchConversations(); await chatStore.fetchSidebar(); return; }
     void connectSSE(false);
-    void chatStore.fetchSidebar().catch(() => {
-      ElMessage.warning("消息已发送，侧栏刷新失败，请稍后重试");
-    });
+    await fetchConversations();
+    await chatStore.fetchSidebar();
   },
   selectedModelId,
   selectedReasoningEffort,
@@ -951,7 +951,7 @@ watch(
       return;
     }
     if (nextId === convId.value && !roleChanged) return;
-    if (owned.enabled.value && sending.value) owned.stopLocal("会话已切换，原回复已中断");
+    if (owned.enabled.value && sending.value) owned.stopLocal(ownedConversationSwitchNotice, true);
     convId.value = nextId;
     convTitle.value = "新对话";
     await loadCharacterConversation();
@@ -1009,6 +1009,7 @@ watch(isOffline, (offline) => {
 });
 
 onMounted(async () => {
+  startChatLayoutObserver();
   window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
   stopCallWindowListener =
     window.amitiaDesktop?.onRealtimeCallWindowClosed?.(() => {
@@ -1096,102 +1097,13 @@ onMounted(async () => {
     finally { startOwnedPolling(); }
     return;
   }
-  history.scrollRestoration = "manual";
-
-  window.addEventListener("online", () => {
-    isOffline.value = false;
-    ElMessage.success("网络已恢复");
-  });
-  window.addEventListener("offline", () => {
-    isOffline.value = true;
-    ElMessage.warning("网络已断开");
-  });
-
-  window.addEventListener("resize", updateViewport);
-  updateViewport();
-
-  const h = await get<any>("/api/health").catch(() => null);
-  if (h?.model === "not_configured") {
-    modelMissing.value = true;
-  }
-
-  const CACHE_VERSION = 2;
-  const storedVersion = localStorage.getItem("char_cache_version");
-  if (String(storedVersion) !== String(CACHE_VERSION)) {
-    invalidateCache("_api_characters");
-    localStorage.setItem("char_cache_version", String(CACHE_VERSION));
-  }
-
-  const { data: cachedChars, refresh: refreshChars } =
-    await cachedGet<any[]>("/api/characters");
-  if (cachedChars.value?.length) {
-    characters.value = cachedChars.value;
-    const savedId = localStorage.getItem("webchat-char-id");
-    const preferred = savedId
-      ? characters.value.find((c: any) => c.id === savedId)
-      : null;
-    if (preferred) {
-      selectCharacter(preferred);
-    } else {
-      const defaultChar = characters.value.find((c: any) => c.isDefault);
-      if (defaultChar) selectCharacter(defaultChar);
-      else {
-        const active = characters.value.find((c: any) => c.isActive);
-        if (active) selectCharacter(active);
-        else if (characters.value.length > 0)
-          selectCharacter(characters.value[0]);
-      }
-    }
-    const def = characters.value.find((c: any) => c.isDefault);
-    if (def) {
-      localStorage.setItem(
-        "uai-default-char",
-        JSON.stringify({
-          id: def.id,
-          name: def.name,
-          identity: def.identity || def.personality || "",
-          updatedAt: Date.now(),
-        }),
-      );
-    }
-  }
-  refreshChars().then(() => {
-    if (cachedChars.value?.length) {
-      characters.value = cachedChars.value;
-      const active = characters.value.find((c: any) => c.isActive);
-      if (!characterId.value) {
-        const defaultChar = characters.value.find((c: any) => c.isDefault);
-        if (defaultChar) selectCharacter(defaultChar);
-        else if (active) selectCharacter(active);
-      }
-      if (characterId.value) {
-        const cur = characters.value.find(
-          (c: any) => c.id === characterId.value,
-        );
-        if (cur) selectCharacter(cur);
-      }
-      const def = characters.value.find((c: any) => c.isDefault);
-      if (def) {
-        localStorage.setItem(
-          "uai-default-char",
-          JSON.stringify({
-            id: def.id,
-            name: def.name,
-            identity: def.identity || def.personality || "",
-            updatedAt: Date.now(),
-          }),
-        );
-      }
-    }
-  });
-  if (convId.value) convTitle.value = "新对话";
-  await loadCharacterConversation();
-  await fetchConversations();
-
-  nextTick(() => inputRef.value?.focus());
+  reportOwnedLoadError(new Error(owned.notice.value || "设备对话服务尚未就绪"));
+  startOwnedPolling();
 });
 
 onUnmounted(() => {
+  chatLayoutObserver?.disconnect();
+  chatLayoutObserver = null;
   window.removeEventListener("amitia:execution-scope-changed", handleScopeChanged);
   ownedDisposed = true;
   if (ownedPolicyTimer) clearInterval(ownedPolicyTimer);
@@ -1224,10 +1136,15 @@ function handleScopeChanged() {
   font-size: 13px;
   line-height: 1.7;
 }
-.chat-surface { position: relative; display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
-.chat-header-region { order: 1; flex: 0 0 auto; }
-.chat-status-region { order: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
-.composer-region { order: 4; flex: 0 0 auto; }
+.chat-surface { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
+.chat-header-region { position: absolute; top: 0; left: 0; right: 0; z-index: 4; }
+.chat-status-region { position: absolute; top: var(--chat-header-h, 44px); left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
+.composer-region { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; }
+.chat-surface--sidebar .composer-region { right: min(320px, 32%); }
+.chat-scroll-fade { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: none; }
+.chat-scroll-fade--top { top: 0; height: var(--chat-header-h, 44px); background: linear-gradient(to bottom, color-mix(in srgb, var(--chat-surface-bg) 96%, transparent), color-mix(in srgb, var(--chat-surface-bg) 0%, transparent)); }
+.chat-scroll-fade--bottom { bottom: 0; height: var(--chat-composer-h, 120px); background: linear-gradient(to top, color-mix(in srgb, var(--chat-surface-bg) 96%, transparent), color-mix(in srgb, var(--chat-surface-bg) 0%, transparent)); }
+.chat-surface--sidebar .chat-scroll-fade { right: min(320px, 32%); }
 @media (max-width: 768px) {
   .webchat-page {
     max-width: 100%;

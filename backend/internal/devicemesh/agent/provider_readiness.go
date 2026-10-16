@@ -16,6 +16,9 @@ import (
 func (h *LocalHandler) checkProviderBusiness(ctx context.Context, credential *StoredCredential, configuration *tls.Config) error {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = configuration
+	if configuration != nil {
+		transport.Proxy = nil
+	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	read := func(path string, target any) error {

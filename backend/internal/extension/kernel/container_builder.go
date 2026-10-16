@@ -19,6 +19,8 @@ import (
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
+	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	coreexec "github.com/u-ai/backend/internal/execution"
@@ -700,8 +702,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	approvalBroker := execution.NewApprovalBroker()
 	approvalBroker.SetObservers(func(request execution.ApprovalRequest) error {
-		runtime := conversationstream.DefaultManager().RuntimeSnapshot(request.ConversationID)
-		event := conversationstream.AgentUIEvent{ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: request.TurnID, Type: "approval.requested", Status: "waiting_approval", CallID: request.ToolCallID, Payload: map[string]any{"approvalId": request.ID, "tool": request.ToolName, "operation": request.ToolName, "risk": request.RiskLevel, "arguments": request.Arguments, "expiresAt": request.ExpiresAt}}
+		runtimeKey, manager := approvalRuntimeTarget(request)
+		runtime := manager.RuntimeSnapshot(runtimeKey)
+		event := conversationstream.AgentUIEvent{ConversationID: runtimeKey, RequestID: request.RequestID, TurnID: request.TurnID, Type: "approval.requested", Status: "waiting_approval", CallID: request.ToolCallID, Payload: map[string]any{"approvalId": request.ID, "tool": request.ToolName, "operation": request.ToolName, "risk": request.RiskLevel, "arguments": request.Arguments, "expiresAt": request.ExpiresAt}}
 		if runtime.ActiveTurn != nil {
 			event.TurnID = runtime.ActiveTurn.TurnID
 			event.TurnSequence = runtime.ActiveTurn.TurnSequence
@@ -710,17 +713,18 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				event.RequestID = runtime.ActiveTurn.RequestID
 			}
 		}
-		_, err := conversationstream.DefaultManager().Publish(context.Background(), event, true)
+		_, err := manager.Publish(context.Background(), event, request.RuntimeKey == "")
 		return err
 	}, func(request execution.ApprovalRequest) error {
-		runtime := conversationstream.DefaultManager().RuntimeSnapshot(request.ConversationID)
+		runtimeKey, manager := approvalRuntimeTarget(request)
+		runtime := manager.RuntimeSnapshot(runtimeKey)
 		eventType := "approval.denied"
 		if request.Status == execution.ApprovalStatusApproved {
 			eventType = "approval.approved"
 		} else if request.Status == execution.ApprovalStatusExpired {
 			eventType = "approval.expired"
 		}
-		event := conversationstream.AgentUIEvent{ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: request.TurnID, Type: eventType, Status: "running", CallID: request.ToolCallID, Payload: map[string]any{"approvalId": request.ID, "approved": request.Status == execution.ApprovalStatusApproved, "status": request.Status}}
+		event := conversationstream.AgentUIEvent{ConversationID: runtimeKey, RequestID: request.RequestID, TurnID: request.TurnID, Type: eventType, Status: "running", CallID: request.ToolCallID, Payload: map[string]any{"approvalId": request.ID, "approved": request.Status == execution.ApprovalStatusApproved, "status": request.Status}}
 		if runtime.ActiveTurn != nil {
 			event.TurnID = runtime.ActiveTurn.TurnID
 			event.TurnSequence = runtime.ActiveTurn.TurnSequence
@@ -729,7 +733,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				event.RequestID = runtime.ActiveTurn.RequestID
 			}
 		}
-		_, err := conversationstream.DefaultManager().Publish(context.Background(), event, true)
+		_, err := manager.Publish(context.Background(), event, request.RuntimeKey == "")
 		return err
 	})
 	approvalGate := execution.NewApprovalGate()
@@ -744,12 +748,25 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if toolName == "" {
 			toolName = strings.TrimSpace(tool.Name)
 		}
-		runtime := conversationstream.DefaultManager().RuntimeSnapshot(inv.ConversationID)
+		runtimeKey := ""
+		manager := conversationstream.DefaultManager()
+		if scope, ok := coordination.FromContext(ctx); ok {
+			if err := coordination.ValidateCurrent(ctx); err != nil {
+				return false, err
+			}
+			runtimeKey, manager = business.RuntimeKey(scope, inv.ConversationID), business.RuntimeManager()
+		}
+		key := inv.ConversationID
+		if runtimeKey != "" {
+			key = runtimeKey
+		}
+		runtime := manager.RuntimeSnapshot(key)
 		turnID := ""
 		if runtime.ActiveTurn != nil {
 			turnID = runtime.ActiveTurn.TurnID
 		}
 		return approvalBroker.Await(ctx, execution.ApprovalRequest{
+			RuntimeKey:     runtimeKey,
 			SpaceID:        inv.SpaceID,
 			ConversationID: inv.ConversationID,
 			TurnID:         turnID,

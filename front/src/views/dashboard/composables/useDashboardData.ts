@@ -1,3 +1,4 @@
+import { ownedManagementRequest } from "@/runtime/owned-chat-management";
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted } from "vue";
@@ -281,7 +282,7 @@ export function useDashboardData() {
 
   async function fetchTodayStats() {
     try {
-      const data = await get<any>("/api/chats/stats");
+      const data = await ownedManagementRequest("stats");
       if (data) {
         todayMessages.value = data.todayMessages || 0;
         totalConvs.value = data.totalConversations || 0;
@@ -357,7 +358,7 @@ export function useDashboardData() {
 
   async function fetchFeedbackStats() {
     try {
-      const res: any = await get("/api/messages/feedback/stats");
+      const res: any = await ownedManagementRequest("feedback-stats");
       const data = res?.data || res;
       feedbackTotal.value = data?.total || 0;
       feedbackByType.value = data?.byType || {};

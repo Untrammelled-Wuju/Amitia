@@ -683,3 +683,25 @@ export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 
   console.error("[CoreManager] 健康检查超时, 已等待", timeoutMs, "ms");
   throw new Error("Amitia Core启动超时");
 }
+
+export async function waitForCoreReadiness(timeoutMs = 60000): Promise<boolean> {
+  const startedAt = Date.now();
+  const readyUrl = "http://127.0.0.1:18899/readyz";
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!isCoreRunning() && Date.now() - startedAt > 2000) {
+      console.error("[CoreManager] 核心进程已退出, 跳过就绪等待");
+      return false;
+    }
+
+    if (await httpHealthCheck(readyUrl, 2000)) {
+      console.log("[CoreManager] 就绪检查通过");
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  console.error("[CoreManager] 就绪检查超时, 已等待", timeoutMs, "ms");
+  return false;
+}

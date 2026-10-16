@@ -47,7 +47,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
-import { apiClient } from "@/composables/useApi";
+import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
 
 type ApprovalItem = {
   id: string;
@@ -132,10 +132,7 @@ async function resolve(approved: boolean) {
   }
   resolving.value = true;
   try {
-    await apiClient.post(
-      `/api/web-chat/conversations/${encodeURIComponent(item.conversationId)}/turns/${encodeURIComponent(item.turnId)}/approvals/${encodeURIComponent(item.id)}`,
-      { approved },
-    );
+    await ownedChatRuntimeRequest("approval", { conversationId: item.conversationId, turnId: item.turnId, approvalId: item.id, approved });
   } catch (error: any) {
     const status = error?.response?.status;
     if (status === 400 || status === 404) {

@@ -67,7 +67,7 @@ func TestOwnedWorkerDetachedExecutionAndIdempotency(t *testing.T) {
 		}
 		return business.Response{Saved: true, Generation: business.Generation{Text: "验证完成"}}, nil
 	})
-	runner := newOwnedMultiAgentWorkerRunner(engine, tracker, nil)
+	runner := newOwnedMultiAgentWorkerRunner(engine, tracker)
 	t.Cleanup(func() { _ = runner.Shutdown(context.Background()) })
 	requestCtx, cancel := context.WithCancel(context.Background())
 	req := ownedWorkerFixture()
@@ -109,7 +109,7 @@ func TestOwnedWorkerCancelTerminatesExecutionAndLedger(t *testing.T) {
 		<-ctx.Done()
 		close(stopped)
 		return business.Response{}, ctx.Err()
-	}), tracker, nil)
+	}), tracker)
 	t.Cleanup(func() { _ = runner.Shutdown(context.Background()) })
 	id, err := runner.StartWorker(context.Background(), ownedWorkerFixture())
 	if err != nil {
@@ -142,7 +142,7 @@ func TestOwnedWorkerFailureNeverReportsSuccess(t *testing.T) {
 				default:
 					return business.Response{}, nil
 				}
-			}), tracker, nil)
+			}), tracker)
 			t.Cleanup(func() { _ = runner.Shutdown(context.Background()) })
 			id, err := runner.StartWorker(context.Background(), ownedWorkerFixture())
 			if err != nil {
@@ -156,51 +156,21 @@ func TestOwnedWorkerFailureNeverReportsSuccess(t *testing.T) {
 	}
 }
 
-type ownedWorkerFallback struct {
-	calls     int
-	stopped   bool
-	cancelled bool
-}
-
-func (f *ownedWorkerFallback) StartWorker(context.Context, interaction.WorkerRunRequest) (string, error) {
-	f.calls++
-	return "legacy-child", nil
-}
-func (f *ownedWorkerFallback) WorkerInteractionID(interaction.WorkerRunRequest) string {
-	return "legacy-child"
-}
-func (f *ownedWorkerFallback) WorkerIsActive(id string) bool  { return id == "legacy-child" }
-func (f *ownedWorkerFallback) Shutdown(context.Context) error { f.stopped = true; return nil }
-func (f *ownedWorkerFallback) CancelWorker(context.Context, string) error {
-	f.cancelled = true
-	return nil
-}
-
-func TestOwnedWorkerLegacyDelegationAndScopeValidation(t *testing.T) {
-	fallback := &ownedWorkerFallback{}
-	runner := newOwnedMultiAgentWorkerRunner(nil, interaction.NewInMemoryTracker(), fallback)
+func TestOwnedWorkerRequiresAuthoritativeScope(t *testing.T) {
+	runner := newOwnedMultiAgentWorkerRunner(nil, interaction.NewInMemoryTracker())
 	req := ownedWorkerFixture()
-	if _, err := runner.StartWorker(context.Background(), req); err == nil {
+	if _, err := runner.StartWorker(t.Context(), req); err == nil {
 		t.Fatal("missing owned engine accepted")
 	}
-	if fallback.calls != 0 {
-		t.Fatal("owned request fell back to legacy")
-	}
 	req.OwnedScope = nil
-	if id, err := runner.StartWorker(context.Background(), req); err != nil || id != "legacy-child" {
-		t.Fatalf("fallback %s %v", id, err)
+	if _, err := runner.StartWorker(t.Context(), req); err == nil {
+		t.Fatal("unowned worker executed")
 	}
-	if runner.WorkerInteractionID(req) != "legacy-child" || !runner.WorkerIsActive("legacy-child") {
-		t.Fatal("fallback lifecycle not forwarded")
+	if runner.WorkerIsActive("legacy-child") {
+		t.Fatal("unowned worker appeared active")
 	}
-	if err := runner.CancelWorker(context.Background(), "legacy-child"); err != nil {
+	if err := runner.Shutdown(t.Context()); err != nil {
 		t.Fatal(err)
-	}
-	if err := runner.Shutdown(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if !fallback.stopped || !fallback.cancelled {
-		t.Fatal("fallback lifecycle not completed")
 	}
 }
 
@@ -211,7 +181,7 @@ func TestOwnedWorkerShutdownCancelsAndRejectsNewRequests(t *testing.T) {
 		close(started)
 		<-ctx.Done()
 		return business.Response{}, ctx.Err()
-	}), tracker, nil)
+	}), tracker)
 	id, err := runner.StartWorker(context.Background(), ownedWorkerFixture())
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +221,7 @@ func TestOwnedWorkerSQLiteReservationAndRestartReplay(t *testing.T) {
 		calls.Add(1)
 		return business.Response{Saved: true, Generation: business.Generation{Text: "持久化完成"}}, nil
 	})
-	runner := newOwnedMultiAgentWorkerRunner(engine, tracker, nil)
+	runner := newOwnedMultiAgentWorkerRunner(engine, tracker)
 	req := ownedWorkerFixture()
 	id, err := runner.StartWorker(context.Background(), req)
 	if err != nil {
@@ -264,7 +234,7 @@ func TestOwnedWorkerSQLiteReservationAndRestartReplay(t *testing.T) {
 	if err := runner.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	restarted := newOwnedMultiAgentWorkerRunner(engine, interaction.NewSQLiteInteractionTracker(db), nil)
+	restarted := newOwnedMultiAgentWorkerRunner(engine, interaction.NewSQLiteInteractionTracker(db))
 	t.Cleanup(func() { _ = restarted.Shutdown(context.Background()) })
 	if repeated, err := restarted.StartWorker(context.Background(), req); err != nil || repeated != id {
 		t.Fatalf("restart replay: %s %v", repeated, err)

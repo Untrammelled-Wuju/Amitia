@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_update/app_update_providers.dart';
+import '../core/app_update/app_update_models.dart';
+import '../core/app_update/app_update_preferences.dart';
 import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
 import '../core/native_bridge/providers/device_timezone_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
@@ -85,22 +87,67 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
     if (mounted) {
       setState(() => _bootstrapInitialized = true);
     }
-    unawaited(_checkMandatoryUpdate());
+    unawaited(_checkUpdateOnStartup());
   }
 
-  Future<void> _checkMandatoryUpdate() async {
+  Future<void> _checkUpdateOnStartup() async {
     try {
-      final result = await ref.read(appUpdateServiceProvider).check();
+      final includeTest = await AppUpdatePreferences.loadIncludeTest();
+      final skippedVersionCode = await AppUpdatePreferences.loadSkippedVersionCode();
+      final result = await ref
+          .read(appUpdateServiceProvider)
+          .check(includeTest: includeTest);
       final update = result.available;
       if (!mounted || update == null) return;
-      if (!update.requiresVersion(result.installed.versionCode)) return;
+      final mandatory = update.requiresVersion(result.installed.versionCode);
+      if (!mandatory && update.versionCode == skippedVersionCode) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+        if (!mounted) return;
+        if (mandatory) {
           ref.read(goRouterProvider).go(AppRoutes.settingsAppUpdate);
+          return;
         }
+        unawaited(_showUpdatePrompt(update));
       });
     } catch (_) {
       return;
+    }
+  }
+
+  Future<void> _showUpdatePrompt(AppUpdateManifest update) async {
+    if (!mounted) return;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('发现新版本 ${update.versionName}'),
+        content: Text(
+          update.releaseNotes.isEmpty ? '有新版本可以更新。' : update.releaseNotes,
+          maxLines: 8,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('skip'),
+            child: const Text('跳过此版本'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('later'),
+            child: const Text('稍后'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('now'),
+            child: const Text('去更新'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'skip') {
+      await AppUpdatePreferences.saveSkippedVersionCode(update.versionCode);
+      return;
+    }
+    if (action == 'now') {
+      ref.read(goRouterProvider).go(AppRoutes.settingsAppUpdate);
     }
   }
 

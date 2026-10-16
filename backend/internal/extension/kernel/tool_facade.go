@@ -638,11 +638,15 @@ func (f *ToolFacade) executeModelToolSpecial(ctx context.Context, modelName stri
 }
 
 func (f *ToolFacade) AfterReply(scope InvocationScope, reply ReplyView) bool {
+	return f.AfterReplyContext(context.Background(), scope, reply)
+}
+
+func (f *ToolFacade) AfterReplyContext(ctx context.Context, scope InvocationScope, reply ReplyView) bool {
 	f.counters.IncAfterReply()
 	if f.hookService != nil && f.hookService.Integrator != nil {
 		hookCtx := f.buildHookContext(scope)
 		payload := f.buildAfterReplyPayload(reply)
-		_, blocked, err := f.hookService.Integrator.InvokePromptAfterAssemble(context.Background(), payload, hookCtx)
+		_, blocked, err := f.hookService.Integrator.InvokePromptAfterAssemble(ctx, payload, hookCtx)
 		if err != nil {
 			f.counters.IncPipelineFailure("after_reply_hook")
 		}

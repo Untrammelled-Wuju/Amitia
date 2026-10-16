@@ -17,6 +17,7 @@ import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 import { classifyError, displayError } from "./request";
 import { signWebAuthenticatedFetch } from "@/runtime/web-device-mesh";
+import { recordClientError } from "@/runtime/client-error-tracker";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 
@@ -154,6 +155,12 @@ apiClient.interceptors.response.use(
     const webAccessExpired = notifyWebAccessExpired(error);
     const err = classifyError(body, error as AxiosError);
     err.raw = body;
+    const requestPath = String(requestConfig?.url || "").split("?")[0];
+    recordClientError({
+      message: err.message || (body as any)?.msg || String(error?.message || ""),
+      stack: (error as any)?.stack,
+      source: `api ${String(requestConfig?.method || "get").toUpperCase()} ${requestPath}`,
+    });
     if (!webAccessExpired) displayError(err);
     return Promise.reject(err);
   },

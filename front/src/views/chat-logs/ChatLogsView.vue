@@ -123,7 +123,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { useApi } from "@/composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import ArchiveConversationIcon from "@/components/ArchiveConversationIcon.vue";
 import ChatBubble from "@/components/ChatBubble.vue";
@@ -156,7 +155,6 @@ interface ArchivedMessage {
   requestId?: string;
 }
 
-const { get } = useApi();
 const chatStore = useChatStore();
 const owned = useDeviceOwnedConversation();
 const conversations = ref<ArchivedConversation[]>([]);
@@ -232,18 +230,12 @@ function scheduleSearch() {
 }
 
 async function loadFilters() {
-  if (await owned.refresh()) {
-    if (disposed) return;
-    projects.value = [];
-    characters.value = owned.roles.value;
-    return;
-  }
-  const [sidebar, characterList] = await Promise.all([
-    get<any>("/api/web-chat/sidebar"),
-    get<any[]>("/api/characters"),
-  ]);
-  projects.value = sidebar?.projects || [];
-  characters.value = Array.isArray(characterList) ? characterList : [];
+  if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+  const role = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
+  const result = await owned.projects(role);
+  if (disposed) return;
+  projects.value = result.projects.map((item) => ({ ...item, name: item.title }));
+  characters.value = owned.roles.value;
 }
 
 async function loadConversations() {
@@ -252,15 +244,9 @@ async function loadConversations() {
   const search = keyword.value.trim().toLowerCase();
   loading.value = true;
   try {
-    const active = await owned.refresh();
-    const role = owned.selectInitialRole();
-    const response = active ? { items: (await owned.conversations(role, search)).filter((row) => row.archivedAt && (!projectId || row.projectId === projectId)) } : await get<any>("/api/web-chat/conversations", {
-      page: 1,
-      pageSize: 200,
-      archivedOnly: true,
-      projectId: projectFilter.value || undefined,
-      keyword: keyword.value.trim() || undefined,
-    });
+    if (!await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    const role = owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
+    const response = { items: (await owned.conversations(role, search)).filter((row) => row.archivedAt && (!projectId || row.projectId === projectId)) };
     if (disposed || ticket !== listRequest || projectId !== projectFilter.value || search !== keyword.value.trim().toLowerCase()) return;
     conversations.value = [...(response?.items || [])].sort((left, right) => {
       const leftTime = Date.parse(left.archivedAt || "");
@@ -287,10 +273,7 @@ async function selectConversation(conversation: ArchivedConversation) {
   selectedId.value = conversation.id;
   messageLoading.value = true;
   try {
-    const response = owned.enabled.value ? { items: await owned.allMessages(conversation.id, conversation.characterId || owned.selectInitialRole()) } : await get<any>(
-      `/api/web-chat/conversations/${encodeURIComponent(conversation.id)}/messages`,
-      { page: 1, pageSize: 200 },
-    );
+    const response = { items: await owned.allMessages(conversation.id, conversation.characterId || owned.selectInitialRole()) };
     if (disposed || ticket !== messageRequest || selectedId.value !== conversation.id) return;
     messages.value = response?.items || [];
     requestAnimationFrame(() => {
@@ -405,7 +388,7 @@ onBeforeUnmount(() => {
 .archive-role-switch { display: flex; align-items: center; gap: 12px; margin: 2px 0 20px; color: var(--ac-color-text-muted); font-size: 12px; }
 .archive-role-switch::before,
 .archive-role-switch::after { content: ""; flex: 1 1 0; height: 1px; background: var(--ac-color-border); }
-.archive-role-switch span { flex: 0 0 auto; }
+.archive-role-switch span { flex: 0 0 auto; max-width: calc(100% * 4 / 6); }
 @media (max-width: 800px) {
   .archive-page { grid-template-columns: 1fr; }
   .archive-list { max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--surface-border); }

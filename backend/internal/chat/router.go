@@ -4,45 +4,11 @@ package chat
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/pkg/app"
 )
 
-func RegisterChatRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, entry *interaction.UnifiedEntry) {
-	handler := NewHandlerWithUnifiedEntry(svc, entry)
-	registerChatRoutes(r, handler)
-}
-
-func RegisterChatRouterWithDelivery(r *gin.RouterGroup, ctx *app.AppContext, svc Service, entry *interaction.UnifiedEntry, ds DeliveryStore) {
-	handler := NewHandlerWithUnifiedEntryAndDelivery(svc, entry, ds)
-	registerChatRoutes(r, handler)
-}
-
-func registerChatRoutes(r *gin.RouterGroup, handler *Handler) {
-	r.POST("/chat", security.SharedCoreAdminOnly(), handler.Chat)
-
-	chatsGroup := r.Group("/chats", security.SharedCoreAdminOnly())
-	{
-		chatsGroup.GET("/stats", handler.Stats)
-		chatsGroup.GET("/conversations", handler.ListConversations)
-		chatsGroup.POST("/conversations", handler.CreateConversation)
-		chatsGroup.GET("/conversations/:id/messages", handler.GetMessages)
-		chatsGroup.DELETE("/conversations/:id", handler.DeleteConversation)
-		chatsGroup.DELETE("/conversations/:id/messages", handler.DeleteMessages)
-		chatsGroup.DELETE("/messages/:id", handler.DeleteSingleMessage)
-		chatsGroup.GET("/search", handler.SearchMessages)
-		chatsGroup.DELETE("/all", handler.DeleteAllConversations)
-		chatsGroup.GET("/conversations/:id/summary", handler.GetSummary)
-		chatsGroup.PUT("/conversations/:id/summary", handler.UpdateSummary)
-		chatsGroup.DELETE("/conversations/:id/summary", handler.DeleteSummary)
-		chatsGroup.POST("/conversations/:id/summary/generate", handler.GenerateSummary)
-		chatsGroup.POST("/cleanup/preview", handler.CleanupPreview)
-		chatsGroup.POST("/cleanup/confirm", handler.CleanupConfirm)
-		chatsGroup.POST("/cleanup/vacuum", handler.CleanupVacuum)
-		chatsGroup.GET("/conversations/:id/compression-status", handler.CompressionStatus)
-		chatsGroup.POST("/export", handler.Export)
-	}
+func RegisterModelRouter(r *gin.RouterGroup, svc Service) {
+	handler := NewHandler(svc)
 	modelGroup := r.Group("/model")
 	{
 		modelGroup.GET("/available", handler.AvailableModels)

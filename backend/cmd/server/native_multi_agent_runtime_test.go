@@ -23,7 +23,7 @@ func TestNativeMultiAgentTaskAuthorityIsIndependentOfParentContinuityLease(t *te
 
 func TestNativeMultiAgentSharedRuntimeNormalizesIdempotentArguments(t *testing.T) {
 	adapter, workers, scope, _ := testMultiAgentModelRuntime(t)
-	runtime := adapter.multiAgent
+	runtime := adapter
 	if got := runtime.ModelTools(t.Context(), scope); len(got) != 3 {
 		t.Fatalf("missing native tools: %d", len(got))
 	}
@@ -58,7 +58,7 @@ func TestNativeMultiAgentOwnedAuthorizationSurvivesCoordinatorRestart(t *testing
 		t.Fatal(err)
 	}
 	ctx := coordination.WithScope(t.Context(), bound)
-	issued := adapter.multiAgent.Execute(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect first source","Validate second source"]}`), scope)
+	issued := adapter.Execute(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect first source","Validate second source"]}`), scope)
 	if issued.Error != nil {
 		t.Fatal(issued.Error)
 	}
@@ -86,7 +86,7 @@ func TestNativeMultiAgentOwnedAuthorizationSurvivesCoordinatorRestart(t *testing
 			if field == "missing" {
 				attackCtx = context.Background()
 			}
-			if got := adapter.multiAgent.Execute(attackCtx, multiAgentStatusTool, lookup, scope); got.Error == nil {
+			if got := adapter.Execute(attackCtx, multiAgentStatusTool, lookup, scope); got.Error == nil {
 				t.Fatalf("cross-owner read accepted: %+v", got)
 			}
 		})
@@ -103,27 +103,27 @@ func TestNativeMultiAgentOwnedAuthorizationSurvivesCoordinatorRestart(t *testing
 		t.Fatal(err)
 	}
 	otherCtx := coordination.WithScope(t.Context(), otherOwned)
-	if len(adapter.multiAgent.ModelTools(otherCtx, otherScope)) != 3 {
+	if len(adapter.ModelTools(otherCtx, otherScope)) != 3 {
 		t.Fatal("other owner's valid parent was rejected")
 	}
-	if got := adapter.multiAgent.Execute(otherCtx, multiAgentStatusTool, lookup, otherScope); got.Error == nil || got.Error.Code != "COORDINATION_NOT_AUTHORIZED" {
+	if got := adapter.Execute(otherCtx, multiAgentStatusTool, lookup, otherScope); got.Error == nil || got.Error.Code != "COORDINATION_NOT_AUTHORIZED" {
 		t.Fatalf("separate valid parent crossed owner: %+v", got)
 	}
-	adapter.multiAgent.coordinator = interaction.NewMultiAgentCoordinator(tracker, adapter.multiAgent.goals, nil, workers, nil, interaction.DefaultMultiAgentPolicy())
-	adapter.multiAgent.coordinator.SetOwnedExecution(func(ctx context.Context, owned coordination.ExecutionScope, run func(context.Context) error) error {
+	adapter.coordinator = interaction.NewMultiAgentCoordinator(tracker, adapter.goals, nil, workers, nil, interaction.DefaultMultiAgentPolicy())
+	adapter.coordinator.SetOwnedExecution(func(ctx context.Context, owned coordination.ExecutionScope, run func(context.Context) error) error {
 		return run(coordination.WithScope(ctx, owned))
 	})
-	if got := adapter.multiAgent.Execute(otherCtx, multiAgentStatusTool, lookup, otherScope); got.Error == nil {
+	if got := adapter.Execute(otherCtx, multiAgentStatusTool, lookup, otherScope); got.Error == nil {
 		t.Fatalf("recovery crossed owner: %+v", got)
 	}
-	if got := adapter.multiAgent.Execute(ctx, multiAgentStatusTool, lookup, scope); got.Error != nil {
+	if got := adapter.Execute(ctx, multiAgentStatusTool, lookup, scope); got.Error != nil {
 		t.Fatalf("owned recovery failed: %+v", got)
 	}
 	if len(workers.started) != 2 {
 		t.Fatalf("recovery duplicated workers: %d", len(workers.started))
 	}
 	denied := coordination.WithAdditionalGuard(ctx, func(context.Context) error { return coordination.ErrScopeExpired })
-	if got := adapter.multiAgent.Execute(denied, multiAgentWaitTool, lookup, scope); got.Error == nil {
+	if got := adapter.Execute(denied, multiAgentWaitTool, lookup, scope); got.Error == nil {
 		t.Fatal("revoked scope accepted")
 	}
 }

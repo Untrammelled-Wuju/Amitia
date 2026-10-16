@@ -57,14 +57,6 @@ func (s *Server) publishAndroidRelease(release *UpdateRelease) error {
 	if apk == nil {
 		return errors.New("缺少 APK")
 	}
-	manifestBytes, err := buildAndroidManifestBytes(s.cfg, release, *apk)
-	if err != nil {
-		return err
-	}
-	signature, err := s.signAndroidManifest(manifestBytes)
-	if err != nil {
-		return err
-	}
 	apkDir := filepath.Join(s.cfg.AndroidPublishDir, "releases", fmt.Sprintf("%d", release.VersionCode))
 	if err := os.MkdirAll(apkDir, 0o755); err != nil {
 		return err
@@ -73,15 +65,83 @@ func (s *Server) publishAndroidRelease(release *UpdateRelease) error {
 	if err := copyFileAtomic(apk.StoredPath, apkTarget); err != nil {
 		return err
 	}
-	signatureTarget := filepath.Join(s.cfg.AndroidPublishDir, release.Channel+".json.sig")
-	if err := writeFileAtomic(signatureTarget, []byte(signature+"\n"), 0o644); err != nil {
-		return err
-	}
-	manifestTarget := filepath.Join(s.cfg.AndroidPublishDir, release.Channel+".json")
-	if err := writeFileAtomic(manifestTarget, manifestBytes, 0o644); err != nil {
-		return err
-	}
 	release.PublishPath = apkTarget
+	return nil
+}
+
+var androidChannelLadder = map[string][]string{
+	ChannelStable: {ChannelStable},
+	ChannelBeta:   {ChannelStable, ChannelBeta},
+	ChannelAlpha:  {ChannelStable, ChannelBeta, ChannelAlpha},
+}
+
+func androidChannelOrder() []string {
+	return []string{ChannelStable, ChannelBeta, ChannelAlpha}
+}
+
+func androidServableStatuses() []string {
+	return []string{StatusPublished, StatusPaused}
+}
+
+func androidChannelAllows(channel, candidate string) bool {
+	for _, allowed := range androidChannelLadder[channel] {
+		if allowed == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func selectAndroidChannelRelease(channel string, candidates []UpdateRelease) *UpdateRelease {
+	var best *UpdateRelease
+	for index := range candidates {
+		candidate := &candidates[index]
+		if !androidChannelAllows(channel, candidate.Channel) {
+			continue
+		}
+		if best == nil || candidate.VersionCode > best.VersionCode ||
+			(candidate.VersionCode == best.VersionCode && candidate.ID > best.ID) {
+			best = candidate
+		}
+	}
+	return best
+}
+
+func (s *Server) refreshAndroidChannelManifests() error {
+	var candidates []UpdateRelease
+	if err := s.db.Where("product = ? AND status IN ?", ProductAndroid, androidServableStatuses()).
+		Order("version_code DESC, id DESC").
+		Find(&candidates).Error; err != nil {
+		return err
+	}
+	for _, channel := range androidChannelOrder() {
+		selected := selectAndroidChannelRelease(channel, candidates)
+		if selected == nil {
+			continue
+		}
+		var apk UpdateReleaseArtifact
+		if err := s.db.Where("release_id = ? AND kind = ?", selected.ID, "apk").First(&apk).Error; err != nil {
+			return fmt.Errorf("读取 %s 通道 APK 失败: %w", channel, err)
+		}
+		effective := *selected
+		effective.Channel = channel
+		manifestBytes, err := buildAndroidManifestBytes(s.cfg, &effective, apk)
+		if err != nil {
+			return err
+		}
+		signature, err := s.signAndroidManifest(manifestBytes)
+		if err != nil {
+			return err
+		}
+		signatureTarget := filepath.Join(s.cfg.AndroidPublishDir, channel+".json.sig")
+		if err := writeFileAtomic(signatureTarget, []byte(signature+"\n"), 0o644); err != nil {
+			return err
+		}
+		manifestTarget := filepath.Join(s.cfg.AndroidPublishDir, channel+".json")
+		if err := writeFileAtomic(manifestTarget, manifestBytes, 0o644); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -92,6 +152,10 @@ func buildAndroidManifestBytes(cfg Config, release *UpdateRelease, apk UpdateRel
 		release.VersionCode,
 		apk.OriginalName,
 	)
+	publishedAt := time.Now().UTC()
+	if release.PublishedAt != nil {
+		publishedAt = release.PublishedAt.UTC()
+	}
 	manifest := androidManifest{
 		SchemaVersion:           1,
 		Product:                 ProductAndroid,
@@ -102,7 +166,7 @@ func buildAndroidManifestBytes(cfg Config, release *UpdateRelease, apk UpdateRel
 		MinSupportedVersionCode: release.MinVersionCode,
 		Mandatory:               release.Mandatory,
 		RolloutPercentage:       release.RolloutPercentage,
-		PublishedAt:             time.Now().UTC().Format(time.RFC3339),
+		PublishedAt:             publishedAt.Format(time.RFC3339),
 		APK: androidManifestAPK{
 			URL:    apkURL,
 			Size:   apk.Size,

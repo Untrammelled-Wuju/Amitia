@@ -134,7 +134,13 @@ class _StoragePageState extends ConsumerState<StoragePage> {
         ),
       );
       if (confirmed != true) return;
-      final result = await system.cleanupConfirm({'previewId': previewId, 'confirmText': '确认清理'});
+      final result = await system.cleanupConfirm({
+        'previewId': previewId,
+        'confirmText': '确认清理',
+        'requestId': 'cleanup-${DateTime.now().microsecondsSinceEpoch}',
+        'characterId': (preview['executionScope'] as Map?)?['roleId'],
+        'expectedExecutionScope': preview['executionScope'],
+      });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('清理完成：${result?['conversationCount'] ?? conversationCount} 个会话')));
       await _load();

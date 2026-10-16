@@ -74,6 +74,7 @@ import (
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"github.com/u-ai/backend/internal/tts"
+	"github.com/u-ai/backend/internal/userfeedback"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workbenchbrowser"
 	"github.com/u-ai/backend/internal/workbenchtasks"
@@ -504,7 +505,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if services.KernelContainer != nil {
 		channelProviders = services.KernelContainer.CapabilityProviders
 	}
-	channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry)
+	if services.OwnedIngress != nil {
+		channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry, services.OwnedIngress.channelOwnerResolver)
+	}
 
 	apiGroup := r.Group("/api")
 	if services.DeviceMesh != nil && services.DeviceMesh.LocalHandler != nil {
@@ -555,11 +558,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPCompatibility.API)
 		}
 		if services.Sync != nil && services.Sync.ChangeLog != nil {
-			character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, services.Chat, services.Sync.ChangeLog)
+			character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, ownedCharacterPreview{services: services}, services.Sync.ChangeLog)
 		} else {
-			character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
+			character.RegisterCharacterRouter(apiGroup, ctx, ownedCharacterPreview{services: services})
 		}
-		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
+		chat.RegisterModelRouter(apiGroup, services.Chat)
 		if services.NotificationRuntime != nil {
 			notificationruntime.RegisterRoutes(apiGroup, services.NotificationRuntime)
 		}
@@ -569,12 +572,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
+		userfeedback.RegisterRouter(apiGroup, ctx)
 		reminderDeviceID := ""
 		if services.DeviceMesh != nil {
 			reminderDeviceID = services.DeviceMesh.LocalDeviceID
 		}
 		reminder.RegisterRouter(apiGroup, services.Reminders, reminderDeviceID)
-		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
+		agent.RegisterAgentRuntimeRunners(ctx, services.UnifiedEntry, agentToolFacade)
 		channelAccess := system.ChannelAvailabilityFunc(func(channelID string) bool {
 			if services.KernelContainer == nil || services.KernelContainer.ChannelResolver == nil {
 				return false
@@ -643,9 +647,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB, services.MemoryConsumers.Beliefs)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
-		ttsRepo := tts.NewRepository(ctx.DB)
-		ttsSvc := tts.NewService(ttsRepo)
-		system.RegisterVoiceEntryRouter(apiGroup, ctx.DB, services.VoiceEntry, ttsSvc, services.DeliveryStore)
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)

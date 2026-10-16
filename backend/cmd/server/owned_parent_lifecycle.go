@@ -25,7 +25,10 @@ func (r *meshOwnedToolRuntime) nativeScope(ctx context.Context, inference busine
 	if inference.InternalWorker {
 		requestID, source = inference.Scope.RequestID, "multi_agent"
 	}
-	return chat.SkillScope{SpaceID: inference.Scope.SpaceID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, RequestID: requestID, Channel: "device-mesh", Source: source, PermissionMode: wire.PermissionMode, ExecContext: wire.ExecContext, IsInternal: inference.InternalWorker}
+	if wire.Source == "" || wire.Source == "device-mesh" {
+		wire.Source = source
+	}
+	return chat.SkillScope{SpaceID: inference.Scope.SpaceID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, RequestID: requestID, Channel: wire.Channel, Source: wire.Source, SessionID: wire.SessionID, PermissionMode: wire.PermissionMode, ExecContext: wire.ExecContext, IsInternal: inference.InternalWorker || wire.IsInternal}
 }
 
 func (r *meshOwnedToolRuntime) BeginOwnedTurn(ctx context.Context, inference business.Inference) (context.Context, func(context.Context, business.Generation, error) error, error) {
@@ -64,7 +67,27 @@ func (r *meshOwnedToolRuntime) BeginOwnedTurn(ctx context.Context, inference bus
 	if err != nil {
 		return ctx, nil, err
 	}
+	var finishRuntime func(context.Context, bool) error
+	if r.services.ChatRuntime != nil {
+		ingress, _ := business.IngressFromContext(ctx)
+		request := &interaction.ProcessRequest{SpaceID: inference.Scope.SpaceID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, RequestID: native.RequestID, Message: inference.Message, Source: native.Source, Channel: native.Channel, IsInternal: ingress.IsInternal, DeviceTimezone: ingress.DeviceTimezone}
+		var prepareErr error
+		ctx, prepareErr = interaction.WithOwnedContext(ctx, inference.Scope, inference.Snapshot, inference.ConversationID, native.Channel)
+		if prepareErr != nil {
+			return ctx, nil, prepareErr
+		}
+		ctx, _, finishRuntime, prepareErr = r.services.ChatRuntime.PrepareOwnedRuntime(ctx, parent, request)
+		if prepareErr != nil {
+			_, failErr := r.services.WorkbenchTaskTracker.Fail(ctx, parent.ID, parent.StatusVersion, "owned_context_failed", prepareErr.Error())
+			return ctx, nil, errors.Join(prepareErr, failErr)
+		}
+	}
 	return parent.Scope.WithContext(ctx), func(current context.Context, generation business.Generation, runErr error) error {
+		if finishRuntime != nil {
+			if err := finishRuntime(current, runErr == nil && !generation.Partial); err != nil {
+				runErr = errors.Join(runErr, err)
+			}
+		}
 		latest, found, err := r.services.WorkbenchTaskTracker.Get(current, parent.ID)
 		if err != nil {
 			return err

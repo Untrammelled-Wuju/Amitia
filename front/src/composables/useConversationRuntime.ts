@@ -1,5 +1,4 @@
 import { type Ref, ref, shallowRef, watch } from "vue";
-import { useApi } from "./useApi";
 import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 import { notifyReplyCompleted } from "./useReplyNotifications";
 import { projectAutomationStatus, type AutomationStatus } from "@/conversation/runtime/automationStatus";
@@ -21,6 +20,8 @@ import {
 } from "@/utils/message-order";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { publishWorkbenchEvent } from "@/runtime/workbench-agent-event";
+import { ownedChatRuntimeRequest, prepareOwnedChatRequest } from "@/runtime/owned-chat-management";
+import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 
 interface ConversationSnapshot {
   version: number;
@@ -54,7 +55,6 @@ export function useConversationRuntime(
   ) => void | Promise<void>,
   onConversationActivityChanged?: (conversationId: string) => void | Promise<void>,
 ) {
-  const { get } = useApi();
   const owned = useDeviceOwnedConversation();
   const reducer = new AgentEventReducer();
   const messages = shallowRef<any[]>([]);
@@ -190,7 +190,7 @@ export function useConversationRuntime(
     const renderedTurnIds = new Set<string>();
     const activeRequestIds = new Set<string>();
     const next = persistedMessages.value.map((message, index) => {
-      const turn = turnByMessageId.get(String(message?.id || ""));
+      const turn = turnByMessageId.get(String(message?.id || "")) || (message?.role === "assistant" && message?.requestId ? turnList.find((item) => item.requestId === message.requestId) : undefined);
       const key = turn ? assistantRowKey(turn) : getMessageUIKey(message, index);
       const candidate = turn
         ? {
@@ -363,30 +363,28 @@ export function useConversationRuntime(
   }
 
   async function loadSnapshot(notify = true) {
-    if (owned.enabled.value) return;
     const id = String(conversationId.value || "").trim();
     const epoch = ++snapshotEpoch;
     if (!id) {
       clear();
       return;
     }
-    const snapshot = await get<ConversationSnapshot>(`/api/web-chat/conversations/${encodeURIComponent(id)}/snapshot`);
-    if (owned.enabled.value || epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return;
+    const snapshot = await ownedChatRuntimeRequest<ConversationSnapshot>("snapshot", { conversationId: id });
+    if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return;
+    if (snapshot.conversation) snapshot.conversation.id = id;
+    snapshot.turns = snapshot.turns?.map((turn) => ({ ...turn, conversationId: id }));
+    snapshot.approvals = snapshot.approvals?.map((approval) => ({ ...approval, conversationId: id }));
     applySnapshot(snapshot);
     if (notify) await onConversationSnapshot?.(snapshot.conversation, snapshot.workspace ?? null, snapshot);
   }
 
   async function loadOlderTurns(): Promise<boolean> {
-    if (owned.enabled.value) return false;
     const epoch = snapshotEpoch;
     const id = String(conversationId.value || "").trim();
     if (!id || !hasMoreTurnHistory.value || turnHistoryBefore.value <= 0) return false;
-    const response = await get<any>(
-      `/api/web-chat/conversations/${encodeURIComponent(id)}/turns`,
-      { before: turnHistoryBefore.value, limit: 50 },
-    );
-    const rows = Array.isArray(response?.items) ? response.items : [];
-    if (owned.enabled.value || epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return false;
+    const response = await ownedChatRuntimeRequest("turns", { conversationId: id, before: turnHistoryBefore.value, limit: 50 });
+    const rows = Array.isArray(response?.items) ? response.items.map((turn: any) => ({ ...turn, conversationId: id })) : [];
+    if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return false;
     if (rows.length === 0) {
       hasMoreTurnHistory.value = false;
       return false;
@@ -409,7 +407,7 @@ export function useConversationRuntime(
   }
 
   function scheduleReconnect() {
-    if (owned.enabled.value || disposed || !conversationId.value || reconnectTimer) return;
+    if (disposed || !conversationId.value || reconnectTimer) return;
     if (automationStatus.value) automationStatus.value = {
       ...automationStatus.value,
       phase: "waiting",
@@ -422,7 +420,7 @@ export function useConversationRuntime(
     }, 1500);
   }
 
-  async function consume(response: Response, signal: AbortSignal) {
+  async function consume(response: Response, signal: AbortSignal, expected: any, id: string) {
     if (!response.body) return;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -444,7 +442,9 @@ export function useConversationRuntime(
           }
           if (type === "agent_ui_event" && data) {
             try {
-              await applyEvent(JSON.parse(data) as AgentUIEvent);
+              const event = JSON.parse(data);
+              if (!sameOwnedAuthority(expected, event.executionScope) || owned.coreId.value !== expected.coreId) throw new Error("运行事件的数据归属已变化");
+              await applyEvent({ ...event, conversationId: id } as AgentUIEvent);
             } catch {}
           }
           boundary = buffer.indexOf("\n\n");
@@ -458,30 +458,33 @@ export function useConversationRuntime(
   async function connect(withSnapshot = true) {
     disconnect();
     const id = String(conversationId.value || "").trim();
-    if (owned.enabled.value || !id || disposed) return;
+    if (!id || disposed) return;
     try {
       if (withSnapshot) await loadSnapshot();
-      if (owned.enabled.value || id !== String(conversationId.value || "")) return;
+      if (id !== String(conversationId.value || "")) return;
       const captured = snapshotEpoch;
-      const path = `/api/web-chat/conversations/${encodeURIComponent(id)}/events`;
-      const query = lastEventSequence.value > 0 ? `?afterSequence=${lastEventSequence.value}` : "";
+      const path = "/api/device-mesh/v1/business/chat-runtime/events";
+      const { payload, expected } = await prepareOwnedChatRequest({ conversationId: id, afterSequence: lastEventSequence.value });
       const controller = new AbortController();
       abortController = controller;
       const [url, init] = await Promise.all([
-        resolveApiUrl(path + query),
+        resolveApiUrl(path),
         createAuthenticatedFetchInit(path, {
           headers: {
             Accept: "text/event-stream",
+            "Content-Type": "application/json",
             ...(lastEventSequence.value > 0 ? { "Last-Event-ID": String(lastEventSequence.value) } : {}),
           },
           signal: controller.signal,
+          method: "POST",
+          body: JSON.stringify(payload),
         }),
       ]);
-      if (owned.enabled.value || captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) return;
+      if (captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) return;
       const response = await fetch(url, init);
-      if (owned.enabled.value || captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) { await response.body?.cancel(); return; }
+      if (captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) { await response.body?.cancel(); return; }
       if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error(`HTTP ${response.status}`);
-      await consume(response, controller.signal);
+      await consume(response, controller.signal, expected, id);
       if (!controller.signal.aborted) scheduleReconnect();
     } catch {
       scheduleReconnect();
@@ -505,11 +508,18 @@ export function useConversationRuntime(
     disposed = true;
     automationStatus.value = null;
     disconnect();
+    window.removeEventListener("amitia:owned-runtime-refresh", refreshRuntime);
     if (renderTimer) {
       clearTimeout(renderTimer);
       renderTimer = null;
     }
   }
+
+  function refreshRuntime(event: Event) {
+    if ((event as CustomEvent).detail?.conversationId === conversationId.value) void connect();
+  }
+
+  window.addEventListener("amitia:owned-runtime-refresh", refreshRuntime);
 
   watch(persistedMessages, scheduleProjection, { deep: true });
   projectTurns();

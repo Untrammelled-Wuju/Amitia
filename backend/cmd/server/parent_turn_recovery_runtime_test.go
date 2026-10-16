@@ -216,6 +216,45 @@ type testRecoveredParentProcessor struct {
 	seen  chan string
 }
 
+type recoveredParentEntryExecutor struct {
+	entry        *interaction.UnifiedEntry
+	orchestrator *interaction.Orchestrator
+}
+
+func (e *recoveredParentEntryExecutor) ExecuteEntry(ctx context.Context, req *interaction.UnifiedEntryRequest) (*interaction.OrchestrationResult, error) {
+	resolution, err := e.entry.ResolveScope(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return e.orchestrator.Process(ctx, &interaction.ProcessRequest{
+		CharacterID:           resolution.Scope.CharacterID,
+		ConversationID:        resolution.Scope.ConversationID,
+		ThreadID:              resolution.Scope.ThreadID,
+		SpaceID:               resolution.Scope.SpaceID,
+		Channel:               resolution.Scope.Channel,
+		PeerID:                resolution.Scope.PeerID,
+		SessionID:             resolution.Scope.SessionID,
+		Source:               resolution.Source,
+		RequestID:             req.RequestID,
+		Message:               req.Message,
+		TurnID:                req.TurnID,
+		ExecutionID:           req.ExecutionID,
+		ReservedInteractionID: req.ReservedInteractionID,
+		RecoverExistingTurn:   req.RecoverExistingTurn,
+		ModelConfigID:         req.ModelConfigID,
+		ReasoningEffort:       req.ReasoningEffort,
+		ReasoningEnabled:      req.ReasoningEnabled,
+		MessageStyle:          req.MessageStyle,
+		PermissionMode:        req.PermissionMode,
+	})
+}
+
+func (e *recoveredParentEntryExecutor) CancelEntryScope(interaction.InteractionScope) int { return 0 }
+
+func (e *recoveredParentEntryExecutor) EntryInteractionActive(string) bool { return false }
+
+func (e *recoveredParentEntryExecutor) EntryReady() bool { return e.orchestrator.IsReady() }
+
 func (p *testRecoveredParentProcessor) ProcessMessageCtx(_ context.Context, req *interaction.ProcessRequest) (*interaction.ProcessResponse, error) {
 	p.calls.Add(1)
 	if p.seen != nil {
@@ -245,6 +284,7 @@ func TestParentTurnRecoveryAutomaticallyResumesPersistedParent(t *testing.T) {
 	orch.SetReady(true)
 	entry := interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil), temporal.SystemClock{})
 	entry.SetExecutionService(coreexec.NewExecutionService())
+	entry.SetEntryExecutor(&recoveredParentEntryExecutor{entry: entry, orchestrator: orch})
 	svc := &AppServices{DB: db, UnifiedEntry: entry}
 	runner := newParentTurnRecoveryRuntime()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -305,6 +345,7 @@ func TestParentTurnRecoveryRetriesPreExecutionReadinessFailure(t *testing.T) {
 	proc := &testRecoveredParentProcessor{}
 	orch := interaction.NewOrchestratorWithStores(interaction.DefaultOrchestratorConfig(), proc, tracker, nil)
 	entry := interaction.NewUnifiedEntry(orch, interaction.NewScopeResolver(nil), temporal.SystemClock{})
+	entry.SetEntryExecutor(&recoveredParentEntryExecutor{entry: entry, orchestrator: orch})
 	svc := &AppServices{DB: db, UnifiedEntry: entry}
 	runner := newParentTurnRecoveryRuntime()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

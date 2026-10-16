@@ -21,6 +21,12 @@ type OwnedTurnRuntime interface {
 	BeginOwnedTurn(context.Context, business.Inference) (context.Context, func(context.Context, business.Generation, error) error, error)
 }
 
+type OwnedToolLifecycleRuntime interface {
+	PrepareOwnedPrompt(context.Context, business.Inference) (string, func(), error)
+	PlanOwnedOutputs(context.Context, business.Inference, business.Generation) ([]MessageOutput, error)
+	OwnedReplyCommitted(context.Context, business.Inference, business.Generation, string) error
+}
+
 func (s *service) SetOwnedToolRuntime(runtime OwnedToolRuntime) { s.ownedToolRuntime = runtime }
 
 func (s *service) generateOwnedWithTools(ctx context.Context, inference business.Inference, cfg *ModelConfig, messages []map[string]interface{}, sink *ownedReplySink) (business.Generation, error) {
@@ -53,16 +59,43 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	}
 	seen := map[string]bool{}
 	totalTokens := 0
+	forceVoice := false
+	var outputs []MessageOutput
+	totalCalls := 0
 	partial := func(err error) (business.Generation, error) {
 		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens, Partial: true}, err
 	}
-	for {
+	for round := 0; ; round++ {
+		if round >= 64 {
+			return partial(errors.New("工具执行达到本轮安全上限，请检查执行结果后继续"))
+		}
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return partial(err)
 		}
-		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(ctx, cfg, messages, modelDefinitions, modelSink)
+		runtime := business.RuntimeManager()
+		runtimeKey := business.RuntimeKey(inference.Scope, inference.ConversationID)
+		for _, steer := range runtime.ConsumeSteer(runtimeKey, inference.Scope.TurnID) {
+			messages = append(messages, map[string]interface{}{"role": "user", "content": steer})
+		}
+		providerCtx, providerCancel := context.WithCancel(ctx)
+		runtime.RegisterProviderCancel(runtimeKey, inference.Scope.TurnID, providerCancel)
+		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(providerCtx, cfg, messages, modelDefinitions, modelSink)
+		providerCancel()
+		runtime.ClearProviderCancel(runtimeKey, inference.Scope.TurnID)
 		totalTokens += tokens
 		if err != nil {
+			if ctx.Err() == nil {
+				steers := runtime.ConsumeSteer(runtimeKey, inference.Scope.TurnID)
+				if len(steers) > 0 {
+					if text != "" {
+						messages = append(messages, map[string]interface{}{"role": "assistant", "content": text})
+					}
+					for _, steer := range steers {
+						messages = append(messages, map[string]interface{}{"role": "user", "content": steer})
+					}
+					continue
+				}
+			}
 			return partial(err)
 		}
 		if len(calls) == 0 {
@@ -93,13 +126,17 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 					}
 				}
 			}
-			return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens}, nil
+			return s.finishOwnedOutputs(ctx, inference, business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens, ForceVoice: forceVoice}, outputs)
 		}
 		if len(calls) > 16 || s.ownedToolRuntime == nil {
 			return partial(errors.New("设备能力调用超出授权范围或数量上限"))
 		}
 		messages = append(messages, map[string]interface{}{"role": "assistant", "content": text, "tool_calls": calls})
 		for _, raw := range calls {
+			totalCalls++
+			if totalCalls > 256 {
+				return partial(errors.New("工具调用达到本轮安全上限"))
+			}
 			encoded, err := json.Marshal(raw)
 			if err != nil {
 				return partial(err)
@@ -137,6 +174,10 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 				output = string(result.Output)
 			}
 			outcome := toolResultToOutcome(result, true)
+			forceVoice = forceVoice || result.ForceVoice
+			if !outcome.HasError {
+				outputs = append(outputs, messageOutputsFromTurnItems([]AssistantTurnItem{{ItemType: assistantTurnItemToolResult, Status: assistantTurnStatusCompleted, ToolName: modelName, ResultJSON: string(result.Output)}})...)
+			}
 			verification.Observe(modelName, call.Function.Arguments, outcome)
 			if ownedNativeTaskTool(modelName) && !outcome.HasError {
 				var task struct {

@@ -48,13 +48,19 @@ type InboundRequest struct {
 type InboundHandler struct {
 	providers ProviderDefinitionSource
 	entry     UnifiedEntryHandler
+	owner     OwnerResolver
 }
 
-func RegisterInboundRouter(router gin.IRouter, providers ProviderDefinitionSource, entry UnifiedEntryHandler) {
+type OwnerResolver func(context.Context, string, string, string) (context.Context, error)
+
+func RegisterInboundRouter(router gin.IRouter, providers ProviderDefinitionSource, entry UnifiedEntryHandler, owners ...OwnerResolver) {
 	if router == nil {
 		return
 	}
 	handler := &InboundHandler{providers: providers, entry: entry}
+	if len(owners) > 0 {
+		handler.owner = owners[0]
+	}
 	router.POST("/api/channels/inbound", handler.Handle)
 }
 
@@ -96,7 +102,15 @@ func (h *InboundHandler) Handle(c *gin.Context) {
 	}
 
 	entryRequest := buildUnifiedEntryRequest(extensionID, moduleID, normalized)
-	result, err := h.entry.Handle(c.Request.Context(), entryRequest)
+	ctx := c.Request.Context()
+	if h.owner != nil {
+		ctx, err = h.owner(ctx, extensionID, moduleID, normalized.ChannelID)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"code": http.StatusForbidden, "msg": err.Error()})
+			return
+		}
+	}
+	result, err := h.entry.Handle(ctx, entryRequest)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"code": http.StatusBadGateway, "msg": err.Error()})
 		return

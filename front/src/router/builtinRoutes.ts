@@ -100,6 +100,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
     { path: "privacy-scan", name: "settingsPrivacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
     { path: "maintenance", name: "settingsMaintenance", component: () => import("@/views/maintenance-diagnostics/MaintenanceDiagnosticsView.vue"), meta: { requiresAuth: true } },
     { path: "system-logs", name: "settingsSystemLogs", component: () => import("@/views/logs/LogsView.vue"), meta: { requiresAuth: true } },
+    { path: "feedback", name: "settingsFeedback", component: () => import("@/views/settings/UserFeedbackPanel.vue"), meta: { requiresAuth: true } },
     { path: "prompt-trace", name: "settingsPromptTrace", component: () => import("@/views/logs/PromptTraceView.vue"), meta: { requiresAuth: true } },
     { path: "about", name: "settingsAbout", component: () => import("@/views/settings/AboutPanel.vue"), meta: { requiresAuth: true } },
     { path: "ui-providers", name: "settingsUIProviders", component: () => import("@/views/settings/UIProviderSettingsView.vue"), meta: { requiresAuth: true } },

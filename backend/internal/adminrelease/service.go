@@ -487,6 +487,12 @@ func (s *Server) publishValidatedRelease(actor adminActor, release *UpdateReleas
 	release.Status = StatusPublished
 	release.PublishedAt = &now
 	release.UpdatedAt = now
+	if release.Product == ProductAndroid {
+		if err := s.refreshAndroidChannelManifests(); err != nil {
+			s.writeAudit(actor, "release.publish", release, "failed", err.Error())
+			return nil, err
+		}
+	}
 	s.writeAudit(actor, "release.publish", release, "success", "发布完成")
 	return release, nil
 }
@@ -515,14 +521,14 @@ func (s *Server) pauseRelease(actor adminActor, releaseID uint, rollout int) (*U
 		if rollout == 100 {
 			release.Status = StatusPublished
 		}
-		if err := s.publishAndroidRelease(&release); err != nil {
-			return err
-		}
 		if err := s.db.Model(&UpdateRelease{}).Where("id = ?", release.ID).Updates(map[string]interface{}{
 			"rollout_percentage": rollout,
 			"status":             release.Status,
 			"updated_at":         time.Now(),
 		}).Error; err != nil {
+			return err
+		}
+		if err := s.refreshAndroidChannelManifests(); err != nil {
 			return err
 		}
 		s.writeAudit(actor, "release.rollout", &release, "success", fmt.Sprintf("灰度调整为 %d%%", rollout))

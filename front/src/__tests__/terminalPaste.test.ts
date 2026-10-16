@@ -15,7 +15,7 @@ describe('Workbench terminal paste and Unicode', () => {
  it('discards control escape sequences from untrusted clipboard data', () => {
   expect(encodeTerminalPaste('hi\x1b[201~\x00there', true)).toBe('\x1b[200~hi[201~there\x1b[201~');
   expect(encodeTerminalPaste('X'.repeat(4100), true)).toBeNull();
-  expect(encodeTerminalPaste('')).toBeNull();
+   expect(encodeTerminalPaste('', false)).toBeNull();
  });
  it('renders combining accents in the preceding terminal cell', () => {
   const screen = new TerminalVtScreen(20, 10);

@@ -12,9 +12,11 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/embedding"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -34,6 +36,34 @@ func ownedPromptContext(ctx context.Context, inference business.Inference) ([]ma
 		return nil, coordination.ErrRoleRequired
 	}
 	parts := buildRoleSystemParts(&role, nil)
+	parts = append(parts, ownedExpressionPrompt(ctx, inference, &role)...)
+	if inference.MessageStyle == "bubble" {
+		parts = append(parts, bubbleMessageInstruction)
+	}
+	if runtime, ok := interaction.RuntimeFromContext(ctx); ok {
+		if runtime.Context.Temporal.Status == interaction.LoadStatusReady {
+			parts = append(parts, temporal.RenderSnapshot(runtime.Context.Temporal.Value))
+		}
+		if runtime.Context.Continuity.Status == interaction.LoadStatusReady {
+			parts = append(parts, continuity.RenderContext(runtime.Context.Continuity.Value))
+		}
+		if emotion := buildEmotionFusionRaw(runtime, role.Name); strings.TrimSpace(emotion) != "" {
+			parts = append(parts, emotion)
+		}
+		if encoded, err := json.Marshal(runtime); err == nil {
+			parts = append(parts, "【当前授权运行决策与上下文】\n"+string(encoded))
+		} else {
+			return nil, err
+		}
+	}
+	if inference.Ingress != nil {
+		ingress := inference.Ingress
+		for _, value := range []string{ingress.ProactiveTaskInstruction, ingress.ProactiveTimeContext, ingress.ProactiveRecentContext, ingress.ProactiveRelationship, ingress.ProactiveEmotion, ingress.ProactiveMemory} {
+			if strings.TrimSpace(value) != "" {
+				parts = append(parts, value)
+			}
+		}
+	}
 	for _, setting := range []struct{ label, value string }{{"角色基础设定", role.CharacterBase}, {"角色系统设定", role.BasePrompt}, {"角色生成设定", role.GeneratedPrompt}} {
 		if strings.TrimSpace(setting.value) != "" {
 			parts = append(parts, "【"+setting.label+"】\n"+setting.value)
@@ -197,7 +227,7 @@ func (s *service) TranscribeOwnedAudio(ctx context.Context, inference business.I
 }
 
 func (s *service) GenerateOwnedReply(ctx context.Context, inference business.Inference) (generation business.Generation, resultErr error) {
-	if lifecycle, ok := s.ownedToolRuntime.(OwnedTurnRuntime); ok && !inference.InternalWorker && !inference.ScheduledMessage {
+	if lifecycle, ok := s.ownedToolRuntime.(OwnedTurnRuntime); ok && !inference.InternalWorker && !inference.ScheduledMessage && !inference.Preview {
 		var finish func(context.Context, business.Generation, error) error
 		var err error
 		ctx, finish, err = lifecycle.BeginOwnedTurn(ctx, inference)
@@ -227,12 +257,24 @@ func (s *service) generateOwnedReply(ctx context.Context, inference business.Inf
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return business.Generation{}, err
 	}
+	if blocked, err := ownedExpressionBlocked(ctx, inference); err != nil {
+		return business.Generation{}, err
+	} else if blocked {
+		return business.Generation{Suppressed: true}, nil
+	}
 	messages, err := ownedPromptContext(ctx, inference)
 	if err != nil {
 		return business.Generation{}, err
 	}
 	if err := s.prepareOwnedVision(ctx, messages); err != nil {
 		return business.Generation{}, err
+	}
+	if !inference.Preview {
+		endSkills, err := s.prepareOwnedToolPrompt(ctx, inference, messages)
+		if err != nil {
+			return business.Generation{}, err
+		}
+		defer endSkills()
 	}
 	if s.worldBookPort != nil && len(messages) > 0 {
 		world := s.worldBookPort.ToSystemPromptForSpace(inference.Scope.SpaceID, inference.Scope.RoleID, inference.Message, "")
@@ -241,13 +283,33 @@ func (s *service) generateOwnedReply(ctx context.Context, inference business.Inf
 		}
 	}
 	cfg, err := s.repo.GetActiveModel()
+	if inference.ModelConfigID > 0 {
+		cfg, err = s.repo.GetModelByID(inference.ModelConfigID)
+	}
 	if err != nil {
 		return business.Generation{}, err
 	}
+	if cfg == nil {
+		return business.Generation{}, errors.New("没有可用的模型配置")
+	}
+	configured := *cfg
+	cfg = &configured
 	applyReasoningCapabilities(cfg)
+	cfg.SupportsReasoning = requestedReasoningEnabled(cfg.SupportsReasoning, inference.ReasoningEnabled)
+	cfg.ReasoningEffort = normalizeReasoningEffort(inference.ReasoningEffort)
+	if cfg.ReasoningEffort == "" {
+		cfg.ReasoningEffort = cfg.DefaultReasoningEffort
+	}
+	if !cfg.SupportsReasoning {
+		cfg.ReasoningEffort = ""
+	}
 	sink := &ownedReplySink{inference: inference}
-	if inference.ScheduledMessage {
-		messages[0]["content"] = fmt.Sprint(messages[0]["content"]) + "\n本次是用户已授权的日程提醒或主动任务，只生成发送给用户的自然消息，不执行工具、脚本、设备操作，也不新增任务。"
+	if inference.ScheduledMessage || inference.Preview {
+		instruction := "本次是用户已授权的日程提醒或主动任务，只生成发送给用户的自然消息，不执行工具、脚本、设备操作，也不新增任务。"
+		if inference.Preview {
+			instruction = "本次是角色预览，只回答用户的测试消息，不执行工具或操作，不写入聊天历史、记忆或任务。"
+		}
+		messages[0]["content"] = fmt.Sprint(messages[0]["content"]) + "\n" + instruction
 		text, _, calls, tokens, err := s.invokeProcessLLMWithToolsStream(ctx, cfg, messages, []tool.Tool{}, sink)
 		if err != nil {
 			return business.Generation{}, err

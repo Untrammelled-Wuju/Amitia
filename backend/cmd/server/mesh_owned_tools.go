@@ -27,9 +27,10 @@ type meshOwnedToolRuntime struct {
 }
 
 type ownedToolResultDocument struct {
-	Scope       coordination.ExecutionScope  `json:"executionScope"`
-	Fingerprint string                       `json:"fingerprint"`
-	Result      capability.UnifiedToolResult `json:"result"`
+	ConversationID string                       `json:"conversationId,omitempty"`
+	Scope          coordination.ExecutionScope  `json:"executionScope"`
+	Fingerprint    string                       `json:"fingerprint"`
+	Result         capability.UnifiedToolResult `json:"result"`
 }
 
 func ownedToolScope(inference business.Inference, call string) kernel.InvocationScope {
@@ -57,7 +58,11 @@ func ownedToolScope(inference business.Inference, call string) kernel.Invocation
 	if permissionMode == "" {
 		permissionMode = "request_approval"
 	}
-	return kernel.InvocationScope{SpaceID: scope.SpaceID, DeviceID: scope.TargetDeviceID, PrincipalType: "device", CharacterID: scope.RoleID, ConversationID: inference.ConversationID, Channel: "device-mesh", RequestID: scope.RequestID, ToolCallID: call, PermissionMode: permissionMode, Message: inference.Message, Source: "device-mesh", ExecContext: &exec}
+	invocation := kernel.InvocationScope{SpaceID: scope.SpaceID, DeviceID: scope.TargetDeviceID, PrincipalType: "device", CharacterID: scope.RoleID, ConversationID: inference.ConversationID, Channel: "device-mesh", RequestID: scope.RequestID, ToolCallID: call, PermissionMode: permissionMode, Message: inference.Message, Source: "owned", ExecContext: &exec}
+	if inference.Ingress != nil {
+		invocation.Source, invocation.Channel, invocation.SessionID, invocation.IsInternal = inference.Ingress.Source, inference.Ingress.Channel, inference.Ingress.SessionID, inference.Ingress.IsInternal
+	}
+	return invocation
 }
 
 func (r *meshOwnedToolRuntime) definition(ctx context.Context, inference business.Inference, name string) (capability.ToolDefinition, error) {
@@ -77,6 +82,23 @@ func (r *meshOwnedToolRuntime) definition(ctx context.Context, inference busines
 	definition, ok := r.services.KernelContainer.ToolRegistry.GetByModelName(ctx, name)
 	if !ok || !definition.Enabled || definition.Internal {
 		return capability.ToolDefinition{}, errors.New("能力不存在、未启用或不允许模型调用")
+	}
+	return r.authorizeDefinition(ctx, inference, definition)
+}
+
+func (r *meshOwnedToolRuntime) authorizeDefinition(ctx context.Context, inference business.Inference, definition capability.ToolDefinition) (capability.ToolDefinition, error) {
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return capability.ToolDefinition{}, err
+	}
+	mesh := r.services.DeviceMesh
+	if err := mesh.Coordination.Validate(ctx, inference.Scope); err != nil {
+		return capability.ToolDefinition{}, err
+	}
+	if err := coordination.ValidateRoleRevision(ctx, mesh, inference.Scope); err != nil {
+		return capability.ToolDefinition{}, err
+	}
+	if !definition.Enabled {
+		return capability.ToolDefinition{}, errors.New("能力未启用")
 	}
 	capabilityID := string(definition.CapabilityID)
 	if capabilityID == "" {
@@ -142,6 +164,10 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 	if err != nil {
 		return chat.ToolResult{}, err
 	}
+	return r.executeDefinition(ctx, inference, call, input, definition)
+}
+
+func (r *meshOwnedToolRuntime) executeDefinition(ctx context.Context, inference business.Inference, call string, input json.RawMessage, definition capability.ToolDefinition) (chat.ToolResult, error) {
 	digest := sha256.Sum256([]byte(inference.Scope.CoreID + "\x00" + inference.Scope.ExecutionID + "\x00" + call))
 	key := "owned/" + hex.EncodeToString(digest[:])
 	fingerprint := kernelExecution.BuildRequestFingerprintSHA(input, definition.ToolVersion, 0)
@@ -155,14 +181,17 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 			if resource.Deleted || resource.OwnerID != inference.Scope.ResourceOwnerID || resource.RoleID != inference.Scope.RoleID || json.Unmarshal(resource.Body, &saved) != nil || saved.Fingerprint != fingerprint || saved.Scope != inference.Scope {
 				return chat.ToolResult{}, coordination.ErrRequestConflict
 			}
-			return (&chatToolRuntimeAdapter{}).toChatResult(kernel.ToolDispatchResultFromUnified(saved.Result)), nil
+			return kernelToolResultToChat(kernel.ToolDispatchResultFromUnified(saved.Result)), nil
 		}
 		ctx = kernelExecution.WithOwnedToolResultStore(ctx, func(current context.Context, result capability.UnifiedToolResult) (kernelExecution.OwnedToolResultReference, error) {
-			return r.saveOwnedToolResult(current, inference.Scope, key, fingerprint, result)
+			return r.saveOwnedToolResult(current, inference.Scope, key, fingerprint, result, inference.ConversationID)
 		})
 	}
-	result, found := r.services.KernelContainer.ToolFacade.ExecuteTool(ctx, capability.CapabilityID(definition.ID), input, ownedToolScope(inference, call), call, key)
-	if !found {
+	result, _, executionErr := r.services.KernelContainer.ToolFacade.ExecuteModelToolStream(ctx, definition.ID, input, ownedToolScope(inference, call), key, ownedToolProgressSink{inference: inference, call: call, name: definition.ModelName})
+	if executionErr != nil {
+		return chat.ToolResult{}, executionErr
+	}
+	if result.Error != nil && result.Error.Code == "TOOL_NOT_FOUND" {
 		return chat.ToolResult{}, errors.New("Core 无法解析所选能力，未执行替代能力")
 	}
 	if err := r.services.DeviceMesh.Coordination.Validate(ctx, inference.Scope); err != nil {
@@ -190,11 +219,15 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 		}
 		result = kernel.ToolDispatchResultFromUnified(saved.Result)
 	}
-	return (&chatToolRuntimeAdapter{}).toChatResult(result), nil
+	return kernelToolResultToChat(result), nil
 }
 
-func (r *meshOwnedToolRuntime) saveOwnedToolResult(ctx context.Context, scope coordination.ExecutionScope, id, fingerprint string, result capability.UnifiedToolResult) (kernelExecution.OwnedToolResultReference, error) {
-	encoded, err := json.Marshal(ownedToolResultDocument{Scope: scope, Fingerprint: fingerprint, Result: result})
+func (r *meshOwnedToolRuntime) saveOwnedToolResult(ctx context.Context, scope coordination.ExecutionScope, id, fingerprint string, result capability.UnifiedToolResult, conversation ...string) (kernelExecution.OwnedToolResultReference, error) {
+	conversationID := ""
+	if len(conversation) > 0 {
+		conversationID = conversation[0]
+	}
+	encoded, err := json.Marshal(ownedToolResultDocument{Scope: scope, Fingerprint: fingerprint, Result: result, ConversationID: conversationID})
 	if err != nil {
 		return kernelExecution.OwnedToolResultReference{}, err
 	}

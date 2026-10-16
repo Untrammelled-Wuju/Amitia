@@ -19,6 +19,7 @@ class AppUpdateService {
     'AMITIA_ANDROID_UPDATE_CHANNEL',
     defaultValue: 'stable',
   );
+  static const List<String> testChannels = <String>['beta', 'alpha'];
 
   AppUpdateService({Dio? dio, String? baseUrl})
     : _dio =
@@ -42,10 +43,67 @@ class AppUpdateService {
     return InstalledAppInfo.fromMap(value ?? const <Object?, Object?>{});
   }
 
-  Future<AppUpdateCheckResult> check({String? channel}) async {
+  static List<String> resolveChannels({String? channel, bool includeTest = false}) {
+    final base = _normalizeChannel(channel ?? updateChannel);
+    final channels = <String>[base];
+    if (includeTest) {
+      for (final testChannel in testChannels) {
+        if (!channels.contains(testChannel)) {
+          channels.add(testChannel);
+        }
+      }
+    }
+    return channels;
+  }
+
+  Future<AppUpdateCheckResult> check({
+    String? channel,
+    bool includeTest = false,
+  }) async {
     final installed = await getInstalledInfo();
-    final normalizedChannel = _normalizeChannel(channel ?? updateChannel);
-    final manifestUrl = '$_baseUrl/$normalizedChannel.json';
+    final channels = resolveChannels(channel: channel, includeTest: includeTest);
+    AppUpdateManifest? best;
+    for (final candidate in channels) {
+      final manifest = await _fetchManifest(candidate, installed, channels);
+      if (manifest == null) continue;
+      if (best == null || manifest.versionCode > best.versionCode) {
+        best = manifest;
+      }
+    }
+    if (best == null) {
+      return AppUpdateCheckResult(
+        installed: installed,
+        available: null,
+        reason: 'manifest_unavailable',
+      );
+    }
+    if (best.versionCode <= installed.versionCode) {
+      return AppUpdateCheckResult(
+        installed: installed,
+        available: null,
+        reason: 'already_latest',
+      );
+    }
+    if (!await _isWithinRollout(best)) {
+      return AppUpdateCheckResult(
+        installed: installed,
+        available: null,
+        reason: 'rollout_excluded',
+      );
+    }
+    return AppUpdateCheckResult(
+      installed: installed,
+      available: best,
+      reason: null,
+    );
+  }
+
+  Future<AppUpdateManifest?> _fetchManifest(
+    String channel,
+    InstalledAppInfo installed,
+    List<String> allowedChannels,
+  ) async {
+    final manifestUrl = '$_baseUrl/$channel.json';
     late final Response<List<int>> manifestResponse;
     try {
       manifestResponse = await _dio.get<List<int>>(
@@ -57,11 +115,7 @@ class AppUpdateService {
       );
     } on DioException catch (error) {
       if (_isNotFound(error)) {
-        return AppUpdateCheckResult(
-          installed: installed,
-          available: null,
-          reason: 'manifest_unavailable',
-        );
+        return null;
       }
       rethrow;
     }
@@ -81,11 +135,7 @@ class AppUpdateService {
       );
     } on DioException catch (error) {
       if (_isNotFound(error)) {
-        return AppUpdateCheckResult(
-          installed: installed,
-          available: null,
-          reason: 'manifest_unavailable',
-        );
+        return null;
       }
       rethrow;
     }
@@ -105,27 +155,8 @@ class AppUpdateService {
     final manifest = AppUpdateManifest.fromMap(
       Map<String, dynamic>.from(decoded),
     );
-    _validateManifest(manifest, installed, normalizedChannel);
-
-    if (manifest.versionCode <= installed.versionCode) {
-      return AppUpdateCheckResult(
-        installed: installed,
-        available: null,
-        reason: 'already_latest',
-      );
-    }
-    if (!await _isWithinRollout(manifest)) {
-      return AppUpdateCheckResult(
-        installed: installed,
-        available: null,
-        reason: 'rollout_excluded',
-      );
-    }
-    return AppUpdateCheckResult(
-      installed: installed,
-      available: manifest,
-      reason: null,
-    );
+    _validateManifest(manifest, installed, allowedChannels);
+    return manifest;
   }
 
   Future<int> download(AppUpdateManifest manifest) async {
@@ -187,7 +218,7 @@ class AppUpdateService {
   void _validateManifest(
     AppUpdateManifest manifest,
     InstalledAppInfo installed,
-    String channel,
+    List<String> allowedChannels,
   ) {
     if (manifest.schemaVersion != 1) {
       throw StateError('不支持的更新清单版本');
@@ -198,7 +229,7 @@ class AppUpdateService {
     if (manifest.packageName != installed.packageName) {
       throw StateError('更新清单包名不匹配');
     }
-    if (manifest.channel != channel) {
+    if (!allowedChannels.contains(manifest.channel)) {
       throw StateError('更新清单通道不匹配');
     }
     if (manifest.versionCode <= 0 || manifest.versionName.isEmpty) {
@@ -214,7 +245,7 @@ class AppUpdateService {
     }
   }
 
-  String _normalizeChannel(String value) {
+  static String _normalizeChannel(String value) {
     final normalized = value.trim().toLowerCase();
     if (normalized == 'stable' ||
         normalized == 'beta' ||

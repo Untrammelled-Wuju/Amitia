@@ -167,7 +167,7 @@ export function useImportWizard() {
       const result = await createConversationFromImport(importedConvId.value);
       if (result?.conversationId) {
         ElMessage.success("正在跳转聊天...");
-        router.push(`/chat/${result.conversationId}`);
+        router.push({ path: "/chat", query: { conversationId: result.conversationId, characterId: result.executionScope.roleId } });
       }
     } catch (err: any) {
       ElMessage.error(err?.message || "创建会话失败");

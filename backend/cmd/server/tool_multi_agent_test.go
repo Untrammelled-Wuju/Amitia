@@ -40,7 +40,7 @@ func (w *harnessTestWorker) StartWorker(ctx context.Context, req interaction.Wor
 	return rec.ID, nil
 }
 
-func testMultiAgentModelRuntime(t *testing.T) (*chatToolRuntimeAdapter, *harnessTestWorker, chat.SkillScope, *interaction.InMemoryTracker) {
+func testMultiAgentModelRuntime(t *testing.T) (*chatMultiAgentRuntime, *harnessTestWorker, chat.SkillScope, *interaction.InMemoryTracker) {
 	t.Helper()
 	ctx := context.Background()
 	tracker := interaction.NewInMemoryTracker()
@@ -58,8 +58,7 @@ func testMultiAgentModelRuntime(t *testing.T) (*chatToolRuntimeAdapter, *harness
 	coordinator.SetOwnedExecution(func(ctx context.Context, owned coordination.ExecutionScope, run func(context.Context) error) error {
 		return run(coordination.WithScope(ctx, owned))
 	})
-	adapter := &chatToolRuntimeAdapter{}
-	adapter.ConfigureMultiAgent(coordinator, tracker, goals)
+	adapter := &chatMultiAgentRuntime{coordinator: coordinator, tracker: tracker, goals: goals}
 	scope := chat.SkillScope{
 		SpaceID: "user-space", ConversationID: "user-conversation", CharacterID: "character",
 		RequestID:      "request-a",
@@ -73,19 +72,19 @@ func testMultiAgentModelRuntime(t *testing.T) (*chatToolRuntimeAdapter, *harness
 
 func TestChatHarnessMultiAgentToolsHonorWorkspaceAuthorization(t *testing.T) {
 	a, _, scope, _ := testMultiAgentModelRuntime(t)
-	if len(a.appendMultiAgentTools(context.Background(), nil, scope)) != 3 {
+	if len(a.ModelTools(context.Background(), scope)) != 3 {
 		t.Fatal("delegation and status tools were not exposed")
 	}
 	scope.ExecContext.WorkspaceID = ""
-	if len(a.appendMultiAgentTools(context.Background(), nil, scope)) != 0 {
+	if len(a.ModelTools(context.Background(), scope)) != 0 {
 		t.Fatal("delegation exposed outside workspace")
 	}
 	scope.ExecContext.WorkspaceID = "workspace-a"
 	scope.IsInternal = true
-	if len(a.appendMultiAgentTools(context.Background(), nil, scope)) != 0 {
+	if len(a.ModelTools(context.Background(), scope)) != 0 {
 		t.Fatal("delegation exposed to internal worker")
 	}
-	got := a.executeMultiAgentTool(context.Background(), multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect the api endpoints","Add durable worker tests"]}`), scope)
+	got := a.Execute(context.Background(), multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect the api endpoints","Add durable worker tests"]}`), scope)
 	if got.Error == nil || got.Error.Code != "MULTI_AGENT_NOT_AUTHORIZED" {
 		t.Fatalf("unauthorized delegation accepted: %+v", got)
 	}
@@ -94,7 +93,7 @@ func TestChatHarnessMultiAgentToolsHonorWorkspaceAuthorization(t *testing.T) {
 func TestChatHarnessMultiAgentPersistsOwnedTaskBinding(t *testing.T) {
 	a, _, scope, tracker := testMultiAgentModelRuntime(t)
 	ctx := coordination.WithScope(t.Context(), coordination.ExecutionScope{SpaceID: scope.SpaceID, RoleID: scope.CharacterID, CoreID: "execution-core", ResourceOwnerID: "device-owner"})
-	result := a.executeMultiAgentTool(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect the api endpoints","Add durable worker tests"]}`), scope)
+	result := a.Execute(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect the api endpoints","Add durable worker tests"]}`), scope)
 	if result.Error != nil {
 		t.Fatalf("delegation failed: %+v", result.Error)
 	}
@@ -112,7 +111,7 @@ func TestChatHarnessMultiAgentModelDelegatesAndReconciles(t *testing.T) {
 	ctx := context.Background()
 	a, workers, scope, tracker := testMultiAgentModelRuntime(t)
 	input := json.RawMessage(`{"objectives":["Review the file runtime","Test restart recovery"],"strategy":"sequential"}`)
-	result := a.executeMultiAgentTool(ctx, multiAgentDelegateTool, input, scope)
+	result := a.Execute(ctx, multiAgentDelegateTool, input, scope)
 	if result.Error != nil || result.Status != "SUCCESS" {
 		t.Fatalf("cannot delegate: %+v", result)
 	}
@@ -129,12 +128,12 @@ func TestChatHarnessMultiAgentModelDelegatesAndReconciles(t *testing.T) {
 	if workers.started[0].SpaceID != "user-space" || workers.started[0].ConversationID != "user-conversation" || workers.started[0].WorkspaceID != "workspace-a" || workers.started[0].WorkspaceDeviceID != "device-a" || workers.started[0].PermissionMode != "request_approval" {
 		t.Fatalf("child worker lost parent identity: %+v", workers.started[0])
 	}
-	again := a.executeMultiAgentTool(ctx, multiAgentDelegateTool, input, scope)
+	again := a.Execute(ctx, multiAgentDelegateTool, input, scope)
 	if again.Error != nil || len(workers.started) != 1 {
 		t.Fatalf("duplicate delegation spawned more workers: %+v count=%d", again, len(workers.started))
 	}
 	lookup, _ := json.Marshal(map[string]string{"coordination_id": payload.CoordinationID})
-	status := a.executeMultiAgentTool(ctx, multiAgentStatusTool, lookup, scope)
+	status := a.Execute(ctx, multiAgentStatusTool, lookup, scope)
 	if status.Error != nil {
 		t.Fatalf("status tool failed: %+v", status)
 	}
@@ -152,7 +151,7 @@ func TestChatHarnessMultiAgentModelDelegatesAndReconciles(t *testing.T) {
 	if _, err := tracker.Complete(ctx, first.ID, first.StatusVersion, "verified:first"); err != nil {
 		t.Fatal(err)
 	}
-	status = a.executeMultiAgentTool(ctx, multiAgentStatusTool, lookup, scope)
+	status = a.Execute(ctx, multiAgentStatusTool, lookup, scope)
 	if status.Error != nil {
 		t.Fatal(status.Error)
 	}
@@ -172,7 +171,7 @@ func TestChatHarnessMultiAgentModelDelegatesAndReconciles(t *testing.T) {
 	if _, err := tracker.Complete(ctx, second.ID, second.StatusVersion, "verified:second"); err != nil {
 		t.Fatal(err)
 	}
-	status = a.executeMultiAgentTool(ctx, multiAgentStatusTool, lookup, scope)
+	status = a.Execute(ctx, multiAgentStatusTool, lookup, scope)
 	if status.Error != nil {
 		t.Fatal(status.Error)
 	}
@@ -187,7 +186,7 @@ func TestChatHarnessMultiAgentModelDelegatesAndReconciles(t *testing.T) {
 func TestChatHarnessMultiAgentRejectsCrossConversationResultRead(t *testing.T) {
 	ctx := context.Background()
 	a, _, scope, _ := testMultiAgentModelRuntime(t)
-	result := a.executeMultiAgentTool(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Review long task","Test interrupted tool"]}`), scope)
+	result := a.Execute(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Review long task","Test interrupted tool"]}`), scope)
 	if result.Error != nil {
 		t.Fatal(result.Error)
 	}
@@ -197,7 +196,7 @@ func TestChatHarnessMultiAgentRejectsCrossConversationResultRead(t *testing.T) {
 	_ = json.Unmarshal(result.Output, &response)
 	input, _ := json.Marshal(map[string]string{"coordination_id": response.CoordinationID})
 	scope.ConversationID = "attacker-conversation"
-	got := a.executeMultiAgentTool(ctx, multiAgentStatusTool, input, scope)
+	got := a.Execute(ctx, multiAgentStatusTool, input, scope)
 	if got.Error == nil || !strings.Contains(got.Error.Code, "NOT_AUTHORIZED") {
 		t.Fatalf("cross-conversation status was exposed: %+v", got)
 	}
@@ -213,7 +212,7 @@ func TestChatHarnessMultiAgentConcurrencyDoesNotDuplicateWorkers(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			res := a.executeMultiAgentTool(context.Background(), multiAgentDelegateTool, data, scope)
+			res := a.Execute(context.Background(), multiAgentDelegateTool, data, scope)
 			if res.Error != nil {
 				failed.Store(true)
 				return
@@ -246,7 +245,7 @@ func TestChatHarnessMultiAgentConcurrencyDoesNotDuplicateWorkers(t *testing.T) {
 
 func TestChatHarnessMultiAgentRestoresGoalOnRestart(t *testing.T) {
 	a, workers, scope, tracker := testMultiAgentModelRuntime(t)
-	res := a.executeMultiAgentTool(context.Background(), multiAgentDelegateTool,
+	res := a.Execute(context.Background(), multiAgentDelegateTool,
 		json.RawMessage(`{"objectives":["Inspect first module","Inspect second module"],"strategy":"sequential"}`), scope)
 	if res.Error != nil {
 		t.Fatal(res.Error)
@@ -271,7 +270,7 @@ func TestChatHarnessMultiAgentRestoresGoalOnRestart(t *testing.T) {
 func TestChatHarnessMultiAgentSynchronousWorkersReturnTerminalResults(t *testing.T) {
 	adapter, workers, scope, tracker := testMultiAgentModelRuntime(t)
 	workers.finishImmediately = true
-	res := adapter.executeMultiAgentTool(context.Background(), multiAgentDelegateTool,
+	res := adapter.Execute(context.Background(), multiAgentDelegateTool,
 		json.RawMessage(`{"objectives":["Inspect the existing source", "Validate the completed implementation"],"strategy":"sequential"}`), scope)
 	if res.Error != nil {
 		t.Fatalf("coordinator returned tool failure: %+v", res.Error)
@@ -309,7 +308,7 @@ func TestChatHarnessMultiAgentStatusRestoresTerminalHistoryAfterRestart(t *testi
 	ctx := context.Background()
 	adapter, workers, scope, tracker := testMultiAgentModelRuntime(t)
 	workers.finishImmediately = true
-	issued := adapter.executeMultiAgentTool(ctx, multiAgentDelegateTool,
+	issued := adapter.Execute(ctx, multiAgentDelegateTool,
 		json.RawMessage(`{"objectives":["Implement change safely","Validate the parent build"],"strategy":"sequential"}`), scope)
 	if issued.Error != nil {
 		t.Fatal(issued.Error)
@@ -325,9 +324,10 @@ func TestChatHarnessMultiAgentStatusRestoresTerminalHistoryAfterRestart(t *testi
 		t.Fatalf("expected completed task: %+v", response)
 	}
 	freshGoals := decision.NewGoalRegistry()
-	adapter.ConfigureMultiAgent(interaction.NewMultiAgentCoordinator(tracker, freshGoals, nil, workers, nil, interaction.DefaultMultiAgentPolicy()), tracker, freshGoals)
+	adapter.coordinator = interaction.NewMultiAgentCoordinator(tracker, freshGoals, nil, workers, nil, interaction.DefaultMultiAgentPolicy())
+	adapter.tracker, adapter.goals = tracker, freshGoals
 	arg, _ := json.Marshal(map[string]string{"coordination_id": response.CoordinationID})
-	queried := adapter.executeMultiAgentTool(ctx, multiAgentStatusTool, arg, scope)
+	queried := adapter.Execute(ctx, multiAgentStatusTool, arg, scope)
 	if queried.Error != nil {
 		t.Fatalf("completed task unavailable after restart: %+v", queried.Error)
 	}
@@ -340,7 +340,7 @@ func TestChatHarnessMultiAgentStatusRestoresTerminalHistoryAfterRestart(t *testi
 		t.Fatalf("terminal history lost or worker replayed: %+v started=%d", snapshot, len(workers.started))
 	}
 	scope.ConversationID = "unrelated-conversation"
-	cross := adapter.executeMultiAgentTool(ctx, multiAgentStatusTool, arg, scope)
+	cross := adapter.Execute(ctx, multiAgentStatusTool, arg, scope)
 	if cross.Error == nil {
 		t.Fatalf("other conversation read recovered results: %+v", cross)
 	}
@@ -349,7 +349,7 @@ func TestChatHarnessMultiAgentStatusRestoresTerminalHistoryAfterRestart(t *testi
 func TestChatHarnessMultiAgentWaitResumesParentWhenChildrenComplete(t *testing.T) {
 	ctx := context.Background()
 	a, workers, scope, tracker := testMultiAgentModelRuntime(t)
-	result := a.executeMultiAgentTool(ctx, multiAgentDelegateTool,
+	result := a.Execute(ctx, multiAgentDelegateTool,
 		json.RawMessage(`{"objectives":["Review code in parallel","Run focused verification"],"strategy":"parallel"}`), scope)
 	if result.Error != nil {
 		t.Fatal(result.Error)
@@ -374,7 +374,7 @@ func TestChatHarnessMultiAgentWaitResumesParentWhenChildrenComplete(t *testing.T
 		}
 	}()
 	args, _ := json.Marshal(map[string]any{"coordination_id": payload.CoordinationID, "wait_seconds": 2})
-	waited := a.executeMultiAgentTool(ctx, multiAgentWaitTool, args, scope)
+	waited := a.Execute(ctx, multiAgentWaitTool, args, scope)
 	if waited.Error != nil {
 		t.Fatalf("waiting for children failed: %+v", waited.Error)
 	}
@@ -391,7 +391,7 @@ func TestChatHarnessMultiAgentWaitResumesParentWhenChildrenComplete(t *testing.T
 		}
 	}
 	scope.ConversationID = "other-conversation"
-	cross := a.executeMultiAgentTool(ctx, multiAgentWaitTool, args, scope)
+	cross := a.Execute(ctx, multiAgentWaitTool, args, scope)
 	if cross.Error == nil {
 		t.Fatal("other conversation accessed wait results")
 	}
@@ -400,7 +400,7 @@ func TestChatHarnessMultiAgentWaitResumesParentWhenChildrenComplete(t *testing.T
 func TestChatHarnessMultiAgentWaitIsBoundedAndCannotFabricateCompletion(t *testing.T) {
 	ctx := context.Background()
 	a, _, scope, _ := testMultiAgentModelRuntime(t)
-	result := a.executeMultiAgentTool(ctx, multiAgentDelegateTool,
+	result := a.Execute(ctx, multiAgentDelegateTool,
 		json.RawMessage(`{"objectives":["Inspect the network runtime","Inspect the worker lifecycle"]}`), scope)
 	if result.Error != nil {
 		t.Fatal(result.Error)
@@ -410,7 +410,7 @@ func TestChatHarnessMultiAgentWaitIsBoundedAndCannotFabricateCompletion(t *testi
 	}
 	_ = json.Unmarshal(result.Output, &payload)
 	args, _ := json.Marshal(map[string]any{"coordination_id": payload.CoordinationID, "wait_seconds": 1})
-	waited := a.executeMultiAgentTool(ctx, multiAgentWaitTool, args, scope)
+	waited := a.Execute(ctx, multiAgentWaitTool, args, scope)
 	if waited.Error != nil {
 		t.Fatalf("pending workers should return status not fake completion: %+v", waited.Error)
 	}
@@ -444,16 +444,16 @@ func TestChatHarnessMultiAgentRejectsSpoofedInternalWorkerSource(t *testing.T) {
 	scope.RequestID = child.Scope.RequestID
 	scope.IsInternal = false
 	scope.Source = ""
-	if len(a.appendMultiAgentTools(context.Background(), nil, scope)) != 0 {
+	if len(a.ModelTools(context.Background(), scope)) != 0 {
 		t.Fatal("internal child was allowed to discover recursive delegation despite missing source flags")
 	}
-	result := a.executeMultiAgentTool(context.Background(), multiAgentDelegateTool,
+	result := a.Execute(context.Background(), multiAgentDelegateTool,
 		json.RawMessage(`{"objectives":["Try recursive dispatch","Try scope escalation"]}`), scope)
 	if result.Error == nil || result.Error.Code != "MULTI_AGENT_NOT_AUTHORIZED" {
 		t.Fatalf("internal child bypassed durable tracker authorization: %+v", result)
 	}
 	scope.ConversationID = "other-conversation"
-	if len(a.appendMultiAgentTools(context.Background(), nil, scope)) != 0 {
+	if len(a.ModelTools(context.Background(), scope)) != 0 {
 		t.Fatal("mismatched conversation discovered delegation")
 	}
 }

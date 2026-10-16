@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/memorypolicy"
 )
@@ -38,6 +39,10 @@ type Request struct {
 	HistoricalRoleID   string                         `json:"historicalRoleId,omitempty"`
 	ConversationID     string                         `json:"conversationId,omitempty"`
 	PermissionMode     string                         `json:"permissionMode,omitempty"`
+	ModelConfigID      int                            `json:"modelConfigId,omitempty"`
+	ReasoningEffort    string                         `json:"reasoningEffort,omitempty"`
+	ReasoningEnabled   *bool                          `json:"reasoningEnabled,omitempty"`
+	MessageStyle       string                         `json:"messageStyle,omitempty"`
 	RequestID          string                         `json:"requestId"`
 	Message            string                         `json:"message"`
 }
@@ -77,13 +82,17 @@ func validateForwardedContext(request Request) error {
 }
 
 type Generation struct {
-	Text      string `json:"reply"`
-	Reasoning string `json:"reasoning,omitempty"`
-	Tokens    int    `json:"tokens"`
-	Partial   bool   `json:"-"`
+	Suppressed bool            `json:"suppressed,omitempty"`
+	Outputs    json.RawMessage `json:"outputs,omitempty"`
+	ForceVoice bool            `json:"forceVoice,omitempty"`
+	Text       string          `json:"reply"`
+	Reasoning  string          `json:"reasoning,omitempty"`
+	Tokens     int             `json:"tokens"`
+	Partial    bool            `json:"-"`
 }
 
 type Event struct {
+	Progress       json.RawMessage             `json:"progress,omitempty"`
 	Task           *TaskEvent                  `json:"task,omitempty"`
 	Type           string                      `json:"type"`
 	ConversationID string                      `json:"conversationId,omitempty"`
@@ -98,6 +107,8 @@ type TaskEvent struct {
 }
 
 type Inference struct {
+	Preview            bool                                                 `json:"-"`
+	Ingress            *Ingress                                             `json:"-"`
 	RegisterCompletion func(func(context.Context, Generation, error) error) `json:"-"`
 	InternalWorker     bool
 	ScheduledMessage   bool
@@ -114,6 +125,10 @@ type Inference struct {
 	HistoricalSnapshot *coordination.DataSnapshot
 	Emit               func(Event) error `json:"-"`
 	PermissionMode     string
+	ModelConfigID      int
+	ReasoningEffort    string
+	ReasoningEnabled   *bool
+	MessageStyle       string
 	Message            string
 }
 
@@ -131,6 +146,10 @@ type Model interface {
 
 type AudioModel interface {
 	TranscribeOwnedAudio(context.Context, Inference, Attachment) (string, error)
+}
+
+type CommittedModel interface {
+	OwnedReplyCommitted(context.Context, Inference, Generation, string) error
 }
 
 type SemanticModel interface {
@@ -155,12 +174,13 @@ type Response struct {
 }
 
 type checkpoint struct {
-	Context        *ForwardedContext            `json:"context,omitempty"`
-	Hash           string                       `json:"hash"`
-	Status         string                       `json:"status"`
-	Response       *Response                    `json:"response,omitempty"`
-	ConversationID string                       `json:"conversationId"`
-	Scope          *coordination.ExecutionScope `json:"scope,omitempty"`
+	Runtime        *conversationstream.ActiveTurnState `json:"runtime,omitempty"`
+	Context        *ForwardedContext                   `json:"context,omitempty"`
+	Hash           string                              `json:"hash"`
+	Status         string                              `json:"status"`
+	Response       *Response                           `json:"response,omitempty"`
+	ConversationID string                              `json:"conversationId"`
+	Scope          *coordination.ExecutionScope        `json:"scope,omitempty"`
 }
 
 type lane struct {
@@ -339,6 +359,9 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if err := validateForwardedContext(request); err != nil {
 		return Response{}, err
 	}
+	if err := validateConversationSettings(request); err != nil {
+		return Response{}, err
+	}
 	if err := ValidateAttachments(request.Attachments); err != nil {
 		return Response{}, err
 	}
@@ -445,7 +468,11 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		return Response{}, err
 	}
 	request.ProjectID, request.ProjectWorkspaces, request.PrimaryWorkspaceID = projectID, workspaces, primaryWorkspaceID
+	if err := resolveConversationSettings(&request, snapshot); err != nil {
+		return Response{}, err
+	}
 	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context, "projectId": projectID, "workspaces": workspaces, "primaryWorkspaceId": primaryWorkspaceID}
+	fingerprintData["conversationSettings"] = settingsFromRequest(request)
 	if request.Quote != nil {
 		fingerprintData["quote"] = request.Quote
 	}
@@ -513,10 +540,15 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		}
 	}
 	conversation["updatedAt"] = now
+	applyConversationSettings(conversation, request)
 	input := []coordination.Mutation{
 		{Kind: "conversation", ID: request.ConversationID, RoleID: role.ID, ExpectedRevision: version(snapshot, "conversation", request.ConversationID), Body: body(conversation)},
 		{Kind: "message", ID: request.RequestID + "/user", RoleID: role.ID, Body: body(map[string]any{"id": request.RequestID + "/user", "conversationId": request.ConversationID, "characterId": role.ID, "role": "user", "content": request.Message, "requestId": request.RequestID, "createdAt": now, "executionScope": scope, "attachments": request.Attachments, "quote": quote})},
 		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, Body: body(checkpoint{Hash: fingerprint, Status: "running", ConversationID: request.ConversationID, Scope: &scope, Context: request.Context})},
+	}
+	ingress, hasIngress := IngressFromContext(ctx)
+	if hasIngress && ingress.SuppressReplyPersistence {
+		input = append(input[:1], input[2:]...)
 	}
 	if err := e.submit(ctx, scope, "input", input, quoteDependencies...); err != nil {
 		return Response{}, fmt.Errorf("输入尚未确认保存: %w", err)
@@ -555,12 +587,39 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		}
 		event.Scope = scope
 		event.ConversationID = request.ConversationID
+		if err := publishRuntime(ctx, Inference{Scope: scope, ConversationID: request.ConversationID}, event); err != nil {
+			return err
+		}
 		if emit != nil {
 			return emit(event)
 		}
 		return nil
 	}
 	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent}
+	inference.ModelConfigID, inference.ReasoningEffort, inference.ReasoningEnabled = request.ModelConfigID, request.ReasoningEffort, request.ReasoningEnabled
+	inference.MessageStyle = request.MessageStyle
+	if ingress, ok := IngressFromContext(ctx); ok {
+		inference.Ingress = &ingress
+	}
+	finishRuntime, err := beginRuntime(ctx, inference, cancel)
+	if err != nil {
+		return Response{}, err
+	}
+	defer finishRuntime()
+	defer func() {
+		status, eventType := "completed", "turn.completed"
+		if finalErr != nil || finalResponse.Interrupted || !finalResponse.Saved {
+			status, eventType = "failed", "turn.failed"
+			if finalResponse.Interrupted {
+				status, eventType = "interrupted", "turn.interrupted"
+			}
+		}
+		payload := map[string]any{"saved": finalResponse.Saved}
+		if finalErr != nil {
+			payload["message"] = finalErr.Error()
+		}
+		_, _ = ownedRuntimeManager.Publish(context.WithoutCancel(ctx), conversationstream.AgentUIEvent{ConversationID: RuntimeKey(scope, request.ConversationID), RequestID: scope.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, Type: eventType, Status: status, Payload: payload}, false)
+	}()
 	_, inference.InternalWorker = ctx.Value(workerContextKey{}).(workerContext)
 	var completeTurn func(context.Context, Generation, error) error
 	inference.RegisterCompletion = func(finish func(context.Context, Generation, error) error) { completeTurn = finish }
@@ -584,7 +643,11 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if err := emitCurrent(Event{Type: "started"}); err != nil {
 		cancel(err)
 	}
-	transcription, userRevision, err := e.transcribeAudio(ctx, &inference, input[1])
+	var transcription string
+	var userRevision int64
+	if !hasIngress || !ingress.SuppressReplyPersistence {
+		transcription, userRevision, err = e.transcribeAudio(ctx, &inference, input[1])
+	}
 	var generation Generation
 	if err == nil {
 		generation, err = e.model.GenerateOwnedReply(ctx, inference)
@@ -621,10 +684,15 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 			response.Evidence = append(response.Evidence, coordination.ResourceVersion{Kind: "message", ID: resource.ID, Revision: resource.Revision})
 		}
 	}
-	response.Evidence = append(response.Evidence, coordination.ResourceVersion{Kind: "message", ID: request.RequestID + "/user", Revision: userRevision})
+	if !hasIngress || !ingress.SuppressReplyPersistence {
+		response.Evidence = append(response.Evidence, coordination.ResourceVersion{Kind: "message", ID: request.RequestID + "/user", Revision: userRevision})
+	}
 	output := []coordination.Mutation{
-		{Kind: "message", ID: request.RequestID + "/assistant", RoleID: role.ID, Body: body(map[string]any{"id": request.RequestID + "/assistant", "conversationId": request.ConversationID, "characterId": role.ID, "role": "assistant", "content": generation.Text, "reasoningContent": generation.Reasoning, "tokens": generation.Tokens, "requestId": request.RequestID, "createdAt": time.Now().UTC().Format(time.RFC3339Nano), "executionScope": scope})},
-		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, ExpectedRevision: 1, Body: body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context})},
+		{Kind: "message", ID: request.RequestID + "/assistant", RoleID: role.ID, Body: body(map[string]any{"id": request.RequestID + "/assistant", "conversationId": request.ConversationID, "characterId": role.ID, "role": "assistant", "content": generation.Text, "reasoningContent": generation.Reasoning, "tokens": generation.Tokens, "outputs": generation.Outputs, "forceVoice": generation.ForceVoice, "requestId": request.RequestID, "createdAt": time.Now().UTC().Format(time.RFC3339Nano), "executionScope": scope})},
+		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, ExpectedRevision: 1, Body: body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, request.ConversationID)).ActiveTurn})},
+	}
+	if generation.Suppressed || hasIngress && ingress.SuppressReplyPersistence {
+		output = output[1:]
 	}
 	if err := e.submit(ctx, scope, "reply", output, response.Evidence...); err != nil {
 		response.Saved = false
@@ -632,6 +700,15 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	}
 	if err := e.coordination.CompleteRequest(ctx, scope); err != nil {
 		return response, err
+	}
+	if committed, ok := e.model.(CommittedModel); ok && !generation.Suppressed && (!hasIngress || !ingress.SuppressReplyPersistence) {
+		if err := committed.OwnedReplyCommitted(ctx, inference, generation, request.RequestID+"/assistant"); err != nil {
+			return response, fmt.Errorf("回复已保存，回复后处理失败: %w", err)
+		}
+	}
+	if generation.Suppressed || hasIngress && ingress.SuppressReplyPersistence {
+		response.MemoryStatus = "skipped"
+		return response, nil
 	}
 	return e.completeMemory(ctx, inference, fingerprint, response, 2)
 }

@@ -45,12 +45,11 @@ SPDX-License-Identifier: AGPL-3.0-only
           'conversation-flow-item--continuation': item.isAssistantContinuation === true,
         }"
       >
-        <div
+        <ConversationDividerLine
           v-if="item.showRoleSwitchDivider"
           class="conversation-role-switch"
-        >
-          <span>当前对话角色已切换为 {{ roleSwitchName(item.roleSwitchCharacterId) }}</span>
-        </div>
+          :text="`当前对话角色已切换为 ${roleSwitchName(item.roleSwitchCharacterId)}`"
+        />
         <ExtensionSlot
           v-if="hasMessageSlotRenderer(item.message)"
           slot-id="chat.message.renderer"
@@ -120,23 +119,29 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-else
         class="conversation-flow-item conversation-flow-item--error"
       >
-        <div class="conversation-error-divider">
-          <span class="conversation-error-line"></span>
-          <div class="conversation-error-text">
-            <b>生成失败</b>
-            <span>{{ item.detail }}</span>
-          </div>
-          <span class="conversation-error-line"></span>
-        </div>
+        <ConversationDividerLine class="conversation-error-divider">
+          <b class="conversation-error-title">生成失败</b>
+          <span>{{ item.detail }}</span>
+        </ConversationDividerLine>
       </div>
     </template>
 
-    <div
+    <ConversationDividerLine
       v-if="pendingRoleSwitchName"
       class="conversation-role-switch conversation-role-switch--pending"
-    >
-      <span>当前对话角色已切换为 {{ pendingRoleSwitchName }}</span>
-    </div>
+      :text="`当前对话角色已切换为 ${pendingRoleSwitchName}`"
+    />
+
+    <ChatBanners
+      :model-missing="modelMissing === true"
+      :is-offline="isOffline === true"
+      :import-context="importContext ?? null"
+      :show-import-detail="showImportDetail === true"
+      @close-import="$emit('closeImport')"
+      @toggle-import-detail="$emit('toggleImportDetail')"
+    />
+
+    <ConversationDividerLine v-if="noticeText" class="conversation-notice-line" :text="noticeText" />
 
     <transition name="fade">
       <div v-if="showScrollBtn" class="scroll-btn-anchor">
@@ -156,6 +161,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue";
 import ChatBubble from "./ChatBubble.vue";
+import ChatBanners from "./ChatBanners.vue";
+import ConversationDividerLine from "./ConversationDividerLine.vue";
 import MessageExtensionHost from "./extension/chat/MessageExtensionHost.vue";
 import ChatEmptyStateExtensionHost from "./extension/chat/ChatEmptyStateExtensionHost.vue";
 import MessageActionExtensionHost from "./extension/chat/MessageActionExtensionHost.vue";
@@ -204,6 +211,11 @@ const props = defineProps<{
   pullLoading: boolean;
   pullText: string;
   characters?: any[];
+  notice?: string;
+  modelMissing?: boolean;
+  isOffline?: boolean;
+  importContext?: Record<string, unknown> | null;
+  showImportDetail?: boolean;
   modelError?: string;
   deviceOwned?: boolean;
   extensionContext?: Record<string, unknown>;
@@ -219,6 +231,8 @@ const emit = defineEmits<{
   retry: [msg: any];
   reply: [msg: any];
   edit: [msg: any];
+  closeImport: [];
+  toggleImportDetail: [];
   scrollToBottom: [];
 }>();
 
@@ -235,6 +249,7 @@ let durableRequestGeneration = 0;
 
 const visibleMessages = computed(() => props.messages);
 const historyMessages = computed(() => props.historyMessages ?? props.messages);
+const noticeText = computed(() => String(props.notice ?? "").trim());
 const conversationId = computed(() => String(
   props.extensionContext?.conversationId ?? historyMessages.value[0]?.conversationId ?? visibleMessages.value[0]?.conversationId ?? "",
 ));
@@ -725,7 +740,7 @@ defineExpose({ rootEl });
   min-height: 0;
   overflow-y: scroll;
   overscroll-behavior-y: contain;
-  padding: 0 32px 28px;
+  padding: calc(var(--chat-header-h, 0px) + 24px) 32px calc(var(--chat-composer-h, 0px) + 32px);
   position: relative;
 }
 
@@ -778,67 +793,29 @@ defineExpose({ rootEl });
   margin-bottom: 38px;
 }
 
-.conversation-error-divider {
-  width: min(100%, 820px);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 auto;
-  color: var(--ac-color-text-muted);
-  font-size: 11px;
-}
-
-.conversation-error-line {
-  flex: 1 1 0;
-  height: 1px;
-  background: var(--ac-color-border);
-}
-
-.conversation-error-text {
-  flex: 4 1 0;
-  min-width: 0;
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-
-.conversation-error-text b {
+.conversation-error-title {
   margin-right: 6px;
   color: var(--ac-color-danger, #e5484d);
 }
 
 .conversation-role-switch {
-  width: min(100%, 820px);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 2px auto 20px;
-  color: var(--ac-color-text-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.conversation-role-switch::before,
-.conversation-role-switch::after {
-  content: "";
-  flex: 1 1 0;
-  height: 1px;
-  background: var(--ac-color-border);
+  margin-top: 2px;
+  margin-bottom: 20px;
 }
 
 .conversation-role-switch--pending {
   margin-top: 12px;
 }
 
-.conversation-role-switch span {
-  flex: 0 0 auto;
-  text-align: center;
+.conversation-notice-line {
+  margin-bottom: 20px;
 }
 
 @media (max-width: 768px) { .messages-area { padding: 12px 8px; } }
 
 .scroll-btn-anchor {
   position: sticky;
-  bottom: 0;
+  bottom: calc(var(--chat-composer-h, 0px) + 12px);
   height: 0;
   display: flex;
   justify-content: center;

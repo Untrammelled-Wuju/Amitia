@@ -25,6 +25,8 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 			State:          ScopeBindingStateActive,
 		},
 	}}), temporal.SystemClock{})
+	executor := &orchestratorEntryExecutor{entry: unifiedEntry, orchestrator: orch}
+	unifiedEntry.SetEntryExecutor(executor)
 	entry := NewVoiceEntry(unifiedEntry)
 	plan := &ExpressionPlan{
 		Version:   ExpressionPlanVersionV1,

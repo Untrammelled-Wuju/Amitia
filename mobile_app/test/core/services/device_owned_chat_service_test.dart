@@ -24,6 +24,8 @@ class _OwnedApi implements BackendServiceApi {
   Map<String, dynamic>? editRequest;
   Map<String, dynamic>? editAck;
   Map<String, dynamic>? projectionResponse;
+  Map<String, dynamic>? managementResponse;
+  String postPath = '';
   bool wrongAck = false;
   bool summaryMode = false;
   Completer<Map<String, dynamic>>? deferred;
@@ -102,6 +104,10 @@ class _OwnedApi implements BackendServiceApi {
     T Function(dynamic)? fromJson,
   }) async {
     editRequest = Map<String, dynamic>.from(data as Map);
+    postPath = path;
+    if (path.contains('/chat-management/') || path.contains('/chat-runtime/')) {
+      return (managementResponse ?? {'executionScope': scope(), 'items': []}) as T;
+    }
     if (summaryMode && path.endsWith('/summary/generate')) {
       final requestId = editRequest!['requestId'];
       return {
@@ -176,6 +182,22 @@ Stream<List<int>> bytes(List<Map<String, dynamic>> events) {
 }
 
 void main() {
+  test('Owner聊天管理和控制使用POST并拒绝迟到或越权回执', () async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _OwnedApi();
+    final service = DeviceOwnedChatService(api);
+    await service.management('stats');
+    expect(api.postPath, endsWith('/chat-management/stats'));
+    expect(api.editRequest!['expectedExecutionScope'], scope());
+    await service.runtime('retry', body: {'conversationId': 'meshconv1:a:chat', 'turnId': 'turn'});
+    expect(api.postPath, endsWith('/chat-runtime/retry'));
+    expect(api.editRequest!['conversationId'], 'chat');
+    expect(api.editRequest!['conversationOwnerId'], 'a');
+    api.managementResponse = {'executionScope': {...scope(), 'resourceOwnerId': 'other'}};
+    await expectLater(service.management('stats'), throwsStateError);
+    await expectLater(service.management('cleanup/confirm', body: {'expectedExecutionScope': {...scope(), 'providerEpoch': 2}}), throwsStateError);
+  });
+
   test('手机从所有者原附件恢复文件和视频，不生成本地镜像文件', () {
     final service = DeviceOwnedChatService(
       _OwnedApi(),

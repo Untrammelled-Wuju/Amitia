@@ -8,8 +8,47 @@ import { getAmitiaDataDir, getInstallDir, isDevMode } from "./path-manager";
 let mainWindow: BrowserWindow | null = null;
 let startupResolve: (() => void) | null = null;
 let pendingUpdateInfo: UpdateInfo | null = null;
+let allowBetaChannel = false;
+let defaultAllowPrerelease = false;
 
 const RELEASES_URL = "https://amitia.untrammelled.top/amitia";
+
+function updatePreferencePath(): string {
+  return path.join(getAmitiaDataDir(), "update-preferences.json");
+}
+
+function loadAllowBetaChannel(): boolean {
+  try {
+    const file = updatePreferencePath();
+    if (!fs.existsSync(file)) return false;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as {
+      allowBetaChannel?: boolean;
+    };
+    return parsed.allowBetaChannel === true;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[UpdateManager] 读取更新通道配置失败:", msg);
+    return false;
+  }
+}
+
+function persistAllowBetaChannel(value: boolean): void {
+  try {
+    fs.mkdirSync(path.dirname(updatePreferencePath()), { recursive: true });
+    fs.writeFileSync(
+      updatePreferencePath(),
+      JSON.stringify({ allowBetaChannel: value }, null, 2),
+      "utf-8",
+    );
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[UpdateManager] 写入更新通道配置失败:", msg);
+  }
+}
+
+function applyChannelPreference(): void {
+  autoUpdater.allowPrerelease = allowBetaChannel || defaultAllowPrerelease;
+}
 
 export function registerUpdateManager(win: BrowserWindow): void {
   mainWindow = win;
@@ -20,6 +59,9 @@ export function registerUpdateManager(win: BrowserWindow): void {
   autoUpdater.logger = log;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  defaultAllowPrerelease = autoUpdater.allowPrerelease;
+  allowBetaChannel = loadAllowBetaChannel();
+  applyChannelPreference();
 
   autoUpdater.on("checking-for-update", () => {
     console.log("[UpdateManager] 正在检查更新...");
@@ -133,6 +175,17 @@ export function registerUpdateManager(win: BrowserWindow): void {
 
   ipcMain.handle("update:get-current-version", () => {
     return app.getVersion();
+  });
+
+  ipcMain.handle("update:get-channel", () => {
+    return { allowBetaChannel };
+  });
+
+  ipcMain.handle("update:set-channel", (_event, value: unknown) => {
+    allowBetaChannel = value === true;
+    applyChannelPreference();
+    persistAllowBetaChannel(allowBetaChannel);
+    return { allowBetaChannel };
   });
 
   ipcMain.handle("update:open-gitee-release", () => {

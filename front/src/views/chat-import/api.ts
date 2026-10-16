@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { apiClient } from "@/composables/useApi";
+import { ownedManagementRequest } from "@/runtime/owned-chat-management";
+import { conversationReference } from "@/runtime/device-owned-conversation-reference";
 
 async function apiGet(url: string, params?: any) {
   const res = await apiClient.get(url, { params });
@@ -43,8 +45,9 @@ export function confirmMemories(batchId: string, selectedIds: string[]) {
   });
 }
 
-export function createConversationFromImport(conversationId: string) {
-  return apiPost("/api/web-chat/conversations/from-import", { conversationId });
+export async function createConversationFromImport(conversationId: string) {
+  const result = await ownedManagementRequest("from-import", { conversationId }, "post");
+  return { ...result, conversationId: conversationReference({ ownerId: result.executionScope.resourceOwnerId, id: result.conversationId }) };
 }
 
 export function fetchBatchesApi(params?: { page?: number; pageSize?: number }) {

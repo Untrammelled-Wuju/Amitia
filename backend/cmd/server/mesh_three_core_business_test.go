@@ -283,6 +283,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = configuration
+	transport.Proxy = nil
 	f.http = &http.Client{Transport: transport, Timeout: 15 * time.Second}
 	t.Cleanup(func() { rt.Stop(); transport.CloseIdleConnections(); server.Close() })
 	return f

@@ -6,12 +6,16 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/modelerror"
 	"gorm.io/gorm"
 )
 
 func TestPersistQueuedWebChatMessageIsImmediatelyQueryable(t *testing.T) {
+	originalCfg := config.AppCfg
+	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "local_single_user"}}
+	t.Cleanup(func() { config.AppCfg = originalCfg })
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "app.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
