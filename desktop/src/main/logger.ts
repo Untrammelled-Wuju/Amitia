@@ -42,7 +42,9 @@ export function initLogger(): void {
       origError(...args);
     } catch (_) {}
     if (logStream) {
-      const msg = `[${new Date().toISOString()}] [ERROR] ${args.map(String).join(" ")}\n`;
+      const text = args.map(String).join(" ");
+      const level = /deprecationwarning/i.test(text) ? "[WARN]" : "[ERROR]";
+      const msg = `[${new Date().toISOString()}] ${level} ${text}\n`;
       try {
         logStream.write(msg);
       } catch (_) {}

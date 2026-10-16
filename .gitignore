@@ -59,6 +59,8 @@ mobile_app/android/app/src/main/assets/runtime-package/amitia-runtime-1.0.0.zip
 runtime/out/runtime-package/android-arm64/amitia-runtime-current-android-arm64.zip
 
 # Build staging, per-module Gradle outputs and compiled server binaries
+desktop/release/
+desktop/release-*/
 mobile_app/android/*/intermediates/
 mobile_app/android/*/tmp/
 mobile_app/android/*/generated/

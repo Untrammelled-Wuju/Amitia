@@ -21,6 +21,19 @@ let coreProcess: ChildProcessWithoutNullStreams | null = null;
 let runningCoreProfile: BundledCoreProfile | null = null;
 let coreGeneration = 0;
 
+const CORE_ERROR_PATTERNS = [
+  /\[(error|fatal|panic)\]/i,
+  /\bpanic[: ]/i,
+  /"@level":"(error|fatal)"/i,
+  /\berrorcode=\S+/i,
+  /\bresult=(failed|error)\b/i,
+];
+
+export function isCoreErrorLine(line: string): boolean {
+  if (/deprecationwarning/i.test(line)) return false;
+  return CORE_ERROR_PATTERNS.some((pattern) => pattern.test(line));
+}
+
 export function getCorePath(): string {
   if (!isDevMode()) {
     return path.join(process.resourcesPath, "core", "AmitiaCore.exe");
@@ -423,7 +436,12 @@ export function startCore(profile: BundledCoreProfile): void {
   });
 
   coreProcess.stderr.on("data", (data) => {
-    console.error(`[AmitiaCore Error] ${data.toString().trim()}`);
+    for (const raw of data.toString().split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (isCoreErrorLine(line)) console.error(`[AmitiaCore] ${line}`);
+      else console.log(`[AmitiaCore] ${line}`);
+    }
   });
 
   coreProcess.on("exit", (code, signal) => {
