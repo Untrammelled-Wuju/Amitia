@@ -106,8 +106,18 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.2，源码基线提交 5d46f8444，提交日志 fix(release): await update server gate before upload，安装包 AmitiaSetup-26.2.0-beta.2-x64.exe，SHA-256 d5511d1ff365feb76736d580f8aab8f8f1b1dd39d7655cc5ab59503f7e901a90，记录时间 2026-09-25 01:40:06 +08:00
-- Android Release：版本 26.2.0-beta.3，源码基线提交 cf504954121053396c83ba256c8ac63d04389638，提交日志 feat(android): integrate proactive tasks and owned multi-agent workbench，安装包 amitia-26.2.0-beta.3-release-arm64-v8a-20261016-083640.apk，大小 135465045 字节，SHA-256 f3215f10c5a838122c3d02a71bff4425d12be7033251f89a1d9652fada27d5a3，记录时间 2026-10-16 08:38:07 +08:00
+- Desktop NSIS：版本 26.2.0-beta.2，源码基线提交 b47244e72，提交日志 feat(owned): single execution cutover, mesh channel reliability and feedback center，安装包 AmitiaSetup-26.2.0-beta.2-x64.exe，大小 275895616 字节，SHA-256 5fbfa26b33a585a463844fd223aeec470ea374135b2f23645e20bf831a9320a0，记录时间 2026-10-16 23:52:00 +08:00
+- Android Release：版本 26.2.0-beta.3，源码基线提交 b47244e72，提交日志 feat(owned): single execution cutover, mesh channel reliability and feedback center，安装包 amitia-26.2.0-beta.3-release-arm64-v8a-20261016-233036.apk，大小 135550321 字节，SHA-256 069f3f0cbc4f0f950d39ce116a88d6e9e8ae62795dc796d49b01282267dfb327，记录时间 2026-10-16 23:52:00 +08:00
+
+管理端发布接口（当前实际使用的发布通道）：
+
+- `desktop/scripts/.publish-config.json` 中的 FTP 账号仍是模板占位符 `REPLACE_WITH_FTP_USER`，FTP 上传会返回 `530 Access denied`；发布前必须先把真实 FTP 账号写入该文件，否则改用管理端接口发布。
+- 管理端接口发布流程（同源 HTTPS，登录 cookie + `X-CSRF-Token`）：
+  1. `POST /api/v1/admin/auth/login`，body 为 `{username,password}`，从响应 `data.csrfToken` 取 CSRF
+  2. `POST /api/v1/admin/releases` 创建草稿，桌面端 `product=desktop channel=stable`，手机端 `product=android channel=<stable|beta|alpha> versionCode=<n> abi=arm64-v8a`
+  3. `POST /api/v1/admin/releases/<id>/artifacts` 上传制品，multipart 字段 `kind`（桌面端 `installer`/`blockmap`，手机端 `apk`）与 `file`
+  4. `POST /api/v1/admin/releases/<id>/validate` 校验，再 `POST /api/v1/admin/releases/<id>/publish` 发布
+- 发布结果：桌面端写入 `latest.yml` 与安装包；手机端写入 `releases/<versionCode>/<apk>` 并刷新 `stable.json`/`beta.json`/`alpha.json` 与 `.sig`，通道为累进式（stable 只服务 stable，beta 服务 stable+beta，alpha 服务全部）
 
 发布配置：
 
