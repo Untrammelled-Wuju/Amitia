@@ -1,11 +1,12 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { releaseGateStampPath } from "./release-integrity.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = resolve(__dirname, "..");
 const repositoryRoot = resolve(desktopRoot, "..");
-const stampPath = resolve(desktopRoot, "release/.desktop-pet-release-gate.json");
+const stampPath = releaseGateStampPath;
 const latestPath = resolve(repositoryRoot, "LATEST_RELEASE_GATE_REPORT.md");
 
 function main() {
