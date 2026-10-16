@@ -261,6 +261,7 @@ Electron 桌面端启动时会自动通过 CoreManager 拉起后端服务（Amit
 
 Android 构建与真机安装规则：
 
+- 手机端 versionName 必须与桌面端保持一致，versionCode 只能单调递增；两端版本号不一致时禁止发布。
 - 仅允许构建、安装和验证 Release 版本 APK，禁止执行、安装或保留任何 Debug 版本 APK。
 - 真机安装前必须确认包名为 com.amitia.amitia_app；发现 com.amitia.amitia_app.debug 时必须先卸载，并在安装后复核该 Debug 包不存在。
 - 每次修复完成后，只要修改涉及手机端或手机内置 Runtime，必须自动构建 Release APK 并安装到已连接真机；只有用户明确说明仅修改源码或暂不构建时才可以跳过。
