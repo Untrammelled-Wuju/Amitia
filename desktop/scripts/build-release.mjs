@@ -92,6 +92,7 @@ async function main() {
 
   const builderArgs = [cliPath, "--win", "--x64", "--publish", "never"];
   if (target.dirOnly) builderArgs.push("--dir");
+  builderArgs.push(`--config.directories.output=${releaseDir}`);
 
   console.log("[build-release] running electron-builder...");
   run(process.execPath, builderArgs, {

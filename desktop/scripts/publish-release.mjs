@@ -14,7 +14,7 @@ import { verifyReleaseGateStamp } from "./release-integrity.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, ".publish-config.json");
-const releaseDir = join(__dirname, "..", "release");
+const releaseDir = join(__dirname, "..", process.env.AMITIA_RELEASE_DIR?.trim() || "release");
 
 function formatBytes(bytes) {
   const mb = bytes / 1024 / 1024;

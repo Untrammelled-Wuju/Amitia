@@ -90,6 +90,7 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 - 前端门禁只执行 `typecheck` 与 `build`，默认不执行前端测试；需要时用 `AMITIA_RELEASE_FRONT_TEST_FILES` 显式指定要跑的测试文件，禁止默认执行前端全量测试。
 - 编译级校验通过即可执行 `pnpm dist:win` 产出发布产物；不得为了"保险"执行未改动模块的测试。
 - 门禁环境变量：`AMITIA_RELEASE_BASE_REF`（差异基准提交）、`AMITIA_RELEASE_GO_TEST_PACKAGES`（显式指定后端测试包）、`AMITIA_RELEASE_FRONT_TEST_FILES`（显式指定前端测试文件）、`AMITIA_RELEASE_FULL_GO_TESTS=1`、`AMITIA_RELEASE_FULL_FRONT_TESTS=1`、`AMITIA_RELEASE_RACE_CHECKS=1`、`AMITIA_RELEASE_SKIP_FRONT_TESTS=1`、`AMITIA_RELEASE_PLAN_ONLY=1`（只打印本次门禁范围，不执行任何命令）。
+- 发布输出目录默认为 `desktop/release`，可用 `AMITIA_RELEASE_DIR` 指定相对 desktop 的目录名；当 `release` 被系统进程锁住（例如杀软仍持有 `win-unpacked/resources/app.asar`）导致 `EPERM` 时，用它输出到新目录后重试，且该目录仍需落在 `desktop/release-*` 忽略规则内。
 - GitHub Actions 的 Backend Full Test Gate 仍按工作流执行全量后端测试，与本地发布门禁相互独立。
 - 桌面端构建前先跑一次范围预检确认门禁内容（不执行任何命令）：在 desktop 目录用项目内 node 执行 `scripts/verify-release-prerequisites.mjs`，并设置 `AMITIA_RELEASE_PLAN_ONLY=1`；随后按预检结果执行 `pnpm dist:win`。
 - 已知与本轮改动无关的陈旧用例：`internal/search` 的超时断言停留在 `timeoutpolicy` 之前、`internal/system` 仍在断言已删除的 legacy web-chat 路由、`internal/psyche_testdata` 未注入统一入口执行器。它们不在定向门禁范围内，重建对应模块时一并修复。
