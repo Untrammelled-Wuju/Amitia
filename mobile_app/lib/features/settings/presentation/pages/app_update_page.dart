@@ -53,6 +53,12 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     if (mounted) {
       setState(() => _includeTest = includeTest);
     }
+    try {
+      final installed = await ref.read(appUpdateServiceProvider).getInstalledInfo();
+      if (mounted) {
+        setState(() => _installedApp = installed);
+      }
+    } catch (_) {}
     await _checkAppUpdate(silent: true);
   }
 
