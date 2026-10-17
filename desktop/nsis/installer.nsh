@@ -5,3 +5,9 @@
     Sleep 400
   ${endIf}
 !macroend
+
+!macro customUnInstallCheck
+!macroend
+
+!macro customUnInstallCheckCurrentUser
+!macroend
