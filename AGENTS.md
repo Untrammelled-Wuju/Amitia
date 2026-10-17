@@ -107,8 +107,13 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.2，源码基线提交 3b3c4affa，提交日志 build(desktop): read the release gate stamp from the configured release directory，安装包 AmitiaSetup-26.2.0-beta.2-x64.exe，大小 275894179 字节，SHA-256 fd7d4561da5d0291149840014b36cb1de71bc168e68d472c4c8cc94ab56f964d，记录时间 2026-10-17 00:38:00 +08:00，构建输出目录 desktop/release-26.2.0-beta.2-fix2（`desktop/release` 被系统进程锁住 `win-unpacked/resources/app.asar`，使用 `AMITIA_RELEASE_DIR` 输出到新目录）
-- Android Release：版本 26.2.0-beta.2，versionCode 6，源码基线提交 4e74ce025，提交日志 chore(android): align mobile version with desktop as 26.2.0-beta.2，安装包 amitia-26.2.0-beta.2-release-arm64-v8a-20261017-122658.apk，大小 135467653 字节，SHA-256 2c44ef7ed0dec43d3a927a85909ee4384a0cea82f25501f94575f781f04c5d72，记录时间 2026-10-17 12:30:00 +08:00
+- Desktop NSIS：版本 26.2.0-beta.4，源码基线提交 34011a4aa，提交日志 fix(desktop): install downloaded updates silently and relaunch，安装包 AmitiaSetup-26.2.0-beta.4-x64.exe，大小 275896938 字节，SHA-256 4942c1185acb1b39d1f8cb8388bdce0269eb7adcb5f7d15431a4a81fefd817d4，记录时间 2026-10-17 15:30:00 +08:00，构建输出目录 desktop/release-26.2.0-beta.4-fix1
+- Android Release：版本 26.2.0-beta.4，versionCode 8，源码基线提交 34011a4aa，提交日志 fix(desktop): install downloaded updates silently and relaunch，安装包 amitia-26.2.0-beta.4-release-arm64-v8a-20261017-145231.apk，大小 135469541 字节，SHA-256 c8cd7bf5c76ddcd16055eebe4f70a62aeda70860c2b84eb9fb3da589673edaaf，记录时间 2026-10-17 15:30:00 +08:00
+
+已知问题（待确认后修复）：
+
+- 当前 assisted NSIS（oneClick:false）在"已安装版本上升级"时会等待旧卸载器 `Un_A.exe` 卡住：`/S --updated --force-run`（electron-updater 的实际调用）、`/S --force-run` 与交互式向导都无法完成安装；全新安装 `/S /currentuser` 正常。行业标准做法是把桌面安装包切换为 oneClick 安装器（electron-builder 官方推荐用于自动更新），确认后再改 electron-builder.yml 并重出安装包验证。
+- 桌面端更新检查与差量下载已验证正常（26.2.0-beta.3 → 26.2.0-beta.4 差量仅 3%，约 7.4MB）。
 
 管理端发布接口（当前实际使用的发布通道）：
 
