@@ -107,8 +107,8 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.5，源码基线提交 866719b52，提交日志 chore(release): bump desktop and mobile to 26.2.0-beta.5，安装包 AmitiaSetup-26.2.0-beta.5-x64.exe，大小 275918260 字节，SHA-256 62491e33862a94ee7189bd049bcb26dd605f0e9243ac6fdcdd074a1370f3689b，记录时间 2026-10-17 17:50:30 +08:00，构建输出目录 desktop/release-26.2.0-beta.5
-- Android Release：版本 26.2.0-beta.5，versionCode 9，源码基线提交 866719b52，提交日志 chore(release): bump desktop and mobile to 26.2.0-beta.5，安装包 amitia-26.2.0-beta.5-release-arm64-v8a-20261017-173713.apk，大小 135500941 字节，SHA-256 b8561cf702c3e48900f102e207f3ec5b770fcd92a579c897861d4fe7a7b8120f，记录时间 2026-10-17 17:50:30 +08:00，beta 与 stable 两个通道均已发布
+- Desktop NSIS：版本 26.2.0-beta.5，源码基线提交 36ec2e2b7，提交日志 build(release): refresh freeze manifest for 26.2.0-beta.5，安装包 AmitiaSetup-26.2.0-beta.5-x64.exe，大小 275935263 字节，SHA-256 c72324fa9177b8b95ecd01726091435390f043a82cb829212e8caaccdf570907，记录时间 2026-10-17 23:58:21 +08:00，构建输出目录 desktop/release-26.2.0-beta.5-final
+- Android Release：版本 26.2.0-beta.5，versionCode 9，源码基线提交 36ec2e2b7，提交日志 build(release): refresh freeze manifest for 26.2.0-beta.5，安装包 amitia-26.2.0-beta.5-release-arm64-v8a-20261017-233141.apk，大小 135476449 字节，SHA-256 08e7cb6372fa5749f63854635dc7b708344cd6b92a07463e05ca665e495195ba，记录时间 2026-10-17 23:58:21 +08:00，beta 与 stable 两个通道均已发布
 
 assisted 安装器的更新行为（已实现并验证）：
 
