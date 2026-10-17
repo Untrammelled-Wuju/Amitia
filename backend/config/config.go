@@ -410,7 +410,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("storage.dataDir", "../data")
 	v.SetDefault("app.name", "U-Ai")
-	v.SetDefault("app.version", "26.2.0-beta.3")
+	v.SetDefault("app.version", "26.2.0-beta.4")
 	v.SetDefault("app.deployMode", "desktop-local")
 	v.SetDefault("chat.eventReplayRingSize", 4096)
 	v.SetDefault("chat.contextWindowMaxRounds", 20)

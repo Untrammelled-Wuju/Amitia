@@ -1,4 +1,12 @@
-# Amitia Android 26.2.0-beta.3
+# Amitia Android 26.2.0-beta.4
+
+## 2026-10-17 真实更新验证
+
+- 手机端与桌面端版本统一为 26.2.0-beta.4，versionCode 提升至 8。
+- 从 26.2.0-beta.3（versionCode 7）真实检查、下载并安装本次更新。
+- 内置 ARM64 后端、运行时宿主与 Runtime Package 从同一份发布源码重新构建。
+
+### 历史版本 Amitia Android 26.2.0-beta.3
 
 ## 2026-10-17 更新链路验证
 
