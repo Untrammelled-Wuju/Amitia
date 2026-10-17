@@ -107,13 +107,20 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.4，源码基线提交 34011a4aa，提交日志 fix(desktop): install downloaded updates silently and relaunch，安装包 AmitiaSetup-26.2.0-beta.4-x64.exe，大小 275896938 字节，SHA-256 4942c1185acb1b39d1f8cb8388bdce0269eb7adcb5f7d15431a4a81fefd817d4，记录时间 2026-10-17 15:30:00 +08:00，构建输出目录 desktop/release-26.2.0-beta.4-fix1
-- Android Release：版本 26.2.0-beta.4，versionCode 8，源码基线提交 34011a4aa，提交日志 fix(desktop): install downloaded updates silently and relaunch，安装包 amitia-26.2.0-beta.4-release-arm64-v8a-20261017-145231.apk，大小 135469541 字节，SHA-256 c8cd7bf5c76ddcd16055eebe4f70a62aeda70860c2b84eb9fb3da589673edaaf，记录时间 2026-10-17 15:30:00 +08:00
+- Desktop NSIS：版本 26.2.0-beta.4，源码基线提交 bb1b69a9f，提交日志 fix(desktop): keep updating when the old uninstaller reports failure，安装包 AmitiaSetup-26.2.0-beta.4-x64.exe，大小 275891805 字节，SHA-256 c7a74578319a39e633da918a11df155c5a4c82a26734f1cc3f5c237592b73d0e，记录时间 2026-10-17 16:40:00 +08:00，构建输出目录 desktop/release-26.2.0-beta.4-fix4
+- Android Release：版本 26.2.0-beta.4，versionCode 8，源码基线提交 34011a4aa，提交日志 fix(desktop): install downloaded updates silently and relaunch，安装包 amitia-26.2.0-beta.4-release-arm64-v8a-20261017-145231.apk，大小 135469541 字节，SHA-256 c8cd7bf5c76ddcd16055eebe4f70a62aeda70860c2b84eb9fb3da589673edaaf，记录时间 2026-10-17 16:40:00 +08:00，beta 与 stable 两个通道均已发布
 
-已知问题（待确认后修复）：
+assisted 安装器的更新行为（已实现并验证）：
 
-- 当前 assisted NSIS（oneClick:false）在"已安装版本上升级"时会等待旧卸载器 `Un_A.exe` 卡住：`/S --updated --force-run`（electron-updater 的实际调用）、`/S --force-run` 与交互式向导都无法完成安装；全新安装 `/S /currentuser` 正常。行业标准做法是把桌面安装包切换为 oneClick 安装器（electron-builder 官方推荐用于自动更新），确认后再改 electron-builder.yml 并重出安装包验证。
-- 桌面端更新检查与差量下载已验证正常（26.2.0-beta.3 → 26.2.0-beta.4 差量仅 3%，约 7.4MB）。
+- 首次安装保持向导（选择用户与安装目录）；后续更新静默覆盖安装到原目录并自动重启，由 `desktop/nsis/installer.nsh` 提供：
+  - `customCheckAppRunning`：只精确匹配 `$INSTDIR\` 下的进程并静默结束。electron-builder 默认用 `Path.StartsWith($INSTDIR)`，会把数据目录 `%LOCALAPPDATA%\Programs\AmitiaData` 也判为运行中，导致升级永远提示"Amitia 无法关闭"。
+  - `customUnInstallCheck` / `customUnInstallCheckCurrentUser`：旧卸载器返回非 0 时不再中止安装，由新 payload 原地覆盖。
+- 验证方式：`AmitiaSetup-<version>-x64.exe /S --updated --force-run`（electron-updater 的原始参数）覆盖已安装版本，安装器约 60 秒完成、`app.asar` 更新、应用自动重启且 `/readyz` 为 ready。
+
+更新通道说明：
+
+- 手机端默认通道是 `stable`（`AMITIA_ANDROID_UPDATE_CHANNEL` 默认值），发布必须同时写 `stable`，否则正式通道客户端会显示"更新服务暂未配置可用版本"。
+- 本机同时存在 `C:\WINDOWS\system32\adb.exe`（1.0.40）与 SDK `platform-tools\adb.exe`（1.0.41），两者会互相 kill server 并导致设备掉线、`input tap` 失效；所有 adb 操作必须使用 SDK 的完整路径。
 
 管理端发布接口（当前实际使用的发布通道）：
 
