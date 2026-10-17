@@ -107,8 +107,8 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.4，源码基线提交 bb1b69a9f，提交日志 fix(desktop): keep updating when the old uninstaller reports failure，安装包 AmitiaSetup-26.2.0-beta.4-x64.exe，大小 275891805 字节，SHA-256 c7a74578319a39e633da918a11df155c5a4c82a26734f1cc3f5c237592b73d0e，记录时间 2026-10-17 16:40:00 +08:00，构建输出目录 desktop/release-26.2.0-beta.4-fix4
-- Android Release：版本 26.2.0-beta.4，versionCode 8，源码基线提交 34011a4aa，提交日志 fix(desktop): install downloaded updates silently and relaunch，安装包 amitia-26.2.0-beta.4-release-arm64-v8a-20261017-145231.apk，大小 135469541 字节，SHA-256 c8cd7bf5c76ddcd16055eebe4f70a62aeda70860c2b84eb9fb3da589673edaaf，记录时间 2026-10-17 16:40:00 +08:00，beta 与 stable 两个通道均已发布
+- Desktop NSIS：版本 26.2.0-beta.5，源码基线提交 866719b52，提交日志 chore(release): bump desktop and mobile to 26.2.0-beta.5，安装包 AmitiaSetup-26.2.0-beta.5-x64.exe，大小 275918260 字节，SHA-256 62491e33862a94ee7189bd049bcb26dd605f0e9243ac6fdcdd074a1370f3689b，记录时间 2026-10-17 17:50:30 +08:00，构建输出目录 desktop/release-26.2.0-beta.5
+- Android Release：版本 26.2.0-beta.5，versionCode 9，源码基线提交 866719b52，提交日志 chore(release): bump desktop and mobile to 26.2.0-beta.5，安装包 amitia-26.2.0-beta.5-release-arm64-v8a-20261017-173713.apk，大小 135500941 字节，SHA-256 b8561cf702c3e48900f102e207f3ec5b770fcd92a579c897861d4fe7a7b8120f，记录时间 2026-10-17 17:50:30 +08:00，beta 与 stable 两个通道均已发布
 
 assisted 安装器的更新行为（已实现并验证）：
 
