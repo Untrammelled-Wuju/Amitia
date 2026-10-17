@@ -134,7 +134,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
   });
 
   ipcMain.handle("update:restart-now", () => {
-    autoUpdater.quitAndInstall(false, true);
+    autoUpdater.quitAndInstall(true, true);
   });
 
   ipcMain.handle("update:restart-later", () => {
@@ -164,7 +164,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
   });
 
   ipcMain.handle("update:install-now", () => {
-    autoUpdater.quitAndInstall(false, true);
+    autoUpdater.quitAndInstall(true, true);
   });
 
   ipcMain.handle("update:cancel-and-enter", () => {

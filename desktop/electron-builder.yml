@@ -49,6 +49,7 @@ nsis:
   oneClick: false
   perMachine: false
   differentialPackage: true
+  include: nsis/installer.nsh
   installerIcon: ../Logo/amitia-icon-light.ico
   allowElevation: true
   allowToChangeInstallationDirectory: true
