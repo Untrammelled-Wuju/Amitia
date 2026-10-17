@@ -177,6 +177,16 @@ export function registerUpdateManager(win: BrowserWindow): void {
     return app.getVersion();
   });
 
+  ipcMain.handle("update:get-pending", () => {
+    if (!pendingUpdateInfo) return null;
+    return {
+      version: pendingUpdateInfo.version,
+      releaseDate: pendingUpdateInfo.releaseDate,
+      releaseNotes: pendingUpdateInfo.releaseNotes,
+      currentVersion: app.getVersion(),
+    };
+  });
+
   ipcMain.handle("update:get-channel", () => {
     return { allowBetaChannel };
   });

@@ -199,7 +199,7 @@ async function enterMainApp(): Promise<void> {
   const autoLaunch = await configStore.getAutoLaunch();
   app.setLoginItemSettings({ openAtLogin: autoLaunch });
   registerUpdateManager(mainWindow);
-  await waitForStartupCheck();
+  void waitForStartupCheck();
 
   registerExtensionProtocol(join(getAmitiaDataDir(), "data", "extensions-v2"));
 

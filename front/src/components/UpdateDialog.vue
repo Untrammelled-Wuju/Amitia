@@ -221,6 +221,14 @@ onMounted(() => {
   api.onUpdateNotAvailable(() => {
     state.value = "idle";
   });
+
+  void api.getPendingUpdate().then((pending) => {
+    if (!pending || !pending.version) return;
+    currentVersion.value = pending.currentVersion || "";
+    latestVersion.value = pending.version;
+    releaseNotes.value = pending.releaseNotes ? String(pending.releaseNotes) : "";
+    state.value = "available";
+  });
 });
 </script>
 

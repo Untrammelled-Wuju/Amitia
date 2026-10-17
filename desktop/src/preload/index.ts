@@ -214,6 +214,14 @@ const api = {
   getCurrentVersion(): Promise<string> {
     return ipcRenderer.invoke("update:get-current-version");
   },
+  getPendingUpdate(): Promise<{
+    version: string;
+    releaseDate?: string;
+    releaseNotes?: unknown;
+    currentVersion: string;
+  } | null> {
+    return ipcRenderer.invoke("update:get-pending");
+  },
   getUpdateChannel(): Promise<{ allowBetaChannel: boolean }> {
     return ipcRenderer.invoke("update:get-channel");
   },
