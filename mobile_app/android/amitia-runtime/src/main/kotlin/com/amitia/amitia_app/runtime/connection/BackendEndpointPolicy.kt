@@ -10,7 +10,7 @@ data class BackendEndpointPolicy(
 fun embeddedAndroidBackendPolicy(): BackendEndpointPolicy {
     return BackendEndpointPolicy(
         host = "127.0.0.1",
-        port = 0,
+        port = 1,
         httpScheme = "http",
         webSocketScheme = "ws",
     )

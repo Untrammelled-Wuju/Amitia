@@ -645,3 +645,25 @@ func TestLoadConfigUsesRuntimeAppVersion(t *testing.T) {
 		t.Fatalf("app version = %q, want runtime override", cfg.App.Version)
 	}
 }
+
+func TestPortOneSentinelAllocatesDynamicPorts(t *testing.T) {
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte("server:\n  port: 1\nproviders:\n  vectorStore:\n    qdrant:\n      port: 1\n  graphStore:\n    surrealdb:\n      port: 1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig failed: %v", err)
+	}
+	if cfg.Server.Port != 0 {
+		t.Fatalf("server port = %d, want dynamic sentinel converted to 0", cfg.Server.Port)
+	}
+	if cfg.Providers.VectorStore.Qdrant.Port != 0 {
+		t.Fatalf("qdrant port = %d, want dynamic sentinel converted to 0", cfg.Providers.VectorStore.Qdrant.Port)
+	}
+	if cfg.Providers.GraphStore.SurrealDB.Port != 0 {
+		t.Fatalf("surrealdb port = %d, want dynamic sentinel converted to 0", cfg.Providers.GraphStore.SurrealDB.Port)
+	}
+}

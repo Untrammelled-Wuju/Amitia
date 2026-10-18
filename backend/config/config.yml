@@ -1,5 +1,5 @@
 server:
-  port: 0
+  port: 1
   host: "127.0.0.1"
   mode: "debug"
 
@@ -32,7 +32,7 @@ providers:
     provider: "builtin.qdrant-process"
     qdrant:
       host: "127.0.0.1"
-      port: 0
+      port: 1
       binaryPath: ""
       configDir: ""
       dataDir: ""
@@ -48,7 +48,7 @@ providers:
     provider: "builtin.surrealdb-process"
     surrealdb:
       host: "127.0.0.1"
-      port: 0
+      port: 1
       namespace: "uai"
       database: "memory_graph"
       username: "root"

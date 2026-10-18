@@ -104,7 +104,7 @@ internal class DefaultBackendConnectionProvider(
                 }
             }
         }
-        if (policy.port in 1..65535) return policy
+        if (policy.port in 2..65535) return policy
         return BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
     }
 

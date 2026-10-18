@@ -374,7 +374,8 @@ internal class DefaultRuntimeController(
             generation = generation,
             session = session,
             endpoint = endpointPolicy,
-            startAttemptId = attemptId
+            startAttemptId = attemptId,
+            runRoot = hostLayout?.runRoot?.absolutePath ?: ""
         )
         val result = try {
             startupDetector.awaitStartup(request)

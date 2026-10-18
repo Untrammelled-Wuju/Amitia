@@ -4,6 +4,7 @@ import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.internal.RuntimeClock
 import com.amitia.amitia_app.runtime.internal.SystemRuntimeClock
 import com.amitia.amitia_app.runtime.proot.ProotSession
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -11,7 +12,8 @@ internal data class RuntimeStartupRequest(
     val generation: Long,
     val session: ProotSession,
     val endpoint: BackendEndpointPolicy,
-    val startAttemptId: String
+    val startAttemptId: String,
+    val runRoot: String = ""
 )
 
 internal interface RuntimeStartupDetector {
@@ -36,7 +38,12 @@ internal class DefaultRuntimeStartupDetector(
     override fun awaitStartup(request: RuntimeStartupRequest): RuntimeStartupResult {
         require(request.generation >= 0) { "generation must be non-negative" }
         require(request.startAttemptId.isNotBlank()) { "startAttemptId must not be blank" }
-        require(request.endpoint.port in 1..65535) { "invalid port: ${request.endpoint.port}" }
+        if (request.endpoint.port !in 0..65535) {
+            return RuntimeStartupResult.Failed(
+                request.generation,
+                RuntimeStartupError.InvalidEndpoint
+            )
+        }
 
         if (!HttpRuntimeHealthProbe.isLoopbackHost(request.endpoint.host)) {
             return RuntimeStartupResult.Failed(
@@ -151,7 +158,9 @@ internal class DefaultRuntimeStartupDetector(
     }
 
     private fun runSingleProbe(request: RuntimeStartupRequest, probeIndex: Int, startEpochMs: Long): SingleProbeOutcome {
-        val result = healthProbe.checkReadiness(request.endpoint)
+        val endpoint = resolveProbeEndpoint(request)
+            ?: return SingleProbeOutcome.Continue("runtime endpoint not published yet")
+        val result = healthProbe.checkReadiness(endpoint)
         when (result) {
             is RuntimeHealthProbeResult.Success -> {
                 return interpretReadinessResponse(result, request, startEpochMs)
@@ -159,10 +168,10 @@ internal class DefaultRuntimeStartupDetector(
             is RuntimeHealthProbeResult.Failure -> {
                 return when (result.error) {
                     is RuntimeHealthProbeError.ConnectionRefused -> SingleProbeOutcome.Continue(
-                        "readyz connection refused at ${request.endpoint.host}:${request.endpoint.port}"
+                        "readyz connection refused at ${endpoint.host}:${endpoint.port}"
                     )
                     is RuntimeHealthProbeError.ConnectionTimeout -> SingleProbeOutcome.Continue(
-                        "readyz connection timed out at ${request.endpoint.host}:${request.endpoint.port}"
+                        "readyz connection timed out at ${endpoint.host}:${endpoint.port}"
                     )
                     is RuntimeHealthProbeError.Unauthorized -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
                     is RuntimeHealthProbeError.Forbidden -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
@@ -176,6 +185,34 @@ internal class DefaultRuntimeStartupDetector(
                     is RuntimeHealthProbeError.MalformedResponse -> SingleProbeOutcome.ProtocolFailure("readiness probe io error")
                 }
             }
+        }
+    }
+
+    private fun resolveProbeEndpoint(request: RuntimeStartupRequest): BackendEndpointPolicy? {
+        if (request.endpoint.port in 2..65535) {
+            return request.endpoint
+        }
+        val runRoot = request.runRoot.trim()
+        if (runRoot.isEmpty()) {
+            return null
+        }
+        return try {
+            val file = File(runRoot, "endpoint.json")
+            if (!file.isFile) {
+                return null
+            }
+            val payload = file.readText()
+            val host = ENDPOINT_HOST_PATTERN.find(payload)?.groupValues?.getOrNull(1)?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: request.endpoint.host
+            val port = ENDPOINT_PORT_PATTERN.find(payload)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: return null
+            if (port !in 1..65535 || !HttpRuntimeHealthProbe.isLoopbackHost(host)) {
+                return null
+            }
+            request.endpoint.copy(host = host, port = port)
+        } catch (_: Throwable) {
+            null
         }
     }
 
@@ -256,6 +293,8 @@ internal class DefaultRuntimeStartupDetector(
         const val DEFAULT_MAX_PROBE_INTERVAL_MS = 1_000L
         const val DEFAULT_PROBE_BACKOFF_MULTIPLIER = 2
         const val DEFAULT_MAX_PROBE_COUNT = 600
+        val ENDPOINT_HOST_PATTERN = Regex("\"host\"\\s*:\\s*\"([^\"]+)\"")
+        val ENDPOINT_PORT_PATTERN = Regex("\"port\"\\s*:\\s*(\\d+)")
 
         fun minOf(a: Long, b: Long): Long = if (a < b) a else b
     }

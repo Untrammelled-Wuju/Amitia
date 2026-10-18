@@ -9,6 +9,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -147,6 +149,38 @@ class RuntimeStartupDetectorTest {
         )
         val result = detector.awaitStartup(request)
         assertTrue("Expected Ready but was $result", result is RuntimeStartupResult.Ready)
+    }
+
+    @Test
+    fun dynamicPort_readsPublishedEndpoint() {
+        val session = createAlwaysAliveSession()
+        val runRoot = Files.createTempDirectory("runtime-startup-endpoint").toFile()
+        File(runRoot, "endpoint.json").writeText(
+            """{"schemaVersion":1,"host":"127.0.0.1","port":43127,"httpBaseURL":"http://127.0.0.1:43127"}"""
+        )
+        val observed = AtomicReference<BackendEndpointPolicy?>()
+        val probe = object : RuntimeHealthProbe {
+            override fun checkReadiness(endpoint: BackendEndpointPolicy): RuntimeHealthProbeResult {
+                observed.set(endpoint)
+                return RuntimeHealthProbeResult.Success(200, validReadyResponse())
+            }
+        }
+        val detector = DefaultRuntimeStartupDetector(
+            healthProbe = probe,
+            totalStartupTimeoutMs = 5000L,
+            initialProbeIntervalMs = 10L,
+            maxProbeIntervalMs = 50L
+        )
+        val request = RuntimeStartupRequest(
+            generation = 3L,
+            session = session,
+            endpoint = BackendEndpointPolicy("127.0.0.1", 1, "http", "ws"),
+            startAttemptId = "attempt-dynamic-port",
+            runRoot = runRoot.absolutePath
+        )
+        val result = detector.awaitStartup(request)
+        assertTrue("Expected Ready but was $result", result is RuntimeStartupResult.Ready)
+        assertEquals(43127, observed.get()?.port)
     }
 
     @Test

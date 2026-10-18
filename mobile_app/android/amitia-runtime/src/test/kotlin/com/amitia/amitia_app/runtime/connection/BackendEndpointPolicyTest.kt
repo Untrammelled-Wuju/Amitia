@@ -11,9 +11,9 @@ class BackendEndpointPolicyTest {
     }
 
     @Test
-    fun `embedded policy returns 18899 for port`() {
+    fun `embedded policy returns 1 for dynamic port sentinel`() {
         val policy = embeddedAndroidBackendPolicy()
-        assertEquals(0, policy.port)
+        assertEquals(1, policy.port)
     }
 
     @Test

@@ -417,7 +417,7 @@ func loadConfig(configPath string) (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("server.port", 0)
+	v.SetDefault("server.port", 1)
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
 	v.SetDefault("server.compatibilityPort", 18899)
@@ -478,7 +478,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.vectorStore.required", false)
 	v.SetDefault("providers.vectorStore.provider", "builtin.qdrant-process")
 	v.SetDefault("providers.vectorStore.qdrant.host", "127.0.0.1")
-	v.SetDefault("providers.vectorStore.qdrant.port", 0)
+	v.SetDefault("providers.vectorStore.qdrant.port", 1)
 	v.SetDefault("providers.vectorStore.qdrant.collectionName", "amitia_vectors")
 	v.SetDefault("providers.vectorStore.qdrant.vectorDim", 2560)
 	v.SetDefault("providers.vectorStore.qdrant.limit", 10)
@@ -492,7 +492,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.graphStore.required", false)
 	v.SetDefault("providers.graphStore.provider", "builtin.surrealdb-process")
 	v.SetDefault("providers.graphStore.surrealdb.host", "127.0.0.1")
-	v.SetDefault("providers.graphStore.surrealdb.port", 0)
+	v.SetDefault("providers.graphStore.surrealdb.port", 1)
 	v.SetDefault("providers.graphStore.surrealdb.namespace", "uai")
 	v.SetDefault("providers.graphStore.surrealdb.database", "memory_graph")
 	v.SetDefault("providers.graphStore.surrealdb.username", "root")
@@ -728,6 +728,15 @@ func normalizeConfig(cfg *Config) {
 }
 
 func normalizeLegacyDynamicPortDefaults(cfg *Config) {
+	if cfg.Server.Port == 1 {
+		cfg.Server.Port = 0
+	}
+	if cfg.Providers.VectorStore.Qdrant.Port == 1 {
+		cfg.Providers.VectorStore.Qdrant.Port = 0
+	}
+	if cfg.Providers.GraphStore.SurrealDB.Port == 1 {
+		cfg.Providers.GraphStore.SurrealDB.Port = 0
+	}
 	if _, ok := os.LookupEnv("AMITIA_SERVER_PORT"); !ok && cfg.Server.Port == 18899 {
 		cfg.Server.Port = 0
 	}
