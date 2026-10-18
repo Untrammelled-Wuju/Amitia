@@ -60,6 +60,47 @@ func TestBuildDesktopLatestYAML(t *testing.T) {
 	}
 }
 
+func TestDesktopVersionSelection(t *testing.T) {
+	candidates := []UpdateRelease{
+		{ID: 1, Version: "26.2.0-beta.5"},
+		{ID: 2, Version: "26.2.0-beta.6"},
+		{ID: 3, Version: "26.1.9"},
+	}
+	selected := selectHighestDesktopRelease(candidates)
+	if selected == nil || selected.ID != 2 {
+		t.Fatalf("应选择最新 beta 版本: %+v", selected)
+	}
+	if compareDesktopVersions("26.2.0", "26.2.0-beta.6") <= 0 {
+		t.Fatal("正式版应高于同版本号 beta")
+	}
+	if compareDesktopVersions("26.2.0-beta.10", "26.2.0-beta.9") <= 0 {
+		t.Fatal("预发布数字标识应按数值比较")
+	}
+	if compareDesktopVersions("26.2.0-beta.6", "26.2.0") >= 0 {
+		t.Fatal("beta 不应高于同版本号正式版")
+	}
+}
+
+func TestEnsureDesktopBetaManifestSeed(t *testing.T) {
+	directory := t.TempDir()
+	latestPath := filepath.Join(directory, "latest.yml")
+	content := []byte("version: 26.2.0-beta.5\n")
+	if err := os.WriteFile(latestPath, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{cfg: Config{DesktopPublishDir: directory}}
+	if err := server.ensureDesktopBetaManifest(); err != nil {
+		t.Fatal(err)
+	}
+	beta, err := os.ReadFile(filepath.Join(directory, "beta.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beta) != string(content) {
+		t.Fatalf("beta.yml seed mismatch: %s", beta)
+	}
+}
+
 func TestBuildAndroidManifest(t *testing.T) {
 	cfg := Config{
 		PublicBaseURL:      "https://amitia.untrammelled.top/amitia",

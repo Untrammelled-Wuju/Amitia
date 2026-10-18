@@ -38,6 +38,10 @@ func NewServer(cfg Config) (*Server, error) {
 			return nil, err
 		}
 	}
+	if err := server.ensureDesktopBetaManifest(); err != nil {
+		_ = server.Close()
+		return nil, err
+	}
 	generatedPassword, err := server.bootstrapAdmin()
 	if err != nil {
 		_ = server.Close()

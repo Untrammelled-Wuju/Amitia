@@ -4,9 +4,12 @@ class AppUpdatePreferences {
   static const String includeTestKey = 'app_update.include_test';
   static const String skippedVersionCodeKey = 'app_update.skipped_version_code';
 
-  static Future<bool> loadIncludeTest() async {
+  static Future<bool> loadIncludeTest({bool defaultValue = false}) async {
     final preferences = await SharedPreferences.getInstance();
-    return preferences.getBool(includeTestKey) ?? false;
+    if (!preferences.containsKey(includeTestKey)) {
+      return defaultValue;
+    }
+    return preferences.getBool(includeTestKey) ?? defaultValue;
   }
 
   static Future<void> saveIncludeTest(bool value) async {

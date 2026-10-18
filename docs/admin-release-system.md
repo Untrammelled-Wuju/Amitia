@@ -12,7 +12,8 @@
 
 客户端更新地址保持不变：
 
-- 桌面端：`https://amitia.untrammelled.top/amitia/latest.yml`
+- 桌面端稳定通道：`https://amitia.untrammelled.top/amitia/latest.yml`
+- 桌面端测试通道：`https://amitia.untrammelled.top/amitia/beta.yml`
 - 手机端：`https://amitia.untrammelled.top/amitia/android/<channel>.json`
 
 ## 首次启动
@@ -67,9 +68,12 @@ AMITIA_ADMIN_COOKIE_SECURE=true
 2. 上传 `AmitiaSetup-<version>-x64.exe`。
 3. 上传 `AmitiaSetup-<version>-x64.exe.blockmap`。
 4. 执行制品校验。
-5. 发布后服务端生成 `latest.yml`，并最后写入发布目录。
+5. 发布到稳定通道时写入 `latest.yml`，发布到测试通道时写入 `beta.yml`。
+6. 稳定通道发布时同步刷新 `beta.yml`，测试通道始终选择稳定版和测试版中语义版本最高的版本。
 
 桌面端最新指针只能帮助尚未升级的客户端。已经安装更高版本的客户端需要发布更高版本的修复包。
+
+桌面端 beta 安装包在首次运行且没有历史偏好时默认开启测试更新。用户主动关闭后保持关闭，不会因版本升级强制重新开启。
 
 ## 手机端发布
 

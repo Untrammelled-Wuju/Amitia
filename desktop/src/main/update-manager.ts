@@ -4,12 +4,15 @@ import log from "electron-log";
 import path from "path";
 import fs from "fs";
 import { getAmitiaDataDir, getInstallDir, isDevMode } from "./path-manager";
+import {
+  desktopUpdateChannel,
+  resolveAllowBetaChannel,
+} from "./update-channel";
 
 let mainWindow: BrowserWindow | null = null;
 let startupResolve: (() => void) | null = null;
 let pendingUpdateInfo: UpdateInfo | null = null;
 let allowBetaChannel = false;
-let defaultAllowPrerelease = false;
 
 const RELEASES_URL = "https://amitia.untrammelled.top/amitia";
 
@@ -20,15 +23,17 @@ function updatePreferencePath(): string {
 function loadAllowBetaChannel(): boolean {
   try {
     const file = updatePreferencePath();
-    if (!fs.existsSync(file)) return false;
+    if (!fs.existsSync(file)) {
+      return resolveAllowBetaChannel(undefined, app.getVersion());
+    }
     const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as {
       allowBetaChannel?: boolean;
     };
-    return parsed.allowBetaChannel === true;
+    return resolveAllowBetaChannel(parsed.allowBetaChannel, app.getVersion());
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[UpdateManager] 读取更新通道配置失败:", msg);
-    return false;
+    return resolveAllowBetaChannel(undefined, app.getVersion());
   }
 }
 
@@ -47,7 +52,9 @@ function persistAllowBetaChannel(value: boolean): void {
 }
 
 function applyChannelPreference(): void {
-  autoUpdater.allowPrerelease = allowBetaChannel || defaultAllowPrerelease;
+  autoUpdater.channel = desktopUpdateChannel(allowBetaChannel);
+  autoUpdater.allowPrerelease = allowBetaChannel;
+  autoUpdater.allowDowngrade = false;
 }
 
 export function registerUpdateManager(win: BrowserWindow): void {
@@ -59,7 +66,6 @@ export function registerUpdateManager(win: BrowserWindow): void {
   autoUpdater.logger = log;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
-  defaultAllowPrerelease = autoUpdater.allowPrerelease;
   allowBetaChannel = loadAllowBetaChannel();
   applyChannelPreference();
 
@@ -195,6 +201,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
     allowBetaChannel = value === true;
     applyChannelPreference();
     persistAllowBetaChannel(allowBetaChannel);
+    pendingUpdateInfo = null;
     return { allowBetaChannel };
   });
 

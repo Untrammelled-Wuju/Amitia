@@ -49,17 +49,21 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
   }
 
   Future<void> _initializeUpdateState() async {
-    final includeTest = await AppUpdatePreferences.loadIncludeTest();
-    if (mounted) {
-      setState(() => _includeTest = includeTest);
-    }
+    InstalledAppInfo? installed;
     try {
-      final installed = await ref.read(appUpdateServiceProvider).getInstalledInfo();
+      installed = await ref.read(appUpdateServiceProvider).getInstalledInfo();
       if (mounted) {
         setState(() => _installedApp = installed);
       }
     } catch (_) {}
-    await _checkAppUpdate(silent: true);
+    final includeTest = await AppUpdatePreferences.loadIncludeTest(
+      defaultValue:
+          installed != null && isAppPrereleaseVersion(installed.versionName),
+    );
+    if (mounted) {
+      setState(() => _includeTest = includeTest);
+    }
+    await _checkAppUpdate(silent: true, installed: installed);
   }
 
   Future<void> _setIncludeTest(bool value) async {
@@ -274,7 +278,10 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     );
   }
 
-  Future<void> _checkAppUpdate({bool silent = false}) async {
+  Future<void> _checkAppUpdate({
+    bool silent = false,
+    InstalledAppInfo? installed,
+  }) async {
     if (_appChecking) return;
     setState(() {
       _appChecking = true;
@@ -285,7 +292,10 @@ class _AppUpdatePageState extends ConsumerState<AppUpdatePage> {
     });
     try {
       final service = ref.read(appUpdateServiceProvider);
-      final result = await service.check(includeTest: _includeTest);
+      final result = await service.check(
+        includeTest: _includeTest,
+        installed: installed,
+      );
       if (!mounted) return;
       setState(() {
         _installedApp = result.installed;

@@ -281,3 +281,10 @@ func (s *Server) withChannelLock(ctx context.Context, product, channel string, f
 	defer connection.ExecContext(context.Background(), "SELECT RELEASE_LOCK(?)", lockName)
 	return fn()
 }
+
+func releaseLockChannel(product, channel string) string {
+	if product == ProductDesktop {
+		return "desktop"
+	}
+	return channel
+}

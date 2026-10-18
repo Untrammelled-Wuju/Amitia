@@ -12,6 +12,8 @@
 https://amitia.untrammelled.top/amitia/android/stable.json
 ```
 
+beta 安装包在首次运行且没有历史偏好时默认开启测试更新，同时检查 `stable`、`beta` 和 `alpha` 通道。用户主动关闭后只读取 `stable.json`。
+
 版本清单签名文件与清单同目录，命名为：
 
 ```text

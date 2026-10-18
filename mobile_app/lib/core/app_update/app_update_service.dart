@@ -43,7 +43,10 @@ class AppUpdateService {
     return InstalledAppInfo.fromMap(value ?? const <Object?, Object?>{});
   }
 
-  static List<String> resolveChannels({String? channel, bool includeTest = false}) {
+  static List<String> resolveChannels({
+    String? channel,
+    bool includeTest = false,
+  }) {
     final base = _normalizeChannel(channel ?? updateChannel);
     final channels = <String>[base];
     if (includeTest) {
@@ -59,12 +62,16 @@ class AppUpdateService {
   Future<AppUpdateCheckResult> check({
     String? channel,
     bool includeTest = false,
+    InstalledAppInfo? installed,
   }) async {
-    final installed = await getInstalledInfo();
-    final channels = resolveChannels(channel: channel, includeTest: includeTest);
+    final installedInfo = installed ?? await getInstalledInfo();
+    final channels = resolveChannels(
+      channel: channel,
+      includeTest: includeTest,
+    );
     AppUpdateManifest? best;
     for (final candidate in channels) {
-      final manifest = await _fetchManifest(candidate, installed, channels);
+      final manifest = await _fetchManifest(candidate, installedInfo, channels);
       if (manifest == null) continue;
       if (best == null || manifest.versionCode > best.versionCode) {
         best = manifest;
@@ -72,27 +79,27 @@ class AppUpdateService {
     }
     if (best == null) {
       return AppUpdateCheckResult(
-        installed: installed,
+        installed: installedInfo,
         available: null,
         reason: 'manifest_unavailable',
       );
     }
-    if (best.versionCode <= installed.versionCode) {
+    if (best.versionCode <= installedInfo.versionCode) {
       return AppUpdateCheckResult(
-        installed: installed,
+        installed: installedInfo,
         available: null,
         reason: 'already_latest',
       );
     }
     if (!await _isWithinRollout(best)) {
       return AppUpdateCheckResult(
-        installed: installed,
+        installed: installedInfo,
         available: null,
         reason: 'rollout_excluded',
       );
     }
     return AppUpdateCheckResult(
-      installed: installed,
+      installed: installedInfo,
       available: best,
       reason: null,
     );

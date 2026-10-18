@@ -92,11 +92,17 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
   Future<void> _checkUpdateOnStartup() async {
     try {
-      final includeTest = await AppUpdatePreferences.loadIncludeTest();
-      final skippedVersionCode = await AppUpdatePreferences.loadSkippedVersionCode();
-      final result = await ref
-          .read(appUpdateServiceProvider)
-          .check(includeTest: includeTest);
+      final service = ref.read(appUpdateServiceProvider);
+      final installed = await service.getInstalledInfo();
+      final includeTest = await AppUpdatePreferences.loadIncludeTest(
+        defaultValue: isAppPrereleaseVersion(installed.versionName),
+      );
+      final skippedVersionCode =
+          await AppUpdatePreferences.loadSkippedVersionCode();
+      final result = await service.check(
+        includeTest: includeTest,
+        installed: installed,
+      );
       final update = result.available;
       if (!mounted || update == null) return;
       final mandatory = update.requiresVersion(result.installed.versionCode);

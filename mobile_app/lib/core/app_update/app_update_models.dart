@@ -186,3 +186,12 @@ int _asInt(Object? value) {
   if (value is num) return value.toInt();
   return int.tryParse(value?.toString() ?? '') ?? 0;
 }
+
+final RegExp _appVersionPattern = RegExp(
+  r'^\d+\.\d+\.\d+(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+);
+
+bool isAppPrereleaseVersion(String version) {
+  final match = _appVersionPattern.firstMatch(version.trim());
+  return match?.group(1) != null;
+}

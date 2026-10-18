@@ -2,6 +2,13 @@ import 'package:amitia_app/core/app_update/app_update_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('detects prerelease application versions', () {
+    expect(isAppPrereleaseVersion('26.2.0-beta.5'), isTrue);
+    expect(isAppPrereleaseVersion('26.2.0-alpha.1+build.7'), isTrue);
+    expect(isAppPrereleaseVersion('26.2.0'), isFalse);
+    expect(isAppPrereleaseVersion('26.2.0+build.7'), isFalse);
+  });
+
   test('parses signed update manifest and computes mandatory state', () {
     final manifest = AppUpdateManifest.fromMap(<String, dynamic>{
       'schemaVersion': 1,

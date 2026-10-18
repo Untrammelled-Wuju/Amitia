@@ -89,8 +89,8 @@ func (s *Server) createRelease(actor adminActor, input CreateReleaseInput) (*Upd
 	if input.RolloutPercentage < 0 || input.RolloutPercentage > 100 {
 		return nil, errors.New("灰度比例必须在 0 到 100 之间")
 	}
-	if product == ProductDesktop && channel != ChannelStable {
-		return nil, errors.New("桌面端当前仅支持 stable 通道")
+	if product == ProductDesktop && channel == ChannelAlpha {
+		return nil, errors.New("桌面端仅支持 stable 和 beta 通道")
 	}
 	release := UpdateRelease{
 		Product:           product,
@@ -440,7 +440,7 @@ func (s *Server) publishRelease(actor adminActor, releaseID uint) (*UpdateReleas
 		return nil, err
 	}
 	var result *UpdateRelease
-	err := s.withChannelLock(context.Background(), release.Product, release.Channel, func() error {
+	err := s.withChannelLock(context.Background(), release.Product, releaseLockChannel(release.Product, release.Channel), func() error {
 		validation, err := s.validateRelease(releaseID)
 		if err != nil {
 			return err
@@ -512,7 +512,7 @@ func (s *Server) pauseRelease(actor adminActor, releaseID uint, rollout int) (*U
 		return nil, errors.New("只有已发布的手机端版本可以调整灰度")
 	}
 	var result *UpdateRelease
-	err := s.withChannelLock(context.Background(), release.Product, release.Channel, func() error {
+	err := s.withChannelLock(context.Background(), release.Product, releaseLockChannel(release.Product, release.Channel), func() error {
 		if err := s.db.First(&release, releaseID).Error; err != nil {
 			return err
 		}
@@ -547,7 +547,7 @@ func (s *Server) rollbackDesktop(actor adminActor, releaseID uint) (*UpdateRelea
 		return nil, errors.New("只有已发布的桌面端版本可以切换最新指针")
 	}
 	var result *UpdateRelease
-	err := s.withChannelLock(context.Background(), release.Product, release.Channel, func() error {
+	err := s.withChannelLock(context.Background(), release.Product, releaseLockChannel(release.Product, release.Channel), func() error {
 		if err := s.db.First(&release, releaseID).Error; err != nil {
 			return err
 		}
