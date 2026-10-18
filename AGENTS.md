@@ -118,8 +118,8 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.5，源码基线提交 36ec2e2b7，提交日志 build(release): refresh freeze manifest for 26.2.0-beta.5，安装包 AmitiaSetup-26.2.0-beta.5-x64.exe，大小 275935263 字节，SHA-256 c72324fa9177b8b95ecd01726091435390f043a82cb829212e8caaccdf570907，记录时间 2026-10-17 23:58:21 +08:00，构建输出目录 desktop/release-26.2.0-beta.5-final
-- Android Release：版本 26.2.0-beta.5，versionCode 9，源码基线提交 36ec2e2b7，提交日志 build(release): refresh freeze manifest for 26.2.0-beta.5，安装包 amitia-26.2.0-beta.5-release-arm64-v8a-20261017-233141.apk，大小 135476449 字节，SHA-256 08e7cb6372fa5749f63854635dc7b708344cd6b92a07463e05ca665e495195ba，记录时间 2026-10-17 23:58:21 +08:00，beta 与 stable 两个通道均已发布
+- Desktop NSIS：版本 26.2.0-beta.7，源码基线提交 ffc5db8c5，提交日志 fix(release): load startup error page through app protocol，安装包 AmitiaSetup-26.2.0-beta.7-x64.exe，大小 275955467 字节，SHA-256 867016235584a157a1ae3d5c08f272d20ab2fec0b911e7a97567c02ffba34ba4，记录时间 2026-10-18 18:59:29 +08:00，构建输出目录 desktop/release-26.2.0-beta.7-final，stable 通道已发布并完成本机覆盖安装与健康检查
+- Android Release：版本 26.2.0-beta.7，versionCode 11，源码基线提交 ffc5db8c5，提交日志 fix(release): load startup error page through app protocol，安装包 amitia-26.2.0-beta.7-release-arm64-v8a-20261018-184832.apk，大小 159989385 字节，SHA-256 5d03825dde11445de9b1aa38f90c054518d627e54fba19acef1db7d91a20e54c，记录时间 2026-10-18 18:59:29 +08:00，beta 与 stable 两个通道均已发布，真机安装因 adb 无设备未执行
 
 assisted 安装器的更新行为（已实现并验证）：
 
