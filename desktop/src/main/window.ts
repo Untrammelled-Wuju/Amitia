@@ -130,7 +130,7 @@ async function loadErrorPage(win: BrowserWindow): Promise<void> {
     return;
   }
   try {
-    await win.loadFile(join(currentDir, "../renderer/core-error.html"));
+    await win.loadURL(`${APP_PROTOCOL_ORIGIN}/core-error.html`);
   } catch (error) {
     console.error("[AmitiaDesktop] 启动错误页加载失败:", error);
   }

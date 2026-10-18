@@ -22,6 +22,11 @@ const STATIC_SOURCES = [
     recursive: false,
   },
   {
+    from: "src/renderer/core-error.html",
+    to: "dist/renderer/core-error.html",
+    recursive: false,
+  },
+  {
     from: "src/renderer/assets",
     to: "dist/renderer/assets",
     recursive: true,
