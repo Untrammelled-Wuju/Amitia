@@ -12,6 +12,12 @@ import {
 import { validateCorePrerequisites, validateDeviceAgentPrerequisites } from "./core-prereq";
 import type { CorePrerequisiteResult } from "./core-prereq";
 import { getLocalAdminHeaders } from "./backend-session-client";
+import {
+  getCoreBaseURL,
+  legacyCoreEndpoint,
+  readCoreEndpoint,
+  setCoreEndpoint,
+} from "./core-endpoint";
 
 export type { CorePrerequisiteResult };
 
@@ -20,6 +26,29 @@ export type BundledCoreProfile = "local" | "device-agent";
 let coreProcess: ChildProcessWithoutNullStreams | null = null;
 let runningCoreProfile: BundledCoreProfile | null = null;
 let coreGeneration = 0;
+
+process.on("exit", () => {
+  const pid = coreProcess?.pid;
+  if (!pid) {
+    return;
+  }
+  try {
+    if (process.platform === "win32") {
+      execSync(`taskkill /PID ${pid} /T /F`, {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    } else {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        process.kill(pid, "SIGKILL");
+      }
+    }
+  } catch {
+    return;
+  }
+});
 
 const CORE_ERROR_PATTERNS = [
   /\[(error|fatal|panic)\]/i,
@@ -384,6 +413,7 @@ export function startCore(profile: BundledCoreProfile): void {
   }
 
   lastHealthyAt = 0;
+  setCoreEndpoint(null);
   ensureHealthPolling();
 
   const corePath = getCorePath();
@@ -415,6 +445,7 @@ export function startCore(profile: BundledCoreProfile): void {
     AMITIA_RUNTIME_ROOT: dataDir,
     AMITIA_DATA_DIR: dataDir,
     AMITIA_EXTENSION_DEV_MODE: isDevMode() ? "true" : "false",
+    AMITIA_VERSION: app.getVersion(),
   };
 
   console.log("[CoreManager] CONFIG_PATH:", configPath);
@@ -449,6 +480,7 @@ export function startCore(profile: BundledCoreProfile): void {
     if (currentGeneration === coreGeneration) {
       coreProcess = null;
       runningCoreProfile = null;
+      setCoreEndpoint(null);
     }
   });
 
@@ -457,6 +489,7 @@ export function startCore(profile: BundledCoreProfile): void {
     if (currentGeneration === coreGeneration) {
       coreProcess = null;
       runningCoreProfile = null;
+      setCoreEndpoint(null);
     }
   });
 }
@@ -481,11 +514,13 @@ export async function stopCore(): Promise<void> {
     if (currentGeneration === coreGeneration) {
       coreProcess = null;
       runningCoreProfile = null;
+      setCoreEndpoint(null);
     }
     return;
   }
   coreProcess = null;
   runningCoreProfile = null;
+  setCoreEndpoint(null);
 }
 
 export async function ensureCoreProfile(profile: BundledCoreProfile): Promise<void> {
@@ -509,7 +544,7 @@ export async function ensureCoreProfile(profile: BundledCoreProfile): Promise<vo
 async function waitForProcessExit(): Promise<void> {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline && coreProcess !== null) {
-    const healthUrl = "http://127.0.0.1:18899/livez";
+    const healthUrl = `${getCoreBaseURL()}/livez`;
     const alive = await httpHealthCheck(healthUrl, 500);
     if (!alive) {
       console.log("[CoreManager] 核心服务已停止响应");
@@ -563,7 +598,7 @@ async function waitForChildExit(child: ChildProcessWithoutNullStreams | null, ti
 }
 
 async function gracefulShutdown(pid: number): Promise<boolean> {
-  const healthUrl = "http://127.0.0.1:18899/livez";
+  const healthUrl = `${getCoreBaseURL()}/livez`;
   const isAlive = await httpHealthCheck(healthUrl, 2000);
   if (!isAlive) {
     console.log("[CoreManager] 核心服务不可达，跳过优雅关闭");
@@ -571,7 +606,7 @@ async function gracefulShutdown(pid: number): Promise<boolean> {
   }
 
   console.log("[CoreManager] 尝试优雅关闭核心服务...");
-  const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/shutdown", 3000, getLocalAdminHeaders());
+  const shutdownOk = await httpShutdown(`${getCoreBaseURL()}/api/local/admin/shutdown`, 3000, getLocalAdminHeaders());
   if (!shutdownOk) {
     console.warn("[CoreManager] 优雅关闭请求失败");
     return false;
@@ -672,7 +707,7 @@ function httpHealthCheck(url: string, timeoutMs: number): Promise<boolean> {
 export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 60000): Promise<void> {
   const startedAt = Date.now();
   const expectedGeneration = coreGeneration;
-  const healthUrl = "http://127.0.0.1:18899/livez";
+  const dataDir = getAmitiaDataDir();
 
   while (Date.now() - startedAt < timeoutMs) {
     if (coreGeneration !== expectedGeneration) {
@@ -689,10 +724,19 @@ export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 
       throw new Error("Amitia Core进程意外退出");
     }
 
-    const ok = await httpHealthCheck(healthUrl, 2000);
+    const endpoint = readCoreEndpoint(dataDir);
+    const ok = endpoint ? await httpHealthCheck(`${endpoint.httpBaseURL}/livez`, 2000) : false;
     if (ok) {
       console.log(`[CoreManager] 健康检查通过, Profile: ${profile}`);
       return;
+    }
+    if (!endpoint && Date.now() - startedAt > 3000) {
+      const legacy = legacyCoreEndpoint();
+      if (await httpHealthCheck(`${legacy.httpBaseURL}/livez`, 1000)) {
+        setCoreEndpoint(legacy);
+        console.log(`[CoreManager] 兼容旧版本核心端点: ${legacy.httpBaseURL}`);
+        return;
+      }
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -704,7 +748,7 @@ export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 
 
 export async function waitForCoreReadiness(timeoutMs = 60000): Promise<boolean> {
   const startedAt = Date.now();
-  const readyUrl = "http://127.0.0.1:18899/readyz";
+  const dataDir = getAmitiaDataDir();
 
   while (Date.now() - startedAt < timeoutMs) {
     if (!isCoreRunning() && Date.now() - startedAt > 2000) {
@@ -712,9 +756,18 @@ export async function waitForCoreReadiness(timeoutMs = 60000): Promise<boolean> 
       return false;
     }
 
-    if (await httpHealthCheck(readyUrl, 2000)) {
+    const endpoint = readCoreEndpoint(dataDir);
+    if (endpoint && (await httpHealthCheck(`${endpoint.httpBaseURL}/readyz`, 2000))) {
       console.log("[CoreManager] 就绪检查通过");
       return true;
+    }
+    if (!endpoint && Date.now() - startedAt > 3000) {
+      const legacy = legacyCoreEndpoint();
+      if (await httpHealthCheck(`${legacy.httpBaseURL}/readyz`, 1000)) {
+        setCoreEndpoint(legacy);
+        console.log(`[CoreManager] 兼容旧版本核心端点: ${legacy.httpBaseURL}`);
+        return true;
+      }
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));

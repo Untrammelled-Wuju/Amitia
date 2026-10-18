@@ -21,6 +21,7 @@ import { ConfigStore } from "./config-store";
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
 import { getDesktopAuthHeaders } from "./backend-session-client";
+import { getCoreEndpoint } from "./core-endpoint";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
 import { getMeshCloudAuth, getMeshIdentity, getMeshStatus, publishLocalVoiceASRFinal } from "./device-mesh/local-agent-client";
 import {
@@ -49,6 +50,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.getDeploymentConfig, async () => {
     return configStore.getDeploymentConfig();
   });
+
+  ipcMain.handle(IPC_CHANNELS.getRuntimeEndpoint, () => getCoreEndpoint());
 
   ipcMain.handle(
     IPC_CHANNELS.saveDeploymentConfig,

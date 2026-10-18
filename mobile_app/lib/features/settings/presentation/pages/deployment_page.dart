@@ -103,7 +103,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                         keyboardType: TextInputType.url,
                         autocorrect: false,
                         decoration: InputDecoration(
-                          hintText: 'cloud.example.com 或 192.168.1.10:18899',
+                          hintText: 'cloud.example.com 或 192.168.1.10:端口',
                           helperText:
                               currentConfig.mode == MobileDeploymentMode.cloud
                               ? '云端业务请求将连接此 Cloud Core；设备 Runtime 仍保留在本机'

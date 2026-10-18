@@ -123,7 +123,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 		{
 			name:       "backend/config",
 			dir:        ".",
-			expectPort: 19178,
+			expectPort: 0,
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
@@ -132,7 +132,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 		{
 			name:       "config",
 			dir:        "../../config",
-			expectPort: 19178,
+			expectPort: 0,
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
@@ -141,7 +141,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 		{
 			name:       "desktop-template",
 			dir:        "../../desktop/resources/config-template",
-			expectPort: 19178,
+			expectPort: 0,
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",

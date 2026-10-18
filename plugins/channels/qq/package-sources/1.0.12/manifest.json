@@ -81,6 +81,7 @@
           "id": "qq",
           "sidecar": {
             "defaultPort": 19877,
+            "portEnv": "QQ_SIDECAR_PORT",
             "healthPath": "/api/health",
             "kind": "qq",
             "subdir": "qq-sidecar"

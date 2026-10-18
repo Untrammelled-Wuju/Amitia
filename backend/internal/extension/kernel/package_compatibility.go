@@ -3,11 +3,11 @@ package kernel
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"runtime"
 	"strings"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
@@ -17,12 +17,7 @@ import (
 )
 
 func currentPackageHostVersion() string {
-	if value := strings.TrimSpace(os.Getenv("AMITIA_VERSION")); value != "" {
-		return value
-	}
-	// The production extension runtime is currently constructed with 26.2.0-beta.2.
-	// Release builds can override the compatibility identity via AMITIA_VERSION.
-	return "26.2.0-beta.2"
+	return config.AppVersion()
 }
 
 func normalizePackagePlatform(value string) string {

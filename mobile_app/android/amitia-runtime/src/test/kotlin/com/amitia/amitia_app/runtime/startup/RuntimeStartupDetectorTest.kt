@@ -93,7 +93,7 @@ class RuntimeStartupDetectorTest {
         return """{"code":503,"msg":"blocked","data":{"status":"blocked","state":"Blocked","blockingCount":1,"degradedCount":0,"readyCount":0,"failedCount":0,"timestamp":"2026-01-01T00:00:00Z"}}"""
     }
 
-    private val validEndpoint = embeddedAndroidBackendPolicy()
+    private val validEndpoint = BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
 
     @Test
     fun validReadyResponse_returnsReady() {

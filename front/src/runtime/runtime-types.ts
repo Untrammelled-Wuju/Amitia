@@ -85,10 +85,24 @@ export interface RealtimeCallWindowRequest {
   charAvatar?: string;
 }
 
+export interface RuntimeEndpoint {
+  schemaVersion: number;
+  version?: string;
+  instanceId?: string;
+  pid: number;
+  startedAt: string;
+  host: string;
+  port: number;
+  httpBaseURL: string;
+  websocketBaseURL: string;
+  compatibilityBaseURL?: string;
+}
+
 export interface AmitiaDesktopAPI {
   showReplyNotification?(options?: { notify: boolean; sound: boolean }): Promise<boolean>;
   getEnvironment(): Promise<DesktopEnvironment>;
   getDeploymentConfig(): Promise<DeploymentModeConfig>;
+  getRuntimeEndpoint(): Promise<RuntimeEndpoint | null>;
   saveDeploymentConfig(
     config: DeploymentModeConfig,
   ): Promise<DeploymentModeConfig>;

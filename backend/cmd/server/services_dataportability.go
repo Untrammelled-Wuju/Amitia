@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
@@ -34,14 +34,10 @@ type dataPortabilityDeps struct {
 }
 
 func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability.Coordinator, error) {
-	appVersion := os.Getenv("AMITIA_VERSION")
-	if appVersion == "" {
-		appVersion = "26.2.0-beta"
-	}
 	schemaFinger := fmt.Sprintf("mig-%d-%s", len(migration.DefaultMigrations()), runtime.GOOS)
 
 	staging := dataportability.NewStagingManager(deps.DataDir)
-	coord := dataportability.NewCoordinator(deps.DataDir, appVersion, runtime.GOOS, schemaFinger, staging)
+	coord := dataportability.NewCoordinator(deps.DataDir, config.AppVersion(), runtime.GOOS, schemaFinger, staging)
 
 	contributors := []dataportability.BackupContributor{
 		dataportability.NewCharacterContributor(deps.DB),

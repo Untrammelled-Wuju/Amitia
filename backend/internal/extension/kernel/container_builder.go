@@ -1832,7 +1832,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.extRoot == "" {
 		updateBaseDir = filepath.Join(os.TempDir(), "amitia-update-downloads")
 	}
-	updateManager := desktop_update.NewUpdateManager(updateBaseDir, "26.2.0-beta.2")
+	updateManager := desktop_update.NewUpdateManager(updateBaseDir, appconfig.AppVersion())
 	updateAdapter := NewUpdateManagerAdapter(updateManager, desktopHost)
 	desktopActionBridge := NewDesktopActionBridge(permBroker, scopeManager, executionKernel)
 	desktopHost.SetPermissionChecker(desktopActionBridge)

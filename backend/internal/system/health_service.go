@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/pkg/database/mysql"
 )
 
@@ -28,7 +29,7 @@ func (s *service) Health() map[string]interface{} {
 		s.healthLog = s.healthLog[1:]
 	}
 	return map[string]interface{}{
-		"health": true, "version": "26.2.0-beta.2", "deployMode": "desktop-local",
+		"health": true, "version": config.AppVersion(), "deployMode": "desktop-local",
 		"database": dbStatus, "model": modelStatus,
 		"web":     "enabled",
 		"uptime":  int(time.Since(s.startTime).Seconds()),
@@ -44,7 +45,7 @@ func (s *service) Diagnostics() map[string]interface{} {
 	s.db.Table("conversations").Count(&convCount)
 	s.db.Table("messages").Count(&msgCount)
 	return map[string]interface{}{
-		"version": "26.2.0-beta.2", "goVersion": runtime.Version(),
+		"version": config.AppVersion(), "goVersion": runtime.Version(),
 		"uptime": time.Since(s.startTime).String(), "goroutines": runtime.NumGoroutine(),
 		"memory": map[string]interface{}{"allocMB": memStats.Alloc / 1024 / 1024, "totalAllocMB": memStats.TotalAlloc / 1024 / 1024},
 		"stats":  map[string]interface{}{"devices": deviceCount, "conversations": convCount, "messages": msgCount},

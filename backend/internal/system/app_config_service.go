@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/config"
 )
 
 func (s *service) AppConfig() map[string]interface{} {
@@ -189,7 +191,7 @@ func parseConfigImportPayload(body map[string]interface{}) (map[string]string, e
 
 func (s *service) GetVersion() map[string]interface{} {
 	return map[string]interface{}{
-		"version":   readEnvOrDefault("AMITIA_VERSION", "26.2.0-beta.2"),
+		"version":   config.AppVersion(),
 		"buildTime": readEnvOrDefault("AMITIA_BUILD_TIME", "2026-05-27"),
 		"goVersion": runtime.Version(),
 	}
@@ -199,7 +201,7 @@ func (s *service) GetAbout() map[string]interface{} {
 	return map[string]interface{}{
 		"name":                   "Amitia",
 		"displayName":            "阿米提亚",
-		"version":                readEnvOrDefault("AMITIA_VERSION", "26.2.0-beta.2"),
+		"version":                config.AppVersion(),
 		"gitCommit":              os.Getenv("AMITIA_GIT_COMMIT"),
 		"license":                "AGPL-3.0-only",
 		"copyright":              "Copyright (C) 2026 彭旭",

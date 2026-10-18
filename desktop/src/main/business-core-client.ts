@@ -1,5 +1,6 @@
 import { getDesktopAuthHeaders, getLocalAdminHeaders } from "./backend-session-client";
 import { getMeshCloudAuth, getMeshIdentity } from "./device-mesh/local-agent-client";
+import { getCoreBaseURL } from "./core-endpoint";
 
 export interface BusinessCoreProbeResult {
   reachable: boolean;
@@ -44,7 +45,7 @@ export class BusinessCoreClient {
   async fetch(path: string, init: RequestInit = {}): Promise<Response> {
     const cloudAuth = await getMeshCloudAuth();
     const pinned = Boolean(cloudAuth?.cloudBaseUrl && sameOrigin(cloudAuth.cloudBaseUrl, this.baseURL));
-    const url = pinned ? "http://127.0.0.1:18899/internal/device-mesh/provider" + path : this.url(path).toString();
+    const url = pinned ? `${getCoreBaseURL()}/internal/device-mesh/provider${path}` : this.url(path).toString();
     const headers: Record<string, string> = {
       ...(pinned ? getLocalAdminHeaders() : await this.authHeaders()),
       ...((init.headers as Record<string, string>) || {}),

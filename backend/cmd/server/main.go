@@ -12,15 +12,19 @@ import (
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/temporal"
 	"gorm.io/gorm"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/runtimeendpoint"
+	"github.com/u-ai/backend/internal/runtimeport"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/security"
 	"github.com/u-ai/backend/internal/spaceidentity"
@@ -36,6 +40,9 @@ import (
 )
 
 func ensureSingleInstance(addr, dataDir string) {
+	if isDynamicListenAddr(addr) {
+		addr = ""
+	}
 	if err := platform.Get().KillExistingServer(addr, dataDir); err != nil {
 		log.Error("检查已有服务实例失败:", err)
 		fmt.Fprintf(os.Stderr, "检查已有服务实例失败: %v\n", err)
@@ -46,6 +53,72 @@ func ensureSingleInstance(addr, dataDir string) {
 		fmt.Fprintf(os.Stderr, "写入服务进程标识失败: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func isDynamicListenAddr(addr string) bool {
+	_, port, err := net.SplitHostPort(addr)
+	return err == nil && port == "0"
+}
+
+func applyDynamicProviderPorts(policy runtimeprofile.Policy) error {
+	if policy.VectorStore && config.AppCfg.Providers.VectorStore.Enabled && config.AppCfg.Providers.VectorStore.Qdrant.Port == 0 {
+		port, err := runtimeport.AllocateLoopbackPair()
+		if err != nil {
+			return fmt.Errorf("分配 Qdrant 动态端口失败: %w", err)
+		}
+		config.AppCfg.Providers.VectorStore.Qdrant.Port = port
+	}
+	if policy.GraphStore && config.AppCfg.Providers.GraphStore.Enabled && config.AppCfg.Providers.GraphStore.SurrealDB.Port == 0 {
+		port, err := runtimeport.AllocateLoopback()
+		if err != nil {
+			return fmt.Errorf("分配 SurrealDB 动态端口失败: %w", err)
+		}
+		config.AppCfg.Providers.GraphStore.SurrealDB.Port = port
+	}
+	return nil
+}
+
+func runtimeServiceEndpoints() map[string]runtimeendpoint.ServiceEndpoint {
+	services := make(map[string]runtimeendpoint.ServiceEndpoint)
+	qdrant := config.AppCfg.Providers.VectorStore.Qdrant
+	if config.AppCfg.Providers.VectorStore.Enabled && qdrant.Port > 0 {
+		services["qdrant"] = runtimeendpoint.ServiceEndpoint{
+			HTTPBaseURL: fmt.Sprintf("http://127.0.0.1:%d", qdrant.Port),
+			GRPCBaseURL: fmt.Sprintf("http://127.0.0.1:%d", qdrant.Port+1),
+			Host:        "127.0.0.1",
+			Port:        qdrant.Port,
+			GRPCPort:    qdrant.Port + 1,
+		}
+	}
+	surreal := config.AppCfg.Providers.GraphStore.SurrealDB
+	if config.AppCfg.Providers.GraphStore.Enabled && surreal.Port > 0 {
+		services["surrealdb"] = runtimeendpoint.ServiceEndpoint{
+			HTTPBaseURL: fmt.Sprintf("http://127.0.0.1:%d", surreal.Port),
+			Host:        "127.0.0.1",
+			Port:        surreal.Port,
+		}
+	}
+	return services
+}
+
+func writeRuntimeEndpoint(paths util.RuntimePaths, listenAddr string) (runtimeendpoint.Endpoint, error) {
+	host, rawPort, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		return runtimeendpoint.Endpoint{}, err
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return runtimeendpoint.Endpoint{}, err
+	}
+	endpoint := runtimeendpoint.New(config.AppCfg.App.Version, spaceidentity.DefaultSpaceID(), host, port)
+	endpoint.Services = runtimeServiceEndpoints()
+	if err := runtimeendpoint.Write(paths.RunDir, endpoint); err != nil {
+		return runtimeendpoint.Endpoint{}, err
+	}
+	return endpoint, nil
 }
 
 var triggerShutdown context.CancelFunc
@@ -79,6 +152,10 @@ func main() {
 	}
 	profile := profileResolution.Profile
 	policy := runtimeprofile.PolicyFor(profile)
+	if err := applyDynamicProviderPorts(policy); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 
 	config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
 	if _, err := spaceidentity.InitializeDefault(config.AppCfg.Storage.DataDir); err != nil {
@@ -126,6 +203,26 @@ func main() {
 	serverAddr := config.AppCfg.Server.Addr()
 	ensureSingleInstance(serverAddr, config.AppCfg.Storage.DataDir)
 	defer platform.Get().RemovePidFile(config.AppCfg.Storage.DataDir)
+	listener, errListen := net.Listen("tcp", serverAddr)
+	if errListen != nil {
+		log.Error("服务监听失败:", errListen)
+		fmt.Fprintf(os.Stderr, "服务监听失败: %v\n", errListen)
+		os.Exit(1)
+	}
+	actualAddr := listener.Addr().String()
+	actualHost, actualPortText, _ := net.SplitHostPort(actualAddr)
+	actualPort, _ := strconv.Atoi(actualPortText)
+	config.AppCfg.Server.Host = actualHost
+	config.AppCfg.Server.Port = actualPort
+	serverAddr = actualAddr
+	endpoint, errEndpoint := writeRuntimeEndpoint(paths, actualAddr)
+	if errEndpoint != nil {
+		_ = listener.Close()
+		log.Error("写运行端点失败:", errEndpoint)
+		fmt.Fprintf(os.Stderr, "写运行端点失败: %v\n", errEndpoint)
+		os.Exit(1)
+	}
+	log.Info("运行端点: ", serverAddr)
 
 	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopRoot()
@@ -329,16 +426,18 @@ func main() {
 		Handler: nil,
 	}
 	serverErr := make(chan error, 1)
+	listenPort := actualPort
 
 	if policy.FullHTTPAPI {
 		r, errSetup := setupRouter(ctx, services, bootstrap)
 		if errSetup != nil {
+			_ = listener.Close()
 			log.Error("路由和安全服务初始化失败:", errSetup)
 			cleanup()
 			os.Exit(1)
 		}
 		srv.Handler = r
-		if err := startMeshLAN(appCtx, services, r); err != nil {
+		if err := startMeshLAN(appCtx, services, r, listenPort); err != nil {
 			log.Warn("局域网加密服务启动失败: ", err)
 		}
 		if err := startCoreWorkers(appCtx, services, srv); err != nil {
@@ -351,7 +450,7 @@ func main() {
 				log.Warn("device-mesh runtime start failed: ", err)
 			}
 		}
-		runCoreServer(appCtx, srv, serverErr, services, srv)
+		runCoreServer(appCtx, srv, listener, serverErr, services, endpoint, paths.RunDir)
 		return
 	}
 	if services.DeviceMesh != nil && services.DeviceMesh.LocalHandler != nil {
@@ -359,12 +458,13 @@ func main() {
 	}
 	r, errSetup := setupDeviceAgentRouter(ctx, services)
 	if errSetup != nil {
+		_ = listener.Close()
 		log.Error("Device Agent路由初始化失败:", errSetup)
 		cleanup()
 		os.Exit(1)
 	}
 	srv.Handler = r
-	runDeviceAgentServer(appCtx, srv, serverErr, services, srv)
+	runDeviceAgentServer(appCtx, srv, listener, serverErr, services, endpoint, paths.RunDir)
 }
 
 func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Server) error {
@@ -393,7 +493,7 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 		services.ContinuityCoordinator.Start(appCtx)
 	}
 
-	selfHeal := startSelfHealMonitor(appCtx, services.DB)
+	selfHeal := startSelfHealMonitor(appCtx, services.DB, r.Addr)
 	defer selfHeal.Stop()
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
@@ -413,10 +513,39 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	return nil
 }
 
-func runCoreServer(appCtx context.Context, srv *http.Server, serverErr chan error, services *AppServices, r *http.Server) {
-	log.Info("所有服务已就绪，开始监听 ", srv.Addr)
+func startCompatibilityListener(srv *http.Server) net.Listener {
+	port := config.AppCfg.Server.CompatibilityPort
+	if port <= 0 {
+		return nil
+	}
+	if _, currentPort, err := net.SplitHostPort(srv.Addr); err == nil && currentPort == strconv.Itoa(port) {
+		return nil
+	}
+	address := net.JoinHostPort(config.AppCfg.Server.Host, strconv.Itoa(port))
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Info("兼容端口未启用: ", address, " ", err)
+		return nil
+	}
 	go func() {
-		serverErr <- srv.ListenAndServe()
+		if serveErr := srv.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			log.Warn("兼容端口监听停止: ", serveErr)
+		}
+	}()
+	log.Info("兼容旧版本端口已启用: ", address)
+	return listener
+}
+
+func runCoreServer(appCtx context.Context, srv *http.Server, listener net.Listener, serverErr chan error, services *AppServices, endpoint runtimeendpoint.Endpoint, runDir string) {
+	log.Info("所有服务已就绪，开始监听 ", srv.Addr)
+	if compatibility := startCompatibilityListener(srv); compatibility != nil {
+		endpoint.CompatibilityBaseURL = "http://" + compatibility.Addr().String()
+		if err := runtimeendpoint.Write(runDir, endpoint); err != nil {
+			log.Warn("写兼容端点失败: ", err)
+		}
+	}
+	go func() {
+		serverErr <- srv.Serve(listener)
 	}()
 
 	select {
@@ -438,10 +567,16 @@ func runCoreServer(appCtx context.Context, srv *http.Server, serverErr chan erro
 	}
 }
 
-func runDeviceAgentServer(appCtx context.Context, srv *http.Server, serverErr chan error, services *AppServices, r *http.Server) {
+func runDeviceAgentServer(appCtx context.Context, srv *http.Server, listener net.Listener, serverErr chan error, services *AppServices, endpoint runtimeendpoint.Endpoint, runDir string) {
 	log.Info("Device Agent已就绪，开始监听 ", srv.Addr)
+	if compatibility := startCompatibilityListener(srv); compatibility != nil {
+		endpoint.CompatibilityBaseURL = "http://" + compatibility.Addr().String()
+		if err := runtimeendpoint.Write(runDir, endpoint); err != nil {
+			log.Warn("写兼容端点失败: ", err)
+		}
+	}
 	go func() {
-		serverErr <- srv.ListenAndServe()
+		serverErr <- srv.Serve(listener)
 	}()
 
 	select {

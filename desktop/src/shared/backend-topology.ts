@@ -33,7 +33,10 @@ export function toWebSocketBaseURL(httpBaseURL: string): string {
 
 export function resolveBackendTopology(
   config: DeploymentModeConfig,
+  localBaseURL = "http://127.0.0.1:18899",
 ): DesktopBackendTopology {
+  const localBase = localBaseURL.replace(/\/+$/, "");
+  const localWebSocket = toWebSocketBaseURL(localBase);
   if (config.mode === "cloud") {
     const normalizedServerURL = normalizeHTTPBaseURL(config.serverURL!);
     return {
@@ -46,8 +49,8 @@ export function resolveBackendTopology(
       },
       localRuntime: {
         role: "local-runtime",
-        baseURL: "http://127.0.0.1:18899",
-        websocketBaseURL: "ws://127.0.0.1:18899",
+        baseURL: localBase,
+        websocketBaseURL: localWebSocket,
         remote: false,
       },
       localRuntimeProfile: "device-agent",
@@ -58,14 +61,14 @@ export function resolveBackendTopology(
     deploymentMode: "local",
     businessCore: {
       role: "business-core",
-      baseURL: "http://127.0.0.1:18899",
-      websocketBaseURL: "ws://127.0.0.1:18899",
+      baseURL: localBase,
+      websocketBaseURL: localWebSocket,
       remote: false,
     },
     localRuntime: {
       role: "local-runtime",
-      baseURL: "http://127.0.0.1:18899",
-      websocketBaseURL: "ws://127.0.0.1:18899",
+      baseURL: localBase,
+      websocketBaseURL: localWebSocket,
       remote: false,
     },
     localRuntimeProfile: "local",

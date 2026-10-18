@@ -23,6 +23,9 @@ const api = {
   getDeploymentConfig(): Promise<DeploymentModeConfig> {
     return ipcRenderer.invoke(IPC_CHANNELS.getDeploymentConfig);
   },
+  getRuntimeEndpoint(): Promise<unknown> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getRuntimeEndpoint);
+  },
   saveDeploymentConfig(
     config: DeploymentModeConfig,
   ): Promise<DeploymentModeConfig> {

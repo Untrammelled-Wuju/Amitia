@@ -164,6 +164,7 @@ object AndroidRuntimeModule {
         val backendConnectionProvider = DefaultBackendConnectionProvider(
             snapshotProvider = { controller.snapshot() },
             dataRootProvider = { layout.dataRoot.absolutePath },
+            runRootProvider = { layout.runRoot.absolutePath },
         )
 
         return DefaultRuntimeModule(

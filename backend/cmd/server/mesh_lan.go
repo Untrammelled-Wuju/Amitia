@@ -14,7 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/spaceidentity"
 )
 
-func startMeshLAN(ctx context.Context, services *AppServices, handler http.Handler) error {
+func startMeshLAN(ctx context.Context, services *AppServices, handler http.Handler, port int) error {
 	if services == nil || services.DeviceMesh == nil || services.DeviceMesh.LocalHandler == nil {
 		return nil
 	}
@@ -32,7 +32,7 @@ func startMeshLAN(ctx context.Context, services *AppServices, handler http.Handl
 	}
 	var server *lan.Server
 	if len(addresses) > 0 {
-		server, err = lan.Start(handler, signer, spaceidentity.DefaultSpaceID(), config.AppCfg.Server.Port, addresses)
+		server, err = lan.Start(handler, signer, spaceidentity.DefaultSpaceID(), port, addresses)
 		if err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ func startMeshLAN(ctx context.Context, services *AppServices, handler http.Handl
 			if len(addresses) == 0 {
 				continue
 			}
-			server, err = lan.Start(handler, signer, spaceidentity.DefaultSpaceID(), config.AppCfg.Server.Port, addresses)
+			server, err = lan.Start(handler, signer, spaceidentity.DefaultSpaceID(), port, addresses)
 			if err != nil {
 				log.Printf("device mesh LAN listener restart failed: %v", err)
 				continue

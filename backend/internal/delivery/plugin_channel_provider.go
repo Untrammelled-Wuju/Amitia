@@ -14,6 +14,7 @@ import (
 	basechannel "github.com/u-ai/backend/internal/channel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/serviceauth"
+	"github.com/u-ai/backend/internal/runtimeport"
 )
 
 const channelProviderCapability capability.CapabilityID = "channel.provider"
@@ -44,7 +45,10 @@ func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel
 		return nil, err
 	}
 	transport := metadataMap(def.Metadata, "transport")
-	baseURL, err := resolveTransportBaseURL(transport)
+	if transport == nil {
+		transport = metadataMap(def.Metadata, "sidecar")
+	}
+	baseURL, err := resolveTransportBaseURL(channelID, transport)
 	if err != nil {
 		return nil, fmt.Errorf("channel provider %s: %w", channelID, err)
 	}
@@ -84,13 +88,16 @@ func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel
 	}), nil
 }
 
-func resolveTransportBaseURL(transport map[string]any) (string, error) {
+func resolveTransportBaseURL(channelID string, transport map[string]any) (string, error) {
 	transportType := strings.ToLower(stringValue(transport["type"]))
 	if transportType == "" {
 		transportType = "http"
 	}
 	if transportType != "http" {
 		return "", fmt.Errorf("unsupported transport type %s", transportType)
+	}
+	if endpoint := runtimeport.ChannelEndpoint(channelID); endpoint != "" {
+		return endpoint, nil
 	}
 	if baseURL := strings.TrimRight(stringValue(transport["baseUrl"]), "/"); baseURL != "" {
 		if err := validateLoopbackBaseURL(baseURL); err != nil {

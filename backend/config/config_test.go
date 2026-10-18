@@ -502,8 +502,8 @@ func TestServerEnvironmentBinding(t *testing.T) {
 	if cfg.Server.Host != "127.0.0.1" {
 		t.Errorf("default server.host = %q, want 127.0.0.1", cfg.Server.Host)
 	}
-	if cfg.Server.Port != 18899 {
-		t.Errorf("default server.port = %d, want 18899", cfg.Server.Port)
+	if cfg.Server.Port != 0 {
+		t.Errorf("default server.port = %d, want 0", cfg.Server.Port)
 	}
 }
 
@@ -565,11 +565,11 @@ func TestServerEnvDoesNotAffectProviderPorts(t *testing.T) {
 		t.Fatalf("loadConfig failed: %v", err)
 	}
 
-	if cfg.Providers.VectorStore.Qdrant.Port != 19178 {
-		t.Errorf("qdrant port should remain 19178, got %d", cfg.Providers.VectorStore.Qdrant.Port)
+	if cfg.Providers.VectorStore.Qdrant.Port != 0 {
+		t.Errorf("qdrant port should remain dynamic, got %d", cfg.Providers.VectorStore.Qdrant.Port)
 	}
-	if cfg.Providers.GraphStore.SurrealDB.Port != 18000 {
-		t.Errorf("surrealdb port should remain 18000, got %d", cfg.Providers.GraphStore.SurrealDB.Port)
+	if cfg.Providers.GraphStore.SurrealDB.Port != 0 {
+		t.Errorf("surrealdb port should remain dynamic, got %d", cfg.Providers.GraphStore.SurrealDB.Port)
 	}
 }
 
@@ -617,5 +617,31 @@ func TestAndroidStyleRequiredProviderOverrides(t *testing.T) {
 	}
 	if cfg.DesktopPetRuntime.Enabled {
 		t.Error("DesktopPetRuntime should be disabled")
+	}
+}
+
+func TestLoadConfigUsesRuntimeAppVersion(t *testing.T) {
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(configFile, []byte("app:\n  version: \"26.2.0-beta.2\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AMITIA_VERSION", "")
+
+	cfg, err := loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig failed: %v", err)
+	}
+	if cfg.App.Version != DefaultAppVersion {
+		t.Fatalf("app version = %q, want %q", cfg.App.Version, DefaultAppVersion)
+	}
+
+	t.Setenv("AMITIA_VERSION", "26.2.0-beta.5")
+	cfg, err = loadConfig(dir)
+	if err != nil {
+		t.Fatalf("loadConfig with AMITIA_VERSION failed: %v", err)
+	}
+	if cfg.App.Version != "26.2.0-beta.5" {
+		t.Fatalf("app version = %q, want runtime override", cfg.App.Version)
 	}
 }

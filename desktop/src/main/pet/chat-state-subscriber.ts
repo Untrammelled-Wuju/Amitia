@@ -1,5 +1,6 @@
 import http from "node:http";
 import type { ChatStateIpcPayload } from "./chat-state-bridge";
+import { getCoreBaseURL } from "../core-endpoint";
 
 export interface ChatStateSubscriberOptions {
   coreHost?: string;
@@ -8,20 +9,14 @@ export interface ChatStateSubscriberOptions {
   pollIntervalMs?: number;
 }
 
-const DEFAULT_CORE_HOST = "127.0.0.1";
-const DEFAULT_CORE_PORT = 18899;
 const DEFAULT_POLL_INTERVAL_MS = 0;
 
 export class ChatStateSubscriber {
-  private readonly coreHost: string;
-  private readonly corePort: number;
   private readonly onPayload?: (payload: ChatStateIpcPayload) => void;
   private readonly pollIntervalMs: number;
   private stopped = true;
 
   constructor(options: ChatStateSubscriberOptions = {}) {
-    this.coreHost = options.coreHost ?? DEFAULT_CORE_HOST;
-    this.corePort = options.corePort ?? DEFAULT_CORE_PORT;
     this.onPayload = options.onPayload;
     this.pollIntervalMs =
       options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -58,10 +53,11 @@ export class ChatStateSubscriber {
 
   private fetchOnce(): Promise<void> {
     return new Promise((resolve, reject) => {
+      const coreURL = new URL(getCoreBaseURL());
       const req = http.request(
         {
-          hostname: this.coreHost,
-          port: this.corePort,
+          hostname: coreURL.hostname,
+          port: Number(coreURL.port || 80),
           path: "/api/desktop-pets/chat-state",
           method: "GET",
           timeout: 2000,

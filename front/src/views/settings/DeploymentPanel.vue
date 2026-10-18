@@ -39,7 +39,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-input
               v-model="formData.serverURL"
               data-amitia-ui="settings.input"
-              placeholder="例如 http://192.168.1.100:18899"
+              placeholder="例如 http://192.168.1.100:端口"
               clearable
             />
             <div class="form-tip">

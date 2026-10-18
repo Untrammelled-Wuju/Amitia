@@ -3,11 +3,11 @@
 package qdrantconfig
 
 type qdrantYAMLConfig struct {
-	LogLevel       string                 `yaml:"log_level,omitempty"`
-	TelemetryDisabled bool                `yaml:"telemetry_disabled,omitempty"`
-	Service        qdrantYAMLService     `yaml:"service"`
-	Storage        qdrantYAMLStorage     `yaml:"storage"`
-	Cluster        qdrantYAMLCluster     `yaml:"cluster"`
+	LogLevel          string            `yaml:"log_level,omitempty"`
+	TelemetryDisabled bool              `yaml:"telemetry_disabled,omitempty"`
+	Service           qdrantYAMLService `yaml:"service"`
+	Storage           qdrantYAMLStorage `yaml:"storage"`
+	Cluster           qdrantYAMLCluster `yaml:"cluster"`
 }
 
 type qdrantYAMLService struct {
@@ -22,14 +22,14 @@ type qdrantYAMLService struct {
 }
 
 type qdrantYAMLStorage struct {
-	StoragePath   string                   `yaml:"storage_path"`
-	SnapshotsPath string                   `yaml:"snapshots_path"`
-	OnDiskPayload bool                     `yaml:"on_disk_payload"`
-	UpdateConcurrency uint64               `yaml:"update_concurrency,omitempty"`
-	WAL           qdrantYAMLWAL            `yaml:"wal"`
-	Performance   qdrantYAMLPerformance    `yaml:"performance"`
-	Optimizers    qdrantYAMLOptimizers     `yaml:"optimizers"`
-	HNSWIndex     qdrantYAMLHNSW           `yaml:"hnsw_index"`
+	StoragePath       string                `yaml:"storage_path"`
+	SnapshotsPath     string                `yaml:"snapshots_path"`
+	OnDiskPayload     bool                  `yaml:"on_disk_payload"`
+	UpdateConcurrency uint64                `yaml:"update_concurrency,omitempty"`
+	WAL               qdrantYAMLWAL         `yaml:"wal"`
+	Performance       qdrantYAMLPerformance `yaml:"performance"`
+	Optimizers        qdrantYAMLOptimizers  `yaml:"optimizers"`
+	HNSWIndex         qdrantYAMLHNSW        `yaml:"hnsw_index"`
 }
 
 type qdrantYAMLWAL struct {
@@ -43,9 +43,9 @@ type qdrantYAMLPerformance struct {
 }
 
 type qdrantYAMLOptimizers struct {
-	DefaultSegmentNumber uint64 `yaml:"default_segment_number"`
-	IndexingThresholdKB  uint64 `yaml:"indexing_threshold_kb"`
-	FlushIntervalSec     uint64 `yaml:"flush_interval_sec"`
+	DefaultSegmentNumber   uint64 `yaml:"default_segment_number"`
+	IndexingThresholdKB    uint64 `yaml:"indexing_threshold_kb"`
+	FlushIntervalSec       uint64 `yaml:"flush_interval_sec"`
 	MaxOptimizationThreads uint64 `yaml:"max_optimization_threads"`
 }
 
@@ -64,8 +64,9 @@ type qdrantDesktopYAMLConfig struct {
 }
 
 type qdrantDesktopYAMLService struct {
-	HTTPPort int `yaml:"http_port"`
-	GRPCPort int `yaml:"grpc_port"`
+	Host     string `yaml:"host"`
+	HTTPPort int    `yaml:"http_port"`
+	GRPCPort int    `yaml:"grpc_port"`
 }
 
 type qdrantDesktopYAMLStorage struct {

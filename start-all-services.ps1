@@ -6,27 +6,13 @@ $desktopDir = Join-Path $root "desktop"
 $adminSystemDir = Join-Path $root "admin-system"
 $adminLogDir = Join-Path $root "logs"
 $nodeExe = Join-Path $root "desktop\resources\core\node\node.exe"
-$surrealExe = Join-Path $backendDir "surrealdb\surreal.exe"
 $qdrantExe = Join-Path $backendDir "qdrant\qdrant.exe"
-    $serverExe = Join-Path $backendDir "server.codex2.exe"
-    if (-not (Test-Path $serverExe)) {
-        $serverExe = Join-Path $backendDir "server.codex.exe"
-    }
-    if (-not (Test-Path $serverExe)) {
-        $serverExe = Join-Path $backendDir "server.runtime.exe"
-    }
-    if (-not (Test-Path $serverExe)) {
-        $serverExe = Join-Path $backendDir "server.current.exe"
-    }
-    if (-not (Test-Path $serverExe)) {
-        $serverExe = Join-Path $backendDir "server.new.exe"
-    }
+$serverExe = Join-Path $backendDir "server.exe"
 if (-not (Test-Path $serverExe)) {
-    $serverExe = Join-Path $backendDir "server.exe"
+    $serverExe = Join-Path $backendDir "server.codex2.exe"
 }
 $adminServerExe = Join-Path $backendDir "admin-server.exe"
 $goExe = "C:\Code\Go\bin\go.exe"
-$surrealPass = "AmitiaSurrealDBRootPassword20260831Securex"
 $adminMySQLConfigPath = Join-Path $root "config\admin-mysql.local.json"
 $adminMySQLConfig = $null
 if (Test-Path $adminMySQLConfigPath) {
@@ -38,8 +24,6 @@ $env:AMITIA_CONFIG_DIR = Join-Path $env:AMITIA_RUNTIME_ROOT "config"
 $env:AMITIA_WORKSPACE_DIR = $root
 $env:AMITIA_DATA_DIR = Join-Path $root "AmitiaData"
 $env:AMITIA_RUN_MODE = "desktop"
-$env:AMITIA_SURREAL_USER = "root"
-$env:AMITIA_SURREAL_PASSWORD = $surrealPass
 $env:AMITIA_EXTENSION_DEV_MODE = "true"
 
 function Stop-ProjectProcess {
@@ -150,27 +134,21 @@ log-error="$($mysqlErrorLog -replace '\\','/')"
 }
 Start-Sleep -Seconds 2
 
-Write-Host "`n[3/8] 启动 SurrealDB..." -ForegroundColor Yellow
-Start-Process -FilePath $surrealExe `
-    -ArgumentList "start", "surrealkv:data", "--bind", "127.0.0.1:18000", "--user", "root", "--pass", $surrealPass `
-    -WorkingDirectory (Join-Path $backendDir "surrealdb") `
-    -WindowStyle Hidden
-Start-Sleep -Seconds 5
+Write-Host "`n[3/8] SurrealDB 由核心运行时管理..." -ForegroundColor Yellow
 
 Write-Host "`n[4/8] Qdrant 由核心运行时管理..." -ForegroundColor Yellow
 
-Write-Host "`n[5/8] 启动后端 Server..." -ForegroundColor Yellow
+Write-Host "`n[5/8] 后端由桌面端 CoreManager 启动..." -ForegroundColor Yellow
 $env:PATH = "$(Split-Path -Parent $nodeExe);$env:PATH"
-Start-Process -FilePath $serverExe -ArgumentList "--runtime-profile=local" -WorkingDirectory $env:AMITIA_RUNTIME_ROOT -WindowStyle Hidden
-Start-Sleep -Seconds 20
 
 Write-Host "`n[6/8] 启动前端..." -ForegroundColor Yellow
 $viteEntry = Join-Path $desktopDir "node_modules\vite\bin\vite.js"
+$devViteEntry = Join-Path $root "scripts\dev-vite.mjs"
 Start-Process -FilePath $nodeExe `
-    -ArgumentList $viteEntry, "--host", "127.0.0.1", "--port", "15178" `
+    -ArgumentList $devViteEntry, $viteEntry, $desktopDir `
     -WorkingDirectory $desktopDir `
     -WindowStyle Hidden
-Start-Sleep -Seconds 10
+Start-Sleep -Seconds 25
 
 Write-Host "`n[7/8] 启动更新管理服务..." -ForegroundColor Yellow
 $adminSourceFiles = @(
@@ -286,12 +264,22 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Format-Table -AutoSize
 
 Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-    Where-Object { $_.LocalPort -in 13306, 18899, 18880, 18000, 19178, 15178, 15179 } |
+    Where-Object { $_.LocalPort -in 13306, 18899, 18880, 15179 } |
     Format-Table LocalPort, OwningProcess -AutoSize
 
 $startupHealthy = $true
+function Get-CoreBaseURL {
+    $endpointPath = Join-Path $env:AMITIA_RUNTIME_ROOT "run\endpoint.json"
+    if (Test-Path $endpointPath) {
+        try {
+            return (Get-Content -Raw -LiteralPath $endpointPath | ConvertFrom-Json).httpBaseURL
+        } catch {
+        }
+    }
+    return "http://127.0.0.1:18899"
+}
 try {
-    $health = Invoke-RestMethod -Uri "http://127.0.0.1:18899/api/public/health" -TimeoutSec 5
+    $health = Invoke-RestMethod -Uri "$(Get-CoreBaseURL)/api/public/health" -TimeoutSec 5
     Write-Host "后端健康检查: $($health | ConvertTo-Json -Compress)" -ForegroundColor Green
 } catch {
     $startupHealthy = $false
@@ -306,7 +294,7 @@ try {
     Write-Host "管理服务健康检查失败: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-foreach ($serviceURL in @("http://127.0.0.1:15178", "http://127.0.0.1:15179", "http://127.0.0.1:18000/health", "http://127.0.0.1:19178/healthz")) {
+foreach ($serviceURL in @("http://127.0.0.1:15179")) {
     try {
         $serviceHealth = Invoke-WebRequest -Uri $serviceURL -TimeoutSec 5
         if ($serviceHealth.StatusCode -ne 200) {

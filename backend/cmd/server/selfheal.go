@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
@@ -163,8 +162,8 @@ func safeGo(name string, fn func()) {
 	}()
 }
 
-func startSelfHealMonitor(ctx context.Context, db *gorm.DB) *SelfHealMonitor {
-	monitor := NewSelfHealMonitor(db, config.AppCfg.Server.Addr())
+func startSelfHealMonitor(ctx context.Context, db *gorm.DB, addr string) *SelfHealMonitor {
+	monitor := NewSelfHealMonitor(db, addr)
 	monitor.Start(ctx)
 	return monitor
 }

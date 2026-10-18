@@ -42,56 +42,14 @@ export default defineConfig({
   root: resolve(__dirname, "../front"),
   publicDir: false,
   server: {
-    port: 15178,
-    strictPort: true,
+    port: 0,
+    strictPort: false,
     fs: {
       allow: [
         resolve(__dirname, "../front"),
         resolve(__dirname, "."),
         resolve(__dirname, ".."),
       ],
-    },
-    proxy: {
-      "/readyz": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/livez": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/api": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/media": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/audio": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/voice": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/images": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/videos": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/avatars": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/emote-assets": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
     },
   },
   resolve: {

@@ -30,6 +30,7 @@ func (r *yamlRenderer) Render(doc Document) ([]byte, error) {
 func renderDesktop(doc Document) ([]byte, error) {
 	cfg := qdrantDesktopYAMLConfig{
 		Service: qdrantDesktopYAMLService{
+			Host:     "127.0.0.1",
 			HTTPPort: doc.HTTPPort,
 			GRPCPort: doc.GRPCPort,
 		},
@@ -66,7 +67,7 @@ func renderMobile(doc Document) ([]byte, error) {
 			StoragePath:       doc.StoragePath,
 			SnapshotsPath:     doc.SnapshotPath,
 			OnDiskPayload:     s.OnDiskPayload,
-			UpdateConcurrency:  s.UpdateConcurrency,
+			UpdateConcurrency: s.UpdateConcurrency,
 			WAL: qdrantYAMLWAL{
 				WalCapacityMB:    s.WALCapacityMB,
 				WalSegmentsAhead: s.WALSegmentsAhead,

@@ -1,16 +1,21 @@
-import { app, BrowserWindow, nativeTheme, Tray } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, shell, Tray } from "electron";
 import { join } from "node:path";
 import { initLogger, closeLogger } from "./logger";
 import { ConfigStore } from "./config-store";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { createMainWindow, revealMainWindow } from "./window";
-import { closeSplashWindow, showSplashWindow } from "./splash";
+import {
+  closeSplashWindow,
+  revealSplashWindow,
+  showSplashWindow,
+} from "./splash";
 import { createAppTray } from "./tray";
 import { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import type { DeploymentModeConfig } from "../shared/types";
 import type { RuntimeStatus } from "../shared/types";
 import {
   ensureDataAndConfig,
+  stopCore,
   waitForCoreReadiness,
 } from "./core-manager";
 import { ensureAmitiaDataDir, getAmitiaDataDir, isDevMode } from "./path-manager";
@@ -36,6 +41,11 @@ let coreStopped = false;
 let shutdownInProgress = false;
 let clipboardBridge: ClipboardBridge | null = null;
 let deploymentLifecycle: DesktopDeploymentLifecycle | null = null;
+let startupTimer: ReturnType<typeof setTimeout> | null = null;
+let startupFailureHandled = false;
+let mainWindowReady = false;
+
+const STARTUP_TIMEOUT_MS = 180000;
 
 function isDevModeForProtocol(): boolean {
   return isDevMode();
@@ -63,6 +73,100 @@ function notifyStatus(
   }
 }
 
+function clearStartupTimer(): void {
+  if (startupTimer) {
+    clearTimeout(startupTimer);
+    startupTimer = null;
+  }
+}
+
+async function shutdownRuntime(): Promise<void> {
+  const task = deploymentLifecycle
+    ? deploymentLifecycle.shutdown()
+    : stopCore();
+  try {
+    await Promise.race([
+      task.catch(async (error) => {
+        console.error("[AmitiaDesktop] 停止核心失败:", error);
+        await stopCore().catch((stopError) => {
+          console.error("[AmitiaDesktop] 强制停止核心失败:", stopError);
+        });
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 15000)),
+    ]);
+  } catch (error) {
+    console.error("[AmitiaDesktop] 关闭运行时异常:", error);
+  }
+}
+
+async function handleStartupFailure(error: unknown): Promise<void> {
+  if (startupFailureHandled) {
+    return;
+  }
+  startupFailureHandled = true;
+  clearStartupTimer();
+  const failure = error instanceof Error ? error : new Error(String(error));
+  console.error("[AmitiaDesktop] 启动失败:", failure);
+  closeSplashWindow();
+
+  if (!app.isReady()) {
+    app.quit();
+    return;
+  }
+
+  const logDir = join(getAmitiaDataDir(), "logs");
+  let response = 0;
+  try {
+    const result = await dialog.showMessageBox({
+      type: "error",
+      title: "Amitia 启动失败",
+      message: "Amitia 无法完成启动",
+      detail: `${failure.message}\n\n日志目录:\n${logDir}`,
+      buttons: ["退出", "打开日志"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    response = result.response;
+  } catch (dialogError) {
+    console.error("[AmitiaDesktop] 启动失败提示展示异常:", dialogError);
+  }
+
+  if (response === 1) {
+    try {
+      await shell.openPath(logDir);
+    } catch (openError) {
+      console.error("[AmitiaDesktop] 打开日志目录失败:", openError);
+    }
+  }
+  app.quit();
+}
+
+async function startDesktop(): Promise<void> {
+  initLogger();
+  console.log("[AmitiaDesktop] 应用启动, isPackaged:", app.isPackaged);
+
+  showSplashWindow((error) => {
+    void handleStartupFailure(error);
+  });
+  startupTimer = setTimeout(() => {
+    void handleStartupFailure(new Error("启动超时，未能在限定时间内显示主界面"));
+  }, STARTUP_TIMEOUT_MS);
+
+  let dataDir: string;
+  try {
+    dataDir = ensureAmitiaDataDir();
+    console.log("[AmitiaDesktop] 数据目录:", dataDir);
+  } catch (err) {
+    throw new Error(
+      `数据目录创建失败: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  await enterMainApp();
+  clearStartupTimer();
+}
+
 if (process.platform === "win32") {
   app.setAppUserModelId("cn.amitia.desktop");
 }
@@ -72,29 +176,24 @@ if (!lock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  });
-
-  void app.whenReady().then(async () => {
-    initLogger();
-    console.log("[AmitiaDesktop] 应用启动, isPackaged:", app.isPackaged);
-
-    let dataDir: string;
-    try {
-      dataDir = ensureAmitiaDataDir();
-      console.log("[AmitiaDesktop] 数据目录:", dataDir);
-    } catch (err) {
-      console.error("[AmitiaDesktop] 数据目录创建失败:", err);
-      app.quit();
+    if (mainWindow && mainWindowReady && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
       return;
     }
-
-    showSplashWindow();
-    await enterMainApp();
+    if (!app.isReady() || startupFailureHandled || quitting) {
+      return;
+    }
+    revealSplashWindow();
   });
+
+  void app
+    .whenReady()
+    .then(() => startDesktop())
+    .catch((error) => {
+      void handleStartupFailure(error);
+    });
 
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
@@ -102,7 +201,25 @@ if (!lock) {
     }
   });
 
+  app.on("before-quit", (event) => {
+    quitting = true;
+    if (coreStopped) {
+      return;
+    }
+    event.preventDefault();
+    if (shutdownInProgress) {
+      return;
+    }
+    shutdownInProgress = true;
+    void shutdownRuntime().finally(() => {
+      coreStopped = true;
+      closeLogger();
+      app.quit();
+    });
+  });
+
   app.on("will-quit", () => {
+    clearStartupTimer();
     closeSplashWindow();
   });
 
@@ -121,6 +238,7 @@ if (!lock) {
 }
 
 async function enterMainApp(): Promise<void> {
+  console.log("[AmitiaDesktop] 启动阶段: 读取部署配置");
   const configStore = new ConfigStore();
   currentConfig = await configStore.getDeploymentConfig();
   const runtimeManager = new DesktopRuntimeManager(currentConfig);
@@ -131,6 +249,7 @@ async function enterMainApp(): Promise<void> {
   });
   registerPetIpcHandlers(desktopPetManager);
 
+  console.log("[AmitiaDesktop] 启动阶段: 初始化数据与运行时");
   const ensureResult = ensureDataAndConfig();
   if (!ensureResult.ok) {
     console.warn(
@@ -142,18 +261,18 @@ async function enterMainApp(): Promise<void> {
   try {
     ensureDesktopInstanceID();
   } catch (error) {
-    console.error(
-      "[AmitiaDesktop] 创建Desktop Instance失败:",
-      error,
+    throw new Error(
+      `创建 Desktop Instance 失败: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
-    app.quit();
-    return;
   }
 
   if (!isDevModeForProtocol()) {
     registerAppProtocol(join(app.getAppPath(), "dist", "renderer"));
   }
 
+  console.log("[AmitiaDesktop] 启动阶段: 创建主窗口");
   const mainWin = createMainWindow();
   mainWindow = mainWin;
   registerRealtimeMediaHandlers(() => mainWin);
@@ -207,13 +326,14 @@ async function enterMainApp(): Promise<void> {
   if (currentConfig.mode === "cloud") {
     console.log(`[AmitiaDesktop] Business Core: ${currentConfig.serverURL}`);
     console.log("[AmitiaDesktop] Bundled Core Profile: device-agent");
-    console.log("[AmitiaDesktop] Local Runtime: http://127.0.0.1:18899");
+    console.log("[AmitiaDesktop] Local Runtime: 动态分配");
   } else {
     console.log("[AmitiaDesktop] Bundled Core Profile: local");
-    console.log("[AmitiaDesktop] Local Runtime: http://127.0.0.1:18899");
+    console.log("[AmitiaDesktop] Local Runtime: 动态分配");
   }
 
   notifyStatus(runtimeManager, "starting");
+  console.log("[AmitiaDesktop] 启动阶段: 启动核心与运行时");
   try {
     await deploymentLifecycle.reconcile(currentConfig);
     const status = runtimeManager.getStatus();
@@ -223,6 +343,7 @@ async function enterMainApp(): Promise<void> {
     notifyStatus(runtimeManager, "failed", String(err));
   }
 
+  console.log("[AmitiaDesktop] 启动阶段: 等待核心就绪");
   const coreReady = await waitForCoreReadiness();
   if (!coreReady) {
     console.warn("[AmitiaDesktop] 核心未就绪, 直接显示主界面");
@@ -235,24 +356,18 @@ async function enterMainApp(): Promise<void> {
     }
   });
 
-  app.on("before-quit", (event) => {
-    quitting = true;
-    if (!coreStopped) {
-      event.preventDefault();
-      if (!shutdownInProgress) {
-        shutdownInProgress = true;
-        void deploymentLifecycle?.shutdown().finally(() => {
-          coreStopped = true;
-          closeLogger();
-          app.quit();
-        });
-      }
-      return;
-    }
-  });
+  if (quitting || startupFailureHandled) {
+    return;
+  }
 
-  await revealMainWindow(mainWin);
-  closeSplashWindow();
+  console.log("[AmitiaDesktop] 启动阶段: 显示主窗口");
+  try {
+    await revealMainWindow(mainWin);
+    mainWindowReady = true;
+  } finally {
+    closeSplashWindow();
+    clearStartupTimer();
+  }
 }
 
 ipcMain.handle("app:enter-main", async () => {

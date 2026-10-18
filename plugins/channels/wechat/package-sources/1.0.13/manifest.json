@@ -81,6 +81,7 @@
           "id": "wechat",
           "sidecar": {
             "defaultPort": 19876,
+            "portEnv": "SIDECAR_PORT",
             "healthPath": "/api/health",
             "kind": "wechat",
             "subdir": "sidecar"

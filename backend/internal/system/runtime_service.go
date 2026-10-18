@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimeendpoint"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func (s *service) GetRuntimeStatus() map[string]interface{} {
@@ -50,6 +53,10 @@ func (s *service) GetRuntimeMode() map[string]interface{} {
 		host = "0.0.0.0"
 	}
 	port := envInt("AMITIA_SERVER_PORT", 18080)
+	if endpoint, err := runtimeendpoint.Read(util.RuntimeRunDir(util.RuntimeRoot())); err == nil {
+		host = endpoint.Host
+		port = endpoint.Port
+	}
 	publicBaseURL := s.getAppSetting("public_base_url")
 	requireAuth := s.getAppSetting("require_auth") != "false"
 	return map[string]interface{}{

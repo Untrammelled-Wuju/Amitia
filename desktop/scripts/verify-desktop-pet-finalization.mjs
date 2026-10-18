@@ -629,6 +629,7 @@ assert(
 assert(
   frontendRuntimeAdapter.includes("isDeviceLocalApiPath") &&
     frontendRuntimeAdapter.includes('LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899"') &&
+    frontendRuntimeAdapter.includes("getRuntimeEndpoint") &&
     frontendApi.includes("deviceLocal ? LOCAL_DEVICE_RUNTIME_BASE_URL : runtime.apiBaseURL") &&
     frontendApi.includes("delete config.headers.Authorization") &&
     frontendApi.includes("__amitiaDeviceLocal"),

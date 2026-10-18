@@ -1,11 +1,11 @@
 {
   "name": "@ai-companion/web",
-  "version": "26.2.0-beta.6",
+  "version": "26.2.0-beta.7",
   "private": true,
   "type": "module",
   "main": "../desktop/dist/main/index.cjs",
   "scripts": {
-    "dev": "vite",
+    "dev": "node ../scripts/dev-vite.mjs node_modules/vite/bin/vite.js .",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",

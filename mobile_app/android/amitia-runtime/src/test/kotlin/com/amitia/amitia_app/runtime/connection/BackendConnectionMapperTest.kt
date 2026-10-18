@@ -11,7 +11,7 @@ class BackendConnectionMapperTest {
     fun `available payload has expected structure`() {
         val credential = BackendConnectionCredential.create("a".repeat(32))
         val descriptor = BackendConnectionMapper.buildDescriptor(
-            policy = embeddedAndroidBackendPolicy(),
+            policy = BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws"),
             generation = 1L,
             credential = credential,
         )

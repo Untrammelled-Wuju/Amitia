@@ -20,7 +20,21 @@ let roleSourceGeneration = 0;
 let deploymentChanging = false;
 const WEB_DEPLOYMENT_CONFIG_KEY = "amitia.web.deployment.v1";
 
-export const LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
+export let LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
+
+async function resolveLocalRuntimeBaseURL(): Promise<string> {
+  const api = window.amitiaDesktop;
+  if (!api?.getRuntimeEndpoint) return LOCAL_DEVICE_RUNTIME_BASE_URL;
+  try {
+    const endpoint = await api.getRuntimeEndpoint();
+    if (endpoint?.httpBaseURL) {
+      LOCAL_DEVICE_RUNTIME_BASE_URL = endpoint.httpBaseURL.replace(/\/+$/, "");
+    }
+  } catch {
+    return LOCAL_DEVICE_RUNTIME_BASE_URL;
+  }
+  return LOCAL_DEVICE_RUNTIME_BASE_URL;
+}
 
 export async function getNativeProviderTransition() {
   return window.amitiaDesktop?.getMeshStatus ? window.amitiaDesktop.getMeshStatus() : null;
@@ -59,7 +73,7 @@ export function isDeviceLocalApiPath(path: string): boolean {
 
 export async function getApiBaseURLForPath(path: string): Promise<string> {
   if (window.amitiaDesktop && isDeviceLocalApiPath(path)) {
-    return LOCAL_DEVICE_RUNTIME_BASE_URL;
+    return resolveLocalRuntimeBaseURL();
   }
   if (window.amitiaDesktop && isDeviceRoleManagementPath(path) && (await getDeploymentConfig()).mode === "cloud") {
     const runtime = await getRuntimeConnection();
@@ -71,7 +85,7 @@ export async function getApiBaseURLForPath(path: string): Promise<string> {
     const policy = payload.data?.policy || payload.policy;
     if (typeof policy?.coordinated !== "boolean") throw new Error("角色来源状态无效");
     if (generation !== roleSourceGeneration) throw new Error("Core 已切换，请重新加载角色");
-    return !policy.coordinated ? LOCAL_DEVICE_RUNTIME_BASE_URL : base;
+    return !policy.coordinated ? await resolveLocalRuntimeBaseURL() : base;
   }
   return getApiBaseURL();
 }
@@ -112,30 +126,22 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
 
   const config = await api.getDeploymentConfig();
   cachedConfig = config;
+  const localBase = await resolveLocalRuntimeBaseURL();
 
   if (config.mode === "cloud" && config.serverURL) {
     const status = await api.getMeshStatus?.();
     if (status?.cloudBaseUrl) {
-      const proxy = LOCAL_DEVICE_RUNTIME_BASE_URL + "/internal/device-mesh/provider";
+      const proxy = localBase + "/internal/device-mesh/provider";
       cachedConnection = { apiBaseURL: proxy, websocketBaseURL: toWebSocketBaseURL(proxy) };
       return cachedConnection;
     }
     throw new Error("本机尚未建立经过验证的云端绑定，请重新配对设备");
   }
 
-  const isDev = (import.meta as any).env?.DEV === true;
-  const devOrigin = window.location.origin;
-  if (isDev && devOrigin) {
-    cachedConnection = {
-      apiBaseURL: devOrigin,
-      websocketBaseURL: toWebSocketBaseURL(devOrigin),
-    };
-  } else {
-    cachedConnection = {
-      apiBaseURL: "http://127.0.0.1:18899",
-      websocketBaseURL: "ws://127.0.0.1:18899",
-    };
-  }
+  cachedConnection = {
+    apiBaseURL: localBase,
+    websocketBaseURL: toWebSocketBaseURL(localBase),
+  };
   return cachedConnection;
 }
 
@@ -237,6 +243,14 @@ export function resetRuntimeConnectionCache(): void {
   window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
 }
 
+if (typeof window !== "undefined" && window.amitiaDesktop?.onRuntimeStatusChanged) {
+  window.amitiaDesktop.onRuntimeStatusChanged((status) => {
+    if (status.state === "ready" || status.state === "starting") {
+      resetRuntimeConnectionCache();
+    }
+  });
+}
+
 
 function sameOrigin(a: string, b: string): boolean {
   try {
@@ -277,7 +291,7 @@ export async function provisionCurrentDeviceMesh(baseURL: string, pairing: Pairi
 
 export async function createCurrentDevicePairingOffer(baseURL: string, ttlSeconds = 600): Promise<PairingOffer> {
   const api = window.amitiaDesktop;
-  if (api && (await getDeploymentConfig()).mode === "local") baseURL = LOCAL_DEVICE_RUNTIME_BASE_URL;
+  if (api && (await getDeploymentConfig()).mode === "local") baseURL = await resolveLocalRuntimeBaseURL();
   if (api && baseURL.endsWith("/internal/device-mesh/provider")) baseURL = (await getDeploymentConfig()).serverURL || baseURL;
   if (api?.createMeshPairingOffer) return api.createMeshPairingOffer(baseURL, ttlSeconds);
   return createWebPairingOffer(baseURL, ttlSeconds);
@@ -299,7 +313,7 @@ export async function deprovisionCurrentDeviceMesh(baseURL: string, originalInte
     throw new Error("当前设备没有可验证的云端绑定，无法撤销远端设备凭证");
   }
   const revokeBaseURL = api && nativeStatus?.cloudBaseUrl
-    ? `${LOCAL_DEVICE_RUNTIME_BASE_URL}/internal/device-mesh/provider`
+    ? `${await resolveLocalRuntimeBaseURL()}/internal/device-mesh/provider`
     : baseURL;
   if (identity?.deviceId && (authHeaders.Authorization || authHeaders["X-Amitia-Desktop-Session"])) {
     let response: Response;

@@ -244,7 +244,7 @@ func buildSnapshot(input *TicketInput, clientErrors []ClientError) (*Diagnostics
 
 	snapshot := &DiagnosticsSnapshot{
 		GeneratedAt:   time.Now().Format(time.RFC3339),
-		CoreVersion:   readEnvOrDefault("AMITIA_VERSION", "26.2.0-beta.2"),
+		CoreVersion:   config.AppVersion(),
 		AppVersion:    strings.TrimSpace(input.AppVersion),
 		Platform:      platform,
 		ClientType:    strings.TrimSpace(input.ClientType),

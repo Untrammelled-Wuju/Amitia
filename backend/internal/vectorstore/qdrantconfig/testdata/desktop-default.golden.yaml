@@ -1,4 +1,5 @@
 service:
+    host: 127.0.0.1
     http_port: 19178
     grpc_port: 19179
 storage:

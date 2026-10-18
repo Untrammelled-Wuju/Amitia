@@ -7,6 +7,7 @@ import { get as httpGet } from "node:http";
 import { APP_PROTOCOL_ORIGIN } from "./app-protocol";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
+const MAIN_RENDERER_LOAD_TIMEOUT_MS = 15000;
 
 const DEV_SERVER_URL = (
   process.env.VITE_DEV_SERVER_URL ||
@@ -104,6 +105,37 @@ export function createMainWindow(): BrowserWindow {
   return win;
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function loadErrorPage(win: BrowserWindow): Promise<void> {
+  if (win.isDestroyed()) {
+    return;
+  }
+  try {
+    await win.loadFile(join(currentDir, "../renderer/core-error.html"));
+  } catch (error) {
+    console.error("[AmitiaDesktop] 启动错误页加载失败:", error);
+  }
+}
+
 export async function revealMainWindow(win: BrowserWindow): Promise<void> {
   const firstPaint = new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 3000);
@@ -114,9 +146,14 @@ export async function revealMainWindow(win: BrowserWindow): Promise<void> {
   });
 
   try {
-    await loadMainRenderer(win);
+    await withTimeout(
+      loadMainRenderer(win),
+      MAIN_RENDERER_LOAD_TIMEOUT_MS,
+      "主界面加载超时",
+    );
   } catch (error) {
     console.error("[AmitiaDesktop] 主界面加载失败:", error);
+    await loadErrorPage(win);
   }
 
   await firstPaint;

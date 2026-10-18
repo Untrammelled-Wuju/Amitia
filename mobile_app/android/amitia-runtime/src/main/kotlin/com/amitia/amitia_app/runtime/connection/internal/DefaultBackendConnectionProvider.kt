@@ -10,11 +10,14 @@ import com.amitia.amitia_app.runtime.connection.BackendConnectionErrorCode
 import com.amitia.amitia_app.runtime.connection.BackendConnectionProvider
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
+import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
 internal class DefaultBackendConnectionProvider(
     private val snapshotProvider: () -> RuntimeSnapshot,
     private val dataRootProvider: () -> String,
+    private val runRootProvider: () -> String = { "" },
     private val credentialResolver: RuntimeCredentialResolver = RuntimeCredentialResolver(),
     private val policy: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
 ) : BackendConnectionProvider {
@@ -22,7 +25,8 @@ internal class DefaultBackendConnectionProvider(
     private val lastErrorRef = AtomicReference<BackendConnectionError?>(null)
 
     override fun current(): BackendConnectionAvailability {
-        val validationError = BackendConnectionValidator.validate(policy)
+        val effectivePolicy = resolveEndpointPolicy()
+        val validationError = BackendConnectionValidator.validate(effectivePolicy)
         if (validationError != null) {
             return unavailable(validationError)
         }
@@ -74,7 +78,7 @@ internal class DefaultBackendConnectionProvider(
         )
 
         val descriptor = BackendConnectionMapper.buildDescriptor(
-            policy = policy,
+            policy = effectivePolicy,
             generation = snapshot.generation,
             credential = credential,
         )
@@ -83,6 +87,26 @@ internal class DefaultBackendConnectionProvider(
     }
 
     override fun lastError(): BackendConnectionError? = lastErrorRef.get()
+
+    private fun resolveEndpointPolicy(): BackendEndpointPolicy {
+        val runRoot = runRootProvider().trim()
+        if (runRoot.isNotEmpty()) {
+            val file = File(runRoot, "endpoint.json")
+            if (file.isFile) {
+                try {
+                    val payload = JSONObject(file.readText())
+                    val host = payload.optString("host", "127.0.0.1")
+                    val port = payload.optInt("port", 0)
+                    if (host == "127.0.0.1" && port in 1..65535) {
+                        return BackendEndpointPolicy(host, port, "http", "ws")
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        if (policy.port in 1..65535) return policy
+        return BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
+    }
 
     private fun unavailable(error: BackendConnectionError): BackendConnectionAvailability {
         lastErrorRef.set(error)

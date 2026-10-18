@@ -174,7 +174,7 @@ func TestPluginChannelProviderRegistryFiltersInactiveExtensions(t *testing.T) {
 
 func TestResolveTransportBaseURLUsesDynamicPort(t *testing.T) {
 	t.Setenv("AMITIA_TEST_CHANNEL_PORT", "19880")
-	baseURL, err := resolveTransportBaseURL(map[string]any{
+	baseURL, err := resolveTransportBaseURL("test_channel", map[string]any{
 		"type":    "http",
 		"host":    "127.0.0.1",
 		"portEnv": "AMITIA_TEST_CHANNEL_PORT",
@@ -188,7 +188,7 @@ func TestResolveTransportBaseURLUsesDynamicPort(t *testing.T) {
 }
 
 func TestResolveTransportBaseURLRejectsNonLoopbackHost(t *testing.T) {
-	_, err := resolveTransportBaseURL(map[string]any{
+	_, err := resolveTransportBaseURL("test_channel", map[string]any{
 		"type":        "http",
 		"host":        "192.0.2.10",
 		"defaultPort": 19880,

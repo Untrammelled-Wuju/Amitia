@@ -12,6 +12,7 @@ import { isAbsolute, join } from "node:path";
 import http from "node:http";
 import { URL } from "node:url";
 import { getAmitiaDataDir } from "../path-manager";
+import { getCoreBaseURL } from "../core-endpoint";
 import { DESKTOP_PET_RUNTIME_VERSION } from "../../shared/desktop-pet-runtime-version";
 import { createRuntimeBootstrapTicket } from "../backend-session-client";
 import { ResourceLoader } from "./resource-loader";
@@ -76,8 +77,6 @@ import {
   PET_WINDOW_SCALE_MIN,
 } from "./types";
 
-const CORE_BASE_HOST = "127.0.0.1";
-const CORE_BASE_PORT = 18899;
 const API_BASE_PATH = "/api/desktop-pets";
 const HEALTH_CHECK_PATH = "/livez";
 const DEFAULT_SPACE_ID = "default";
@@ -416,8 +415,6 @@ function mapRuntimeSettingsPayload(payload: RuntimeSettingsApiPayload): RuntimeS
 
 export class DesktopPetManager {
   private readonly spaceId: string;
-  private readonly coreHost: string;
-  private readonly corePort: number;
   private readonly resourceLoader: ResourceLoader;
   private readonly resourceCache: ResourceCache;
   private readonly alphaThreshold: number;
@@ -505,8 +502,6 @@ export class DesktopPetManager {
   constructor(deps?: PetManagerDeps) {
     const opts = deps ?? {};
     this.spaceId = opts.spaceId ?? DEFAULT_SPACE_ID;
-    this.coreHost = opts.coreHost ?? CORE_BASE_HOST;
-    this.corePort = opts.corePort ?? CORE_BASE_PORT;
     this.runtimeVersion = opts.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION;
     this.getChatStateWindow = opts.getChatStateWindow ?? null;
     this.resourceLoader = opts.resourceLoader ?? new ResourceLoader(this.runtimeVersion);
@@ -1379,10 +1374,11 @@ export class DesktopPetManager {
 
   private async healthCheck(): Promise<boolean> {
     return new Promise((resolve) => {
+      const coreURL = new URL(getCoreBaseURL());
       const req = http.request(
         {
-          hostname: this.coreHost,
-          port: this.corePort,
+          hostname: coreURL.hostname,
+          port: Number(coreURL.port || 80),
           path: HEALTH_CHECK_PATH,
           method: "GET",
           timeout: 2000,
@@ -3336,7 +3332,7 @@ export class DesktopPetManager {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const url = new URL(`http://${this.coreHost}:${this.corePort}${path}`);
+    const url = new URL(`${getCoreBaseURL()}${path}`);
 
     const sessionClient = getBackendSessionClient();
     const authHeaders = await sessionClient.getMainProcessAuthHeaders();
@@ -3586,7 +3582,8 @@ export class DesktopPetManager {
   }
 
   private buildRuntimeV1URL(runtimeId: string, deviceId: string): string {
-    const wsBase = `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
+    const httpBase = new URL(getCoreBaseURL());
+    const wsBase = `${httpBase.protocol === "https:" ? "wss:" : "ws:"}//${httpBase.host}${RUNTIME_BRIDGE_WS_PATH}`;
     const url = new URL(wsBase);
     url.searchParams.set("deviceId", deviceId);
     url.searchParams.set("runtimeId", runtimeId);

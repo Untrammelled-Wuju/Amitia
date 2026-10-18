@@ -205,6 +205,31 @@ class MethodChannelEmbeddedRuntimeController
   @override
   Future<BackendEndpoint> getEndpoint() async {
     if (_lastEndpoint != null) return _lastEndpoint!;
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+        'runtime.getBackendConnection',
+        <String, Object?>{'expectedRuntimeGeneration': null},
+      );
+      final payload = result == null ? <String, dynamic>{} : _stringKeyMap(result);
+      final endpoint = payload['endpoint'];
+      if (payload['status'] == 'available' && endpoint is Map) {
+        final map = _stringKeyMap(endpoint);
+        final host = map['host'] as String? ?? '127.0.0.1';
+        final port = map['port'] as int? ?? 0;
+        if (host == '127.0.0.1' && port > 0 && port <= 65535) {
+          final httpBaseUri = Uri(scheme: 'http', host: host, port: port);
+          final endpointValue = BackendEndpoint(
+            role: BackendEndpointRole.localRuntime,
+            httpBaseUri: httpBaseUri,
+            websocketBaseUri: httpBaseUri.replace(scheme: 'ws'),
+            isRemote: false,
+          );
+          _lastEndpoint = endpointValue;
+          return endpointValue;
+        }
+      }
+    } catch (_) {
+    }
     final endpoint = BackendEndpoint(
       role: BackendEndpointRole.localRuntime,
       httpBaseUri: Uri(scheme: 'http', host: '127.0.0.1', port: 18899),

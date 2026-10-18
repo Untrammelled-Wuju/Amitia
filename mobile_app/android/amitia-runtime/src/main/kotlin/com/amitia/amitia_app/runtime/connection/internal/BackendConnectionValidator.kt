@@ -33,8 +33,8 @@ internal object BackendConnectionValidator {
         if (policy.host.contains("#")) {
             return BackendConnectionError(BackendConnectionErrorCode.ENDPOINT_INVALID, "host must not contain fragment")
         }
-        if (policy.port < 1 || policy.port > 65535) {
-            return BackendConnectionError(BackendConnectionErrorCode.ENDPOINT_INVALID, "port must be in range 1..65535")
+        if (policy.port != 0 && (policy.port < 1 || policy.port > 65535)) {
+            return BackendConnectionError(BackendConnectionErrorCode.ENDPOINT_INVALID, "port must be 0 or in range 1..65535")
         }
         if (policy.httpScheme != "http" && policy.httpScheme != "https") {
             return BackendConnectionError(BackendConnectionErrorCode.ENDPOINT_INVALID, "httpScheme must be http or https")

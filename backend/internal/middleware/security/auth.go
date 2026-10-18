@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -102,10 +103,11 @@ func isDesktopDevelopmentOrigin(origin string) bool {
 	if err != nil || parsed.Scheme != "http" {
 		return false
 	}
-	switch parsed.Port() {
-	case "5178", "15177", "15178":
-	default:
-		return false
+	if rawPort := parsed.Port(); rawPort != "" {
+		port, err := strconv.Atoi(rawPort)
+		if err != nil || port < 1 || port > 65535 || port == 3000 {
+			return false
+		}
 	}
 	host := strings.ToLower(parsed.Hostname())
 	if host == "localhost" {

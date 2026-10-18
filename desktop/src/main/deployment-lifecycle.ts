@@ -5,6 +5,7 @@ import type {
 } from "../shared/backend-topology";
 import type { DeploymentModeConfig, RuntimeStatus } from "../shared/types";
 import { resolveBackendTopology } from "../shared/backend-topology";
+import { getCoreBaseURL } from "./core-endpoint";
 import { ConfigStore } from "./config-store";
 import { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import {
@@ -100,6 +101,8 @@ export class DesktopDeploymentLifecycle {
     );
 
     await ensureCoreProfile("local");
+    this.topology = resolveBackendTopology(this.currentConfig, getCoreBaseURL());
+    this.businessCoreClient = new BusinessCoreClient(this.topology.businessCore.baseURL);
     await this.probeLocalRuntime();
     await this.probeBusinessCore(this.topology.businessCore);
 
@@ -127,6 +130,7 @@ export class DesktopDeploymentLifecycle {
         "本机执行节点启动失败",
       );
     } else {
+      this.topology = resolveBackendTopology(this.currentConfig, getCoreBaseURL());
       await this.probeLocalRuntime();
     }
 

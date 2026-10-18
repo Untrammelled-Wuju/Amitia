@@ -42,9 +42,9 @@ import type {
 const mode = reactive<RuntimeModeResponse>({
   deployMode: "desktop-local",
   host: "127.0.0.1",
-  port: 18080,
+  port: 0,
   web: { enabled: true, publicBaseUrl: "", requireAuth: true },
-  bridge: { enabled: true, mode: "cloud", host: "127.0.0.1", port: 8898 },
+  bridge: { enabled: false, mode: "cloud", host: "127.0.0.1", port: 0 },
   storage: { dataDir: "./data" },
 });
 

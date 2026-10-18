@@ -16,6 +16,7 @@ const (
 	WorkspaceDirEnv = "AMITIA_WORKSPACE_DIR"
 	CacheDirEnv     = "AMITIA_CACHE_DIR"
 	TempDirEnv      = "AMITIA_TEMP_DIR"
+	RunDirEnv       = "AMITIA_RUN_ROOT"
 	CONFIG_PATH     = "CONFIG_PATH"
 )
 
@@ -27,6 +28,7 @@ type RuntimePaths struct {
 	WorkspaceDir string
 	CacheDir     string
 	TempDir      string
+	RunDir       string
 }
 
 func RuntimeRoot() string {
@@ -191,6 +193,13 @@ func RuntimeTempDir(runtimeRoot, dataDir string) string {
 	return filepath.Join(runtimeRoot, "data", "tmp")
 }
 
+func RuntimeRunDir(runtimeRoot string) string {
+	if v := strings.TrimSpace(os.Getenv(RunDirEnv)); v != "" {
+		return resolveEnvDir(v, runtimeRoot)
+	}
+	return filepath.Join(runtimeRoot, "run")
+}
+
 func DetectRuntimePaths(configuredDataDir string) RuntimePaths {
 	root := RuntimeRoot()
 	configDir := RuntimeConfigDir(root)
@@ -199,6 +208,7 @@ func DetectRuntimePaths(configuredDataDir string) RuntimePaths {
 	workspaceDir := RuntimeWorkspaceDir(root)
 	cacheDir := RuntimeCacheDir(root, dataDir)
 	tempDir := RuntimeTempDir(root, dataDir)
+	runDir := RuntimeRunDir(root)
 	return RuntimePaths{
 		Root:         root,
 		ConfigDir:    configDir,
@@ -207,5 +217,6 @@ func DetectRuntimePaths(configuredDataDir string) RuntimePaths {
 		WorkspaceDir: workspaceDir,
 		CacheDir:     cacheDir,
 		TempDir:      tempDir,
+		RunDir:       runDir,
 	}
 }

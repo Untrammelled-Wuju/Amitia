@@ -170,7 +170,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     });
     try {
       final onboarding = ref.read(onboardingServiceProvider);
-      const localRuntimeUri = 'http://127.0.0.1:18899';
+      final localRuntimeUri = (await ref
+              .read(embeddedRuntimeControllerProvider)
+              .getEndpoint())
+          .httpBaseUri
+          .toString();
       final results = await Future.wait<dynamic>(<Future<dynamic>>[
         onboarding.livenessAt(localRuntimeUri),
         onboarding.readinessAt(localRuntimeUri),

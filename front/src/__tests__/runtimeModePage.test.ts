@@ -25,7 +25,7 @@ describe("运行模式配置健壮性", () => {
       await vi.waitFor(() => {
         expect(wrapper.get(".runtime-mode-page").text()).toContain("Bridge 模式");
         expect(wrapper.get(".runtime-mode-page").text()).toContain("当前 Core 的服务端部署形态");
-        expect(wrapper.get(".runtime-mode-page").text()).toContain("127.0.0.1:8898");
+        expect(wrapper.get(".runtime-mode-page").text()).toContain("Bridge 地址已禁用");
       });
     } finally {
       wrapper.unmount();

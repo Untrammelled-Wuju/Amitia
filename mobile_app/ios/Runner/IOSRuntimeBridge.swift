@@ -29,6 +29,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     private var probeInFlight = false
     private var probeTask: URLSessionDataTask?
     private var hostRestartRequired = false
+    private var persistentVolume: URL?
 
     init(resolver: RootfsResolver, installer: RootfsInstaller, identity: IOSDeviceMeshIdentity) {
         self.resolver = resolver
@@ -77,6 +78,22 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                 "manifest": manifest() as Any? ?? NSNull()]
     }
 
+    private func runtimeEndpoint() -> [String: Any] {
+        if let volume = persistentVolume {
+            let file = volume.appendingPathComponent("run", isDirectory: true).appendingPathComponent("endpoint.json")
+            if let data = try? Data(contentsOf: file),
+               let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let host = payload["host"] as? String,
+               let port = payload["port"] as? Int,
+               host == "127.0.0.1", port > 0, port <= 65535 {
+                return ["host": host, "port": port, "httpScheme": "http", "webSocketScheme": "ws",
+                        "livenessPath": "/livez", "readinessPath": "/readyz"]
+            }
+        }
+        return ["host": "127.0.0.1", "port": 18899, "httpScheme": "http", "webSocketScheme": "ws",
+                "livenessPath": "/livez", "readinessPath": "/readyz"]
+    }
+
     private func manifest() -> [String: Any]? {
         guard let root = resolver.resolveCurrentRootfs() else { return nil }
         return ["schemaVersion": 1, "runtimeVersion": root.version, "packageId": "amitia-ios-runtime",
@@ -122,7 +139,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                             "error": ["code": "RUNTIME_NOT_READY", "message": "iOS Runtime 尚未就绪或代次已改变"]]); return
             }
             completion(["schemaVersion": 1, "status": "available", "generation": generation,
-                        "endpoint": ["host": "127.0.0.1", "port": 18899, "httpScheme": "http", "webSocketScheme": "ws", "livenessPath": "/livez", "readinessPath": "/readyz"],
+                        "endpoint": runtimeEndpoint(),
                         "authentication": ["type": "local_token", "header": "X-Amitia-Local-Token", "token": token]])
         default: completion(FlutterMethodNotImplemented)
         }
@@ -190,6 +207,7 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                 .appendingPathComponent(installation, isDirectory: true)
                 .appendingPathComponent("business-volume", isDirectory: true)
             try FileManager.default.createDirectory(at: volume, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700, .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            persistentVolume = volume
             var volumeAttributes = URLResourceValues()
             volumeAttributes.isExcludedFromBackup = true
             try volume.setResourceValues(volumeAttributes)
@@ -204,12 +222,12 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
                        "AMITIA_RUNTIME_MODE": "ios-ish", "AMITIA_RUNTIME_PLATFORM": "ios", "AMITIA_PLATFORM": "ios",
                        "AMITIA_RUNTIME_PROFILE": requested, "AMITIA_RUNTIME_ROOT": runtimeRoot,
                        "AMITIA_NODE_BIN": "/opt/amitia/node/bin/node", "AMITIA_NODE_WORK_DIR": runtimeRoot + "/workspace",
-                       "AMITIA_SERVER_HOST": "127.0.0.1", "AMITIA_SERVER_PORT": "18899",
+                       "AMITIA_SERVER_HOST": "127.0.0.1", "AMITIA_SERVER_PORT": "0",
                        "AMITIA_SECURITY_MODE": "local_single_user", "AMITIA_ALLOW_REMOTE_ACCESS": "false", "AMITIA_LOCAL_TOKEN": localToken,
                        "AMITIA_IOS_HOST_BRIDGE_REQUIRED": "true", "AMITIA_IOS_HOST_BRIDGE_GENERATION": bridgeGeneration,
                        "AMITIA_GRAPH_STORE_ENABLED": "false", "AMITIA_GRAPH_STORE_REQUIRED": "false", "AMITIA_SURREAL_ENABLED": "false",
                        "AMITIA_VECTOR_STORE_ENABLED": "true", "AMITIA_QDRANT_BINARY": "/opt/amitia/qdrant/qdrant",
-                       "AMITIA_QDRANT_DATA_DIR": runtimeRoot + "/data/qdrant", "AMITIA_QDRANT_HOST": "127.0.0.1", "AMITIA_QDRANT_PORT": "19178",
+                       "AMITIA_QDRANT_DATA_DIR": runtimeRoot + "/data/qdrant", "AMITIA_QDRANT_HOST": "127.0.0.1", "AMITIA_QDRANT_PORT": "0",
                        "AMITIA_SEARCH_ENABLED": "true", "AMITIA_SEARCH_DEFAULT_PROVIDER": "native", "GOMAXPROCS": "1", "GODEBUG": "asyncpreemptoff=1"]
             for directory in ["config", "data", "cache", "log", "run", "temp", "workspace"] {
                 env["AMITIA_" + directory.uppercased() + "_DIR"] = runtimeRoot + "/" + directory
@@ -252,7 +270,8 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
         if state == "STARTING" && Date().timeIntervalSince(startedAt) > 60 { stop(reason: nil); fail("READINESS_TIMEOUT", "iOS Core 启动超时"); return }
         guard !probeInFlight else { return }
         probeInFlight = true
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:18899/readyz")!)
+        let port = runtimeEndpoint()["port"] as? Int ?? 18899
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/readyz")!)
         request.timeoutInterval = 2
         request.setValue(token, forHTTPHeaderField: "X-Amitia-Local-Token")
         let task = URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
@@ -272,7 +291,8 @@ final class IOSRuntimeBridge: NSObject, FlutterStreamHandler {
     }
 
     private func verifyRunningIdentity(_ current: Int, child: IOSBusinessRuntimeProcess) {
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:18899/internal/device-mesh/identity")!)
+        let port = runtimeEndpoint()["port"] as? Int ?? 18899
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/internal/device-mesh/identity")!)
         request.timeoutInterval = 2
         request.setValue(token, forHTTPHeaderField: "X-Amitia-Local-Token")
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in

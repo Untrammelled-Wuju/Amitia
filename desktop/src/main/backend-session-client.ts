@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { getBackendDataDir, ensureLocalToken } from "./path-manager";
 import { getDesktopInstanceID } from "./desktop-identity";
+import { getCoreBaseURL } from "./core-endpoint";
 
 interface DesktopSessionResponse {
   sessionToken: string;
@@ -16,8 +17,6 @@ interface ApiEnvelope<T> {
   data?: T;
 }
 
-const CORE_HOST = "127.0.0.1";
-const CORE_PORT = 18899;
 const SESSION_RENEW_SKEW_MS = 2 * 60 * 1000;
 
 function readTextFile(filePath: string): string {
@@ -51,11 +50,12 @@ function requestJSON<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const rawBody = body === undefined ? undefined : JSON.stringify(body);
+    const coreURL = new URL(getCoreBaseURL());
 
     const req = http.request(
       {
-        host: CORE_HOST,
-        port: CORE_PORT,
+        hostname: coreURL.hostname,
+        port: Number(coreURL.port || (coreURL.protocol === "https:" ? 443 : 80)),
         path: requestPath,
         method,
         timeout: 5000,

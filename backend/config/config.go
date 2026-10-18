@@ -182,9 +182,10 @@ type ProcessComponentConfig struct {
 }
 
 type ServerConfig struct {
-	Port int    `mapstructure:"port"`
-	Host string `mapstructure:"host"`
-	Mode string `mapstructure:"mode"`
+	Port              int    `mapstructure:"port"`
+	Host              string `mapstructure:"host"`
+	Mode              string `mapstructure:"mode"`
+	CompatibilityPort int    `mapstructure:"compatibilityPort"`
 }
 
 func (c *ServerConfig) Addr() string {
@@ -359,7 +360,16 @@ func (c *Config) SearchRuntimeConfig() *SearchRuntimeProviderConfig {
 
 var AppCfg *Config
 
+const DefaultAppVersion = "26.2.0-beta.7"
+
 var providerIDRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,127}$`)
+
+func AppVersion() string {
+	if value := strings.TrimSpace(os.Getenv("AMITIA_VERSION")); value != "" {
+		return value
+	}
+	return DefaultAppVersion
+}
 
 func InitConfig(configPath string) {
 	cfg, err := loadConfig(configPath)
@@ -393,7 +403,9 @@ func loadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("配置解析失败: %w", err)
 	}
 
+	cfg.App.Version = AppVersion()
 	applyLegacyProviderConfig(v, cfg)
+	normalizeLegacyDynamicPortDefaults(cfg)
 	normalizeConfig(cfg)
 
 	if err := validateConfig(cfg); err != nil {
@@ -405,12 +417,13 @@ func loadConfig(configPath string) (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("server.port", 18899)
+	v.SetDefault("server.port", 0)
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.mode", "debug")
+	v.SetDefault("server.compatibilityPort", 18899)
 	v.SetDefault("storage.dataDir", "../data")
 	v.SetDefault("app.name", "U-Ai")
-	v.SetDefault("app.version", "26.2.0-beta.6")
+	v.SetDefault("app.version", DefaultAppVersion)
 	v.SetDefault("app.deployMode", "desktop-local")
 	v.SetDefault("chat.eventReplayRingSize", 4096)
 	v.SetDefault("chat.contextWindowMaxRounds", 20)
@@ -465,7 +478,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.vectorStore.required", false)
 	v.SetDefault("providers.vectorStore.provider", "builtin.qdrant-process")
 	v.SetDefault("providers.vectorStore.qdrant.host", "127.0.0.1")
-	v.SetDefault("providers.vectorStore.qdrant.port", 19178)
+	v.SetDefault("providers.vectorStore.qdrant.port", 0)
 	v.SetDefault("providers.vectorStore.qdrant.collectionName", "amitia_vectors")
 	v.SetDefault("providers.vectorStore.qdrant.vectorDim", 2560)
 	v.SetDefault("providers.vectorStore.qdrant.limit", 10)
@@ -479,7 +492,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.graphStore.required", false)
 	v.SetDefault("providers.graphStore.provider", "builtin.surrealdb-process")
 	v.SetDefault("providers.graphStore.surrealdb.host", "127.0.0.1")
-	v.SetDefault("providers.graphStore.surrealdb.port", 18000)
+	v.SetDefault("providers.graphStore.surrealdb.port", 0)
 	v.SetDefault("providers.graphStore.surrealdb.namespace", "uai")
 	v.SetDefault("providers.graphStore.surrealdb.database", "memory_graph")
 	v.SetDefault("providers.graphStore.surrealdb.username", "root")
@@ -590,6 +603,7 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "runtime.mode", environments: []string{"AMITIA_RUNTIME_MODE", "AMITIA_RUN_MODE"}},
 	{key: "server.host", environments: []string{"AMITIA_SERVER_HOST"}},
 	{key: "server.port", environments: []string{"AMITIA_SERVER_PORT"}},
+	{key: "server.compatibilityPort", environments: []string{"AMITIA_SERVER_COMPAT_PORT"}},
 	{key: "server.mode", environments: []string{"AMITIA_SERVER_MODE"}},
 	{key: "storage.dataDir", environments: []string{"AMITIA_DATA_DIR"}},
 	{key: "app.deployMode", environments: []string{"AMITIA_DEPLOY_MODE"}},
@@ -713,6 +727,18 @@ func normalizeConfig(cfg *Config) {
 	}
 }
 
+func normalizeLegacyDynamicPortDefaults(cfg *Config) {
+	if _, ok := os.LookupEnv("AMITIA_SERVER_PORT"); !ok && cfg.Server.Port == 18899 {
+		cfg.Server.Port = 0
+	}
+	if _, ok := os.LookupEnv("AMITIA_QDRANT_PORT"); !ok && cfg.Providers.VectorStore.Qdrant.Port == 19178 {
+		cfg.Providers.VectorStore.Qdrant.Port = 0
+	}
+	if _, ok := os.LookupEnv("AMITIA_SURREAL_PORT"); !ok && cfg.Providers.GraphStore.SurrealDB.Port == 18000 {
+		cfg.Providers.GraphStore.SurrealDB.Port = 0
+	}
+}
+
 func validateConfig(cfg *Config) error {
 	if cfg.Providers.ScriptRuntime.Required && !cfg.Providers.ScriptRuntime.Enabled {
 		return fmt.Errorf("scriptRuntime: required=true 但 enabled=false")
@@ -738,6 +764,12 @@ func validateConfig(cfg *Config) error {
 		if err := validateProviderID(cfg.Providers.GraphStore.Provider); err != nil {
 			return fmt.Errorf("graphStore.provider: %w", err)
 		}
+	}
+	if cfg.Server.Port < 0 || cfg.Server.Port > 65535 {
+		return fmt.Errorf("server.port 超有效范围: %d", cfg.Server.Port)
+	}
+	if cfg.Server.CompatibilityPort < 0 || cfg.Server.CompatibilityPort > 65535 {
+		return fmt.Errorf("server.compatibilityPort 超有效范围: %d", cfg.Server.CompatibilityPort)
 	}
 
 	if err := validateSearchRuntimeConfig(cfg.Providers.Search); err != nil {

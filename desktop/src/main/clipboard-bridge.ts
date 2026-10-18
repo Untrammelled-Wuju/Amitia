@@ -2,9 +2,8 @@ import { clipboard, type BrowserWindow } from "electron";
 import { getLocalAdminHeaders } from "./backend-session-client";
 import { getDeviceId } from "./pet/runtime-identity";
 import { IPC_CHANNELS } from "../shared/ipc";
+import { getCoreBaseURL } from "./core-endpoint";
 
-const CORE_HOST = "127.0.0.1";
-const CORE_PORT = 18899;
 const SSE_PATH = "/api/proactive-sse";
 const CLIPBOARD_RESPONSE_PATH = "/api/extensions/ui/clipboard-response";
 const CLIENT_ID = "electron-main-clipboard";
@@ -87,7 +86,7 @@ export class ClipboardBridge {
     headers: Record<string, string>,
     body: Record<string, unknown>,
   ): Promise<T> {
-    const response = await fetch(`http://${CORE_HOST}:${CORE_PORT}${path}`, {
+    const response = await fetch(`${getCoreBaseURL()}${path}`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -166,7 +165,7 @@ export class ClipboardBridge {
 
     try {
       const response = await fetch(
-        `http://${CORE_HOST}:${CORE_PORT}${SSE_PATH}?clientId=${CLIENT_ID}`,
+        `${getCoreBaseURL()}${SSE_PATH}?clientId=${CLIENT_ID}`,
         {
           headers: {
             Accept: "text/event-stream",
@@ -295,7 +294,7 @@ export class ClipboardBridge {
         : JSON.stringify({ requestId, text, ...identity });
 
       const response = await fetch(
-        `http://${CORE_HOST}:${CORE_PORT}${CLIPBOARD_RESPONSE_PATH}`,
+        `${getCoreBaseURL()}${CLIPBOARD_RESPONSE_PATH}`,
         {
           method: "POST",
           headers: {

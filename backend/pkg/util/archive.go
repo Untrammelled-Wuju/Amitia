@@ -39,24 +39,42 @@ func UnzipFile(zipPath, targetDir string) error {
 		if err := os.MkdirAll(filepath.Dir(cleanPath), 0755); err != nil {
 			return err
 		}
-		src, err := file.Open()
-		if err != nil {
-			return err
+		if err := extractZipEntry(file, cleanPath); err != nil {
+			_ = os.Remove(cleanPath)
+			return fmt.Errorf("解压 %s 失败: %w", file.Name, err)
 		}
-		dst, err := os.OpenFile(cleanPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
-		if err != nil {
-			src.Close()
-			return err
-		}
-		_, copyErr := io.Copy(dst, src)
-		closeErr := dst.Close()
-		src.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		if closeErr != nil {
-			return closeErr
-		}
+	}
+	return nil
+}
+
+func extractZipEntry(file *zip.File, targetPath string) error {
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	mode := file.Mode().Perm()
+	if mode == 0 {
+		mode = 0644
+	}
+	dst, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	written, copyErr := io.Copy(dst, src)
+	syncErr := dst.Sync()
+	closeErr := dst.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if syncErr != nil {
+		return syncErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if uint64(written) != file.UncompressedSize64 {
+		return fmt.Errorf("解压字节数不完整: got %d want %d", written, file.UncompressedSize64)
 	}
 	return nil
 }

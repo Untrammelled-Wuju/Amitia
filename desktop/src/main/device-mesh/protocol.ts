@@ -4,7 +4,12 @@ export const DEVICE_MESH_SCHEMA_VERSION = "1.0.0";
 export const DEVICE_MESH_CONTRACT_VERSION = "1.0";
 export const DEVICE_MESH_WS_PATH = "/api/device-mesh/v1/runtime/ws";
 
-export const LOCAL_MESH_BASE_URL = "http://127.0.0.1:18899";
+export let LOCAL_MESH_BASE_URL = "http://127.0.0.1:18899";
+
+export function setLocalMeshBaseURL(baseURL: string): void {
+  const normalized = baseURL.trim().replace(/\/+$/, "");
+  if (normalized) LOCAL_MESH_BASE_URL = normalized;
+}
 export const LOCAL_MESH_PREFIX = "/internal/device-mesh";
 
 export type DeviceMeshAgentState =

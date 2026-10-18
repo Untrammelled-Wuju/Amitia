@@ -310,7 +310,12 @@ func (a *graphStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDe
 	}
 }
 
-func (a *graphStoreProviderAdapter) Start(ctx context.Context) error {
+func (a *graphStoreProviderAdapter) Start(ctx context.Context) (err error) {
+	defer func() {
+		if err != nil {
+			log.Error("graph store start failed: ", err)
+		}
+	}()
 	a.reconnectMu.Lock()
 	a.stopped = false
 	a.reconnectMu.Unlock()

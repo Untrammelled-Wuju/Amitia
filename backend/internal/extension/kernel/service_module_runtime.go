@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/native_companion"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/runtimeport"
 )
 
 func (r *Runtime) registerServiceModuleDefinitions(ctx context.Context, extID domain.ExtensionID, version domain.SemanticVersion, modules []domain.ModuleDefinition) error {
@@ -120,6 +122,13 @@ func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, m
 			Required: true,
 		})
 	}
+	envTemplate := map[string]string{
+		"AMITIA_NATIVE_COMPANIONS_VERSION": "1",
+		"AMITIA_NATIVE_COMPANIONS":         string(companionJSON),
+	}
+	for key, value := range dynamicChannelPortEnv(module) {
+		envTemplate[key] = value
+	}
 	serviceTrust := strings.ToLower(strings.TrimSpace(extension.Publisher.TrustLevel))
 	switch serviceTrust {
 	case string(trusted_service.TrustLevelOfficial):
@@ -150,10 +159,7 @@ func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, m
 				Trusted:   true,
 			},
 			Dependencies: dependencies,
-			EnvTemplate: map[string]string{
-				"AMITIA_NATIVE_COMPANIONS_VERSION": "1",
-				"AMITIA_NATIVE_COMPANIONS":         string(companionJSON),
-			},
+			EnvTemplate:  envTemplate,
 		}},
 		Protocol:       "plain",
 		InstancePolicy: "singleton",
@@ -188,6 +194,65 @@ func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, m
 		},
 		DefinitionVersion: 1,
 	}, nil
+}
+
+func dynamicChannelPortEnv(module domain.ModuleDefinition) map[string]string {
+	if module.Provider == nil || module.Provider.Metadata == nil {
+		return nil
+	}
+	metadata := module.Provider.Metadata
+	channelID := strings.TrimSpace(channelStringValue(metadata["channelId"]))
+	if channelID == "" {
+		channelID = strings.TrimSpace(channelStringValue(metadata["id"]))
+	}
+	if labels, ok := metadata["labels"].(map[string]any); ok {
+		if channelID == "" {
+			channelID = strings.TrimSpace(channelStringValue(labels["channelId"]))
+		}
+	}
+	transport := channelMetadataMap(metadata, "transport")
+	if transport == nil {
+		transport = channelMetadataMap(metadata, "sidecar")
+	}
+	portEnv := ""
+	if transport != nil {
+		portEnv = strings.TrimSpace(channelStringValue(transport["portEnv"]))
+	}
+	if portEnv == "" {
+		switch channelID {
+		case "qq":
+			portEnv = "QQ_SIDECAR_PORT"
+		case "wechat":
+			portEnv = "SIDECAR_PORT"
+		case "wechat_ipad860":
+			portEnv = "AMITIA_WECHAT_IPAD860_PORT"
+		}
+	}
+	if channelID == "" || portEnv == "" {
+		return nil
+	}
+	port, err := runtimeport.AllocateLoopback()
+	if err != nil {
+		return nil
+	}
+	env := map[string]string{portEnv: strconv.Itoa(port)}
+	runtimeport.SetChannelEndpoint(channelID, fmt.Sprintf("http://127.0.0.1:%d", port))
+	if channelID == "wechat_ipad860" {
+		if enginePort, engineErr := runtimeport.AllocateLoopback(); engineErr == nil {
+			env["AMITIA_WECHAT_IPAD860_ENGINE_PORT"] = strconv.Itoa(enginePort)
+		}
+	}
+	return env
+}
+
+func channelMetadataMap(metadata map[string]any, key string) map[string]any {
+	value, _ := metadata[key].(map[string]any)
+	return value
+}
+
+func channelStringValue(value any) string {
+	text, _ := value.(string)
+	return text
 }
 
 func sha256Path(filePath string) (string, error) {

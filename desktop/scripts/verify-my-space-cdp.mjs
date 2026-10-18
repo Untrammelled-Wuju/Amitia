@@ -1,4 +1,5 @@
 const host = process.env.AMITIA_CDP_URL || "http://127.0.0.1:9229";
+const rendererBase = (process.env.AMITIA_DESKTOP_DEV_URL || "http://127.0.0.1:15178").replace(/\/+$/, "");
 const targets = await fetch(host + "/json/list").then((response) => response.json());
 const target = targets.find((item) => item.type === "page");
 if (!target) throw new Error("Electron main page not found");
@@ -41,7 +42,7 @@ socket.addEventListener("message", (event) => {
 await command("Runtime.enable");
 await command("Page.navigate", { url: "about:blank" });
 await new Promise((resolve) => setTimeout(resolve, 800));
-await command("Page.navigate", { url: "http://127.0.0.1:15178/#/my-space/profile" });
+await command("Page.navigate", { url: `${rendererBase}/#/my-space/profile` });
 await new Promise((resolve) => setTimeout(resolve, 8000));
 const sections = ["runtime"];
 for (const section of sections) {
@@ -59,7 +60,7 @@ for (const section of sections) {
     exception: state.result?.exceptionDetails?.text,
   }));
 }
-const url = "http://127.0.0.1:15178/#/settings/system";
+const url = `${rendererBase}/#/settings/system`;
 await command("Page.navigate", {url});
 await new Promise((resolve) => setTimeout(resolve, 5000));
 const settings = await command("Runtime.evaluate", {

@@ -85,8 +85,8 @@ internal class DefaultRuntimeEnvironmentBuilder(
         if (policy.host != "127.0.0.1") {
             return RuntimeEnvironmentErrorCode.ENDPOINT_INVALID to "backend host must be 127.0.0.1"
         }
-        if (policy.port != 18899) {
-            return RuntimeEnvironmentErrorCode.ENDPOINT_INVALID to "backend port must be 18899"
+        if (policy.port < 0 || policy.port > 65535) {
+            return RuntimeEnvironmentErrorCode.ENDPOINT_INVALID to "backend port is invalid"
         }
         return null
     }

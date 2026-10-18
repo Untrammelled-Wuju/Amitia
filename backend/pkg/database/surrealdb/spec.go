@@ -69,12 +69,7 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 		"start",
 		"surrealkv:" + dataPath,
 		"--bind", bindAddress,
-		"--user", cfg.Username,
-		"--pass", cfg.Password,
 	}
-
-	// Password is at len(args)-1
-	sensitiveIdx := len(args) - 1
 
 	return runtimehost.ProcessSpec{
 		ID:         runtimehost.ProcessIDSurrealDB,
@@ -86,7 +81,10 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 			Values: map[string]string{
 				"AMITIA_PROCESS_ID":          "amitia.surrealdb",
 				"AMITIA_RUNTIME_INSTANCE_ID": instanceID,
+				"SURREAL_USER":               cfg.Username,
+				"SURREAL_PASS":               cfg.Password,
 			},
+			SensitiveKeys: []string{"SURREAL_PASS"},
 		},
 		Ports: []runtimehost.LoopbackPortClaim{
 			{Host: bindHost, Port: cfg.Port, Protocol: "tcp"},
@@ -102,7 +100,6 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 			MaxDelay:    30 * time.Second,
 			ResetAfter:  5 * time.Minute,
 		},
-		SensitiveArgIndexes: []int{sensitiveIdx},
 	}, nil
 }
 

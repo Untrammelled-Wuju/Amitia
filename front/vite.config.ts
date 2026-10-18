@@ -12,54 +12,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 15177,
-    strictPort: true,
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/media": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/bridge": {
-        target: "http://127.0.0.1:8898",
-        changeOrigin: true,
-      },
-      "/voice": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/audio": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/images": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/videos": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/avatars": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/emote-assets": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/exports": {
-        target: "http://127.0.0.1:18899",
-        changeOrigin: true,
-      },
-      "/qq-api": {
-        target: "http://127.0.0.1:19877",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/qq-api/, "/api"),
-      },
-    },
+    port: 0,
+    strictPort: false,
   },
 })

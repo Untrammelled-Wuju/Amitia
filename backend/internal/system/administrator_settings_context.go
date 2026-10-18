@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/runtimeendpoint"
+	"github.com/u-ai/backend/pkg/util"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -113,7 +115,12 @@ func (s *service) AdministratorSettingsContext(ctx context.Context, operation st
 		if mode == "cloud-web" {
 			host = "0.0.0.0"
 		}
-		return map[string]interface{}{"mode": mode, "deployMode": mode, "runtimeProfile": s.runtimeProfile.String(), "host": host, "port": envInt("AMITIA_SERVER_PORT", 18080), "web": map[string]interface{}{"enabled": true, "publicBaseUrl": text("public_base_url", ""), "requireAuth": text("require_auth", "true") != "false"}, "storage": map[string]interface{}{"dataDir": s.dataDir}, "requiresRestart": true}, nil
+		port := envInt("AMITIA_SERVER_PORT", 18080)
+		if endpoint, err := runtimeendpoint.Read(util.RuntimeRunDir(util.RuntimeRoot())); err == nil {
+			host = endpoint.Host
+			port = endpoint.Port
+		}
+		return map[string]interface{}{"mode": mode, "deployMode": mode, "runtimeProfile": s.runtimeProfile.String(), "host": host, "port": port, "web": map[string]interface{}{"enabled": true, "publicBaseUrl": text("public_base_url", ""), "requireAuth": text("require_auth", "true") != "false"}, "storage": map[string]interface{}{"dataDir": s.dataDir}, "requiresRestart": true}, nil
 	case "long-running":
 		return map[string]interface{}{"maxTasks": toInt(text("long_running_max_tasks", "5")), "timeoutMinutes": toInt(text("long_running_timeout", "30"))}, nil
 	case "update":
