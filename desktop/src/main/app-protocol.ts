@@ -1,6 +1,7 @@
 import { protocol } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { getCoreEndpoint } from "./core-endpoint";
 
 export const APP_PROTOCOL_SCHEME = "app";
 export const APP_PROTOCOL_HOST = "amitia";
@@ -31,6 +32,15 @@ const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-cache",
 };
+
+const CORE_RESOURCE_PREFIX = "/api/extension/webui/resource/";
+const CORE_RESOURCE_RESPONSE_HEADERS = [
+  "content-type",
+  "content-security-policy",
+  "cache-control",
+  "x-content-type-options",
+  "referrer-policy",
+];
 
 let schemeRegistered = false;
 let handlerRegistered = false;
@@ -75,6 +85,10 @@ export function registerAppProtocol(rendererRoot: string): void {
     }
     if (request.method !== "GET" && request.method !== "HEAD") {
       return textResponse(405, "method not allowed");
+    }
+
+    if (parsed.pathname.startsWith(CORE_RESOURCE_PREFIX)) {
+      return proxyCoreResource(parsed, request.method);
     }
 
     const relativePath = normalizeRequestPath(parsed.pathname);
@@ -125,6 +139,31 @@ export function registerAppProtocol(rendererRoot: string): void {
     } catch {
       return textResponse(404, "resource not found");
     }
+  });
+}
+
+async function proxyCoreResource(parsed: URL, method: string): Promise<Response> {
+  const baseURL = getCoreEndpoint()?.httpBaseURL || "";
+  if (!baseURL) {
+    return textResponse(503, "core is not ready");
+  }
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${baseURL}${parsed.pathname}${parsed.search}`, {
+      method,
+      redirect: "error",
+    });
+  } catch {
+    return textResponse(502, "core resource unavailable");
+  }
+  const headers = new Headers();
+  for (const name of CORE_RESOURCE_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return new Response(method === "HEAD" ? null : upstream.body, {
+    status: upstream.status,
+    headers,
   });
 }
 
