@@ -1,6 +1,6 @@
 更新日志
 
-26.2.0-beta.8
+26.2.0-beta.8.1
 
 错误页与反馈
 
@@ -35,7 +35,7 @@
 
 其他
 
-- versionCode 更新为 13，versionName 与桌面端统一为 26.2.0-beta.8。
+- versionCode 更新为 14，versionName 与桌面端统一为 26.2.0-beta.8.1。
 
 26.2.0-beta.7.1
 
