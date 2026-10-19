@@ -1,33 +1,33 @@
 # AMITIA Release Gate Report
 
-Generated: 2026-10-19T09:36:42.806Z
+Generated: 2026-10-19T14:49:27.360Z
 
 Status: **PASS**
 
 | Gate | Result |
 |---|---|
-| Canonical freeze verification | PASS (10454 files) |
-| Source Gate SHA256 | `01e69285ed75e3c87e350405373cdebb6a7d8a02e5e6d5be26f3c9b28995a5c9` |
+| Canonical freeze verification | PASS (10452 files) |
+| Source Gate SHA256 | `899a84993b657e7dc570b216ad92d19414d50b40c8d633513578563451284ef7` |
 | AmitiaCore provenance | PASS |
 | Runtime asset provenance | PASS (6 files) |
 | Packaged artifact integrity | PASS |
 
 ## Core provenance
 
-- Core SHA256: `d8354501b7378492597673d3bc2b5a89c448e6a96dc02d3352f8f46f5572c320`
-- Core SourceGate SHA256: `01e69285ed75e3c87e350405373cdebb6a7d8a02e5e6d5be26f3c9b28995a5c9`
+- Core SHA256: `b9e429ec9b9129e51c49ade3366e7bfe1bd91d83973163d99d2bd05488a1957c`
+- Core SourceGate SHA256: `899a84993b657e7dc570b216ad92d19414d50b40c8d633513578563451284ef7`
 - Go: go version go1.26.1 windows/amd64
-- Commit: a33980cec
+- Commit: 52ae7fb79
 
 ## Runtime assets
 
-- Runtime asset SourceGate SHA256: `01e69285ed75e3c87e350405373cdebb6a7d8a02e5e6d5be26f3c9b28995a5c9`
+- Runtime asset SourceGate SHA256: `899a84993b657e7dc570b216ad92d19414d50b40c8d633513578563451284ef7`
 - Verified packaged runtime files: 6
 
 ## Release artifacts
 
 | Artifact | Bytes | SHA256 |
 |---|---:|---|
-| AmitiaSetup-26.2.0-beta.8.1-x64.exe | 275810656 | `2c244f8e25949e8eadd68c752810e5c771a8efae7756194a5922a1014436d1a1` |
-| AmitiaSetup-26.2.0-beta.8.1-x64.exe.blockmap | 287027 | `880d922e969f791b51b7c5bb967222a3b5164e98b265a1345c2607d475d2dc97` |
-| latest.yml | 50444 | `6166d8d478531998c8bf7067355cc70e6edfaef0d6f36773859769e1f8b95388` |
+| AmitiaSetup-26.2.0-beta.9-x64.exe | 275793862 | `8aa1327ab5f052488d897ba9e15d30334b2e795de24e1d55efa71a4022ed70d9` |
+| AmitiaSetup-26.2.0-beta.9-x64.exe.blockmap | 287519 | `1e04eaaa85a7a8dd3ac6a4da259847a210ca06836edeb58fc7cac0c3287d5980` |
+| latest.yml | 54438 | `dbaff02fd53f50a5eccd0ea1eeb4d602d9786b75b3c1df9c513d08c244a722b3` |
