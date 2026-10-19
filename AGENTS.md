@@ -117,8 +117,10 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.8.1，源码基线提交 a33980cec，提交日志 chore(release): bump to 26.2.0-beta.8.1，安装包 AmitiaSetup-26.2.0-beta.8.1-x64.exe，大小 275810656 字节，SHA-256 2c244f8e25949e8eadd68c752810e5c771a8efae7756194a5922a1014436d1a1，记录时间 2026-10-19 17:41:47 +08:00，构建输出目录 desktop/release，通过管理端接口发布到 stable 通道，latest.yml 与安装包已通过 HTTPS 返回 200；已在 E:\asdadsadsadasd 覆盖安装，插件页面 iframe、bridge.js、styles.css、app.js 均返回 200 并完成渲染；管理端现有部署版本仅支持 desktop stable，beta.yml 仍停留在 26.2.0-beta.6，待替换该文件或重新部署管理端后测试版客户端才能收到本次更新
-- Android Release：版本 26.2.0-beta.8.1，versionCode 14，源码基线提交 a33980cec，提交日志 chore(release): bump to 26.2.0-beta.8.1，安装包 amitia-26.2.0-beta.8.1-release-arm64-v8a-20261019-175800.apk，大小 135341610 字节，SHA-256 7e022b0f4854999b4673daa56bb85e09189c8f592c1db2adb93607fc687aa6e1，记录时间 2026-10-19 17:58:00 +08:00，beta 与 stable 两个通道均已发布，stable.json、beta.json 与 APK 已通过 HTTPS 返回 200；本次构建时无已连接真机，未执行覆盖安装验证
+- Desktop NSIS：版本 26.2.0-beta.9，源码基线提交 52ae7fb791818b79c78d4dca26f6c75d1ccc204e（版本号提交 ecc2f1cfc，冻结清单提交 52ae7fb79），提交日志 chore(release): refresh 26.2.0-beta.9 freeze manifest，安装包 AmitiaSetup-26.2.0-beta.9-x64.exe，大小 275793862 字节，SHA-256 8aa1327ab5f052488d897ba9e15d30334b2e795de24e1d55efa71a4022ed70d9，记录时间 2026-10-19 23:12:25 +08:00，构建输出目录 desktop/release，通过管理端接口发布到 stable 通道（release id 27），latest.yml、安装包与 blockmap 已通过 HTTPS 返回 200；已在 E:\新455454文件夹\Amitia 覆盖安装，安装后核心 SHA-256 为 b9e429ec9b9129e51c49ade3366e7bfe1bd91d83973163d99d2bd05488a1957c，/readyz 为 ready，/api/health 返回 26.2.0-beta.9，Qdrant 与 SurrealDB 健康接口均返回 200；本次同时生成微信渠道插件 1.0.19、QQ 渠道插件 1.0.17 到根目录 plugin
+- Android Release：版本 26.2.0-beta.9，versionCode 15，源码基线提交 52ae7fb791818b79c78d4dca26f6c75d1ccc204e，提交日志 chore(release): refresh 26.2.0-beta.9 freeze manifest，安装包 amitia-26.2.0-beta.9-release-arm64-v8a-20261019-231050.apk，大小 135347554 字节，SHA-256 09c4dc334875a29bf012ee74940d2fb8c744d940490f8142d834baa57148db2c，记录时间 2026-10-19 23:13:53 +08:00，stable（release id 28）与 beta（release id 29）两个通道均已发布，stable.json、beta.json、签名文件与 APK 已通过 HTTPS 返回 200；Runtime Package SHA-256 为 e7608bc47049398a829e636ceffddabc2446074c43881ad19ba07548eecb85b3，sourceCommit 与本次源码基线一致；本次构建时无已连接真机，未执行覆盖安装验证
+
+本次发布归档：artifacts/release-26.2.0-beta.9/，包含桌面 EXE、blockmap、Android APK、changelog.png、latest.yml、stable.json、beta.json 与 SHA256SUMS.txt。
 
 assisted 安装器的更新行为（已实现并验证）：
 
