@@ -117,8 +117,8 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 最近发布源码基线：
 
-- Desktop NSIS：版本 26.2.0-beta.8，源码基线提交 d2c691e8b，提交日志 chore(release): prepare 26.2.0-beta.8 sources，安装包 AmitiaSetup-26.2.0-beta.8-x64.exe，大小 275809504 字节，SHA-256 0601a26c10022d8f0788e4e5a2696ba1061a6b59d00d99a9d04065851944d494，记录时间 2026-10-19 16:48:57 +08:00，构建输出目录 desktop/release，通过管理端接口发布到 stable 通道，latest.yml 与安装包已通过 HTTPS 返回 200
-- Android Release：版本 26.2.0-beta.8，versionCode 13，源码基线提交 d2c691e8b，提交日志 chore(release): prepare 26.2.0-beta.8 sources，安装包 amitia-26.2.0-beta.8-release-arm64-v8a-20261019-164546.apk，大小 135341410 字节，SHA-256 56564f99c582b63399962cf8761827f6910722dffbbe107b5d97cf55193b8e4d，记录时间 2026-10-19 16:51:20 +08:00，beta 与 stable 两个通道均已发布，stable.json、beta.json、beta.json.sig 与 APK 已通过 HTTPS 返回 200；本次构建时无已连接真机，未执行覆盖安装验证
+- Desktop NSIS：版本 26.2.0-beta.8.1，源码基线提交 a33980cec，提交日志 chore(release): bump to 26.2.0-beta.8.1，安装包 AmitiaSetup-26.2.0-beta.8.1-x64.exe，大小 275810656 字节，SHA-256 2c244f8e25949e8eadd68c752810e5c771a8efae7756194a5922a1014436d1a1，记录时间 2026-10-19 17:41:47 +08:00，构建输出目录 desktop/release，通过管理端接口发布到 stable 通道，latest.yml 与安装包已通过 HTTPS 返回 200；已在 E:\asdadsadsadasd 覆盖安装，插件页面 iframe、bridge.js、styles.css、app.js 均返回 200 并完成渲染；管理端现有部署版本仅支持 desktop stable，beta.yml 仍停留在 26.2.0-beta.6，待替换该文件或重新部署管理端后测试版客户端才能收到本次更新
+- Android Release：版本 26.2.0-beta.8.1，versionCode 14，源码基线提交 a33980cec，提交日志 chore(release): bump to 26.2.0-beta.8.1，安装包 amitia-26.2.0-beta.8.1-release-arm64-v8a-20261019-175800.apk，大小 135341610 字节，SHA-256 7e022b0f4854999b4673daa56bb85e09189c8f592c1db2adb93607fc687aa6e1，记录时间 2026-10-19 17:58:00 +08:00，beta 与 stable 两个通道均已发布，stable.json、beta.json 与 APK 已通过 HTTPS 返回 200；本次构建时无已连接真机，未执行覆盖安装验证
 
 assisted 安装器的更新行为（已实现并验证）：
 
