@@ -1,14 +1,11 @@
 package chat
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"time"
 
-	"github.com/u-ai/backend/internal/agent/tool"
 	coreexec "github.com/u-ai/backend/internal/execution"
-	"github.com/u-ai/backend/internal/extension"
 )
 
 type SkillScope struct {
@@ -78,15 +75,6 @@ type ActivatedSkill struct {
 	ToolMappings        []map[string]any
 }
 
-type ModelToolRuntime interface {
-	PrepareAgentSkillPrompt(ctx context.Context, scope SkillScope, message string) (string, []ActivatedSkill, []string)
-	EndAgentSkillRound(scope SkillScope)
-	BeforePrompt(ctx context.Context, scope SkillScope) []ContextContribution
-	ModelTools(ctx context.Context, scope SkillScope) ([]tool.Tool, error)
-	ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope SkillScope, idempotencyKey string) (ToolResult, bool)
-	AfterReply(scope SkillScope, reply ReplyView) bool
-}
-
 type ToolProgressEvent struct {
 	Fraction      float64
 	Indeterminate bool
@@ -94,36 +82,15 @@ type ToolProgressEvent struct {
 	Metadata      map[string]any
 }
 
-type ModelToolProgressRuntime interface {
-	ExecuteModelToolWithProgress(ctx context.Context, modelName string, input json.RawMessage, scope SkillScope, idempotencyKey string, emit func(context.Context, ToolProgressEvent) error) (ToolResult, bool, error)
-}
-
-func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
-	return SkillScope{
-		SpaceID:        es.SpaceID,
-		CharacterID:    es.CharacterID,
-		ConversationID: es.ConversationID,
-		Channel:        es.Channel,
-		SessionID:      es.SessionID,
-		Trigger:        string(es.Trigger),
-		TraceID:        es.TraceID,
-		RequestID:      es.RequestID,
-		ToolCallID:     es.ToolCallID,
-		CorrelationID:  es.CorrelationID,
-		CausationID:    es.CausationID,
-		ExecContext:    es.ExecContext,
-	}
-}
-
 type toolExecOutcome struct {
-	VisibleText  string
-	Status       string
-	ForceVoice   bool
-	ErrorCode    string
+	VisibleText string
+	Status string
+	ForceVoice bool
+	ErrorCode string
 	ErrorMessage string
-	Output       json.RawMessage
-	HasError     bool
-	Found        bool
+	Output json.RawMessage
+	HasError bool
+	Found bool
 }
 
 func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {

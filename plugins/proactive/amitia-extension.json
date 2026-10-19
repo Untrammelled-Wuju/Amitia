@@ -37,7 +37,7 @@
       "ios"
     ]
   },
-  "placement": "hybrid",
+  "placement": "cloud",
   "modules": [
     {
       "id": "proactive-runtime",
@@ -48,7 +48,7 @@
         "default": "使用宿主唯一调度账本管理主动任务，支持本地与云端。"
       },
       "type": "javascript",
-      "placement": "core",
+      "placement": "cloud",
       "runtime": {
         "type": "javascript",
         "entryPoint": "dist/index.js",
@@ -135,7 +135,7 @@
         "default": "在角色详情中管理主动任务开关、参数、规则和运行历史。"
       },
       "type": "data_only",
-      "placement": "hybrid",
+      "placement": "device",
       "contributions": [
         {
           "id": "proactive-character-tab",
@@ -551,7 +551,7 @@
       "name": "ui.notify",
       "reason": "通过统一主动任务服务管理规则、执行和系统通知。",
       "required": true,
-      "scope": "extension"
+      "scope": "global"
     }
   ],
   "lifecycle": {

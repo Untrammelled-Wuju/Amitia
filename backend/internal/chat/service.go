@@ -46,8 +46,6 @@ type Service interface {
 	DeleteConversationSummary(convID string) error
 	GenerateConversationSummary(ctx context.Context, convID string) (*ConversationSummary, error)
 	GetStats() (*ChatStatsResponse, error)
-	Chat(req *ChatRequest) (*ChatResponse, error)
-	ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error)
 	AppendConversationMessages(ctx context.Context, request *AppendConversationMessagesRequest) (*AppendConversationMessagesResult, error)
 	ListModels() ([]ModelConfig, error)
 	GetModel(id int) (*ModelConfig, error)
@@ -67,7 +65,6 @@ type Service interface {
 	SetOutboxStore(store OutboxStore)
 	SetDeliveryStore(store DeliveryStore)
 	ReplayPostProcess(eventType string, payload []byte) error
-	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
 	GenerateVoiceStream(ctx context.Context, spaceID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error
 	SummarizeRealtimeVoiceRollingContext(ctx context.Context, existingSummary, rawTurns string) (string, error)
@@ -76,7 +73,6 @@ type Service interface {
 	CommitRealtimeEmotion(ctx context.Context, commit RealtimeEmotionCommit) error
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
-	SetToolRuntime(ModelToolRuntime)
 	SetHookInvoker(HookInvoker)
 	SetDesktopPetLifecycleObserver(DesktopPetLifecycleObserver)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
@@ -92,24 +88,6 @@ type Service interface {
 	GetArtifactResolver() ArtifactResolver
 	SetWorkspaceAvailabilityResolver(resolver WorkspaceAvailabilityResolver)
 }
-
-// systemFormatInstruction enforces the host line splitting contract.
-const systemFormatInstruction = `【回复格式 - 系统固定规则】
-
-每句话必须单独一行，用换行符分隔。
-每句话尽量短。
-能一句说完就一句，不要写长段落。
-不要把多句话连成一段。
-不要用句号连接多个意思。
-
-【工具使用规则 - 严格遵守】
-create_schedule 仅在用户明确要求"提醒"、"叫"、"通知"、"叫醒"、"定时"等场景时调用。
-禁止在用户只问时间、闲聊、打招呼、问天气等日常对话中调用 create_schedule。
-get_current_time 仅在用户明确询问当前时间时调用。
-不要在用户没有明确要求的情况下自动创建任何提醒。
-force_voice_reply 仅在用户明确要求"用语音回复"、"发语音"、"语音回答"、"说语音"、"讲语音"时调用。调用后本次回复会以语音形式发送。`
-
-const systemNoEmojiInstruction = "【系统指令】回复中不要使用任何emoji表情符号。"
 
 type ArtifactResolver interface {
 	Resolve(ctx context.Context, actor string, resourceURI string) (ArtifactResolution, error)
@@ -150,7 +128,6 @@ type service struct {
 	llmWithTools        llmWithToolsFunc
 	outboxStore         OutboxStore
 	deliveryStore       DeliveryStore
-	toolRuntime         ModelToolRuntime
 	ownedToolRuntime    OwnedToolRuntime
 	canonicalMemory     CanonicalMemoryRuntime
 	memoryConsumers     business.MemoryConsumerPort
@@ -183,8 +160,6 @@ type ModelDetectItem struct {
 	OwnedBy string `json:"owned_by,omitempty"`
 }
 
-var _ interaction.MessageProcessor = (*service)(nil)
-
 type DeliveryStore interface {
 	CreateDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) error
 	PreemptActiveOutputLeases(characterID string) error
@@ -204,10 +179,6 @@ func (s *service) SetOutboxStore(store OutboxStore) {
 
 func (s *service) SetDeliveryStore(store DeliveryStore) {
 	s.deliveryStore = store
-}
-
-func (s *service) SetToolRuntime(runtime ModelToolRuntime) {
-	s.toolRuntime = runtime
 }
 
 func (s *service) SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator) {
@@ -318,24 +289,6 @@ func (s *service) invalidateLocalModels(ctx context.Context) {
 	}
 }
 
-func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {
-	profile, err := s.charRepo.GetRuntimeProfile(characterID)
-	if err != nil {
-		return "", fmt.Errorf("获取角色配置失败: %w", err)
-	}
-	parts := buildRoleSystemParts(profile, nil)
-	systemPrompt := strings.Join(parts, "\n\n")
-	cfg, err := s.repo.GetActiveModel()
-	if err != nil {
-		return "", fmt.Errorf("获取模型配置失败: %w", err)
-	}
-	messages := []map[string]interface{}{
-		{"role": "system", "content": systemPrompt + "\n\n" + systemFormatInstruction},
-		{"role": "user", "content": userMessage},
-	}
-	reply, _, err := s.callLLM(ctx, cfg, messages)
-	return reply, err
-}
 func (s *service) GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error) {
 	cfg, err := s.repo.GetActiveModel()
 	if err != nil {

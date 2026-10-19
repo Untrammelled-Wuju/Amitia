@@ -89,7 +89,7 @@ const isError = computed(() =>
 const pageContribution = computed<UIContributionSummary | null>(() => {
   if (!pageSpec.value) return null;
   return {
-    contributionId: `${extensionId.value}/${pageId.value}`,
+    contributionId: pageId.value,
     extensionId: extensionId.value,
     moduleId: "",
     kind: pageSpec.value.entryKind,
@@ -131,6 +131,7 @@ const pageContext = computed<Record<string, unknown>>(() => {
 });
 
 async function openPage() {
+  const token = ++pageRequestToken;
   if (!extensionId.value || !pageId.value) return;
   pageState.value = "resolving";
   errorReason.value = "";
@@ -139,6 +140,12 @@ async function openPage() {
       params: route.query as Record<string, unknown>,
       scopeSnapshot: buildScopeSnapshot(),
     });
+    if (disposed || token !== pageRequestToken) {
+      if (result.sessionId) {
+        void closePageSession(result.sessionId).catch(() => {});
+      }
+      return;
+    }
     sessionId.value = result.sessionId;
     pageSessionGeneration.value = result.generation ?? 0;
     pageState.value = result.state as PageState;
@@ -146,55 +153,72 @@ async function openPage() {
     missingPermissions.value = result.missingPermissions ?? [];
     errorReason.value = result.reason ?? "";
     if (result.state === "loading" || result.state === "runtime_starting") {
-      pollPageStatus();
+      void pollPageStatus(token);
     }
     if (result.sessionId) {
+      const registryKey = `${extensionId.value}/${pageId.value}`;
+      activePageKey = registryKey;
       uiStore.registerSession({
-        contributionId: `${extensionId.value}/${pageId.value}`,
+        contributionId: registryKey,
         sessionId: result.sessionId,
         createdAt: Date.now(),
         lastActivity: Date.now(),
       });
     }
   } catch (e) {
+    if (disposed || token !== pageRequestToken) return;
     pageState.value = "failed";
     errorReason.value = e instanceof Error ? e.message : String(e);
   }
 }
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
+let pageRequestToken = 0;
+let disposed = false;
+let activePageKey = "";
 
-async function pollPageStatus() {
-  if (!sessionId.value) return;
+async function pollPageStatus(token: number) {
+  if (disposed || token !== pageRequestToken || !sessionId.value) return;
+  const currentSessionId = sessionId.value;
   try {
-    const result = await pollPageSessionStatus(sessionId.value);
+    const result = await pollPageSessionStatus(currentSessionId);
+    if (disposed || token !== pageRequestToken || currentSessionId !== sessionId.value) return;
     pageSessionGeneration.value = result.generation ?? pageSessionGeneration.value;
     pageState.value = result.state as PageState;
     pageSpec.value = (result.definition as PageSpec) ?? pageSpec.value;
     missingPermissions.value = result.missingPermissions ?? [];
     errorReason.value = result.reason ?? "";
     if (result.state === "loading" || result.state === "runtime_starting") {
-      pollTimer = setTimeout(pollPageStatus, 1000);
+      pollTimer = setTimeout(() => {
+        void pollPageStatus(token);
+      }, 1000);
     }
   } catch (e) {
+    if (disposed || token !== pageRequestToken) return;
     pageState.value = "failed";
     errorReason.value = e instanceof Error ? e.message : String(e);
   }
 }
 
 async function closePage() {
+  pageRequestToken += 1;
   if (pollTimer) {
     clearTimeout(pollTimer);
     pollTimer = null;
   }
-  if (!sessionId.value) return;
-  try {
-    await closePageSession(sessionId.value);
-  } catch {
-  }
-  uiStore.unregisterSession(`${extensionId.value}/${pageId.value}`);
+  const currentSessionId = sessionId.value;
+  const registryKey = activePageKey;
+  activePageKey = "";
+  if (!currentSessionId) return;
   sessionId.value = "";
   pageSessionGeneration.value = 0;
+  if (registryKey) {
+    uiStore.unregisterSession(registryKey);
+  }
+  try {
+    await closePageSession(currentSessionId);
+  } catch {
+  }
 }
 
 function buildScopeSnapshot(): string {
@@ -218,8 +242,19 @@ async function goBack() {
   router.push({ name: "extensionCenter" });
 }
 
-onMounted(openPage);
-onBeforeUnmount(closePage);
+onMounted(() => {
+  disposed = false;
+  void openPage();
+});
+onBeforeUnmount(() => {
+  disposed = true;
+  pageRequestToken += 1;
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+  void closePage();
+});
 
 watch([extensionId, pageId], async () => {
   await closePage();

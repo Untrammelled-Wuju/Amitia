@@ -141,7 +141,15 @@ func (r *meshOwnedToolRuntime) Tools(ctx context.Context, inference business.Inf
 	return allowed, nil
 }
 
-func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.Inference, call, name string, input json.RawMessage) (chat.ToolResult, error) {
+func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.Inference, call, name string, input json.RawMessage) (output chat.ToolResult, executionErr error) {
+	if err := emitOwnedToolEvent(inference, "tool-started", call, name, input, chat.ToolResult{}, nil); err != nil {
+		return chat.ToolResult{}, err
+	}
+	defer func() {
+		if err := emitOwnedToolEvent(inference, "tool-completed", call, name, input, output, executionErr); err != nil {
+			executionErr = errors.Join(executionErr, err)
+		}
+	}()
 	if isChatMultiAgentTool(name) {
 		if r.native == nil || inference.InternalWorker {
 			return chat.ToolResult{}, coordination.ErrWrongOwner
@@ -165,6 +173,27 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 		return chat.ToolResult{}, err
 	}
 	return r.executeDefinition(ctx, inference, call, input, definition)
+}
+
+func emitOwnedToolEvent(inference business.Inference, eventType, call, name string, input json.RawMessage, result chat.ToolResult, executionErr error) error {
+	if inference.Emit == nil {
+		return nil
+	}
+	content:=result.VisibleText
+	if len(result.Output)>0 {content=string(result.Output)}
+	payload := map[string]any{"toolCallId": call, "toolName": name, "arguments": string(input), "result": content, "durationMs": result.DurationMS,"status":result.Status,"forceVoice":result.ForceVoice}
+	if result.Error != nil {
+		payload["errorCode"], payload["error"] = result.Error.Code, result.Error.Message
+	}
+	if eventType=="tool-completed" && result.Error==nil && result.Status!="" && !strings.EqualFold(result.Status,"SUCCESS") && !strings.EqualFold(result.Status,"SUCCEEDED") {payload["errorCode"]="TOOL_"+strings.ToUpper(result.Status);payload["error"]="工具未成功完成"}
+	if executionErr != nil {
+		payload["error"] = executionErr.Error()
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return inference.Emit(business.Event{Type: eventType, Progress: encoded})
 }
 
 func (r *meshOwnedToolRuntime) executeDefinition(ctx context.Context, inference business.Inference, call string, input json.RawMessage, definition capability.ToolDefinition) (chat.ToolResult, error) {

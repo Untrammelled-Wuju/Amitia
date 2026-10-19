@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 )
 
 func TestInferenceAuthorityBlocksLegacyAndOwnedModelEntries(t *testing.T) {
@@ -17,11 +18,8 @@ func TestInferenceAuthorityBlocksLegacyAndOwnedModelEntries(t *testing.T) {
 		return "unexpected", "", nil, 0, nil
 	}
 	s.SetInferenceAuthority(func(context.Context) (context.Context, func(), error) { return nil, nil, rejected })
-	if _, err := s.ComputeInteraction(t.Context(), nil); !errors.Is(err, rejected) {
-		t.Fatalf("legacy entry: %v", err)
-	}
-	if _, err := s.commitInteraction(t.Context(), messageCommitPlan{}); !errors.Is(err, rejected) {
-		t.Fatalf("legacy commit: %v", err)
+	if _, err := s.GenerateOwnedReply(t.Context(), business.Inference{}); !errors.Is(err, rejected) {
+		t.Fatalf("owned entry: %v", err)
 	}
 	if _, _, err := s.callLLMJSON(t.Context(), nil, nil); !errors.Is(err, rejected) {
 		t.Fatalf("JSON entry: %v", err)

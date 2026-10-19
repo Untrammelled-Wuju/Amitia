@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -88,7 +89,7 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 		r.mu.Unlock()
 		return nil, interaction.ErrOrchestratorProcessing
 	}
-	r.active[activeKey] = ownedIngressActive{owner: owner, scope: interaction.InteractionScope{SpaceID: owner.SpaceID, CharacterID: req.CharacterID, ConversationID: req.ConversationID, Channel: req.Channel, PeerID: req.PeerID, SessionID: req.SessionID, RequestID: req.RequestID, Source: req.Source}}
+	r.active[activeKey] = ownedIngressActive{owner: owner, scope: interaction.InteractionScope{SpaceID: owner.SpaceID, CharacterID: req.CharacterID, ConversationID: req.ConversationID, Channel: req.Channel, PeerID: req.PeerID, SessionID: req.SessionID, ThreadID: req.ThreadID, RequestID: req.RequestID, Source: req.Source}}
 	r.mu.Unlock()
 	defer func() { r.mu.Lock(); delete(r.active, activeKey); r.mu.Unlock() }()
 	started := time.Now()
@@ -110,8 +111,19 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 		}
 	}
 	result.Response = &interaction.ProcessResponse{ConversationID: response.ConversationID, ThreadID: req.ThreadID, TurnID: response.TurnID, Reply: response.Text, Reasoning: response.Reasoning, CharacterID: response.Scope.RoleID, MessageIDs: []string{response.RequestID + "/user", response.RequestID + "/assistant"}, ForceVoice: response.ForceVoice, RequestID: response.RequestID}
+	if response.Suppressed || req.SuppressReplyPersistence {
+		result.Response.Reply, result.Response.Reasoning = "", ""
+		result.Response.MessageIDs = nil
+		result.Response.ForceVoice = false
+		return result, nil
+	}
 	if err := ownedIngressResponseOutputs(result.Response, response.Outputs); err != nil {
 		return nil, err
+	}
+	if response.Saved && req.PeerID != "" && req.Channel != "" && !strings.EqualFold(req.Channel, "web") && !strings.EqualFold(req.Channel, "voice") {
+		if err := r.services.DeviceMesh.SubmitChannelDelivery(ctx, response.Scope, coordination.ChannelDeliveryRequest{ConversationID: response.ConversationID, RequestID: response.RequestID, Channel: req.Channel, PeerID: req.PeerID, Text: response.Text, Outputs: response.Outputs}); err != nil {
+			return result, fmt.Errorf("回复已保存，渠道交付等待重试: %w", err)
+		}
 	}
 	return result, nil
 }
@@ -122,7 +134,7 @@ func (r *ownedChatIngress) CancelEntryScope(scope interaction.InteractionScope) 
 	count := 0
 	for _, active := range r.active {
 		current := active.scope
-		if scope.SpaceID != "" && scope.SpaceID != current.SpaceID || scope.CharacterID != "" && scope.CharacterID != current.CharacterID || scope.ConversationID != "" && scope.ConversationID != current.ConversationID || scope.Channel != "" && scope.Channel != current.Channel || scope.PeerID != "" && scope.PeerID != current.PeerID || scope.RequestID != "" && scope.RequestID != current.RequestID {
+		if scope.SpaceID != "" && scope.SpaceID != current.SpaceID || scope.CharacterID != "" && scope.CharacterID != current.CharacterID || scope.ConversationID != "" && scope.ConversationID != current.ConversationID || scope.Channel != "" && scope.Channel != current.Channel || scope.PeerID != "" && scope.PeerID != current.PeerID || scope.SessionID != "" && scope.SessionID != current.SessionID || scope.ThreadID != "" && scope.ThreadID != current.ThreadID || scope.Source != "" && scope.Source != current.Source || scope.RequestID != "" && scope.RequestID != current.RequestID {
 			continue
 		}
 		if r.services.OwnedBusiness.Interrupt(active.owner.SpaceID, active.owner.DeviceID, current.RequestID) {

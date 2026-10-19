@@ -25,6 +25,7 @@ func (r *ownedChatIngress) channelOwnerResolver(ctx context.Context, extensionID
 	}
 	registry := r.services.KernelContainer.CapabilityProviders
 	var selected *interaction.EntryOwner
+	localRuntime := false
 	for _, instance := range registry.ListInstancesByCapability(capability.CapabilityID("channel.provider")) {
 		if instance == nil || instance.ExtensionID != extensionID || instance.ModuleID != moduleID || !instance.IsExecutable() {
 			continue
@@ -34,10 +35,25 @@ func (r *ownedChatIngress) channelOwnerResolver(ctx context.Context, extensionID
 			continue
 		}
 		declared, _ := definition.Metadata["channelId"].(string)
-		if declared != "" && declared != channelID {
+		if declared == "" {
+			declared, _ = definition.Metadata["id"].(string)
+		}
+		if declared == "" {
+			if labels, ok := definition.Metadata["labels"].(map[string]any); ok {
+				declared, _ = labels["channelId"].(string)
+			}
+		}
+		if declared != channelID {
 			continue
 		}
 		if instance.SpaceID == "" || instance.DeviceID == "" {
+			if instance.Placement == capability.ProviderPlacementCore && instance.RuntimeInstanceID != "" {
+				owner := interaction.EntryOwner{SpaceID: r.coreID, CoreID: r.coreID, DeviceID: r.services.DeviceMesh.LocalDeviceID, TargetDeviceID: r.services.DeviceMesh.LocalDeviceID}
+				if selected != nil && *selected != owner {
+					return ctx, errors.New("渠道来源对应多个设备，必须使用设备专属接入凭据")
+				}
+				selected, localRuntime = &owner, true
+			}
 			continue
 		}
 		owner := interaction.EntryOwner{SpaceID: instance.SpaceID.String(), DeviceID: instance.DeviceID.String(), TargetDeviceID: instance.DeviceID.String(), CoreID: r.coreID}
@@ -47,12 +63,15 @@ func (r *ownedChatIngress) channelOwnerResolver(ctx context.Context, extensionID
 		selected = &owner
 	}
 	if selected != nil {
+		if localRuntime {
+			current, finish, err := r.bindLocalSource(ctx, r.coreID)
+			if err != nil {
+				return ctx, err
+			}
+			context.AfterFunc(current, finish)
+			return current, nil
+		}
 		return interaction.WithEntryOwner(ctx, *selected), nil
 	}
-	current, finish, err := r.bindLocalSource(ctx, r.coreID)
-	if err != nil {
-		return ctx, err
-	}
-	context.AfterFunc(current, finish)
-	return current, nil
+	return ctx, errors.New("渠道来源没有已认证的设备运行实例绑定")
 }

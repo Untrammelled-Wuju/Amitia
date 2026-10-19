@@ -6,9 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agentpermission"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
-	coreexec "github.com/u-ai/backend/internal/execution"
-	"github.com/u-ai/backend/internal/interaction"
-	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"gorm.io/gorm"
 	"time"
 )
@@ -413,72 +410,8 @@ type MessageSearchResponse struct {
 	TotalPages int       `json:"totalPages"`
 }
 
-type ProcessMessageRequest struct {
-	CharacterID              string                       `json:"characterId"`
-	Message                  string                       `json:"message"`
-	ConversationID           string                       `json:"conversationId"`
-	ThreadID                 string                       `json:"threadId,omitempty"`
-	ProjectID                string                       `json:"projectId"`
-	Sequence                 int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Channel                  string                       `json:"channel"`
-	Source                   string                       `json:"source"`
-	ProactiveTaskInstruction string                       `json:"-"`
-	ProactiveTimeContext     string                       `json:"-"`
-	ProactiveRecentContext   string                       `json:"-"`
-	ProactiveRelationship    string                       `json:"-"`
-	ProactiveEmotion         string                       `json:"-"`
-	ProactiveMemory          string                       `json:"-"`
-	PeerID                   string                       `json:"peerId"`
-	AudioUrl                 string                       `json:"audioUrl"`
-	AudioDuration            float64                      `json:"audioDuration"`
-	VoiceMessage             bool                         `json:"voiceMessage"`
-	ImageUrl                 string                       `json:"imageUrl"`
-	VideoUrl                 string                       `json:"videoUrl"`
-	Attachments              []MessageAttachmentInput     `json:"attachments,omitempty"`
-	RequestID                string                       `json:"requestId"`
-	TurnID                   string                       `json:"turnId,omitempty"`
-	ExecutionID              string                       `json:"executionId,omitempty"`
-	ReplyToMessageID         *string                      `json:"replyToMessageId,omitempty"`
-	ModelConfigID            int                          `json:"modelConfigId,omitempty"`
-	ReasoningEffort          string                       `json:"reasoningEffort,omitempty"`
-	MessageStyle             string                       `json:"messageStyle,omitempty"`
-	ReasoningEnabled         *bool                        `json:"reasoningEnabled,omitempty"`
-	PermissionMode           string                       `json:"permissionMode,omitempty"`
-	ImageContext             string                       `json:"-"`
-	SpaceID                  string                       `json:"-"`
-	DeviceTimezone           string                       `json:"-"`
-	SessionID                string                       `json:"-"`
-	InteractionID            string                       `json:"-"`
-	ExpectedStatusVersion    int64                        `json:"-"`
-	Runtime                  *interaction.RuntimeAssembly `json:"-"`
-	ExecContext              *coreexec.ExecutionContext   `json:"-"`
-	IsInternal               bool                         `json:"-"`
-	SuppressReplyPersistence bool                         `json:"-"`
-	ForceRegenerate          bool                         `json:"-"`
-}
-
 func normalizePermissionMode(value string) string {
 	return agentpermission.Normalize(value)
-}
-
-type ProcessMessageResponse struct {
-	ConversationID      string                   `json:"conversationId"`
-	ThreadID            string                   `json:"threadId,omitempty"`
-	TurnID              string                   `json:"turnId,omitempty"`
-	Sequence            int64                    `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Reply               string                   `json:"reply"`
-	Reasoning           string                   `json:"reasoning,omitempty"`
-	ReasoningDurationMS int64                    `json:"reasoningDurationMs"`
-	CharacterID         string                   `json:"characterId"`
-	CharacterName       string                   `json:"characterName"`
-	MessageIDs          []string                 `json:"messageIds"`
-	ForceVoice          bool                     `json:"forceVoice"`
-	AudioUrls           []string                 `json:"audioUrls"`
-	UserMessage         *MessageItem             `json:"userMessage"`
-	UserMessageID       string                   `json:"userMessageId"`
-	RequestID           string                   `json:"requestId"`
-	MessagePlan         *interaction.MessagePlan `json:"messagePlan,omitempty"`
-	Events              []newoutbox.OutboxRecord `json:"-"`
 }
 
 type ChatStatsResponse struct {

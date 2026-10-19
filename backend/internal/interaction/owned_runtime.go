@@ -28,7 +28,7 @@ func (o *Orchestrator) PrepareOwnedRuntime(ctx context.Context, record *Interact
 	}
 	ctx = temporal.ContextWithDeviceTimezone(ctx, req.DeviceTimezone)
 	var prepared *temporal.RelationshipTimeContext
-	if scope, ok := coordination.FromContext(ctx); !ok || scope.ResourceOwnerID == scope.CoreID {
+	if _, ok := coordination.FromContext(ctx); !ok {
 		var err error
 		prepared, err = o.prepareRelationshipTime(ctx, record, req)
 		if err != nil {

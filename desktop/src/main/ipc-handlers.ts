@@ -34,6 +34,16 @@ import {
 
 const EXTENSION_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 
+function isCoreUnavailableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("ECONNREFUSED") ||
+    message.includes("ECONNRESET") ||
+    message.includes("EPIPE") ||
+    message.includes("Amitia Core 尚未就绪")
+  );
+}
+
 export function registerIpcHandlers(
   configStore: ConfigStore,
   runtimeManager: DesktopRuntimeManager,
@@ -511,18 +521,25 @@ export function registerIpcHandlers(
   });
 
   ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async (_event, target: "local" | "business" = "business") => {
-    if (target === "local") {
-      return getDesktopAuthHeaders();
-    }
-    const deployment = await configStore.getDeploymentConfig();
-    if (deployment.mode === "cloud") {
-      const cloudAuth = await getMeshCloudAuth();
-      if (!cloudAuth?.authorization) {
-        return {};
+    try {
+      if (target === "local") {
+        return getDesktopAuthHeaders();
+      }
+      const deployment = await configStore.getDeploymentConfig();
+      if (deployment.mode === "cloud") {
+        const cloudAuth = await getMeshCloudAuth();
+        if (!cloudAuth?.authorization) {
+          return {};
+        }
+        return getDesktopAuthHeaders();
       }
       return getDesktopAuthHeaders();
+    } catch (error) {
+      if (isCoreUnavailableError(error)) {
+        throw new Error("Amitia Core 正在启动或重启，请稍后重试");
+      }
+      throw error;
     }
-    return getDesktopAuthHeaders();
   });
 
   ipcMain.handle(IPC_CHANNELS.publishLocalVoiceASRFinal, async (_event, payload) => {

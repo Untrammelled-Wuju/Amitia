@@ -26,7 +26,7 @@ function readProviderState(): { coreId: string; notice: string; changeId?: strin
     const storedNotice = String(state?.notice || "");
     return {
       coreId: String(state?.coreId || ""),
-      notice: storedNotice === ownedConversationSwitchNotice ? "" : storedNotice,
+      notice: storedNotice === ownedConversationSwitchNotice || storedNotice.startsWith("角色配置已变化") ? "" : storedNotice,
       changeId: state?.changeId,
     };
   } catch { return { coreId: "", notice: "" }; }
@@ -89,6 +89,11 @@ function stopLocal(message: string, temporary = false) {
   }
   saveProviderState();
   window.dispatchEvent(new CustomEvent("amitia:execution-scope-changed", { detail: { reason: message } }));
+}
+
+function noteWithoutInterrupt(message: string) {
+  transientNotice = message;
+  notice.value = message;
 }
 
 function markUnavailable() {
@@ -164,7 +169,7 @@ export function useDeviceOwnedConversation() {
     const finalDeployment = await getDeploymentConfig();
     if (roleGeneration !== revision || finalDeployment.mode !== deployment.mode || finalDeployment.serverURL !== deployment.serverURL) throw new OwnedChatStateChangedError("服务提供者已变化，旧角色已丢弃");
     const nextRoles: MeshRole[] = Array.isArray(available.roles) ? available.roles : [];
-    if (roles.value.some(role => nextRoles.find(item => item.id === role.id)?.revision !== role.revision)) stopLocal("角色配置已变化，请重新加载后继续操作");
+    if (roles.value.some(role => nextRoles.find(item => item.id === role.id)?.revision !== role.revision)) noteWithoutInterrupt("角色配置已变化");
     roles.value = nextRoles;
     roleOwnerId.value = String(available.roleOwnerId || "");
     if (notice.value === unavailableNotice) {

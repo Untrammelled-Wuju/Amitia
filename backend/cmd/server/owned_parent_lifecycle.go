@@ -145,7 +145,6 @@ func (r *meshOwnedToolRuntime) BeginOwnedTurn(ctx context.Context, inference bus
 			_, err = r.services.WorkbenchTaskTracker.Fail(current, latest.ID, latest.StatusVersion, "owned_turn_failed", message)
 			return err
 		}
-		_, err = r.services.WorkbenchTaskTracker.Complete(current, latest.ID, latest.StatusVersion, "owned-turn/"+inference.Scope.RequestID)
-		return err
+		return completeRecoveredOwnedParent(current, r.services.WorkbenchTaskTracker, latest, "owned-turn/"+inference.Scope.RequestID)
 	}, nil
 }

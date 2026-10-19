@@ -269,6 +269,10 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		}
 	}
 	switch request.Operation {
+	case "feedback-stats", "feedback/list", "feedback/create", "feedback/delete":
+		return p.managedChatFeedback(ctx, scope, request, records)
+	case "conversations", "conversation/create", "conversation/read", "conversation/rename", "conversation/delete":
+		return p.managedConversationAction(ctx, scope, role, request, records, selected)
 	case "from-import":
 		if request.ConversationID == "" || request.RequestID == "" {
 			return nil, errors.New("导入会话和请求编号不能为空")
@@ -385,6 +389,34 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		}
 		freed := max(int64(0), before-after)
 		return map[string]any{"vacuumed": true, "freedBytes": freed, "freedFormatted": fmt.Sprintf("%.2f MB", float64(freed)/(1024*1024))}, nil
+	case "message-range":
+		items := []map[string]any{}
+		for _, row := range selected {
+			if row.Kind == "message" {
+				items = append(items, row.Body)
+			}
+		}
+		sort.SliceStable(items, func(i, j int) bool {
+			return chatManagementString(items[i], "createdAt") < chatManagementString(items[j], "createdAt")
+		})
+		result := make([]map[string]any, 0)
+		for index, item := range items {
+			sequence, _ := item["sequence"].(float64)
+			if sequence <= 0 {
+				sequence = float64(index + 1)
+			}
+			if request.StartSequence > 0 && sequence < float64(request.StartSequence) || request.EndSequence > 0 && sequence > float64(request.EndSequence) {
+				continue
+			}
+			result = append(result, item)
+			if len(result) >= min(max(request.Limit, 1), 500) && request.Limit > 0 {
+				break
+			}
+		}
+		if request.Limit <= 0 && len(result) > 100 {
+			result = result[:100]
+		}
+		return map[string]any{"items": result, "count": len(result)}, nil
 	case "search":
 		items := []map[string]any{}
 		for _, row := range selected {
@@ -578,8 +610,12 @@ func (p *meshLocalDataPort) deleteManagedChat(ctx context.Context, scope coordin
 			}
 		}
 		selection := chat.ManagedHistorySelection{ConversationRevisions: map[string]int64{}, MessageRevisions: map[string]int64{}}
+		feedbackKeys := []string{}
 		for _, row := range plan.Records {
 			if !row.Legacy {
+				if row.Kind == "message" {
+					feedbackKeys = append(feedbackKeys, ownedFeedbackMessageKey(p.ownerID, role, row.ID))
+				}
 				continue
 			}
 			if row.Kind == "conversation" {
@@ -587,6 +623,11 @@ func (p *meshLocalDataPort) deleteManagedChat(ctx context.Context, scope coordin
 			}
 			if row.Kind == "message" {
 				selection.MessageRevisions[row.ID] = row.Revision
+			}
+		}
+		if len(feedbackKeys) > 0 {
+			if err := p.services.DB.WithContext(ctx).Exec("DELETE FROM message_feedback WHERE message_id IN ?", feedbackKeys).Error; err != nil {
+				return err
 			}
 		}
 		return chat.DeleteOwnedManagedHistory(ctx, p.services.DB, p.services.Chat, p.legacySpaceID, role, selection)

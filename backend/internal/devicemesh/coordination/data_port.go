@@ -17,24 +17,34 @@ type Role struct {
 }
 
 type DataQuery struct {
-	Management             bool      `json:"management,omitempty"`
-	RuntimeTurns           bool      `json:"runtimeTurns,omitempty"`
-	Vector                 []float32 `json:"vector,omitempty"`
-	VectorModel            string    `json:"vectorModel,omitempty"`
-	Cursor                 string    `json:"cursor,omitempty"`
-	HistoricalCursor       string    `json:"historicalCursor,omitempty"`
-	LegacyCursor           string    `json:"legacyCursor,omitempty"`
-	HistoricalLegacyCursor string    `json:"historicalLegacyCursor,omitempty"`
-	HistoricalListCursor   string    `json:"historicalListCursor,omitempty"`
-	ResourceKind           string    `json:"resourceKind,omitempty"`
-	ResourceID             string    `json:"resourceId,omitempty"`
-	RequestID              string    `json:"requestId,omitempty"`
-	ConversationID         string    `json:"conversationId,omitempty"`
-	Query                  string    `json:"query,omitempty"`
-	SearchQuery            string    `json:"searchQuery,omitempty"`
-	Limit                  int       `json:"limit,omitempty"`
-	HistoricalRoleID       string    `json:"historicalRoleId,omitempty"`
-	ListConversations      bool      `json:"listConversations,omitempty"`
+	ChatRuntime            *OwnedChatRuntimeQuery `json:"chatRuntime,omitempty"`
+	Management             bool                   `json:"management,omitempty"`
+	RuntimeTurns           bool                   `json:"runtimeTurns,omitempty"`
+	QueuedChats            bool                   `json:"queuedChats,omitempty"`
+	Vector                 []float32              `json:"vector,omitempty"`
+	VectorModel            string                 `json:"vectorModel,omitempty"`
+	Cursor                 string                 `json:"cursor,omitempty"`
+	HistoricalCursor       string                 `json:"historicalCursor,omitempty"`
+	LegacyCursor           string                 `json:"legacyCursor,omitempty"`
+	HistoricalLegacyCursor string                 `json:"historicalLegacyCursor,omitempty"`
+	HistoricalListCursor   string                 `json:"historicalListCursor,omitempty"`
+	ResourceKind           string                 `json:"resourceKind,omitempty"`
+	ResourceID             string                 `json:"resourceId,omitempty"`
+	RequestID              string                 `json:"requestId,omitempty"`
+	ConversationID         string                 `json:"conversationId,omitempty"`
+	Query                  string                 `json:"query,omitempty"`
+	SearchQuery            string                 `json:"searchQuery,omitempty"`
+	Limit                  int                    `json:"limit,omitempty"`
+	HistoricalRoleID       string                 `json:"historicalRoleId,omitempty"`
+	ListConversations      bool                   `json:"listConversations,omitempty"`
+}
+
+type OwnedChatRuntimeQuery struct {
+	Source         string `json:"source,omitempty"`
+	Channel        string `json:"channel,omitempty"`
+	PeerID         string `json:"peerId,omitempty"`
+	IsInternal     bool   `json:"isInternal,omitempty"`
+	DeviceTimezone string `json:"deviceTimezone,omitempty"`
 }
 
 func NormalizeConversationSearch(value string) (string, error) {
@@ -47,6 +57,7 @@ func NormalizeConversationSearch(value string) (string, error) {
 const OwnedConversationSearchPredicate = ` AND (instr(lower(COALESCE(json_extract(CAST(body AS TEXT),'$.title'),'')),?)>0 OR EXISTS (SELECT 1 FROM kernel_device_owned_resources AS matched WHERE matched.owner_id=kernel_device_owned_resources.owner_id AND matched.role_id=kernel_device_owned_resources.role_id AND matched.kind='message' AND matched.deleted=0 AND json_extract(CAST(matched.body AS TEXT),'$.conversationId')=kernel_device_owned_resources.resource_id AND instr(lower(COALESCE(json_extract(CAST(matched.body AS TEXT),'$.content'),'')),?)>0))`
 
 type DataSnapshot struct {
+	WorldBookPrompt     string                     `json:"worldBookPrompt,omitempty"`
 	RuntimeContext      map[string]json.RawMessage `json:"runtimeContext,omitempty"`
 	NextCursors         map[string]string          `json:"nextCursors,omitempty"`
 	OwnerID             string                     `json:"ownerId"`
@@ -114,6 +125,9 @@ func ResolveRole(requested string, available []Role) (Role, error) {
 }
 
 func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
+	if len(snapshot.WorldBookPrompt) > 256<<10 || !utf8.ValidString(snapshot.WorldBookPrompt) {
+		return ErrPendingLimit
+	}
 	if snapshot.OwnerID != scope.ResourceOwnerID || snapshot.Role.ID != scope.RoleID || snapshot.Role.Revision != scope.RoleRevision || !json.Valid(snapshot.Role.Profile) {
 		return ErrWrongOwner
 	}

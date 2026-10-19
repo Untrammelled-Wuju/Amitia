@@ -13,7 +13,7 @@ import (
 )
 
 type dynamicRoundToolRuntime struct {
-	ModelToolRuntime
+	ownedFixtureToolRuntime
 	calls atomic.Int32
 }
 
@@ -29,7 +29,7 @@ func TestInvokeLLMWithToolsTracksReasoningDuration(t *testing.T) {
 		return "回复", "思考", nil, 12, nil
 	}
 
-	reply, reasoning, forceVoice, tokens, durationMS, err := svc.invokeLLMWithTools(
+	reply, reasoning, forceVoice, tokens, durationMS, err := svc.invokeOwnedLoopFixture(
 		context.Background(),
 		&ModelConfig{},
 		nil,
@@ -110,7 +110,7 @@ func TestCfgToProviderConfigFallsBackToMaxTokens(t *testing.T) {
 
 func TestInvokeLLMWithToolsContinuesUntilFinalAnswer(t *testing.T) {
 	runtime := &dynamicRoundToolRuntime{}
-	svc := &service{toolRuntime: runtime}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
 	modelCalls := 0
 	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		modelCalls++
@@ -127,7 +127,7 @@ func TestInvokeLLMWithToolsContinuesUntilFinalAnswer(t *testing.T) {
 		return "最终回答", "", nil, 4, nil
 	}
 
-	reply, _, _, _, _, err := svc.invokeLLMWithTools(
+	reply, _, _, _, _, err := svc.invokeOwnedLoopFixture(
 		context.Background(),
 		&ModelConfig{},
 		nil,

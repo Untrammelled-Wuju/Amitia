@@ -1,5 +1,5 @@
 import { app } from "electron";
-import { spawn, execSync, ChildProcessWithoutNullStreams } from "child_process";
+import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import http from "http";
 import path from "path";
 import fs from "fs";
@@ -12,10 +12,14 @@ import {
 import { validateCorePrerequisites, validateDeviceAgentPrerequisites } from "./core-prereq";
 import type { CorePrerequisiteResult } from "./core-prereq";
 import { getLocalAdminHeaders } from "./backend-session-client";
+import { buildCoreSpawnArgs, parseCoreChildPid } from "./core-supervisor";
 import {
   getCoreBaseURL,
+  invalidateCoreEndpoint,
+  isCoreEndpointOwnedByProcess,
   legacyCoreEndpoint,
   readCoreEndpoint,
+  removeCoreEndpoint,
   setCoreEndpoint,
 } from "./core-endpoint";
 
@@ -26,6 +30,8 @@ export type BundledCoreProfile = "local" | "device-agent";
 let coreProcess: ChildProcessWithoutNullStreams | null = null;
 let runningCoreProfile: BundledCoreProfile | null = null;
 let coreGeneration = 0;
+let coreSpawnedAt = 0;
+let coreChildPid = 0;
 
 process.on("exit", () => {
   const pid = coreProcess?.pid;
@@ -33,17 +39,17 @@ process.on("exit", () => {
     return;
   }
   try {
-    if (process.platform === "win32") {
-      execSync(`taskkill /PID ${pid} /T /F`, {
-        windowsHide: true,
-        stdio: "ignore",
-      });
-    } else {
+    removeCoreEndpoint(getAmitiaDataDir(), coreChildPid || undefined);
+  } catch {
+    console.error("[CoreManager] 退出时清理核心端点失败");
+  }
+  try {
+    if (coreProcess && coreProcess.exitCode === null && !coreProcess.killed) {
       try {
-        process.kill(-pid, "SIGKILL");
+        coreProcess.stdin?.write("shutdown\n");
       } catch {
-        process.kill(pid, "SIGKILL");
       }
+      coreProcess.kill();
     }
   } catch {
     return;
@@ -413,11 +419,13 @@ export function startCore(profile: BundledCoreProfile): void {
   }
 
   lastHealthyAt = 0;
-  setCoreEndpoint(null);
+  invalidateCoreEndpoint();
   ensureHealthPolling();
+  coreChildPid = 0;
 
   const corePath = getCorePath();
   const dataDir = getAmitiaDataDir();
+  removeCoreEndpoint(dataDir);
 
   console.log("[CoreManager] 核心路径:", corePath);
   console.log("[CoreManager] 数据目录:", dataDir);
@@ -452,18 +460,35 @@ export function startCore(profile: BundledCoreProfile): void {
   console.log("[CoreManager] cwd:", dataDir);
 
   const currentGeneration = ++coreGeneration;
-  coreProcess = spawn(corePath, [`--runtime-profile=${profile}`], {
+  coreSpawnedAt = Date.now();
+  const coreArgs = buildCoreSpawnArgs(process.platform, profile);
+  coreProcess = spawn(corePath, coreArgs, {
     cwd: dataDir,
     env,
     windowsHide: true,
     detached: process.platform !== "win32",
   });
   runningCoreProfile = profile;
+  const pid = coreProcess.pid ?? 0;
 
-  console.log(`[CoreManager] 核心进程已启动, PID: ${coreProcess.pid}, generation: ${currentGeneration}`);
+  console.log(`[CoreManager] 核心进程已启动, PID: ${pid}, generation: ${currentGeneration}`);
 
+  let stdoutBuffer = "";
   coreProcess.stdout.on("data", (data) => {
-    console.log(`[AmitiaCore] ${data.toString().trim()}`);
+    stdoutBuffer += data.toString();
+    const lines = stdoutBuffer.split(/\r?\n/);
+    stdoutBuffer = lines.pop() ?? "";
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      const childPid = parseCoreChildPid(line);
+      if (childPid !== null) {
+        coreChildPid = childPid;
+        console.log(`[CoreManager] 核心子进程 PID: ${coreChildPid}`);
+        continue;
+      }
+      console.log(`[AmitiaCore] ${line}`);
+    }
   });
 
   coreProcess.stderr.on("data", (data) => {
@@ -478,18 +503,22 @@ export function startCore(profile: BundledCoreProfile): void {
   coreProcess.on("exit", (code, signal) => {
     console.log(`[AmitiaCore] 进程退出, code=${code}, signal=${signal}, generation=${currentGeneration}`);
     if (currentGeneration === coreGeneration) {
+      removeCoreEndpoint(dataDir, coreChildPid || undefined);
+      coreChildPid = 0;
       coreProcess = null;
       runningCoreProfile = null;
-      setCoreEndpoint(null);
+      invalidateCoreEndpoint();
     }
   });
 
   coreProcess.on("error", (error) => {
     console.error("[AmitiaCore] 启动失败:", error.message);
     if (currentGeneration === coreGeneration) {
+      removeCoreEndpoint(dataDir, coreChildPid || undefined);
+      coreChildPid = 0;
       coreProcess = null;
       runningCoreProfile = null;
-      setCoreEndpoint(null);
+      invalidateCoreEndpoint();
     }
   });
 }
@@ -497,30 +526,38 @@ export function startCore(profile: BundledCoreProfile): void {
 export async function stopCore(): Promise<void> {
   if (coreProcess && !coreProcess.killed) {
     const currentGeneration = coreGeneration;
+    const dataDir = getAmitiaDataDir();
     console.log("[CoreManager] 正在停止核心进程, PID:", coreProcess.pid);
     const pid = coreProcess.pid ?? 0;
+    const shutdownBaseURL = getCoreBaseURL();
+    const endpointPid = coreChildPid;
+    invalidateCoreEndpoint();
+    removeCoreEndpoint(dataDir, endpointPid || undefined);
 
     try {
-      const success = await gracefulShutdown(pid);
+      const success = await gracefulShutdown(pid, shutdownBaseURL);
       if (!success) {
         console.warn("[CoreManager] 优雅关闭超时，回退到强制终止");
-        forceKillProcessTree(pid);
+        await forceStopRunner();
       }
     } catch (err) {
       console.error("[CoreManager] 优雅关闭异常，强制终止:", err);
-      forceKillProcessTree(pid);
+      await forceStopRunner();
     }
     await waitForChildExit(coreProcess, 5000);
     if (currentGeneration === coreGeneration) {
+      removeCoreEndpoint(dataDir, endpointPid || undefined);
+      coreChildPid = 0;
       coreProcess = null;
       runningCoreProfile = null;
-      setCoreEndpoint(null);
+      invalidateCoreEndpoint();
     }
     return;
   }
+  coreChildPid = 0;
   coreProcess = null;
   runningCoreProfile = null;
-  setCoreEndpoint(null);
+  invalidateCoreEndpoint();
 }
 
 export async function ensureCoreProfile(profile: BundledCoreProfile): Promise<void> {
@@ -557,27 +594,18 @@ async function waitForProcessExit(): Promise<void> {
   }
 }
 
-function forceKillProcessTree(pid: number): void {
-  if (!pid) return;
-  if (process.platform === "win32") {
+async function forceStopRunner(): Promise<void> {
+  const child = coreProcess;
+  if (!child || child.exitCode !== null || child.killed) return;
+  try {
+    child.stdin?.write("shutdown\n");
+  } catch {
+  }
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  if (child.exitCode === null && !child.killed) {
     try {
-      execSync(`taskkill /PID ${pid} /T /F`, {
-        windowsHide: true,
-        stdio: "pipe",
-      });
-      console.log("[CoreManager] 进程树已强制终止");
-    } catch (e) {
-      console.error("[CoreManager] taskkill异常:", e);
-    }
-  } else {
-    try {
-      process.kill(-pid, "SIGKILL");
-      console.log("[CoreManager] 进程组已强制终止");
-    } catch (e) {
-      console.error("[CoreManager] kill进程组异常:", e);
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch (_) {}
+      child.kill();
+    } catch {
     }
   }
 }
@@ -597,8 +625,8 @@ async function waitForChildExit(child: ChildProcessWithoutNullStreams | null, ti
   });
 }
 
-async function gracefulShutdown(pid: number): Promise<boolean> {
-  const healthUrl = `${getCoreBaseURL()}/livez`;
+async function gracefulShutdown(pid: number, baseURL: string): Promise<boolean> {
+  const healthUrl = `${baseURL}/livez`;
   const isAlive = await httpHealthCheck(healthUrl, 2000);
   if (!isAlive) {
     console.log("[CoreManager] 核心服务不可达，跳过优雅关闭");
@@ -606,7 +634,7 @@ async function gracefulShutdown(pid: number): Promise<boolean> {
   }
 
   console.log("[CoreManager] 尝试优雅关闭核心服务...");
-  const shutdownOk = await httpShutdown(`${getCoreBaseURL()}/api/local/admin/shutdown`, 3000, getLocalAdminHeaders());
+  const shutdownOk = await httpShutdown(`${baseURL}/api/local/admin/shutdown`, 3000, getLocalAdminHeaders());
   if (!shutdownOk) {
     console.warn("[CoreManager] 优雅关闭请求失败");
     return false;
@@ -724,13 +752,19 @@ export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 
       throw new Error("Amitia Core进程意外退出");
     }
 
+    const expectedPid = coreChildPid;
     const endpoint = readCoreEndpoint(dataDir);
-    const ok = endpoint ? await httpHealthCheck(`${endpoint.httpBaseURL}/livez`, 2000) : false;
-    if (ok) {
+    const owned = expectedPid > 0 && isCoreEndpointOwnedByProcess(endpoint, expectedPid, coreSpawnedAt);
+    if (endpoint && !owned) {
+      removeCoreEndpoint(dataDir, endpoint.pid);
+    }
+    const ok = endpoint && owned && await httpHealthCheck(`${endpoint.httpBaseURL}/livez`, 2000);
+    if (ok && endpoint) {
+      setCoreEndpoint(endpoint);
       console.log(`[CoreManager] 健康检查通过, Profile: ${profile}`);
       return;
     }
-    if (!endpoint && Date.now() - startedAt > 3000) {
+    if ((!endpoint || !owned) && Date.now() - startedAt > 3000) {
       const legacy = legacyCoreEndpoint();
       if (await httpHealthCheck(`${legacy.httpBaseURL}/livez`, 1000)) {
         setCoreEndpoint(legacy);
@@ -756,12 +790,18 @@ export async function waitForCoreReadiness(timeoutMs = 60000): Promise<boolean> 
       return false;
     }
 
+    const expectedPid = coreChildPid;
     const endpoint = readCoreEndpoint(dataDir);
-    if (endpoint && (await httpHealthCheck(`${endpoint.httpBaseURL}/readyz`, 2000))) {
+    const owned = expectedPid > 0 && isCoreEndpointOwnedByProcess(endpoint, expectedPid, coreSpawnedAt);
+    if (endpoint && !owned) {
+      removeCoreEndpoint(dataDir, endpoint.pid);
+    }
+    if (endpoint && owned && (await httpHealthCheck(`${endpoint.httpBaseURL}/readyz`, 2000))) {
+      setCoreEndpoint(endpoint);
       console.log("[CoreManager] 就绪检查通过");
       return true;
     }
-    if (!endpoint && Date.now() - startedAt > 3000) {
+    if ((!endpoint || !owned) && Date.now() - startedAt > 3000) {
       const legacy = legacyCoreEndpoint();
       if (await httpHealthCheck(`${legacy.httpBaseURL}/readyz`, 1000)) {
         setCoreEndpoint(legacy);

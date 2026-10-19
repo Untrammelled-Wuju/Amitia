@@ -1,6 +1,6 @@
 {
   "name": "@amitia/world-game-plugin",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "Amitia World Game Plugin - a formal game plugin for the Amitia platform.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

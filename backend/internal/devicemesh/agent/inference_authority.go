@@ -8,6 +8,9 @@ import (
 var ErrCoreInferenceRequired = errors.New("当前设备已使用云端服务，对话与记忆计算必须由当前 Core 提供")
 
 func (h *LocalHandler) LocalInferenceContext(ctx context.Context) (context.Context, func(), error) {
+	if h == nil {
+		return nil, nil, ErrCoreInferenceRequired
+	}
 	h.providerMu.Lock()
 	defer h.providerMu.Unlock()
 	if err := context.Cause(ctx); err != nil {

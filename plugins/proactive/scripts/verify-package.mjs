@@ -101,7 +101,13 @@ function main() {
   for (const name of ['proactive_task.read', 'proactive_task.create', 'proactive_task.manage', 'proactive_task.execute', 'ui.notify']) {
     if (!permissions.some(permission => permission.name === name)) throw new Error(`${name} permission missing`);
   }
-  if (manifest.placement !== 'hybrid') throw new Error('proactive extension must support local and cloud owners');
+  const notifyPermission = permissions.find(permission => permission.name === 'ui.notify');
+  if (notifyPermission?.scope !== 'global') throw new Error('ui.notify permission must use global scope');
+  if (manifest.placement !== 'cloud') throw new Error('proactive extension runtime must be hosted by Core');
+  const runtimeModule = manifest.modules?.find(module => module.id === 'proactive-runtime');
+  const uiModule = manifest.modules?.find(module => module.id === 'proactive-ui');
+  if (runtimeModule?.placement !== 'cloud') throw new Error('proactive runtime module must use cloud placement');
+  if (uiModule?.placement !== 'device') throw new Error('proactive ui module must use device placement');
   const command = manifest.modules.flatMap(module => module.contributions || []).find(item => item.spec?.handlerName === 'command');
   if (!command?.spec?.inputSchema?.properties?.payload?.properties?.scope) throw new Error('trusted UI scope input missing');
   const runtimeSource = entries.get("modules/proactive-runtime/dist/index.js").toString("utf8");

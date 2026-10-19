@@ -16,9 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
-	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/internal/outputlease"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -26,9 +24,7 @@ import (
 )
 
 type Handler struct {
-	service       Service
-	deliveryStore DeliveryStore
-	unifiedEntry  *interaction.UnifiedEntry
+	service Service
 }
 
 type conversationReadScopedService interface {
@@ -66,14 +62,6 @@ type cleanupCapableService interface {
 
 func NewHandler(srv Service) *Handler {
 	return &Handler{service: srv}
-}
-
-func NewHandlerWithUnifiedEntry(srv Service, entry *interaction.UnifiedEntry) *Handler {
-	return &Handler{service: srv, unifiedEntry: entry, deliveryStore: nil}
-}
-
-func NewHandlerWithUnifiedEntryAndDelivery(srv Service, entry *interaction.UnifiedEntry, ds DeliveryStore) *Handler {
-	return &Handler{service: srv, unifiedEntry: entry, deliveryStore: ds}
 }
 
 func (h *Handler) ListConversations(c *gin.Context) {
@@ -227,106 +215,6 @@ func (h *Handler) Stats(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, stats)
-}
-
-func (h *Handler) Chat(c *gin.Context) {
-	var req ChatRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
-		return
-	}
-	req.SpaceID = requestidentity.ResolveGin(c)
-	if h.unifiedEntry != nil {
-		channel := strings.TrimSpace(req.Channel)
-		if channel == "" {
-			channel = "web"
-		}
-		source := strings.TrimSpace(req.Source)
-		if source == "" {
-			source = "web"
-		}
-
-		if req.CharacterID != "" {
-			outputlease.CancelLowPriorityOnUserInput(req.CharacterID)
-			if h.deliveryStore != nil {
-				_ = h.deliveryStore.PreemptActiveOutputLeases(req.CharacterID)
-			}
-		}
-
-		deviceTimezone := strings.TrimSpace(req.DeviceTimezone)
-		if deviceTimezone == "" {
-			deviceTimezone = strings.TrimSpace(c.GetHeader("X-Device-Timezone"))
-		}
-		originActor, _ := auth.FromContext(c.Request.Context())
-		orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
-			CharacterID:    req.CharacterID,
-			Message:        req.Message,
-			ConversationID: req.ConversationID,
-			ThreadID:       req.ThreadID,
-			Channel:        channel,
-			Source:         source,
-			PeerID:         req.PeerID,
-			SpaceID:        req.SpaceID,
-			DeviceTimezone: deviceTimezone,
-			SessionID:      req.SessionID,
-			RequestID:      req.RequestID,
-			OriginActor:    originActor,
-		})
-		if err != nil {
-			h.writeUnifiedEntryError(c, err)
-			return
-		}
-		if orchResult == nil || orchResult.Response == nil {
-			util.ErrorResponse(c, response.OperationFailed, "统一入口未返回回复", nil)
-			return
-		}
-		resp := h.chatResponseFromProcessResponse(orchResult.Response)
-		util.SuccessResponse(c, resp)
-		return
-	}
-	resp, err := h.service.Chat(&req)
-	if err != nil {
-		util.ErrorResponse(c, response.BusinessError, err.Error(), nil)
-		return
-	}
-	util.SuccessResponse(c, resp)
-}
-
-func (h *Handler) chatResponseFromProcessResponse(resp *interaction.ProcessResponse) *ChatResponse {
-	msgID := ""
-	if len(resp.MessageIDs) > 0 {
-		msgID = resp.MessageIDs[len(resp.MessageIDs)-1]
-	}
-	return &ChatResponse{
-		ConversationID: resp.ConversationID,
-		Sequence:       resp.Sequence,
-		Message: &MessageItem{
-			ID:             msgID,
-			ConversationID: resp.ConversationID,
-			Sequence:       resp.Sequence,
-			Role:           "assistant",
-			Content:        resp.Reply,
-			Source:         "assistant",
-			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
-		},
-	}
-}
-
-func (h *Handler) writeUnifiedEntryError(c *gin.Context, err error) {
-	switch {
-	case errors.Is(err, interaction.ErrBackpressureShedding), errors.Is(err, interaction.ErrBackpressureCooldown), errors.Is(err, interaction.ErrOrchestratorBusy):
-		util.ErrorResponse(c, response.TooManyRequests, "请求过于频繁", err.Error())
-	case errors.Is(err, interaction.ErrOrchestratorNotReady):
-		util.ErrorResponse(c, response.OperationFailed, "服务尚未就绪", err.Error())
-	case errors.Is(err, interaction.ErrOrchestratorDuplicate):
-		util.ErrorResponse(c, response.OperationFailed, "重复请求", err.Error())
-	case errors.Is(err, interaction.ErrOrchestratorInvalidScope), errors.Is(err, interaction.ErrInvalidChannel), errors.Is(err, interaction.ErrScopeResolutionFailed):
-		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
-	case errors.Is(err, interaction.ErrOrchestratorCancelled), errors.Is(err, interaction.ErrOrchestratorSuperseded):
-		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
-	default:
-		util.ErrorResponse(c, response.BusinessError, err.Error(), nil)
-	}
 }
 
 func redactModelConfigForResponse(cfg *ModelConfig) {

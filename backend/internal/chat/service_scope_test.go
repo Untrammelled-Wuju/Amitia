@@ -1,9 +1,8 @@
 package chat
 
 import (
-	"context"
+	"errors"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -38,44 +37,14 @@ func setupScopedChatService(t *testing.T) *service {
 	return &service{repo: NewRepository(ctx), charRepo: character.NewRepository(ctx), db: db}
 }
 
-func TestProcessMessageRejectsConversationChannelMismatch(t *testing.T) {
-	svc := setupScopedChatService(t)
-	if err := svc.db.Create(&Conversation{ID: "conv-2", SpaceID: normalizeConversationOwner(""), Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := svc.ProcessMessage(context.Background(), &ProcessMessageRequest{
-		CharacterID:    "char-1",
-		ConversationID: "conv-2",
-		Message:        "你好",
-		Channel:        "web",
-		RequestID:      "req-mismatch-channel",
-	})
-	if err == nil || !strings.Contains(err.Error(), "会话与角色或渠道不匹配") {
-		t.Fatalf("expected scope mismatch error, got %v", err)
-	}
-	var count int64
-	if err := svc.db.Model(&Message{}).Where("conversation_id = ?", "conv-2").Count(&count).Error; err != nil {
-		t.Fatal(err)
-	}
-	if count != 0 {
-		t.Fatalf("expected no messages written, got %d", count)
-	}
-}
-
-func TestChatRejectsConversationChannelMismatch(t *testing.T) {
+func TestConversationScopeRejectsChannelMismatch(t *testing.T) {
 	svc := setupScopedChatService(t)
 	if err := svc.db.Create(&Conversation{ID: "conv-3", SpaceID: normalizeConversationOwner(""), Title: "旧会话", Channel: "qq", Source: "manual"}).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := svc.Chat(&ChatRequest{
-		CharacterID:    "char-1",
-		ConversationID: "conv-3",
-		Message:        "你好",
-		Channel:        "web",
-	})
-	if err == nil || !strings.Contains(err.Error(), "会话与角色或渠道不匹配") {
+	err := svc.validateConversationScope("conv-3", "web", normalizeConversationOwner(""))
+	if !errors.Is(err, ErrConversationScopeMismatch) {
 		t.Fatalf("expected scope mismatch error, got %v", err)
 	}
 }

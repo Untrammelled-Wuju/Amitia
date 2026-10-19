@@ -90,6 +90,7 @@ func (e *Engine) ResumeMemory(ctx context.Context, job coordination.MemoryJobLoc
 		snapshot.Resources = filtered
 	}
 	inference := Inference{Scope: saved.Response.Scope, ConversationID: job.ConversationID, Snapshot: snapshot, Message: message, Context: saved.Context}
+	inference.Ingress = saved.Ingress
 	return e.completeMemory(coordination.WithScope(ctx, inference.Scope), inference, saved.Hash, *saved.Response, revision)
 }
 
@@ -101,6 +102,7 @@ func (e *Engine) RunMemoryWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			_ = e.ResumePendingQueuedChats(ctx)
 			jobs, err := e.coordination.PendingMemoryJobs(ctx)
 			if err != nil {
 				continue

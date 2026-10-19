@@ -244,7 +244,10 @@ onErrorCaptured((err) => {
   return false;
 });
 
+let schemaLoadToken = 0;
+
 async function loadSchema() {
+  const token = ++schemaLoadToken;
   if (!props.contribution.schemaPath && !props.contribution.entryPath) {
     loading.value = false;
     error.value = "该贡献未提供 schema 路径";
@@ -260,6 +263,7 @@ async function loadSchema() {
       props.contribution.extensionId,
       props.contribution.contributionId,
     )) as SchemaUIDocument;
+    if (token !== schemaLoadToken) return;
     const result = validateDocument(data);
     if (!result.valid) {
       validationErrors.value = result.errors;
@@ -271,9 +275,12 @@ async function loadSchema() {
     const roots: SchemaUINodeType[] = data.root ? [data.root] : data.children ?? [];
     for (const r of roots) initializeFormDefaults(r);
   } catch (e) {
+    if (token !== schemaLoadToken) return;
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
-    loading.value = false;
+    if (token === schemaLoadToken) {
+      loading.value = false;
+    }
   }
 }
 
@@ -683,6 +690,7 @@ watch(
 
 onBeforeUnmount(() => {
   ++restartToken;
+  ++schemaLoadToken;
   disposeSession();
 });
 </script>

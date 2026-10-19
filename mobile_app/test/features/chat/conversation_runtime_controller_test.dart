@@ -21,7 +21,12 @@ class _FakeOwnedService extends DeviceOwnedChatService {
 
   late _FakeChatService owner;
 
-  Map<String, dynamic> scope() => {'coreId': coreId, 'roleId': 'role', 'resourceOwnerId': 'device', 'roleOwnerId': 'device'};
+  Map<String, dynamic> scope() => {
+    'coreId': coreId,
+    'roleId': 'role',
+    'resourceOwnerId': 'device',
+    'roleOwnerId': 'device',
+  };
 
   @override
   Future<bool> refresh() async => enabled;
@@ -30,29 +35,65 @@ class _FakeOwnedService extends DeviceOwnedChatService {
   Future<void> poll() async {}
 
   @override
-  Future<Map<String, dynamic>> query(String conversationId, {String? characterId, bool older = false, String keyword = ''}) async => {'conversationId': conversationId, 'executionScope': scope()};
+  Future<Map<String, dynamic>> query(
+    String conversationId, {
+    String? characterId,
+    bool older = false,
+    String keyword = '',
+  }) async => {'conversationId': conversationId, 'executionScope': scope()};
 
   @override
-  List<MessageDto> messages(Map<String, dynamic> result) => owner.snapshotMessages?.call(result['conversationId'].toString()) ?? [];
+  List<MessageDto> messages(Map<String, dynamic> result) =>
+      owner.snapshotMessages?.call(result['conversationId'].toString()) ?? [];
 
   @override
-  bool hasMore(String conversationId, {String? characterId, String keyword = ''}) => false;
+  bool hasMore(
+    String conversationId, {
+    String? characterId,
+    String keyword = '',
+  }) => false;
 
   @override
-  Stream<Map<String, dynamic>> send({required String requestId, required String message, String? conversationId, String? projectId, String? characterId, int? modelConfigId, String? reasoningEffort, bool? reasoningEnabled, String? permissionMode, String? messageStyle, Map<String, dynamic>? context, List<Map<String, dynamic>>? attachments, Map<String, dynamic>? quote}) async* {
+  Stream<Map<String, dynamic>> send({
+    required String requestId,
+    required String message,
+    String? conversationId,
+    String? projectId,
+    String? characterId,
+    int? modelConfigId,
+    String? reasoningEffort,
+    bool? reasoningEnabled,
+    String? permissionMode,
+    String? messageStyle,
+    Map<String, dynamic>? context,
+    List<Map<String, dynamic>>? attachments,
+    Map<String, dynamic>? quote,
+  }) async* {
     if (owner.submitError != null) throw owner.submitError!;
     owner.submitCount++;
     owner.submittedMessage = message;
     owner.submittedStyle = messageStyle ?? '';
     owner.submittedRequestId = requestId;
-    final id = conversationId?.isNotEmpty == true ? conversationId! : 'conversation-1';
+    final id = conversationId?.isNotEmpty == true
+        ? conversationId!
+        : 'conversation-1';
     yield {'type': 'started', 'conversationId': id, 'executionScope': scope()};
-    yield {'type': 'completed', 'data': {'conversationId': id, 'executionScope': scope(), 'reply': '回答', 'saved': true, 'memoryStatus': 'completed'}};
+    yield {
+      'type': 'completed',
+      'data': {
+        'conversationId': id,
+        'executionScope': scope(),
+        'reply': '回答',
+        'saved': true,
+        'memoryStatus': 'completed',
+      },
+    };
   }
 }
 
 class _FakeChatService extends ChatService {
-  _FakeChatService(this.events, {this.submitError}) : super(_FakeBackendApi(), owned: _FakeOwnedService()) {
+  _FakeChatService(this.events, {this.submitError})
+    : super(_FakeBackendApi(), owned: _FakeOwnedService()) {
     (owned as _FakeOwnedService).owner = this;
   }
 
@@ -64,6 +105,22 @@ class _FakeChatService extends ChatService {
   int submitCount = 0;
   Completer<void>? mutation;
   List<MessageDto> Function(String)? snapshotMessages;
+  bool moreTurns = false;
+  String turnCursor = '';
+  String requestedTurnCursor = '';
+  Completer<AssistantTurnPageDto>? pendingTurnPage;
+
+  @override
+  Future<AssistantTurnPageDto> getAssistantTurnPage(
+    String conversationId, {
+    int before = 0,
+    String cursor = '',
+    int limit = 50,
+  }) async {
+    requestedTurnCursor = cursor;
+    return pendingTurnPage?.future ??
+        const AssistantTurnPageDto(items: [], nextBefore: 0, hasMore: false);
+  }
 
   @override
   Future<void> deleteMessage(
@@ -119,7 +176,8 @@ class _FakeChatService extends ChatService {
       messageNextBefore: 0,
       hasMoreMessages: false,
       turnNextBefore: 0,
-      hasMoreTurns: false,
+      turnNextCursor: turnCursor,
+      hasMoreTurns: moreTurns,
       activeTurn: null,
       approvals: const <Map<String, dynamic>>[],
     );
@@ -150,6 +208,49 @@ Map<String, dynamic> _event({
 }
 
 void main() {
+  test('执行历史分页使用服务端游标并在页面结束后停止', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events)
+      ..moreTurns = true
+      ..turnCursor = 'owner-bound-cursor';
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('conversation-1');
+    expect(controller.hasMoreHistory, isTrue);
+    await controller.loadOlderMessages();
+    expect(service.requestedTurnCursor, 'owner-bound-cursor');
+    expect(controller.hasMoreHistory, isFalse);
+    controller.dispose();
+    await events.close();
+  });
+
+  test('切换会话后忽略延迟返回的执行历史页面', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events)
+      ..moreTurns = true
+      ..turnCursor = 'first-owner-page';
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('first');
+    service.pendingTurnPage = Completer<AssistantTurnPageDto>();
+    final pending = controller.loadOlderMessages();
+    await Future<void>.delayed(Duration.zero);
+    service.moreTurns = false;
+    await controller.openConversation('second');
+    service.pendingTurnPage!.complete(
+      const AssistantTurnPageDto(
+        items: [],
+        nextBefore: 0,
+        nextCursor: 'foreign-cursor',
+        hasMore: true,
+      ),
+    );
+    expect(await pending, isFalse);
+    expect(controller.conversationId, 'second');
+    expect(controller.hasMoreHistory, isFalse);
+    controller.dispose();
+    await events.close();
+  });
   test('旧页面的编辑或删除确认不能修改后来打开的同名消息', () async {
     SharedPreferences.setMockInitialValues({});
     for (final edit in [true, false]) {

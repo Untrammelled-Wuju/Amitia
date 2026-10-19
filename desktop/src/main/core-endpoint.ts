@@ -19,6 +19,12 @@ const LEGACY_CORE_BASE_URL = "http://127.0.0.1:18899";
 const LEGACY_CORE_WS_URL = "ws://127.0.0.1:18899";
 
 let currentEndpoint: CoreEndpoint | null = null;
+let endpointEpoch = 0;
+const endpointWaiters = new Set<{
+  resolve: (endpoint: CoreEndpoint) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}>();
 
 export function coreEndpointPath(dataDir: string): string {
   return path.join(dataDir, "run", "endpoint.json");
@@ -62,21 +68,95 @@ export function parseCoreEndpoint(payload: unknown): CoreEndpoint | null {
 export function readCoreEndpoint(dataDir: string): CoreEndpoint | null {
   try {
     const raw = fs.readFileSync(coreEndpointPath(dataDir), "utf8");
-    const endpoint = parseCoreEndpoint(JSON.parse(raw));
-    if (endpoint) setCoreEndpoint(endpoint);
-    return endpoint;
+    return parseCoreEndpoint(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
+export function removeCoreEndpoint(dataDir: string, pid?: number): boolean {
+  const filePath = coreEndpointPath(dataDir);
+  if (pid !== undefined) {
+    const endpoint = readCoreEndpoint(dataDir);
+    if (!endpoint || endpoint.pid !== pid) {
+      return false;
+    }
+  }
+  try {
+    fs.rmSync(filePath, { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isCoreEndpointOwnedByProcess(
+  endpoint: CoreEndpoint | null,
+  pid: number,
+  startedAfterMs = 0,
+): boolean {
+  if (!endpoint || !Number.isInteger(pid) || pid <= 0 || endpoint.pid !== pid) {
+    return false;
+  }
+  if (startedAfterMs <= 0) {
+    return true;
+  }
+  const startedAt = Date.parse(endpoint.startedAt);
+  return Number.isFinite(startedAt) && startedAt >= startedAfterMs - 2000;
+}
+
 export function setCoreEndpoint(endpoint: CoreEndpoint | null): void {
+  if (!endpoint) {
+    invalidateCoreEndpoint();
+    return;
+  }
   currentEndpoint = endpoint;
-  setLocalMeshBaseURL(endpoint?.httpBaseURL || LEGACY_CORE_BASE_URL);
+  endpointEpoch += 1;
+  setLocalMeshBaseURL(endpoint.httpBaseURL);
+  for (const waiter of endpointWaiters) {
+    clearTimeout(waiter.timer);
+    waiter.resolve(endpoint);
+  }
+  endpointWaiters.clear();
+}
+
+export function invalidateCoreEndpoint(): void {
+  currentEndpoint = null;
+  endpointEpoch += 1;
+  setLocalMeshBaseURL(LEGACY_CORE_BASE_URL);
+}
+
+export function waitForCoreEndpoint(timeoutMs = 30000): Promise<CoreEndpoint> {
+  if (currentEndpoint) {
+    return Promise.resolve(currentEndpoint);
+  }
+  return new Promise((resolve, reject) => {
+    let waiter: {
+      resolve: (endpoint: CoreEndpoint) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    };
+    const timer = setTimeout(() => {
+      endpointWaiters.delete(waiter);
+      reject(new Error("Amitia Core 尚未就绪"));
+    }, timeoutMs);
+    waiter = { resolve, reject, timer };
+    endpointWaiters.add(waiter);
+  });
 }
 
 export function getCoreEndpoint(): CoreEndpoint | null {
   return currentEndpoint;
+}
+
+export function getCoreEndpointEpoch(): number {
+  return endpointEpoch;
+}
+
+export function coreEndpointIdentity(endpoint: CoreEndpoint): string {
+  return endpoint.instanceId
+    ? `${endpoint.instanceId}:${endpoint.pid}:${endpoint.startedAt}`
+    : `${endpoint.pid}:${endpoint.startedAt}:${endpoint.httpBaseURL}`;
 }
 
 export function getCoreBaseURL(): string {

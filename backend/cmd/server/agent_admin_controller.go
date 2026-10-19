@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -28,6 +28,8 @@ type mcpReconnectController interface {
 }
 
 type serverAgentAdminController struct {
+	owned      *business.Engine
+	ownedData  coordination.DataPort
 	chat       chat.Service
 	memory     business.MemoryRelationPort
 	characters character.Repository
@@ -75,224 +77,10 @@ func (c *serverAgentAdminController) ExecuteAgentAdminTool(ctx context.Context, 
 	if c == nil || c.chat == nil || c.db == nil {
 		return nil, fmt.Errorf("agent admin services unavailable")
 	}
-	scopedChat, err := c.scopedChat()
-	if err != nil {
-		return nil, err
+	if ownedChatAdminTool(toolName) {
+		return c.executeOwnedChatAdmin(ctx, toolName, input, invocation)
 	}
-	spaceID := agentAdminSpaceID(invocation)
 	switch toolName {
-	case "start_chat_service":
-		stats, err := scopedChat.GetStatsForSpace(spaceID)
-		if err != nil {
-			return nil, err
-		}
-		return jsonResult(map[string]any{"ready": true, "status": "running", "stats": stats})
-	case "agent_status":
-		stats, err := scopedChat.GetStatsForSpace(spaceID)
-		if err != nil {
-			return nil, err
-		}
-		return jsonResult(map[string]any{"ready": true, "stats": stats, "selectedConversationId": c.selectedConversation(invocation)})
-	case "create_new_chat":
-		var req struct {
-			ProjectID string `json:"projectId"`
-			Title     string `json:"title"`
-			Channel   string `json:"channel"`
-			PeerID    string `json:"peerId"`
-		}
-		if err := parseAdminInput(input, &req); err != nil {
-			return nil, err
-		}
-		if req.Channel == "" {
-			req.Channel = "web"
-		}
-		conv, err := scopedChat.CreateConversationForSpace(&chat.CreateConversationRequest{ProjectID: req.ProjectID, Title: req.Title, Channel: req.Channel, Source: "agent_tool", PeerID: req.PeerID}, spaceID)
-		if err != nil {
-			return nil, err
-		}
-		c.setSelectedConversation(invocation, conv.ID)
-		return jsonResult(conv)
-	case "list_chats":
-		var req struct {
-			Page      int    `json:"page"`
-			PageSize  int    `json:"pageSize"`
-			Channel   string `json:"channel"`
-			ProjectID string `json:"projectId"`
-			Keyword   string `json:"keyword"`
-		}
-		_ = parseAdminInput(input, &req)
-		if req.Page < 1 {
-			req.Page = 1
-		}
-		if req.PageSize < 1 {
-			req.PageSize = 50
-		}
-		if req.PageSize > 100 {
-			req.PageSize = 100
-		}
-		return resultOrError(scopedChat.ListConversationsForSpace(chat.ConversationQuery{Page: req.Page, PageSize: req.PageSize, Channel: req.Channel, ProjectID: req.ProjectID, Keyword: req.Keyword}, spaceID))
-	case "find_chat":
-		var req struct {
-			Query string `json:"query"`
-			Limit int    `json:"limit"`
-		}
-		if err := parseAdminInput(input, &req); err != nil {
-			return nil, err
-		}
-		if req.Limit < 1 {
-			req.Limit = 20
-		}
-		if req.Limit > 100 {
-			req.Limit = 100
-		}
-		return resultOrError(scopedChat.ListConversationsForSpace(chat.ConversationQuery{Page: 1, PageSize: req.Limit, Keyword: req.Query}, spaceID))
-	case "switch_chat":
-		var req struct {
-			ConversationID string `json:"conversationId"`
-		}
-		if err := parseAdminInput(input, &req); err != nil {
-			return nil, err
-		}
-		conv, err := scopedChat.GetConversationForSpace(req.ConversationID, spaceID)
-		if err != nil {
-			return nil, err
-		}
-		c.setSelectedConversation(invocation, conv.ID)
-		return jsonResult(map[string]any{"switched": true, "conversation": conv})
-	case "update_chat_title":
-		var req struct {
-			ConversationID string `json:"conversationId"`
-			Title          string `json:"title"`
-		}
-		if err := parseAdminInput(input, &req); err != nil {
-			return nil, err
-		}
-		id := c.resolveConversationID(invocation, req.ConversationID)
-		if id == "" {
-			return nil, fmt.Errorf("conversationId is required")
-		}
-		title := strings.TrimSpace(req.Title)
-		if title == "" {
-			return nil, fmt.Errorf("title is required")
-		}
-		if len([]rune(title)) > 200 {
-			return nil, fmt.Errorf("title is too long")
-		}
-		if _, err := scopedChat.GetConversationForSpace(id, spaceID); err != nil {
-			return nil, err
-		}
-		if err := c.db.Model(&chat.Conversation{}).Where("id = ?", id).Updates(map[string]any{"title": title, "updated_at": time.Now().Format("2006-01-02 15:04:05")}).Error; err != nil {
-			return nil, err
-		}
-		return resultOrError(scopedChat.GetConversationForSpace(id, spaceID))
-	case "delete_chat":
-		var req struct {
-			ConversationID string `json:"conversationId"`
-		}
-		_ = parseAdminInput(input, &req)
-		id := c.resolveConversationID(invocation, req.ConversationID)
-		if id == "" {
-			return nil, fmt.Errorf("conversationId is required")
-		}
-		ok, err := scopedChat.DeleteConversationForSpace(id, spaceID)
-		if err != nil {
-			return nil, err
-		}
-		c.clearSelectedConversation(invocation, id)
-		return jsonResult(map[string]any{"deleted": ok, "conversationId": id})
-	case "send_message_to_ai":
-		var req struct {
-			ConversationID string `json:"conversationId"`
-			CharacterID    string `json:"characterId"`
-			Message        string `json:"message"`
-			RequestID      string `json:"requestId"`
-		}
-		if err := parseAdminInput(input, &req); err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(req.Message) == "" {
-			return nil, fmt.Errorf("message is required")
-		}
-		req.ConversationID = c.resolveConversationID(invocation, req.ConversationID)
-		if req.CharacterID == "" {
-			req.CharacterID = invocation.CharacterID
-		}
-		if req.CharacterID == "" {
-			return nil, fmt.Errorf("characterId is required")
-		}
-		if req.RequestID == "" {
-			req.RequestID = uuid.NewString()
-		}
-		resp, err := c.chat.ProcessMessage(ctx, &chat.ProcessMessageRequest{CharacterID: req.CharacterID, Message: req.Message, ConversationID: req.ConversationID, Channel: "web", Source: "agent_tool", RequestID: req.RequestID, SpaceID: spaceID, SessionID: invocation.InvocationID, IsInternal: true})
-		if err != nil {
-			return nil, err
-		}
-		c.setSelectedConversation(invocation, resp.ConversationID)
-		return jsonResult(map[string]any{"response": resp})
-	case "list_character_cards":
-		chars, err := c.ownedCharacterList(spaceID, false)
-		if err != nil {
-			return nil, err
-		}
-		return jsonResult(map[string]any{"characters": chars, "count": len(chars)})
-	case "get_chat_messages":
-		var req struct {
-			ConversationID string `json:"conversationId"`
-			Page           int    `json:"page"`
-			PageSize       int    `json:"pageSize"`
-		}
-		_ = parseAdminInput(input, &req)
-		id := c.resolveConversationID(invocation, req.ConversationID)
-		if id == "" {
-			return nil, fmt.Errorf("conversationId is required")
-		}
-		if req.Page < 1 {
-			req.Page = 1
-		}
-		if req.PageSize < 1 {
-			req.PageSize = 50
-		}
-		if req.PageSize > 200 {
-			req.PageSize = 200
-		}
-		items, total, err := scopedChat.GetMessagesForSpace(id, spaceID, req.Page, req.PageSize)
-		if err != nil {
-			return nil, err
-		}
-		return jsonResult(map[string]any{"items": items, "total": total, "page": req.Page, "pageSize": req.PageSize})
-	case "get_chat_messages_range":
-		var req struct {
-			ConversationID string `json:"conversationId"`
-			StartSequence  int64  `json:"startSequence"`
-			EndSequence    int64  `json:"endSequence"`
-			Limit          int    `json:"limit"`
-		}
-		_ = parseAdminInput(input, &req)
-		id := c.resolveConversationID(invocation, req.ConversationID)
-		if id == "" {
-			return nil, fmt.Errorf("conversationId is required")
-		}
-		if req.Limit < 1 {
-			req.Limit = 100
-		}
-		if req.Limit > 500 {
-			req.Limit = 500
-		}
-		if _, err := scopedChat.GetConversationForSpace(id, spaceID); err != nil {
-			return nil, err
-		}
-		q := c.db.Where("conversation_id = ?", id)
-		if req.StartSequence > 0 {
-			q = q.Where("sequence >= ?", req.StartSequence)
-		}
-		if req.EndSequence > 0 {
-			q = q.Where("sequence <= ?", req.EndSequence)
-		}
-		var msgs []chat.Message
-		if err := q.Order("sequence ASC").Limit(req.Limit).Find(&msgs).Error; err != nil {
-			return nil, err
-		}
-		return jsonResult(map[string]any{"items": msgs, "count": len(msgs)})
 	case "list_model_configs":
 		cfgs, err := c.chat.ListModels()
 		if err != nil {

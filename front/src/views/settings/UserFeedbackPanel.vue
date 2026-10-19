@@ -149,11 +149,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "@/composables/useApi";
-import { isDesktopShell } from "@/runtime/runtime-capabilities";
-import { getDeploymentConfig } from "@/runtime/runtime-adapter";
-import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
-import { getDeviceTimezone } from "@/utils/requestEnvelope";
-import { collectClientErrors, clearClientErrors } from "@/runtime/client-error-tracker";
+import { clearClientErrors } from "@/runtime/client-error-tracker";
+import { buildUserFeedbackPayload } from "@/runtime/userFeedbackPayload";
 
 interface FeedbackSettings {
   uploadUrl: string;
@@ -230,44 +227,18 @@ function formatTime(value: string) {
   return parsed.toLocaleString();
 }
 
-async function buildContext() {
-  let runtimeMode = "local";
-  try {
-    runtimeMode = (await getDeploymentConfig()).mode;
-  } catch {
-    runtimeMode = "local";
-  }
-  let deviceId = "";
-  try {
-    deviceId = await resolveUIHostDeviceId();
-  } catch {
-    deviceId = "";
-  }
-  return {
-    platform: isDesktopShell() ? "desktop" : "web",
-    clientType: isDesktopShell() ? "desktop" : "web",
-    appVersion: appVersion.value,
-    runtimeMode,
-    deviceId,
-    osInfo: typeof navigator !== "undefined" ? navigator.userAgent : "",
-    locale: typeof navigator !== "undefined" ? navigator.language : "",
-    timezone: getDeviceTimezone(),
-    uploadUrl: uploadUrl.value.trim(),
-  };
-}
-
 async function buildPayload() {
-  const context = await buildContext();
-  return {
-    category: form.category,
-    title: form.title.trim(),
-    description: form.description.trim(),
-    contact: form.contact.trim(),
-    includeLogs: form.includeLogs,
-    clientErrors: collectClientErrors(),
-    ...context,
-    screenshot: screenshot.value,
-  };
+  return buildUserFeedbackPayload(
+    {
+      category: form.category,
+      title: form.title,
+      description: form.description,
+      contact: form.contact,
+      includeLogs: form.includeLogs,
+      screenshot: screenshot.value,
+    },
+    { appVersion: appVersion.value, uploadUrl: uploadUrl.value },
+  );
 }
 
 async function loadSettings() {

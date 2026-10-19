@@ -2569,6 +2569,7 @@ var schemaMigrations = []string{
 	coordination.DeliveryFailuresSchema,
 	meshaudit.Schema,
 	`UPDATE kernel_device_owned_resources SET role_id='@global-memory',revision=revision+1 WHERE kind='profile' AND role_id<>'@global-memory'`,
+	`ALTER TABLE kernel_device_business_requests ADD COLUMN queued_scope_json TEXT NOT NULL DEFAULT ''`,
 }
 
 type dbExecutor interface {

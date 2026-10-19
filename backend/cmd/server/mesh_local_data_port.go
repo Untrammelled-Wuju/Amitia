@@ -403,7 +403,10 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 	}
 	if !query.Management && query.ResourceKind == "" {
-		snapshot.RuntimeContext, err = p.ownedRuntimeContext(ctx, scope, query.ConversationID)
+		if p.services.WorldBook != nil {
+			snapshot.WorldBookPrompt = p.services.WorldBook.ToSystemPromptForSpace(p.legacySpaceID, scope.RoleID, query.Query, "")
+		}
+		snapshot.RuntimeContext, err = p.ownedRuntimeContext(ctx, scope, query)
 		if err != nil {
 			return snapshot, err
 		}

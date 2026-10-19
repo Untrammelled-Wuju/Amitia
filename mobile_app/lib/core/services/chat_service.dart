@@ -48,6 +48,7 @@ class ConversationSnapshotDto {
   final int messageNextBefore;
   final bool hasMoreMessages;
   final int turnNextBefore;
+  final String turnNextCursor;
   final bool hasMoreTurns;
   final Map<String, dynamic>? activeTurn;
   final List<Map<String, dynamic>> approvals;
@@ -63,6 +64,7 @@ class ConversationSnapshotDto {
     required this.messageNextBefore,
     required this.hasMoreMessages,
     required this.turnNextBefore,
+    this.turnNextCursor = '',
     required this.hasMoreTurns,
     required this.activeTurn,
     required this.approvals,
@@ -117,6 +119,7 @@ class ConversationSnapshotDto {
       messageNextBefore: (messageHistory['nextBefore'] as num?)?.toInt() ?? 0,
       hasMoreMessages: messageHistory['hasMore'] == true,
       turnNextBefore: (turnHistory['nextBefore'] as num?)?.toInt() ?? 0,
+      turnNextCursor: (turnHistory['nextCursor'] ?? '').toString(),
       hasMoreTurns: turnHistory['hasMore'] == true,
       activeTurn: rawActiveTurn is Map
           ? Map<String, dynamic>.from(rawActiveTurn)
@@ -134,11 +137,13 @@ class ConversationSnapshotDto {
 class AssistantTurnPageDto {
   final List<AssistantTurnDto> items;
   final int nextBefore;
+  final String nextCursor;
   final bool hasMore;
 
   const AssistantTurnPageDto({
     required this.items,
     required this.nextBefore,
+    this.nextCursor = '',
     required this.hasMore,
   });
 }
@@ -452,17 +457,18 @@ class ChatService {
   Future<AssistantTurnPageDto> getAssistantTurnPage(
     String conversationId, {
     int before = 0,
+    String cursor = '',
     int limit = 50,
   }) async {
     final resp = await owned.runtime(
       'turns',
       body: <String, dynamic>{
         'conversationId': conversationId,
-        if (before > 0) 'before': before,
+        if (cursor.isNotEmpty) 'cursor': cursor,
         'limit': limit,
       },
     );
-    final rows = resp?['items'];
+    final rows = resp['items'];
     final items = rows is List
         ? rows
               .whereType<Map>()
@@ -476,8 +482,9 @@ class ChatService {
         : const <AssistantTurnDto>[];
     return AssistantTurnPageDto(
       items: items,
-      nextBefore: (resp?['nextBefore'] as num?)?.toInt() ?? 0,
-      hasMore: resp?['hasMore'] == true,
+      nextBefore: (resp['nextBefore'] as num?)?.toInt() ?? 0,
+      nextCursor: (resp['nextCursor'] ?? '').toString(),
+      hasMore: resp['hasMore'] == true,
     );
   }
 

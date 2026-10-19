@@ -56,6 +56,35 @@ function event(
 
 describe("conversation runtime projection", () => {
 
+  it("uses the server cursor for older turns and stops when the server page ends", async () => {
+    mocks.get.mockReset();
+    mocks.get.mockResolvedValueOnce({ version: 1, turns: [], messages: [], lastEventSequence: 0, turnHistory: { hasMore: true, nextCursor: "owner-bound-cursor" } });
+    const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
+    await runtime.loadSnapshot();
+    mocks.get.mockResolvedValueOnce({ items: [{ id: "old-turn", status: "completed", sequence: 7, items: [] }], hasMore: false, nextCursor: "" });
+    expect(await runtime.loadOlderTurns()).toBe(true);
+    expect(mocks.get).toHaveBeenLastCalledWith("turns", { conversationId: "conversation-1", cursor: "owner-bound-cursor", limit: 50 });
+    expect(await runtime.loadOlderTurns()).toBe(false);
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    runtime.cleanup();
+  });
+
+  it("discards an older turn page returned after navigation", async () => {
+    mocks.get.mockReset();
+    mocks.get.mockResolvedValueOnce({ version: 1, turns: [], messages: [], turnHistory: { hasMore: true, nextCursor: "first-owner-page" } });
+    const conversation = ref("conversation-1");
+    const runtime = useConversationRuntime(conversation, ref<any[]>([]), ref(false), () => undefined);
+    await runtime.loadSnapshot();
+    let resolvePage!: (value: any) => void;
+    mocks.get.mockImplementationOnce(() => new Promise((resolve) => { resolvePage = resolve; }));
+    const pending = runtime.loadOlderTurns();
+    conversation.value = "conversation-2";
+    resolvePage({ items: [{ id: "foreign-turn", status: "completed", sequence: 7, items: [] }], hasMore: false });
+    expect(await pending).toBe(false);
+    expect(runtime.messages.value.some((message) => message.assistantTurn?.id === "foreign-turn")).toBe(false);
+    runtime.cleanup();
+  });
+
   it("holds an unconfirmed side effect without a false success notification or active sending spinner", async () => {
     mocks.notifyReplyCompleted.mockClear();
     const sending = ref(false);

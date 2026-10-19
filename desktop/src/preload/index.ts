@@ -117,8 +117,21 @@ const api = {
   }): void {
     ipcRenderer.send("chat:state-change", payload);
   },
-  getBackendAuthHeaders(target: "local" | "business" = "business"): Promise<Record<string, string>> {
-    return ipcRenderer.invoke(IPC_CHANNELS.getBackendAuthHeaders, target);
+  async getBackendAuthHeaders(target: "local" | "business" = "business"): Promise<Record<string, string>> {
+    try {
+      return await ipcRenderer.invoke(IPC_CHANNELS.getBackendAuthHeaders, target);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes("Amitia Core 正在启动或重启") ||
+        message.includes("ECONNREFUSED") ||
+        message.includes("ECONNRESET") ||
+        message.includes("EPIPE")
+      ) {
+        throw new Error("Amitia Core 正在启动或重启，请稍后重试");
+      }
+      throw error;
+    }
   },
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }> {
     return ipcRenderer.invoke(IPC_CHANNELS.publishLocalVoiceASRFinal, event);

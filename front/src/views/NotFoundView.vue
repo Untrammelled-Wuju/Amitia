@@ -14,21 +14,26 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="nf-actions">
         <el-button type="primary" size="large" @click="goHome">返回首页</el-button>
         <el-button size="large" @click="retry" :loading="retrying">重试</el-button>
+        <el-button size="large" @click="bugReportVisible = true">提交报错信息</el-button>
       </div>
     </div>
+    <BugReportDialog v-model="bugReportVisible" :page-path="route.fullPath" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue"
-import { useRouter } from "vue-router"
+import { useRoute, useRouter } from "vue-router"
+import BugReportDialog from "@/components/feedback/BugReportDialog.vue"
 
 defineProps<{
   error?: string | null
 }>()
 
 const router = useRouter()
+const route = useRoute()
 const retrying = ref(false)
+const bugReportVisible = ref(false)
 
 function goHome() {
   router.replace("/chat")
@@ -87,5 +92,6 @@ line-height: 1.6;
   display: flex;
   gap: 12px;
   justify-content: center;
+  flex-wrap: wrap;
 }
 </style>

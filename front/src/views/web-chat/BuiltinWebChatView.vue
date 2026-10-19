@@ -909,7 +909,7 @@ watch(
       if ((convId.value || "") === requestedId) {
         convSummary.value = summary;
       }
-    });
+    }).catch(() => undefined);
   },
   { immediate: true },
 );
@@ -973,7 +973,7 @@ watch(showSummaryDrawer, (visible) => {
     if ((convId.value || "") === requestedId) {
       convSummary.value = summary;
     }
-  });
+    }).catch(() => undefined);
 });
 
 function handleViewSummary() {

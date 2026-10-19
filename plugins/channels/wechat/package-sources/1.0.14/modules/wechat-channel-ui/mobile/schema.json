@@ -1,0 +1,194 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "微信渠道（手机端）",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "status",
+        "target": "host_command",
+        "input": {
+          "channelId": "wechat"
+        },
+        "statePath": "status"
+      },
+      {
+        "action_id": "config",
+        "target": "host_command",
+        "input": {
+          "channelId": "wechat"
+        },
+        "statePath": "config"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "status",
+      "target": "host_command"
+    },
+    {
+      "actionId": "config",
+      "target": "host_command"
+    },
+    {
+      "actionId": "connect",
+      "target": "host_command"
+    },
+    {
+      "actionId": "disconnect",
+      "target": "host_command"
+    }
+  ],
+  "children": [
+    {
+      "id": "wechat-mobile-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "wechat-mobile-status",
+          "type": "key_value",
+          "props": {
+            "title": "连接状态",
+            "columns": 1
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "status.data"
+            }
+          ]
+        },
+        {
+          "id": "wechat-mobile-qr",
+          "type": "image",
+          "props": {
+            "alt": "微信登录二维码",
+            "fit": "contain",
+            "height": 280,
+            "preview": true
+          },
+          "bindings": [
+            {
+              "path": "src",
+              "source": "state",
+              "sourcePath": "status.data.qrImageUrl"
+            }
+          ],
+          "visibleWhen": [
+            {
+              "field": "status.data.qrImageUrl",
+              "operator": "not_null"
+            }
+          ]
+        },
+        {
+          "id": "wechat-mobile-actions",
+          "type": "button_group",
+          "children": [
+            {
+              "id": "wechat-mobile-refresh",
+              "type": "button",
+              "props": {
+                "text": "刷新",
+                "type": "primary"
+              },
+              "actions": [
+                {
+                  "action_id": "status",
+                  "target": "host_command",
+                  "input": {
+                    "channelId": "wechat"
+                  },
+                  "statePath": "status"
+                }
+              ]
+            },
+            {
+              "id": "wechat-mobile-connect",
+              "type": "button",
+              "props": {
+                "text": "扫码登录"
+              },
+              "actions": [
+                {
+                  "action_id": "connect",
+                  "target": "host_command",
+                  "input": {
+                    "channelId": "wechat"
+                  },
+                  "statePath": "connectResult"
+                },
+                {
+                  "action_id": "status",
+                  "target": "host_command",
+                  "input": {
+                    "channelId": "wechat"
+                  },
+                  "statePath": "status"
+                }
+              ]
+            },
+            {
+              "id": "wechat-mobile-disconnect",
+              "type": "button",
+              "props": {
+                "text": "退出登录",
+                "type": "danger"
+              },
+              "actions": [
+                {
+                  "action_id": "disconnect",
+                  "target": "host_command",
+                  "input": {
+                    "channelId": "wechat"
+                  },
+                  "confirmation": "确认退出当前微信账号？",
+                  "statePath": "disconnectResult"
+                },
+                {
+                  "action_id": "status",
+                  "target": "host_command",
+                  "input": {
+                    "channelId": "wechat"
+                  },
+                  "statePath": "status"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "wechat-mobile-config",
+          "type": "code",
+          "props": {
+            "language": "json"
+          },
+          "bindings": [
+            {
+              "path": "content",
+              "source": "state",
+              "sourcePath": "config.data"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 120,
+    "maxLayoutCount": 160,
+    "maxNodeCount": 160,
+    "maxDataFetchCount": 2,
+    "maxActionCount": 12
+  }
+}

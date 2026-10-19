@@ -116,6 +116,7 @@ func (rt *Runtime) runDeviceDataDelivery(ctx context.Context, done chan struct{}
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			_ = rt.ResumeChannelDeliveries(ctx)
 			if sources, err := rt.Coordination.PendingRemoteSources(ctx); err == nil {
 				for _, source := range sources {
 					if _, connected := rt.Hub.GetByDevice(runtimeidentity.SpaceID(source.SpaceID), runtimeidentity.DeviceID(source.DeviceID)); connected {

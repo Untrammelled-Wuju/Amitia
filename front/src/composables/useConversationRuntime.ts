@@ -32,7 +32,7 @@ interface ConversationSnapshot {
   messages?: any[];
   turns?: AssistantTurnData[];
   messageHistory?: { nextBefore?: number; hasMore?: boolean };
-  turnHistory?: { nextBefore?: number; hasMore?: boolean };
+  turnHistory?: { nextCursor?: string; hasMore?: boolean };
   approvals?: Array<Record<string, any>>;
   activeTurn?: RuntimeTurnSnapshot | null;
 }
@@ -62,7 +62,7 @@ export function useConversationRuntime(
   const activeExecutionId = ref("");
   const automationStatus = shallowRef<AutomationStatus | null>(null);
   const lastEventSequence = ref(0);
-  const turnHistoryBefore = ref(0);
+  const turnHistoryCursor = ref("");
   const hasMoreTurnHistory = ref(false);
   let projectionCache = new Map<string, any>();
   let projectionSignatures = new Map<string, string>();
@@ -326,7 +326,7 @@ export function useConversationRuntime(
   function applySnapshot(snapshot: ConversationSnapshot) {
     if (Number(snapshot.version) !== 1) throw new Error(`Unsupported conversation snapshot version: ${snapshot.version}`);
     reducer.reset(snapshot.turns || [], Number(snapshot.lastEventSequence || 0), snapshot.activeTurn || null);
-    turnHistoryBefore.value = Number(snapshot.turnHistory?.nextBefore || 0);
+    turnHistoryCursor.value = String(snapshot.turnHistory?.nextCursor || "");
     hasMoreTurnHistory.value = snapshot.turnHistory?.hasMore === true;
     syncReducerState();
     const active = reducer.turn(reducer.activeTurnId);
@@ -381,8 +381,8 @@ export function useConversationRuntime(
   async function loadOlderTurns(): Promise<boolean> {
     const epoch = snapshotEpoch;
     const id = String(conversationId.value || "").trim();
-    if (!id || !hasMoreTurnHistory.value || turnHistoryBefore.value <= 0) return false;
-    const response = await ownedChatRuntimeRequest("turns", { conversationId: id, before: turnHistoryBefore.value, limit: 50 });
+    if (!id || !hasMoreTurnHistory.value || !turnHistoryCursor.value) return false;
+    const response = await ownedChatRuntimeRequest("turns", { conversationId: id, cursor: turnHistoryCursor.value, limit: 50 });
     const rows = Array.isArray(response?.items) ? response.items.map((turn: any) => ({ ...turn, conversationId: id })) : [];
     if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return false;
     if (rows.length === 0) {
@@ -390,7 +390,7 @@ export function useConversationRuntime(
       return false;
     }
     reducer.mergeTurns(rows as AssistantTurnData[]);
-    turnHistoryBefore.value = Number(response?.nextBefore || rows[0]?.sequence || 0);
+    turnHistoryCursor.value = String(response?.nextCursor || "");
     hasMoreTurnHistory.value = response?.hasMore === true;
     syncReducerState();
     scheduleProjection();

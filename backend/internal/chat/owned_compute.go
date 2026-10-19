@@ -227,6 +227,24 @@ func (s *service) TranscribeOwnedAudio(ctx context.Context, inference business.I
 }
 
 func (s *service) GenerateOwnedReply(ctx context.Context, inference business.Inference) (generation business.Generation, resultErr error) {
+	if err := s.requireInferenceAuthority(ctx); err != nil {
+		return business.Generation{}, err
+	}
+	defer func() {
+		if resultErr == nil && !generation.Partial && !generation.Suppressed && !inference.Preview {
+			if runtime, ok := interaction.RuntimeFromContext(ctx); ok {
+				generation.StateEffects, resultErr = json.Marshal(runtime)
+			}
+		}
+	}()
+	s.beginOwnedChatLifecycle(ctx, inference)
+	defer func() {
+		phase := "response.ready"
+		if resultErr != nil || generation.Partial {
+			phase = "response.failed"
+		}
+		s.emitOwnedChatLifecycle(ctx, inference, inference.Scope.RequestID+"/assistant", phase, 4)
+	}()
 	if lifecycle, ok := s.ownedToolRuntime.(OwnedTurnRuntime); ok && !inference.InternalWorker && !inference.ScheduledMessage && !inference.Preview {
 		var finish func(context.Context, business.Generation, error) error
 		var err error
@@ -276,8 +294,8 @@ func (s *service) generateOwnedReply(ctx context.Context, inference business.Inf
 		}
 		defer endSkills()
 	}
-	if s.worldBookPort != nil && len(messages) > 0 {
-		world := s.worldBookPort.ToSystemPromptForSpace(inference.Scope.SpaceID, inference.Scope.RoleID, inference.Message, "")
+	if len(messages) > 0 {
+		world := inference.Snapshot.WorldBookPrompt
 		if strings.TrimSpace(world) != "" {
 			messages[0]["content"] = fmt.Sprint(messages[0]["content"]) + "\n\n【世界书】\n" + world
 		}
@@ -326,9 +344,22 @@ func (s *service) generateOwnedReply(ctx context.Context, inference business.Inf
 }
 
 type ownedReplySink struct {
-	inference business.Inference
-	text      strings.Builder
-	reasoning strings.Builder
+	inference        business.Inference
+	text             strings.Builder
+	reasoning        strings.Builder
+	reasoningStarted time.Time
+	reasoningElapsed time.Duration
+}
+
+func (s *ownedReplySink) reasoningDurationMS() int64 {
+	duration := s.reasoningElapsed
+	if !s.reasoningStarted.IsZero() {
+		duration += time.Since(s.reasoningStarted)
+	}
+	if s.reasoning.Len() == 0 {
+		return 0
+	}
+	return max(duration.Milliseconds(), 1)
 }
 
 func (s *ownedReplySink) Emit(ctx context.Context, event ModelEvent) error {
@@ -337,11 +368,18 @@ func (s *ownedReplySink) Emit(ctx context.Context, event ModelEvent) error {
 	}
 	switch event.Type {
 	case ModelEventTextDelta:
+		if !s.reasoningStarted.IsZero() {
+			s.reasoningElapsed += time.Since(s.reasoningStarted)
+			s.reasoningStarted = time.Time{}
+		}
 		s.text.WriteString(event.TextDelta)
 		if s.inference.Emit != nil {
 			return s.inference.Emit(business.Event{Type: "delta", Text: event.TextDelta})
 		}
 	case ModelEventReasoningSummaryDelta:
+		if s.reasoningStarted.IsZero() {
+			s.reasoningStarted = time.Now()
+		}
 		s.reasoning.WriteString(event.TextDelta)
 		if s.inference.Emit != nil {
 			return s.inference.Emit(business.Event{Type: "delta", Text: event.TextDelta, Reasoning: true})

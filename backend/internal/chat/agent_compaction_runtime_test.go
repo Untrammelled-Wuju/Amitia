@@ -96,7 +96,7 @@ func TestAgentRejectsUnrecoverablyOversizedSystemPromptBeforeProviderCall(t *tes
 		return "should not run", "", nil, 0, nil
 	}}
 	messages := []map[string]interface{}{{"role": "system", "content": strings.Repeat("system constraints ", 5000)}}
-	_, _, _, _, _, err := svc.invokeLLMWithTools(context.Background(),
+	_, _, _, _, _, err := svc.invokeOwnedLoopFixture(context.Background(),
 		&ModelConfig{ContextWindow: 8192, MaxOutputTokens: 1024},
 		messages, applog.TraceFields{}, nil, "", "oversized", "char", "web",
 		"req-oversized", "", "", "request_approval", nil, nil, nil, context.Background(), nil)

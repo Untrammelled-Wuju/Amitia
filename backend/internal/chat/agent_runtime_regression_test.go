@@ -12,7 +12,7 @@ import (
 )
 
 type agentRegressionRuntime struct {
-	ModelToolRuntime
+	ownedFixtureToolRuntime
 	lastName string
 	lastKey  string
 }
@@ -61,7 +61,7 @@ func TestAgentLoopDispatchesMappedWorkspaceToolWithIdempotency(t *testing.T) {
 	}
 	definitions := []tool.Tool{{Function: tool.Function{Name: "workspace.read", Parameters: parameters}}}
 	runtime := &agentRegressionRuntime{}
-	svc := &service{toolRuntime: runtime}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
 	calls := 0
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, _ []map[string]interface{}, modelTools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		calls++
@@ -76,7 +76,7 @@ func TestAgentLoopDispatchesMappedWorkspaceToolWithIdempotency(t *testing.T) {
 		}
 		return "文件已检查", "", nil, 11, nil
 	}
-	reply, _, _, tokens, _, err := svc.invokeLLMWithTools(
+	reply, _, _, tokens, _, err := svc.invokeOwnedLoopFixture(
 		context.Background(), &ModelConfig{}, nil, applog.TraceFields{}, nil,
 		"", "conv", "char", "web", "req-123", "", "", "request_approval",
 		nil, definitions, map[string]bool{}, context.Background(), testAgentLoopRecorder(t, "conv", "char", "req-123"),
@@ -141,7 +141,7 @@ func TestAgentCompactionKeepsToolCallsAndResultsTogether(t *testing.T) {
 
 func TestAgentContinuesBeyondFormerRoundLimit(t *testing.T) {
 	runtime := &agentRegressionRuntime{}
-	svc := &service{toolRuntime: runtime}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
 	modelCalls := 0
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		modelCalls++
@@ -154,7 +154,7 @@ func TestAgentContinuesBeyondFormerRoundLimit(t *testing.T) {
 		}
 		return "持续任务已完成", "", nil, 1, nil
 	}
-	reply, _, _, tokens, _, err := svc.invokeLLMWithTools(
+	reply, _, _, tokens, _, err := svc.invokeOwnedLoopFixture(
 		context.Background(), &ModelConfig{ContextWindow: 500000}, nil, applog.TraceFields{}, nil,
 		"", "long-running", "char", "web", "long-run", "", "", "request_approval",
 		nil, []tool.Tool{{Function: tool.Function{Name: "read_file"}}}, map[string]bool{}, context.Background(), testAgentLoopRecorder(t, "long-running", "char", "long-run"),

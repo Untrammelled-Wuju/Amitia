@@ -31,8 +31,8 @@ export class MockGameRPCService {
   }
 
   async handleCommand(request: Envelope): Promise<unknown> {
-    const payload = (request.payload as { action?: string; value?: number }) || {};
-    const action = payload.action || 'noop';
+    const payload = (request.payload as { action?: string; value?: number; direction?: string }) || {};
+    const action = payload.action || (payload.direction ? 'move' : 'noop');
 
     switch (action) {
       case 'start':
@@ -48,13 +48,23 @@ export class MockGameRPCService {
         this.runtime.heal(payload.value || 10);
         return { action, result: 'healed', health: this.runtime.getState().health };
       case 'move':
-        return { action, result: 'moved', position: { x: payload.value || 0, y: payload.value || 0 } };
+        return { action, result: 'moved', direction: payload.direction || '', position: { x: payload.value || 0, y: payload.value || 0 } };
       case 'reset':
         this.runtime.reset();
         return { action, result: 'reset' };
       default:
         return { action, result: 'unknown_command' };
     }
+  }
+
+  async handleMove(request: Envelope): Promise<unknown> {
+    const payload = (request.payload as { direction?: string }) || {};
+    const direction = payload.direction || 'up';
+    return {
+      action: 'move',
+      result: 'moved',
+      direction,
+    };
   }
 
   async handleLongTask(request: Envelope): Promise<unknown> {

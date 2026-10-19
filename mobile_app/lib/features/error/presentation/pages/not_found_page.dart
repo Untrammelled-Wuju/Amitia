@@ -8,6 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_dialogs.dart';
+import '../../../settings/presentation/widgets/bug_report_dialog.dart';
 
 class NotFoundPage extends ConsumerWidget {
   final String? attemptedPath;
@@ -90,6 +92,14 @@ class NotFoundPage extends ConsumerWidget {
               ),
               SizedBox(height: AppSpacing.md),
               AmitiaButton(
+                label: '提交报错信息',
+                icon: Icons.report_problem_outlined,
+                outlined: true,
+                isFullWidth: true,
+                onPressed: () => _reportBug(context),
+              ),
+              SizedBox(height: AppSpacing.md),
+              AmitiaButton(
                 label: '返回聊天页',
                 icon: Icons.chat_bubble_outline,
                 isSecondary: true,
@@ -102,5 +112,12 @@ class NotFoundPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _reportBug(BuildContext context) async {
+    final submitted = await showBugReportDialog(context, attemptedPath: attemptedPath);
+    if (submitted == true && context.mounted) {
+      amitiaSnackBar(context, '报错信息已提交，正在上传到管理端');
+    }
   }
 }

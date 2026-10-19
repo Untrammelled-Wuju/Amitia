@@ -6,6 +6,17 @@ import (
 )
 
 type ChatManagementRequest struct {
+	Title               string   `json:"title,omitempty"`
+	ProjectID           string   `json:"projectId,omitempty"`
+	Channel             string   `json:"channel,omitempty"`
+	PeerID              string   `json:"peerId,omitempty"`
+	MessageID           string   `json:"messageId,omitempty"`
+	FeedbackID          int      `json:"feedbackId,omitempty"`
+	FeedbackType        string   `json:"feedbackType,omitempty"`
+	Reason              string   `json:"reason,omitempty"`
+	StartSequence       int64    `json:"startSequence,omitempty"`
+	EndSequence         int64    `json:"endSequence,omitempty"`
+	Limit               int      `json:"limit,omitempty"`
 	RequestID           string   `json:"requestId,omitempty"`
 	Operation           string   `json:"operation"`
 	ConversationID      string   `json:"conversationId,omitempty"`

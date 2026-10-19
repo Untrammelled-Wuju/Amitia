@@ -1,0 +1,42 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@amitia/game-plugin-sdk':
+        specifier: file:vendor/amitia-game-plugin-sdk-0.1.0.tgz
+        version: file:vendor/amitia-game-plugin-sdk-0.1.0.tgz
+    devDependencies:
+      '@types/node':
+        specifier: ^18.0.0
+        version: 18.0.0
+      typescript:
+        specifier: ^5.0.0
+        version: 5.0.2
+
+packages:
+
+  '@amitia/game-plugin-sdk@file:vendor/amitia-game-plugin-sdk-0.1.0.tgz':
+    resolution: {integrity: sha512-SUxNwUWbznHZGjE31oqd/u3GLAGiRNKS5E9Avvgz02PPgeFzTBVb8sDCSJXQR9kHchHoLl2xbprc7LKXelsrOg==, tarball: file:vendor/amitia-game-plugin-sdk-0.1.0.tgz}
+    version: 0.1.0
+
+  '@types/node@18.0.0':
+    resolution: {integrity: sha512-cHlGmko4gWLVI27cGJntjs/Sj8th9aYwplmZFwmmgYQQvL5NUsgVJG7OddLvNfLqYS31KFN0s3qlaD9qCaxACA==}
+
+  typescript@5.0.2:
+    resolution: {integrity: sha512-wVORMBGO/FAs/++blGNeAVdbNKtIh1rbBL2EyQ1+J9lClJ93KiiKe8PmFIVdXhHcyv44SL9oglmfeSsndo0jRw==}
+    engines: {node: '>=12.20'}
+    hasBin: true
+
+snapshots:
+
+  '@amitia/game-plugin-sdk@file:vendor/amitia-game-plugin-sdk-0.1.0.tgz': {}
+
+  '@types/node@18.0.0': {}
+
+  typescript@5.0.2: {}

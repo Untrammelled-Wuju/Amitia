@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	applog "github.com/u-ai/backend/log"
 )
 
 type OwnedToolRuntime interface {
@@ -51,6 +52,14 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	definitions = filtered
 	modelSink := sink
 	verification := agentVerificationGate{}
+	citations:=&ownedCitationAudit{}
+	workspaceVerification := len(inference.Workspaces) > 0
+	if workspaceVerification {
+		bufferNativeOutput = true
+		staged := inference
+		staged.Emit = nil
+		modelSink = &ownedReplySink{inference: staged}
+	}
 	var nativeStatus, nativeCoordination string
 	modelDefinitions, toolAliases := prepareAgentModelTools(definitions)
 	allowed := map[string]bool{}
@@ -58,17 +67,32 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 		allowed[definition.Function.Name] = true
 	}
 	seen := map[string]bool{}
+	if inference.RecoveredRuntime != nil {
+		items, err := ownedRecoveredToolItems(inference.RecoveredRuntime)
+		if err != nil {
+			return business.Generation{}, err
+		}
+		recovered, err := restoreAgentToolMessages(items, toolAliases)
+		if err != nil {
+			return business.Generation{}, err
+		}
+		messages = append(messages, recovered...)
+		verification.Restore(items)
+		for _,item:=range items {if item.ItemType==assistantTurnItemToolResult {citations.captureCitationIDs(item.ToolName,item.ResultJSON)}}
+		for _, item := range items {
+			if item.ItemType == assistantTurnItemToolCall {
+				seen[item.CallID] = true
+			}
+		}
+	}
+	baseMessageCount := len(messages)
 	totalTokens := 0
 	forceVoice := false
 	var outputs []MessageOutput
-	totalCalls := 0
 	partial := func(err error) (business.Generation, error) {
-		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens, Partial: true}, err
+		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, Partial: true}, err
 	}
 	for round := 0; ; round++ {
-		if round >= 64 {
-			return partial(errors.New("工具执行达到本轮安全上限，请检查执行结果后继续"))
-		}
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return partial(err)
 		}
@@ -76,6 +100,15 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 		runtimeKey := business.RuntimeKey(inference.Scope, inference.ConversationID)
 		for _, steer := range runtime.ConsumeSteer(runtimeKey, inference.Scope.TurnID) {
 			messages = append(messages, map[string]interface{}{"role": "user", "content": steer})
+		}
+		messages = s.compactAgentMessagesWithToolBudget(ctx, cfg, messages, baseMessageCount, modelDefinitions)
+		if cfg != nil && cfg.ContextWindow >= 4096 && agentCompactionMessageTokens(messages, agentToolDefinitionTokens(modelDefinitions)) > agentCompactionHardInputLimit(cfg) {
+			return partial(fmt.Errorf("agent context exceeds usable context %d after reserving output", agentCompactionHardInputLimit(cfg)))
+		}
+		if workspaceVerification {
+			staged := inference
+			staged.Emit = nil
+			modelSink = &ownedReplySink{inference: staged}
 		}
 		providerCtx, providerCancel := context.WithCancel(ctx)
 		runtime.RegisterProviderCancel(runtimeKey, inference.Scope.TurnID, providerCancel)
@@ -99,6 +132,22 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			return partial(err)
 		}
 		if len(calls) == 0 {
+			if workspaceVerification && verification.PendingDelegation() {
+				if verification.ShouldRequestDelegationStatus() {
+					messages = append(messages, map[string]interface{}{"role": "system", "content": "【子任务完成门禁】必须查询协调任务 " + verification.activeDelegation + " 的实际终态，再进行父任务验证；不得将运行中的任务称为完成。"})
+					continue
+				}
+				return partial(fmt.Errorf("multi-agent coordination %s has not reached a terminal state; parent turn cannot claim task completion", verification.activeDelegation))
+			}
+			if workspaceVerification && verification.Pending() {
+				if agentVerificationToolAvailable(modelDefinitions) && verification.ShouldRequestVerification() {
+					instruction:="【执行验收门禁】最新工作区修改尚无成功测试、构建或静态检查证据。检查上一个工具的退出码和错误，实际修复后执行相关验证，不能只声称完成。"
+					if verification.verificationAttempt>0 {instruction="【执行验收门禁·失败修复】刚才验证未通过。检查上一个工具的错误信息和退出码，实际修复后重新运行相关验证；不得只重复声称完成。"}
+					messages = append(messages, map[string]interface{}{"role": "system", "content": instruction})
+					continue
+				}
+				return partial(errors.New("workspace changes were applied but no successful build or test evidence was recorded after the latest edit"))
+			}
 			if strings.TrimSpace(modelSink.text.String()) == "" && nativeCoordination == "" {
 				return partial(errors.New("模型未返回内容或能力调用，不能判定任务已完成"))
 			}
@@ -107,7 +156,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			}
 			if bufferNativeOutput {
 				finalText := modelSink.text.String()
-				if nativeCoordination != "" {
+				if nativeCoordination != "" && !workspaceVerification {
 					switch {
 					case verification.PendingDelegation():
 						finalText = fmt.Sprintf("多 Agent 任务 %s 已进入后台执行，当前状态为 %s，尚未完成。可在工作台查看任务进度和检查点。", nativeCoordination, nativeStatus)
@@ -126,17 +175,23 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 					}
 				}
 			}
-			return s.finishOwnedOutputs(ctx, inference, business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), Tokens: totalTokens, ForceVoice: forceVoice}, outputs)
+			audit:=citations.AuditCitationMarkers(sink.text.String())
+			if len(audit.Available)+len(audit.Unknown)+len(audit.MissingCitation)>0 {applog.TraceInfo(newProcessTrace(inference.Scope.RequestID,inference.ConversationID,inference.Scope.RoleID,"owned").WithStage("citation_audit_completed"),applog.Fields{"available_citations":len(audit.Available),"unknown_citations":len(audit.Unknown),"missing_citation_claims":len(audit.MissingCitation)},"owned reply citation audit completed")}
+			return s.finishOwnedOutputs(ctx, inference, business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, ForceVoice: forceVoice}, outputs)
 		}
 		if len(calls) > 16 || s.ownedToolRuntime == nil {
 			return partial(errors.New("设备能力调用超出授权范围或数量上限"))
 		}
 		messages = append(messages, map[string]interface{}{"role": "assistant", "content": text, "tool_calls": calls})
+		batch := map[string]bool{}
 		for _, raw := range calls {
-			totalCalls++
-			if totalCalls > 256 {
-				return partial(errors.New("工具调用达到本轮安全上限"))
+			id, _ := raw["id"].(string)
+			if id == "" || len(id) > 128 || seen[id] || batch[id] {
+				return partial(errors.New("duplicate tool call id or invalid identity; no batch effects dispatched"))
 			}
+			batch[id] = true
+		}
+		for _, raw := range calls {
 			encoded, err := json.Marshal(raw)
 			if err != nil {
 				return partial(err)
@@ -148,7 +203,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 					Arguments string `json:"arguments"`
 				} `json:"function"`
 			}
-			if json.Unmarshal(encoded, &call) != nil || call.ID == "" || len(call.ID) > 128 || seen[call.ID] || len(call.Function.Arguments) > 256<<10 || !json.Valid([]byte(call.Function.Arguments)) {
+			if json.Unmarshal(encoded, &call) != nil {
 				return partial(errors.New("模型返回了重复或无效的能力调用，已拦截"))
 			}
 			modelName := call.Function.Name
@@ -156,9 +211,17 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 				modelName = original
 			}
 			if !allowed[modelName] || inference.InternalWorker && ownedNativeTaskTool(modelName) {
-				return partial(errors.New("模型调用了未授权的设备能力，已拦截"))
+				seen[call.ID] = true
+				messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": "工具执行失败：TOOL_NOT_ADVERTISED: 该能力未授权或未暴露，不能执行。请使用当前可用能力。"})
+				continue
 			}
 			seen[call.ID] = true
+			arguments, invalid := validateAgentToolArguments(call.Function.Arguments)
+			if invalid != "" {
+				messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": "工具执行失败：INVALID_ARGUMENTS: " + invalid})
+				continue
+			}
+			call.Function.Arguments = arguments
 			result, err := s.ownedToolRuntime.Execute(ctx, inference, call.ID, modelName, json.RawMessage(call.Function.Arguments))
 			if err != nil {
 				return partial(err)
@@ -174,6 +237,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 				output = string(result.Output)
 			}
 			outcome := toolResultToOutcome(result, true)
+			citations.captureCitationIDs(modelName,string(result.Output))
 			forceVoice = forceVoice || result.ForceVoice
 			if !outcome.HasError {
 				outputs = append(outputs, messageOutputsFromTurnItems([]AssistantTurnItem{{ItemType: assistantTurnItemToolResult, Status: assistantTurnStatusCompleted, ToolName: modelName, ResultJSON: string(result.Output)}})...)
@@ -195,7 +259,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 				}
 			}
 			if outcome.HasError {
-				output = fmt.Sprintf("能力调用未成功：%s: %s", outcome.ErrorCode, outcome.ErrorMessage)
+				output = toolResultContent(modelName, outcome)
 			}
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": output})
 		}

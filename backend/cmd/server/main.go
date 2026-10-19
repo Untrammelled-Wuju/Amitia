@@ -131,6 +131,13 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: --version cannot be combined with other arguments\n")
 		os.Exit(1)
 	}
+	if hasSupervisorFlag(os.Args[1:]) {
+		if err := runSupervisor(os.Args[1:]); err != nil {
+			fmt.Fprintf(os.Stderr, "supervisor error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	runtimeRoot := util.RuntimeRoot()
 	configDir := util.RuntimeConfigDir(runtimeRoot)
 	config.InitConfig(configDir)
@@ -222,6 +229,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "写运行端点失败: %v\n", errEndpoint)
 		os.Exit(1)
 	}
+	defer runtimeendpoint.RemoveIfOwner(paths.RunDir, os.Getpid())
 	log.Info("运行端点: ", serverAddr)
 
 	rootCtx, stopRoot := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

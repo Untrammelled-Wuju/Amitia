@@ -13,6 +13,12 @@ let mainWindow: BrowserWindow | null = null;
 let startupResolve: (() => void) | null = null;
 let pendingUpdateInfo: UpdateInfo | null = null;
 let allowBetaChannel = false;
+let installInProgress = false;
+let downloadedUpdateReady = false;
+
+export interface UpdateManagerHooks {
+  prepareForInstall?: () => Promise<void>;
+}
 
 const RELEASES_URL = "https://amitia.untrammelled.top/amitia";
 
@@ -57,7 +63,7 @@ function applyChannelPreference(): void {
   autoUpdater.allowDowngrade = false;
 }
 
-export function registerUpdateManager(win: BrowserWindow): void {
+export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHooks = {}): void {
   mainWindow = win;
 
   const logDir = path.join(getAmitiaDataDir(), "logs");
@@ -77,6 +83,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
   autoUpdater.on("update-available", (info: UpdateInfo) => {
     console.log("[UpdateManager] 发现新版本:", info.version);
     pendingUpdateInfo = info;
+    downloadedUpdateReady = false;
     mainWindow?.webContents.send("update:available", {
       version: info.version,
       releaseDate: info.releaseDate,
@@ -89,6 +96,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
     console.log("[UpdateManager] 已是最新版本");
     mainWindow?.webContents.send("update:not-available");
     pendingUpdateInfo = null;
+    downloadedUpdateReady = false;
     startupResolve?.();
     startupResolve = null;
   });
@@ -108,6 +116,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
   autoUpdater.on("update-downloaded", (info) => {
     console.log("[UpdateManager] 更新已下载:", info.version);
     pendingUpdateInfo = null;
+    downloadedUpdateReady = true;
     mainWindow?.webContents.send("update:downloaded", {
       version: info.version,
     });
@@ -139,9 +148,27 @@ export function registerUpdateManager(win: BrowserWindow): void {
     startupResolve = null;
   });
 
-  ipcMain.handle("update:restart-now", () => {
-    autoUpdater.quitAndInstall(true, true);
-  });
+  const installUpdate = async (): Promise<void> => {
+    if (installInProgress) {
+      return;
+    }
+    if (!downloadedUpdateReady) {
+      mainWindow?.webContents.send("update:error", { message: "更新尚未下载完成" });
+      return;
+    }
+    installInProgress = true;
+    try {
+      await hooks.prepareForInstall?.();
+      autoUpdater.quitAndInstall(true, true);
+    } catch (error) {
+      installInProgress = false;
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[UpdateManager] 更新安装准备失败:", msg);
+      mainWindow?.webContents.send("update:error", { message: msg });
+    }
+  };
+
+  ipcMain.handle("update:restart-now", () => installUpdate());
 
   ipcMain.handle("update:restart-later", () => {
     pendingUpdateInfo = null;
@@ -169,9 +196,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
     }
   });
 
-  ipcMain.handle("update:install-now", () => {
-    autoUpdater.quitAndInstall(true, true);
-  });
+  ipcMain.handle("update:install-now", () => installUpdate());
 
   ipcMain.handle("update:cancel-and-enter", () => {
     pendingUpdateInfo = null;
@@ -202,6 +227,7 @@ export function registerUpdateManager(win: BrowserWindow): void {
     applyChannelPreference();
     persistAllowBetaChannel(allowBetaChannel);
     pendingUpdateInfo = null;
+    downloadedUpdateReady = false;
     return { allowBetaChannel };
   });
 

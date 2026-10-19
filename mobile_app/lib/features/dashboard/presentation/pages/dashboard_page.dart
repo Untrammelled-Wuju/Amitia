@@ -31,11 +31,11 @@ final dashboardOverviewProvider = FutureProvider<Map<String, dynamic>>((
     _safeGet(ref, '/api/health'),
     _safeGet(ref, '/api/security/status'),
     _safeGet(ref, '/api/usage/overview'),
-    _safeGet(ref, '/api/chats/stats'),
+    ref.read(systemServiceProvider).chatStats(),
     _safeGet(ref, '/api/logs/recent/errors', query: const {'limit': 20}),
     _safeGet(ref, '/api/imports/batches', query: const {'limit': 5}),
     _safeGet(ref, '/api/usage/periodic'),
-    _safeGet(ref, '/api/messages/feedback/stats'),
+    ref.read(feedbackServiceProvider).stats(),
   ]);
   return {
     'health': values[0],

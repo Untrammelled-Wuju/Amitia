@@ -158,7 +158,10 @@ final modelConfigServiceProvider = Provider<ModelConfigService>(
 );
 
 final feedbackServiceProvider = Provider<FeedbackService>(
-  (ref) => FeedbackService(_getDynamicServiceApi(ref)),
+  (ref) => FeedbackService(
+    _getDynamicServiceApi(ref),
+    owned: ref.read(chatServiceProvider).owned,
+  ),
 );
 
 final ttsServiceProvider = Provider<TTSService>(

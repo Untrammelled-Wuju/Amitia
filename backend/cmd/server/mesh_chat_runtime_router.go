@@ -25,10 +25,12 @@ type ownedRuntimeRequest struct {
 	ApprovalID    string `json:"approvalId"`
 	Approved      bool   `json:"approved"`
 	AfterSequence int64  `json:"afterSequence"`
+	Cursor        string `json:"cursor"`
+	Limit         int    `json:"limit"`
 }
 
 func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices, coreID string) {
-	for _, operation := range []string{"snapshot", "turns", "events", "interrupt", "steer", "retry", "approval"} {
+	for _, operation := range []string{"snapshot", "turns", "events", "interrupt", "steer", "retry", "approval", "queue/status"} {
 		operation := operation
 		mesh.POST("/chat-runtime/"+operation, func(c *gin.Context) {
 			actor := security.GetActor(c)
@@ -38,7 +40,7 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 			}
 			var request ownedRuntimeRequest
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 512<<10)
-			if c.ShouldBindJSON(&request) != nil || request.ExpectedScope == nil || request.ConversationID == "" || len(request.ConversationID) > 512 || len(request.Content) > 128<<10 || request.AfterSequence < 0 {
+			if c.ShouldBindJSON(&request) != nil || request.ExpectedScope == nil || request.ConversationID == "" || len(request.ConversationID) > 512 || len(request.Content) > 128<<10 || request.AfterSequence < 0 || len(request.Cursor) > 8192 || request.Limit < 0 || request.Limit > 128 {
 				c.JSON(400, gin.H{"message": "聊天运行控制参数无效"})
 				return
 			}
@@ -48,20 +50,49 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				return
 			}
 			err := services.OwnedBusiness.WithExecutionScope(c.Request.Context(), *request.ExpectedScope, func(ctx context.Context) error {
-				view, err := services.OwnedBusiness.Query(ctx, request.Request, coordination.DataQuery{ConversationID: request.ConversationID, Management: true, RuntimeTurns: true, Limit: 128})
+				if operation == "queue/status" {
+					status, err := services.OwnedBusiness.ResumeQueuedChat(ctx, *request.ExpectedScope, request.RequestID, request.ConversationID)
+					if err != nil {
+						return err
+					}
+					if status.ConversationID != request.ConversationID {
+						return coordination.ErrWrongOwner
+					}
+					c.JSON(200, gin.H{"code": 200, "data": status})
+					return nil
+				}
+				query := coordination.DataQuery{ConversationID: request.ConversationID, Management: true, RuntimeTurns: true, Limit: request.Limit}
+				if operation == "turns" {
+					query.ResourceKind, query.Cursor = "checkpoint", request.Cursor
+				}
+				view, err := services.OwnedBusiness.Query(ctx, request.Request, query)
 				if err != nil {
 					return err
 				}
 				request.ConversationID = view.ConversationID
 				key := business.RuntimeKey(view.Scope, request.ConversationID)
 				turns, messages, conversation := ownedRuntimeDocuments(view, key)
+				if request.TurnID != "" && operation != "snapshot" && operation != "turns" && operation != "events" {
+					turns, err = loadOwnedRuntimeTarget(ctx, services.OwnedBusiness, request.Request, request.TurnID, view, turns)
+					if err != nil {
+						return err
+					}
+				}
 				manager := business.RuntimeManager()
 				runtime := manager.RuntimeSnapshot(key)
 				approvals := ownedRuntimeApprovals(services, view.Scope, request.ConversationID, turns)
 				data := gin.H{"executionScope": view.Scope, "version": conversationstream.ProtocolVersion, "revision": len(turns), "conversation": conversation, "messages": messages, "turns": turns, "lastEventSequence": runtime.LastEventSequence, "activeTurn": runtime.ActiveTurn, "approvals": approvals, "messageHistory": gin.H{"hasMore": view.Snapshot.NextCursors["message"] != "", "nextCursor": view.Snapshot.NextCursors["message"]}, "turnHistory": gin.H{"hasMore": view.Snapshot.NextCursors["checkpoint"] != "", "nextCursor": view.Snapshot.NextCursors["checkpoint"]}}
 				switch operation {
-				case "snapshot", "turns":
+				case "snapshot":
+					queued, err := services.OwnedBusiness.ResumeConversationQueuedChats(ctx, request.Request)
+					if err != nil {
+						return err
+					}
+					data["queuedRequests"] = queued
 					c.JSON(200, gin.H{"code": 200, "data": data})
+					return nil
+				case "turns":
+					c.JSON(200, gin.H{"code": 200, "data": gin.H{"executionScope": view.Scope, "items": turns, "hasMore": view.Snapshot.NextCursors["checkpoint"] != "", "nextCursor": view.Snapshot.NextCursors["checkpoint"]}})
 					return nil
 				case "events":
 					return streamOwnedRuntime(c, services, request, key, view.Scope)
@@ -88,6 +119,9 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 					if strings.TrimSpace(request.Content) == "" || !manager.Steer(key, request.TurnID, request.Content) {
 						return errors.New("目标执行当前不可干预")
 					}
+					if err := publishOwnedControl(ctx, key, target, "turn.steered", "running", gin.H{"content": request.Content}); err != nil {
+						return err
+					}
 					data = gin.H{"accepted": true, "turnId": request.TurnID, "executionScope": view.Scope}
 				case "approval":
 					found := false
@@ -112,6 +146,37 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				c.JSON(409, gin.H{"message": err.Error()})
 			}
 		})
+	}
+}
+
+func publishOwnedControl(ctx context.Context, key string, target map[string]any, event, status string, payload map[string]any) error {
+	request, _ := target["requestId"].(string)
+	turn, _ := target["id"].(string)
+	execution, _ := target["executionId"].(string)
+	_, err := business.RuntimeManager().Publish(ctx, conversationstream.AgentUIEvent{ConversationID: key, RequestID: request, TurnID: turn, ExecutionID: execution, Type: event, Status: status, Payload: payload}, false)
+	return err
+}
+
+func loadOwnedRuntimeTarget(ctx context.Context, engine *business.Engine, request business.Request, turnID string, view business.QueryResult, turns []map[string]any) ([]map[string]any, error) {
+	for {
+		for _, turn := range turns {
+			if turn["id"] == turnID {
+				return turns, nil
+			}
+		}
+		cursor := view.Snapshot.NextCursors["checkpoint"]
+		if cursor == "" {
+			return nil, errors.New("目标执行不存在或不属于当前会话")
+		}
+		var err error
+		view, err = engine.Query(ctx, request, coordination.DataQuery{ConversationID: view.ConversationID, Management: true, RuntimeTurns: true, ResourceKind: "checkpoint", Cursor: cursor, Limit: 128})
+		if err != nil {
+			return nil, err
+		}
+		if view.Snapshot.NextCursors["checkpoint"] == cursor {
+			return nil, coordination.ErrRequestConflict
+		}
+		turns, _, _ = ownedRuntimeDocuments(view, business.RuntimeKey(view.Scope, view.ConversationID))
 	}
 }
 
@@ -154,7 +219,11 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 				status = "interrupted"
 			}
 			id := strings.TrimPrefix(resource.ID, "turn/")
-			turns = append(turns, map[string]any{"id": scope.TurnID, "conversationId": view.ConversationID, "characterId": view.Scope.RoleID, "requestId": id, "executionId": scope.ExecutionID, "userMessageId": id + "/user", "status": status, "createdAt": resource.UpdatedAt, "items": []any{}})
+			var runtime conversationstream.ActiveTurnState
+			raw, _ := json.Marshal(document["runtime"])
+			_ = json.Unmarshal(raw, &runtime)
+			items := ownedRuntimeItems(runtime, view.ConversationID, status)
+			turns = append(turns, map[string]any{"id": scope.TurnID, "conversationId": view.ConversationID, "characterId": view.Scope.RoleID, "requestId": id, "executionId": scope.ExecutionID, "userMessageId": id + "/user", "status": status, "createdAt": resource.UpdatedAt, "items": items})
 		}
 	}
 	for _, raw := range view.Snapshot.LegacyMessages {
@@ -167,8 +236,9 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 		return fmt.Sprint(messages[i]["createdAt"]) < fmt.Sprint(messages[j]["createdAt"])
 	})
 	sort.SliceStable(turns, func(i, j int) bool { return fmt.Sprint(turns[i]["createdAt"]) < fmt.Sprint(turns[j]["createdAt"]) })
-	for index, turn := range turns {
-		turn["sequence"] = index + 1
+	for _, turn := range turns {
+		created, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(turn["createdAt"]))
+		turn["sequence"] = created.UnixMilli()
 	}
 	return turns, messages, conversation
 }
@@ -183,7 +253,7 @@ func ownedRuntimeApprovals(services *AppServices, scope coordination.ExecutionSc
 			continue
 		}
 		for _, turn := range turns {
-			if approval.RequestID == turn["requestId"] && approval.RequestID != "" {
+			if approval.RequestID == turn["requestId"] && approval.RequestID != "" && approval.TurnID == turn["id"] {
 				raw, _ := json.Marshal(approval)
 				var item map[string]any
 				_ = json.Unmarshal(raw, &item)
@@ -203,6 +273,16 @@ func streamOwnedRuntime(c *gin.Context, services *AppServices, request ownedRunt
 	c.Header("Cache-Control", "no-cache")
 	c.Header("X-Accel-Buffering", "no")
 	write := func(event conversationstream.AgentUIEvent) error {
+		if event.ConversationID != key {
+			return coordination.ErrWrongOwner
+		}
+		if err := services.DeviceMesh.Coordination.Validate(c.Request.Context(), scope); err != nil {
+			return err
+		}
+		if event.EventSequence != request.AfterSequence+1 {
+			return errors.New("聊天事件存在缺口，请重新加载快照")
+		}
+		request.AfterSequence = event.EventSequence
 		event.ConversationID = request.ConversationID
 		raw, err := json.Marshal(event)
 		if err != nil {
@@ -271,15 +351,16 @@ func startOwnedRetry(c *gin.Context, services *AppServices, request ownedRuntime
 		return errors.New("当前执行不可重试")
 	}
 	old, _ := source["requestId"].(string)
+	inputView, err := services.OwnedBusiness.Query(c.Request.Context(), request.Request, coordination.DataQuery{ConversationID: request.ConversationID, Management: true, ResourceKind: "message", ResourceID: old + "/user", Limit: 1})
+	if err != nil {
+		return err
+	}
 	var input struct {
 		Content     string                `json:"content"`
 		Attachments []business.Attachment `json:"attachments"`
 	}
 	found := false
-	for _, resource := range view.Snapshot.Resources {
-		if resource.Kind == "tool-result" {
-			return errors.New("执行存在已保存的能力结果，请先核对结果，再发送新的指令，系统不会自动重放副作用")
-		}
+	for _, resource := range inputView.Snapshot.Resources {
 		if resource.Kind == "message" && resource.ID == old+"/user" && json.Unmarshal(resource.Body, &input) == nil {
 			found = true
 		}
@@ -289,8 +370,41 @@ func startOwnedRetry(c *gin.Context, services *AppServices, request ownedRuntime
 	}
 	current := request.Request
 	current.RequestID, current.Message, current.Attachments = uuid.NewString(), input.Content, input.Attachments
-	ctx := context.WithoutCancel(c.Request.Context())
-	go func() { _, _ = services.OwnedBusiness.Run(ctx, current) }()
-	c.JSON(200, gin.H{"code": 200, "data": gin.H{"conversationId": current.ConversationID, "requestId": current.RequestID, "status": "queued", "executionScope": view.Scope}})
+	current.RetryRequestID = old
+	queued, err := services.OwnedBusiness.QueueChat(c.Request.Context(), view.Scope, current)
+	if err != nil {
+		return err
+	}
+	c.JSON(200, gin.H{"code": 200, "data": queued})
 	return nil
+}
+
+func ownedToolResultRequest(raw json.RawMessage) string {
+	var result struct {
+		Scope coordination.ExecutionScope `json:"executionScope"`
+	}
+	if json.Unmarshal(raw, &result) != nil {
+		return ""
+	}
+	return result.Scope.RequestID
+}
+
+func ownedRuntimeItems(runtime conversationstream.ActiveTurnState, conversation, status string) []map[string]any {
+	items := make([]map[string]any, 0, len(runtime.Blocks))
+	for _, block := range runtime.Blocks {
+		blockStatus := block.Status
+		if status == "completed" || status == "failed" || status == "interrupted" {
+			if blockStatus != "completed" && blockStatus != "failed" && blockStatus != "interrupted" {
+				blockStatus = status
+			}
+		}
+		item := map[string]any{"id": block.BlockID, "turnId": runtime.TurnID, "conversationId": conversation, "sequence": block.BlockSequence, "type": block.Type, "status": blockStatus, "revision": block.Revision, "callId": block.CallID, "content": block.Content}
+		for source, target := range map[string]string{"arguments": "argumentsJson", "result": "resultJson", "toolName": "toolName", "errorCode": "errorCode", "durationMs": "durationMs"} {
+			if value, ok := block.Payload[source]; ok {
+				item[target] = value
+			}
+		}
+		items = append(items, item)
+	}
+	return items
 }

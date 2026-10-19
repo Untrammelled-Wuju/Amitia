@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -93,7 +92,7 @@ func killExistingServer(addr, dataDir string, readPid func(string) (int, error),
 		}
 		return fmt.Errorf("resolve process %d executable: %w", pid, err)
 	}
-	if !sameProcessImage(currentImage, targetImage) && !isAmitiaCoreImage(targetImage) {
+	if !sameProcessImage(currentImage, targetImage) {
 		if !portInUse {
 			_ = removePid(dataDir)
 			return nil
@@ -108,12 +107,4 @@ func killExistingServer(addr, dataDir string, readPid func(string) (int, error),
 	}
 	_ = removePid(dataDir)
 	return nil
-}
-
-func isAmitiaCoreImage(image string) bool {
-	name := strings.ToLower(filepath.Base(image))
-	if name == "amitiacore" || name == "amitiacore.exe" || name == "server" || name == "server.exe" {
-		return true
-	}
-	return strings.HasPrefix(name, "server.") && strings.HasSuffix(name, ".exe")
 }

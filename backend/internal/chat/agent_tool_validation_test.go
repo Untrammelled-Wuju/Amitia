@@ -33,7 +33,7 @@ func TestAgentToolArgumentValidation(t *testing.T) {
 
 func TestAgentModelCanRepairInvalidToolCalls(t *testing.T) {
 	runtime := &agentRegressionRuntime{}
-	svc := &service{toolRuntime: runtime}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
 	rounds := 0
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, definitions []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		rounds++
@@ -59,7 +59,7 @@ func TestAgentModelCanRepairInvalidToolCalls(t *testing.T) {
 			"function": map[string]interface{}{"name": name, "arguments": args},
 		}}, 1, nil
 	}
-	reply, _, _, _, _, err := svc.invokeLLMWithTools(
+	reply, _, _, _, _, err := svc.invokeOwnedLoopFixture(
 		context.Background(), &ModelConfig{}, nil, applog.TraceFields{}, nil,
 		"", "conv-check", "char", "web", "req-check", "", "", "request_approval",
 		nil, []tool.Tool{{Function: tool.Function{Name: "read_file"}}}, map[string]bool{}, context.Background(), testAgentLoopRecorder(t, "conv-check", "char", "req-check"),

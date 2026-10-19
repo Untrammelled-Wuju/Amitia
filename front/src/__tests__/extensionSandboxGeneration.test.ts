@@ -24,4 +24,14 @@ describe("extension sandbox generation contract", () => {
     expect(extensionPageHostSource).toContain("generation: pageSessionGeneration.value");
     expect(extensionPageHostSource).toContain("pageSessionGeneration.value = result.generation ?? 0");
   });
+
+  it("uses the page contribution id without prefixing it twice", () => {
+    expect(extensionPageHostSource).toContain("contributionId: pageId.value");
+  });
+
+  it("stops page polling after unmount and ignores stale responses", () => {
+    expect(extensionPageHostSource).toContain("let pageRequestToken = 0;");
+    expect(extensionPageHostSource).toContain("disposed = true;");
+    expect(extensionPageHostSource).toContain("void pollPageStatus(token);");
+  });
 });

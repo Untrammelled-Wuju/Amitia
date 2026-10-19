@@ -96,13 +96,15 @@ func TestExtensionLeaseMutualExclusionAndExpiredTakeover(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := repository.AcquireExtensionLease(context.Background(), "extension-1", "operation-1", "worker-1", 20*time.Millisecond); err != nil {
+	if _, err := repository.AcquireExtensionLease(context.Background(), "extension-1", "operation-1", "worker-1", time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repository.AcquireExtensionLease(context.Background(), "extension-1", "operation-2", "worker-2", time.Minute); !IsPackageOperationError(err, OperationErrLeaseConflict) {
 		t.Fatalf("expected lease conflict, got %v", err)
 	}
-	time.Sleep(30 * time.Millisecond)
+	if _, err := repository.db.ExecContext(context.Background(), `UPDATE extension_package_operation_leases SET lease_expires_at=? WHERE extension_id=?`, time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano), "extension-1"); err != nil {
+		t.Fatal(err)
+	}
 	lease, err := repository.AcquireExtensionLease(context.Background(), "extension-1", "operation-2", "worker-2", time.Minute)
 	if err != nil || lease.OperationID != "operation-2" || lease.CASVersion < 2 {
 		t.Fatalf("expired lease was not taken over: %#v err=%v", lease, err)

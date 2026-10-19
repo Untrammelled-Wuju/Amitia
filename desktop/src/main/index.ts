@@ -39,6 +39,7 @@ let currentConfig: DeploymentModeConfig = { mode: "local" };
 let quitting = false;
 let coreStopped = false;
 let shutdownInProgress = false;
+let updateInstallPrepared = false;
 let clipboardBridge: ClipboardBridge | null = null;
 let deploymentLifecycle: DesktopDeploymentLifecycle | null = null;
 let startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,6 +97,21 @@ async function shutdownRuntime(): Promise<void> {
     ]);
   } catch (error) {
     console.error("[AmitiaDesktop] 关闭运行时异常:", error);
+  }
+}
+
+async function prepareForUpdateInstall(): Promise<void> {
+  if (updateInstallPrepared) {
+    return;
+  }
+  updateInstallPrepared = true;
+  quitting = true;
+  shutdownInProgress = true;
+  console.log("[AmitiaDesktop] 更新安装前停止运行时");
+  try {
+    await shutdownRuntime();
+  } finally {
+    coreStopped = true;
   }
 }
 
@@ -221,6 +237,7 @@ if (!lock) {
   app.on("will-quit", () => {
     clearStartupTimer();
     closeSplashWindow();
+    closeLogger();
   });
 
   app.on("activate", () => {
@@ -317,7 +334,7 @@ async function enterMainApp(): Promise<void> {
 
   const autoLaunch = await configStore.getAutoLaunch();
   app.setLoginItemSettings({ openAtLogin: autoLaunch });
-  registerUpdateManager(mainWindow);
+  registerUpdateManager(mainWindow, { prepareForInstall: prepareForUpdateInstall });
   void waitForStartupCheck();
 
   registerExtensionProtocol(join(getAmitiaDataDir(), "data", "extensions-v2"));

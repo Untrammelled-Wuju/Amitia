@@ -506,7 +506,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   isMounted = true;
-  void chatStore.fetchSidebar();
+  void chatStore.fetchSidebar().catch(() => undefined);
   syncConversationActivityPolling();
   window.addEventListener("click", closeProfileMenu);
   window.addEventListener("keydown", handleKeydown);

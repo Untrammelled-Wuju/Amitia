@@ -65,8 +65,8 @@ func TestToolResultContent(t *testing.T) {
 }
 
 func TestAssistantTurnRecorderCitationAudit(t *testing.T) {
-	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
-	if err := recorder.AddToolResult(nil, "call-1", "web_run", `{"citations":[{"index":1},{"index":3}]}`, "completed", "", 1); err != nil {
+	recorder := &ownedCitationAudit{}
+	if err := recorder.captureToolResultFixture(nil, "call-1", "web_run", `{"citations":[{"index":1},{"index":3}]}`, "completed", "", 1); err != nil {
 		t.Fatalf("AddToolResult() error = %v", err)
 	}
 	audit := recorder.AuditCitationMarkers("supported [1], unknown [2], inline `value[2]`, fenced:\n```go\na[3]\n```\nand supported [3]")
@@ -82,7 +82,7 @@ func TestAssistantTurnRecorderCitationAudit(t *testing.T) {
 }
 
 func TestAssistantTurnRecorderCitationAuditUnknownWithoutAvailableCitations(t *testing.T) {
-	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
+	recorder := &ownedCitationAudit{}
 	audit := recorder.AuditCitationMarkers("unsupported marker [99], code `value[88]`")
 	if len(audit.Available) != 0 || len(audit.Used) != 0 {
 		t.Fatalf("unexpected available/used: %#v", audit)
@@ -93,8 +93,8 @@ func TestAssistantTurnRecorderCitationAuditUnknownWithoutAvailableCitations(t *t
 }
 
 func TestAssistantTurnRecorderCitationClaimVerifier(t *testing.T) {
-	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
-	if err := recorder.AddToolResult(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","title":"Release","url":"https://example.com","text":"Amitia version 2.0 was released in September 2026."}]}`, "completed", "", 1); err != nil {
+	recorder := &ownedCitationAudit{}
+	if err := recorder.captureToolResultFixture(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","title":"Release","url":"https://example.com","text":"Amitia version 2.0 was released in September 2026."}]}`, "completed", "", 1); err != nil {
 		t.Fatalf("AddToolResult() error = %v", err)
 	}
 	audit := recorder.AuditCitationMarkers("Amitia version 2.0 was released in September 2026 [1].")
@@ -107,8 +107,8 @@ func TestAssistantTurnRecorderCitationClaimVerifier(t *testing.T) {
 }
 
 func TestAssistantTurnRecorderDetectsMissingCitationClaimAfterWebResearch(t *testing.T) {
-	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
-	if err := recorder.AddToolResult(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","text":"Amitia version 2.0 was released in September 2026."}]}`, "completed", "", 1); err != nil {
+	recorder := &ownedCitationAudit{}
+	if err := recorder.captureToolResultFixture(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","text":"Amitia version 2.0 was released in September 2026."}]}`, "completed", "", 1); err != nil {
 		t.Fatalf("AddToolResult() error = %v", err)
 	}
 	audit := recorder.AuditCitationMarkers("Amitia version 2.0 was released in September 2026. The project supports Linux [1].")
@@ -118,8 +118,8 @@ func TestAssistantTurnRecorderDetectsMissingCitationClaimAfterWebResearch(t *tes
 }
 
 func TestAssistantTurnRecorderDoesNotFlagOpinionAsMissingCitation(t *testing.T) {
-	recorder := newAssistantTurnRecorder(nil, "conversation-1", "character-1", "message-1", "request-1")
-	if err := recorder.AddToolResult(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","text":"Reference evidence."}]}`, "completed", "", 1); err != nil {
+	recorder := &ownedCitationAudit{}
+	if err := recorder.captureToolResultFixture(nil, "call-1", "web_run", `{"citations":[{"index":1,"evidence_id":"ev-1","ref_id":"ref-1","text":"Reference evidence."}]}`, "completed", "", 1); err != nil {
 		t.Fatalf("AddToolResult() error = %v", err)
 	}
 	audit := recorder.AuditCitationMarkers("我认为 2026 版本的交互更顺手。")
@@ -129,7 +129,7 @@ func TestAssistantTurnRecorderDoesNotFlagOpinionAsMissingCitation(t *testing.T) 
 }
 
 func TestCitationAuditFlagsMissingClaimsWhenWebResearchReturnedNoCitations(t *testing.T) {
-	recorder := newAssistantTurnRecorder(nil, "conv-1", "char-1", "msg-1", "req-1")
+	recorder := &ownedCitationAudit{}
 	recorder.captureCitationIDs("web_run", `{"operation":"search","citations":[]}`)
 
 	audit := recorder.AuditCitationMarkers("Project X version 2.0 was released in 2026.")

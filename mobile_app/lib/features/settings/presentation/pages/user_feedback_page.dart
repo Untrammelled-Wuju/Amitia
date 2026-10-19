@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,13 +8,8 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/app_update/app_update_providers.dart';
-import '../../../../core/debug/debug_log_service.dart';
-import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
-import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/ui_runtime/ui_client_info.dart';
-import '../../../../core/ui_runtime/ui_device_identity.dart';
+import '../../../../core/services/user_feedback_payload.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -46,9 +40,6 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
   int _logLineLimit = 120;
   int _errorLineLimit = 40;
   int _maxScreenshotMB = 6;
-  String _appVersion = '';
-  String _runtimeMode = 'local';
-  String _deviceId = '';
   List<Map<String, dynamic>> _tickets = const [];
   Map<String, dynamic>? _screenshot;
   String? _error;
@@ -79,9 +70,6 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
       final service = ref.read(userFeedbackServiceProvider);
       final settings = await service.settings();
       final tickets = await service.tickets();
-      final appVersion = await _resolveAppVersion();
-      final runtimeMode = _resolveRuntimeMode();
-      final deviceId = await _resolveDeviceId();
       if (!mounted) return;
       setState(() {
         _defaultUploadUrl = (settings['defaultUploadUrl'] ?? '').toString();
@@ -93,9 +81,6 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
           _uploadUrlController.text = current.isEmpty ? _defaultUploadUrl : current;
         }
         _tickets = tickets;
-        _appVersion = appVersion;
-        _runtimeMode = runtimeMode;
-        _deviceId = deviceId;
         _loading = false;
       });
     } catch (error) {
@@ -104,33 +89,6 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
         _error = error.toString();
         _loading = false;
       });
-    }
-  }
-
-  Future<String> _resolveAppVersion() async {
-    try {
-      final installed = await ref.read(appUpdateServiceProvider).getInstalledInfo();
-      if (installed.versionName.trim().isNotEmpty) return installed.versionName.trim();
-    } catch (_) {
-      // Fall back to the compile-time client version below.
-    }
-    return currentUIClientInfo().appVersion;
-  }
-
-  String _resolveRuntimeMode() {
-    try {
-      final config = ref.read(mobileDeploymentConfigProvider);
-      return config.mode == MobileDeploymentMode.cloud ? 'cloud' : 'local';
-    } catch (_) {
-      return 'local';
-    }
-  }
-
-  Future<String> _resolveDeviceId() async {
-    try {
-      return await UIDeviceIdentity().getOrCreate();
-    } catch (_) {
-      return '';
     }
   }
 
@@ -143,52 +101,17 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
     }
   }
 
-  List<Map<String, dynamic>> _clientErrors() {
-    final entries = ref
-        .read(debugLogServiceProvider)
-        .entries
-        .where((entry) => entry.level == DebugLogLevel.error)
-        .toList(growable: false);
-    final recent = entries.length > 15 ? entries.sublist(entries.length - 15) : entries;
-    return recent
-        .map(
-          (entry) => <String, dynamic>{
-            'message': entry.message,
-            'stack': entry.stackTrace ?? '',
-            'source': entry.source,
-            'at': entry.time.toIso8601String(),
-          },
-        )
-        .toList(growable: false);
-  }
-
-  String _timezone() {
-    final offset = DateTime.now().timeZoneOffset;
-    final sign = offset.isNegative ? '-' : '+';
-    final hours = offset.inHours.abs().toString().padLeft(2, '0');
-    final minutes = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
-    return '${DateTime.now().timeZoneName} UTC$sign$hours:$minutes';
-  }
-
-  Map<String, dynamic> _buildPayload() {
-    return <String, dynamic>{
-      'category': _category,
-      'title': _titleController.text.trim(),
-      'description': _descriptionController.text.trim(),
-      'contact': _contactController.text.trim(),
-      'includeLogs': _includeLogs,
-      'clientErrors': _clientErrors(),
-      'platform': Platform.isAndroid ? 'android' : Platform.isIOS ? 'ios' : Platform.operatingSystem,
-      'clientType': 'mobile',
-      'appVersion': _appVersion,
-      'runtimeMode': _runtimeMode,
-      'deviceId': _deviceId,
-      'osInfo': '${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
-      'locale': Platform.localeName,
-      'timezone': _timezone(),
-      'uploadUrl': _uploadUrlController.text.trim(),
-      if (_screenshot != null) 'screenshot': _screenshot,
-    };
+  Future<Map<String, dynamic>> _buildPayload() {
+    return buildUserFeedbackPayload(
+      ref: ref,
+      category: _category,
+      title: _titleController.text.trim(),
+      description: _descriptionController.text.trim(),
+      contact: _contactController.text.trim(),
+      includeLogs: _includeLogs,
+      uploadUrl: _uploadUrlController.text.trim(),
+      screenshot: _screenshot,
+    );
   }
 
   Future<void> _saveUploadUrl() async {
@@ -236,7 +159,7 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
       setState(() {
         _screenshot = <String, dynamic>{
           'name': picked.name.isEmpty ? 'screenshot.png' : picked.name,
-          'mediaType': _mediaTypeForPath(picked.path),
+          'mediaType': userFeedbackMediaTypeForPath(picked.path),
           'dataBase64': base64Encode(bytes),
         };
       });
@@ -249,19 +172,12 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
     }
   }
 
-  String _mediaTypeForPath(String path) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    return 'image/png';
-  }
-
   Future<void> _openPreview() async {
     if (_previewing) return;
     setState(() => _previewing = true);
     try {
-      final result = await ref.read(userFeedbackServiceProvider).preview(_buildPayload());
+      final payload = await _buildPayload();
+      final result = await ref.read(userFeedbackServiceProvider).preview(payload);
       final text = (result['text'] ?? '').toString();
       if (!mounted) return;
       await showDialog<void>(
@@ -300,7 +216,8 @@ class _UserFeedbackPageState extends ConsumerState<UserFeedbackPage> {
     }
     setState(() => _submitting = true);
     try {
-      await ref.read(userFeedbackServiceProvider).submit(_buildPayload());
+      final payload = await _buildPayload();
+      await ref.read(userFeedbackServiceProvider).submit(payload);
       if (!mounted) return;
       _titleController.clear();
       _descriptionController.clear();

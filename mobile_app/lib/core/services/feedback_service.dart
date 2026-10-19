@@ -1,40 +1,50 @@
 import '../backend_transport/backend_service_api.dart';
 import '../models/feedback.dart';
 import '../models/mood.dart';
+import 'device_owned_chat_service.dart';
 
 class FeedbackService {
-  final BackendServiceApi _api;
+  final DeviceOwnedChatService _owned;
 
-  FeedbackService(this._api);
+  FeedbackService(BackendServiceApi api, {DeviceOwnedChatService? owned})
+    : _owned = owned ?? DeviceOwnedChatService(api);
 
   Future<FeedbackDto?> create(String messageId, int rating, {String? comment}) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/messages/$messageId/feedback',
-      data: {
-        'rating': rating,
-        if (comment != null) 'comment': comment,
+    final resp = await _owned.management(
+      'feedback/create',
+      body: {
+        'messageId': messageId,
+        'feedbackType': rating > 0 ? 'good' : 'other',
+        'reason': 'rating=$rating${comment == null || comment.isEmpty ? '' : '; $comment'}',
       },
     );
-    if (resp == null) return null;
-    return FeedbackDto.fromJson(resp);
+    final feedback = resp['feedback'];
+    if (feedback is! Map) throw StateError('反馈保存结果无效');
+    return FeedbackDto.fromJson(Map<String, dynamic>.from(feedback));
   }
 
   Future<FeedbackDto?> getByMessage(String messageId) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/messages/$messageId/feedback',
-      fromJson: (e) => e as Map<String, dynamic>,
+    final resp = await _owned.management(
+      'feedback/list',
+      body: {'messageId': messageId},
     );
-    if (resp == null) return null;
-    return FeedbackDto.fromJson(resp);
+    final items = resp['items'];
+    if (items is! List) throw StateError('反馈查询结果无效');
+    if (items.isEmpty) return null;
+    return FeedbackDto.fromJson(Map<String, dynamic>.from(items.first as Map));
   }
 
   Future<Map<String, dynamic>?> stats() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/messages/feedback/stats');
-    return resp;
+    return _owned.management('feedback-stats');
   }
 
   Future<bool> delete(String id) async {
-    await _api.delete('/api/messages/feedback/$id');
+    final feedbackId = int.tryParse(id);
+    if (feedbackId == null || feedbackId <= 0) throw ArgumentError.value(id, 'id');
+    final result = await _owned.management('feedback/delete', body: {'feedbackId': feedbackId});
+    if (result['deleted'] != true || result['id'].toString() != id) {
+      throw StateError('反馈删除尚未确认');
+    }
     return true;
   }
 }

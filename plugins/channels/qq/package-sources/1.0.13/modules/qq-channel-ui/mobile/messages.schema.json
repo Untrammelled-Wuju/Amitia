@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "QQ 消息（手机端）",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "status",
+        "target": "host_command",
+        "input": {
+          "channelId": "qq"
+        },
+        "statePath": "status"
+      },
+      {
+        "action_id": "messages",
+        "target": "host_command",
+        "input": {
+          "channelId": "qq",
+          "limit": 200,
+          "offset": 0
+        },
+        "statePath": "messages"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "status",
+      "target": "host_command"
+    },
+    {
+      "actionId": "messages",
+      "target": "host_command"
+    },
+    {
+      "actionId": "send",
+      "target": "host_command"
+    }
+  ],
+  "children": [
+    {
+      "id": "qq-messages-mobile-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "qq-messages-mobile-status",
+          "type": "key_value",
+          "props": {
+            "title": "账号状态",
+            "columns": 1
+          },
+          "bindings": [
+            {
+              "path": "items",
+              "source": "state",
+              "sourcePath": "status.data"
+            }
+          ]
+        },
+        {
+          "id": "qq-messages-mobile-refresh",
+          "type": "button",
+          "props": {
+            "text": "刷新消息"
+          },
+          "actions": [
+            {
+              "action_id": "messages",
+              "target": "host_command",
+              "input": {
+                "channelId": "qq",
+                "limit": 200,
+                "offset": 0
+              },
+              "statePath": "messages"
+            }
+          ]
+        },
+        {
+          "id": "qq-messages-mobile-content",
+          "type": "code",
+          "props": {
+            "language": "json"
+          },
+          "bindings": [
+            {
+              "path": "content",
+              "source": "state",
+              "sourcePath": "messages.data"
+            }
+          ]
+        },
+        {
+          "id": "qq-messages-mobile-send-peer",
+          "type": "field",
+          "props": {
+            "label": "发送对象",
+            "placeholder": "peerId 或群聊 ID"
+          },
+          "bindings": [
+            {
+              "path": "peerId",
+              "source": "form",
+              "default": ""
+            }
+          ]
+        },
+        {
+          "id": "qq-messages-mobile-send-text",
+          "type": "field",
+          "props": {
+            "label": "消息内容",
+            "variant": "textarea",
+            "rows": 4
+          },
+          "bindings": [
+            {
+              "path": "text",
+              "source": "form",
+              "default": ""
+            }
+          ]
+        },
+        {
+          "id": "qq-messages-mobile-send",
+          "type": "button",
+          "props": {
+            "text": "发送测试消息",
+            "type": "primary"
+          },
+          "actions": [
+            {
+              "action_id": "send",
+              "target": "host_command",
+              "input": {
+                "channelId": "qq",
+                "peerId": "$form.peerId",
+                "text": "$form.text"
+              },
+              "statePath": "sendResult"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 150,
+    "maxLayoutCount": 200,
+    "maxNodeCount": 200,
+    "maxDataFetchCount": 2,
+    "maxActionCount": 16
+  }
+}

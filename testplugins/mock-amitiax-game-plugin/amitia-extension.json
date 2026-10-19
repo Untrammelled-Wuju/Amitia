@@ -8,7 +8,7 @@
     "description": {
       "default": "Amitia World Game Plugin - a formal game plugin for the Amitia platform with realtime control, state streaming, and RPC capabilities."
     },
-    "version": "1.0.1",
+    "version": "1.0.5",
     "license": "MIT",
     "categories": [
       "game",
@@ -180,7 +180,7 @@
           "spec": {
             "toolId": "worldgame/move",
             "modelName": "world_game_move",
-            "handlerName": "move",
+            "handlerName": "worldgame.command",
             "inputSchema": {
               "type": "object",
               "properties": {
@@ -197,7 +197,7 @@
             "sideEffect": "write",
             "runtime": {
               "runtimeType": "game_host",
-              "handlerName": "move",
+              "handlerName": "worldgame.command",
               "pluginId": "com.amitia/world-game-plugin/world-game-plugin-contribution",
               "serviceId": "world-game-runtime"
             }
@@ -389,6 +389,12 @@
     {
       "name": "tool.invoke",
       "reason": "Required for the plugin-provided UI to invoke the declared game movement tool.",
+      "required": true,
+      "scope": "extension"
+    },
+    {
+      "name": "service.runtime.execute",
+      "reason": "Required to launch the plugin service runtimes managed by GameHost.",
       "required": true,
       "scope": "extension"
     }

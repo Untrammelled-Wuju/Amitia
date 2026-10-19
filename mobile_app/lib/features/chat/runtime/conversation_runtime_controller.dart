@@ -62,7 +62,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   bool _hasMoreMessageHistory = false;
   bool _hasMoreTurnHistory = false;
   bool _automationStateUncertain = false;
-  int _oldestTurnSequence = 0;
+  String _turnHistoryCursor = '';
   Timer? _ownedPoll;
   bool _ownedPolling = false;
   String _ownedNotice = '';
@@ -709,9 +709,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       _pendingApprovals[approvalId] = Map<String, dynamic>.from(approval);
     }
     _hasMoreMessageHistory = snapshot.hasMoreMessages;
-    _oldestTurnSequence = snapshot.turnNextBefore > 0
-        ? snapshot.turnNextBefore
-        : (snapshot.turns.isEmpty ? 0 : snapshot.turns.first.sequence);
+    _turnHistoryCursor = snapshot.turnNextCursor;
     _hasMoreTurnHistory = snapshot.hasMoreTurns;
     final active = _agentReducer.turn(_agentReducer.activeTurnId);
     _sending = active != null && active.status != 'needs_reconciliation';
@@ -1056,11 +1054,11 @@ class ConversationRuntimeController extends ChangeNotifier {
       if (_hasMoreTurnHistory) {
         final page = await _chatService.getAssistantTurnPage(
           conv,
-          before: _oldestTurnSequence,
+          cursor: _turnHistoryCursor,
         );
         if (_disposed || _conversationId != conv) return false;
         _agentReducer.mergeTurns(page.items);
-        _oldestTurnSequence = page.nextBefore;
+        _turnHistoryCursor = page.nextCursor;
         _hasMoreTurnHistory = page.hasMore;
         changed = changed || page.items.isNotEmpty;
         _projectTurns();
@@ -1422,7 +1420,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   void _resetHistory() {
     _hasMoreMessageHistory = false;
     _hasMoreTurnHistory = false;
-    _oldestTurnSequence = 0;
+    _turnHistoryCursor = '';
     _loadingOlderMessages = false;
   }
 

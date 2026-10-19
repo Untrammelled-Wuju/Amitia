@@ -3,7 +3,6 @@
 package chat
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -282,50 +281,6 @@ func (s *service) SearchMessagesScoped(q MessageSearchQuery, characterID string)
 
 func (s *service) requireConversationCharacter(convID string, characterID string) error {
 	return nil
-}
-
-func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
-	channel := strings.TrimSpace(req.Channel)
-	if channel == "" {
-		channel = "web"
-	}
-	source := strings.TrimSpace(req.Source)
-	if source == "" {
-		source = "web"
-	}
-
-	resp, err := s.ProcessMessage(context.Background(), &ProcessMessageRequest{
-		CharacterID:    req.CharacterID,
-		Message:        req.Message,
-		ConversationID: req.ConversationID,
-		Channel:        channel,
-		Source:         source,
-		PeerID:         req.PeerID,
-		SpaceID:        req.SpaceID,
-		RequestID:      req.RequestID,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	msgID := ""
-	if len(resp.MessageIDs) > 0 {
-		msgID = resp.MessageIDs[len(resp.MessageIDs)-1]
-	}
-
-	return &ChatResponse{
-		ConversationID: resp.ConversationID,
-		Sequence:       resp.Sequence,
-		Message: &MessageItem{
-			ID:             msgID,
-			ConversationID: resp.ConversationID,
-			Sequence:       resp.Sequence,
-			Role:           "assistant",
-			Content:        resp.Reply,
-			Source:         "assistant",
-			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
-		},
-	}, nil
 }
 
 func (s *service) validateConversationScope(convID, channel, spaceID string) error {

@@ -45,6 +45,7 @@ export class MockAmitiaXGamePlugin {
     this.mainRegistry = new HandlerRegistry();
     this.mainRegistry.registerRequest('worldgame.status', (req) => this.rpcService.handleStatus(req));
     this.mainRegistry.registerRequest('worldgame.command', (req) => this.rpcService.handleCommand(req));
+    this.mainRegistry.registerRequest('move', (req) => this.rpcService.handleMove(req));
     this.mainRegistry.registerRequest('worldgame.echo', (req) => this.rpcService.handleEcho(req));
     this.mainRegistry.registerRequest('worldgame.namespace.support_ping', async (req) => {
       const response = await this.client.sendRequest('worldsupport.core.ping', req.payload ?? {});

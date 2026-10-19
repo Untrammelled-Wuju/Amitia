@@ -40,6 +40,8 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 			RoleID                   string                                   `json:"roleId"`
 			Query                    coordination.DataQuery                   `json:"query"`
 			ChatManagement           coordination.ChatManagementRequest       `json:"chatManagement"`
+			ChannelDelivery          coordination.ChannelDeliveryRequest      `json:"channelDelivery"`
+			ChatEffects              coordination.OwnedChatEffectsRequest     `json:"chatEffects"`
 			Interrupted              coordination.InterruptedReply            `json:"interrupted"`
 		}
 		if len(invocation.Input) > 4<<20 {
@@ -73,7 +75,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 		if cred == nil || cred.ExpiresAt.Before(time.Now()) || invocation.SpaceID != cred.SpaceID || invocation.DeviceID != identity.DeviceID || invocation.RuntimeID != identity.RuntimeID || scope.SpaceID != cred.SpaceID.String() || scope.CoreID != cred.SpaceID.String() || scope.TargetDeviceID != identity.DeviceID.String() {
 			return nil, coordination.ErrWrongOwner
 		}
-		if req.Operation != "chat-management" && req.Operation != "task-definition" && req.Operation != "task-catalog-entry" && req.Operation != "task-permissions" && req.Operation != "task-catalog" && req.Operation != "task-history-resource" && req.Operation != "history" && req.Operation != "history-list" && req.Operation != "history-list-page" && req.Operation != "history-roles" && (scope.ResourceOwnerID != identity.DeviceID.String() || scope.RoleOwnerID != identity.DeviceID.String()) {
+		if req.Operation != "channel-delivery" && req.Operation != "chat-management" && req.Operation != "task-definition" && req.Operation != "task-catalog-entry" && req.Operation != "task-permissions" && req.Operation != "task-catalog" && req.Operation != "task-history-resource" && req.Operation != "history" && req.Operation != "history-list" && req.Operation != "history-list-page" && req.Operation != "history-roles" && (scope.ResourceOwnerID != identity.DeviceID.String() || scope.RoleOwnerID != identity.DeviceID.String()) {
 			return nil, coordination.ErrWrongOwner
 		}
 		var result any
@@ -101,6 +103,26 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				}
 			}
 			switch req.Operation {
+			case "chat-effects":
+				source := context.WithValue(ctx, chatEffectsSourceCallKey{}, invocation.InvocationID)
+				guarded := coordination.WithAdditionalGuard(coordination.WithScope(source, scope), func(current context.Context) error {
+					if err := coordination.ValidateSourceCall(current, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
+						return err
+					}
+					return coordination.ValidateSourceAuthority(current, services.KernelContainer.DeviceRegistry.Database(), scope)
+				})
+				err = port.CommitOwnedChatEffects(guarded, scope, req.ChatEffects)
+				result = map[string]any{"requestId": req.ChatEffects.RequestID}
+			case "channel-delivery":
+				source := context.WithValue(ctx, channelDeliverySourceCallKey{}, invocation.InvocationID)
+				guarded := coordination.WithAdditionalGuard(coordination.WithScope(source, scope), func(current context.Context) error {
+					if err := coordination.ValidateSourceCall(current, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
+						return err
+					}
+					return coordination.ValidateSourceAuthority(current, services.KernelContainer.DeviceRegistry.Database(), scope)
+				})
+				err = port.SubmitChannelDelivery(guarded, scope, req.ChannelDelivery)
+				result = map[string]any{"requestId": req.ChannelDelivery.RequestID}
 			case "chat-management":
 				if req.ChatManagement.ConversationOwnerID != identity.DeviceID.String() || scope.Coordinated && (scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID) {
 					return coordination.ErrWrongOwner

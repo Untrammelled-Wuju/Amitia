@@ -4,7 +4,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { getBackendDataDir, ensureLocalToken } from "./path-manager";
 import { getDesktopInstanceID } from "./desktop-identity";
-import { getCoreBaseURL } from "./core-endpoint";
+import {
+  coreEndpointIdentity,
+  invalidateCoreEndpoint,
+  waitForCoreEndpoint,
+  type CoreEndpoint,
+} from "./core-endpoint";
 
 interface DesktopSessionResponse {
   sessionToken: string;
@@ -42,15 +47,22 @@ function readLocalRootToken(): string {
   return token;
 }
 
-function requestJSON<T>(
+function isRetryableCoreConnectionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EPIPE";
+}
+
+async function requestJSONOnce<T>(
+  endpoint: CoreEndpoint,
   method: string,
   requestPath: string,
   headers: Record<string, string>,
   body?: unknown,
 ): Promise<T> {
+  const resolvedBaseURL = endpoint.httpBaseURL;
   return new Promise<T>((resolve, reject) => {
     const rawBody = body === undefined ? undefined : JSON.stringify(body);
-    const coreURL = new URL(getCoreBaseURL());
+    const coreURL = new URL(resolvedBaseURL);
 
     const req = http.request(
       {
@@ -130,10 +142,38 @@ function requestJSON<T>(
   });
 }
 
-class BackendSessionClient {
+export async function requestJSON<T>(
+  method: string,
+  requestPath: string,
+  headers: Record<string, string>,
+  body?: unknown,
+): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const endpoint = await waitForCoreEndpoint();
+    try {
+      return await requestJSONOnce<T>(endpoint, method, requestPath, headers, body);
+    } catch (error) {
+      lastError = error;
+      if (attempt > 0 || !isRetryableCoreConnectionError(error)) {
+        throw error;
+      }
+      invalidateCoreEndpoint();
+      try {
+        await waitForCoreEndpoint(8000);
+      } catch {
+        throw error;
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+export class BackendSessionClient {
   private readonly desktopInstanceID = getDesktopInstanceID();
   private sessionToken: string | null = null;
   private expiresAt = 0;
+  private endpointIdentity = "";
   private createInFlight: Promise<void> | null = null;
 
   getDesktopInstanceID(): string {
@@ -167,9 +207,18 @@ class BackendSessionClient {
 
     this.sessionToken = response.sessionToken;
     this.expiresAt = parsedExpiry;
+    this.endpointIdentity = coreEndpointIdentity(await waitForCoreEndpoint());
   }
 
   async ensureSession(): Promise<void> {
+    const endpoint = await waitForCoreEndpoint();
+    const identity = coreEndpointIdentity(endpoint);
+    if (this.endpointIdentity && this.endpointIdentity !== identity) {
+      this.sessionToken = null;
+      this.expiresAt = 0;
+    }
+    this.endpointIdentity = identity;
+
     if (
       this.sessionToken &&
       Date.now() + SESSION_RENEW_SKEW_MS < this.expiresAt
@@ -206,6 +255,7 @@ class BackendSessionClient {
   invalidateSession(): void {
     this.sessionToken = null;
     this.expiresAt = 0;
+    this.endpointIdentity = "";
   }
 }
 

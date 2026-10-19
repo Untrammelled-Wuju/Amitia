@@ -10,17 +10,17 @@ import {
 async function main(): Promise<void> {
   const transport = new StdioTransport();
   const client = new Client(transport, {
-    pluginId: 'com.mock-developer/mock-amitiax-game-plugin/mock-game-plugin-contribution',
+    pluginId: 'com.amitia/world-game-plugin/world-game-plugin-contribution',
   });
   const registry = new HandlerRegistry();
   registry.registerRequest('mocksupport.core.ping', async (req) => ({
     pong: true,
     payload: req.payload ?? null,
-    serviceId: 'mock-game-support',
+        serviceId: 'world-game-support',
   }));
   const config: RunnerConfig = {
-    pluginId: 'com.mock-developer/mock-amitiax-game-plugin/mock-game-plugin-contribution',
-    defaultServiceId: 'mock-game-support',
+    pluginId: 'com.amitia/world-game-plugin/world-game-plugin-contribution',
+    defaultServiceId: 'world-game-support',
     hello: {
       supportedProtocols: [PROTOCOL_VERSION],
       capabilities: ['multi_service', 'custom_rpc'],
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   };
 
   const runner = new Runner(client, config);
-  runner.addService('mock-game-support', registry);
+  runner.addService('world-game-support', registry);
   runner.setDefaultRegistry(registry);
 
   const shutdown = (): void => process.exit(0);

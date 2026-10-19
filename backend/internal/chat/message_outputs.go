@@ -4,15 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
-	"log"
-	"net/url"
-	"path"
 	"sort"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 )
 
@@ -58,55 +52,6 @@ type MessageOutputPlanner interface {
 
 type MessageArtifactImporter interface {
 	ImportURL(ctx context.Context, req artifact.ImportURLRequest) (artifact.Artifact, error)
-}
-
-func (s *service) planMessageOutputs(ctx context.Context, plan messageCommitPlan) ([]MessageOutput, error) {
-	outputs := messageOutputsFromTurnItems(plan.TurnItems)
-	if s == nil || s.toolRuntime == nil || plan.Request == nil {
-		normalized, err := normalizeMessageOutputs(outputs)
-		if err != nil {
-			return nil, err
-		}
-		return s.materializeWebSearchImages(ctx, plan, normalized), nil
-	}
-	if planner, ok := s.toolRuntime.(MessageOutputPlanner); ok {
-		requestID := plan.Request.RequestID
-		if strings.TrimSpace(requestID) == "" {
-			requestID = plan.Request.InteractionID
-		}
-		planned, err := planner.PlanMessageOutputs(ctx, SkillScope{
-			SpaceID:        plan.Request.SpaceID,
-			CharacterID:    plan.Character,
-			ConversationID: plan.Conversation,
-			Channel:        plan.Request.Channel,
-			SessionID:      plan.Request.SessionID,
-			Message:        plan.Request.Message,
-			Source:         plan.Source,
-			IsInternal:     plan.Request.IsInternal,
-			TraceID:        requestID,
-			RequestID:      requestID,
-		}, &MessageOutputPlanningEvent{
-			ConversationID: plan.Conversation,
-			CharacterID:    plan.Character,
-			Channel:        plan.Request.Channel,
-			Source:         plan.Source,
-			UserMessage:    plan.Request.Message,
-			Reply:          plan.Reply,
-			SpaceID:        plan.Request.SpaceID,
-			PeerID:         plan.Request.PeerID,
-			RequestID:      requestID,
-			ForceVoice:     plan.ForceVoice,
-		})
-		if err != nil {
-			return nil, err
-		}
-		outputs = append(outputs, planned...)
-	}
-	normalized, err := normalizeMessageOutputs(outputs)
-	if err != nil {
-		return nil, err
-	}
-	return s.materializeWebSearchImages(ctx, plan, normalized), nil
 }
 
 func messageOutputsFromTurnItems(items []AssistantTurnItem) []MessageOutput {
@@ -191,61 +136,6 @@ func imageOutputsFromWebSearch(raw string) []MessageOutput {
 	return outputs
 }
 
-func (s *service) materializeWebSearchImages(ctx context.Context, plan messageCommitPlan, outputs []MessageOutput) []MessageOutput {
-	if len(outputs) == 0 || plan.Request == nil || s == nil || s.artifactImporter == nil {
-		return outputs
-	}
-	ownerSpaceID := strings.TrimSpace(plan.Request.SpaceID)
-	if ownerSpaceID == "" {
-		return outputs
-	}
-	importCtx, cancel := timeoutpolicy.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	materialized := make([]MessageOutput, 0, len(outputs))
-	for _, output := range outputs {
-		if !strings.EqualFold(strings.TrimSpace(output.OutputID), "web_run.image") || !strings.EqualFold(output.Part.Type, "image") {
-			materialized = append(materialized, output)
-			continue
-		}
-		remoteURL := strings.TrimSpace(output.Part.URL)
-		parsed, err := url.Parse(remoteURL)
-		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
-			materialized = append(materialized, output)
-			continue
-		}
-		filename := strings.TrimSpace(output.Part.AltText)
-		if filename == "" {
-			filename = strings.TrimSpace(path.Base(parsed.Path))
-		}
-		art, importErr := s.artifactImporter.ImportURL(importCtx, artifact.ImportURLRequest{
-			OwnerSpaceID: ownerSpaceID,
-			URL:          remoteURL,
-			Kind:         artifact.KindImage,
-			MIMEType:     output.Part.MIMEType,
-			Filename:     filename,
-			Source:       artifact.SourceToolOutput,
-			MaxBytes:     24 * 1024 * 1024,
-		})
-		if importErr != nil {
-			log.Printf("[message_outputs] web image import failed: %v", importErr)
-			continue
-		}
-		output.Part.FallbackURL = remoteURL
-		output.Part.URL = artifact.URI(art.ID)
-		if strings.TrimSpace(output.Part.MIMEType) == "" {
-			output.Part.MIMEType = art.MIMEType
-		}
-		if output.Part.Width <= 0 {
-			output.Part.Width = art.Width
-		}
-		if output.Part.Height <= 0 {
-			output.Part.Height = art.Height
-		}
-		materialized = append(materialized, output)
-	}
-	return materialized
-}
-
 func mimeTypeFromURL(raw string) string {
 	path := strings.ToLower(strings.TrimSpace(raw))
 	if index := strings.IndexAny(path, "?#"); index >= 0 {
@@ -327,62 +217,6 @@ func validMessageOutputPartType(value string) bool {
 	default:
 		return false
 	}
-}
-
-func buildMessageFromOutput(plan messageCommitPlan, deliveryGroupID string, sequence int, output MessageOutput) *Message {
-	part := output.Part
-	content := part.Content
-	if content == "" {
-		content = part.AltText
-	}
-	if content == "" {
-		switch part.Type {
-		case "image":
-			content = "[图片]"
-		case "audio":
-			content = "[音频]"
-		case "video":
-			content = "[视频]"
-		case "file":
-			content = "[文件]"
-		}
-	}
-	status := "sent"
-	if !strings.EqualFold(plan.Request.Channel, "web") {
-		status = "sending"
-	}
-	source := strings.TrimSpace(plan.Source)
-	if strings.TrimSpace(output.ExtensionID) != "" {
-		source = "extension:" + strings.TrimSpace(output.ExtensionID)
-	}
-	message := &Message{
-		ID:               uuid.New().String(),
-		ConversationID:   plan.Conversation,
-		Role:             "assistant",
-		Content:          content,
-		MsgType:          part.Type,
-		ExtensionType:    part.ExtensionType,
-		Source:           source,
-		Status:           status,
-		AltText:          part.AltText,
-		IsAnimated:       boolInt(part.IsAnimated),
-		MediaWidth:       part.Width,
-		MediaHeight:      part.Height,
-		OriginalAsset:    part.URL,
-		FallbackAsset:    part.FallbackURL,
-		DeliveryGroupID:  deliveryGroupID,
-		DeliverySequence: sequence,
-		RequestID:        plan.Request.RequestID,
-	}
-	switch part.Type {
-	case "image":
-		message.ImageUrl = part.URL
-	case "audio":
-		message.AudioUrl = part.URL
-	case "video":
-		message.VideoUrl = part.URL
-	}
-	return message
 }
 
 func boolInt(value bool) int {

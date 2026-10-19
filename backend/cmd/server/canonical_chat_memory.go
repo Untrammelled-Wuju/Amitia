@@ -29,6 +29,16 @@ type canonicalChatMemoryRuntime struct {
 	begin             chat.InferenceAuthority
 }
 
+func (r *canonicalChatMemoryRuntime) inferenceContext(ctx context.Context) (context.Context, func(), error) {
+	if err := context.Cause(ctx); err != nil {
+		return nil, nil, err
+	}
+	if r.begin == nil {
+		return ctx, func() {}, nil
+	}
+	return r.begin(ctx)
+}
+
 func (r *canonicalChatMemoryRuntime) request(spaceID, role string) (business.Request, error) {
 	if spaceID != r.spaceID || role == "" {
 		return business.Request{}, coordination.ErrWrongOwner
@@ -80,7 +90,7 @@ func (r *canonicalChatMemoryRuntime) Recall(ctx context.Context, spaceID, role, 
 }
 
 func (r *canonicalChatMemoryRuntime) Observe(ctx context.Context, payload chat.PostProcessPayload) error {
-	ctx, finish, err := r.begin(ctx)
+	ctx, finish, err := r.inferenceContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -277,7 +287,7 @@ func (p *ownedMemoryConsumers) authority(ctx context.Context, role string) (cont
 		}
 		return ctx, business.Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, CoreID: scope.CoreID, TargetDeviceID: scope.TargetDeviceID, RoleID: selectedRole, RequestID: uuid.NewString()}, func() {}, nil
 	}
-	ctx, finish, err := p.runtime.begin(ctx)
+	ctx, finish, err := p.runtime.inferenceContext(ctx)
 	return ctx, business.Request{SpaceID: p.runtime.spaceID, DeviceID: p.runtime.deviceID, CoreID: p.runtime.spaceID, RoleID: role, RequestID: uuid.NewString()}, finish, err
 }
 

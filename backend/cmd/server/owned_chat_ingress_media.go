@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net"
@@ -150,19 +151,35 @@ func ownedIngressMedia(ctx context.Context, source string) ([]byte, string, stri
 }
 
 func ownedIngressResponseOutputs(response *interaction.ProcessResponse, raw json.RawMessage) error {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil
-	}
 	var outputs []chat.MessageOutput
-	if err := json.Unmarshal(raw, &outputs); err != nil {
-		return err
+	if len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &outputs); err != nil {
+			return err
+		}
 	}
 	plan := &interaction.MessagePlan{DeliveryGroupID: response.RequestID, Managed: true, Items: []interaction.MessagePlanItem{}}
-	for index, output := range outputs {
+	appendOutput := func(output chat.MessageOutput) {
 		part := output.Part
-		plan.Items = append(plan.Items, interaction.MessagePlanItem{MessageID: output.OutputID, Sequence: index, Type: part.Type, ExtensionType: part.ExtensionType, Content: part.Content, AltText: part.AltText, MIMEType: part.MIMEType, IsAnimated: part.IsAnimated, Width: part.Width, Height: part.Height, OriginalAssetReference: part.URL, FallbackAssetReference: part.FallbackURL})
+		id := output.OutputID
+		if id == "" {
+			id = fmt.Sprintf("%s/output/%d", response.RequestID, len(plan.Items)+1)
+		}
+		plan.Items = append(plan.Items, interaction.MessagePlanItem{MessageID: id, Sequence: len(plan.Items) + 1, Type: part.Type, ExtensionType: part.ExtensionType, Content: part.Content, AltText: part.AltText, MIMEType: part.MIMEType, IsAnimated: part.IsAnimated, Width: part.Width, Height: part.Height, OriginalAssetReference: part.URL, FallbackAssetReference: part.FallbackURL})
 		if part.Type == "audio" && part.URL != "" {
 			response.AudioUrls = append(response.AudioUrls, part.URL)
+		}
+	}
+	for _, output := range outputs {
+		if output.Placement == "before_text" {
+			appendOutput(output)
+		}
+	}
+	if strings.TrimSpace(response.Reply) != "" {
+		plan.Items = append(plan.Items, interaction.MessagePlanItem{MessageID: response.RequestID + "/assistant", Sequence: len(plan.Items) + 1, Type: "text", Content: response.Reply})
+	}
+	for _, output := range outputs {
+		if output.Placement != "before_text" {
+			appendOutput(output)
 		}
 	}
 	response.MessagePlan = plan

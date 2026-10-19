@@ -64,6 +64,7 @@ func (s *service) OwnedReplyCommitted(ctx context.Context, inference business.In
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return err
 	}
+	s.emitOwnedChatLifecycle(ctx, inference, messageID, "response.completed", 5)
 	if lifecycle, ok := s.ownedToolRuntime.(OwnedToolLifecycleRuntime); ok {
 		return lifecycle.OwnedReplyCommitted(ctx, inference, generation, messageID)
 	}

@@ -12,7 +12,7 @@ import (
 )
 
 type verificationGateRuntime struct {
-	ModelToolRuntime
+	ownedFixtureToolRuntime
 	commands         int
 	mutations        int
 	failVerification bool
@@ -51,12 +51,12 @@ func workspaceVerificationCall(id, name, args string) []map[string]interface{} {
 
 func testWorkspaceVerificationRun(t *testing.T, runtime *verificationGateRuntime, toolDefinitions []tool.Tool, model func([]map[string]interface{}) (string, []map[string]interface{})) (string, error) {
 	t.Helper()
-	svc := &service{toolRuntime: runtime}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		content, calls := model(messages)
 		return content, "", calls, 1, nil
 	}
-	answer, _, _, _, _, err := svc.invokeLLMWithTools(
+	answer, _, _, _, _, err := svc.invokeOwnedLoopFixture(
 		context.Background(), &ModelConfig{ContextWindow: 128000},
 		[]map[string]interface{}{{"role": "system", "content": "Work on the repository"}},
 		applog.TraceFields{}, nil, "user", "verification-conv", "char", "web", "verification-request",
@@ -194,14 +194,14 @@ func TestDuplicateModelToolIDsFailBeforeAnySideEffects(t *testing.T) {
 	runtime := &verificationGateRuntime{}
 	definitions := []tool.Tool{{Function: tool.Function{Name: "apply_file"}}}
 	rounds := 0
-	svc := &service{toolRuntime: runtime}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
 	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		rounds++
 		calls := workspaceVerificationCall("same-id", "apply_file", `{"path":"a.go"}`)
 		calls = append(calls, workspaceVerificationCall("same-id", "apply_file", `{"path":"b.go"}`)...)
 		return "", "", calls, 1, nil
 	}
-	_, _, _, _, _, err := svc.invokeLLMWithTools(context.Background(), &ModelConfig{},
+	_, _, _, _, _, err := svc.invokeOwnedLoopFixture(context.Background(), &ModelConfig{},
 		nil, applog.TraceFields{}, nil, "user", "duplicate", "char", "web", "req", "", "",
 		"request_approval", &coreexec.ExecutionContext{WorkspaceID: "workspace"},
 		definitions, map[string]bool{}, context.Background(), nil)

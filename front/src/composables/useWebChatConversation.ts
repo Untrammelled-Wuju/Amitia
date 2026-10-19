@@ -63,7 +63,7 @@ export function useWebChatConversation(
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
     await fetchConversations();
-    if (owned.enabled.value) await chatStore.fetchSidebar();
+    if (owned.enabled.value) await chatStore.fetchSidebar().catch(() => undefined);
   }
 
   async function loadCharacterConversation() {

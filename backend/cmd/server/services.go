@@ -691,7 +691,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	reflectionPublisher := interaction.NewReflectionMemoryPublisher(reflectionMemoryAdapter, nil)
 	dispatchedPublisher.Register(interaction.ReflectionCandidateApprovedEventType, reflectionPublisher)
 	dispatchedPublisher.Register(interaction.ReflectionMemoryAbstractionEventType, reflectionPublisher)
-	orch := interaction.NewOrchestratorWithStores(orchCfg, chatSvc.(interaction.MessageProcessor), tracker, newOutboxStore)
+	orch := interaction.NewOrchestratorWithStores(orchCfg, nil, tracker, newOutboxStore)
 	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
 		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
 		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
@@ -1346,6 +1346,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("Core 缺少设备归属计算端口")
 		}
 		services.OwnedBusiness = business.NewEngine(deviceMeshRuntime.Coordination, deviceMeshRuntime, ownedModel)
+		agentAdminController.owned = services.OwnedBusiness
+		agentAdminController.ownedData = deviceMeshRuntime
 		services.OwnedIngress = newOwnedChatIngress(services, localSpace.SpaceID())
 		entry.SetEntryExecutor(services.OwnedIngress)
 		continuityCoordinator.SetDispatcher(&continuityWakeDispatcher{entry: entry, bindLocal: services.OwnedIngress.bindLocalSource})
@@ -1360,7 +1362,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if setter, ok := services.Chat.(interface {
 			SetCanonicalMemoryRuntime(chat.CanonicalMemoryRuntime)
 		}); ok {
-			runtime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: deviceMeshRuntime.LocalHandler.LocalInferenceContext}
+			var inferenceAuthority chat.InferenceAuthority
+			if deviceMeshRuntime.LocalHandler != nil {
+				inferenceAuthority = deviceMeshRuntime.LocalHandler.LocalInferenceContext
+			}
+			runtime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: inferenceAuthority}
 			setter.SetCanonicalMemoryRuntime(runtime)
 			memoryConsumers.runtime = runtime
 			reflectionMemoryAdapter.runtime = runtime

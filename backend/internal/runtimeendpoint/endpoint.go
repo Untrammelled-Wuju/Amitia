@@ -70,6 +70,23 @@ func Write(runDir string, endpoint Endpoint) error {
 	return os.Rename(temp, path)
 }
 
+func RemoveIfOwner(runDir string, pid int) error {
+	if pid <= 0 {
+		return nil
+	}
+	endpoint, err := Read(runDir)
+	if err != nil {
+		return nil
+	}
+	if endpoint.PID != pid {
+		return nil
+	}
+	if err := os.Remove(FilePath(runDir)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func Read(runDir string) (Endpoint, error) {
 	data, err := os.ReadFile(FilePath(runDir))
 	if err != nil {

@@ -43,24 +43,6 @@ func (s *service) SetDesktopPetLifecycleObserver(observer DesktopPetLifecycleObs
 	s.desktopPetLifecycle = observer
 }
 
-func (s *service) emitDesktopPetChat(ctx context.Context, req *ProcessMessageRequest, charID, convID, messageID, phase string, version int64) {
-	if s == nil || s.desktopPetLifecycle == nil || strings.TrimSpace(charID) == "" {
-		return
-	}
-	interactionID := strings.TrimSpace(req.InteractionID)
-	if interactionID == "" {
-		interactionID = strings.TrimSpace(req.RequestID)
-	}
-	if interactionID == "" {
-		interactionID = strings.TrimSpace(messageID)
-	}
-	s.desktopPetLifecycle.OnDesktopPetChatLifecycle(ctx, DesktopPetChatLifecycle{
-		InteractionID: interactionID, MessageID: messageID, CharacterID: charID,
-		SpaceID: req.SpaceID, ConversationID: convID, Phase: phase, StatusVersion: version,
-		Origin: req.Source, CorrelationID: req.RequestID, OccurredAt: time.Now().UTC(),
-	})
-}
-
 func (s *service) emitDesktopPetTool(ctx context.Context, scope SkillScope, toolCallID, toolName, phase, errorClass string, depth int) {
 	if s == nil || s.desktopPetLifecycle == nil || strings.TrimSpace(scope.CharacterID) == "" {
 		return

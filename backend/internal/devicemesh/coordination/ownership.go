@@ -435,6 +435,7 @@ type resourceCursor struct {
 	Order        string `json:"order"`
 	ID           string `json:"id"`
 	SearchHash   string `json:"searchHash,omitempty"`
+	RequestID    string `json:"requestId,omitempty"`
 }
 
 func ConversationSearchHash(search string) string {
@@ -466,7 +467,7 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			return nil, "", ErrWrongOwner
 		}
 		encoded, err := base64.RawURLEncoding.DecodeString(query.Cursor)
-		if err != nil || json.Unmarshal(encoded, &cursor) != nil || cursor.Owner != s.ownerID || cursor.Kind != kind || cursor.Role != role || cursor.Conversation != query.ConversationID || cursor.SearchHash != searchHash || cursor.Order == "" || cursor.ID == "" || len(cursor.ID) > 512 || len(cursor.Order) > 128 {
+		if err != nil || json.Unmarshal(encoded, &cursor) != nil || cursor.Owner != s.ownerID || cursor.Kind != kind || cursor.Role != role || cursor.Conversation != query.ConversationID || cursor.SearchHash != searchHash || cursor.RequestID != query.RequestID || cursor.Order == "" || cursor.ID == "" || len(cursor.ID) > 512 || len(cursor.Order) > 128 {
 			return nil, "", ErrWrongOwner
 		}
 	}
@@ -494,12 +495,20 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 		}
 		statement += ` AND (json_extract(CAST(body AS TEXT),'$.conversationId')=? OR json_extract(CAST(body AS TEXT),'$.executionScope.requestId') IN (SELECT substr(resource_id,6) FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='checkpoint' AND deleted=0 AND substr(resource_id,1,5)='turn/' AND json_extract(CAST(body AS TEXT),'$.conversationId')=?))`
 		arguments = append(arguments, query.ConversationID, s.ownerID, role, query.ConversationID)
+		if query.RequestID != "" {
+			statement += ` AND json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?`
+			arguments = append(arguments, query.RequestID)
+		}
 	case "message", "summary", "working":
 		if query.ConversationID == "" {
 			return []Resource{}, "", nil
 		}
 		statement += ` AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`
 		arguments = append(arguments, query.ConversationID)
+		if query.ResourceID != "" {
+			statement += ` AND resource_id=?`
+			arguments = append(arguments, query.ResourceID)
+		}
 	case "conversation":
 		if search != "" {
 			statement += OwnedConversationSearchPredicate
@@ -513,7 +522,10 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			arguments = append(arguments, query.ConversationID)
 		}
 	case "checkpoint":
-		if query.Management && query.RuntimeTurns && query.ConversationID != "" {
+		if query.Management && query.QueuedChats && query.ConversationID != "" {
+			statement += ` AND substr(resource_id,1,12)='queued-chat/' AND json_extract(CAST(body AS TEXT),'$.request.conversationId')=? AND json_extract(CAST(body AS TEXT),'$.status')='queued'`
+			arguments = append(arguments, query.ConversationID)
+		} else if query.Management && query.RuntimeTurns && query.ConversationID != "" {
 			statement += ` AND substr(resource_id,1,5)='turn/' AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`
 			arguments = append(arguments, query.ConversationID)
 		} else if query.Management && query.ResourceKind == "checkpoint" {
@@ -577,7 +589,7 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			count = limit
 		}
 		last := resources[count-1]
-		encoded, _ := json.Marshal(resourceCursor{Owner: s.ownerID, Kind: kind, Role: role, Conversation: query.ConversationID, Order: orders[count-1], ID: last.ID, SearchHash: searchHash})
+		encoded, _ := json.Marshal(resourceCursor{Owner: s.ownerID, Kind: kind, Role: role, Conversation: query.ConversationID, Order: orders[count-1], ID: last.ID, SearchHash: searchHash, RequestID: query.RequestID})
 		next = base64.RawURLEncoding.EncodeToString(encoded)
 		resources = resources[:count]
 	}
