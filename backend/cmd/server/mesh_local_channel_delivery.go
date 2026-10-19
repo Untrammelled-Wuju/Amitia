@@ -70,8 +70,8 @@ func (p *meshLocalDataPort) SubmitChannelDelivery(ctx context.Context, scope coo
 	return p.WithSourceRole(ctx, scope, submit)
 }
 
-func (p *meshLocalDataPort) PendingChannelDeliveries(ctx context.Context) ([]coordination.PendingChannelDelivery, error) {
-	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT resource_id,revision,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='checkpoint' AND deleted=0 AND resource_id LIKE 'channel-delivery/%' AND json_extract(body,'$.pending')=1 ORDER BY updated_at,resource_id LIMIT 64`, p.ownerID)
+func (p *meshLocalDataPort) PendingChannelDeliveries(ctx context.Context, cursor string) ([]coordination.PendingChannelDelivery, error) {
+	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT resource_id,revision,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='checkpoint' AND deleted=0 AND resource_id LIKE 'channel-delivery/%' AND json_extract(body,'$.pending')=1 AND resource_id>? ORDER BY resource_id LIMIT 64`, p.ownerID, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +86,7 @@ func (p *meshLocalDataPort) PendingChannelDeliveries(ctx context.Context) ([]coo
 		if err := json.Unmarshal(raw, &item); err != nil {
 			return nil, err
 		}
+		item.Cursor = item.ID
 		if item.Scope.ResourceOwnerID != p.ownerID || item.ID != "channel-delivery/"+item.Scope.RequestID || item.Request.RequestID != item.Scope.RequestID {
 			return nil, coordination.ErrWrongOwner
 		}

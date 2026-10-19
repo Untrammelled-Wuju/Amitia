@@ -13,7 +13,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
-	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
@@ -54,8 +53,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	if dpCoord != nil {
 		svc.SetDataPortabilityCoordinator(dpCoord)
 	}
-
-	modelerror.SetReporter(handler.publishModelError)
 
 	r.GET("/health", handler.Health)
 	r.GET("/readyz", handler.Readyz)

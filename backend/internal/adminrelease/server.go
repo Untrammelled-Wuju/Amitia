@@ -102,6 +102,7 @@ func (s *Server) buildRouter() *gin.Engine {
 	protected.GET("/feedbacks-export", s.handleExportFeedbacks)
 	protected.GET("/feedbacks/:id", s.handleGetFeedback)
 	protected.GET("/feedbacks/:id/screenshot", s.handleFeedbackScreenshot)
+	protected.PATCH("/feedbacks/:id", requirePublisher, s.handleSetFeedbackResolved)
 	protected.GET("/settings", requireAdmin, s.handleSettings)
 	s.registerWebRoutes(router)
 	return router

@@ -57,8 +57,8 @@ describe("404 报错信息弹窗", () => {
         return {
           uploadUrl: "https://amitia.example.com/api/v1/feedbacks",
           defaultUploadUrl: "https://amitia.example.com/api/v1/feedbacks",
-          logLineLimit: 120,
-          errorLineLimit: 40,
+          logLineLimit: 500,
+          errorLineLimit: 500,
           maxScreenshotMB: 6,
         };
       }

@@ -34,7 +34,7 @@ export class OwnedRealtimeSession {
   private inbox = Promise.resolve();
   private latestVisual: OwnedAttachment | null = null;
   private readonly scope: OwnedExecutionScope;
-  private readonly invalidated = () => this.fail("云端服务或数据归属已变化，通话已中断");
+  private readonly invalidated = () => this.fail("设备服务或数据归属已变化，通话已中断");
 
   constructor(private readonly options: OwnedRealtimeOptions) {
     this.scope = JSON.parse(JSON.stringify(options.expectedExecutionScope));
@@ -53,8 +53,8 @@ export class OwnedRealtimeSession {
     if (captured !== this.generation) throw new Error("通话服务已变化");
     this.socket = new WebSocket(url);
     this.socket.onmessage = (event) => { this.inbox = this.inbox.then(() => this.receive(event.data, captured)).catch((error) => this.fail(error instanceof Error ? error.message : "通话响应无效")); };
-    this.socket.onerror = () => this.fail("云端通话连接失败");
-    this.socket.onclose = () => { if (captured === this.generation) this.fail("云端通话连接已关闭"); };
+    this.socket.onerror = () => this.fail("设备通话连接失败");
+    this.socket.onclose = () => { if (captured === this.generation) this.fail("设备通话连接已关闭"); };
   }
 
   startTurn(): boolean {
@@ -126,9 +126,9 @@ export class OwnedRealtimeSession {
 
   private async receive(raw: unknown, captured: number): Promise<void> {
     if (captured !== this.generation) return;
-    if (typeof raw !== "string" || raw.length > 2 * 1048576) throw new Error("云端通话响应格式或大小无效");
+    if (typeof raw !== "string" || raw.length > 2 * 1048576) throw new Error("设备通话响应格式或大小无效");
     const frame = JSON.parse(raw);
-    if (frame.type === "authority_changed") throw new Error("云端服务、角色或权限已变化，通话已中断");
+    if (frame.type === "authority_changed") throw new Error("设备服务、角色或权限已变化，通话已中断");
     if (frame.type === "ready") {
       if (this.ready || !sameOwnedAuthority(this.scope, frame.executionScope)) throw new Error("通话服务归属不一致");
       this.ready = true;

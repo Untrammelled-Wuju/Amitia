@@ -31,8 +31,18 @@ func (p *channelRecoveryPort) Commit(context.Context, coordination.Commit) (coor
 	return coordination.Acknowledgement{}, nil
 }
 
-func (p *channelRecoveryPort) PendingChannelDeliveries(context.Context) ([]coordination.PendingChannelDelivery, error) {
-	return p.pending, nil
+func (p *channelRecoveryPort) PendingChannelDeliveries(_ context.Context, cursor string) ([]coordination.PendingChannelDelivery, error) {
+	var page []coordination.PendingChannelDelivery
+	for _, item := range p.pending {
+		if item.ID > cursor {
+			item.Cursor = item.ID
+			page = append(page, item)
+			if len(page) == 64 {
+				break
+			}
+		}
+	}
+	return page, nil
 }
 
 func (p *channelRecoveryPort) CompleteChannelDelivery(ctx context.Context, pending coordination.PendingChannelDelivery) error {

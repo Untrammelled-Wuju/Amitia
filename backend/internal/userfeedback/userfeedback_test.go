@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -52,6 +54,76 @@ func TestRedactionMasksSensitiveValues(t *testing.T) {
 	}
 	if masked == 0 {
 		t.Fatal("expected redaction count to be reported")
+	}
+}
+
+func TestLooksLikeErrorUsesStructuredLevels(t *testing.T) {
+	cases := []struct {
+		line string
+		want bool
+	}{
+		{`{"@level":"warning","@message":"realtime voice not ready"}`, true},
+		{`{"@level":"error","@message":"request failed"}`, true},
+		{`{"@level":"info","@message":"status=succeeded error="}`, false},
+		{`{"level":30,"msg":"incoming request"}`, false},
+		{`{"level":50,"msg":"request failed"}`, true},
+		{`[2026-10-19T12:57:07.829Z] [LOG] [AmitiaCore] {"@level":"warning","@message":"disk pressure"}`, true},
+		{`[2026-10-19 20:37:12] [enable-tx] status=succeeded error=`, false},
+		{`[2026-10-19 20:37:12] [enable-tx] status=succeeded errorCode=`, false},
+		{`interaction recovered failed=0 scanned=134`, false},
+		{`[ERROR] connection refused`, true},
+		{`[WARN] retry scheduled`, true},
+		{`level=warn service=com.amitia/channel-wechat msg=slow`, true},
+		{`panic: runtime error`, true},
+		{`failed: connection refused`, true},
+	}
+	for _, item := range cases {
+		if got := looksLikeError(item.line); got != item.want {
+			t.Fatalf("looksLikeError(%q) = %v, want %v", item.line, got, item.want)
+		}
+	}
+}
+
+func TestCollectLogsIncludesPluginRuntimeLogsAndCapsAtFiveHundred(t *testing.T) {
+	coreDir := t.TempDir()
+	pluginDir := t.TempDir()
+	coreLines := make([]string, 0, 600)
+	for index := 0; index < 600; index++ {
+		coreLines = append(coreLines, "error: core failure "+strconv.Itoa(index))
+	}
+	if err := os.WriteFile(filepath.Join(coreDir, "app.log"), []byte(strings.Join(coreLines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write core log: %v", err)
+	}
+	pluginLogDir := filepath.Join(pluginDir, "wechat", "logs")
+	if err := os.MkdirAll(pluginLogDir, 0o755); err != nil {
+		t.Fatalf("create plugin log dir: %v", err)
+	}
+	pluginLine := "plugin runtime ready"
+	if err := os.WriteFile(filepath.Join(pluginLogDir, "service.log"), []byte(pluginLine+"\n"), 0o644); err != nil {
+		t.Fatalf("write plugin log: %v", err)
+	}
+
+	files, errors, recent, _ := collectLogs([]logRoot{
+		{Path: coreDir, MaxDepth: 3},
+		{Path: pluginDir, Prefix: "plugin:", MaxDepth: 3},
+	}, true)
+
+	joinedFiles := strings.Join(files, "\n")
+	if !strings.Contains(joinedFiles, "app.log") || !strings.Contains(joinedFiles, "plugin:wechat/logs/service.log") {
+		t.Fatalf("plugin log file missing from discovery: %v", files)
+	}
+	if len(recent) != 500 || len(errors) != 500 {
+		t.Fatalf("unexpected log limits: recent=%d errors=%d", len(recent), len(errors))
+	}
+	foundPluginLine := false
+	for _, line := range recent {
+		if line.File == "plugin:wechat/logs/service.log" && line.Line == pluginLine {
+			foundPluginLine = true
+			break
+		}
+	}
+	if !foundPluginLine {
+		t.Fatal("plugin runtime log line was not included in recent lines")
 	}
 }
 

@@ -5,6 +5,7 @@ import { Refresh, Search, VideoPause, VideoPlay, RefreshRight, SetUp } from "@el
 import { listWorkflowDevices, type WorkflowDeviceDescriptor } from "@/api/workflow";
 import { taskPauseControls } from "./control";
 import { getRuntimeConnection, isCurrentDevicePaired } from "@/runtime/runtime-adapter";
+import { currentDeviceServiceMode, deviceProviderChangedNotice } from "@/runtime/device-service-label";
 import {
   listTasks,
   getTask,
@@ -473,7 +474,8 @@ async function handleEnqueue() {
       const expected = options.executionScope;
       const actual = current.executionScope;
       if (actual.coreId !== expected.coreId || actual.modeRevision !== expected.modeRevision || actual.providerEpoch !== expected.providerEpoch || actual.permissionRevision !== expected.permissionRevision || actual.targetPermissionRevision !== expected.targetPermissionRevision || actual.targetProviderEpoch !== expected.targetProviderEpoch || actual.resourceOwnerId !== expected.resourceOwnerId || !current.roles.some(item => item.id === role.id && item.revision === role.revision)) {
-        throw new Error(actual.coreId !== expected.coreId ? `云端服务提供者已从「${expected.coreId}」切换为「${actual.coreId}」，请刷新后重新提交。` : "目标角色、权限或统筹状态已变化，请刷新后重新提交");
+        const serviceMode = await currentDeviceServiceMode();
+        throw new Error(actual.coreId !== expected.coreId ? deviceProviderChangedNotice(serviceMode, expected.coreId, actual.coreId, "请刷新后重新提交。") : "目标角色、权限或统筹状态已变化，请刷新后重新提交");
       }
       const expectedExecutionScope = { ...expected, requestId: "", turnId: "", executionId: "", roleId: role.id, roleRevision: role.revision };
       const catalog = enqueueCatalog.value.find(entry => entry.reference.catalogId === req.taskDefinitionId);

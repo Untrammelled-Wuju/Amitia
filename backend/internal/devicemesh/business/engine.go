@@ -537,12 +537,24 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if !firstRequest {
 		return Response{}, ErrUncertainExecution
 	}
+	ingress, hasIngress := IngressFromContext(ctx)
 	quote, quoteDependencies, err := e.reviewQuote(ctx, scope, quoteRequest, request.Quote)
 	if err != nil {
 		return Response{}, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	conversation := map[string]any{"id": request.ConversationID, "conversationId": request.ConversationID, "title": request.Message, "characterId": role.ID, "createdAt": now, "ownerId": scope.ResourceOwnerID, "coreId": scope.CoreID}
+	if hasIngress {
+		if ingress.Channel != "" {
+			conversation["channel"] = ingress.Channel
+		}
+		if ingress.Source != "" {
+			conversation["source"] = ingress.Source
+		}
+		if ingress.PeerID != "" {
+			conversation["peerId"] = ingress.PeerID
+		}
+	}
 	if projectID != "" {
 		conversation["projectId"] = projectID
 	}
@@ -573,7 +585,6 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	}
 	userDocument["sequence"] = userSequence
 	input[1].Body = body(userDocument)
-	ingress, hasIngress := IngressFromContext(ctx)
 	var storedIngress *Ingress
 	if hasIngress {
 		storedIngress = &ingress

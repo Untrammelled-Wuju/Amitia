@@ -103,22 +103,6 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 	if current.RequestID != request.RequestID || current.ConversationID != request.ConversationID || current.Role != "user" {
 		return coordination.ErrWrongOwner
 	}
-	if len(assistant.StateEffects) > 0 && string(assistant.StateEffects) != "null" {
-		var runtime interaction.RuntimeAssembly
-		if err := json.Unmarshal(assistant.StateEffects, &runtime); err != nil {
-			return err
-		}
-		committer, ok := p.services.Chat.(interface {
-			CommitOwnedState(context.Context, chat.OwnedStatePlan) error
-		})
-		if !ok {
-			return errors.New("Owner 心理、关系与需求状态提交端口未接通")
-		}
-		plan := chat.OwnedStatePlan{Scope: scope, SpaceID: p.legacySpaceID, Character: scope.RoleID, Conversation: request.ConversationID, InteractionID: scope.TurnID, Channel: request.Channel, PeerID: request.PeerID, Source: request.Source, IsInternal: request.IsInternal, Reply: assistant.Content, MessageID: request.MessageID, Runtime: &runtime}
-		if err := committer.CommitOwnedState(ctx, plan); err != nil {
-			return err
-		}
-	}
 	currentAt, err := time.Parse(time.RFC3339Nano, current.CreatedAt)
 	if err != nil {
 		return err
@@ -169,6 +153,22 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		phaseScope := scope
 		phaseScope.RequestID += "|effects-mood"
 		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: phaseScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: receiptID + "/mood", RoleID: scope.RoleID, Body: encoded}}}); err != nil {
+			return err
+		}
+	}
+	if len(assistant.StateEffects) > 0 && string(assistant.StateEffects) != "null" {
+		var runtime interaction.RuntimeAssembly
+		if err := json.Unmarshal(assistant.StateEffects, &runtime); err != nil {
+			return err
+		}
+		committer, ok := p.services.Chat.(interface {
+			CommitOwnedState(context.Context, chat.OwnedStatePlan) error
+		})
+		if !ok {
+			return errors.New("Owner 心理、关系与需求状态提交端口未接通")
+		}
+		plan := chat.OwnedStatePlan{Scope: scope, SpaceID: p.legacySpaceID, Character: scope.RoleID, Conversation: request.ConversationID, InteractionID: scope.TurnID, Channel: request.Channel, PeerID: request.PeerID, Source: request.Source, IsInternal: request.IsInternal, Reply: assistant.Content, MessageID: request.MessageID, Runtime: &runtime}
+		if err := committer.CommitOwnedState(ctx, plan); err != nil {
 			return err
 		}
 	}

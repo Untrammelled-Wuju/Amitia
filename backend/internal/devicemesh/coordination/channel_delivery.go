@@ -20,6 +20,7 @@ type PendingChannelDelivery struct {
 	Request  ChannelDeliveryRequest `json:"request"`
 	ID       string                 `json:"-"`
 	Revision int64                  `json:"-"`
+	Cursor   string                 `json:"-"`
 }
 
 type ChannelDeliveryPort interface {
@@ -27,6 +28,6 @@ type ChannelDeliveryPort interface {
 }
 
 type ChannelDeliveryRecoveryPort interface {
-	PendingChannelDeliveries(context.Context) ([]PendingChannelDelivery, error)
+	PendingChannelDeliveries(context.Context, string) ([]PendingChannelDelivery, error)
 	CompleteChannelDelivery(context.Context, PendingChannelDelivery) error
 }

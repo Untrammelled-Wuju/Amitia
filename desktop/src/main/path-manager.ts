@@ -2,6 +2,9 @@ import { app } from "electron";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "node:url";
+import { resolveStableDataDir } from "./data-location";
+
+let cachedAmitiaDataDir = "";
 
 export function isDevMode(): boolean {
   if (!app.isPackaged) return true;
@@ -16,19 +19,39 @@ export function getInstallDir(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 }
 
+export function getDataLocationFile(): string {
+  return path.join(app.getPath("userData"), "data-location.json");
+}
+
+function getStableDataDir(): string {
+  const localAppData = process.env.LOCALAPPDATA?.trim();
+  return localAppData
+    ? path.join(path.resolve(localAppData), "AmitiaData")
+    : path.join(app.getPath("userData"), "AmitiaData");
+}
+
 export function getAmitiaDataDir(): string {
-  if (!isDevMode()) {
-    const installDir = getInstallDir();
-    const parentDir = path.dirname(installDir);
-    return path.join(parentDir, "AmitiaData");
+  const override = process.env.AMITIA_DATA_DIR?.trim();
+  if (override) {
+    return path.resolve(override);
   }
+  if (cachedAmitiaDataDir) {
+    return cachedAmitiaDataDir;
+  }
+
   const installDir = getInstallDir();
-  return path.join(path.dirname(installDir), "AmitiaData");
+  cachedAmitiaDataDir = resolveStableDataDir({
+    locationFile: getDataLocationFile(),
+    legacyDataDir: path.join(path.dirname(installDir), "AmitiaData"),
+    stableDataDir: getStableDataDir(),
+  });
+  return cachedAmitiaDataDir;
 }
 
 export function getBackendDataDir(): string {
-  if (process.env.AMITIA_DATA_DIR && process.env.AMITIA_DATA_DIR.trim() !== "") {
-    return path.resolve(process.env.AMITIA_DATA_DIR.trim());
+  const override = process.env.AMITIA_DATA_DIR?.trim();
+  if (override) {
+    return path.resolve(override);
   }
   return getAmitiaDataDir();
 }

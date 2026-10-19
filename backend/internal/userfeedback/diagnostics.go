@@ -5,6 +5,8 @@ package userfeedback
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,6 +28,8 @@ var (
 	unixUserPattern   = regexp.MustCompile(`(/(?:home|Users)/)[^/\s"']+`)
 	emailPattern      = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 	phonePattern      = regexp.MustCompile(`\b1[3-9]\d{9}\b`)
+	textErrorPattern  = regexp.MustCompile(`(?i)(?:^|\s)(?:\[(?:warn|warning|error|fatal|panic)\]|(?:warn|warning|error|fatal|panic)(?::|\s|$)|failed(?::|\s|$))`)
+	valueErrorPattern = regexp.MustCompile(`(?i)\blevel\s*[:=]\s*(?:warn|warning|error|fatal|panic|dpanic|critical)\b`)
 )
 
 func redactText(value string, limit int) (string, int) {
@@ -73,28 +77,127 @@ func screenshotDirectory() string {
 	return filepath.Join(dataDirectory(), "user-feedback", "screenshots")
 }
 
-func logFilesByRecency(logDir string) []os.FileInfo {
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		return nil
+type logRoot struct {
+	Path     string
+	Prefix   string
+	MaxDepth int
+}
+
+type discoveredLogFile struct {
+	Path    string
+	Label   string
+	ModTime time.Time
+}
+
+type collectedLogFile struct {
+	Recent []LogLine
+	Errors []LogLine
+}
+
+func logSearchRoots() []logRoot {
+	roots := []logRoot{
+		{Path: runtimeLogDirectory(), MaxDepth: 3},
 	}
-	files := make([]os.FileInfo, 0, len(entries))
-	for _, entry := range entries {
-		if entry.Type()&os.ModeSymlink != 0 {
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		roots = append(roots, logRoot{Path: filepath.Join(home, ".amitia", "extensions"), Prefix: "plugin:", MaxDepth: 6})
+	}
+	if dir := strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_DATA_DIR")); dir != "" {
+		roots = append(roots, logRoot{Path: dir, Prefix: "plugin:", MaxDepth: 6})
+	}
+	for _, base := range []string{dataDirectory(), util.RuntimeRoot()} {
+		for _, name := range []string{"extensions", "extensions-v2"} {
+			roots = append(roots, logRoot{Path: filepath.Join(base, name), Prefix: "plugin:", MaxDepth: 7})
+		}
+	}
+	seen := map[string]bool{}
+	result := make([]logRoot, 0, len(roots))
+	for _, root := range roots {
+		path := strings.TrimSpace(root.Path)
+		if path == "" {
 			continue
 		}
-		info, infoErr := entry.Info()
-		if infoErr == nil && info.Mode().IsRegular() && strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
-			files = append(files, info)
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			absolute = filepath.Clean(path)
 		}
+		if seen[absolute] {
+			continue
+		}
+		seen[absolute] = true
+		root.Path = absolute
+		result = append(result, root)
+	}
+	return result
+}
+
+func logFilesByRecency(roots []logRoot) []discoveredLogFile {
+	files := []discoveredLogFile{}
+	seen := map[string]bool{}
+	for _, root := range roots {
+		appendLogFiles(&files, seen, root)
 	}
 	sort.Slice(files, func(i, j int) bool {
-		if files[i].ModTime().Equal(files[j].ModTime()) {
-			return files[i].Name() > files[j].Name()
+		if files[i].ModTime.Equal(files[j].ModTime) {
+			return files[i].Label > files[j].Label
 		}
-		return files[i].ModTime().After(files[j].ModTime())
+		return files[i].ModTime.After(files[j].ModTime)
 	})
 	return files
+}
+
+func appendLogFiles(files *[]discoveredLogFile, seen map[string]bool, root logRoot) {
+	info, err := os.Stat(root.Path)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	baseDepth := strings.Count(filepath.Clean(root.Path), string(os.PathSeparator))
+	_ = filepath.WalkDir(root.Path, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			depth := strings.Count(filepath.Clean(path), string(os.PathSeparator)) - baseDepth
+			if depth >= root.MaxDepth {
+				return filepath.SkipDir
+			}
+			switch strings.ToLower(entry.Name()) {
+			case ".git", ".package-staging", "artifacts", "cache", "data", "native", "node_modules", "qdrant", "surrealdb", "tmp":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
+			return nil
+		}
+		fileInfo, infoErr := entry.Info()
+		if infoErr != nil || !fileInfo.Mode().IsRegular() {
+			return nil
+		}
+		absolute, absErr := filepath.Abs(path)
+		if absErr != nil {
+			absolute = filepath.Clean(path)
+		}
+		if seen[absolute] {
+			return nil
+		}
+		seen[absolute] = true
+		label := entry.Name()
+		if root.Prefix != "" {
+			relative, relErr := filepath.Rel(root.Path, path)
+			if relErr != nil {
+				relative = entry.Name()
+			}
+			label = root.Prefix + filepath.ToSlash(relative)
+		}
+		*files = append(*files, discoveredLogFile{Path: absolute, Label: label, ModTime: fileInfo.ModTime()})
+		return nil
+	})
 }
 
 func readLogTail(path string, maxBytes int64) (string, error) {
@@ -130,66 +233,129 @@ func readLogTail(path string, maxBytes int64) (string, error) {
 }
 
 func looksLikeError(line string) bool {
-	lower := strings.ToLower(line)
-	for _, marker := range []string{"error", "fail", "panic", "exception", "fatal", "warn"} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
+	if level, ok := structuredLogLevel(line); ok {
+		return errorLogLevel(level)
 	}
-	return false
+	return valueErrorPattern.MatchString(line) || textErrorPattern.MatchString(line)
 }
 
-func collectLogs(logDir string, includeLogs bool) (files []string, errorLines []LogLine, recentLines []LogLine, redacted int) {
-	files = []string{}
+func structuredLogLevel(line string) (string, bool) {
+	candidate := strings.TrimSpace(line)
+	if index := strings.Index(candidate, "{"); index >= 0 {
+		candidate = candidate[index:]
+	}
+	if !strings.HasPrefix(candidate, "{") {
+		return "", false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(candidate), &payload); err != nil {
+		return "", false
+	}
+	if value, ok := payload["@level"].(string); ok {
+		return strings.ToLower(strings.TrimSpace(value)), true
+	}
+	switch value := payload["level"].(type) {
+	case string:
+		return strings.ToLower(strings.TrimSpace(value)), true
+	case float64:
+		return numericLogLevel(int(value)), true
+	}
+	return "", false
+}
+
+func numericLogLevel(level int) string {
+	switch {
+	case level >= 60:
+		return "fatal"
+	case level >= 50:
+		return "error"
+	case level >= 40:
+		return "warn"
+	case level >= 30:
+		return "info"
+	default:
+		return "debug"
+	}
+}
+
+func errorLogLevel(level string) bool {
+	switch level {
+	case "warn", "warning", "error", "fatal", "panic", "dpanic", "critical":
+		return true
+	default:
+		return false
+	}
+}
+
+func collectLogs(roots []logRoot, includeLogs bool) (files []string, errorLines []LogLine, recentLines []LogLine, redacted int) {
+	fileInfos := logFilesByRecency(roots)
+	files = make([]string, 0, len(fileInfos))
+	for _, info := range fileInfos {
+		files = append(files, info.Label)
+	}
 	errorLines = []LogLine{}
 	recentLines = []LogLine{}
-	if !includeLogs {
-		if entries, err := os.ReadDir(logDir); err == nil {
-			for _, entry := range entries {
-				if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
-					files = append(files, entry.Name())
-				}
-			}
-		}
+	if !includeLogs || len(fileInfos) == 0 {
 		return files, errorLines, recentLines, 0
 	}
-	fileInfos := logFilesByRecency(logDir)
+	collected := make([]collectedLogFile, 0, len(fileInfos))
 	for _, info := range fileInfos {
-		files = append(files, info.Name())
-	}
-	for index := 0; index < len(fileInfos) && len(recentLines) < defaultLogLineLimit; index++ {
-		content, err := readLogTail(filepath.Join(logDir, fileInfos[index].Name()), 2*1024*1024)
+		content, err := readLogTail(info.Path, 2*1024*1024)
 		if err != nil {
 			continue
 		}
 		lines := strings.Split(content, "\n")
-		for position := len(lines) - 1; position >= 0 && len(recentLines) < defaultLogLineLimit; position-- {
+		entry := collectedLogFile{
+			Recent: make([]LogLine, 0, defaultLogLineLimit),
+			Errors: make([]LogLine, 0, defaultErrorLineLimit),
+		}
+		for position := len(lines) - 1; position >= 0; position-- {
 			line := strings.TrimSpace(lines[position])
 			if line == "" {
 				continue
 			}
 			cleaned, masked := redactLine(line)
 			redacted += masked
-			recentLines = append(recentLines, LogLine{File: fileInfos[index].Name(), Line: cleaned})
+			if len(entry.Recent) < defaultLogLineLimit {
+				entry.Recent = append(entry.Recent, LogLine{File: info.Label, Line: cleaned})
+			}
+			if len(entry.Errors) < defaultErrorLineLimit && looksLikeError(line) {
+				entry.Errors = append(entry.Errors, LogLine{File: info.Label, Line: cleaned})
+			}
+			if len(entry.Recent) >= defaultLogLineLimit && len(entry.Errors) >= defaultErrorLineLimit {
+				break
+			}
 		}
+		collected = append(collected, entry)
 	}
-	for index := 0; index < len(fileInfos) && len(errorLines) < defaultErrorLineLimit; index++ {
-		content, err := readLogTail(filepath.Join(logDir, fileInfos[index].Name()), 2*1024*1024)
-		if err != nil {
-			continue
-		}
-		lines := strings.Split(content, "\n")
-		for position := len(lines) - 1; position >= 0 && len(errorLines) < defaultErrorLineLimit; position-- {
-			line := strings.TrimSpace(lines[position])
-			if line == "" || !looksLikeError(line) {
+	recentLines = interleaveLogLines(collected, defaultLogLineLimit, false)
+	errorLines = interleaveLogLines(collected, defaultErrorLineLimit, true)
+	return files, errorLines, recentLines, redacted
+}
+
+func interleaveLogLines(files []collectedLogFile, limit int, errors bool) []LogLine {
+	result := make([]LogLine, 0, limit)
+	for position := 0; len(result) < limit; position++ {
+		progressed := false
+		for _, file := range files {
+			lines := file.Recent
+			if errors {
+				lines = file.Errors
+			}
+			if position >= len(lines) {
 				continue
 			}
-			cleaned, masked := redactLine(line)
-			redacted += masked
-			errorLines = append(errorLines, LogLine{File: fileInfos[index].Name(), Line: cleaned})
+			result = append(result, lines[position])
+			progressed = true
+			if len(result) >= limit {
+				break
+			}
+		}
+		if !progressed {
+			break
 		}
 	}
-	return files, errorLines, recentLines, redacted
+	return result
 }
 
 func sanitizeClientErrors(input []ClientError) ([]ClientError, int) {
@@ -225,7 +391,7 @@ func sanitizeClientErrors(input []ClientError) ([]ClientError, int) {
 func buildSnapshot(input *TicketInput, clientErrors []ClientError) (*DiagnosticsSnapshot, error) {
 	includeLogs := input.IncludeLogs == nil || *input.IncludeLogs
 	logDir := runtimeLogDirectory()
-	files, errorLines, recentLines, redacted := collectLogs(logDir, includeLogs)
+	files, errorLines, recentLines, redacted := collectLogs(logSearchRoots(), includeLogs)
 	sanitizedErrors, clientRedacted := sanitizeClientErrors(clientErrors)
 	redacted += clientRedacted
 

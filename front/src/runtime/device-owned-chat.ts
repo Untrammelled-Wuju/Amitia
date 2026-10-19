@@ -190,7 +190,7 @@ export async function streamOwnedChat(request: OwnedChatRequest, signal: AbortSi
   const response = await fetch(url, init);
   if (!response.ok || !response.body || !response.headers.get("Content-Type")?.includes("text/event-stream")) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.message || error?.msg || `云端对话服务不可用 (${response.status})`);
+    throw new Error(error?.message || error?.msg || `设备对话服务不可用 (${response.status})`);
   }
   return consumeOwnedChatStream(response.body, request.requestId, onEvent, request.expectedExecutionScope);
 }

@@ -433,6 +433,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			RuntimeID: localIdentity.RuntimeID,
 		}
 	}
+	kernelChatAppender := newConversationMessageAppenderAdapter()
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithTaskOwnershipBinding(taskOwnershipBinding).
 		WithRuntimeIdentity(kernelRuntimeIdentity).
@@ -444,8 +445,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithConversationReader(kernelConvReader).
 		WithMemoryQueryService(kernelMemQuerySvc).
 		WithAgentAdminController(agentAdminController).
-		WithConversationMessageSender(newConversationMessageSenderAdapter(newConversationMessageAppenderAdapter(chatSvc))).
-		WithConversationMessageAppender(newConversationMessageAppenderAdapter(chatSvc)).
+		WithConversationMessageSender(newConversationMessageSenderAdapter(kernelChatAppender)).
+		WithConversationMessageAppender(kernelChatAppender).
 		WithVectorStore(newKernelVectorStoreAdapter(ctx.DB)).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
@@ -1359,6 +1360,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		codingReviewer.services = services
 		multiAgentCoordinator.SetOwnedExecution(services.OwnedBusiness.WithExecutionScope)
 		kernelMemQuerySvc.engine = services.OwnedBusiness
+		kernelChatAppender.engine, kernelChatAppender.coreID = services.OwnedBusiness, localSpace.SpaceID()
 		if setter, ok := services.Chat.(interface {
 			SetCanonicalMemoryRuntime(chat.CanonicalMemoryRuntime)
 		}); ok {

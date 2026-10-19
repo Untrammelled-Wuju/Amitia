@@ -8,6 +8,8 @@ import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversa
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { ownedProjectReference } from "@/runtime/owned-project-reference";
 
+class SidebarStaleError extends Error {}
+
 export interface ConversationItem {
   id: string;
   projectId: string;
@@ -76,8 +78,10 @@ export const useChatStore = defineStore("chat", () => {
   const historicalProjectRoles = ref<Array<{ id: string; name: string }>>([]);
   const historicalProjectRole = ref("");
   let sidebarGeneration = 0;
+  let sidebarFetch: Promise<void> | null = null;
   watch([owned.coreId, () => owned.policy.value?.providerEpoch, () => owned.policy.value?.coordinated, () => owned.policy.value?.modeRevision, () => owned.policy.value?.permissionRevision], () => {
     sidebarGeneration++;
+    sidebarFetch = null;
     projectIntent.value = null;
     historicalProjectRoles.value = [];
     historicalProjectRole.value = "";
@@ -113,14 +117,14 @@ export const useChatStore = defineStore("chat", () => {
     currentConversationId.value = id;
   }
 
-  async function fetchSidebar() {
+  async function loadSidebar() {
     if (owned.enabled.value) {
       const generation = ++sidebarGeneration;
       const role=owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
       if (!role) { sidebar.value={pinned:[],recent:[],projects:[],removedProjects:[]};return; }
       const conversations=await owned.conversations(role);
       const projectPage = await owned.projects(role, historicalProjectRole.value);
-      if (generation !== sidebarGeneration) throw new Error("服务已变化，旧项目列表已丢弃");
+      if (generation !== sidebarGeneration) throw new SidebarStaleError("服务已变化，旧项目列表已丢弃");
       projectIntent.value = projectPage.executionScope;
       historicalProjectRoles.value = projectPage.historicalRoles;
       historicalProjectRole.value = projectPage.selectedHistoricalRole;
@@ -138,6 +142,23 @@ export const useChatStore = defineStore("chat", () => {
       return;
     }
     throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+  }
+
+  async function fetchSidebar() {
+    if (sidebarFetch) return sidebarFetch;
+    const task = (async () => {
+      try {
+        await loadSidebar();
+      } catch (error) {
+        if (!(error instanceof SidebarStaleError)) throw error;
+        await loadSidebar();
+      }
+    })();
+    const wrapped = task.finally(() => {
+      if (sidebarFetch === wrapped) sidebarFetch = null;
+    });
+    sidebarFetch = wrapped;
+    return wrapped;
   }
 
 

@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "QQ 渠道",
+  "lifecycle": {
+    "onMount": [
+      {
+        "action_id": "status",
+        "target": "host_command",
+        "input": { "channelId": "qq" },
+        "statePath": "status"
+      },
+      {
+        "action_id": "config",
+        "target": "host_command",
+        "input": { "channelId": "qq" },
+        "statePath": "config"
+      }
+    ]
+  },
+  "actions": [
+    { "actionId": "status", "target": "host_command" },
+    { "actionId": "config", "target": "host_command" },
+    { "actionId": "connect", "target": "host_command" },
+    { "actionId": "disconnect", "target": "host_command" }
+  ],
+  "children": [
+    {
+      "id": "qq-page",
+      "type": "page",
+      "children": [
+        {
+          "id": "qq-status",
+          "type": "key_value",
+          "props": { "title": "连接状态", "columns": 1 },
+          "bindings": [
+            { "path": "items", "source": "state", "sourcePath": "status.data" }
+          ]
+        },
+        {
+          "id": "qq-notice",
+          "type": "alert",
+          "props": {
+            "type": "info",
+            "title": "QQ 官方 Bot 使用 AppID 与 Secret 连接",
+            "description": "官方 QQ Bot 不支持账号扫码登录，请从 QQ 开放平台获取机器人凭证。"
+          }
+        },
+        {
+          "id": "qq-credential-section",
+          "type": "section",
+          "props": { "title": "QQ Bot 配置" },
+          "children": [
+            {
+              "id": "qq-app-id",
+              "type": "field",
+              "props": { "label": "AppID", "placeholder": "填写 Bot AppID" },
+              "bindings": [
+                { "path": "credentials.appId", "source": "form", "default": "" }
+              ]
+            },
+            {
+              "id": "qq-secret",
+              "type": "field",
+              "props": { "label": "Secret", "variant": "password", "placeholder": "填写 Bot Secret" },
+              "bindings": [
+                { "path": "credentials.token", "source": "form", "default": "" }
+              ]
+            },
+            {
+              "id": "qq-sandbox",
+              "type": "switch",
+              "props": { "activeText": "使用沙箱环境" },
+              "bindings": [
+                { "path": "credentials.sandbox", "source": "form", "default": false }
+              ]
+            },
+            {
+              "id": "qq-connect",
+              "type": "button",
+              "props": { "text": "连接 QQ Bot", "type": "primary" },
+              "actions": [
+                {
+                  "action_id": "connect",
+                  "target": "host_command",
+                  "input": {
+                    "channelId": "qq",
+                    "config": {
+                      "appId": "$form.credentials.appId",
+                      "token": "$form.credentials.token",
+                      "sandbox": "$form.credentials.sandbox"
+                    }
+                  },
+                  "statePath": "connectResult"
+                },
+                {
+                  "action_id": "status",
+                  "target": "host_command",
+                  "input": { "channelId": "qq" },
+                  "statePath": "status"
+                }
+              ]
+            },
+            {
+              "id": "qq-disconnect",
+              "type": "button",
+              "props": { "text": "断开连接", "type": "danger" },
+              "actions": [
+                {
+                  "action_id": "disconnect",
+                  "target": "host_command",
+                  "input": { "channelId": "qq" },
+                  "confirmation": "确认断开当前 QQ 连接？",
+                  "statePath": "disconnectResult"
+                },
+                {
+                  "action_id": "status",
+                  "target": "host_command",
+                  "input": { "channelId": "qq" },
+                  "statePath": "status"
+                }
+              ]
+            },
+            {
+              "id": "qq-refresh",
+              "type": "button",
+              "props": { "text": "刷新状态" },
+              "actions": [
+                {
+                  "action_id": "status",
+                  "target": "host_command",
+                  "input": { "channelId": "qq" },
+                  "statePath": "status"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "qq-saved-config",
+          "type": "key_value",
+          "props": { "title": "已保存配置", "columns": 1 },
+          "bindings": [
+            { "path": "items", "source": "state", "sourcePath": "config.data" }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": { "mode": "auto" },
+  "accessibility": {
+    "enabled": true,
+    "keyboardNav": true,
+    "screenReader": true
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 120,
+    "maxLayoutCount": 160,
+    "maxNodeCount": 160,
+    "maxDataFetchCount": 2,
+    "maxActionCount": 12
+  }
+}

@@ -4,8 +4,16 @@ package adminrelease
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestFeedbackIngestLimiterBlocksBursts(t *testing.T) {
@@ -53,5 +61,59 @@ func TestFeedbackHelpersNormalizeValues(t *testing.T) {
 	}
 	if screenshotContentType(".PNG") != "image/png" || screenshotContentType(".unknown") != "application/octet-stream" {
 		t.Fatal("screenshot content type resolution is wrong")
+	}
+}
+
+func TestFeedbackResolvedToggle(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dsn := "file:feedback_resolved_test_" + strconv.FormatInt(time.Now().UnixNano(), 10) + "?mode=memory&cache=shared"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&UserFeedback{}); err != nil {
+		t.Fatalf("migrate feedback table: %v", err)
+	}
+	record := UserFeedback{
+		TicketID:   "ticket-resolved",
+		Category:   "bug",
+		Title:      "闪退",
+		Payload:    "{}",
+		ReceivedAt: time.Now(),
+	}
+	if err := db.Create(&record).Error; err != nil {
+		t.Fatalf("create feedback: %v", err)
+	}
+	server := &Server{db: db}
+	resolve := func(resolved bool) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]bool{"resolved": resolved})
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/feedbacks/"+strconv.FormatUint(record.ID, 10), strings.NewReader(string(body)))
+		context.Request.Header.Set("Content-Type", "application/json")
+		context.Params = gin.Params{{Key: "id", Value: strconv.FormatUint(record.ID, 10)}}
+		context.Set(actorContextKey, adminActor{Username: "admin"})
+		server.handleSetFeedbackResolved(context)
+		return recorder
+	}
+	if recorder := resolve(true); recorder.Code != http.StatusOK {
+		t.Fatalf("resolve feedback status: %d %s", recorder.Code, recorder.Body.String())
+	}
+	var updated UserFeedback
+	if err := db.First(&updated, record.ID).Error; err != nil {
+		t.Fatalf("read feedback: %v", err)
+	}
+	if !updated.Resolved || updated.ResolvedAt == nil || updated.ResolvedBy != "admin" {
+		t.Fatalf("feedback not resolved: %+v", updated)
+	}
+	if recorder := resolve(false); recorder.Code != http.StatusOK {
+		t.Fatalf("reopen feedback status: %d %s", recorder.Code, recorder.Body.String())
+	}
+	updated = UserFeedback{}
+	if err := db.First(&updated, record.ID).Error; err != nil {
+		t.Fatalf("read feedback: %v", err)
+	}
+	if updated.Resolved || updated.ResolvedAt != nil || updated.ResolvedBy != "" {
+		t.Fatalf("feedback not reopened: %+v", updated)
 	}
 }

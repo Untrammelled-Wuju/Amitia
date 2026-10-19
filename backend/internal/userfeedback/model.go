@@ -15,8 +15,8 @@ const (
 	UploadURLSettingKey = "user_feedback_upload_url"
 	DefaultUploadURL    = "https://amitia.untrammelled.top/api/v1/feedbacks"
 
-	defaultLogLineLimit   = 120
-	defaultErrorLineLimit = 40
+	defaultLogLineLimit   = 500
+	defaultErrorLineLimit = 500
 	maxLogLineLength      = 4000
 	maxClientErrors       = 20
 	maxScreenshotBytes    = 6 * 1024 * 1024

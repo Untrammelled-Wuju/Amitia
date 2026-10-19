@@ -56,6 +56,7 @@ import AccountWorkspace from "./components/AccountWorkspace.vue";
 import { useSecondaryWorkspace } from "./composables/useSecondaryWorkspace";
 import { useAppUIHost } from "./composables/useAppUIHost";
 import ApplicationBackground from "./components/ApplicationBackground.vue";
+import { isServiceTransitionMessage } from "./runtime/service-transition";
 
 const router = useRouter();
 const route = useRoute();
@@ -115,6 +116,10 @@ onErrorCaptured((err, _instance, info) => {
   const errorMessage = err instanceof Error ? err.message : String(err);
   if (errorMessage.includes("Cannot read properties of null") || errorMessage.includes("Cannot set properties of null") || errorMessage.includes("reading 'type'") || errorMessage.includes("reading 'exposed'") || errorMessage.includes("setting '__vrv_devtools'")) {
     console.warn("[App] suppressed unmount error:", errorMessage);
+    return false;
+  }
+  if (isServiceTransitionMessage(errorMessage)) {
+    console.warn("[App] suppressed service transition error:", errorMessage);
     return false;
   }
   if (errorMessage.includes("Request failed") || errorMessage.includes("404") || errorMessage.includes("401") || errorMessage.includes("500")) {

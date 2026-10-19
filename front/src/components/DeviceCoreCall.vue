@@ -17,6 +17,7 @@
 import { onUnmounted, ref, watch } from "vue";
 import { useApi } from "@/composables/useApi";
 import { streamOwnedChat, type OwnedExecutionScope } from "@/runtime/device-owned-chat";
+import { currentDeviceServiceMode, deviceProviderChangedNotice } from "@/runtime/device-service-label";
 
 const props = defineProps<{ visible: boolean; deviceId: string; label?: string }>();
 const emit = defineEmits<{ "update:visible": [value: boolean] }>();
@@ -70,6 +71,7 @@ async function send() {
   const target = props.deviceId;
   const expectedCore = coreId.value;
   const expectedOwner = ownerId.value;
+  const serviceMode = await currentDeviceServiceMode();
   const current = new AbortController();
   controller = current;
   requestId = crypto.randomUUID();
@@ -85,7 +87,7 @@ async function send() {
       const state = await api.get<{ coreId: string; coordinationAvailable: boolean }>("/api/device-mesh/v1/coordination/me");
       if (ticket !== generation || controller !== current) return;
       if (state.coreId !== expectedCore || !state.coordinationAvailable) {
-        error.value = state.coreId !== expectedCore ? `云端服务提供者已从「${expectedCore}」切换为「${state.coreId}」，当前调用已中断。` : "Core 服务已暂停，当前调用已中断。";
+        error.value = state.coreId !== expectedCore ? deviceProviderChangedNotice(serviceMode, expectedCore, state.coreId, "当前调用已中断。") : "Core 服务已暂停，当前调用已中断。";
         current.abort();
       }
     } catch (cause) {
@@ -101,7 +103,7 @@ async function send() {
       if (ticket !== generation) return;
       const scope = event.executionScope || event.data?.executionScope;
       if (scope && (scope.coreId !== expectedCore || scope.targetDeviceId !== target || scope.resourceOwnerId !== expectedOwner)) {
-        error.value = scope.coreId !== expectedCore ? `云端服务提供者已从「${expectedCore}」切换为「${scope.coreId}」，当前调用已中断。` : "目标设备的数据归属已变化，当前调用已中断；刷新后再发起调用。";
+        error.value = scope.coreId !== expectedCore ? deviceProviderChangedNotice(serviceMode, expectedCore, scope.coreId, "当前调用已中断。") : "目标设备的数据归属已变化，当前调用已中断；刷新后再发起调用。";
         current.abort();
         throw new Error(error.value);
       }

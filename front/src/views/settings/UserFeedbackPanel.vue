@@ -64,7 +64,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="log-consent">
             <el-switch v-model="form.includeLogs" />
             <span class="log-consent-text">
-              提交时会一起上传本机日志文件中的报错日志（最近 {{ settings.logLineLimit }} 行运行日志与
+              提交时会一起上传本机与插件的运行日志（最近 {{ settings.logLineLimit }} 行运行日志与
               最多 {{ settings.errorLineLimit }} 条报错行），以及客户端捕获的异常堆栈。
             </span>
           </div>
@@ -175,8 +175,8 @@ const { get, post, put } = useApi();
 const settings = ref<FeedbackSettings>({
   uploadUrl: "",
   defaultUploadUrl: "",
-  logLineLimit: 120,
-  errorLineLimit: 40,
+  logLineLimit: 500,
+  errorLineLimit: 500,
   maxScreenshotMB: 6,
 });
 const uploadUrl = ref("");

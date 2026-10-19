@@ -8,6 +8,12 @@ import { createOwnedConversationExport } from "@/runtime/device-owned-export";
 import { OwnedChatStateChangedError } from "@/runtime/owned-chat-poll";
 import { memoryRecordScope, memoryStorageRole } from "@/runtime/owned-memory-scope";
 import { ownedWorkbenchTaskChange, workbenchTaskEventName } from "@/runtime/owned-workbench-task-event";
+import {
+  deviceProviderChangedNotice,
+  deviceProviderTransitionNotice,
+  deviceUnavailableNotice,
+  type DeviceServiceMode,
+} from "@/runtime/device-service-label";
 
 interface MeshRole { id: string; name: string; revision: number }
 export interface OwnedProjectWorkspace { id: string; deviceId: string; name: string; kind: string; rootUri: string; readOnly?: boolean }
@@ -20,25 +26,29 @@ interface MeshQueryResult { conversationReference?: string; conversationOrigin?:
 const enabled = ref(false);
 const roles = ref<MeshRole[]>([]);
 export const ownedConversationSwitchNotice = "会话已切换，原回复已中断";
-function readProviderState(): { coreId: string; notice: string; changeId?: string } {
-  try {
-    const state = JSON.parse(localStorage.getItem("amitia.mesh.provider-state") || "{}");
-    const storedNotice = String(state?.notice || "");
-    return {
-      coreId: String(state?.coreId || ""),
-      notice: storedNotice === ownedConversationSwitchNotice || storedNotice.startsWith("角色配置已变化") ? "" : storedNotice,
-      changeId: state?.changeId,
-    };
-  } catch { return { coreId: "", notice: "" }; }
+const providerStateKey = "amitia.mesh.provider-state";
+const providerStateVersion = 2;
+interface StoredProviderState {
+  version: number;
+  mode: DeviceServiceMode;
+  binding: string;
+  changeId?: string;
 }
-const coreId = ref(String(readProviderState().coreId || ""));
+function readProviderState(): StoredProviderState | null {
+  try {
+    const state = JSON.parse(localStorage.getItem(providerStateKey) || "null");
+    if (state?.version !== providerStateVersion || !["local", "cloud"].includes(state?.mode) || typeof state?.binding !== "string" || !state.binding) return null;
+    return { version: providerStateVersion, mode: state.mode, binding: state.binding, changeId: typeof state.changeId === "string" ? state.changeId : undefined };
+  } catch { return null; }
+}
+const coreId = ref("");
 const roleOwnerId = ref("");
 const policy = ref<MeshPolicy | null>(null);
-const notice = ref(String(readProviderState().notice || ""));
-const unavailableNotice = "云端服务暂不可用，当前回复已中断；不会自动切换到本机模型。";
-let persistentNotice = notice.value === unavailableNotice ? "" : notice.value;
+const notice = ref("");
 let transientNotice = "";
-let providerChangeId = String(readProviderState().changeId || "");
+let providerChangeId = "";
+let providerMode: DeviceServiceMode = "local";
+let providerBinding = "";
 let activeController: AbortController | null = null;
 let activeRequest = "";
 let revision = 0;
@@ -57,7 +67,11 @@ const historyRequests = new Map<string, symbol>();
 const conversationLoads = new Map<string, Promise<any[]>>();
 
 function saveProviderState() {
-  try { localStorage.setItem("amitia.mesh.provider-state", JSON.stringify({ coreId: coreId.value, notice: persistentNotice, changeId: providerChangeId })); } catch {}
+  if (!providerBinding) return;
+  try {
+    const state: StoredProviderState = { version: providerStateVersion, mode: providerMode, binding: providerBinding, changeId: providerChangeId || undefined };
+    localStorage.setItem(providerStateKey, JSON.stringify(state));
+  } catch {}
 }
 
 function unwrap<T>(response: any): T {
@@ -68,26 +82,29 @@ function stamp(core: string, state: MeshPolicy | null) {
   return `${core}:${state?.providerEpoch}:${state?.modeRevision}:${state?.permissionRevision}`;
 }
 
-function stopLocal(message: string, temporary = false) {
-  revision++;
-  refreshInFlight = undefined;
+function clearOwnedCaches() {
   resourceCache.clear();
   summaryViews.clear();
   summaryPreparations.clear();
   historyPages.clear();
   historyRequests.clear();
   conversationLoads.clear();
+}
+
+function invalidateWithoutInterrupt() {
+  revision++;
+  clearOwnedCaches();
+}
+
+function stopLocal(message: string, _temporary = false) {
+  revision++;
+  refreshInFlight = undefined;
+  clearOwnedCaches();
   activeController?.abort();
   activeController = null;
   activeRequest = "";
   notice.value = message;
-  if (temporary) {
-    transientNotice = message;
-  } else {
-    persistentNotice = message;
-    transientNotice = "";
-  }
-  saveProviderState();
+  transientNotice = message;
   window.dispatchEvent(new CustomEvent("amitia:execution-scope-changed", { detail: { reason: message } }));
 }
 
@@ -97,16 +114,24 @@ function noteWithoutInterrupt(message: string) {
 }
 
 function markUnavailable() {
-  if (notice.value === unavailableNotice && !activeController) return;
-  stopLocal(unavailableNotice, true);
+  const message = deviceUnavailableNotice(providerMode);
+  if (notice.value === message && !activeController) return;
+  stopLocal(message, true);
 }
 
 window.addEventListener("amitia:runtime-connection-changed", () => {
-  enabled.value = true;
+  const interrupted = activeController !== null;
+  coreId.value = "";
+  providerBinding = "";
+  providerChangeId = "";
+  notice.value = "";
+  transientNotice = "";
+  enabled.value = false;
   roles.value = [];
   roleOwnerId.value = "";
   policy.value = null;
-  stopLocal("云端服务连接正在变化，当前回复已中断；请等待当前服务确认");
+  if (interrupted) stopLocal("设备服务连接正在变化，当前回复已中断；请等待当前服务确认");
+  else invalidateWithoutInterrupt();
 });
 
 export function useDeviceOwnedConversation() {
@@ -133,36 +158,62 @@ export function useDeviceOwnedConversation() {
   }
 
   async function refreshState() {
-	const transition = await getNativeProviderTransition();
-	if (transition?.providerChangePending) {
-	  enabled.value = true;
-	  roles.value = [];
-	  stopLocal(`云端服务提供者正在从「${transition.coreId || coreId.value}」切换至「${transition.successorCoreId || "新 Core"}」，当前回复已中断，等待新服务批准并连接。`);
-	  throw new Error(notice.value);
-	}
     const deployment = await getDeploymentConfig();
-    if (deployment.mode === "cloud") enabled.value = true;
+    const mode = deployment.mode;
+    const binding = mode === "cloud" ? `cloud:${deployment.serverURL || ""}` : "local";
+    const bindingChanged = providerBinding !== "" && (providerMode !== mode || providerBinding !== binding);
+    providerMode = mode;
+    providerBinding = binding;
+    const stored = readProviderState();
+    providerChangeId = stored?.mode === mode && stored.binding === binding ? String(stored.changeId || "") : "";
+    if (bindingChanged) {
+      const interrupted = activeController !== null;
+      notice.value = "";
+      transientNotice = "";
+      coreId.value = "";
+      policy.value = null;
+      roles.value = [];
+      roleOwnerId.value = "";
+      enabled.value = false;
+      if (interrupted) stopLocal("设备服务连接正在变化，当前回复已中断；请等待当前服务确认");
+      else invalidateWithoutInterrupt();
+    }
+    let transition: Awaited<ReturnType<typeof getNativeProviderTransition>> = null;
+    if (mode === "cloud") {
+      transition = await getNativeProviderTransition();
+      if (transition?.providerChangePending) {
+        enabled.value = true;
+        roles.value = [];
+        stopLocal(deviceProviderTransitionNotice(mode, transition.coreId || coreId.value, transition.successorCoreId || "新 Core"));
+        throw new Error(notice.value);
+      }
+    }
+    if (mode === "cloud") enabled.value = true;
     const captured = revision;
     const current = unwrap<any>(await apiClient.get("/api/device-mesh/v1/coordination/me"));
     const latestDeployment = await getDeploymentConfig();
     if (captured !== revision || latestDeployment.mode !== deployment.mode || latestDeployment.serverURL !== deployment.serverURL) throw new OwnedChatStateChangedError("服务提供者已变化，旧状态已丢弃");
     const previous = stamp(coreId.value, policy.value);
     const next = stamp(String(current.coreId || ""), current.policy || null);
-    if ((enabled.value && policy.value && previous !== next) || (coreId.value && coreId.value !== current.coreId)) {
-      const message = coreId.value !== current.coreId
-        ? `云端服务提供者已从「${coreId.value}」切换为「${current.coreId}」，当前回复已中断。`
-        : "统筹模式或调用权限已变化，当前回复已中断；继续发送时将使用当前服务和数据归属。";
+    const coreChanged = Boolean(coreId.value && coreId.value !== current.coreId);
+    const authorityChanged = Boolean(enabled.value && policy.value && previous !== next);
+    if (coreChanged || authorityChanged) {
+      const message = coreChanged
+        ? deviceProviderChangedNotice(mode, coreId.value, String(current.coreId || ""), activeController ? "当前回复已中断。" : "旧数据已失效。")
+        : activeController
+          ? "统筹模式或调用权限已变化，当前回复已中断；继续发送时将使用当前服务和数据归属。"
+          : "统筹模式或调用权限已更新，旧数据已失效。";
       stopLocal(message);
     }
     if (transition?.coreId === current.coreId && transition?.providerChangeId && transition.previousCoreId && transition.previousCoreId !== current.coreId && providerChangeId !== transition.providerChangeId) {
       providerChangeId = transition.providerChangeId;
-      stopLocal(`云端服务提供者已从「${transition.previousCoreId}」切换为「${current.coreId}」，当前回复已中断。`);
+      stopLocal(deviceProviderChangedNotice(mode, transition.previousCoreId, current.coreId, "当前回复已中断。"));
     }
     coreId.value = String(current.coreId || "");
     saveProviderState();
     policy.value = current.policy || null;
     enabled.value = current.coordinationAvailable === true;
-    if (!enabled.value && deployment.mode === "cloud") { enabled.value = true; roles.value = []; roleOwnerId.value = ""; stopLocal("云端设备对话服务尚未就绪，当前回复已中断"); throw new Error(notice.value); }
+    if (!enabled.value && mode === "cloud") { enabled.value = true; roles.value = []; roleOwnerId.value = ""; stopLocal("云端设备对话服务尚未就绪，当前回复已中断"); throw new Error(notice.value); }
     if (!enabled.value) return false;
     const roleGeneration = revision;
     const available = unwrap<any>(await apiClient.get("/api/device-mesh/v1/business/roles"));
@@ -172,8 +223,10 @@ export function useDeviceOwnedConversation() {
     if (roles.value.some(role => nextRoles.find(item => item.id === role.id)?.revision !== role.revision)) noteWithoutInterrupt("角色配置已变化");
     roles.value = nextRoles;
     roleOwnerId.value = String(available.roleOwnerId || "");
-    if (notice.value === unavailableNotice) {
-      notice.value = persistentNotice;
+    const unavailable = deviceUnavailableNotice(mode);
+    if (notice.value === unavailable) {
+      notice.value = "";
+      if (transientNotice === unavailable) transientNotice = "";
       saveProviderState();
     }
     return true;

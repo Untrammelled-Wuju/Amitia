@@ -1,69 +1,72 @@
 package chat
 
-import ("context";"testing")
+import (
+	"encoding/json"
+	"errors"
+	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"testing"
+)
 
-func TestAppendConversationMessagesPersistsGenericParts(t *testing.T) {
-	db, svc, convID := setupCommitCoordinatorTest(t, false)
-	if err := db.Model(&Conversation{}).Where("id = ?", convID).Update("space_id", "user:web").Error; err != nil {
+func TestOwnedAppendPersistsGenericPartsAndDeduplicates(t *testing.T) {
+	f := newOwnedExecutionFixture(t)
+	f.model.llmWithTools = ownedFixedReply("seed")
+	if _, err := f.engine.Run(t.Context(), f.request("seed")); err != nil {
 		t.Fatal(err)
 	}
-	result, err := svc.AppendConversationMessages(context.Background(), &AppendConversationMessagesRequest{
-		SpaceID:        "user:web",
-		CharacterID:    "char-commit",
-		ConversationID: convID,
-		Channel:        "web",
-		Role:           "user",
-		Source:         "extension:com.example/media",
-		RequestID:      "append-req",
-		Parts: []MessagePart{
-			{Type: "text", Content: "你好"},
-			{Type: "image", ExtensionType: "media-card", URL: "/api/extension/resources/example", AltText: "图片", MIMEType: "image/png"},
-		},
-	})
+	request := f.request("append-req")
+	input := business.AppendOwnedMessagesRequest{ConversationID: "conversation", Role: "user", Source: "extension:media", Channel: "web", Parts: []business.AppendedMessagePart{{Type: "text", Content: "你好"}, {Type: "image", ExtensionType: "media-card", URL: "/api/extension/resources/example", AltText: "图片", MIMEType: "image/png"}}}
+	var first business.AppendOwnedMessagesResult
+	for i := 0; i < 2; i++ {
+		result, err := f.engine.AppendOwnedMessages(t.Context(), request, input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.MessageIDs) != 2 || result.LastSequence != 4 || result.Sequences[0] != 3 {
+			t.Fatalf("bad sequence: %+v", result)
+		}
+		if i == 0 {
+			first = result
+		} else if result.MessageIDs[0] != first.MessageIDs[0] {
+			t.Fatal("duplicate append")
+		}
+	}
+	if len(f.messages(t)) != 4 {
+		t.Fatal("append replay wrote extra messages")
+	}
+	row, err := coordination.NewOwnershipStore(f.db, "device").Get(t.Context(), "message", first.MessageIDs[1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.MessageIDs) != 2 || len(result.Sequences) != 2 || result.LastSequence <= 0 {
-		t.Fatalf("unexpected append result: %#v", result)
-	}
-	var messages []Message
-	if err := db.Where("conversation_id = ? AND request_id = ?", convID, "append-req").Order("delivery_sequence ASC").Find(&messages).Error; err != nil {
+	var message map[string]any
+	if err = json.Unmarshal(row.Body, &message); err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) != 2 {
-		t.Fatalf("expected two appended messages, got %d", len(messages))
+	if row.RoleID != "role" || message["imageUrl"] != input.Parts[1].URL || message["extensionType"] != "media-card" {
+		t.Fatalf("media lost: %s", row.Body)
 	}
-	if messages[1].MsgType != "image" || messages[1].ExtensionType != "media-card" || messages[1].ImageUrl != "/api/extension/resources/example" {
-		t.Fatalf("unexpected appended image message: %#v", messages[1])
+	input.Parts[0].Content = "changed"
+	if _, err = f.engine.AppendOwnedMessages(t.Context(), request, input); !errors.Is(err, coordination.ErrRequestConflict) {
+		t.Fatalf("conflicting replay accepted: %v", err)
 	}
 }
-
-func TestAppendConversationMessagesRejectsMultipleAssistantTextParts(t *testing.T) {
-	db, svc, convID := setupCommitCoordinatorTest(t, false)
-	if err := db.Model(&Conversation{}).Where("id = ?", convID).Update("space_id", "user:web").Error; err != nil {
+func TestOwnedAppendRejectsSplitAssistantAndWrongQuote(t *testing.T) {
+	f := newOwnedExecutionFixture(t)
+	f.model.llmWithTools = ownedFixedReply("seed")
+	if _, err := f.engine.Run(t.Context(), f.request("seed")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := svc.AppendConversationMessages(context.Background(), &AppendConversationMessagesRequest{
-		SpaceID:        "user:web",
-		CharacterID:    "char-commit",
-		ConversationID: convID,
-		Channel:        "web",
-		Role:           "assistant",
-		Source:         "extension:com.example/media",
-		RequestID:      "append-assistant-split",
-		Parts: []MessagePart{
-			{Type: "text", Content: "第一段"},
-			{Type: "text", Content: "第二段"},
-		},
-	})
-	if err == nil {
-		t.Fatal("expected multiple assistant text parts to be rejected")
+	input := business.AppendOwnedMessagesRequest{ConversationID: "conversation", Role: "assistant", Parts: []business.AppendedMessagePart{{Type: "text", Content: "第一段"}, {Type: "text", Content: "第二段"}}}
+	if _, err := f.engine.AppendOwnedMessages(t.Context(), f.request("split"), input); err == nil {
+		t.Fatal("split assistant accepted")
 	}
-	var count int64
-	if err := db.Model(&Message{}).Where("conversation_id = ? AND request_id = ?", convID, "append-assistant-split").Count(&count).Error; err != nil {
-		t.Fatal(err)
+	input.Parts = input.Parts[:1]
+	quote := "missing"
+	input.ReplyToMessageID = &quote
+	if _, err := f.engine.AppendOwnedMessages(t.Context(), f.request("quote"), input); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("unowned quote accepted: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("expected no assistant messages to persist, got %d", count)
+	if len(f.messages(t)) != 2 {
+		t.Fatal("rejected append persisted")
 	}
 }

@@ -343,7 +343,9 @@ func (c *Container) Recover(ctx context.Context) error {
 			continue
 		}
 		runtimegate.Set(string(inst.ExtensionID), inst.EnablementState == domain.EnablementEnabled || inst.EnablementState == domain.EnablementRequiresRecovery)
+		var recoveredDefinition *domain.ExtensionDefinition
 		if definition, definitionErr := c.DefinitionRepository.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion); definitionErr == nil {
+			recoveredDefinition = &definition
 			if c.ExtensionProviderReconciler != nil {
 				if err := c.ExtensionProviderReconciler.ReconcileDefinitions(definition); err != nil {
 					recoverErrs = append(recoverErrs, fmt.Errorf("kernel: reconcile providers for %s: %w", inst.ExtensionID, err))
@@ -431,6 +433,7 @@ func (c *Container) Recover(ctx context.Context) error {
 			c.ensureGameHostServicePermissionGrants(ctx, inst.ExtensionID, gameHostOwned, modules)
 
 			runtimeFailed := false
+			runtimeResults := make(map[domain.ModuleID]capability.RuntimeReadyResult)
 			if c.RuntimeSupervisor != nil {
 				for _, mod := range modules {
 					if isGameHostOwnedRuntimeModule(gameHostOwned, mod.ID) {
@@ -447,6 +450,11 @@ func (c *Container) Recover(ctx context.Context) error {
 							c.recordReconcileFailure(ctx, inst.ExtensionID, result)
 							recoverErrs = append(recoverErrs, fmt.Errorf("kernel: runtime reconcile failed for %s module %s: actual=%s", inst.ExtensionID, mod.ID, result.Actual))
 							runtimeFailed = true
+						} else {
+							runtimeResults[mod.ID] = capability.RuntimeReadyResult{
+								InstanceID: result.InstanceID,
+								Health:     string(result.Health),
+							}
 						}
 					}
 				}
@@ -460,6 +468,13 @@ func (c *Container) Recover(ctx context.Context) error {
 			if c.ContributionInstaller != nil {
 				if err := c.ContributionInstaller.RecoverContributions(ctx, inst.ExtensionID); err != nil {
 					recoverErrs = append(recoverErrs, fmt.Errorf("kernel: recover typed contributions for %s: %w", inst.ExtensionID, err))
+					c.markRequiresRecovery(ctx, inst)
+					continue
+				}
+			}
+			if c.ProviderInstanceReconciler != nil && recoveredDefinition != nil {
+				if _, err := c.ProviderInstanceReconciler.ActivateExtension(*recoveredDefinition, runtimeResults); err != nil {
+					recoverErrs = append(recoverErrs, fmt.Errorf("kernel: restore provider instances for %s: %w", inst.ExtensionID, err))
 					c.markRequiresRecovery(ctx, inst)
 				}
 			}

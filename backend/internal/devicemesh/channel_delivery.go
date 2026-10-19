@@ -57,29 +57,39 @@ func (rt *Runtime) ResumeChannelDeliveries(ctx context.Context) error {
 		if !ok {
 			continue
 		}
-		pending, err := port.PendingChannelDeliveries(ctx)
-		if err != nil {
-			return err
-		}
-		for _, item := range pending {
-			current, finish, err := rt.Coordination.Restore(ctx, item.Scope, rt)
-			if err != nil {
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				continue
-			}
-			if err := rt.SubmitChannelDelivery(current, item.Scope, item.Request); err != nil {
-				finish()
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				continue
-			}
-			err = port.CompleteChannelDelivery(current, item)
-			finish()
+		cursor := ""
+		for {
+			pending, err := port.PendingChannelDeliveries(ctx, cursor)
 			if err != nil {
 				return err
+			}
+			if len(pending) == 0 {
+				break
+			}
+			for _, item := range pending {
+				if item.Cursor <= cursor {
+					return coordination.ErrRequestConflict
+				}
+				cursor = item.Cursor
+				current, finish, err := rt.Coordination.Restore(ctx, item.Scope, rt)
+				if err != nil {
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					continue
+				}
+				if err := rt.SubmitChannelDelivery(current, item.Scope, item.Request); err != nil {
+					finish()
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					continue
+				}
+				err = port.CompleteChannelDelivery(current, item)
+				finish()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

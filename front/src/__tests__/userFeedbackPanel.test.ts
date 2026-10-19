@@ -39,8 +39,8 @@ describe("问题反馈设置页", () => {
         return {
           uploadUrl: "https://amitia.example.com/api/v1/feedbacks",
           defaultUploadUrl: "https://amitia.example.com/api/v1/feedbacks",
-          logLineLimit: 120,
-          errorLineLimit: 40,
+          logLineLimit: 500,
+          errorLineLimit: 500,
           maxScreenshotMB: 6,
         };
       }
@@ -57,7 +57,7 @@ describe("问题反馈设置页", () => {
     await flushPromises();
     const urlInput = wrapper.get("input[placeholder='https://example.com/api/v1/feedbacks']");
     expect((urlInput.element as HTMLInputElement).value).toBe("https://amitia.example.com/api/v1/feedbacks");
-    expect(wrapper.text()).toContain("提交时会一起上传本机日志文件中的报错日志");
+    expect(wrapper.text()).toContain("提交时会一起上传本机与插件的运行日志");
     expect(wrapper.text()).toContain("查看将要上传的信息");
     expect(wrapper.text()).toContain("上传失败");
     wrapper.unmount();

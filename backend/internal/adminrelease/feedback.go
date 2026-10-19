@@ -22,28 +22,31 @@ import (
 )
 
 type UserFeedback struct {
-	ID              uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	TicketID        string    `gorm:"size:64;not null;uniqueIndex" json:"ticketId"`
-	Category        string    `gorm:"size:32;not null;index" json:"category"`
-	Title           string    `gorm:"size:200;not null" json:"title"`
-	Platform        string    `gorm:"size:64;index" json:"platform"`
-	ClientType      string    `gorm:"size:32" json:"clientType"`
-	AppVersion      string    `gorm:"size:64" json:"appVersion"`
-	CoreVersion     string    `gorm:"size:64" json:"coreVersion"`
-	RuntimeMode     string    `gorm:"size:32" json:"runtimeMode"`
-	OSInfo          string    `gorm:"size:255" json:"osInfo"`
-	Contact         string    `gorm:"size:200" json:"contact"`
-	DeviceHash      string    `gorm:"size:128;index" json:"deviceHash"`
-	LogLineCount    int       `json:"logLineCount"`
-	ErrorLineCount  int       `json:"errorLineCount"`
-	RedactedCount   int       `json:"redactedCount"`
-	HasScreenshot   bool      `json:"hasScreenshot"`
-	ScreenshotName  string    `gorm:"size:255" json:"screenshotName"`
-	ScreenshotPath  string    `gorm:"size:512" json:"-"`
-	ScreenshotSize  int64     `json:"screenshotSize"`
-	ClientCreatedAt string    `gorm:"size:64" json:"clientCreatedAt"`
-	Payload         string    `gorm:"type:longtext;not null" json:"-"`
-	ReceivedAt      time.Time `gorm:"index" json:"receivedAt"`
+	ID              uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	TicketID        string     `gorm:"size:64;not null;uniqueIndex" json:"ticketId"`
+	Category        string     `gorm:"size:32;not null;index" json:"category"`
+	Title           string     `gorm:"size:200;not null" json:"title"`
+	Platform        string     `gorm:"size:64;index" json:"platform"`
+	ClientType      string     `gorm:"size:32" json:"clientType"`
+	AppVersion      string     `gorm:"size:64" json:"appVersion"`
+	CoreVersion     string     `gorm:"size:64" json:"coreVersion"`
+	RuntimeMode     string     `gorm:"size:32" json:"runtimeMode"`
+	OSInfo          string     `gorm:"size:255" json:"osInfo"`
+	Contact         string     `gorm:"size:200" json:"contact"`
+	DeviceHash      string     `gorm:"size:128;index" json:"deviceHash"`
+	LogLineCount    int        `json:"logLineCount"`
+	ErrorLineCount  int        `json:"errorLineCount"`
+	RedactedCount   int        `json:"redactedCount"`
+	HasScreenshot   bool       `json:"hasScreenshot"`
+	ScreenshotName  string     `gorm:"size:255" json:"screenshotName"`
+	ScreenshotPath  string     `gorm:"size:512" json:"-"`
+	ScreenshotSize  int64      `json:"screenshotSize"`
+	ClientCreatedAt string     `gorm:"size:64" json:"clientCreatedAt"`
+	Payload         string     `gorm:"type:longtext;not null" json:"-"`
+	ReceivedAt      time.Time  `gorm:"index" json:"receivedAt"`
+	Resolved        bool       `gorm:"not null;default:false;index" json:"resolved"`
+	ResolvedAt      *time.Time `json:"resolvedAt"`
+	ResolvedBy      string     `gorm:"size:64" json:"resolvedBy"`
 }
 
 func (UserFeedback) TableName() string { return "user_feedbacks" }
@@ -251,6 +254,14 @@ func (s *Server) handleListFeedbacks(c *gin.Context) {
 	if value := strings.TrimSpace(c.Query("platform")); value != "" {
 		query = query.Where("platform = ?", value)
 	}
+	if value := strings.TrimSpace(c.Query("resolved")); value != "" {
+		switch value {
+		case "true", "1":
+			query = query.Where("resolved = ?", true)
+		case "false", "0":
+			query = query.Where("resolved = ?", false)
+		}
+	}
 	if value := strings.TrimSpace(c.Query("keyword")); value != "" {
 		like := "%" + value + "%"
 		query = query.Where("title LIKE ? OR contact LIKE ? OR device_hash LIKE ? OR payload LIKE ?", like, like, like, like)
@@ -292,6 +303,68 @@ func (s *Server) handleGetFeedback(c *gin.Context) {
 		"screenshotName": record.ScreenshotName,
 		"screenshotSize": record.ScreenshotSize,
 		"screenshotURL":  screenshotURL(record),
+		"resolved":       record.Resolved,
+		"resolvedAt":     record.ResolvedAt,
+		"resolvedBy":     record.ResolvedBy,
+	})
+}
+
+type feedbackResolvedPayload struct {
+	Resolved *bool `json:"resolved"`
+}
+
+func (s *Server) handleSetFeedbackResolved(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		util.ErrorResponse(c, 400, "反馈编号无效", nil)
+		return
+	}
+	var payload feedbackResolvedPayload
+	if err := c.ShouldBindJSON(&payload); err != nil || payload.Resolved == nil {
+		util.ErrorResponse(c, 400, "缺少解决状态", nil)
+		return
+	}
+	var record UserFeedback
+	if err := s.db.First(&record, id).Error; err != nil {
+		util.ErrorResponse(c, 404, "反馈记录不存在", nil)
+		return
+	}
+	if record.Resolved == *payload.Resolved {
+		util.SuccessMsgResponse(c, "反馈状态未变化", gin.H{
+			"id":         record.ID,
+			"resolved":   record.Resolved,
+			"resolvedAt": record.ResolvedAt,
+			"resolvedBy": record.ResolvedBy,
+		})
+		return
+	}
+	updates := map[string]any{"resolved": *payload.Resolved}
+	if *payload.Resolved {
+		now := time.Now()
+		username := ""
+		if actor := currentActor(c); actor != nil {
+			username = actor.Username
+		}
+		updates["resolved_at"] = now
+		updates["resolved_by"] = username
+		record.ResolvedAt = &now
+		record.ResolvedBy = username
+	} else {
+		updates["resolved_at"] = nil
+		updates["resolved_by"] = ""
+		record.ResolvedAt = nil
+		record.ResolvedBy = ""
+	}
+	if err := s.db.Model(&UserFeedback{}).Where("id = ?", record.ID).Updates(updates).Error; err != nil {
+		util.ErrorResponse(c, 500, "更新反馈状态失败", nil)
+		return
+	}
+	record.Resolved = *payload.Resolved
+	util.SuccessMsgResponse(c, "反馈状态已更新", gin.H{
+		"id":         record.ID,
+		"resolved":   record.Resolved,
+		"resolvedAt": record.ResolvedAt,
+		"resolvedBy": record.ResolvedBy,
 	})
 }
 
@@ -335,8 +408,16 @@ func (s *Server) handleExportFeedbacks(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"amitia-feedbacks-%s.csv\"", time.Now().Format("20060102-150405")))
 	c.Writer.WriteString("\uFEFF")
 	writer := csv.NewWriter(c.Writer)
-	_ = writer.Write([]string{"编号", "反馈标识", "类型", "标题", "平台", "客户端", "应用版本", "Core 版本", "运行模式", "联系方式", "设备标识", "日志行数", "报错行数", "收到时间"})
+	_ = writer.Write([]string{"编号", "反馈标识", "类型", "标题", "平台", "客户端", "应用版本", "Core 版本", "运行模式", "联系方式", "设备标识", "日志行数", "报错行数", "收到时间", "状态", "解决时间", "解决人"})
 	for _, item := range items {
+		resolvedLabel := "未解决"
+		if item.Resolved {
+			resolvedLabel = "已解决"
+		}
+		resolvedAt := ""
+		if item.ResolvedAt != nil {
+			resolvedAt = item.ResolvedAt.Format(time.RFC3339)
+		}
 		_ = writer.Write([]string{
 			strconv.FormatUint(item.ID, 10),
 			item.TicketID,
@@ -352,6 +433,9 @@ func (s *Server) handleExportFeedbacks(c *gin.Context) {
 			strconv.Itoa(item.LogLineCount),
 			strconv.Itoa(item.ErrorLineCount),
 			item.ReceivedAt.Format(time.RFC3339),
+			resolvedLabel,
+			resolvedAt,
+			item.ResolvedBy,
 		})
 	}
 	writer.Flush()

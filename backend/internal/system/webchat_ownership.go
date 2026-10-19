@@ -12,21 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type webChatScopedService interface {
-	ListConversationsForSpace(q chat.ConversationQuery, spaceID string) (*chat.ConversationListResponse, error)
-	GetConversationForSpace(id, spaceID string) (*chat.Conversation, error)
-	GetMessagesForSpace(convID, spaceID string, page, pageSize int) ([]chat.Message, int64, error)
-	GetMessagesBeforeForSpace(convID, spaceID string, beforeSequence int64, limit int) ([]chat.Message, bool, error)
-	CreateConversationForSpace(req *chat.CreateConversationRequest, spaceID string) (*chat.Conversation, error)
-	EnsureChannelConversationForSpace(channel, spaceID string) (*chat.Conversation, error)
-	DeleteConversationForSpace(id, spaceID string) (bool, error)
-	DeleteMessagesForSpace(convID, spaceID string) error
-}
-
-type webChatMessageEditService interface {
-	UpdateMessageForSpace(id, spaceID, content string) (*chat.Message, error)
-}
-
 func webChatSpaceID(c *gin.Context) string {
 	return requestidentity.ResolveGin(c)
 }
@@ -47,78 +32,12 @@ func (h *Handler) webChatOwnedConversationQuery(spaceID string) *gorm.DB {
 	return webChatOwnerQuery(h.db.Model(&chat.Conversation{}).Where("deleted_at IS NULL"), spaceID)
 }
 
-func (h *Handler) requireWebChatConversation(convID, spaceID string) (*chat.Conversation, error) {
-	var conv chat.Conversation
-	if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ?", strings.TrimSpace(convID)).First(&conv).Error; err != nil {
-		return nil, err
-	}
-	return &conv, nil
-}
-
 func (h *Handler) requireWebChatImportConversation(convID, spaceID string) (*chat.Conversation, error) {
 	var conv chat.Conversation
 	if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ? AND source = ?", strings.TrimSpace(convID), "import").First(&conv).Error; err != nil {
 		return nil, err
 	}
 	return &conv, nil
-}
-
-// requireWebChatConversationOrAbsent allows a caller to reserve a brand-new
-// conversation id, but rejects an id that already belongs to another user.
-// This must run before touching process-global chat buffers or workspace state.
-func (h *Handler) requireWebChatConversationOrAbsent(convID, spaceID string) error {
-	convID = strings.TrimSpace(convID)
-	if convID == "" {
-		return nil
-	}
-	var owned int64
-	if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ?", convID).Count(&owned).Error; err != nil {
-		return err
-	}
-	if owned > 0 {
-		return nil
-	}
-	var any int64
-	if err := h.db.Unscoped().Model(&chat.Conversation{}).Where("id = ?", convID).Count(&any).Error; err != nil {
-		return err
-	}
-	if any > 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
-}
-
-func (h *Handler) webChatOwnedMessageQuery(spaceID string) *gorm.DB {
-	q := h.db.Table("messages").Joins("JOIN conversations ON conversations.id = messages.conversation_id").
-		Where("messages.deleted_at IS NULL AND conversations.deleted_at IS NULL")
-	owner := requestidentity.NormalizeSpaceID(spaceID)
-	if webChatLocalSingleUserMode() {
-		return q.Where("(conversations.space_id = ? OR conversations.space_id = '' OR conversations.space_id IS NULL OR conversations.space_id = ?)", owner, requestidentity.LegacySpaceID)
-	}
-	return q.Where("conversations.space_id = ?", owner)
-}
-
-func (h *Handler) findWebChatConversationByRequest(spaceID, requestID string) (string, error) {
-	requestID = strings.TrimSpace(requestID)
-	if requestID == "" {
-		return "", nil
-	}
-	var row struct {
-		ConversationID string `gorm:"column:conversation_id"`
-	}
-	result := h.webChatOwnedMessageQuery(spaceID).
-		Select("messages.conversation_id").
-		Where("messages.request_id = ? AND messages.role = ?", requestID, "user").
-		Order("messages.created_at ASC, messages.id ASC").
-		Limit(1).
-		Scan(&row)
-	if result.Error != nil {
-		return "", result.Error
-	}
-	if result.RowsAffected == 0 {
-		return "", nil
-	}
-	return strings.TrimSpace(row.ConversationID), nil
 }
 
 func (h *Handler) webChatCharacterQuery(spaceID string) *gorm.DB {

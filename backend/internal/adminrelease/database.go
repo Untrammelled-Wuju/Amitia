@@ -152,6 +152,16 @@ var adminMigrations = []mysqlMigration{
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 		},
 	},
+	{
+		Version: "202610190001",
+		Statements: []string{
+			`ALTER TABLE user_feedbacks
+				ADD COLUMN resolved TINYINT(1) NOT NULL DEFAULT 0,
+				ADD COLUMN resolved_at DATETIME(6) NULL,
+				ADD COLUMN resolved_by VARCHAR(64) NOT NULL DEFAULT '',
+				ADD KEY idx_user_feedbacks_resolved (resolved)`,
+		},
+	},
 }
 
 func OpenDatabase(config MySQLConfig) (*gorm.DB, error) {

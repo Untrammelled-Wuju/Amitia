@@ -8,6 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
@@ -183,20 +185,21 @@ func (a *conversationMessageSenderAdapter) SendConversationMessage(ctx context.C
 }
 
 type conversationMessageAppenderAdapter struct {
-	service chat.Service
+	engine *business.Engine
+	coreID string
 }
 
-func newConversationMessageAppenderAdapter(service chat.Service) *conversationMessageAppenderAdapter {
-	return &conversationMessageAppenderAdapter{service: service}
+func newConversationMessageAppenderAdapter() *conversationMessageAppenderAdapter {
+	return &conversationMessageAppenderAdapter{}
 }
 
 func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx context.Context, request kernel.ConversationMessageAppendRequest) (kernel.ConversationMessageAppendResult, error) {
-	if a == nil || a.service == nil {
+	if a == nil || a.engine == nil {
 		return kernel.ConversationMessageAppendResult{}, fmt.Errorf("chat service is not configured")
 	}
-	parts := make([]chat.MessagePart, len(request.Parts))
+	parts := make([]business.AppendedMessagePart, len(request.Parts))
 	for index, part := range request.Parts {
-		parts[index] = chat.MessagePart{
+		parts[index] = business.AppendedMessagePart{
 			Type:          part.Type,
 			Content:       part.Content,
 			ExtensionType: part.ExtensionType,
@@ -210,17 +213,33 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 			Metadata:      part.Metadata,
 		}
 	}
-	result, err := a.service.AppendConversationMessages(ctx, &chat.AppendConversationMessagesRequest{
-		SpaceID:          request.SpaceID,
-		CharacterID:      request.CharacterID,
-		ConversationID:   request.ConversationID,
-		Channel:          request.Channel,
-		Role:             request.Role,
-		Source:           request.Source,
-		ReplyToMessageID: request.ReplyToMessageID,
-		RequestID:        request.RequestID,
-		Parts:            parts,
-	})
+	host := kernel.GetHostAPIScope(ctx)
+	if host.SpaceID == "" || host.CharacterID == "" || request.SpaceID != host.SpaceID || request.CharacterID != host.CharacterID || host.ConversationID != "" && host.ConversationID != request.ConversationID {
+		return kernel.ConversationMessageAppendResult{}, coordination.ErrWrongOwner
+	}
+	if request.RequestID == "" {
+		request.RequestID = uuid.NewString()
+	}
+	ownedRequest := business.Request{SpaceID: request.SpaceID, CoreID: a.coreID, RoleID: request.CharacterID, ConversationID: request.ConversationID, RequestID: request.RequestID}
+	if scope, ok := coordination.FromContext(ctx); ok {
+		if scope.SpaceID != request.SpaceID || scope.RoleID != request.CharacterID {
+			return kernel.ConversationMessageAppendResult{}, coordination.ErrWrongOwner
+		}
+		ownedRequest.DeviceID, ownedRequest.TargetDeviceID, ownedRequest.CoreID = scope.InitiatorDeviceID, scope.TargetDeviceID, scope.CoreID
+		scope.RequestID = request.RequestID
+		scope.TurnID, scope.ExecutionID = "", ""
+		ownedRequest.ExpectedScope = &scope
+	} else {
+		actor, err := auth.RequireActor(ctx)
+		if err != nil {
+			return kernel.ConversationMessageAppendResult{}, err
+		}
+		if actor.SpaceID.String() != request.SpaceID || actor.DeviceID == "" {
+			return kernel.ConversationMessageAppendResult{}, coordination.ErrWrongOwner
+		}
+		ownedRequest.DeviceID, ownedRequest.TargetDeviceID = actor.DeviceID.String(), actor.DeviceID.String()
+	}
+	result, err := a.engine.AppendOwnedMessages(ctx, ownedRequest, business.AppendOwnedMessagesRequest{ConversationID: request.ConversationID, Role: request.Role, Source: request.Source, Channel: request.Channel, ReplyToMessageID: request.ReplyToMessageID, Parts: parts})
 	if err != nil {
 		return kernel.ConversationMessageAppendResult{}, err
 	}

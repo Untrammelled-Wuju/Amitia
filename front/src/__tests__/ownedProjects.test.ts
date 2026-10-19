@@ -190,6 +190,29 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     expect(store.projectIntent).toBeNull();
   });
 
+  it("并发加载侧栏只发起一次项目请求", async () => {
+    const store = useChatStore();
+    let resolveProjects!: (response: any) => void;
+    let projectCalls = 0;
+    const inheritedGet = mocks.get.getMockImplementation()!;
+    mocks.get.mockImplementation((path, config) => {
+      if (path.endsWith("/projects")) {
+        projectCalls += 1;
+        return new Promise((resolve) => {
+          resolveProjects = resolve;
+        });
+      }
+      return inheritedGet(path, config);
+    });
+    const first = store.fetchSidebar();
+    const second = store.fetchSidebar();
+    await vi.waitFor(() => expect(resolveProjects).toBeTypeOf("function"));
+    resolveProjects({ data: { projects: currentProjects, executionScope: structuredClone(scope) } });
+    await Promise.all([first, second]);
+    expect(projectCalls).toBe(1);
+    expect(store.sidebar.projects).toHaveLength(1);
+  });
+
   it("项目草稿携带完整工作区集合，Core 切换清空旧草稿", async () => {
     const store = useChatStore();
     const workspace = useConversationWorkspace();

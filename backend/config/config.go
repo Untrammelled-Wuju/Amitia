@@ -360,7 +360,7 @@ func (c *Config) SearchRuntimeConfig() *SearchRuntimeProviderConfig {
 
 var AppCfg *Config
 
-const DefaultAppVersion = "26.2.0-beta.8.1"
+const DefaultAppVersion = "26.2.0-beta.9"
 
 var providerIDRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,127}$`)
 

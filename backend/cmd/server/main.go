@@ -254,10 +254,6 @@ func main() {
 		log.Error("数据库启动迁移失败:", err)
 		os.Exit(1)
 	}
-	if err := backfillConversationEventFiles(db, conversationEventFileStore); err != nil {
-		log.Error("会话事件历史回填失败:", err)
-		os.Exit(1)
-	}
 	ctx := app.NewAppContext(db, nil)
 
 	bootstrap, bootErr := newRuntimeBootstrap(&paths, profile)

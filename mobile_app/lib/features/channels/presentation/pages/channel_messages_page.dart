@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -257,6 +259,9 @@ class _ChannelMessageBubble extends StatelessWidget {
     final imageUrl = message.imageUrl.trim();
     final videoUrl = message.videoUrl.trim();
     final audioUrl = message.audioUrl.trim();
+    final content = message.content.trim();
+    final hasMedia = imageUrl.isNotEmpty || videoUrl.isNotEmpty || audioUrl.isNotEmpty;
+    final placeholder = RegExp(r'^\[(图片|视频|语音|音频|文件)\]$').hasMatch(content);
     return Container(
       constraints: const BoxConstraints(maxWidth: 320),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -272,27 +277,71 @@ class _ChannelMessageBubble extends StatelessWidget {
             const SizedBox(height: 6),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
+              child: _channelImage(context, imageUrl),
             ),
           ],
           if (videoUrl.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(videoUrl, style: AppTypography.body(context)),
+            Row(
+              children: [
+                const Icon(Icons.play_circle_outline, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '视频消息',
+                    style: AppTypography.body(context),
+                  ),
+                ),
+              ],
+            ),
           ],
           if (audioUrl.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(audioUrl, style: AppTypography.body(context)),
+            Row(
+              children: [
+                const Icon(Icons.graphic_eq, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    message.audioDuration > 0
+                        ? '语音消息 ${message.audioDuration.toStringAsFixed(1)} 秒'
+                        : '语音消息',
+                    style: AppTypography.body(context),
+                  ),
+                ),
+              ],
+            ),
           ],
-          if (message.content.trim().isNotEmpty) ...[
+          if (content.isNotEmpty && !(hasMedia && placeholder)) ...[
             const SizedBox(height: 4),
-            Text(message.content, style: AppTypography.body(context)),
+            Text(content, style: AppTypography.body(context)),
           ],
         ],
       ),
     );
+  }
+
+  Widget _channelImage(BuildContext context, String url) {
+    if (!url.startsWith('data:')) {
+      return Image.network(
+        url,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => Text('图片加载失败', style: AppTypography.label(context)),
+      );
+    }
+    final separator = url.indexOf(',');
+    if (separator < 0 || !url.substring(0, separator).endsWith(';base64')) {
+      return Text('图片格式不受支持', style: AppTypography.label(context));
+    }
+    try {
+      final bytes = base64Decode(url.substring(separator + 1));
+      return Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => Text('图片解码失败', style: AppTypography.label(context)),
+      );
+    } catch (_) {
+      return Text('图片解码失败', style: AppTypography.label(context));
+    }
   }
 }

@@ -656,24 +656,3 @@ func (h *Handler) ExtractImportsMemoryCandidates(c *gin.Context) {
 	h.canonicalImportCandidates(c, true)
 
 }
-
-func (h *Handler) WebChatFromImport(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	convID, _ := body["conversationId"].(string)
-	if convID == "" {
-		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "缺少会话ID"})
-		return
-	}
-	spaceID := webChatSpaceID(c)
-	var conv map[string]interface{}
-	if err := h.webChatOwnedConversationQuery(spaceID).Where("id = ? AND source = ?", convID, "import").Limit(1).Scan(&conv).Error; err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取导入会话失败", nil)
-		return
-	}
-	if len(conv) == 0 {
-		util.ErrorResponse(c, response.DataNotFound, "未找到导入的会话", nil)
-		return
-	}
-	util.SuccessResponse(c, map[string]interface{}{"imported": true, "conversationId": convID})
-}

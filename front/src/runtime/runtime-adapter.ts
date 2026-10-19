@@ -245,9 +245,18 @@ export function resetRuntimeConnectionCache(): void {
 
 if (typeof window !== "undefined" && window.amitiaDesktop?.onRuntimeStatusChanged) {
   window.amitiaDesktop.onRuntimeStatusChanged((status) => {
-    if (status.state === "ready" || status.state === "starting") {
-      resetRuntimeConnectionCache();
-    }
+    if (status.state !== "ready") return;
+    const previousBaseURL = cachedConnection?.apiBaseURL || "";
+    roleSourceGeneration++;
+    cachedConnection = null;
+    cachedConfig = null;
+    void getRuntimeConnection()
+      .then((next) => {
+        if (previousBaseURL && next.apiBaseURL !== previousBaseURL) {
+          window.dispatchEvent(new CustomEvent("amitia:runtime-connection-changed"));
+        }
+      })
+      .catch(() => undefined);
   });
 }
 

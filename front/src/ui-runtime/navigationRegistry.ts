@@ -61,6 +61,7 @@ const iconMap: Record<string, Component> = {
   profile: Avatar,
   collection: Collection,
   connection: Connection,
+  channel: Connection,
   star: StarFilled,
   memory: Grid,
   list: List,

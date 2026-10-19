@@ -46,7 +46,6 @@ type Service interface {
 	DeleteConversationSummary(convID string) error
 	GenerateConversationSummary(ctx context.Context, convID string) (*ConversationSummary, error)
 	GetStats() (*ChatStatsResponse, error)
-	AppendConversationMessages(ctx context.Context, request *AppendConversationMessagesRequest) (*AppendConversationMessagesResult, error)
 	ListModels() ([]ModelConfig, error)
 	GetModel(id int) (*ModelConfig, error)
 	CreateModel(cfg *ModelConfig) (*ModelConfig, error)

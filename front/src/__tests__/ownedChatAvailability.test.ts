@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OwnedChatStateChangedError, pollOwnedChat } from "../runtime/owned-chat-poll";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), transition: vi.fn(), stream: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), transition: vi.fn(), stream: vi.fn(), mode: { value: "cloud" as "local" | "cloud" } }));
 vi.mock("../composables/useApi", () => ({ apiClient: { get: mocks.get } }));
-vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: async () => ({ mode: "cloud", serverURL: "https://core" }), getNativeProviderTransition: mocks.transition }));
+vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: async () => ({ mode: mocks.mode.value, serverURL: mocks.mode.value === "cloud" ? "https://core" : undefined }), getNativeProviderTransition: mocks.transition }));
 vi.mock("../runtime/device-owned-chat", () => ({ streamOwnedChat: mocks.stream }));
 
 const unavailable = "云端服务暂不可用，当前回复已中断；不会自动切换到本机模型。";
@@ -15,6 +15,7 @@ describe("云端可用性恢复与中断通知", () => {
     vi.resetModules();
     vi.clearAllMocks();
     localStorage.clear();
+    mocks.mode.value = "cloud";
     mocks.transition.mockResolvedValue(null);
     mocks.get.mockImplementation(async (path: string) => ({ data: path.endsWith("/coordination/me")
       ? { coreId: "C", coordinationAvailable: true, policy: { coordinated: true, providerEpoch: 1, modeRevision: 1, permissionRevision: 1 } }
@@ -43,28 +44,78 @@ describe("云端可用性恢复与中断通知", () => {
     expect(mocks.get.mock.calls.filter(([path]) => path.endsWith("/coordination/me"))).toHaveLength(2);
   });
 
-  it("完整校验服务与角色后清除历史保存的不可用提示，不生成虚假权限变化通知", async () => {
-    localStorage.setItem(stateKey, JSON.stringify({ coreId: "C", notice: unavailable }));
+  it("旧版持久化的核心切换提示不会在升级后恢复", async () => {
+    localStorage.setItem(stateKey, JSON.stringify({ coreId: "B", notice: providerNotice }));
     const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
     const owned = useDeviceOwnedConversation();
-    expect(owned.notice.value).toBe(unavailable);
+    expect(owned.notice.value).toBe("");
     expect(await owned.refresh()).toBe(true);
     expect(owned.notice.value).toBe("");
-    expect(JSON.parse(localStorage.getItem(stateKey)!).notice).toBe("");
+    expect(JSON.parse(localStorage.getItem(stateKey)!)).toMatchObject({ version: 2, mode: "cloud", binding: "cloud:https://core" });
+    expect(JSON.parse(localStorage.getItem(stateKey)!).notice).toBeUndefined();
     expect(mocks.stream).not.toHaveBeenCalled();
   });
 
-  it("临时断线恢复后仍保留先前 Core 切换通知，并且不把断线提示永久保存", async () => {
-    localStorage.setItem(stateKey, JSON.stringify({ coreId: "C", notice: providerNotice }));
+  it("本地模式忽略历史推进状态并且不读取云端切换入口", async () => {
+    mocks.mode.value = "local";
+    localStorage.setItem(stateKey, JSON.stringify({ coreId: "B", notice: providerNotice }));
+    const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
+    const owned = useDeviceOwnedConversation();
+    expect(await owned.refresh()).toBe(true);
+    expect(owned.notice.value).toBe("");
+    expect(mocks.transition).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem(stateKey)!)).toMatchObject({ version: 2, mode: "local", binding: "local" });
+  });
+
+  it("临时断线恢复后清除不可用提示", async () => {
     const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
     const owned = useDeviceOwnedConversation();
     await owned.refresh();
     owned.markUnavailable();
     expect(owned.notice.value).toBe(unavailable);
-    expect(JSON.parse(localStorage.getItem(stateKey)!).notice).toBe(providerNotice);
     await owned.refresh();
-    expect(owned.notice.value).toBe(providerNotice);
+    expect(owned.notice.value).toBe("");
     expect(mocks.stream).not.toHaveBeenCalled();
+  });
+
+  it("本地模式没有进行中的回复时核心变化不会声称回复中断", async () => {
+    mocks.mode.value = "local";
+    let currentCore = "C";
+    mocks.get.mockImplementation(async (path: string) => ({ data: path.endsWith("/coordination/me")
+      ? { coreId: currentCore, coordinationAvailable: true, policy: { coordinated: true, providerEpoch: 1, modeRevision: 1, permissionRevision: 1 } }
+      : { roles: [{ id: "role", name: "角色", revision: 1 }], roleOwnerId: currentCore } }));
+    const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
+    const owned = useDeviceOwnedConversation();
+    await owned.refresh();
+    currentCore = "D";
+    await owned.refresh();
+    expect(owned.notice.value).toContain("本机 Core 已从「C」切换为「D」");
+    expect(owned.notice.value).not.toContain("当前回复已中断");
+    expect(owned.coreId.value).toBe("D");
+  });
+
+  it("本地模式核心变化时中止进行中的回复并使用本机提示", async () => {
+    mocks.mode.value = "local";
+    let currentCore = "C";
+    mocks.get.mockImplementation(async (path: string) => ({ data: path.endsWith("/coordination/me")
+      ? { coreId: currentCore, coordinationAvailable: true, policy: { coordinated: true, providerEpoch: 1, modeRevision: 1, permissionRevision: 1 } }
+      : { roles: [{ id: "role", name: "角色", revision: 1 }], roleOwnerId: currentCore } }));
+    const { useDeviceOwnedConversation } = await import("../composables/useDeviceOwnedConversation");
+    const owned = useDeviceOwnedConversation();
+    await owned.refresh();
+    let signal!: AbortSignal;
+    let finish!: (value: any) => void;
+    mocks.stream.mockImplementation((_request, capturedSignal) => {
+      signal = capturedSignal;
+      return new Promise((resolve) => { finish = resolve; });
+    });
+    const pending = owned.send({ requestId: "request", characterId: "role", message: "继续" }, vi.fn());
+    currentCore = "D";
+    await owned.refresh();
+    expect(owned.notice.value).toContain("本机 Core 已从「C」切换为「D」");
+    expect(signal.aborted).toBe(true);
+    finish({ conversationId: "chat", executionScope: { resourceOwnerId: "C" } });
+    await expect(pending).rejects.toThrow("迟到回复已拦截");
   });
 
   it("角色接口仍失败时不能提前清除不可用提示，重复轮询失败不重复发中断事件", async () => {
