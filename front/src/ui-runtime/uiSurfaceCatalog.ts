@@ -15,6 +15,7 @@ const ROUTE_ALIAS_RULES: RouteAliasRule[] = [
   { canonicalPrefix: "/memory/graph", aliasPrefix: "/graph", exact: true },
   { canonicalPrefix: "/memory/profiles", aliasPrefix: "/profiles", exact: true },
   { canonicalPrefix: "/memory/world-book", aliasPrefix: "/world-book", exact: true },
+  { canonicalPrefix: "/memory/knowledge", aliasPrefix: "/knowledge", exact: true },
   { canonicalPrefix: "/chat-logs", aliasPrefix: "/logs", exact: true },
   { canonicalPrefix: "/chat-import", aliasPrefix: "/import", exact: true },
   { canonicalPrefix: "/settings/runtime-mode", aliasPrefix: "/runtime-mode", exact: true },
@@ -61,7 +62,7 @@ export function canonicalUISurfaceId(rawRoute: string): string {
   if (hasExact("/characters", "/character")) return "surface.character.list";
   if (hasPrefix("/characters") || hasPrefix("/character")) return "surface.character.detail";
   if (hasExact("/memory/manager", "/memory-manager")) return "surface.memory.manager";
-  if (hasPrefix("/memory") || hasExact("/memory-timeline", "/episodic", "/graph", "/profiles", "/world-book")) {
+  if (hasPrefix("/memory") || hasExact("/memory-timeline", "/episodic", "/graph", "/profiles", "/world-book", "/knowledge")) {
     return "surface.memory.detail";
   }
   if (hasPrefix("/workshop") || hasPrefix("/creative-workshop")) return "surface.workshop";

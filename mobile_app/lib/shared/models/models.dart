@@ -66,6 +66,7 @@ class ChatMessage {
   final String? replyToMessageId;
   final String? replyToExcerpt;
   final AssistantTurnDto? assistantTurn;
+  final List<Map<String, dynamic>> citationSnapshot;
 
   ChatMessage({
     required this.id,
@@ -99,6 +100,7 @@ class ChatMessage {
     this.replyToMessageId,
     this.replyToExcerpt,
     this.assistantTurn,
+    this.citationSnapshot = const <Map<String, dynamic>>[],
   }) : renderId = renderId ?? id;
 }
 

@@ -117,6 +117,8 @@ type service struct {
 	psycheStore         psyche.PsycheStore
 	emotion             *emotionstate.Service
 	worldBookPort       WorldBookPort
+	knowledgePort       KnowledgePort
+	investigationPlanner investigationPlannerFunc
 	visionPort          VisionPort
 	wmCache             *WorkingMemoryCache
 	stateProvider       *ConversationStateProvider
@@ -164,6 +166,10 @@ type DeliveryStore interface {
 
 func (s *service) SetDeliveryStore(store DeliveryStore) {
 	s.deliveryStore = store
+}
+
+func (s *service) SetKnowledgePort(port KnowledgePort) {
+	s.knowledgePort = port
 }
 
 func (s *service) SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator) {

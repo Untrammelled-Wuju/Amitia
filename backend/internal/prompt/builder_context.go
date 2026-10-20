@@ -26,6 +26,7 @@ func appendContextSections(ctx *buildContext) {
 		ctx.sections = append(ctx.sections, GwSection{Enabled: true, ID: "relationship_time", Type: GwSectionRelationshipTime, TrustLevel: TrustTrusted, InstructionMode: ModeDataOnly, Source: "temporal-runtime", Priority: 440, TokenBudget: 160, Content: relationshipTimePolicy + "\n" + relationshipTime, SourceProject: "prompt", SourceFile: "builder_context.go", SourceConstant: "GwSectionRelationshipTime"})
 	}
 	appendDataOnly(ctx, "memory_context", GwSectionMemoryContext, "memory", req.MemoryContext, "GwSectionMemoryContext")
+	appendDataOnly(ctx, "knowledge_context", GwSectionKnowledgeContext, "knowledge", req.KnowledgeContext, "GwSectionKnowledgeContext")
 	appendDataOnly(ctx, "worldbook_context", GwSectionWorldbookContext, "worldbook", req.Worldbook, "GwSectionWorldbookContext")
 	appendDataOnly(ctx, "plugin_context", GwSectionPluginContext, "plugin", req.PluginContext, "GwSectionPluginContext")
 	appendDataOnly(ctx, "conversation_history", GwSectionConversationHistory, "history", req.History, "GwSectionConversationHistory")

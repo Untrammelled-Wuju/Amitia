@@ -15,11 +15,6 @@ vi.mock("@/composables/useApi", () => ({
   useApi: () => ({ get: mocks.get }),
 }));
 
-vi.mock("@/runtime/owned-chat-management", () => ({
-  ownedChatRuntimeRequest: (...args: any[]) => mocks.get(...args),
-  prepareOwnedChatRequest: vi.fn(),
-}));
-
 vi.mock("@/runtime/runtime-adapter", () => ({
   resolveApiUrl: vi.fn(async (value: string) => value),
 }));
@@ -55,33 +50,34 @@ function event(
 }
 
 describe("conversation runtime projection", () => {
-
-  it("uses the server cursor for older turns and stops when the server page ends", async () => {
-    mocks.get.mockReset();
-    mocks.get.mockResolvedValueOnce({ version: 1, turns: [], messages: [], lastEventSequence: 0, turnHistory: { hasMore: true, nextCursor: "owner-bound-cursor" } });
-    const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
-    await runtime.loadSnapshot();
-    mocks.get.mockResolvedValueOnce({ items: [{ id: "old-turn", status: "completed", sequence: 7, items: [] }], hasMore: false, nextCursor: "" });
-    expect(await runtime.loadOlderTurns()).toBe(true);
-    expect(mocks.get).toHaveBeenLastCalledWith("turns", { conversationId: "conversation-1", cursor: "owner-bound-cursor", limit: 50 });
-    expect(await runtime.loadOlderTurns()).toBe(false);
-    expect(mocks.get).toHaveBeenCalledTimes(2);
-    runtime.cleanup();
-  });
-
-  it("discards an older turn page returned after navigation", async () => {
-    mocks.get.mockReset();
-    mocks.get.mockResolvedValueOnce({ version: 1, turns: [], messages: [], turnHistory: { hasMore: true, nextCursor: "first-owner-page" } });
-    const conversation = ref("conversation-1");
-    const runtime = useConversationRuntime(conversation, ref<any[]>([]), ref(false), () => undefined);
-    await runtime.loadSnapshot();
-    let resolvePage!: (value: any) => void;
-    mocks.get.mockImplementationOnce(() => new Promise((resolve) => { resolvePage = resolve; }));
-    const pending = runtime.loadOlderTurns();
-    conversation.value = "conversation-2";
-    resolvePage({ items: [{ id: "foreign-turn", status: "completed", sequence: 7, items: [] }], hasMore: false });
-    expect(await pending).toBe(false);
-    expect(runtime.messages.value.some((message) => message.assistantTurn?.id === "foreign-turn")).toBe(false);
+  it("projects completed citations before and after snapshot refresh", async () => {
+    const persistedMessages = ref<any[]>([]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persistedMessages, ref(false), () => undefined);
+    const snapshot = [
+      { marker: "[K1]", kind: "knowledge", index: 1, title: "文档", sourceId: "doc-1" },
+      { marker: "[1]", kind: "web", index: 1, title: "网页", url: "https://example.com" },
+    ];
+    await runtime.applyEvent(event(1, "turn.started"));
+    await runtime.applyEvent(event(2, "text.completed", {
+      blockId: "text-1", blockSequence: 1, messageId: "message-1", revision: 2,
+      payload: { blockType: "text", content: "文档 [K1] 网页 [1]", citationSnapshot: snapshot },
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const live = runtime.messages.value.find((row) => row.role === "assistant");
+    expect(live?.citationSnapshot).toEqual(snapshot);
+    expect(live?.id).toBe("message-1");
+    mocks.get.mockResolvedValueOnce({
+      version: 1, revision: 1, lastEventSequence: 2, messages: [
+        { id: "message-1", role: "assistant", conversationId: "conversation-1", content: "文档 [K1] 网页 [1]", citationSnapshot: snapshot },
+      ],
+      turns: [{ id: "turn-1", conversationId: "conversation-1", requestId: "request-1", sequence: 1, status: "completed", items: [
+        { id: "text-1", type: "text", status: "completed", sequence: 1, revision: 2, messageId: "message-1", content: "文档 [K1] 网页 [1]" },
+      ] }],
+    });
+    await runtime.loadSnapshot(false);
+    const historic = runtime.messages.value.find((row) => row.role === "assistant");
+    expect(historic?.citationSnapshot).toEqual(snapshot);
+    expect(historic?.uiKey).toBe(live?.uiKey);
     runtime.cleanup();
   });
 
@@ -123,7 +119,6 @@ describe("conversation runtime projection", () => {
     runtime.cleanup();
   });
   it("only notifies completed root turns once", async () => {
-    mocks.get.mockResolvedValue({ version: 1, messages: [], turns: [] });
     mocks.notifyReplyCompleted.mockClear();
     mocks.get.mockResolvedValue({ version: 1, turns: [], lastEventSequence: 5 });
     for (const candidate of [

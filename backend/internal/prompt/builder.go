@@ -39,6 +39,7 @@ type BuildRequest struct {
 	ContinuityContext         string
 	RelationshipTimeContext   string
 	MemoryContext             string
+	KnowledgeContext          string
 	Worldbook                 string
 	PluginContext             string
 	AgentSkillContext         string

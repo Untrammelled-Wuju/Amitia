@@ -51,8 +51,10 @@ markdown.renderer.rules.table_close = () => "</table></div>";
 
 markdown.inline.ruler.before("link", "amrp_citation", (state, silent) => {
   if (state.src[state.pos] !== "[") return false;
-  const match = /^\[(\d+)\]/.exec(state.src.slice(state.pos));
+  const match = /^\[((?:K)?\d+)\]/.exec(state.src.slice(state.pos));
   if (!match) return false;
+  const next = state.src[state.pos + match[0].length] || "";
+  if (["(", "[", ":"].includes(next) || state.src[state.pos - 1] === "!") return false;
   if (!silent) {
     const token = state.push("amrp_citation", "button", 0);
     token.content = match[1];

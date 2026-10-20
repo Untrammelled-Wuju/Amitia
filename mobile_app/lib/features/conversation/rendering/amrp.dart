@@ -1,3 +1,4 @@
+import '../../chat/runtime/citation_snapshot.dart';
 import '../../../shared/models/models.dart';
 
 enum AmrpMessageRole { user, assistant, system }
@@ -277,7 +278,16 @@ class AmrpMessage {
                   : null,
             ),
       blocks: _blocksFor(message),
-      sources: const <AmrpCitationSource>[],
+      sources: [
+        for (final entry in normalizeCitationSnapshot(message.citationSnapshot))
+          if ((entry['marker'] ?? '').toString().trim().isNotEmpty)
+            AmrpCitationSource(
+              id: (entry['marker'] ?? '').toString().replaceAll(RegExp(r'[\[\]]'), ''),
+              title: (entry['title'] ?? '来源').toString(),
+              url: (entry['url'] ?? '').toString(),
+              snippet: (entry['excerpt'] ?? '').toString(),
+            ),
+      ],
       state: _stateFor(message),
       createdAt: message.time,
       raw: message,

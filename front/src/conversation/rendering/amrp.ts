@@ -1,3 +1,4 @@
+import { normalizeCitationSnapshot, normalizeCitationURL } from "@/conversation/runtime/citationSnapshot";
 import type {
   AgentTaskBlock,
   AIMessageData,
@@ -303,16 +304,18 @@ function legacyBlocks(message: Record<string, any>): RichBlock[] {
 }
 
 function normalizeSources(message: Record<string, any>): CitationSource[] {
-  const raw = message.sources ?? message.citations;
+  const raw = Array.isArray(message.citationSnapshot)
+    ? normalizeCitationSnapshot(message.citationSnapshot)
+    : (message.sources ?? message.citations);
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((item: unknown): item is Record<string, any> => !!item && typeof item === "object")
     .map((item, index) => ({
-      id: firstString(item, ["id", "index"]) || String(index + 1),
+      id: firstString(item, ["id", "marker"]).replace(/^\[|\]$/g, "") || (item.kind === "knowledge" ? `K${item.index}` : firstString(item, ["index"])) || String(index + 1),
       title: firstString(item, ["title", "name", "url", "fileId"]) || `Source ${index + 1}`,
-      url: firstString(item, ["url", "href"]) || undefined,
+      url: normalizeCitationURL(firstString(item, ["url", "href"])) || undefined,
       fileId: firstString(item, ["fileId"]) || undefined,
-      snippet: firstString(item, ["snippet", "text", "description"]) || undefined,
+      snippet: firstString(item, ["excerpt", "snippet", "text", "description"]) || undefined,
     }));
 }
 

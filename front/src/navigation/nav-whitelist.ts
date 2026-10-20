@@ -21,6 +21,7 @@ export const NAVIGATION_WHITELIST: readonly string[] = [
   "/user-settings",
   "/episodic",
   "/world-book",
+  "/knowledge",
   "/decision-viz",
   "/memory-manager",
   "/memory-timeline",

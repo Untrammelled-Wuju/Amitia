@@ -112,6 +112,7 @@ const pageItems = [
   { label: "时间线", desc: "记忆时间线", to: "/memory-timeline", icon: Timer },
   { label: "用户画像", desc: "用户特征画像", to: "/profiles", icon: Notebook },
   { label: "世界书", desc: "世界观设定", to: "/world-book", icon: Files },
+  { label: "知识库", desc: "本地文档检索", to: "/knowledge", icon: Files },
   { label: "聊天记录", desc: "历史对话", to: "/logs", icon: ChatDotRound },
   { label: "系统运行日志", desc: "Core 运行日志文件", to: "/settings/system-logs", icon: Document },
   { label: "Prompt Trace", desc: "提示词调用追踪", to: "/settings/prompt-trace", icon: Operation },

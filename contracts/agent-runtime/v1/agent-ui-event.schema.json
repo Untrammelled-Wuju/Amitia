@@ -115,7 +115,20 @@
         "agent_task.started",
         "agent_task.progress",
         "agent_task.completed",
-        "agent_task.failed"
+        "agent_task.failed",
+        "agent_task.interrupted",
+        "retrieval.started",
+        "retrieval.completed",
+        "retrieval.failed",
+        "retrieval.interrupted",
+        "knowledge.read.started",
+        "knowledge.read.completed",
+        "knowledge.read.failed",
+        "investigation.started",
+        "investigation.round",
+        "investigation.completed",
+        "investigation.failed",
+        "investigation.interrupted"
       ]
     },
     "status": {

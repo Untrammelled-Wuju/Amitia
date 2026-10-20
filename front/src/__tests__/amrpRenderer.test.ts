@@ -110,6 +110,17 @@ describe("AMRP renderer", () => {
     expect(html).toContain("katex");
     expect(html).not.toContain('href="javascript:');
   });
+  it("keeps markdown links and images distinct from evidence references", () => {
+    const html = renderMarkdownSegment(
+      "证据 [K1] 和 [1]；普通链接 [K1](https://example.org/report) 与 [1](https://example.org/web)，图片 ![K1](https://example.org/image.png)，引用式 [K1][document]。",
+      ["K1", "1"],
+    );
+    expect((html.match(/data-citation-id=/g) ?? [])).toHaveLength(2);
+    expect(html).toContain('href="https://example.org/report"');
+    expect(html).toContain('href="https://example.org/web"');
+    expect(html).toContain('data-amitia-image="true"');
+  });
+
   it("renders only registered citation ids as interactive references", () => {
     const withoutSources = renderMarkdownSegment("unknown [99]", []);
     expect(withoutSources).toContain("[99]");

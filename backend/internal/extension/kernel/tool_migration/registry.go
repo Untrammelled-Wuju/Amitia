@@ -19,6 +19,7 @@ type ModuleID string
 const (
 	ModuleCoreTools       ModuleID = "core-tools"
 	ModuleMemoryTools     ModuleID = "memory-tools"
+	ModuleKnowledgeTools  ModuleID = "knowledge-tools"
 	ModuleMessageTools    ModuleID = "message-tools"
 	ModuleMediaTools      ModuleID = "media-tools"
 	ModuleDesktopTools    ModuleID = "desktop-tools"
@@ -70,7 +71,7 @@ func NewToolMigrationRegistry() *ToolMigrationRegistry {
 			Generation:  1,
 			TrustLevel:  "platform",
 			Modules: []ModuleID{
-				ModuleCoreTools, ModuleMemoryTools, ModuleMessageTools,
+				ModuleCoreTools, ModuleMemoryTools, ModuleKnowledgeTools, ModuleMessageTools,
 				ModuleMediaTools, ModuleDesktopTools, ModuleProviderTools,
 				ModuleDiagnosticTools,
 			},
@@ -173,6 +174,8 @@ func DefaultToolSpecs() []*ToolContributionSpec {
 			RuntimeBinding: "host_internal",
 			RiskLevel:      "low",
 		},
+		{ToolID: "builtin/knowledge/search", LegacyToolID: "search_knowledge", ModelToolName: "search_knowledge", Module: ModuleKnowledgeTools, Namespace: "knowledge", Title: "搜索共享知识库", Description: "租户隔离的混合检索", RuntimeBinding: "host_internal", RiskLevel: "low", Permissions: []string{"knowledge.read"}},
+		{ToolID: "builtin/knowledge/read", LegacyToolID: "read_knowledge", ModelToolName: "read_knowledge", Module: ModuleKnowledgeTools, Namespace: "knowledge", Title: "精读知识原文", Description: "按 Evidence/Unit/Locator 在权限范围内精读", RuntimeBinding: "host_internal", RiskLevel: "low", Permissions: []string{"knowledge.read"}},
 		{
 			ToolID:         "builtin/memory/query",
 			LegacyToolID:   "query_memory",

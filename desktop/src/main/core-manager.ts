@@ -14,6 +14,11 @@ import type { CorePrerequisiteResult } from "./core-prereq";
 import { getLocalAdminHeaders } from "./backend-session-client";
 import { buildCoreSpawnArgs, parseCoreChildPid } from "./core-supervisor";
 import {
+  databaseSourceCandidates,
+  firstExisting,
+  resolveCorePath,
+} from "./platform-artifacts";
+import {
   getCoreBaseURL,
   invalidateCoreEndpoint,
   isCoreEndpointOwnedByProcess,
@@ -70,10 +75,7 @@ export function isCoreErrorLine(line: string): boolean {
 }
 
 export function getCorePath(): string {
-  if (!isDevMode()) {
-    return path.join(process.resourcesPath, "core", "AmitiaCore.exe");
-  }
-  return path.join(getInstallDir(), "resources", "core", "AmitiaCore.exe");
+  return resolveCorePath(getCoreResourcesPath());
 }
 
 export function getCoreResourcesPath(): string {
@@ -350,36 +352,40 @@ function ensureLocalToken(dataDir: string): void {
 
 function ensureCoreBinaries(dataDir: string): void {
   const resourcesPath = getCoreResourcesPath();
+  const extraRoots = isDevMode()
+    ? [path.resolve(getInstallDir(), "..", "backend")]
+    : [];
   const nodeArchive = ["node.exe.zip", "node.zip"]
     .map((name) => path.join(resourcesPath, "core", "node", name))
     .find((file) => fs.existsSync(file));
   const binaries = [
     {
-      src: path.join(resourcesPath, "qdrant", "qdrant.zip"),
+      sources: databaseSourceCandidates(resourcesPath, "qdrant", process.platform, process.arch, extraRoots),
       dest: path.join(dataDir, "qdrant", "qdrant.zip"),
     },
     {
-      src: path.join(resourcesPath, "surrealdb", "surreal.zip"),
+      sources: databaseSourceCandidates(resourcesPath, "surrealdb", process.platform, process.arch, extraRoots),
       dest: path.join(dataDir, "surrealdb", "surreal.zip"),
     },
   ];
   if (nodeArchive) {
     binaries.push({
-      src: nodeArchive,
+      sources: [nodeArchive],
       dest: path.join(dataDir, "node", path.basename(nodeArchive)),
     });
   }
-  for (const { src, dest } of binaries) {
+  for (const { sources, dest } of binaries) {
     if (fs.existsSync(dest)) {
       console.log("[CoreManager] 二进制已存在, 跳过复制:", dest);
       continue;
     }
-    if (fs.existsSync(src)) {
+    const src = firstExisting(sources);
+    if (src) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(src, dest);
-      console.log("[CoreManager] 二进制已复制:", dest);
+      console.log("[CoreManager] 二进制已复制:", src, "->", dest);
     } else {
-      console.error("[CoreManager] 二进制资源不存在:", src);
+      console.error("[CoreManager] 二进制资源不存在:", sources.join(", "));
     }
   }
   syncRuntimeHostAssets(dataDir, getBundledRuntimeRoot());

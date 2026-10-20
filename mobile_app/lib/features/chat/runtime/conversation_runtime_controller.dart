@@ -15,6 +15,7 @@ import '../../../core/settings/chat_permission_preferences.dart';
 import '../../../shared/models/models.dart';
 import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
 import 'agent_event_reducer.dart';
+import 'citation_projection.dart';
 import '../../workbench/runtime/workbench_mobile_events.dart';
 import 'automation_status.dart';
 import 'conversation_message_ledger.dart';
@@ -885,7 +886,15 @@ class ConversationRuntimeController extends ChangeNotifier {
         final persisted = _messages.findById(finalItem.messageId);
         if (persisted != null && persisted.role == MessageRole.assistant) {
           _messages.upsert(
-            _cloneMessage(persisted, renderId: renderId, assistantTurn: turn),
+            _cloneMessage(
+              persisted,
+              renderId: renderId,
+              assistantTurn: turn,
+              citationSnapshot: projectCitationSnapshot(
+                persisted.citationSnapshot,
+                finalItem,
+              ),
+            ),
           );
           continue;
         }
@@ -945,6 +954,10 @@ class ConversationRuntimeController extends ChangeNotifier {
               DateTime.now(),
           status: status,
           assistantTurn: turn,
+          citationSnapshot: projectCitationSnapshot(
+            existing?.citationSnapshot ?? const <Map<String, dynamic>>[],
+            finalItem,
+          ),
         ),
       );
     }
@@ -1024,6 +1037,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           : null,
       replyToMessageId: dto.replyToMessageId,
       replyToExcerpt: dto.replyToExcerpt,
+      citationSnapshot: dto.citationSnapshot,
     );
   }
 
@@ -1437,6 +1451,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     int? sequence,
     MessageStatus? status,
     AssistantTurnDto? assistantTurn,
+    List<Map<String, dynamic>>? citationSnapshot,
   }) {
     return ChatMessage(
       id: id ?? message.id,
@@ -1471,6 +1486,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       replyToMessageId: message.replyToMessageId,
       replyToExcerpt: message.replyToExcerpt,
       assistantTurn: assistantTurn ?? message.assistantTurn,
+      citationSnapshot: citationSnapshot ?? message.citationSnapshot,
     );
   }
 

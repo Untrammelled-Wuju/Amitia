@@ -502,6 +502,11 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
     final byId = <String, AmrpCitationSource>{
       for (final source in messageSources) source.id: source,
     };
+    // Frozen citations are the authority for new messages. Legacy turns may
+    // still recover web sources from tool results when no snapshot exists.
+    if (messageSources.isNotEmpty) {
+      return byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+    }
     if (turn != null) {
       for (final item in turn.items) {
         if (item.type != 'tool_result' ||

@@ -114,6 +114,7 @@ class MessageDto {
   final int? tokens;
   final String? replyToMessageId;
   final String? replyToExcerpt;
+  final List<Map<String, dynamic>> citationSnapshot;
 
   MessageDto({
     this.resourceUri = '',
@@ -148,6 +149,7 @@ class MessageDto {
     this.tokens,
     this.replyToMessageId,
     this.replyToExcerpt,
+    this.citationSnapshot = const <Map<String, dynamic>>[],
   });
 
   factory MessageDto.fromJson(Map<String, dynamic> json) {
@@ -190,6 +192,12 @@ class MessageDto {
       tokens: (json['tokens'] as num?)?.toInt(),
       replyToMessageId: json['replyToMessageId'] as String?,
       replyToExcerpt: json['replyToExcerpt'] as String?,
+      citationSnapshot: json['citationSnapshot'] is List
+          ? (json['citationSnapshot'] as List)
+              .whereType<Map>()
+              .map((entry) => Map<String, dynamic>.from(entry))
+              .toList(growable: false)
+          : const <Map<String, dynamic>>[],
     );
   }
 }
@@ -223,6 +231,8 @@ class AssistantTurnItemDto {
   final int durationMs;
   final bool isFinal;
   final String messageId;
+  final List<Map<String, dynamic>> citationSnapshot;
+  final bool citationSnapshotProvided;
   final String createdAt;
   final String updatedAt;
 
@@ -243,6 +253,8 @@ class AssistantTurnItemDto {
     this.durationMs = 0,
     this.isFinal = false,
     this.messageId = '',
+    this.citationSnapshot = const <Map<String, dynamic>>[],
+    this.citationSnapshotProvided = false,
     this.createdAt = '',
     this.updatedAt = '',
   });
@@ -265,6 +277,13 @@ class AssistantTurnItemDto {
       durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
       isFinal: (json['isFinal'] as num?)?.toInt() == 1,
       messageId: (json['messageId'] ?? '').toString(),
+      citationSnapshot: json['citationSnapshot'] is List
+          ? (json['citationSnapshot'] as List)
+              .whereType<Map>()
+              .map((entry) => Map<String, dynamic>.from(entry))
+              .toList(growable: false)
+          : const <Map<String, dynamic>>[],
+      citationSnapshotProvided: json.containsKey('citationSnapshot'),
       createdAt: (json['createdAt'] ?? '').toString(),
       updatedAt: (json['updatedAt'] ?? '').toString(),
     );

@@ -1,3 +1,5 @@
+import type { CitationSnapshotEntry } from "@/conversation/runtime/citationSnapshot";
+
 export type MessageState =
   | "queued"
   | "streaming"
@@ -170,6 +172,7 @@ export interface AssistantTurnItem {
   durationMs?: number;
   isFinal?: number;
   messageId?: string;
+  citationSnapshot?: CitationSnapshotEntry[];
   createdAt?: string;
   updatedAt?: string;
 }

@@ -48,7 +48,7 @@ func (v *Validator) ValidateIR(ir GwIR) error {
 			if s.TrustLevel != TrustTrusted || s.InstructionMode != ModeAuthoritative || s.Source != "chat_interface" {
 				return fmt.Errorf("chat delivery contract metadata is invalid: %s", s.ID)
 			}
-		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionPluginContext,
+		case GwSectionMemoryContext, GwSectionKnowledgeContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionPluginContext,
 			GwSectionConversationHistory, GwSectionToolResult, GwSectionMultimodalText:
 			if s.TrustLevel != TrustUntrusted {
 				return fmt.Errorf("context section must be untrusted: %s", s.ID)

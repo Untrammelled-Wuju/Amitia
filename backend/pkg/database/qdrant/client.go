@@ -3,7 +3,11 @@ package qdrant
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/qdrant/go-client/qdrant"
 	"github.com/u-ai/backend/config"
@@ -65,7 +69,16 @@ func EnsureCollections() error {
 }
 
 func EnsureCollectionByName(collectionName string, vectorDim int) error {
-	ctx := context.Background()
+	return EnsureCollectionByNameWithContext(context.Background(), collectionName, vectorDim)
+}
+
+func EnsureCollectionByNameWithContext(ctx context.Context, collectionName string, vectorDim int) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	if collectionName == "" {
 		collectionName = defaultCollectionName()
@@ -135,8 +148,17 @@ type VectorPoint struct {
 }
 
 func UpsertVectors(points []VectorPoint, collectionName ...string) error {
+	return UpsertVectorsWithContext(context.Background(), points, collectionName...)
+}
+
+func UpsertVectorsWithContext(ctx context.Context, points []VectorPoint, collectionName ...string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	target := resolveCollectionName(collectionName...)
-	ctx := context.Background()
 
 	qdrantPoints := make([]*qdrant.PointStruct, len(points))
 	for i, p := range points {
@@ -149,25 +171,105 @@ func UpsertVectors(points []VectorPoint, collectionName ...string) error {
 
 	_, err := Client.Upsert(ctx, &qdrant.UpsertPoints{
 		CollectionName: target,
+		Wait:           qdrant.PtrOf(true),
 		Points:         qdrantPoints,
 	})
 	return err
 }
 
 func DeleteVectors(ids []string, collectionName ...string) error {
+	return DeleteVectorsWithContext(context.Background(), ids, collectionName...)
+}
+
+func DeleteVectorsWithContext(ctx context.Context, ids []string, collectionName ...string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	if Client == nil {
+		return fmt.Errorf("vector index unavailable")
+	}
 	target := resolveCollectionName(collectionName...)
-	ctx := context.Background()
+	exists, err := Client.CollectionExists(ctx, target)
+	if err != nil {
+		return fmt.Errorf("check vector collection before delete: %w", err)
+	}
+	if !exists {
+		return nil
+	}
 
 	qdrantIDs := make([]*qdrant.PointId, len(ids))
 	for i, id := range ids {
 		qdrantIDs[i] = qdrant.NewID(id)
 	}
 
-	_, err := Client.Delete(ctx, &qdrant.DeletePoints{
+	_, err = Client.Delete(ctx, &qdrant.DeletePoints{
 		CollectionName: target,
+		Wait:           qdrant.PtrOf(true),
 		Points:         qdrant.NewPointsSelector(qdrantIDs...),
 	})
 	return err
+}
+
+type VectorMetadata struct {
+	ID      string
+	Payload map[string]string
+}
+
+func GetVectorMetadataWithContext(ctx context.Context, ids []string, collectionName string) (map[string]VectorMetadata, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if Client == nil {
+		return nil, fmt.Errorf("vector index unavailable")
+	}
+	if len(ids) == 0 {
+		return map[string]VectorMetadata{}, nil
+	}
+	if len(ids) > 100 || collectionName == "" {
+		return nil, fmt.Errorf("invalid vector metadata request")
+	}
+	pointIDs := make([]*qdrant.PointId, len(ids))
+	for i, id := range ids {
+		if _, err := uuid.Parse(id); err != nil {
+			return nil, fmt.Errorf("invalid vector point ID: %w", err)
+		}
+		pointIDs[i] = qdrant.NewID(id)
+	}
+	points, err := Client.Get(ctx, &qdrant.GetPoints{
+		CollectionName: collectionName,
+		Ids:            pointIDs,
+		WithPayload:    qdrant.NewWithPayloadInclude("chunk_id", "tenant_id", "source_id", "source_revision", "index_version"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]VectorMetadata, len(points))
+	for _, point := range points {
+		if point == nil || point.GetId() == nil {
+			continue
+		}
+		id := point.GetId().GetUuid()
+		if id == "" {
+			continue
+		}
+		payload := make(map[string]string, 5)
+		for _, key := range []string{"chunk_id", "tenant_id", "source_id", "source_revision", "index_version"} {
+			if field := point.GetPayload()[key]; field != nil {
+				payload[key] = field.GetStringValue()
+			}
+		}
+		result[id] = VectorMetadata{ID: id, Payload: payload}
+	}
+	return result, nil
 }
 
 func SearchVectors(vector []float32, limit int, filter map[string]interface{}, collectionName ...string) ([]*qdrant.ScoredPoint, error) {
@@ -345,4 +447,95 @@ func collectionVectorDim(info *qdrant.CollectionInfo) uint64 {
 		}
 	}
 	return 0
+}
+
+func ScanTenantVectorMetadataWithContext(ctx context.Context, tenantID, collectionName string, limit int) ([]VectorMetadata, error) {
+	points, _, err := ScanTenantVectorMetadataPageWithContext(ctx, tenantID, collectionName, limit, "")
+	return points, err
+}
+
+func ScanTenantVectorMetadataPageWithContext(ctx context.Context, tenantID, collectionName string, limit int, offset string) ([]VectorMetadata, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
+	if Client == nil {
+		return nil, "", fmt.Errorf("vector index unavailable")
+	}
+	if strings.TrimSpace(tenantID) == "" || strings.TrimSpace(collectionName) == "" || limit <= 0 || limit > 100 {
+		return nil, "", fmt.Errorf("invalid vector scan request")
+	}
+	request := &qdrant.ScrollPoints{
+		CollectionName: collectionName,
+		Filter:         &qdrant.Filter{Must: []*qdrant.Condition{qdrant.NewMatchKeyword("tenant_id", tenantID)}},
+		Limit:          qdrant.PtrOf(uint32(limit)),
+		WithPayload:    qdrant.NewWithPayloadInclude("chunk_id", "tenant_id", "source_id", "source_revision", "index_version"),
+	}
+	if offset != "" {
+		if _, err := uuid.Parse(offset); err != nil {
+			return nil, "", fmt.Errorf("invalid vector scan offset: %w", err)
+		}
+		request.Offset = qdrant.NewID(offset)
+	}
+	points, nextOffset, err := Client.ScrollAndOffset(ctx, request)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(points) > limit {
+		return nil, "", fmt.Errorf("vector scan exceeded page bound")
+	}
+	result := make([]VectorMetadata, 0, len(points))
+	for _, point := range points {
+		if point == nil || point.GetId() == nil {
+			return nil, "", fmt.Errorf("vector scan returned invalid point")
+		}
+		id := point.GetId().GetUuid()
+		if _, parseErr := uuid.Parse(id); parseErr != nil {
+			return nil, "", fmt.Errorf("vector scan returned invalid point ID: %w", parseErr)
+		}
+		payload := make(map[string]string, 5)
+		for _, key := range []string{"chunk_id", "tenant_id", "source_id", "source_revision", "index_version"} {
+			if field := point.GetPayload()[key]; field != nil {
+				payload[key] = field.GetStringValue()
+			}
+		}
+		if payload["tenant_id"] != tenantID {
+			return nil, "", fmt.Errorf("vector scan tenant isolation mismatch")
+		}
+		result = append(result, VectorMetadata{ID: id, Payload: payload})
+	}
+	next := ""
+	if nextOffset != nil {
+		next = nextOffset.GetUuid()
+		if _, err := uuid.Parse(next); err != nil || next == offset || len(points) == 0 {
+			return nil, "", fmt.Errorf("vector scan returned invalid continuation offset")
+		}
+	}
+	return result, next, nil
+}
+
+func ListKnowledgeCollectionNamesWithContext(ctx context.Context, base string) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if Client == nil || strings.TrimSpace(base) == "" {
+		return nil, fmt.Errorf("vector index unavailable")
+	}
+	names, err := Client.ListCollections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]string, 0)
+	for _, name := range names {
+		if strings.HasPrefix(name, base+"_") && len(name) > len(base)+1 {
+			filtered = append(filtered, name)
+		}
+	}
+	sort.Strings(filtered)
+	return filtered, nil
 }

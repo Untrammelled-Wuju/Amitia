@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS messages (
     reply_to_message_id TEXT DEFAULT '',
     reply_to_role TEXT DEFAULT '',
     reply_to_excerpt TEXT DEFAULT '',
+    citation_snapshot_json TEXT NOT NULL DEFAULT '[]',
     tool_call_id TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
@@ -5938,6 +5939,341 @@ CREATE TABLE IF NOT EXISTS search_credential_cleanup (
     last_error TEXT NOT NULL DEFAULT '',
     created_at DATETIME NOT NULL
 );
+
+
+-- Additive Knowledge/RAG domain; modern WorldBook/Memory tables unchanged.
+CREATE TABLE IF NOT EXISTS knowledge_sources (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    logical_name TEXT NOT NULL DEFAULT '',
+    filename TEXT NOT NULL DEFAULT '',
+    mime_type TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'file',
+    storage_key TEXT NOT NULL DEFAULT '',
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    sha256 TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    parser_version TEXT NOT NULL DEFAULT 'knowledge-parser-v1',
+    chunk_schema_version TEXT NOT NULL DEFAULT 'knowledge-chunk-v1',
+    config_hash TEXT NOT NULL DEFAULT '',
+    embedding_version TEXT NOT NULL DEFAULT '',
+    index_version TEXT NOT NULL DEFAULT 'v1',
+    status TEXT NOT NULL DEFAULT 'pending',
+    expected_units INTEGER NOT NULL DEFAULT 0,
+    processed_units INTEGER NOT NULL DEFAULT 0,
+    failed_units INTEGER NOT NULL DEFAULT 0,
+    indexed_chunks INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_sources_tenant_status ON knowledge_sources(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_knowledge_sources_tenant_sha ON knowledge_sources(tenant_id, sha256);
+
+CREATE TABLE IF NOT EXISTS knowledge_source_revisions (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    filename TEXT NOT NULL DEFAULT '',
+    mime_type TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'file',
+    storage_key TEXT NOT NULL DEFAULT '',
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    sha256 TEXT NOT NULL DEFAULT '',
+    parser_version TEXT NOT NULL DEFAULT 'knowledge-parser-v1',
+    chunk_schema_version TEXT NOT NULL DEFAULT 'knowledge-chunk-v1',
+    config_hash TEXT NOT NULL DEFAULT '',
+    embedding_version TEXT NOT NULL DEFAULT '',
+    index_version TEXT NOT NULL DEFAULT 'v1',
+    status TEXT NOT NULL DEFAULT 'pending',
+    expected_units INTEGER NOT NULL DEFAULT 0,
+    processed_units INTEGER NOT NULL DEFAULT 0,
+    failed_units INTEGER NOT NULL DEFAULT 0,
+    indexed_chunks INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    activated_at DATETIME,
+    retain_until DATETIME,
+    purged_at DATETIME,
+    UNIQUE(tenant_id, source_id, revision)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_revisions_source ON knowledge_source_revisions(tenant_id, source_id, revision);
+CREATE INDEX IF NOT EXISTS idx_knowledge_revisions_sha ON knowledge_source_revisions(tenant_id, sha256);
+CREATE INDEX IF NOT EXISTS idx_knowledge_revisions_status ON knowledge_source_revisions(tenant_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_revisions_retention ON knowledge_source_revisions(tenant_id, retain_until, purged_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_units (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    source_revision INTEGER NOT NULL,
+    ordinal INTEGER NOT NULL,
+    unit_type TEXT NOT NULL DEFAULT 'text',
+    title TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    locator_json TEXT NOT NULL DEFAULT '{}',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    checksum TEXT NOT NULL DEFAULT '',
+    valid_from DATETIME,
+    valid_to DATETIME,
+    supersedes_json TEXT NOT NULL DEFAULT '[]',
+    conflict_group TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    UNIQUE(source_id, source_revision, ordinal)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_units_tenant_source ON knowledge_units(tenant_id, source_id, source_revision);
+CREATE INDEX IF NOT EXISTS idx_knowledge_units_temporal ON knowledge_units(tenant_id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS idx_knowledge_units_conflict ON knowledge_units(tenant_id, conflict_group);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    source_revision INTEGER NOT NULL,
+    unit_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    parent_chunk_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    embedding_text TEXT NOT NULL DEFAULT '',
+    token_count INTEGER NOT NULL DEFAULT 0,
+    locator_json TEXT NOT NULL DEFAULT '{}',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    checksum TEXT NOT NULL DEFAULT '',
+    embedding_version TEXT NOT NULL DEFAULT '',
+    index_version TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    valid_from DATETIME,
+    valid_to DATETIME,
+    supersedes_json TEXT NOT NULL DEFAULT '[]',
+    conflict_group TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE(unit_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_tenant_source ON knowledge_chunks(tenant_id, source_id, source_revision);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_index_status ON knowledge_chunks(tenant_id, index_version, status);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_temporal ON knowledge_chunks(tenant_id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_conflict ON knowledge_chunks(tenant_id, conflict_group);
+
+CREATE TABLE IF NOT EXISTS knowledge_ingest_jobs (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    source_revision INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'ingest',
+    stage TEXT NOT NULL DEFAULT 'queued',
+    status TEXT NOT NULL DEFAULT 'queued',
+    cursor_json TEXT NOT NULL DEFAULT '{}',
+    last_committed_ordinal INTEGER NOT NULL DEFAULT -1,
+    expected_units INTEGER NOT NULL DEFAULT 0,
+    processed_units INTEGER NOT NULL DEFAULT 0,
+    failed_units INTEGER NOT NULL DEFAULT 0,
+    indexed_chunks INTEGER NOT NULL DEFAULT 0,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    heartbeat_at DATETIME,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    finished_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_jobs_tenant_status ON knowledge_ingest_jobs(tenant_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_jobs_source_revision ON knowledge_ingest_jobs(source_id, source_revision);
+
+CREATE TABLE IF NOT EXISTS knowledge_index_outbox (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    aggregate_type TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    source_revision INTEGER NOT NULL,
+    operation TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    next_attempt_at DATETIME,
+    lease_token TEXT NOT NULL DEFAULT '',
+    lease_until DATETIME,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_status ON knowledge_index_outbox(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_aggregate ON knowledge_index_outbox(tenant_id, aggregate_type, aggregate_id, source_revision);
+CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_lease ON knowledge_index_outbox(tenant_id, status, next_attempt_at, lease_until);
+
+CREATE TABLE IF NOT EXISTS knowledge_index_aliases (
+    tenant_id TEXT PRIMARY KEY,
+    active_version TEXT NOT NULL DEFAULT 'v1',
+    previous_version TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_benchmark_runs (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    config_hash TEXT NOT NULL DEFAULT '',
+    k INTEGER NOT NULL DEFAULT 0,
+    cases INTEGER NOT NULL DEFAULT 0,
+    successful_cases INTEGER NOT NULL DEFAULT 0,
+    error_cases INTEGER NOT NULL DEFAULT 0,
+    failed_cases INTEGER NOT NULL DEFAULT 0,
+    positive_cases INTEGER NOT NULL DEFAULT 0,
+    no_answer_cases INTEGER NOT NULL DEFAULT 0,
+    citation_observed_cases INTEGER NOT NULL DEFAULT 0,
+    scenario_counts_json TEXT NOT NULL DEFAULT '{}',
+    recall_at_k REAL NOT NULL DEFAULT 0,
+    mrr REAL NOT NULL DEFAULT 0,
+    ndcg_at_k REAL NOT NULL DEFAULT 0,
+    context_precision REAL NOT NULL DEFAULT 0,
+    context_recall REAL NOT NULL DEFAULT 0,
+    no_answer_accuracy REAL NOT NULL DEFAULT 0,
+    citation_precision REAL NOT NULL DEFAULT 0,
+    citation_recall REAL NOT NULL DEFAULT 0,
+    groundedness REAL NOT NULL DEFAULT 0,
+    error_rate REAL NOT NULL DEFAULT 0,
+    p50_latency_ms INTEGER NOT NULL DEFAULT 0,
+    p95_latency_ms INTEGER NOT NULL DEFAULT 0,
+    passed INTEGER NOT NULL DEFAULT 0,
+    violations_json TEXT NOT NULL DEFAULT '[]',
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_benchmark_runs_tenant_created ON knowledge_benchmark_runs(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_benchmark_runs_tenant_config_created ON knowledge_benchmark_runs(tenant_id, config_hash, created_at);
+
+CREATE TABLE IF NOT EXISTS retrieval_traces (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    request_id TEXT NOT NULL DEFAULT '',
+    query_hash TEXT NOT NULL DEFAULT '',
+    sources_json TEXT NOT NULL DEFAULT '[]',
+    candidate_count INTEGER NOT NULL DEFAULT 0,
+    selected_count INTEGER NOT NULL DEFAULT 0,
+    sufficient INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    error_code TEXT NOT NULL DEFAULT '',
+    temporal_mode TEXT NOT NULL DEFAULT 'current',
+    as_of DATETIME,
+    degraded INTEGER NOT NULL DEFAULT 0,
+    ambiguous INTEGER NOT NULL DEFAULT 0,
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    candidate_trace_json TEXT NOT NULL DEFAULT '[]',
+    evidence_trace_json TEXT NOT NULL DEFAULT '[]',
+    query_plan_json TEXT NOT NULL DEFAULT '{}',
+    config_hash TEXT NOT NULL DEFAULT '',
+    slo_target_ms INTEGER NOT NULL DEFAULT 0,
+    slo_exceeded INTEGER NOT NULL DEFAULT 0,
+    policy_mode TEXT NOT NULL DEFAULT '',
+    route_reason TEXT NOT NULL DEFAULT '',
+    shadow_level TEXT NOT NULL DEFAULT '',
+    shadow_reason TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_created ON retrieval_traces(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_mode_created ON retrieval_traces(tenant_id, temporal_mode, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_config_created ON retrieval_traces(tenant_id, config_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_slo_created ON retrieval_traces(tenant_id, slo_exceeded, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_tenant_policy_created ON retrieval_traces(tenant_id, policy_mode, created_at);
+
+-- Quarantine unowned WorldBook rules without altering the authoritative world_book schema.
+CREATE TABLE IF NOT EXISTS world_book_orphans (
+ id TEXT PRIMARY KEY, space_id TEXT NOT NULL DEFAULT '', legacy_id TEXT NOT NULL,
+ match_type TEXT NOT NULL DEFAULT 'keyword', match_pattern TEXT NOT NULL DEFAULT '',
+ match_scope TEXT NOT NULL DEFAULT 'full_context', inject_content TEXT NOT NULL DEFAULT '',
+ priority INTEGER NOT NULL DEFAULT 0, hit_count INTEGER NOT NULL DEFAULT 0,
+ config_json TEXT NOT NULL DEFAULT '{}', migrated_to TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT 'orphan', created_at TEXT NOT NULL DEFAULT '',
+ updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_world_book_orphan_space_status ON world_book_orphans(space_id,status);
+
+CREATE TABLE IF NOT EXISTS knowledge_vector_audit_sessions (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    collections_hash TEXT NOT NULL,
+    page_limit INTEGER NOT NULL,
+    page INTEGER NOT NULL DEFAULT 0,
+    next_cursor TEXT NOT NULL DEFAULT '',
+    last_cursor TEXT NOT NULL DEFAULT '',
+    last_result_json TEXT NOT NULL DEFAULT '{}',
+    sampled INTEGER NOT NULL DEFAULT 0,
+    suspected_orphans INTEGER NOT NULL DEFAULT 0,
+    metadata_mismatches INTEGER NOT NULL DEFAULT 0,
+    in_flight INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_vector_audit_tenant_updated ON knowledge_vector_audit_sessions(tenant_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_vector_audit_pages (
+    audit_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    page INTEGER NOT NULL,
+    request_hash TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    result_hash TEXT NOT NULL,
+    previous_hash TEXT NOT NULL,
+    receipt_hash TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (audit_id, page)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_vector_audit_pages_tenant ON knowledge_vector_audit_pages(tenant_id, audit_id, page);
+
+CREATE TABLE IF NOT EXISTS knowledge_vector_audit_recheck_leases (
+    audit_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    lease_token TEXT NOT NULL,
+    lease_expires_at DATETIME NOT NULL,
+    next_allowed_at DATETIME NOT NULL
+   );
+CREATE INDEX IF NOT EXISTS idx_knowledge_vector_audit_recheck_lease_tenant ON knowledge_vector_audit_recheck_leases(tenant_id, next_allowed_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_vector_audit_recheck_results (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    audit_id TEXT NOT NULL,
+    page INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    result_hash TEXT NOT NULL,
+    receipt_hash TEXT NOT NULL,
+    observed_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL
+   );
+CREATE INDEX IF NOT EXISTS idx_knowledge_vector_audit_recheck_result_history ON knowledge_vector_audit_recheck_results(tenant_id, audit_id, created_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_vector_recovery_reviews (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    audit_id TEXT NOT NULL,
+    recheck_id TEXT NOT NULL,
+    receipt_hash TEXT NOT NULL,
+    request_key TEXT NOT NULL,
+    requested_by_hash TEXT NOT NULL,
+    reviewed_by_hash TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'revoked')),
+    action TEXT NOT NULL CHECK (action = 'manual_investigation'),
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    UNIQUE (tenant_id, request_key),
+    UNIQUE (tenant_id, audit_id, recheck_id)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_vector_recovery_reviews_scope ON knowledge_vector_recovery_reviews(tenant_id, audit_id, created_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_vector_recovery_review_events (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    review_id TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('requested', 'approved', 'revoked')),
+    actor_hash TEXT NOT NULL,
+    receipt_hash TEXT NOT NULL,
+    created_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_vector_recovery_review_events_scope ON knowledge_vector_recovery_review_events(tenant_id, review_id, created_at);
 
 CREATE TABLE IF NOT EXISTS user_feedback_tickets (
     id TEXT PRIMARY KEY,

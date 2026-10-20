@@ -16,6 +16,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 
+	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
@@ -90,6 +91,7 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/knowledge"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/middleware/security"
@@ -137,6 +139,7 @@ type AppServices struct {
 	Graph                        graph.Service
 	MemoryConsumers              *ownedMemoryConsumers
 	WorldBook                    worldbook.Service
+	Knowledge                    knowledge.Service
 	Vision                       vision.Service
 	Chat                         chat.Service
 	UnifiedEntry                 *interaction.UnifiedEntry
@@ -277,6 +280,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	temporalSvc.SetRelationshipTimeProvider(relTimeCoordinator)
 	wbRepo := worldbook.NewRepository(ctx)
 	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
+	knowledgeSvc := knowledge.NewService(ctx)
+	tool.SetKnowledgeService(knowledgeSvc)
 	visionRepo := vision.NewRepository(ctx.DB)
 	visionSvc := vision.NewService(visionRepo)
 	compressor := chat.NewCompressor(ctx.DB)
@@ -292,6 +297,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
 	syncService := syncpkg.NewService(ctx.DB, syncApplier)
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
+	if binder, ok := chatSvc.(interface{ SetKnowledgePort(chat.KnowledgePort) }); ok {
+		binder.SetKnowledgePort(knowledgeSvc)
+	}
 	extensionRuntime, err := extension.NewRuntime(context.Background(), ctx.DB, "1.0.0")
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
@@ -1185,6 +1193,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		ChatDeliveryAdapter:          deliveryAdapter,
 		MemoryConsumers:              memoryConsumers,
 		WorldBook:                    wbSvc,
+		Knowledge:                    knowledgeSvc,
 		Vision:                       visionSvc,
 		Chat:                         chatSvc,
 		UnifiedEntry:                 entry,

@@ -243,6 +243,11 @@ const citationSources = computed<CitationSource[]>(() => {
     const id = String(source.id || "").trim();
     if (id) byId.set(id, source);
   }
+  // For new messages the immutable snapshot is authoritative. Do not append
+  // retrieved-but-uncited web tool candidates to historical references.
+  if (Array.isArray(message.value.raw?.citationSnapshot)) {
+    return [...byId.values()].sort(compareCitationSources);
+  }
   const turn = assistantTurn.value;
   if (!turn) return [...byId.values()].sort(compareCitationSources);
   for (const item of turn.items) {

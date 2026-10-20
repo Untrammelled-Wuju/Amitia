@@ -81,6 +81,7 @@ const builtinItems: UINavigationItem[] = [
   { id: "character.reminders", route: "/reminders", label: "主动任务", icon: Calendar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 25 },
   { id: "character.profiles", route: "/profiles", label: "用户画像", icon: Avatar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 30 },
   { id: "character.world-book", route: "/world-book", label: "世界书", icon: Collection, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 35 },
+  { id: "memory.knowledge", route: "/knowledge", label: "知识库", icon: Collection, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 50, mobile: true, match: ["/knowledge"] },
   { id: "memory.manager", route: "/memory-manager", label: "记忆总览", icon: List, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 55, mobile: true, match: ["/memory", "/memory-manager"] },
   { id: "memory.episodic", route: "/episodic", label: "情景记忆", icon: Film, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 60 },
   { id: "memory.graph", route: "/graph", label: "记忆图谱", icon: Share, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 65 },

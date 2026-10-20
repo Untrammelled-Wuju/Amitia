@@ -1,0 +1,27 @@
+{
+  "source_baseline": "U-Ai-source-20261016-084225.zip",
+  "stage": "Phase 15 selective adaptation",
+  "modified_files": 96,
+  "go_parsed": 82,
+  "frontend_syntax_parsed": 4,
+  "sqlite_knowledge_tables": [
+    "knowledge_benchmark_runs",
+    "knowledge_chunks",
+    "knowledge_index_aliases",
+    "knowledge_index_outbox",
+    "knowledge_ingest_jobs",
+    "knowledge_source_revisions",
+    "knowledge_sources",
+    "knowledge_units",
+    "retrieval_traces",
+    "world_book_orphans"
+  ],
+  "migration_version_count": 214,
+  "actual_build": "NOT RUN: Go 1.26.1 SDK and Dart SDK unavailable",
+  "outstanding": [
+    "Citation realtime/history integration",
+    "Agentic planner and event replay integration",
+    "native Go/Dart build",
+    "migrations against actual user DB"
+  ]
+}

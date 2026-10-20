@@ -5,6 +5,7 @@ import { projectAutomationStatus, type AutomationStatus } from "@/conversation/r
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import type { AssistantTurnData } from "@/conversation/rendering/types";
+import { projectCitationSnapshot } from "@/conversation/runtime/citationProjection";
 import {
   AgentEventReducer,
   type AgentUIEvent,
@@ -95,6 +96,7 @@ export function useConversationRuntime(
         item.status,
         item.revision,
         item.messageId,
+        JSON.stringify(item.citationSnapshot || []),
         item.errorCode,
         item.durationMs,
       ].join("\u0001")),
@@ -120,6 +122,7 @@ export function useConversationRuntime(
       message?.replyToMessageId,
       message?.replyToRole,
       message?.replyToExcerpt,
+      JSON.stringify(message?.citationSnapshot || []),
     ].map((value) => String(value ?? "")).join("\u0002");
   }
 
@@ -143,6 +146,7 @@ export function useConversationRuntime(
       status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : "streaming",
       createdAt: turn.createdAt || new Date().toISOString(),
       assistantTurn: cloneTurn(turn),
+      ...(finalItem?.citationSnapshot ? { citationSnapshot: finalItem.citationSnapshot } : {}),
     };
   }
 
@@ -199,6 +203,10 @@ export function useConversationRuntime(
             turnId: turn.id,
             requestId: turn.requestId || message.requestId,
             assistantTurn: cloneTurn(turn),
+            citationSnapshot: projectCitationSnapshot(
+              message.citationSnapshot,
+              [...(turn.items || [])].reverse().find((item) => item.type === "text" && item.messageId === String(message.id)),
+            ),
             status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : message.status,
           }
         : message;

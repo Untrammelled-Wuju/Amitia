@@ -49,7 +49,7 @@ func (r *Renderer) Render(ir GwIR) ([]GwMessage, error) {
 		case GwSectionContinuityContext:
 			contextParts = append(contextParts, renderUntrustedSection(s))
 
-		case GwSectionMemoryContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionPluginContext, GwSectionConversationHistory,
+		case GwSectionMemoryContext, GwSectionKnowledgeContext, GwSectionProfileContext, GwSectionWorldbookContext, GwSectionPluginContext, GwSectionConversationHistory,
 			GwSectionMemoryInjectRaw, GwSectionMemoryExtractRaw,
 			GwSectionProactiveTimeContext, GwSectionProactiveRecentContext,
 			GwSectionProactiveRelationship, GwSectionProactiveEmotion, GwSectionProactiveMemory:

@@ -7,6 +7,7 @@ import 'character_service.dart';
 import 'character_detail_service.dart';
 import 'chat_service.dart';
 import 'memory_service.dart';
+import 'knowledge_service.dart';
 import 'device_owned_memory_service.dart';
 import 'device_owned_chat_service.dart';
 import 'profile_service.dart';
@@ -81,6 +82,10 @@ final chatServiceProvider = Provider<ChatService>(
       );
     },
   ),
+);
+
+final knowledgeServiceProvider = Provider<KnowledgeService>(
+  (ref) => KnowledgeService(_getDynamicServiceApi(ref)),
 );
 
 final memoryServiceProvider = Provider<MemoryService>(

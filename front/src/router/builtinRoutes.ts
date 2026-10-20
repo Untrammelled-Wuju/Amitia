@@ -140,6 +140,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/user-settings", name: "userSettings", redirect: (to) => resolveMySpaceLegacy(to, "profile") },
 { path: "/episodic", name: "episodic", component: () => import("@/views/episodic/EpisodicView.vue"), meta: { requiresAuth: true } },
 { path: "/world-book", name: "worldBook", component: () => import("@/views/world-book/WorldBookView.vue"), meta: { requiresAuth: true } },
+{ path: "/knowledge", name: "knowledge", component: () => import("@/views/knowledge/KnowledgeView.vue"), meta: { requiresAuth: true } },
 { path: '/runtime-debug', name: 'runtimeDebug', component: () => import('@/views/runtime-debug/RuntimeDebugView.vue'), meta: { requiresAuth: true } },
 { path: '/decision-viz', name: 'decisionViz', component: () => import('@/views/decision-viz/DecisionVizView.vue'), meta: { requiresAuth: true } },
 { path: '/workspaces', name: 'workspaces', component: () => import('@/views/workspace/WorkspaceBrowserView.vue'), meta: { requiresAuth: true } },

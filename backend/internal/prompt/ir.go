@@ -31,6 +31,7 @@ const (
 	GwSectionRuntimePlan              GwSectionType = "runtime_plan"
 	GwSectionExpressionPlan           GwSectionType = "expression_plan"
 	GwSectionMemoryContext            GwSectionType = "memory_context"
+	GwSectionKnowledgeContext         GwSectionType = "knowledge_context"
 	GwSectionProfileContext           GwSectionType = "profile_context"
 	GwSectionTemporalContext          GwSectionType = "temporal_context"
 	GwSectionContinuityContext        GwSectionType = "continuity_context"

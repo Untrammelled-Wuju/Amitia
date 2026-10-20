@@ -521,6 +521,7 @@ ChatMessage _toChatMessage(MessageDto message) {
     durationMs: (message.audioDuration * 1000).round(),
     replyToMessageId: message.replyToMessageId,
     replyToExcerpt: message.replyToExcerpt,
+    citationSnapshot: message.citationSnapshot,
   );
 }
 

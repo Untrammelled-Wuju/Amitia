@@ -23,6 +23,7 @@ import '../../../features/memory/presentation/pages/memory_graph_page.dart';
 import '../../../features/memory/presentation/pages/memory_timeline_page.dart';
 import '../../../features/memory/presentation/pages/user_profiles_page.dart';
 import '../../../features/memory/presentation/pages/world_book_page.dart';
+import '../../../features/knowledge/presentation/pages/knowledge_page.dart';
 import '../../../features/reminders/presentation/pages/reminders_page.dart';
 import '../../../features/continuity/presentation/pages/continuity_page.dart';
 import '../../../features/continuity/presentation/pages/continuity_detail_page.dart';
@@ -301,6 +302,10 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       state: state,
       child: const UserProfilesPage(),
     ),
+  ),
+  GoRoute(
+    path: AppRoutes.knowledge,
+    pageBuilder: (context, state) => drawerSlideFadePage(state: state, child: const KnowledgePage()),
   ),
   GoRoute(
     path: '/memory/world-book',

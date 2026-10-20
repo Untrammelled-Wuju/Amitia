@@ -1,4 +1,5 @@
 import type { AssistantTurnData, AssistantTurnItem } from "@/conversation/rendering/types";
+import { normalizeCitationSnapshot } from "./citationSnapshot";
 
 export interface AgentUIEvent {
   version: number;
@@ -104,7 +105,7 @@ function turnFreshness(turn: AssistantTurnData): number {
 }
 
 function cloneItem(item: AssistantTurnItem): AssistantTurnItem {
-  return { ...item };
+  return { ...item, citationSnapshot: item.citationSnapshot?.map((entry) => ({ ...entry })) };
 }
 
 export function cloneTurn(turn: AssistantTurnData): AssistantTurnData {
@@ -139,8 +140,31 @@ export class AgentEventReducer {
       incoming.status = normalizedTurnStatus(incoming.status);
       incoming.items.sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
       const current = this.byTurnId.get(incoming.id);
-      if (!current || turnFreshness(incoming) >= turnFreshness(current)) {
+      if (!current) {
         this.byTurnId.set(incoming.id, incoming);
+        continue;
+      }
+      const incomingIsNewer = turnFreshness(incoming) >= turnFreshness(current);
+      const merged = incomingIsNewer ? incoming : cloneTurn(current);
+      const items = new Map(current.items.map((item) => [item.id, cloneItem(item)]));
+      for (const item of incoming.items) {
+        const previous = items.get(item.id);
+        if (previous && Number(previous.revision || 0) > Number(item.revision || 0)) continue;
+        const result = cloneItem(item);
+        if (previous?.citationSnapshot && result.citationSnapshot === undefined && previous.messageId === result.messageId) {
+          result.citationSnapshot = previous.citationSnapshot.map((entry) => ({ ...entry }));
+        }
+        items.set(item.id, result);
+      }
+      merged.items = [...items.values()].sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+      merged.status = isTerminalTurn(current.status) ? current.status
+        : isTerminalTurn(incoming.status) ? incoming.status
+        : incomingIsNewer ? incoming.status : current.status;
+      merged.completedAt = current.completedAt || incoming.completedAt;
+      this.byTurnId.set(incoming.id, merged);
+      if (this.activeTurnIdValue === incoming.id && isTerminalTurn(merged.status)) {
+        this.activeTurnIdValue = "";
+        this.activeExecutionIdValue = "";
       }
     }
   }
@@ -162,9 +186,12 @@ export class AgentEventReducer {
     if (activeTurn?.turnId) {
       const existing = this.byTurnId.get(activeTurn.turnId);
       const turn = this.turnFromRuntime(activeTurn, existing);
+      if (existing && isTerminalTurn(existing.status)) turn.status = existing.status;
       this.byTurnId.set(turn.id, turn);
-      this.activeTurnIdValue = turn.id;
-      this.activeExecutionIdValue = String(turn.executionId || "");
+      if (!isTerminalTurn(turn.status)) {
+        this.activeTurnIdValue = turn.id;
+        this.activeExecutionIdValue = String(turn.executionId || "");
+      }
       return;
     }
     for (const turn of this.turns.reverse()) {
@@ -198,6 +225,7 @@ export class AgentEventReducer {
     const type = String(event.type || "").trim();
 
     if (["turn.queued", "turn.started", "turn.waiting", "turn.cancelling", "turn.steered", "approval.requested", "approval.approved", "approval.denied", "approval.expired"].includes(type)) {
+      if (isTerminalTurn(turn.status)) return "stale";
       let nextStatus = normalizedTurnStatus(event.status || turn.status);
       if (type === "turn.queued") nextStatus = "queued";
       if (type === "turn.started") nextStatus = "running";
@@ -222,6 +250,7 @@ export class AgentEventReducer {
     }
 
     if (["turn.completed", "turn.failed", "turn.interrupted"].includes(type)) {
+      if (isTerminalTurn(turn.status)) return "stale";
       const terminalStatus = type === "turn.completed" ? "completed" : type === "turn.failed" ? "failed" : "interrupted";
       const items = (turn.items || []).map((item) => {
         const copy = cloneItem(item);
@@ -277,6 +306,8 @@ export class AgentEventReducer {
       return "applied";
     }
 
+    if (isTerminalTurn(turn.status) && (type.endsWith(".delta") ||
+        (type === "text.completed" && normalizedTurnStatus(turn.status) !== "completed"))) return "stale";
     const blockId = String(event.blockId || "").trim();
     if (!blockId) {
       this.byTurnId.set(turnId, { ...turn, updatedAt: event.createdAt || turn.updatedAt });
@@ -319,6 +350,9 @@ export class AgentEventReducer {
       durationMs: typeof payload.durationMs === "number" ? Number(payload.durationMs) : item.durationMs,
       isFinal: type === "text.completed" ? 1 : item.isFinal,
       messageId: event.messageId || item.messageId,
+      citationSnapshot: type === "text.completed" && Object.prototype.hasOwnProperty.call(payload, "citationSnapshot")
+        ? normalizeCitationSnapshot(payload.citationSnapshot)
+        : item.citationSnapshot,
       updatedAt: event.createdAt || item.updatedAt,
     };
     if (index >= 0) items[index] = item;
@@ -409,6 +443,7 @@ export class AgentEventReducer {
       const payload = block.payload || {};
       const currentIndex = turn.items.findIndex((item) => item.id === block.blockId);
       const current = currentIndex >= 0 ? turn.items[currentIndex] : undefined;
+      if (current && Number(block.revision || 0) > 0 && Number(current.revision || 0) > Number(block.revision)) continue;
       const item: AssistantTurnItem = {
         ...(current || {} as AssistantTurnItem),
         id: block.blockId,
@@ -420,7 +455,14 @@ export class AgentEventReducer {
         revision: Number(block.revision || current?.revision || 0),
         callId: block.callId || current?.callId,
         toolName: String(payload.toolName || "") || current?.toolName,
-        content: block.content || String(payload.content || current?.content || ""),
+        content: block.content !== undefined
+          ? String(block.content)
+          : Object.prototype.hasOwnProperty.call(payload, "content")
+            ? String(payload.content ?? "")
+            : String(current?.content || ""),
+        citationSnapshot: Object.prototype.hasOwnProperty.call(payload, "citationSnapshot")
+          ? normalizeCitationSnapshot(payload.citationSnapshot)
+          : current?.citationSnapshot,
         argumentsJson: payload.arguments === undefined ? current?.argumentsJson || "" : String(payload.arguments),
         resultJson: payload.result === undefined ? current?.resultJson || "" : (typeof payload.result === "string" ? payload.result : JSON.stringify(payload.result)),
         errorCode: payload.errorCode === undefined ? current?.errorCode : String(payload.errorCode || ""),

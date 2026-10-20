@@ -9,7 +9,18 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = resolve(__dirname, "..");
 const repositoryRoot = resolve(desktopRoot, "..");
 const coreDir = resolve(desktopRoot, "resources/core");
-const outputPath = resolve(coreDir, "AmitiaCore.exe");
+const hostGoos = process.env.AMITIA_CORE_GOOS
+  || (process.platform === "win32" ? "windows" : process.platform === "darwin" ? "darwin" : "linux");
+const hostGoarch = process.env.AMITIA_CORE_GOARCH
+  || (process.env.ELECTRON_BUILDER_ARCH === "arm64"
+    ? "arm64"
+    : process.env.ELECTRON_BUILDER_ARCH === "amd64"
+      ? "amd64"
+      : process.arch === "arm64"
+        ? "arm64"
+        : "amd64");
+const coreBinaryName = hostGoos === "windows" ? "AmitiaCore.exe" : "AmitiaCore";
+const outputPath = resolve(coreDir, coreBinaryName);
 const stampPath = resolve(coreDir, ".amitiacore-build.json");
 
 function sha256File(filePath) {
@@ -50,19 +61,19 @@ async function main() {
 
   const goEnv = {
     ...process.env,
-    GOOS: "windows",
-    GOARCH: process.env.ELECTRON_BUILDER_ARCH === "arm64" ? "arm64" : "amd64",
+    GOOS: hostGoos,
+    GOARCH: hostGoarch,
     CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
   };
 
-  console.log(`[build-amitiacore] Building Windows ${goEnv.GOARCH} Core from ./cmd/server...`);
+  console.log(`[build-amitiacore] Building ${goEnv.GOOS} ${goEnv.GOARCH} Core from ./cmd/server...`);
   run(goBin, ["build", "-trimpath", "-o", outputPath, "./cmd/server"], {
     cwd: backendDir,
     env: goEnv,
   });
 
   if (!existsSync(outputPath)) {
-    throw new Error("AmitiaCore.exe was not produced");
+    throw new Error(`${coreBinaryName} was not produced`);
   }
 
   const sourceGateAfter = await computeFreezeSourceGateHash(repositoryRoot);

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../../core/models/conversation.dart';
+import 'citation_snapshot.dart';
 
 class AgentUIEvent {
   final int version;
@@ -115,11 +116,17 @@ class AgentEventReducer {
     _activeTurnId = '';
     _activeExecutionId = '';
     if (activeTurn != null) {
-      final turn = _turnFromRuntime(activeTurn);
+      final turn = _turnFromRuntime(activeTurn, _turns[(activeTurn['turnId'] ?? '').toString().trim()]);
       if (turn != null) {
-        _turns[turn.id] = turn;
-        _activeTurnId = turn.id;
-        _activeExecutionId = turn.executionId;
+        final existing = _turns[turn.id];
+        final next = existing != null && _isTerminal(existing.status)
+            ? _copyTurn(turn, status: existing.status)
+            : turn;
+        _turns[next.id] = next;
+        if (!_isTerminal(next.status)) {
+          _activeTurnId = next.id;
+          _activeExecutionId = next.executionId;
+        }
       }
     } else {
       for (final turn in this.turns.reversed) {
@@ -133,10 +140,49 @@ class AgentEventReducer {
   }
 
   void mergeTurns(Iterable<AssistantTurnDto> turns) {
-    for (final turn in turns) {
-      final current = _turns[turn.id];
-      if (current == null || _turnFreshness(turn) >= _turnFreshness(current)) {
-        _turns[turn.id] = turn;
+    for (final incoming in turns) {
+      final current = _turns[incoming.id];
+      if (current == null) {
+        _turns[incoming.id] = incoming;
+        continue;
+      }
+      final incomingIsNewer = _turnFreshness(incoming) >= _turnFreshness(current);
+      final base = incomingIsNewer ? incoming : current;
+      final items = <String, AssistantTurnItemDto>{
+        for (final item in current.items) item.id: item,
+      };
+      for (final item in incoming.items) {
+        final old = items[item.id];
+        if (old != null && old.revision > item.revision) continue;
+        if (old != null &&
+            old.citationSnapshot.isNotEmpty &&
+            item.citationSnapshot.isEmpty &&
+            !item.citationSnapshotProvided &&
+            old.messageId == item.messageId) {
+          items[item.id] = _copyItem(item, citationSnapshot: old.citationSnapshot);
+        } else {
+          items[item.id] = item;
+        }
+      }
+      final mergedItems = items.values.toList()
+        ..sort((left, right) => left.sequence.compareTo(right.sequence));
+      final status = _isTerminal(current.status)
+          ? current.status
+          : _isTerminal(incoming.status)
+              ? incoming.status
+              : incomingIsNewer ? incoming.status : current.status;
+      final merged = _copyTurn(
+        base,
+        status: status,
+        completedAt: current.completedAt.isNotEmpty
+            ? current.completedAt
+            : incoming.completedAt,
+        items: mergedItems,
+      );
+      _turns[incoming.id] = merged;
+      if (_activeTurnId == incoming.id && _isTerminal(merged.status)) {
+        _activeTurnId = '';
+        _activeExecutionId = '';
       }
     }
   }
@@ -174,6 +220,7 @@ class AgentEventReducer {
         type == 'approval.approved' ||
         type == 'approval.denied' ||
         type == 'approval.expired') {
+      if (_isTerminal(turn.status)) return AgentEventApplyResult.stale;
       var nextStatus = _normalizeStatus(event.status.isNotEmpty ? event.status : turn.status);
       if (type == 'turn.queued') nextStatus = 'queued';
       if (type == 'turn.started') nextStatus = 'running';
@@ -199,6 +246,7 @@ class AgentEventReducer {
       return AgentEventApplyResult.applied;
     }
     if (type == 'turn.completed' || type == 'turn.failed' || type == 'turn.interrupted') {
+      if (_isTerminal(turn.status)) return AgentEventApplyResult.stale;
       final terminalStatus = type == 'turn.completed'
           ? 'completed'
           : type == 'turn.failed'
@@ -265,6 +313,11 @@ class AgentEventReducer {
       }
       return AgentEventApplyResult.applied;
     }
+    if (_isTerminal(turn.status) &&
+        (type.endsWith('.delta') ||
+         (type == 'text.completed' && _normalizeStatus(turn.status) != 'completed'))) {
+      return AgentEventApplyResult.stale;
+    }
     if (event.blockId.trim().isEmpty) {
       _turns[turnId] = _copyTurn(turn, updatedAt: event.createdAt);
       return AgentEventApplyResult.applied;
@@ -321,6 +374,10 @@ class AgentEventReducer {
           : null,
       isFinal: type == 'text.completed' || item.isFinal,
       messageId: event.messageId.isNotEmpty ? event.messageId : null,
+      citationSnapshot: type == 'text.completed' &&
+              payload.containsKey('citationSnapshot')
+          ? normalizeCitationSnapshot(payload['citationSnapshot'])
+          : null,
       updatedAt: event.createdAt,
     );
     if (index >= 0) {
@@ -404,52 +461,86 @@ class AgentEventReducer {
     );
   }
 
-  AssistantTurnDto? _turnFromRuntime(Map<String, dynamic> raw) {
+  AssistantTurnDto? _turnFromRuntime(
+    Map<String, dynamic> raw,
+    AssistantTurnDto? existing,
+  ) {
     final id = (raw['turnId'] ?? '').toString().trim();
     if (id.isEmpty) return null;
     final rawBlocks = raw['blocks'];
-    final items = <AssistantTurnItemDto>[];
+    final items = <AssistantTurnItemDto>[
+      ...?existing?.items,
+    ];
     if (rawBlocks is List) {
       for (final value in rawBlocks.whereType<Map>()) {
         final block = Map<String, dynamic>.from(value);
+        final blockId = (block['blockId'] ?? '').toString().trim();
+        if (blockId.isEmpty) continue;
         final payload = block['payload'] is Map
             ? Map<String, dynamic>.from(block['payload'] as Map)
             : const <String, dynamic>{};
-        final type = (block['type'] ?? '').toString();
-        items.add(
-          AssistantTurnItemDto(
-            id: (block['blockId'] ?? '').toString(),
-            turnId: id,
-            conversationId: '',
-            sequence: (block['blockSequence'] as num?)?.toInt() ?? 0,
-            type: type,
-            status: (block['status'] ?? 'running').toString(),
-            revision: (block['revision'] as num?)?.toInt() ?? 0,
-            callId: (block['callId'] ?? '').toString(),
-            toolName: (payload['toolName'] ?? '').toString(),
-            content: (block['content'] ?? '').toString(),
-            argumentsJson: (payload['arguments'] ?? '').toString(),
-            resultJson: (payload['result'] ?? '').toString(),
-            errorCode: (payload['errorCode'] ?? '').toString(),
-            durationMs: (payload['durationMs'] as num?)?.toInt() ?? 0,
-            createdAt: (raw['startedAt'] ?? '').toString(),
-            updatedAt: (raw['lastModifiedAt'] ?? '').toString(),
-          ),
+        final index = items.indexWhere((item) => item.id == blockId);
+        final old = index >= 0 ? items[index] : null;
+        final revision = (block['revision'] as num?)?.toInt() ?? 0;
+        if (old != null && revision > 0 && old.revision > revision) {
+          continue;
+        }
+        final item = AssistantTurnItemDto(
+          id: blockId,
+          turnId: id,
+          conversationId: old?.conversationId ?? existing?.conversationId ?? '',
+          sequence: (block['blockSequence'] as num?)?.toInt() ?? old?.sequence ?? 0,
+          type: (block['type'] ?? old?.type ?? 'text').toString(),
+          status: (block['status'] ?? old?.status ?? 'running').toString(),
+          revision: revision > 0 ? revision : old?.revision ?? 0,
+          callId: (block['callId'] ?? old?.callId ?? '').toString(),
+          toolName: (payload['toolName'] ?? old?.toolName ?? '').toString(),
+          content: block.containsKey('content')
+              ? (block['content'] ?? '').toString()
+              : (payload.containsKey('content')
+                    ? (payload['content'] ?? '').toString()
+                    : old?.content ?? ''),
+          citationSnapshot: payload.containsKey('citationSnapshot')
+              ? normalizeCitationSnapshot(payload['citationSnapshot'])
+              : old?.citationSnapshot ?? const <Map<String, dynamic>>[],
+          citationSnapshotProvided: payload.containsKey('citationSnapshot') ||
+              (old?.citationSnapshotProvided ?? false),
+          argumentsJson: payload.containsKey('arguments')
+              ? (payload['arguments'] ?? '').toString()
+              : old?.argumentsJson ?? '',
+          resultJson: payload.containsKey('result')
+              ? (payload['result'] ?? '').toString()
+              : old?.resultJson ?? '',
+          errorCode: (payload['errorCode'] ?? old?.errorCode ?? '').toString(),
+          durationMs: (payload['durationMs'] as num?)?.toInt() ?? old?.durationMs ?? 0,
+          isFinal: old?.isFinal ?? false,
+          messageId: old?.messageId ?? '',
+          createdAt: old?.createdAt ?? (raw['startedAt'] ?? '').toString(),
+          updatedAt: (raw['lastModifiedAt'] ?? old?.updatedAt ?? '').toString(),
         );
+        if (index >= 0) {
+          items[index] = item;
+        } else {
+          items.add(item);
+        }
       }
     }
     items.sort((left, right) => left.sequence.compareTo(right.sequence));
     return AssistantTurnDto(
       id: id,
-      requestId: (raw['requestId'] ?? '').toString(),
-      executionId: (raw['executionId'] ?? '').toString(),
-      parentTurnId: (raw['parentTurnId'] ?? '').toString(),
-      parentBlockId: (raw['parentBlockId'] ?? '').toString(),
-      agentId: (raw['agentId'] ?? '').toString(),
-      sequence: (raw['turnSequence'] as num?)?.toInt() ?? 0,
-      status: _normalizeStatus((raw['status'] ?? 'running').toString()),
-      createdAt: (raw['startedAt'] ?? '').toString(),
-      updatedAt: (raw['lastModifiedAt'] ?? '').toString(),
+      conversationId: existing?.conversationId ?? '',
+      characterId: existing?.characterId ?? '',
+      userMessageId: existing?.userMessageId ?? '',
+      requestId: (raw['requestId'] ?? existing?.requestId ?? '').toString(),
+      executionId: (raw['executionId'] ?? existing?.executionId ?? '').toString(),
+      parentTurnId: (raw['parentTurnId'] ?? existing?.parentTurnId ?? '').toString(),
+      parentBlockId: (raw['parentBlockId'] ?? existing?.parentBlockId ?? '').toString(),
+      agentId: (raw['agentId'] ?? existing?.agentId ?? '').toString(),
+      sequence: (raw['turnSequence'] as num?)?.toInt() ?? existing?.sequence ?? 0,
+      status: _normalizeStatus((raw['status'] ?? existing?.status ?? 'running').toString()),
+      createdAt: (raw['startedAt'] ?? existing?.createdAt ?? '').toString(),
+      updatedAt: (raw['lastModifiedAt'] ?? existing?.updatedAt ?? '').toString(),
+      completedAt: existing?.completedAt ?? '',
       items: items,
     );
   }
@@ -519,6 +610,7 @@ class AgentEventReducer {
     int? durationMs,
     bool? isFinal,
     String? messageId,
+    List<Map<String, dynamic>>? citationSnapshot,
     String? updatedAt,
   }) {
     return AssistantTurnItemDto(
@@ -538,6 +630,8 @@ class AgentEventReducer {
       durationMs: durationMs ?? item.durationMs,
       isFinal: isFinal ?? item.isFinal,
       messageId: messageId ?? item.messageId,
+      citationSnapshot: citationSnapshot ?? item.citationSnapshot,
+      citationSnapshotProvided: citationSnapshot != null || item.citationSnapshotProvided,
       createdAt: item.createdAt,
       updatedAt: updatedAt?.isNotEmpty == true ? updatedAt! : item.updatedAt,
     );

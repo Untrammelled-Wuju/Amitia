@@ -55,6 +55,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/imagegen"
+	"github.com/u-ai/backend/internal/knowledge"
 	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/mcpapi"
 	"github.com/u-ai/backend/internal/middleware"
@@ -571,6 +572,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			agentToolFacade = services.KernelContainer.ToolFacade
 		}
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
+		knowledge.RegisterKnowledgeRouter(apiGroup, services.Knowledge)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		userfeedback.RegisterRouter(apiGroup, ctx)
 		reminderDeviceID := ""
