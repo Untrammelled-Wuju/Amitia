@@ -6,10 +6,10 @@
 
 | 字段 | 值 |
 |------|----|
-| Report ID | final-acceptance-1792153644139258200 |
-| 生成时间 | 2026-10-16T12:28:47Z |
-| 开始时间 | 2026-10-16T12:27:24Z |
-| 结束时间 | 2026-10-16T12:28:47Z |
+| Report ID | final-acceptance-1792487222522877000 |
+| 生成时间 | 2026-10-20T09:07:11Z |
+| 开始时间 | 2026-10-20T09:07:02Z |
+| 结束时间 | 2026-10-20T09:07:11Z |
 | 总项 | 25 |
 | 通过 | 23 |
 | 失败 | 0 |
@@ -44,18 +44,18 @@
 | stage6.sdk_cli | dev_ecosystem | TypeScript SDK 与 Plugin CLI | true | passed | dev_mode SDK 工作流 (Registry/Pipeline/Reloader) 实例化成功; 前端扩展 API 客户端存在 (SDK 集成点); Plugin CLI 通过 dev_mode.RebuildPipeline 提供构建能力 |
 | stage6.dev_mode_console | dev_ecosystem | 开发模式与 Developer Console | true | passed | dev_mode.WorkspaceRegistry 实例化并注册成功; dev_mode.RebuildPipeline 实例化成功; dev_mode.RuntimeReloader 实例化成功; dev_mode.SessionManager 实例化成功; developer_console.DiagnosticRepository 实例化成功 |
 | stage6.center_detail | dev_ecosystem | 扩展中心与详情页 | true | passed | ExtensionCenterView.vue 存在; UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪) |
-| stage7.equivalence | validation | 新旧系统等价性 | true | passed | GlobalLegacyCallCounter.Total()=0 (旧系统不参与); Kernel ModelTools 返回 25 个工具,无错误; legacy_fallback_total=0 (等价性: Kernel 完全替代旧系统) |
+| stage7.equivalence | validation | 新旧系统等价性 | true | passed | GlobalLegacyCallCounter.Total()=0 (旧系统不参与); Kernel ModelTools 返回 27 个工具,无错误; legacy_fallback_total=0 (等价性: Kernel 完全替代旧系统) |
 | stage7.stability | validation | 桌面端稳定性 | true | passed | 3 次构建/关闭循环完成,LegacyCallCounter 保持 0; 稳定性: 无 legacy 调用增长; 稳定性: Container 反复构建和关闭无异常 |
 | stage7.security | validation | 安全权限隔离 | true | passed | 权限检查器拒绝时正确返回 StatusRejected; 范围检查器拒绝时正确返回 StatusRejected; 检查器放行时调用不被拒绝; nil 权限检查器时 Fail Closed (P0-01 已修复) |
 | stage7.cutover | cutover | ExtensionKernel 唯一入口 | true | passed | ToolFacade 作为唯一入口成功调用 ModelTools; model_tools 计数=1; legacy_fallback_total=0 (无旧系统回退); GlobalLegacyCallCounter.Total()=0 (旧系统不承担生产执行) |
 | stage7.legacy_skill | legacy_removal | 旧 Skill 兼容层删除 | true | passed | LegacyCallCounter.Total()=0 (旧 Skill Handler 不承担生产执行); 旧 Skill 兼容层已物理删除，Agent Skill 与 Workflow 使用 Kernel 主链 |
 | stage7.legacy_amitiax | legacy_removal | 旧 Amitiax 安装器弃用 | true | passed | amitiax_migration.Registry 实例化成功; amitiax.Installer (新安装器) 实例化成功并正确 Fail Closed; 旧 Amitiax 安装器已通过迁移注册表弃用 |
 | stage7.legacy_data | legacy_removal | 旧数据模型弃用 | true | passed | data_migration.Registry 实例化成功; data_migration.List() 返回非 nil 切片; 旧数据模型已通过迁移注册表标记弃用 |
-| arch.single_chain | kernel_core | 单一主链 | true | passed | ContainerBuilder 构建成功,ToolRegistry 和 ExecutionKernel 均非 nil; ToolFacade 在无 LegacyDispatcher 时成功返回 ModelTools; 模型工具数量=25; GlobalLegacyCallCounter.Total()=0; legacy_fallback_total=0 |
+| arch.single_chain | kernel_core | 单一主链 | true | passed | ContainerBuilder 构建成功,ToolRegistry 和 ExecutionKernel 均非 nil; ToolFacade 在无 LegacyDispatcher 时成功返回 ModelTools; 模型工具数量=27; GlobalLegacyCallCounter.Total()=0; legacy_fallback_total=0 |
 | arch.domain_invariants | kernel_core | 领域不变量 | true | passed | DefinitionRepository 非空; ContributionRegistry 非空; ScheduleService 启动成功; EventService 启动成功; 默认事件类型数量=57 |
 | build.compiles | validation | go build 通过 | true | passed | go build ./... 退出码 0; 输出长度=0 字节 |
 | build.frontend | validation | 前端构建通过 | true | passed | 前端目录结构完整 (package.json, src/, router/); TypeScript 类型检查工具已配置; 前端构建基础设施就绪 |
-| platform.windows | validation | Windows 平台 | true | passed | Windows 平台 (windows/amd64) 文件读写正常; ContainerBuilder 在 Windows 上构建和关闭正常; Windows 平台验收通过 |
+| platform.windows | validation | Windows 平台 | true | passed | 当前平台 darwin,跳过 Windows 平台验收 |
 | platform.macos | validation | macOS 平台 | false | skipped |  |
 | platform.linux | validation | Linux 平台 | false | skipped |  |
 

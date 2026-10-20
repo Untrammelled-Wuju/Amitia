@@ -60,7 +60,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.2.0-beta.9
+  releaseName: Amitia 26.2.0-beta.10
   releaseNotesFile: release-notes.md
 
 publish:

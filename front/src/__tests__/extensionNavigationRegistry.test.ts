@@ -3,6 +3,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
 import { collectExtensionNavigationItems, resolveBuiltinNavigationItems } from "@/ui-runtime/navigationRegistry";
 import { collectEffectiveProviderRoutes, shadowsProtectedRoute, syncProviderRoutes } from "@/ui-runtime/providerRoutes";
+import { builtinBusinessRoutes } from "@/router/builtinRoutes";
 
 function provider(input: Partial<UIProviderDefinition> & Pick<UIProviderDefinition, "providerId" | "extensionId" | "capability">): UIProviderDefinition {
   return {
@@ -198,5 +199,28 @@ describe("extension navigation registry", () => {
     const registered = router.getRoutes().find((route) => route.path === "/games/minecraft");
     expect(registered?.meta.fullHeight).toBe(true);
     expect(registered?.meta.extensionRoute).toBe(true);
+  });
+
+  it("resolves provider routes when they are registered before the first navigation", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/:pathMatch(.*)*", name: "catchAll", component: { template: "<div />" } }],
+    });
+    syncProviderRoutes(router, store([
+      routeRegistry("minecraft", "routes.minecraft", "/games/minecraft", "page.minecraft", 10, false),
+      pageProvider("minecraft", "page.minecraft"),
+    ]));
+
+    await router.push("/games/minecraft");
+
+    expect(router.currentRoute.value.path).toBe("/games/minecraft");
+    expect(router.currentRoute.value.name).not.toBe("catchAll");
+  });
+
+  it("redirects the desktop character proactive alias to the provider route", () => {
+    const route = builtinBusinessRoutes.find((item) => item.path === "/character/:id/proactive");
+    expect(route?.redirect).toBeTypeOf("function");
+    expect((route?.redirect as (value: { params: { id: string } }) => string)({ params: { id: "role-1" } }))
+      .toBe("/characters/role-1/proactive");
   });
 });

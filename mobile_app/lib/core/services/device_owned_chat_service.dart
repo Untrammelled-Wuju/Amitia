@@ -12,7 +12,7 @@ import 'device_owned_attachments.dart';
 import 'owned_conversation_reference.dart';
 import 'owned_memory_scope.dart';
 
-const _scopeFields = [
+const _preSendScopeFields = [
   'spaceId',
   'initiatorDeviceId',
   'targetDeviceId',
@@ -26,14 +26,11 @@ const _scopeFields = [
   'roleId',
   'roleRevision',
   'authorizationRealm',
-  'turnId',
-  'executionId',
   'roleOwnerId',
   'resourceOwnerId',
-  'requestId',
 ];
 const _authorityFields = [
-  ..._scopeFields,
+  ..._preSendScopeFields,
   'memoryRoleId',
   'memoryViewAll',
   'continuityRoleId',
@@ -1419,7 +1416,7 @@ class DeviceOwnedChatService {
       final expectedScope = Map<String, dynamic>.from(
         view['executionScope'] as Map,
       );
-      if (_scopeFields.any((key) => expectedScope[key] == null) ||
+      if (_preSendScopeFields.any((key) => expectedScope[key] == null) ||
           captured != revision ||
           token.isCancelled) {
         throw StateError('发送前无法确认当前角色、权限与数据归属');

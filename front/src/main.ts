@@ -20,17 +20,40 @@ import { installClientErrorTracking } from "./runtime/client-error-tracker";
 import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index";
 import { useExtensionUIStore } from "./stores/extensionUI";
 import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
+import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
 
 async function bootstrap() {
   await getRuntimeConnection();
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
+  const extensionUI = useExtensionUIStore(pinia);
+  await initializeRuntimeCapabilities(true);
+  const initialRoute = router.resolve(window.location.href);
+  const bootstrapPublicRoute = ["/web-access", "/onboarding", "/privacy", "/usage-boundary", "/call-window"].includes(initialRoute.path);
+  if (!bootstrapPublicRoute) {
+    await extensionUI.refreshSnapshot().catch(() => undefined);
+    syncProviderRoutes(router, extensionUI);
+  }
+  let extensionRouteRecoveryPending = false;
+  router.beforeEach(async (to) => {
+    if (to.name !== "catchAll" || extensionRouteRecoveryPending) return true;
+    extensionRouteRecoveryPending = true;
+    try {
+      await extensionUI.refreshSnapshot(true).catch(() => undefined);
+      syncProviderRoutes(router, extensionUI);
+      const recovered = router.resolve(to.fullPath);
+      if (!recovered.matched.some((record) => record.name === "catchAll")) {
+        return { path: to.path, query: to.query, hash: to.hash, replace: true };
+      }
+    } finally {
+      extensionRouteRecoveryPending = false;
+    }
+    return true;
+  });
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
   installClientErrorTracking(app);
-  const extensionUI = useExtensionUIStore(pinia);
-  await initializeRuntimeCapabilities(true);
   await router.isReady();
 
   if (typeof window !== "undefined" && !window.amitiaDesktop) {
@@ -41,9 +64,7 @@ async function bootstrap() {
     });
   }
 
-  const bootstrapPublicRoute = ["/web-access", "/onboarding", "/privacy", "/usage-boundary"].includes(router.currentRoute.value.path);
   if (!bootstrapPublicRoute) {
-    await extensionUI.refreshSnapshot().catch(() => undefined);
     await syncBrowserClientSlots(extensionUI.snapshot);
   }
   extensionUI.$subscribe((_mutation, state) => { void syncBrowserClientSlots(state.snapshot); });

@@ -247,6 +247,7 @@ func DefaultMigrations() []Migration {
 		RetireLegacyReminderDataMigration(),
 		UserFeedbackTicketsMigration(),
 		KernelSecurityAuditOutboxMigration(),
+		WorldBookOrphanAuditLatestMigration(),
 	}
 }
 

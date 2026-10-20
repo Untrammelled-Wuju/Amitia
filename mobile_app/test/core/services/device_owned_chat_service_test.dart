@@ -28,6 +28,7 @@ class _OwnedApi implements BackendServiceApi {
   String postPath = '';
   bool wrongAck = false;
   bool summaryMode = false;
+  Map<String, dynamic>? dataExecutionScope;
   Completer<Map<String, dynamic>>? deferred;
   final pages = <Map<String, dynamic>>[];
   final queries = <Map<String, dynamic>>[];
@@ -76,7 +77,7 @@ class _OwnedApi implements BackendServiceApi {
     if (pages.isNotEmpty) return pages.removeAt(0) as T;
     if (path.endsWith('/data'))
       return {
-            'executionScope': scope(),
+            'executionScope': dataExecutionScope ?? scope(),
             'snapshot': {
               'ownerId': 'a',
               'resources': [
@@ -171,6 +172,14 @@ Map<String, dynamic> scope() => {
   'resourceOwnerId': 'a',
   'requestId': 'request',
 };
+
+Map<String, dynamic> preSendScope() {
+  final value = scope();
+  value.remove('turnId');
+  value.remove('executionId');
+  value.remove('requestId');
+  return value;
+}
 
 Stream<List<int>> bytes(List<Map<String, dynamic>> events) {
   final encoded = utf8.encode(
@@ -303,6 +312,50 @@ void main() {
             },
           )
           .toList(),
+      throwsStateError,
+    );
+    expect(api.streamRequest, isNull);
+  });
+  test('手机发送前不要求尚未生成的轮次标识', () async {
+    final api = _OwnedApi();
+    api.dataExecutionScope = preSendScope();
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.streamEvents = [
+      {
+        'type': 'started',
+        'executionScope': scope(),
+        'conversationId': 'chat',
+      },
+      {
+        'type': 'completed',
+        'data': {
+          'requestId': 'request',
+          'saved': true,
+          'executionScope': scope(),
+          'conversationId': 'chat',
+        },
+      },
+    ];
+    final events = await service
+        .send(requestId: 'request', message: 'hello')
+        .toList();
+    expect(api.streamRequest?['expectedExecutionScope'], preSendScope());
+    expect(events.last['type'], 'completed');
+  });
+  test('手机发送前仍拒绝缺少稳定数据归属的响应', () async {
+    final api = _OwnedApi();
+    api.dataExecutionScope = preSendScope()..remove('roleOwnerId');
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    await expectLater(
+      service.send(requestId: 'request', message: 'hello').toList(),
       throwsStateError,
     );
     expect(api.streamRequest, isNull);

@@ -151,7 +151,7 @@ onMounted(async () => {
   } catch {}
 
   extensionUIStore
-    .refreshSnapshot(true)
+    .refreshSnapshot()
     .then(() => syncProviderRoutes(router, extensionUIStore))
     .catch(() => {});
 });

@@ -119,6 +119,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/character/:id/memory", name: "characterMemory", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/character/:id/timeline", name: "characterTimeline", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/character/:id/lifestyle", name: "characterLifestyle", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
+{ path: "/character/:id/proactive", redirect: (to: any) => `/characters/${to.params.id}/proactive` },
 { path: "/character/:id/psyche", name: "characterPsyche", component: () => import("../views/character/CharacterView.vue"), meta: { requiresAuth: true } },
 { path: "/logs", name: "logs", component: () => import("@/views/chat-logs/ChatLogsView.vue"), meta: { requiresAuth: true, fullHeight: true } },
 { path: "/channel-messages", name: "channelMessages", component: () => import("@/views/channels/ChannelMessagesView.vue"), meta: { requiresAuth: true, fullHeight: true } },
