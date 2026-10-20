@@ -323,23 +323,16 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
 
   String _revisionRetentionLabel(KnowledgeSourceRevisionDto revision) {
     if (revision.purgedAt.isNotEmpty || revision.status == 'purged') {
-      return '已清理 ${_formatDateTime(revision.purgedAt.isEmpty ? revision.updatedAt : revision.purgedAt)}';
+      return '已清理 ${_formatIso(revision.purgedAt.isEmpty ? revision.updatedAt : revision.purgedAt)}';
     }
     final retainUntil = DateTime.tryParse(revision.retainUntil);
     if (retainUntil != null) {
       final expired = !retainUntil.isAfter(DateTime.now().toUtc());
-      return '${expired ? '可清理' : '保留至'} ${_formatDateTime(revision.retainUntil)}';
+      return '${expired ? '可清理' : '保留至'} ${_formatIso(revision.retainUntil)}';
     }
     return '保留中';
   }
 
-  String _formatDateTime(String value) {
-    final date = DateTime.tryParse(value);
-    if (date == null) return '-';
-    final local = date.toLocal();
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '${local.year}-${two(local.month)}-${two(local.day)} ${two(local.hour)}:${two(local.minute)}';
-  }
 
   Future<String?> _askLogicalName(String filename) async {
     final controller = TextEditingController(text: filename);

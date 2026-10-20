@@ -20,3 +20,6 @@ android/keystore/
 *.jks
 *.p12
 *.pfx
+
+!third_party/katex_dart/lib/src/build/
+!third_party/katex_dart/lib/src/build/**
