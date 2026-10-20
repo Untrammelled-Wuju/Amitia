@@ -22,7 +22,7 @@ func TestOwnedAppendPersistsGenericPartsAndDeduplicates(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(result.MessageIDs) != 2 || result.LastSequence != 4 || result.Sequences[0] != 3 {
+		if len(result.MessageIDs) != 2 || result.LastSequence != 4 || result.Sequences[0] != 3 || result.Channel != "web" || result.Role != "user" || result.Status != "sent" {
 			t.Fatalf("bad sequence: %+v", result)
 		}
 		if i == 0 {

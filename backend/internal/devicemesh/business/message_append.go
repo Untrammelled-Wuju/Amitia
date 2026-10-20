@@ -63,6 +63,9 @@ type AppendOwnedMessagesRequest struct {
 	Parts            []AppendedMessagePart
 }
 type AppendOwnedMessagesResult struct {
+	Channel         string   `json:"channel"`
+	Role            string   `json:"role"`
+	Status          string   `json:"status"`
 	MessageIDs      []string `json:"messageIds"`
 	Sequences       []int64  `json:"sequences"`
 	DeliveryGroupID string   `json:"deliveryGroupId"`
@@ -178,6 +181,10 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 		text := ""
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		result.DeliveryGroupID = prefix
+		result.Channel, result.Role, result.Status = channel, appendRequest.Role, "sent"
+		if channel != "web" && channel != "voice" {
+			result.Status = "sending"
+		}
 		for i, part := range appendRequest.Parts {
 			id := fmt.Sprintf("%s/message/%02d", prefix, i)
 			content := part.Content
@@ -187,10 +194,7 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 			if content == "" {
 				content = "[" + part.Type + "]"
 			}
-			status := "sent"
-			if channel != "web" && channel != "voice" {
-				status = "sending"
-			}
+			status := result.Status
 			message := map[string]any{"id": id, "conversationId": appendRequest.ConversationID, "characterId": scope.RoleID, "ownerId": scope.ResourceOwnerID, "role": appendRequest.Role, "content": content, "msgType": part.Type, "source": appendRequest.Source, "status": status, "requestId": request.RequestID, "sequence": sequence + int64(i), "createdAt": now, "extensionType": part.ExtensionType, "mimeType": part.MIMEType, "altText": part.AltText, "originalAsset": part.URL, "fallbackAsset": part.FallbackURL, "isAnimated": part.IsAnimated, "mediaWidth": part.Width, "mediaHeight": part.Height, "metadata": part.Metadata, "deliveryGroupId": prefix, "deliverySequence": i + 1, "replyToMessageId": appendRequest.ReplyToMessageID, "executionScope": scope}
 			if len(part.Attachments) > 0 {
 				message["attachments"] = part.Attachments

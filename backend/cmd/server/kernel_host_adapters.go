@@ -308,7 +308,7 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 	}
 	bus := system.GetMessageEventBus()
 	direction := "outbound"
-	if strings.EqualFold(request.Role, "user") {
+	if result.Role == "user" {
 		direction = "inbound"
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
@@ -324,10 +324,10 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 		bus.PublishMessageCreated(
 			request.ConversationID,
 			messageID,
-			request.Channel,
+			result.Channel,
 			direction,
-			request.Role,
-			"sent",
+			result.Role,
+			result.Status,
 			part.Content,
 			now,
 			sequence,

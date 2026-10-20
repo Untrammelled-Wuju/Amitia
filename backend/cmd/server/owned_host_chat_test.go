@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/system"
 )
 
 func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
@@ -90,5 +91,25 @@ func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 	request.Parts[0].URL = "http://127.0.0.1/private-image"
 	if _, err := appender.AppendConversationMessages(ctx, request); err == nil {
 		t.Fatal("plugin image resolver accepted a private network URL")
+	}
+	scope.RequestID = "seed-channel-host"
+	if _, err := p.store.Apply(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "channel-host", RoleID: "one", Body: json.RawMessage(`{"id":"channel-host","characterId":"one","channel":"telegram","peerId":"peer"}`)}}}); err != nil {
+		t.Fatal(err)
+	}
+	channelContext := kernel.WithHostAPIScope(ctx, kernel.HostAPIScopeContext{SpaceID: "core", CharacterID: "one", ConversationID: "channel-host"})
+	subscriber := system.GetMessageEventBus().Subscribe(t.Name(), []string{"telegram"})
+	defer system.GetMessageEventBus().Unsubscribe(t.Name())
+	request.ConversationID, request.Role, request.Channel, request.RequestID = "channel-host", "", "", "channel-append"
+	request.Parts = []kernel.ConversationMessagePart{{Type: "text", Content: "waiting for actual delivery"}}
+	if _, err := appender.AppendConversationMessages(channelContext, request); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-subscriber.Events:
+		if event.Status != "sending" || event.Role != "assistant" || event.Channel != "telegram" {
+			t.Fatalf("event did not reflect Owner acknowledgement: %+v", event)
+		}
+	default:
+		t.Fatal("Owner channel event was not published")
 	}
 }
