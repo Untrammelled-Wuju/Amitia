@@ -23,6 +23,7 @@ type AppendedMessagePart struct {
 	Height        int            `json:"height,omitempty"`
 	IsAnimated    bool           `json:"isAnimated,omitempty"`
 	Metadata      map[string]any `json:"metadata,omitempty"`
+	Attachments   []Attachment   `json:"attachments,omitempty"`
 }
 
 func normalizeAppendedMessagePart(index int, part AppendedMessagePart) (AppendedMessagePart, error) {
@@ -41,6 +42,14 @@ func normalizeAppendedMessagePart(index int, part AppendedMessagePart) (Appended
 	}
 	if part.Type != "text" && part.URL == "" {
 		return AppendedMessagePart{}, fmt.Errorf("part %d %s url is required", index, part.Type)
+	}
+	if err := ValidateAttachments(part.Attachments); err != nil {
+		return AppendedMessagePart{}, err
+	}
+	for _, attachment := range part.Attachments {
+		if attachment.Kind != part.Type {
+			return AppendedMessagePart{}, coordination.ErrRequestConflict
+		}
 	}
 	return part, nil
 }
@@ -183,6 +192,9 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 				status = "sending"
 			}
 			message := map[string]any{"id": id, "conversationId": appendRequest.ConversationID, "characterId": scope.RoleID, "ownerId": scope.ResourceOwnerID, "role": appendRequest.Role, "content": content, "msgType": part.Type, "source": appendRequest.Source, "status": status, "requestId": request.RequestID, "sequence": sequence + int64(i), "createdAt": now, "extensionType": part.ExtensionType, "mimeType": part.MIMEType, "altText": part.AltText, "originalAsset": part.URL, "fallbackAsset": part.FallbackURL, "isAnimated": part.IsAnimated, "mediaWidth": part.Width, "mediaHeight": part.Height, "metadata": part.Metadata, "deliveryGroupId": prefix, "deliverySequence": i + 1, "replyToMessageId": appendRequest.ReplyToMessageID, "executionScope": scope}
+			if len(part.Attachments) > 0 {
+				message["attachments"] = part.Attachments
+			}
 			switch part.Type {
 			case "image":
 				message["imageUrl"] = part.URL

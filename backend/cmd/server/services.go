@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 
 	"github.com/u-ai/backend/internal/belief"
@@ -141,7 +140,7 @@ type AppServices struct {
 	Vision                       vision.Service
 	Chat                         chat.Service
 	UnifiedEntry                 *interaction.UnifiedEntry
-	ChatRuntime                  *interaction.Orchestrator
+	ChatRuntime                  *interaction.RuntimeContextService
 	OwnedIngress                 *ownedChatIngress
 	Continuity                   *continuity.Repository
 	ContinuityCoordinator        *continuity.WaitCoordinator
@@ -308,8 +307,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	kernelDBPath := filepath.Join(kernelRoot, "kernel.db")
 	charRepo := character.NewRepository(ctx)
-	kernelCharReader := newKernelCharacterReader(charRepo)
-	kernelConvReader := newKernelConversationReader(chatSvc)
+	kernelCharReader := newKernelCharacterReader()
+	kernelConvReader := newKernelConversationReader()
 	kernelMemQuerySvc := newKernelMemoryQueryService()
 	var nodeResolver script_host.NodeEnvironmentResolver
 	var artifactResolver script_host.ArtifactResolver
@@ -629,9 +628,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		toolFacade.SetHookService(kernelContainer.HookService)
 		chatSvc.SetHookInvoker(chat.NewHookAdapter(kernelContainer.HookService))
 	}
-	orchCfg := interaction.DefaultOrchestratorConfig()
+	parallelTurns := 16
 	if config.AppCfg.Chat.AgentMaxParallelTurns > 0 {
-		orchCfg.MaxConcurrent = config.AppCfg.Chat.AgentMaxParallelTurns
+		parallelTurns = config.AppCfg.Chat.AgentMaxParallelTurns
 	}
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
 	if err := tracker.InitSchema(); err != nil {
@@ -651,10 +650,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	continuityResolver := continuity.NewResolver(continuityRepo)
 	continuityResolver.SetSemanticMatcher(continuity.NewEmbeddingSemanticMatcher(embedding.NewService(ctx.DB)))
 	continuityResolver.SetDisambiguator(continuity.NewLLMThreadDisambiguator(chatSvc))
-	continuityObserver := continuity.NewObserver(continuityRepo)
-	continuityObserver.SetIntelligence(continuity.NewIntelligence(chatSvc))
 	continuityCoordinator := continuity.NewWaitCoordinator(continuityRepo, nil, continuity.DefaultWaitCoordinatorConfig())
-	continuityObserver.SetWaitCoordinator(continuityCoordinator)
 	continuityBridge := continuity.NewRuntimeBridge(continuityRepo, continuityCoordinator)
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
@@ -665,21 +661,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	deliveryWorker := delivery.NewWorker(deliveryStore, kernelContainer.ChannelResolver, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
-	outboxAdapter := &chatOutboxAdapter{store: newOutboxStore}
-	chatSvc.SetOutboxStore(outboxAdapter)
 	if err := runtimeQueue.InitSchema(); err != nil {
 		log.Error("failed to init runtime queue schema:", err)
 		panic("failed to init runtime queue schema")
 	}
 
 	dispatchedPublisher := newoutbox.NewDispatchedPublisher(newoutbox.LogOnlyPublisher())
-	postProcessAdapter := &postProcessPublisherAdapter{chatSvc: chatSvc}
-	continuityAdapter := &continuityObserverPublisher{observer: continuityObserver}
-	dispatchedPublisher.Register("postprocess.pipeline.execute", postProcessAdapter)
-	dispatchedPublisher.Register("postprocess.context.trim", postProcessAdapter)
-	dispatchedPublisher.Register("postprocess.mood.recovery", postProcessAdapter)
-	dispatchedPublisher.Register("postprocess.compressor.maybe", postProcessAdapter)
-	dispatchedPublisher.Register("continuity.observe", continuityAdapter)
 
 	newOutboxWorker := newoutbox.NewWorker(newOutboxStore, dispatchedPublisher, newoutbox.DefaultWorkerConfig())
 
@@ -692,9 +679,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	reflectionPublisher := interaction.NewReflectionMemoryPublisher(reflectionMemoryAdapter, nil)
 	dispatchedPublisher.Register(interaction.ReflectionCandidateApprovedEventType, reflectionPublisher)
 	dispatchedPublisher.Register(interaction.ReflectionMemoryAbstractionEventType, reflectionPublisher)
-	orch := interaction.NewOrchestratorWithStores(orchCfg, nil, tracker, newOutboxStore)
+	orch := interaction.NewRuntimeContextService(tracker, parallelTurns)
 	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
-		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
 		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
 	}
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, extensionContextProvider, memoryConsumers.Beliefs, temporalSvc)
@@ -1361,18 +1347,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		multiAgentCoordinator.SetOwnedExecution(services.OwnedBusiness.WithExecutionScope)
 		kernelMemQuerySvc.engine = services.OwnedBusiness
 		kernelChatAppender.engine, kernelChatAppender.coreID = services.OwnedBusiness, localSpace.SpaceID()
-		if setter, ok := services.Chat.(interface {
-			SetCanonicalMemoryRuntime(chat.CanonicalMemoryRuntime)
-		}); ok {
-			var inferenceAuthority chat.InferenceAuthority
-			if deviceMeshRuntime.LocalHandler != nil {
-				inferenceAuthority = deviceMeshRuntime.LocalHandler.LocalInferenceContext
-			}
-			runtime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: inferenceAuthority}
-			setter.SetCanonicalMemoryRuntime(runtime)
-			memoryConsumers.runtime = runtime
-			reflectionMemoryAdapter.runtime = runtime
+		kernelConvReader.engine, kernelConvReader.coreID = services.OwnedBusiness, localSpace.SpaceID()
+		kernelCharReader.engine, kernelCharReader.catalog, kernelCharReader.coreID = services.OwnedBusiness, deviceMeshRuntime, localSpace.SpaceID()
+		var inferenceAuthority chat.InferenceAuthority
+		if deviceMeshRuntime.LocalHandler != nil {
+			inferenceAuthority = deviceMeshRuntime.LocalHandler.LocalInferenceContext
 		}
+		memoryRuntime := &canonicalChatMemoryRuntime{engine: services.OwnedBusiness, spaceID: localSpace.SpaceID(), deviceID: deviceMeshRuntime.LocalDeviceID, begin: inferenceAuthority}
+		memoryConsumers.runtime, reflectionMemoryAdapter.runtime = memoryRuntime, memoryRuntime
 		if setter, ok := services.Chat.(interface{ SetOwnedToolRuntime(chat.OwnedToolRuntime) }); ok {
 			setter.SetOwnedToolRuntime(&meshOwnedToolRuntime{services: services, native: nativeMultiAgent})
 		}
@@ -1677,39 +1659,6 @@ func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Rep
 	return runtimeRegistry
 }
 
-type chatOutboxAdapter struct {
-	store *newoutbox.SQLiteOutboxStore
-}
-
-func (a *chatOutboxAdapter) AppendOutbox(aggregateID, eventType string, payload []byte) error {
-	record := newoutbox.OutboxRecord{
-		ID:          uuid.New().String(),
-		AggregateID: aggregateID,
-		EventType:   eventType,
-		Payload:     payload,
-		Status:      newoutbox.OutboxStatusPending,
-		MaxRetries:  newoutbox.DefaultMaxRetries,
-		AvailableAt: time.Now(),
-		CreatedAt:   time.Now(),
-	}
-	return a.store.Append(record)
-}
-
-func (a *chatOutboxAdapter) AppendOutboxWithKey(aggregateID, eventType, idempotencyKey string, payload []byte) error {
-	record := newoutbox.OutboxRecord{
-		ID:             uuid.New().String(),
-		AggregateID:    aggregateID,
-		EventType:      eventType,
-		Payload:        payload,
-		Status:         newoutbox.OutboxStatusPending,
-		MaxRetries:     newoutbox.DefaultMaxRetries,
-		AvailableAt:    time.Now(),
-		IdempotencyKey: idempotencyKey,
-		CreatedAt:      time.Now(),
-	}
-	return a.store.Append(record)
-}
-
 type chatDeliveryAdapter struct {
 	store *delivery.SQLiteDeliveryStore
 }
@@ -1788,29 +1737,6 @@ func registerAgentReconciliation(engine *mindruntime.ReconciliationEngine, goalR
 		engine.RegisterChecker(mindruntime.ReconciliationAgentDescriptorRefStale, interaction.NewDescriptorRefStaleChecker(recoveryDescriptor, settleDelay))
 		engine.RegisterChecker(mindruntime.ReconciliationAgentDescriptorSchema, interaction.NewDescriptorRefStaleChecker(recoveryDescriptor, settleDelay))
 	}
-}
-
-type postProcessPublisherAdapter struct {
-	chatSvc chat.Service
-}
-
-func (a *postProcessPublisherAdapter) Publish(record newoutbox.OutboxRecord) error {
-	return a.chatSvc.ReplayPostProcess(record.EventType, record.Payload)
-}
-
-type continuityObserverPublisher struct {
-	observer *continuity.Observer
-}
-
-func (p *continuityObserverPublisher) Publish(record newoutbox.OutboxRecord) error {
-	if p == nil || p.observer == nil {
-		return nil
-	}
-	var payload continuity.ObservePayload
-	if err := json.Unmarshal(record.Payload, &payload); err != nil {
-		return err
-	}
-	return p.observer.Observe(context.Background(), payload)
 }
 
 type noopPublisher struct{}

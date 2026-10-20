@@ -75,7 +75,7 @@ func (s *service) RunAndroidUIAgent(ctx context.Context, execCtx tool.ToolExecut
 			return result, err
 		}
 		beforeHash := androidUISemanticHash(tree)
-		action, err := s.planAndroidUIAction(cfg, req, observationRaw, result.Steps)
+		action, err := s.planAndroidUIAction(ctx, cfg, req, observationRaw, result.Steps)
 		if err != nil {
 			result.Steps = append(result.Steps, androiduiagent.Step{
 				Index: index, Action: "planner", Status: "failed", Observation: observationSummary,
@@ -481,7 +481,7 @@ func (s *service) androidUIVisualObservation(ctx context.Context, scope extensio
 	return encoded, summary, quality, tree, nil
 }
 
-func (s *service) planAndroidUIAction(cfg map[string]string, req androiduiagent.Request, observation json.RawMessage, history []androiduiagent.Step) (plannedAndroidUIAction, error) {
+func (s *service) planAndroidUIAction(ctx context.Context, cfg map[string]string, req androiduiagent.Request, observation json.RawMessage, history []androiduiagent.Step) (plannedAndroidUIAction, error) {
 	historyJSON, _ := json.Marshal(historyForPlanner(history, 6))
 	allowedApps, _ := json.Marshal(req.AllowedApps)
 	system := `You are a bounded Android UI sub-agent planner. Return exactly one JSON object and nothing else.
@@ -502,7 +502,7 @@ JSON shape: {"action":"...","reason":"short","target":{...},"text":"...","direct
 			{"type": "image_url", "image_url": map[string]any{"url": "data:" + screenshotMimeType + ";base64," + screenshotBase64, "detail": "high"}},
 		}
 	}
-	content, _, err := s.callLLM(cfg, []map[string]interface{}{
+	content, _, err := s.callLLM(ctx, cfg, []map[string]interface{}{
 		{"role": "system", "content": system},
 		{"role": "user", "content": userContent},
 	})

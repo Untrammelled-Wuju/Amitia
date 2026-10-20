@@ -9,9 +9,8 @@ import (
 )
 
 func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing.T) {
-	processor := &captureRequestProcessor{}
 	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
+	orch := NewRuntimeContextService(tracker, 16)
 	orch.SetReady(true)
 	unifiedEntry := NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
 		{
@@ -25,7 +24,7 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 			State:          ScopeBindingStateActive,
 		},
 	}}), temporal.SystemClock{})
-	executor := &orchestratorEntryExecutor{entry: unifiedEntry, orchestrator: orch}
+	executor := &canonicalTestExecutor{entry: unifiedEntry}
 	unifiedEntry.SetEntryExecutor(executor)
 	entry := NewVoiceEntry(unifiedEntry)
 	plan := &ExpressionPlan{
@@ -53,34 +52,25 @@ func TestVoiceEntryFinalTurnUsesUnifiedEntryAndPreservesVoiceEnvelope(t *testing
 	if result == nil || result.Outcome != OutcomeCompleted {
 		t.Fatalf("unexpected result: %#v", result)
 	}
-	if processor.req == nil {
+	if executor.request == nil {
 		t.Fatal("processor was not called")
 	}
-	if processor.req.CharacterID != "char-bound" || processor.req.ConversationID != "conv-bound" {
-		t.Fatalf("voice turn did not use unified resolved scope: %#v", processor.req)
+	if executor.request.CharacterID != "char-bound" || executor.request.ConversationID != "conv-bound" {
+		t.Fatalf("voice turn did not use unified resolved scope: %#v", executor.request)
 	}
-	if processor.req.Channel != "voice" || processor.req.PeerID != "peer-voice" || processor.req.Source != "voice" {
-		t.Fatalf("voice turn did not preserve unified channel source: %#v", processor.req)
+	if executor.request.Channel != "voice" || executor.request.PeerID != "peer-voice" || executor.request.Source != "voice" {
+		t.Fatalf("voice turn did not preserve unified channel source: %#v", executor.request)
 	}
-	if processor.req.RequestID != "turn-voice" || processor.req.SessionID != "session-voice" {
-		t.Fatalf("voice envelope was not preserved: %#v", processor.req)
+	if executor.request.RequestID != "turn-voice" || executor.request.SessionID != "session-voice" {
+		t.Fatalf("voice envelope was not preserved: %#v", executor.request)
 	}
-	if !processor.req.VoiceMessage || processor.req.AudioUrl != "https://example.test/audio.wav" || processor.req.AudioDuration != 3.5 {
-		t.Fatalf("voice media fields were not preserved: %#v", processor.req)
+	if !executor.request.VoiceMessage || executor.request.AudioUrl != "https://example.test/audio.wav" || executor.request.AudioDuration != 3.5 {
+		t.Fatalf("voice media fields were not preserved: %#v", executor.request)
 	}
-	if processor.req.ExpressionPlan == nil || processor.req.ExpressionPlan.ID != "expr-voice" {
-		t.Fatalf("expression plan was not preserved: %#v", processor.req.ExpressionPlan)
+	if executor.request.ExpressionPlan == nil || executor.request.ExpressionPlan.ID != "expr-voice" {
+		t.Fatalf("expression plan was not preserved: %#v", executor.request.ExpressionPlan)
 	}
-	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("interaction record was not persisted")
-	}
-	if record.Scope.CharacterID != "char-bound" || record.Scope.ConversationID != "conv-bound" || record.Scope.Source != "voice" {
-		t.Fatalf("persisted scope did not come from unified entry: %#v", record.Scope)
-	}
+
 }
 
 func TestVoiceEntryRequiresCanonicalUnifiedEntry(t *testing.T) {

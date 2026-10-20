@@ -13,12 +13,12 @@ type StartupRecoveryResult struct {
 	Failed    int
 }
 
-func (o *Orchestrator) RecoverStaleInteractions(ctx context.Context, cutoff time.Time) (StartupRecoveryResult, error) {
+func (o *RuntimeContextService) RecoverStaleInteractions(ctx context.Context, cutoff time.Time) (StartupRecoveryResult, error) {
 	return RecoverStaleInteractions(ctx, o.tracker, cutoff)
 }
 
 func (e *UnifiedEntry) RecoverStaleInteractions(ctx context.Context, cutoff time.Time) (StartupRecoveryResult, error) {
-	return e.orchestrator.RecoverStaleInteractions(ctx, cutoff)
+	return e.runtimeContext.RecoverStaleInteractions(ctx, cutoff)
 }
 
 func RecoverStaleInteractions(ctx context.Context, tracker InteractionTracker, cutoff time.Time) (StartupRecoveryResult, error) {

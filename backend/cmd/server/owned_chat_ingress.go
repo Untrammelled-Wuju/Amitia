@@ -32,7 +32,7 @@ func newOwnedChatIngress(services *AppServices, coreID string) *ownedChatIngress
 }
 
 func (r *ownedChatIngress) EntryReady() bool {
-	return r != nil && r.services != nil && r.services.OwnedBusiness != nil && r.services.DeviceMesh != nil
+	return r != nil && r.services != nil && r.services.OwnedBusiness != nil && r.services.DeviceMesh != nil && (r.services.ChatRuntime == nil || r.services.ChatRuntime.IsReady())
 }
 
 func (r *ownedChatIngress) owner(ctx context.Context, req *interaction.UnifiedEntryRequest) (interaction.EntryOwner, error) {

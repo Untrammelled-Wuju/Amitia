@@ -8,7 +8,3 @@ func (s *service) GetCompressionStatus(convID string) map[string]interface{} {
 	}
 	return s.compressor.GetCompressionStatus(convID)
 }
-
-func (s *service) GetPipelineStatus() interface{} {
-	return map[string]interface{}{"runtime": "owned-v1", "ready": s.canonicalMemory != nil}
-}

@@ -35,7 +35,7 @@ func TestEntryExecutorOwnsExecutionWithoutLegacyResolverOrOrchestrator(t *testin
 	if request.RequestID != "" {
 		t.Fatal("entry mutated caller request")
 	}
-	if !entry.IsOrchestratorReady() || !entry.IsInteractionActive("owned-parent") {
+	if !entry.IsReady() || !entry.IsInteractionActive("owned-parent") {
 		t.Fatal("entry still depends on legacy readiness")
 	}
 	if count := entry.CancelByPeer("test", "peer"); count != 1 || executor.scope.Channel != "test" || executor.scope.PeerID != "peer" {

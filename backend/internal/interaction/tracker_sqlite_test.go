@@ -1024,8 +1024,7 @@ func TestSupersedeResolverExcludesCurrentRecord(t *testing.T) {
 }
 
 func TestUnifiedEntryBackpressureRejectsInvalidConfig(t *testing.T) {
-	processor := &runtimeCaptureProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
+	orch := NewRuntimeContextService(NewInMemoryTracker(), 16)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 	entry.SetBackpressureConfig(BackpressureConfig{MaxQueueDepth: 0, WarningRatio: -1, SheddingRatio: 2})

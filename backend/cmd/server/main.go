@@ -479,7 +479,7 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	} else if result.Recovered > 0 || result.Failed > 0 {
 		log.Info("交互启动恢复完成 scanned=", result.Scanned, " recovered=", result.Recovered, " skipped=", result.Skipped, " failed=", result.Failed)
 	}
-	services.UnifiedEntry.SetOrchestratorReady(true)
+	services.UnifiedEntry.SetReady(true)
 	services.OutboxWorker.Start(appCtx)
 	services.DeliveryWorker.Start(appCtx)
 	if services.OwnedBusiness != nil {
@@ -559,7 +559,7 @@ func runCoreServer(appCtx context.Context, srv *http.Server, listener net.Listen
 		}
 	case <-appCtx.Done():
 		log.Info("收到关闭信号，开始排水...")
-		services.UnifiedEntry.SetOrchestratorReady(false)
+		services.UnifiedEntry.SetReady(false)
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {

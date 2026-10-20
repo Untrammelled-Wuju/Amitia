@@ -10,13 +10,17 @@ import (
 )
 
 type Role struct {
-	ID       string          `json:"id"`
-	Name     string          `json:"name"`
-	Revision int64           `json:"revision"`
-	Profile  json.RawMessage `json:"profile"`
+	Avatar      string          `json:"avatar,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Disabled    bool            `json:"disabled,omitempty"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Revision    int64           `json:"revision"`
+	Profile     json.RawMessage `json:"profile"`
 }
 
 type DataQuery struct {
+	IncludeDisabled        bool                   `json:"includeDisabled,omitempty"`
 	ChatRuntime            *OwnedChatRuntimeQuery `json:"chatRuntime,omitempty"`
 	Management             bool                   `json:"management,omitempty"`
 	RuntimeTurns           bool                   `json:"runtimeTurns,omitempty"`
@@ -37,6 +41,10 @@ type DataQuery struct {
 	Limit                  int                    `json:"limit,omitempty"`
 	HistoricalRoleID       string                 `json:"historicalRoleId,omitempty"`
 	ListConversations      bool                   `json:"listConversations,omitempty"`
+}
+
+type RoleCatalogPort interface {
+	ListOwnedRoleCatalog(context.Context, ExecutionScope, bool) ([]Role, error)
 }
 
 type OwnedChatRuntimeQuery struct {

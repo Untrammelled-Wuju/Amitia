@@ -578,7 +578,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			reminderDeviceID = services.DeviceMesh.LocalDeviceID
 		}
 		reminder.RegisterRouter(apiGroup, services.Reminders, reminderDeviceID)
-		agent.RegisterAgentRuntimeRunners(ctx, services.UnifiedEntry, agentToolFacade)
+		agent.RegisterAgentRuntimeRunners(ctx, agentToolFacade)
 		channelAccess := system.ChannelAvailabilityFunc(func(channelID string) bool {
 			if services.KernelContainer == nil || services.KernelContainer.ChannelResolver == nil {
 				return false

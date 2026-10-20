@@ -2,202 +2,78 @@ package interaction
 
 import (
 	"context"
+	"github.com/u-ai/backend/internal/temporal"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/u-ai/backend/internal/temporal"
 )
 
-type captureRequestProcessor struct {
-	mu  sync.Mutex
-	req *ProcessRequest
+type canonicalTestExecutor struct {
+	entry    *UnifiedEntry
+	requests []*UnifiedEntryRequest
+	request  *UnifiedEntryRequest
+	scope    InteractionScope
+	entered  chan struct{}
+	release  chan struct{}
 }
 
-func (p *captureRequestProcessor) ProcessMessageCtx(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error) {
-	p.mu.Lock()
-	p.req = req
-	p.mu.Unlock()
-	return &ProcessResponse{
-		ConversationID: req.ConversationID,
-		Reply:          "ok",
-		CharacterID:    req.CharacterID,
-		RequestID:      req.RequestID,
-	}, nil
-}
-
-type blockingListTracker struct {
-	*InMemoryTracker
-	entered chan struct{}
-	release chan struct{}
-	once    sync.Once
-}
-
-func newBlockingListTracker() *blockingListTracker {
-	return &blockingListTracker{
-		InMemoryTracker: NewInMemoryTracker(),
-		entered:         make(chan struct{}),
-		release:         make(chan struct{}),
-	}
-}
-
-func (t *blockingListTracker) ListActive(ctx context.Context, scope InteractionScope) ([]*InteractionRecord, error) {
-	t.once.Do(func() {
-		close(t.entered)
-	})
-	select {
-	case <-t.release:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-	return t.InMemoryTracker.ListActive(ctx, scope)
-}
-
-func TestUnifiedEntryPreservesClientRequestIDAndEnvelope(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
-	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
-	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
-
-	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
-		Channel:        "web",
-		Source:         "web",
-		PeerID:         "peer-1",
-		SpaceID:        "user-1",
-		CharacterID:    "char-1",
-		ConversationID: "conv-1",
-		SessionID:      "session-1",
-		RequestID:      "request-1",
-		Message:        "hello",
-	})
+func (e *canonicalTestExecutor) ExecuteEntry(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
+	resolution, err := e.entry.ResolveScope(ctx, req)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	if result.Response == nil || result.Response.RequestID != "request-1" {
-		t.Fatalf("request id was not returned in response: %#v", result.Response)
+	copied := *req
+	copied.SpaceID, copied.CharacterID, copied.ConversationID = resolution.Scope.SpaceID, resolution.Scope.CharacterID, resolution.Scope.ConversationID
+	copied.Source, copied.Channel, copied.PeerID = resolution.Source, resolution.Scope.Channel, resolution.Scope.PeerID
+	e.request = &copied
+	e.requests = append(e.requests, &copied)
+	return &OrchestrationResult{Outcome: OutcomeCompleted, Response: &ProcessResponse{ConversationID: copied.ConversationID, CharacterID: copied.CharacterID, RequestID: copied.RequestID, Reply: "ok"}}, nil
+}
+func (e *canonicalTestExecutor) CancelEntryScope(scope InteractionScope) int {
+	e.scope = scope
+	if e.entered != nil {
+		close(e.entered)
 	}
-	if processor.req == nil {
-		t.Fatal("processor was not called")
+	if e.release != nil {
+		<-e.release
 	}
-	if processor.req.RequestID != "request-1" || processor.req.SessionID != "session-1" || processor.req.PeerID != "peer-1" || processor.req.SpaceID != "user-1" {
-		t.Fatalf("entry envelope was not preserved: %#v", processor.req)
-	}
-	record, ok, err := orch.GetTracker().Get(context.Background(), result.InteractionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("interaction record was not persisted")
-	}
-	if record.Scope.RequestID != "request-1" || record.Scope.SessionID != "session-1" || record.Scope.PeerID != "peer-1" || record.Scope.SpaceID != "user-1" {
-		t.Fatalf("persisted scope was not preserved: %#v", record.Scope)
+	return 1
+}
+func (*canonicalTestExecutor) EntryInteractionActive(string) bool { return false }
+func (*canonicalTestExecutor) EntryReady() bool                   { return true }
+func TestUnifiedEntryCanonicalEnvelopeAndGeneratedIdentity(t *testing.T) {
+	for _, id := range []string{"client-id", ""} {
+		t.Run(id, func(t *testing.T) {
+			entry := NewUnifiedEntry(NewRuntimeContextService(NewInMemoryTracker(), 16), NewScopeResolver(nil), temporal.SystemClock{})
+			executor := &canonicalTestExecutor{entry: entry}
+			entry.SetEntryExecutor(executor)
+			result, err := entry.Handle(t.Context(), &UnifiedEntryRequest{SpaceID: "space", CharacterID: "role", ConversationID: "conversation", Channel: "web", Source: "web", PeerID: "peer", SessionID: "session", RequestID: id, Message: "hello"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if executor.request == nil || result.Response == nil || result.Response.RequestID == "" {
+				t.Fatalf("identity lost: %+v", result)
+			}
+			if id != "" && result.Response.RequestID != id {
+				t.Fatal("client id replaced")
+			}
+			if executor.request.SpaceID != "space" || executor.request.PeerID != "peer" || executor.request.SessionID != "session" {
+				t.Fatalf("envelope lost: %+v", executor.request)
+			}
+		})
 	}
 }
-
-func TestUnifiedEntryGeneratesRequestIDWhenMissing(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
-	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
-	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
-
-	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
-		Channel:        "web",
-		Source:         "web",
-		SpaceID:        "user-1",
-		CharacterID:    "char-1",
-		ConversationID: "conv-1",
-		Message:        "hello",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if processor.req == nil || processor.req.RequestID == "" {
-		t.Fatalf("entry did not generate request id: %#v", processor.req)
-	}
-	if result.Response == nil || result.Response.RequestID != processor.req.RequestID {
-		t.Fatalf("generated request id was not returned: response=%#v req=%#v", result.Response, processor.req)
-	}
-	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("interaction record was not persisted")
-	}
-	if record.Scope.RequestID != processor.req.RequestID {
-		t.Fatalf("generated request id was not reused in scope: record=%#v req=%#v", record.Scope, processor.req)
+func TestUnifiedEntryHasNoLegacyProcessorFallback(t *testing.T) {
+	entry := NewUnifiedEntry(NewRuntimeContextService(NewInMemoryTracker(), 16), NewScopeResolver(nil), temporal.SystemClock{})
+	if _, err := entry.Handle(t.Context(), &UnifiedEntryRequest{Channel: "web", Message: "hello"}); err != ErrOrchestratorNotReady {
+		t.Fatalf("unexpected fallback: %v", err)
 	}
 }
-
-func TestUnifiedEntryUsesResolvedScopeForProcessRequest(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	tracker := NewInMemoryTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
-	orch.SetReady(true)
-	entry := NewUnifiedEntry(orch, NewScopeResolver(fakeScopeBindingLookup{bindings: []ScopeBinding{
-		{
-			ID:             "bind-1",
-			SpaceID:        "bound-user",
-			CharacterID:    "bound-char",
-			ConversationID: "bound-conv",
-			Channel:        "wechat",
-			PeerID:         "peer-1",
-			Source:         "binding",
-			State:          ScopeBindingStateActive,
-		},
-	}}), temporal.SystemClock{})
-	entry.SetEntryExecutor(&orchestratorEntryExecutor{entry: entry, orchestrator: orch})
-
-	result, err := entry.Handle(context.Background(), &UnifiedEntryRequest{
-		Channel:   "wechat",
-		Source:    "wechat",
-		PeerID:    "peer-1",
-		SessionID: "session-1",
-		RequestID: "request-1",
-		Message:   "hello",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if processor.req == nil {
-		t.Fatal("processor was not called")
-	}
-	if processor.req.SpaceID != "bound-user" || processor.req.CharacterID != "bound-char" || processor.req.ConversationID != "bound-conv" {
-		t.Fatalf("processor did not receive resolved target scope: %#v", processor.req)
-	}
-	if processor.req.Channel != "wechat" || processor.req.PeerID != "peer-1" || processor.req.Source != "wechat" {
-		t.Fatalf("processor did not receive resolved channel scope: %#v", processor.req)
-	}
-	if processor.req.SessionID != "session-1" || processor.req.RequestID != "request-1" {
-		t.Fatalf("processor envelope was not preserved: %#v", processor.req)
-	}
-	record, ok, err := tracker.Get(context.Background(), result.InteractionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("interaction record was not persisted")
-	}
-	if record.Scope.SpaceID != "bound-user" || record.Scope.CharacterID != "bound-char" || record.Scope.ConversationID != "bound-conv" {
-		t.Fatalf("persisted scope did not use resolved target scope: %#v", record.Scope)
-	}
-	if record.Scope.Channel != "wechat" || record.Scope.PeerID != "peer-1" || record.Scope.Source != "wechat" {
-		t.Fatalf("persisted scope did not use resolved channel scope: %#v", record.Scope)
-	}
-	if record.Scope.SessionID != "session-1" || record.Scope.RequestID != "request-1" {
-		t.Fatalf("persisted envelope was not preserved: %#v", record.Scope)
-	}
-}
-
 func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
+	orch := NewRuntimeContextService(NewInMemoryTracker(), 16)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
-	executor := &orchestratorEntryExecutor{entry: entry, orchestrator: orch}
+	executor := &canonicalTestExecutor{entry: entry}
 	entry.SetEntryExecutor(executor)
 	entry.SetBackpressureConfig(BackpressureConfig{
 		MaxQueueDepth: -1,
@@ -229,78 +105,6 @@ func TestUnifiedEntryBackpressureConfigNormalizesExtremeValues(t *testing.T) {
 	}
 }
 
-type orchestratorEntryExecutor struct {
-	entry        *UnifiedEntry
-	orchestrator *Orchestrator
-	requests     []*UnifiedEntryRequest
-	scope        InteractionScope
-	entered      chan struct{}
-	release      chan struct{}
-}
-
-func (e *orchestratorEntryExecutor) ExecuteEntry(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
-	resolution, err := e.entry.ResolveScope(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	e.requests = append(e.requests, req)
-	scope := resolution.Scope
-	return e.orchestrator.Process(ctx, &ProcessRequest{
-		CharacterID:              scope.CharacterID,
-		ConversationID:           scope.ConversationID,
-		ThreadID:                 scope.ThreadID,
-		SpaceID:                  scope.SpaceID,
-		Channel:                  scope.Channel,
-		PeerID:                   scope.PeerID,
-		Source:                   resolution.Source,
-		DeviceTimezone:           req.DeviceTimezone,
-		Message:                  req.Message,
-		SessionID:                req.SessionID,
-		RequestID:                req.RequestID,
-		ReservedInteractionID:    req.ReservedInteractionID,
-		RecoverExistingTurn:      req.RecoverExistingTurn,
-		TurnID:                   req.TurnID,
-		ExecutionID:              req.ExecutionID,
-		AudioUrl:                 req.AudioUrl,
-		AudioDuration:            req.AudioDuration,
-		VoiceMessage:             req.VoiceMessage,
-		ExpressionPlan:           req.ExpressionPlan,
-		ImageUrl:                 req.ImageUrl,
-		VideoUrl:                 req.VideoUrl,
-		ImageContext:             req.ImageContext,
-		ReplyToMessageID:         req.ReplyToMessageID,
-		ModelConfigID:            req.ModelConfigID,
-		ReasoningEffort:          req.ReasoningEffort,
-		MessageStyle:             req.MessageStyle,
-		ReasoningEnabled:         req.ReasoningEnabled,
-		PermissionMode:           req.PermissionMode,
-		IsInternal:               req.IsInternal,
-		SuppressReplyPersistence: req.SuppressReplyPersistence,
-		ForceRegenerate:          req.ForceRegenerate,
-		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
-		ProactiveTimeContext:     req.ProactiveTimeContext,
-		ProactiveRecentContext:   req.ProactiveRecentContext,
-		ProactiveRelationship:    req.ProactiveRelationship,
-		ProactiveEmotion:         req.ProactiveEmotion,
-		ProactiveMemory:          req.ProactiveMemory,
-	})
-}
-
-func (e *orchestratorEntryExecutor) CancelEntryScope(scope InteractionScope) int {
-	e.scope = scope
-	if e.entered != nil {
-		close(e.entered)
-	}
-	if e.release != nil {
-		<-e.release
-	}
-	return 1
-}
-
-func (e *orchestratorEntryExecutor) EntryInteractionActive(string) bool { return false }
-
-func (e *orchestratorEntryExecutor) EntryReady() bool { return true }
-
 func TestUnifiedEntryBackpressureRecoveryTimeoutCapsCooldown(t *testing.T) {
 	state := &BackpressureState{QueueDepth: 10}
 	cfg := BackpressureConfig{
@@ -323,8 +127,7 @@ func TestUnifiedEntryBackpressureRecoveryTimeoutCapsCooldown(t *testing.T) {
 }
 
 func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, NewInMemoryTracker(), nil)
+	orch := NewRuntimeContextService(NewInMemoryTracker(), 16)
 	orch.SetReady(true)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
 
@@ -361,15 +164,13 @@ func TestUnifiedEntryBackpressureConcurrentConfigAndHandle(t *testing.T) {
 }
 
 func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	tracker := newBlockingListTracker()
-	orch := NewOrchestratorWithStores(DefaultOrchestratorConfig(), processor, tracker, nil)
+	tracker := NewInMemoryTracker()
+	orch := NewRuntimeContextService(tracker, 16)
 	entry := NewUnifiedEntry(orch, NewScopeResolver(nil), temporal.SystemClock{})
-	executor := &orchestratorEntryExecutor{
-		entry:        entry,
-		orchestrator: orch,
-		entered:      make(chan struct{}),
-		release:      make(chan struct{}),
+	executor := &canonicalTestExecutor{
+		entry:   entry,
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
 	}
 	entry.SetEntryExecutor(executor)
 
@@ -411,27 +212,6 @@ func TestUnifiedEntryCancelByPeerDoesNotHoldBackpressureLock(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("cancel did not finish")
-	}
-}
-
-func TestOrchestratorNormalizesZeroValueConfig(t *testing.T) {
-	processor := &captureRequestProcessor{}
-	orch := NewOrchestratorWithStores(OrchestratorConfig{}, processor, NewInMemoryTracker(), nil)
-	orch.SetReady(true)
-
-	result, err := orch.Process(context.Background(), &ProcessRequest{
-		CharacterID:    "char-1",
-		ConversationID: "conv-1",
-		Channel:        "web",
-		Source:         "web",
-		Message:        "hello",
-		RequestID:      "req-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Outcome != OutcomeCompleted {
-		t.Fatalf("unexpected outcome: %s", result.Outcome)
 	}
 }
 

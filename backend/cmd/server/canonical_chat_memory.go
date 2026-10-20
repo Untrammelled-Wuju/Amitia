@@ -13,7 +13,6 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/system/dataportability"
-	"strings"
 	"time"
 )
 
@@ -87,29 +86,6 @@ func (r *canonicalChatMemoryRuntime) Recall(ctx context.Context, spaceID, role, 
 		rows = append(rows, business.HybridSearchResult{Memory: record, Score: result.Scores[resource.ID], SourceType: sourceType})
 	}
 	return rows, nil
-}
-
-func (r *canonicalChatMemoryRuntime) Observe(ctx context.Context, payload chat.PostProcessPayload) error {
-	ctx, finish, err := r.inferenceContext(ctx)
-	if err != nil {
-		return err
-	}
-	defer finish()
-	request, err := r.request(payload.SpaceID, payload.CharacterID)
-	if err != nil {
-		return err
-	}
-	for index := len(payload.PipelineMessages) - 1; index >= 0; index-- {
-		if payload.PipelineMessages[index]["role"] == "user" {
-			request.Message = strings.TrimSpace(payload.PipelineMessages[index]["content"])
-			break
-		}
-	}
-	request.RequestID, request.ConversationID = payload.RequestID+"|observed-memory", payload.ConversationID
-	request.ExpectedScope = payload.ExecutionScope
-	request.RecallEvidence = payload.RecallEvidence
-	_, err = r.engine.ObserveMemory(ctx, request, business.Generation{Text: payload.Reply})
-	return err
 }
 
 type ownedMemoryConsumers struct {

@@ -59,11 +59,8 @@ type Service interface {
 	RecalculateMessageCounts() (int64, error)
 	BackfillMissingConversations() (int64, error)
 	GetCompressionStatus(convID string) map[string]interface{}
-	GetPipelineStatus() interface{}
 	ListProviders() []ProviderInfo
-	SetOutboxStore(store OutboxStore)
 	SetDeliveryStore(store DeliveryStore)
-	ReplayPostProcess(eventType string, payload []byte) error
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
 	GenerateVoiceStream(ctx context.Context, spaceID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error
 	SummarizeRealtimeVoiceRollingContext(ctx context.Context, existingSummary, rawTurns string) (string, error)
@@ -125,10 +122,8 @@ type service struct {
 	stateProvider       *ConversationStateProvider
 	compressor          *Compressor
 	llmWithTools        llmWithToolsFunc
-	outboxStore         OutboxStore
 	deliveryStore       DeliveryStore
 	ownedToolRuntime    OwnedToolRuntime
-	canonicalMemory     CanonicalMemoryRuntime
 	memoryConsumers     business.MemoryConsumerPort
 	inferenceAuthority  InferenceAuthority
 	hookInvoker         HookInvoker
@@ -165,15 +160,6 @@ type DeliveryStore interface {
 	CreateOutputLease(interactionID, characterID, spaceID, channel string) error
 	AcquireOutputLease(interactionID, characterID, spaceID, channel string) (leaseID string, ownerToken string, err error)
 	ReleaseOutputLease(leaseID, ownerToken string) error
-}
-
-type OutboxStore interface {
-	AppendOutbox(aggregateID, eventType string, payload []byte) error
-	AppendOutboxWithKey(aggregateID, eventType, idempotencyKey string, payload []byte) error
-}
-
-func (s *service) SetOutboxStore(store OutboxStore) {
-	s.outboxStore = store
 }
 
 func (s *service) SetDeliveryStore(store DeliveryStore) {

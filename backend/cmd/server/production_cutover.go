@@ -97,7 +97,7 @@ func (g *appMaintenanceGate) BeginQuiesce(ctx context.Context) error {
 		return fmt.Errorf("maintenance gate: unified entry not available")
 	}
 	g.quiesced.Store(true)
-	g.services.UnifiedEntry.SetOrchestratorReady(false)
+	g.services.UnifiedEntry.SetReady(false)
 	return nil
 }
 
@@ -105,7 +105,7 @@ func (g *appMaintenanceGate) EndQuiesce(ctx context.Context) error {
 	if g.services == nil || g.services.UnifiedEntry == nil {
 		return nil
 	}
-	g.services.UnifiedEntry.SetOrchestratorReady(true)
+	g.services.UnifiedEntry.SetReady(true)
 	g.quiesced.Store(false)
 	return nil
 }

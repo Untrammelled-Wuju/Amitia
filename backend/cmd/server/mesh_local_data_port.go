@@ -60,19 +60,40 @@ func (p *meshLocalDataPort) Roles(ctx context.Context, scope coordination.Execut
 }
 
 func (p *meshLocalDataPort) rolesLocked(ctx context.Context, scope coordination.ExecutionScope) ([]coordination.Role, error) {
+	return p.roleCatalogLocked(ctx, scope, false)
+}
+
+func (p *meshLocalDataPort) ListOwnedRoleCatalog(ctx context.Context, scope coordination.ExecutionScope, includeDisabled bool) ([]coordination.Role, error) {
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return nil, err
+	}
+	var result []coordination.Role
+	err := p.WithSourceRole(ctx, scope, func() error {
+		var err error
+		result, err = p.roleCatalogLocked(ctx, scope, includeDisabled)
+		return err
+	})
+	return result, err
+}
+
+func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordination.ExecutionScope, includeDisabled bool) ([]coordination.Role, error) {
 	if scope.RoleOwnerID != p.ownerID || scope.ResourceOwnerID != p.ownerID {
 		return nil, coordination.ErrWrongOwner
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	characters, err := p.roles.List(false)
+	characters, err := p.roles.List(includeDisabled)
 	if err != nil {
 		return nil, err
 	}
 	roles := make([]coordination.Role, 0, len(characters))
 	for _, row := range characters {
 		if row.SpaceID != "" && row.SpaceID != "default" && row.SpaceID != p.legacySpaceID {
+			continue
+		}
+		if row.Status != "enabled" {
+			roles = append(roles, coordination.Role{ID: row.ID, Name: row.Name, Avatar: row.Avatar, Description: row.Description, Disabled: true, Revision: row.Revision})
 			continue
 		}
 		runtime, err := p.roles.GetRuntimeProfile(row.ID)
@@ -86,7 +107,7 @@ func (p *meshLocalDataPort) rolesLocked(ctx context.Context, scope coordination.
 		if err != nil {
 			return nil, err
 		}
-		roles = append(roles, coordination.Role{ID: row.ID, Name: row.Name, Revision: row.Revision, Profile: body})
+		roles = append(roles, coordination.Role{ID: row.ID, Name: row.Name, Avatar: row.Avatar, Description: row.Description, Disabled: row.Status != "enabled", Revision: row.Revision, Profile: body})
 	}
 	return roles, nil
 }

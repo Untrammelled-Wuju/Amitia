@@ -157,6 +157,29 @@ func (rt *Runtime) Roles(ctx context.Context, scope coordination.ExecutionScope)
 	return roles, nil
 }
 
+func (rt *Runtime) ListOwnedRoleCatalog(ctx context.Context, scope coordination.ExecutionScope, includeDisabled bool) ([]coordination.Role, error) {
+	if err := rt.validateDataRoute(ctx, scope); err != nil {
+		return nil, err
+	}
+	var local coordination.DataPort
+	if scope.Coordinated {
+		local = rt.CoreDataPort
+	} else if scope.TargetDeviceID == rt.LocalDeviceID {
+		local = rt.LocalDeviceDataPort
+	} else {
+		var result []coordination.Role
+		if err := rt.callOwnedData(ctx, scope, "role-catalog", coordination.DataQuery{IncludeDisabled: includeDisabled}, &result); err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+	port, ok := local.(coordination.RoleCatalogPort)
+	if !ok {
+		return nil, errors.New("Owner 角色目录未接通")
+	}
+	return port.ListOwnedRoleCatalog(ctx, scope, includeDisabled)
+}
+
 func (rt *Runtime) Snapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (coordination.DataSnapshot, error) {
 	if err := rt.validateDataRoute(ctx, scope); err != nil {
 		return coordination.DataSnapshot{}, err

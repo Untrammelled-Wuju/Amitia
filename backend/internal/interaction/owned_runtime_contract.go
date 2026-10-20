@@ -3,7 +3,6 @@ package interaction
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -107,10 +106,6 @@ type MessagePlanItem struct {
 	FallbackAssetReference string `json:"fallbackAssetReference,omitempty"`
 }
 
-type MessageProcessor interface {
-	ProcessMessageCtx(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error)
-}
-
 type Outcome string
 
 const (
@@ -130,120 +125,45 @@ type OrchestrationResult struct {
 	Events        []outbox.OutboxRecord `json:"events,omitempty"`
 }
 
-type OrchestratorConfig struct {
-	MaxConcurrent   int
-	SupersedePolicy SupersedePolicy
-	DefaultTimeout  time.Duration
+type RuntimeContextService struct {
+	tracker  InteractionTracker
+	pipeline *RuntimePipeline
+	mu       sync.Mutex
+	ready    bool
+	slots    chan struct{}
 }
 
-func DefaultOrchestratorConfig() OrchestratorConfig {
-	return OrchestratorConfig{
-		MaxConcurrent:   16,
-		SupersedePolicy: SupersedePolicyLatest,
-		DefaultTimeout:  0,
+func NewRuntimeContextService(tracker InteractionTracker, parallelTurns int) *RuntimeContextService {
+	if tracker == nil {
+		tracker = NewInMemoryTracker()
 	}
-}
-
-type Orchestrator struct {
-	cfg                        OrchestratorConfig
-	processor                  MessageProcessor
-	tracker                    InteractionTracker
-	outbox                     *outbox.SQLiteOutboxStore
-	resolver                   *SupersedeResolver
-	pipeline                   *RuntimePipeline
-	cancels                    *CancellationRegistry
-	deadlineFn                 func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)
-	relationshipTime           RelationshipTimeCoordinator
-	mu                         sync.Mutex
-	queueMu                    sync.Mutex
-	relationshipTimeMu         sync.Mutex
-	queueLocks                 map[string]*sync.Mutex
-	preparedRelationshipClaims map[string]struct{}
-	executionSlots             chan struct{}
-	active                     int
-	ready                      bool
-}
-
-func NewOrchestrator(cfg OrchestratorConfig, processor MessageProcessor, outboxStore *outbox.SQLiteOutboxStore) *Orchestrator {
-	tracker := NewInMemoryTracker()
-	return newOrchestratorWithStores(cfg, processor, tracker, outboxStore)
-}
-
-func NewOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outboxStore *outbox.SQLiteOutboxStore) *Orchestrator {
-	return newOrchestratorWithStores(cfg, processor, tracker, outboxStore)
-}
-
-func newOrchestratorWithStores(cfg OrchestratorConfig, processor MessageProcessor, tracker InteractionTracker, outboxStore *outbox.SQLiteOutboxStore) *Orchestrator {
-	cfg = normalizeOrchestratorConfig(cfg)
-	return &Orchestrator{
-		cfg:                        cfg,
-		processor:                  processor,
-		tracker:                    tracker,
-		outbox:                     outboxStore,
-		resolver:                   NewSupersedeResolver(cfg.SupersedePolicy, tracker),
-		pipeline:                   NewRuntimePipeline(nil, nil, nil),
-		cancels:                    NewCancellationRegistry(),
-		queueLocks:                 map[string]*sync.Mutex{},
-		preparedRelationshipClaims: map[string]struct{}{},
-		executionSlots:             make(chan struct{}, cfg.MaxConcurrent),
-		ready:                      false,
+	if parallelTurns <= 0 {
+		parallelTurns = 16
 	}
+	return &RuntimeContextService{slots: make(chan struct{}, parallelTurns), tracker: tracker, pipeline: NewRuntimePipeline(nil, nil, nil)}
 }
-
-func normalizeOrchestratorConfig(cfg OrchestratorConfig) OrchestratorConfig {
-	defaults := DefaultOrchestratorConfig()
-	if cfg.MaxConcurrent <= 0 {
-		cfg.MaxConcurrent = defaults.MaxConcurrent
-	}
-	if cfg.DefaultTimeout < 0 {
-		cfg.DefaultTimeout = defaults.DefaultTimeout
-	}
-	if cfg.SupersedePolicy == "" {
-		cfg.SupersedePolicy = defaults.SupersedePolicy
-	}
-	return cfg
-}
-
-func (e *UnifiedEntry) SetOrchestratorReady(ready bool) {
+func (e *UnifiedEntry) SetReady(ready bool) {
 	if ready {
-		e.orchestrator.SetReady(true)
+		e.runtimeContext.SetReady(true)
 	} else {
-		e.orchestrator.SetReady(false)
+		e.runtimeContext.SetReady(false)
 	}
 }
 
-func (o *Orchestrator) SetReady(ready bool) {
+func (o *RuntimeContextService) SetReady(ready bool) {
 	o.mu.Lock()
 	o.ready = ready
 	o.mu.Unlock()
 }
 
-func (o *Orchestrator) IsReady() bool {
+func (o *RuntimeContextService) IsReady() bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.ready
 }
 
-func (o *Orchestrator) GetTracker() InteractionTracker {
+func (o *RuntimeContextService) GetTracker() InteractionTracker {
 	return o.tracker
-}
-
-func (o *Orchestrator) GetOutbox() *outbox.SQLiteOutboxStore {
-	return o.outbox
-}
-
-func (o *Orchestrator) buildScope(req *ProcessRequest) InteractionScope {
-	return InteractionScope{
-		SpaceID:        req.SpaceID,
-		CharacterID:    req.CharacterID,
-		ConversationID: req.ConversationID,
-		ThreadID:       req.ThreadID,
-		Channel:        req.Channel,
-		PeerID:         req.PeerID,
-		SessionID:      req.SessionID,
-		Source:         req.Source,
-		RequestID:      req.RequestID,
-	}.Normalize()
 }
 
 func metadataFromRuntime(runtime RuntimeAssembly, ctx context.Context) InteractionMetadataUpdate {
@@ -262,32 +182,6 @@ func metadataFromRuntime(runtime RuntimeAssembly, ctx context.Context) Interacti
 	return update
 }
 
-func executorIDForProcessor(processor MessageProcessor) string {
-	if processor == nil {
-		return ""
-	}
-	t := reflect.TypeOf(processor)
-	for t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	if t.PkgPath() == "" || t.Name() == "" {
-		return t.String()
-	}
-	return t.PkgPath() + "." + t.Name()
-}
-
-func metadataFromResponse(resp *ProcessResponse) InteractionMetadataUpdate {
-	commitID := ""
-	if resp != nil {
-		if len(resp.MessageIDs) > 0 {
-			commitID = strings.Join(resp.MessageIDs, ",")
-		} else {
-			commitID = resp.RequestID
-		}
-	}
-	return InteractionMetadataUpdate{CommitID: &commitID}
-}
-
 func priorityForPath(path PathType) int {
 	switch path {
 	case PathTypeDeep:
@@ -299,11 +193,7 @@ func priorityForPath(path PathType) int {
 	}
 }
 
-func (o *Orchestrator) SetDeadlineProvider(fn func(ctx context.Context, requestID string) (context.Context, context.CancelFunc)) {
-	o.deadlineFn = fn
-}
-
-func (o *Orchestrator) SetRuntimePipeline(pipeline *RuntimePipeline) {
+func (o *RuntimeContextService) SetRuntimePipeline(pipeline *RuntimePipeline) {
 	if pipeline == nil {
 		pipeline = NewRuntimePipeline(nil, nil, nil)
 	}

@@ -147,15 +147,15 @@ type UnifiedEntryRequest struct {
 }
 
 type UnifiedEntry struct {
-	canonical    EntryExecutor
-	orchestrator *Orchestrator
-	resolver     ScopeResolver
-	execService  *coreexec.ExecutionService
-	continuity   *continuity.Resolver
-	bpCfg        BackpressureConfig
-	bpState      *BackpressureState
-	mu           sync.Mutex
-	clock        temporal.Clock
+	canonical      EntryExecutor
+	runtimeContext *RuntimeContextService
+	resolver       ScopeResolver
+	execService    *coreexec.ExecutionService
+	continuity     *continuity.Resolver
+	bpCfg          BackpressureConfig
+	bpState        *BackpressureState
+	mu             sync.Mutex
+	clock          temporal.Clock
 }
 
 type EntryExecutor interface {
@@ -171,13 +171,13 @@ func (e *UnifiedEntry) SetEntryExecutor(executor EntryExecutor) {
 	e.canonical = executor
 }
 
-func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver, clock temporal.Clock) *UnifiedEntry {
+func NewUnifiedEntry(runtimeContext *RuntimeContextService, resolver ScopeResolver, clock temporal.Clock) *UnifiedEntry {
 	return &UnifiedEntry{
-		orchestrator: orchestrator,
-		resolver:     resolver,
-		bpCfg:        DefaultBackpressureConfig(),
-		bpState:      &BackpressureState{Status: BackpressureNormal},
-		clock:        clock,
+		runtimeContext: runtimeContext,
+		resolver:       resolver,
+		bpCfg:          DefaultBackpressureConfig(),
+		bpState:        &BackpressureState{Status: BackpressureNormal},
+		clock:          clock,
 	}
 }
 
@@ -259,7 +259,7 @@ func (e *UnifiedEntry) GetBackpressureStatus() BackpressureStatus {
 	return e.bpState.Status
 }
 
-func (e *UnifiedEntry) IsOrchestratorReady() bool {
+func (e *UnifiedEntry) IsReady() bool {
 	if e == nil {
 		return false
 	}

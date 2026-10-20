@@ -267,7 +267,7 @@ func (c *taskRuntimeComponent) Start(ctx context.Context) error {
 		go func() {
 			defer close(watchDone)
 			runMultiAgentReconciliation(watchCtx, 4*time.Second, func(reconcileCtx context.Context) error {
-				if svc.UnifiedEntry == nil || !svc.UnifiedEntry.IsOrchestratorReady() {
+				if svc.UnifiedEntry == nil || !svc.UnifiedEntry.IsReady() {
 					return nil
 				}
 				return reconcileIndependentRecovery(reconcileCtx,

@@ -62,7 +62,7 @@ func (p *goldenOwnedData) Commit(ctx context.Context, commit coordination.Commit
 }
 
 type goldenOwnedRuntime struct {
-	orchestrator *interaction.Orchestrator
+	orchestrator *interaction.RuntimeContextService
 	tracker      *interaction.InMemoryTracker
 }
 
@@ -81,7 +81,7 @@ func (r *goldenOwnedRuntime) BeginOwnedTurn(ctx context.Context, inference busin
 	if err := r.tracker.Create(current, record); err != nil {
 		return ctx, nil, err
 	}
-	current, _, finish, err := r.orchestrator.PrepareOwnedRuntime(current, record, &interaction.ProcessRequest{Message: inference.Message, Channel: "web", Source: "manual"})
+	current, _, finish, err := r.orchestrator.PrepareOwnedRuntime(current, record, &interaction.ProcessRequest{SpaceID: inference.Scope.SpaceID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, Message: inference.Message, Channel: "web", Source: "manual"})
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -114,7 +114,7 @@ func newGoldenOwnedFixture(t *testing.T, personalityConfig string, emotionEnable
 		return "你今天看起来心情不错呢\n有什么开心的事吗", "", nil, 21, nil
 	}
 	tracker := interaction.NewInMemoryTracker()
-	orchestrator := interaction.NewOrchestratorWithStores(interaction.DefaultOrchestratorConfig(), nil, tracker, nil)
+	orchestrator := interaction.NewRuntimeContextService(tracker, 16)
 	pipeline := interaction.NewRuntimePipeline(nil, nil, nil)
 	pipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 	pipeline.SetAppraisalEngine(appraisal.NewEngine(appraisal.DefaultAppraisalConfig()))

@@ -154,7 +154,7 @@ func (s *service) RunBrowserAgent(ctx context.Context, execCtx tool.ToolExecutio
 			result.FinalState = "observation_failed"
 			return result, err
 		}
-		action, err := s.planBrowserAction(cfg, req, observation, result.Steps)
+		action, err := s.planBrowserAction(ctx, cfg, req, observation, result.Steps)
 		if err != nil {
 			result.Steps = append(result.Steps, browseragent.Step{Index: index, Action: "planner", Status: "failed", Observation: summary, Error: err.Error()})
 			result.StepCount = len(result.Steps)
@@ -325,7 +325,7 @@ func (s *service) browserAgentObservation(ctx context.Context, scope extensionke
 	return bounded, summary, nil
 }
 
-func (s *service) planBrowserAction(cfg map[string]string, req browseragent.Request, observation json.RawMessage, history []browseragent.Step) (plannedBrowserAction, error) {
+func (s *service) planBrowserAction(ctx context.Context, cfg map[string]string, req browseragent.Request, observation json.RawMessage, history []browseragent.Step) (plannedBrowserAction, error) {
 	historyJSON, _ := json.Marshal(browserHistoryForPlanner(history, 6))
 	allowedHosts, _ := json.Marshal(req.AllowedHosts)
 	system := `You are a bounded browser sub-agent planner. Return exactly one JSON object and nothing else.
@@ -335,7 +335,7 @@ Use stableId values from the current DOM snapshot for every element interaction.
 One action per turn. Never claim completion unless the current observation shows the goal is achieved.
 JSON shape: {"action":"...","reason":"short","url":"https://...","target":{"stableId":"...","selector":"...","runtimeGeneration":0,"documentGeneration":0,"frameId":"..."},"text":"...","value":"...","direction":"up|down|left|right","waitMs":500,"result":"..."}.`
 	user := fmt.Sprintf("Goal:\n%s\n\nAllowed navigation hosts (empty means normal browser policy only):\n%s\n\nRecent action history:\n%s\n\nCurrent DOM observation:\n%s", req.Goal, allowedHosts, historyJSON, observation)
-	content, _, err := s.callLLM(cfg, []map[string]interface{}{{"role": "system", "content": system}, {"role": "user", "content": user}})
+	content, _, err := s.callLLM(ctx, cfg, []map[string]interface{}{{"role": "system", "content": system}, {"role": "user", "content": user}})
 	if err != nil {
 		return plannedBrowserAction{}, err
 	}

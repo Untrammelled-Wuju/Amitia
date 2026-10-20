@@ -10,11 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/auth"
-	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/system"
 )
 
@@ -25,85 +24,123 @@ const (
 )
 
 type kernelCharacterReader struct {
-	repo character.Repository
+	engine  *business.Engine
+	catalog coordination.RoleCatalogPort
+	coreID  string
 }
 
-func newKernelCharacterReader(repo character.Repository) *kernelCharacterReader {
-	return &kernelCharacterReader{repo: repo}
-}
-
-func (r *kernelCharacterReader) ReadCharacter(ctx context.Context, characterID string) (json.RawMessage, bool, error) {
-	scopeCtx := kernel.GetHostAPIScope(ctx)
-	if scopeCtx.CharacterID != "" && characterID != "" && scopeCtx.CharacterID != characterID {
-		return nil, false, nil
-	}
-	if characterID == "" {
-		characterID = scopeCtx.CharacterID
-	}
-	var c *character.Character
-	var err error
-	if characterID != "" {
-		c, err = r.repo.FindByID(characterID)
-	} else {
-		c, err = r.repo.GetActive()
-	}
-	if err != nil || c == nil {
-		return nil, false, nil
-	}
-	if scopeCtx.SpaceID == "" || (strings.TrimSpace(c.SpaceID) != "" && strings.TrimSpace(c.SpaceID) != strings.TrimSpace(scopeCtx.SpaceID)) {
-		return nil, false, nil
-	}
-	summary := c.Description
-	if utf8.RuneCountInString(summary) > maxCharacterSummaryLength {
-		summary = truncateRunes(summary, maxCharacterSummaryLength)
-	}
-	data, _ := json.Marshal(map[string]any{
-		"id":          c.ID,
-		"displayName": c.Name,
-		"avatarRef":   c.Avatar,
-		"summary":     summary,
-	})
-	return data, true, nil
-}
-
-func (r *kernelCharacterReader) ListCharacters(_ context.Context, spaceID string, includeDisabled bool) ([]json.RawMessage, error) {
-	characters, err := r.repo.List(includeDisabled)
+func newKernelCharacterReader() *kernelCharacterReader { return &kernelCharacterReader{} }
+func (r *kernelCharacterReader) roleCatalog(ctx context.Context, includeDisabled bool) ([]coordination.Role, error) {
+	host := kernel.GetHostAPIScope(ctx)
+	request, err := ownedHostChatRequest(ctx, r.engine, r.coreID, host.ConversationID, host.CharacterID, uuid.NewString())
 	if err != nil {
 		return nil, err
 	}
-	spaceID = strings.TrimSpace(spaceID)
-	items := make([]json.RawMessage, 0, len(characters))
-	for _, character := range characters {
-		owner := strings.TrimSpace(character.SpaceID)
-		if spaceID != "" && owner != "" && owner != spaceID && owner != "default" {
-			continue
+	if r.catalog == nil {
+		return nil, fmt.Errorf("Owner role catalog is not configured")
+	}
+	var result []coordination.Role
+	err = r.engine.WithExecutionScope(ctx, *request.ExpectedScope, func(current context.Context) error {
+		var err error
+		result, err = r.catalog.ListOwnedRoleCatalog(current, *request.ExpectedScope, includeDisabled)
+		return err
+	})
+	return result, err
+}
+func (r *kernelCharacterReader) ReadCharacter(ctx context.Context, characterID string) (json.RawMessage, bool, error) {
+	host := kernel.GetHostAPIScope(ctx)
+	if characterID == "" {
+		characterID = host.CharacterID
+	}
+	if characterID == "" || characterID != host.CharacterID {
+		return nil, false, nil
+	}
+	roles, err := r.roleCatalog(ctx, false)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, role := range roles {
+		if role.ID == characterID {
+			summary := role.Description
+			if utf8.RuneCountInString(summary) > maxCharacterSummaryLength {
+				summary = truncateRunes(summary, maxCharacterSummaryLength)
+			}
+			raw, err := json.Marshal(map[string]any{"id": role.ID, "displayName": role.Name, "avatarRef": role.Avatar, "summary": summary})
+			return raw, err == nil, err
 		}
-		data, _ := json.Marshal(map[string]any{
-			"id":          character.ID,
-			"displayName": character.Name,
-			"avatarRef":   character.Avatar,
-			"enabled":     character.Status == "enabled",
-		})
-		items = append(items, data)
+	}
+	return nil, false, nil
+}
+func (r *kernelCharacterReader) ListCharacters(ctx context.Context, spaceID string, includeDisabled bool) ([]json.RawMessage, error) {
+	host := kernel.GetHostAPIScope(ctx)
+	if spaceID != "" && spaceID != host.SpaceID {
+		return nil, coordination.ErrWrongOwner
+	}
+	roles, err := r.roleCatalog(ctx, includeDisabled)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]json.RawMessage, 0, len(roles))
+	for _, role := range roles {
+		raw, err := json.Marshal(map[string]any{"id": role.ID, "displayName": role.Name, "avatarRef": role.Avatar, "enabled": !role.Disabled})
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, raw)
 	}
 	return items, nil
 }
 
 type kernelConversationReader struct {
-	chatSvc chat.Service
+	engine *business.Engine
+	coreID string
 }
 
-func newKernelConversationReader(chatSvc chat.Service) *kernelConversationReader {
-	return &kernelConversationReader{chatSvc: chatSvc}
-}
-
-func (r *kernelConversationReader) ReadConversation(ctx context.Context, conversationID string, limit int, offset int) ([]json.RawMessage, bool, error) {
-	scopeCtx := kernel.GetHostAPIScope(ctx)
-	if scopeCtx.ConversationID != "" && conversationID != "" && scopeCtx.ConversationID != conversationID {
-		return []json.RawMessage{}, false, nil
+func newKernelConversationReader() *kernelConversationReader { return &kernelConversationReader{} }
+func ownedHostChatRequest(ctx context.Context, engine *business.Engine, coreID, conversationID, roleID, requestID string) (business.Request, error) {
+	if engine == nil {
+		return business.Request{}, fmt.Errorf("Owner chat service is not configured")
 	}
+	host := kernel.GetHostAPIScope(ctx)
+	if host.SpaceID == "" || host.CharacterID == "" || roleID != "" && roleID != host.CharacterID || host.ConversationID != "" && host.ConversationID != conversationID {
+		return business.Request{}, coordination.ErrWrongOwner
+	}
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	request := business.Request{SpaceID: host.SpaceID, CoreID: coreID, RoleID: host.CharacterID, ConversationID: conversationID, RequestID: requestID}
+	if scope, ok := coordination.FromContext(ctx); ok {
+		if scope.SpaceID != host.SpaceID || scope.RoleID != host.CharacterID {
+			return business.Request{}, coordination.ErrWrongOwner
+		}
+		request.DeviceID, request.TargetDeviceID, request.CoreID = scope.InitiatorDeviceID, scope.TargetDeviceID, scope.CoreID
+		scope.RequestID = requestID
+		scope.TurnID, scope.ExecutionID = "", ""
+		request.ExpectedScope = &scope
+		return request, nil
+	}
+	actor, err := auth.RequireActor(ctx)
+	if err != nil {
+		return business.Request{}, err
+	}
+	if actor.SpaceID.String() != host.SpaceID || actor.DeviceID == "" {
+		return business.Request{}, coordination.ErrWrongOwner
+	}
+	request.DeviceID, request.TargetDeviceID = actor.DeviceID.String(), actor.DeviceID.String()
+	view, err := engine.Query(ctx, request, coordination.DataQuery{ConversationID: conversationID, Management: true, ResourceKind: "conversation", Limit: 1})
+	if err != nil {
+		return business.Request{}, err
+	}
+	scope := view.Scope
+	scope.RequestID = requestID
+	scope.TurnID, scope.ExecutionID = "", ""
+	request.ExpectedScope = &scope
+	return request, nil
+}
+func (r *kernelConversationReader) ReadConversation(ctx context.Context, conversationID string, limit, offset int) ([]json.RawMessage, bool, error) {
+	host := kernel.GetHostAPIScope(ctx)
 	if conversationID == "" {
-		conversationID = scopeCtx.ConversationID
+		conversationID = host.ConversationID
 	}
 	if conversationID == "" {
 		return []json.RawMessage{}, false, nil
@@ -111,40 +148,63 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	page := 1
-	if offset > 0 && limit > 0 {
-		page = offset/limit + 1
+	if offset < 0 || offset > 1000000 {
+		return nil, false, coordination.ErrPendingLimit
 	}
-	if strings.TrimSpace(scopeCtx.SpaceID) == "" {
-		return []json.RawMessage{}, false, nil
-	}
-	type scopedConversationReader interface {
-		GetMessagesForSpace(conversationID, spaceID string, page, pageSize int) ([]chat.Message, int64, error)
-	}
-	scopedChat, ok := r.chatSvc.(scopedConversationReader)
-	if !ok {
-		return nil, false, fmt.Errorf("chat service does not support authenticated ownership")
-	}
-	messages, total, err := scopedChat.GetMessagesForSpace(conversationID, scopeCtx.SpaceID, page, limit)
+	request, err := ownedHostChatRequest(ctx, r.engine, r.coreID, conversationID, host.CharacterID, uuid.NewString())
 	if err != nil {
 		return nil, false, err
 	}
-	results := make([]json.RawMessage, 0, len(messages))
-	for _, msg := range messages {
-		content := msg.Content
-		if utf8.RuneCountInString(content) > maxMessageContentLength {
-			content = truncateRunes(content, maxMessageContentLength)
+	page := offset/limit + 1
+	skip := offset % limit
+	items := []json.RawMessage{}
+	total := 0
+	for len(items) < limit {
+		result, err := r.engine.ManageChat(ctx, request, coordination.ChatManagementRequest{Operation: "search", ConversationOwnerID: request.ExpectedScope.ResourceOwnerID, ConversationID: conversationID, Page: page, PageSize: limit})
+		if err != nil {
+			return nil, false, err
 		}
-		entry, _ := json.Marshal(map[string]any{
-			"conversationId": msg.ConversationID,
-			"role":           msg.Role,
-			"timestamp":      msg.CreatedAt,
-			"contentSummary": content,
-		})
-		results = append(results, entry)
+		raw, err := json.Marshal(result)
+		if err != nil {
+			return nil, false, err
+		}
+		var batch struct {
+			Items []struct {
+				ConversationID string `json:"conversationId"`
+				Role           string `json:"role"`
+				CreatedAt      string `json:"createdAt"`
+				Content        string `json:"content"`
+			} `json:"items"`
+			Total int `json:"total"`
+		}
+		if err = json.Unmarshal(raw, &batch); err != nil {
+			return nil, false, err
+		}
+		total = batch.Total
+		for i, msg := range batch.Items {
+			if i < skip {
+				continue
+			}
+			content := msg.Content
+			if utf8.RuneCountInString(content) > maxMessageContentLength {
+				content = truncateRunes(content, maxMessageContentLength)
+			}
+			entry, err := json.Marshal(map[string]any{"conversationId": msg.ConversationID, "role": msg.Role, "timestamp": msg.CreatedAt, "contentSummary": content})
+			if err != nil {
+				return nil, false, err
+			}
+			items = append(items, entry)
+			if len(items) == limit {
+				break
+			}
+		}
+		if len(batch.Items) < limit || page*limit >= total {
+			break
+		}
+		page++
+		skip = 0
 	}
-	hasMore := int64(offset+limit) < total
-	return results, hasMore, nil
+	return items, offset+len(items) < total, nil
 }
 
 type kernelMemoryQueryService struct {
@@ -213,31 +273,34 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 			Metadata:      part.Metadata,
 		}
 	}
-	host := kernel.GetHostAPIScope(ctx)
-	if host.SpaceID == "" || host.CharacterID == "" || request.SpaceID != host.SpaceID || request.CharacterID != host.CharacterID || host.ConversationID != "" && host.ConversationID != request.ConversationID {
+	if request.SpaceID != kernel.GetHostAPIScope(ctx).SpaceID {
 		return kernel.ConversationMessageAppendResult{}, coordination.ErrWrongOwner
 	}
 	if request.RequestID == "" {
 		request.RequestID = uuid.NewString()
 	}
-	ownedRequest := business.Request{SpaceID: request.SpaceID, CoreID: a.coreID, RoleID: request.CharacterID, ConversationID: request.ConversationID, RequestID: request.RequestID}
-	if scope, ok := coordination.FromContext(ctx); ok {
-		if scope.SpaceID != request.SpaceID || scope.RoleID != request.CharacterID {
-			return kernel.ConversationMessageAppendResult{}, coordination.ErrWrongOwner
+	ownedRequest, err := ownedHostChatRequest(ctx, a.engine, a.coreID, request.ConversationID, request.CharacterID, request.RequestID)
+	if err != nil {
+		return kernel.ConversationMessageAppendResult{}, err
+	}
+	if strings.EqualFold(strings.TrimSpace(request.Role), "user") {
+		for i, part := range parts {
+			media := &interaction.UnifiedEntryRequest{}
+			switch strings.ToLower(strings.TrimSpace(part.Type)) {
+			case "image":
+				media.ImageUrl = part.URL
+			case "audio":
+				media.AudioUrl = part.URL
+			case "video":
+				media.VideoUrl = part.URL
+			default:
+				continue
+			}
+			parts[i].Attachments, err = ownedIngressAttachments(ctx, media)
+			if err != nil {
+				return kernel.ConversationMessageAppendResult{}, err
+			}
 		}
-		ownedRequest.DeviceID, ownedRequest.TargetDeviceID, ownedRequest.CoreID = scope.InitiatorDeviceID, scope.TargetDeviceID, scope.CoreID
-		scope.RequestID = request.RequestID
-		scope.TurnID, scope.ExecutionID = "", ""
-		ownedRequest.ExpectedScope = &scope
-	} else {
-		actor, err := auth.RequireActor(ctx)
-		if err != nil {
-			return kernel.ConversationMessageAppendResult{}, err
-		}
-		if actor.SpaceID.String() != request.SpaceID || actor.DeviceID == "" {
-			return kernel.ConversationMessageAppendResult{}, coordination.ErrWrongOwner
-		}
-		ownedRequest.DeviceID, ownedRequest.TargetDeviceID = actor.DeviceID.String(), actor.DeviceID.String()
 	}
 	result, err := a.engine.AppendOwnedMessages(ctx, ownedRequest, business.AppendOwnedMessagesRequest{ConversationID: request.ConversationID, Role: request.Role, Source: request.Source, Channel: request.Channel, ReplyToMessageID: request.ReplyToMessageID, Parts: parts})
 	if err != nil {

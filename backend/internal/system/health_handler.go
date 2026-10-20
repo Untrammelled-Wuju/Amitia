@@ -32,7 +32,7 @@ func (h *Handler) Health(c *gin.Context) {
 			ready = false
 		}
 	}
-	orchestratorReady := h.unifiedEntry != nil && h.unifiedEntry.IsOrchestratorReady()
+	orchestratorReady := h.unifiedEntry != nil && h.unifiedEntry.IsReady()
 	checks["orchestrator"] = map[string]interface{}{"ready": orchestratorReady}
 	if !orchestratorReady {
 		ready = false

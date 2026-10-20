@@ -95,14 +95,6 @@ func TestConversationCompressorWaitsForTokenPressureAndCommitsAtomically(t *test
 	}
 }
 
-func TestLegacyFixedRoundTrimReplayIsNoop(t *testing.T) {
-	svc := &service{}
-	payload, _ := json.Marshal(PostProcessPayload{Version: postProcessPayloadVersion, ConversationID: "does-not-matter"})
-	if err := svc.ReplayPostProcess(postProcessEventContextTrim, payload); err != nil {
-		t.Fatalf("legacy outbox events must remain replay-compatible without pruning: %v", err)
-	}
-}
-
 func TestOllamaConversationSummaryUsesContextWindowNotOutputTokens(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {

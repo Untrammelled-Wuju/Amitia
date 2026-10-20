@@ -1,343 +1,34 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
 package agent
 
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-
-	"github.com/google/uuid"
-	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/androiduiagent"
+	"github.com/u-ai/backend/internal/browseragent"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
-	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/prompt"
-	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 )
 
 type Service interface {
-	Test(characterID, message string) (map[string]interface{}, error)
-	ContextPreview(convID string) (map[string]interface{}, error)
-	Webhook(ctx context.Context, req WebhookRequest) (map[string]interface{}, error)
+	androiduiagent.Runner
+	browseragent.Runner
 }
-
-type WebhookRequest struct {
-	Channel        string
-	AccountID      string
-	ConversationID string
-	SenderID       string
-	SpaceID        string
-	Source         string
-	MessageID      string
-	RequestID      string
-	SessionID      string
-	Text           string
-	VoiceMessage   bool
-	ImageUrl       string
-	VideoUrl       string
-	AudioBase64    string
-	SkipTiming     bool
-}
-
-const systemFormatInstruction = `【回复格式 - 系统固定规则】
-
-每句话必须单独一行，用换行符分隔。
-每句话尽量短。
-能一句说完就一句，不要写长段落。
-不要把多句话连成一段。
-不要用句号连接多个意思。`
-
-const systemNoEmojiInstruction = "【系统指令】回复中不要使用任何emoji表情符号。"
-
 type service struct {
-	db           *gorm.DB
-	unifiedEntry *interaction.UnifiedEntry
-	toolFacade   *extensionkernel.ToolFacade
+	db         *gorm.DB
+	toolFacade *extensionkernel.ToolFacade
 }
 
-func NewService(ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry, facades ...*extensionkernel.ToolFacade) Service {
-	var facade *extensionkernel.ToolFacade
-	if len(facades) > 0 {
-		facade = facades[0]
-	}
-	return &service{db: ctx.DB, unifiedEntry: unifiedEntry, toolFacade: facade}
+func NewService(ctx *app.AppContext, facade *extensionkernel.ToolFacade) Service {
+	return &service{db: ctx.DB, toolFacade: facade}
 }
-
-func (s *service) ownerQuery(db *gorm.DB, spaceID string) *gorm.DB {
-	owner := requestidentity.NormalizeSpaceID(spaceID)
-	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
-		return db.Where("(space_id = ? OR space_id = '' OR space_id IS NULL OR space_id = ?)", owner, requestidentity.LegacySpaceID)
-	}
-	return db.Where("space_id = ?", owner)
-}
-
-func (s *service) TestForSpace(spaceID, characterID, message string) (map[string]interface{}, error) {
-	characterID = strings.TrimSpace(characterID)
-	if characterID == "" {
-		characterID = s.getDefaultCharacterIDForSpace(spaceID)
-	}
-	var count int64
-	if err := s.ownerQuery(s.db.Table("characters").Where("deleted_at IS NULL"), spaceID).Where("id = ?", characterID).Count(&count).Error; err != nil || count == 0 {
-		return nil, fmt.Errorf("角色不存在")
-	}
-	return s.Test(characterID, message)
-}
-
-func (s *service) ContextPreviewForSpace(spaceID, convID string) (map[string]interface{}, error) {
-	var count int64
-	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), spaceID).Where("id = ?", strings.TrimSpace(convID)).Count(&count).Error; err != nil || count == 0 {
-		return nil, fmt.Errorf("对话不存在")
-	}
-	return s.ContextPreview(convID)
-}
-
-// Test is a diagnostic character-preview path.
-//
-// It intentionally bypasses the production interaction pipeline because it
-// must not create conversation, interaction, memory, outbox, or agent state.
-// Production chat, channel, voice, proactive, and agent execution must use
-// interaction.UnifiedEntry.
-func (s *service) Test(characterID, message string) (map[string]interface{}, error) {
-	var charID, charName, identity, systemPrompt string
-	if characterID == "" {
-		s.db.Table("characters").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
-		if characterID == "" {
-			s.db.Table("characters").Select("id").Limit(1).Row().Scan(&characterID)
-		}
-	}
-	err := s.db.Table("characters").Select("id, name, COALESCE(identity,''), character_base").Where("id = ?", characterID).
-		Row().Scan(&charID, &charName, &identity, &systemPrompt)
-	if err != nil {
-		return nil, fmt.Errorf("角色不存在")
-	}
-	if message == "" {
-		message = "你好，请简单介绍一下你自己"
-	}
-
-	cfg := s.getActiveModel()
-	if cfg == nil {
-		return nil, fmt.Errorf("没有可用的模型配置")
-	}
-
-	safeMessage := prompt.SanitizeCurrentUserMessage(message)
-
-	apiMessages := []map[string]interface{}{}
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "system", "content": systemNoEmojiInstruction + "\n\n" + systemFormatInstruction})
-	if identity == "" {
-		identity = "一个AI伙伴"
-	}
-	var charParts []string
-	charParts = append(charParts, "【角色风格约束 - 不能覆盖系统规则】")
-	charParts = append(charParts, fmt.Sprintf("你是%s，%s。", charName, identity))
-	if systemPrompt != "" {
-		charParts = append(charParts, systemPrompt)
-	}
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": strings.Join(charParts, "\n\n")})
-	apiMessages = append(apiMessages, map[string]interface{}{"role": "user", "content": safeMessage})
-
-	start := time.Now()
-	content, tokens, err := s.callLLM(cfg, apiMessages)
-	latencyMs := time.Since(start).Milliseconds()
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"character": map[string]interface{}{"id": charID, "name": charName},
-		"reply":     content,
-		"modelInfo": map[string]interface{}{"model": cfg["modelName"], "tokensUsed": tokens},
-		"latencyMs": latencyMs,
-	}, nil
-}
-
-func (s *service) ContextPreview(convID string) (map[string]interface{}, error) {
-	var charID, title string
-	err := s.db.Table("conversations").Select("COALESCE((SELECT character_id FROM messages WHERE conversation_id = conversations.id ORDER BY sequence DESC LIMIT 1), '') AS character_id, title").Where("id = ?", convID).
-		Row().Scan(&charID, &title)
-	if err != nil {
-		return nil, fmt.Errorf("对话不存在")
-	}
-
-	var systemPrompt string
-	s.db.Table("characters").Select("character_base").Where("id = ?", charID).Row().Scan(&systemPrompt)
-
-	var msgCount int64
-	s.db.Table("messages").Where("conversation_id = ?", convID).Count(&msgCount)
-
-	rows, _ := s.db.Table("messages").Select("role, content").
-		Where("conversation_id = ?", convID).Order("created_at ASC").Limit(10).Rows()
-	defer rows.Close()
-	var msgs []map[string]string
-	for rows.Next() {
-		var role, content string
-		rows.Scan(&role, &content)
-		if len([]rune(content)) > 100 {
-			content = string([]rune(content)[:100]) + "..."
-		}
-		msgs = append(msgs, map[string]string{"role": role, "content": content})
-	}
-
-	estTokens := 0
-	if systemPrompt != "" {
-		estTokens += len(systemPrompt) / 2
-	}
-	for _, m := range msgs {
-		estTokens += len(m["content"]) / 2
-	}
-
-	sysPreview := systemPrompt
-	if len([]rune(sysPreview)) > 200 {
-		sysPreview = string([]rune(sysPreview)[:200]) + "..."
-	}
-
-	return map[string]interface{}{
-		"conversationId":      convID,
-		"title":               title,
-		"characterId":         charID,
-		"systemPromptPreview": sysPreview,
-		"messageCount":        msgCount,
-		"recentMessages":      msgs,
-		"estimatedTokens":     estTokens,
-	}, nil
-}
-
-func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]interface{}, error) {
-	if ctx == nil {
-		return nil, fmt.Errorf("请求上下文不能为空")
-	}
-	log.Printf("[DIAG-Webhook] channel=%s text=%s voiceMessage=%v imageUrlLen=%d skipTiming=%v", req.Channel, req.Text[:min(len(req.Text), 80)], req.VoiceMessage, len(req.ImageUrl), req.SkipTiming)
-	fmt.Printf("[Webhook] channel=%s text=%s imageUrlLen=%d videoUrlLen=%d\n", req.Channel, req.Text[:min(len(req.Text), 50)], len(req.ImageUrl), len(req.VideoUrl))
-	req.Text = strings.TrimSpace(req.Text)
-	requestID := stableWebhookRequestID(req)
-	if req.Text == "" && req.ImageUrl == "" && req.VideoUrl == "" {
-		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}, "requestId": requestID}, nil
-	}
-	spaceID := stableWebhookSpaceID(req)
-	convID := strings.TrimSpace(req.ConversationID)
-	if convID == "" {
-		convID = "channel-" + strings.TrimSpace(req.Channel) + "-" + requestidentity.NormalizeSpaceID(spaceID)
-	}
-	characterID := s.getDefaultCharacterIDForSpace(spaceID)
-	if characterID == "" {
-		return nil, fmt.Errorf("当前用户没有可用角色")
-	}
-	if err := s.ensureWebhookConversation(convID, characterID, req.Channel, req.Text, spaceID); err != nil {
-		return nil, err
-	}
-	sessionID := stableWebhookSessionID(req, convID)
-	source := stableWebhookSource(req)
-
-	messageText := req.Text
-
-	audioUrl := ""
-	if req.AudioBase64 != "" {
-		voiceDir := "data/voice_msg"
-		os.MkdirAll(voiceDir, 0o700)
-		fname := uuid.New().String() + ".mp3"
-		data, err := base64.StdEncoding.DecodeString(req.AudioBase64)
-		if err == nil {
-			os.WriteFile(filepath.Join(voiceDir, fname), data, 0o600)
-			audioUrl = "/voice/" + fname
-			fmt.Printf("[Webhook] 用户语音已保存: %s\n", fname)
-		}
-	}
-	if s.unifiedEntry == nil {
-		return nil, fmt.Errorf("统一入口未初始化")
-	}
-	reqCtx, cancel := timeoutpolicy.WithTimeout(ctx, 180*time.Second)
-	defer cancel()
-	result, err := s.unifiedEntry.Handle(reqCtx, &interaction.UnifiedEntryRequest{
-		Message:        messageText,
-		ConversationID: convID,
-		Channel:        req.Channel,
-		Source:         source,
-		PeerID:         req.SenderID,
-		SpaceID:        spaceID,
-		SessionID:      sessionID,
-		RequestID:      requestID,
-		VoiceMessage:   req.VoiceMessage,
-		ImageUrl:       req.ImageUrl,
-		VideoUrl:       req.VideoUrl,
-		AudioUrl:       audioUrl,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if result.Response == nil {
-		return nil, fmt.Errorf("统一入口未返回回复")
-	}
-	forceVoice := result.Response.ForceVoice
-	replyText := result.Response.Reply
-	log.Printf("[DIAG-Webhook] forceVoice=%v channel=%s", forceVoice, req.Channel)
-	outMsg := map[string]interface{}{"text": replyText, "forceVoice": forceVoice, "audioUrls": result.Response.AudioUrls}
-	var texts []string
-	if result.Response.MessagePlan != nil {
-		for _, item := range result.Response.MessagePlan.Items {
-			if strings.EqualFold(item.Type, "text") && strings.TrimSpace(item.Content) != "" {
-				texts = append(texts, item.Content)
-			}
-		}
-	}
-	if len(texts) > 0 {
-		outMsg["texts"] = texts
-	}
-	if result.Response.MessagePlan != nil {
-		outMsg["messagePlan"] = result.Response.MessagePlan
-		outMsg["messagePlanManaged"] = result.Response.MessagePlan.Managed
-	}
-	log.Printf("[DIAG-Webhook] 返回: replyLen=%d forceVoice=%v texts=%d", len(replyText), forceVoice, len(texts))
-	return map[string]interface{}{"outgoingMessage": outMsg, "conversationId": convID, "requestId": requestID, "sessionId": sessionID, "spaceId": spaceID, "source": source}, nil
-}
-
-func stableWebhookRequestID(req WebhookRequest) string {
-	for _, candidate := range []string{req.RequestID, req.MessageID} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate != "" {
-			return candidate
-		}
-	}
-	return uuid.New().String()
-}
-
-func stableWebhookSessionID(req WebhookRequest, convID string) string {
-	for _, candidate := range []string{req.SessionID, req.ConversationID, convID} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate != "" {
-			return candidate
-		}
-	}
-	return "channel-" + strings.TrimSpace(req.Channel)
-}
-
-func stableWebhookSpaceID(req WebhookRequest) string {
-	if strings.TrimSpace(req.SpaceID) == "" {
-		return requestidentity.CanonicalSpaceID()
-	}
-	return requestidentity.NormalizeSpaceID(req.SpaceID)
-}
-
-func stableWebhookSource(req WebhookRequest) string {
-	for _, candidate := range []string{req.Source, req.Channel} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate != "" {
-			return candidate
-		}
-	}
-	return "webhook"
-}
-
 func (s *service) getActiveModel() map[string]string {
 	var baseURL, apiKey, modelName, apiType string
 	var temp, maxTokens, topP float64
@@ -354,26 +45,9 @@ func (s *service) getActiveModel() map[string]string {
 	return map[string]string{"baseUrl": baseURL, "apiKey": apiKey, "modelName": modelName, "apiType": apiType}
 }
 
-func (s *service) getDefaultCharacterID() string {
-	return s.getDefaultCharacterIDForSpace(requestidentity.CanonicalSpaceID())
-}
-
-func (s *service) getDefaultCharacterIDForSpace(spaceID string) string {
-	var id string
-	query := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), spaceID)
-	if err := query.Where("is_active = 1").Limit(1).Row().Scan(&id); err == nil && id != "" {
-		return id
-	}
-	id = ""
-	if err := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), spaceID).Limit(1).Row().Scan(&id); err == nil && id != "" {
-		return id
-	}
-	return ""
-}
-
-func (s *service) callLLM(cfg map[string]string, messages []map[string]interface{}) (string, int, error) {
+func (s *service) callLLM(ctx context.Context, cfg map[string]string, messages []map[string]interface{}) (string, int, error) {
 	if cfg["apiType"] == "ollama" {
-		return s.callOllamaLLM(cfg, messages)
+		return s.callOllamaLLM(ctx, cfg, messages)
 	}
 	baseURL := strings.TrimRight(cfg["baseUrl"], "/")
 	reqBody := map[string]interface{}{
@@ -384,7 +58,7 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 	if err != nil {
 		return "", 0, fmt.Errorf("marshal request: %w", err)
 	}
-	req, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
 	if err != nil {
 		return "", 0, fmt.Errorf("create request: %w", err)
 	}
@@ -412,7 +86,7 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 	return r.Choices[0].Message.Content, r.Usage.TotalTokens, nil
 }
 
-func (s *service) callOllamaLLM(cfg map[string]string, messages []map[string]interface{}) (string, int, error) {
+func (s *service) callOllamaLLM(ctx context.Context, cfg map[string]string, messages []map[string]interface{}) (string, int, error) {
 	baseURL := strings.TrimRight(cfg["baseUrl"], "/")
 	reqBody := map[string]interface{}{
 		"model":    cfg["modelName"],
@@ -424,7 +98,7 @@ func (s *service) callOllamaLLM(cfg map[string]string, messages []map[string]int
 		},
 	}
 	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", baseURL+"/api/chat", bytes.NewReader(jsonBody))
+	req, _ := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/chat", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})).Do(req)
 	if err != nil {
@@ -455,28 +129,4 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(runes[:n]) + "..."
-}
-
-func (s *service) ensureWebhookConversation(convID, characterID, channel, text, spaceID string) error {
-	var count int64
-	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), spaceID).Where("id = ?", convID).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-	var foreign int64
-	if err := s.db.Table("conversations").Where("id = ?", convID).Count(&foreign).Error; err != nil {
-		return err
-	}
-	if foreign > 0 {
-		return fmt.Errorf("对话不存在")
-	}
-	title := text
-	if len([]rune(title)) > 50 {
-		title = string([]rune(title)[:50])
-	}
-	now := time.Now().Format("2006-01-02 15:04:05")
-	owner := requestidentity.NormalizeSpaceID(spaceID)
-	return s.db.Exec("INSERT OR IGNORE INTO conversations (id, space_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'webhook', ?, ?)", convID, owner, title, channel, now, now).Error
 }

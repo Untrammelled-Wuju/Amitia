@@ -224,6 +224,8 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result, err = port.Commit(coordination.WithSourceCommitAuthority(ctx, scope, invocation.InvocationID), req.Commit)
 			case "roles":
 				result, err = port.Roles(ctx, scope)
+			case "role-catalog":
+				result, err = port.ListOwnedRoleCatalog(ctx, scope, req.Query.IncludeDisabled)
 			case "projection-status", "projection-rebuild":
 				result, err = port.ProjectionState(ctx, scope, req.Operation == "projection-rebuild")
 			case "memory-deletion-status":

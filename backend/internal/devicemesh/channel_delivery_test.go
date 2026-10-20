@@ -3,6 +3,7 @@ package devicemesh_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/u-ai/backend/internal/devicemesh"
@@ -126,5 +127,39 @@ func TestChannelDeliveryRecoveryRestoresOwnerAndRevocationGuard(t *testing.T) {
 				t.Fatalf("stale authority delivered reply: %+v", port)
 			}
 		})
+	}
+}
+
+func TestChannelDeliveryRecoveryContinuesPastStalePage(t *testing.T) {
+	db := meshAuthorityDB(t)
+	registry := host_registry.NewRegistry(db)
+	if _, err := registry.EnsureDevice(t.Context(), host_registry.DeviceRecord{SpaceID: "core", DeviceID: "phone", Platform: runtimeidentity.PlatformAndroid, TrustState: host_registry.DeviceTrustTrusted}); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := devicemesh.NewCloudRuntime(db, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.LocalDeviceID = "phone"
+	port := &channelRecoveryPort{roleRevision: 1}
+	rt.LocalDeviceDataPort = port
+	for i := 0; i < 65; i++ {
+		id := fmt.Sprintf("request-%03d", i)
+		_, scope, finish, err := rt.Coordination.Begin(t.Context(), "core", "phone", "phone", "core", "role", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		finish()
+		scope.RoleRevision, scope.ExecutionID, scope.TurnID = 2, id, id
+		if i == 64 {
+			scope.RoleRevision = 1
+		}
+		port.pending = append(port.pending, coordination.PendingChannelDelivery{Pending: true, Scope: scope, ID: "channel-delivery/" + id, Revision: 1, Request: coordination.ChannelDeliveryRequest{RequestID: id, ConversationID: "conversation", Channel: "telegram", PeerID: "peer", Text: "reply"}})
+	}
+	if err := rt.ResumeChannelDeliveries(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if port.submitted != 1 || port.completed != 1 {
+		t.Fatalf("stale first page blocked a valid later delivery: submitted=%d completed=%d", port.submitted, port.completed)
 	}
 }
