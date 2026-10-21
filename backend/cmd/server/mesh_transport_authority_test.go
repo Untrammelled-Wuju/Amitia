@@ -264,6 +264,7 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	}
 	targetPin, err := taskConfig.OwnedTargetDefinitions.Prepare(taskContext, taskRun, &coreDefinition)
 	if err != nil || targetPin.DeviceID != identity.DeviceID.String() || targetPin.InstalledGeneration != 2 {
+		skipUnsupportedDeviceIsolation(t, err)
 		t.Fatalf("实际 TLS 目标插件版本未确认: %+v %v", targetPin, err)
 	}
 	if _, err := taskConfig.OwnedTargetDefinitions.Prepare(taskContext, taskRun, &coreDefinition); err != nil {

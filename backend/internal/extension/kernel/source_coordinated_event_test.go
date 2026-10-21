@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -74,6 +76,9 @@ func TestCoordinatedSourceEventUsesFixedContractAndRejectsForeignExecution(t *te
 	sourceRuntime := task_runtime.NewTaskRuntimeService(sourceContractDefinitionStore{definition: source}, config)
 	pin, err := sourceRuntime.DescribeInstalledTask(ctx, source.TaskID, scope.TargetDeviceID)
 	if err != nil {
+		if runtime.GOOS == "darwin" && strings.Contains(err.Error(), "task_dependency_unavailable") {
+			t.Skipf("verified device isolation is unavailable on this host: %v", err)
+		}
 		t.Fatal(err)
 	}
 	definition, err := task_runtime.NewCoreDeviceTaskDefinition(scope.CoreID, scope.TargetDeviceID, task_runtime.DeviceTaskCatalogEntry{Definition: *source, Target: pin})

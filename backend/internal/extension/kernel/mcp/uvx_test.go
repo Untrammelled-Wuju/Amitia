@@ -2,12 +2,20 @@ package mcp
 
 import (
 	"context"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 )
+
+func requireUV(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("uv"); err != nil {
+		t.Skip("uv executable is not installed")
+	}
+}
 
 func TestUvxLaunchSpec_StartTimeoutOrDefault(t *testing.T) {
 	tests := []struct {
@@ -206,6 +214,7 @@ func TestValidateUvxWorkDir(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_Basic(t *testing.T) {
+	requireUV(t)
 	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
 	if err != nil {
 		t.Fatalf("failed to create resolver: %v", err)
@@ -287,6 +296,7 @@ func TestBuildUvxInvocation_Basic(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_WithPython(t *testing.T) {
+	requireUV(t)
 	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
 	if err != nil {
 		t.Fatalf("failed to create resolver: %v", err)
@@ -318,6 +328,7 @@ func TestBuildUvxInvocation_WithPython(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_Offline(t *testing.T) {
+	requireUV(t)
 	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
 	if err != nil {
 		t.Fatalf("failed to create resolver: %v", err)
@@ -448,6 +459,7 @@ func TestUVXLauncher_NilCommandResolver(t *testing.T) {
 }
 
 func TestUVXLauncher_Resolve(t *testing.T) {
+	requireUV(t)
 	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
 	if err != nil {
 		t.Fatalf("failed to create resolver: %v", err)
@@ -526,6 +538,7 @@ func TestBuildUvxEnvironment(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_CustomIndex(t *testing.T) {
+	requireUV(t)
 	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
 	if err != nil {
 		t.Fatalf("failed to create resolver: %v", err)
@@ -562,6 +575,7 @@ func TestBuildUvxInvocation_CustomIndex(t *testing.T) {
 }
 
 func TestBuildUvxInvocation_CustomIndexDenied(t *testing.T) {
+	requireUV(t)
 	resolver, err := commandenv.NewResolver(commandenv.ResolveContext{})
 	if err != nil {
 		t.Fatalf("failed to create resolver: %v", err)

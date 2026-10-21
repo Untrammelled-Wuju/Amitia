@@ -172,6 +172,7 @@ func runSourceTaskEventTLS(t *testing.T, coordinated bool) {
 	defer cancel()
 	pin, err := service.DescribeInstalledTask(ctx, definition.TaskID, a.device.DeviceID.String())
 	if err != nil {
+		skipUnsupportedDeviceIsolation(t, err)
 		t.Fatal(err)
 	}
 	ownerInput := *run

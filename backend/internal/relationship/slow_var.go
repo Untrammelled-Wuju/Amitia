@@ -68,7 +68,7 @@ func FlushSlowAccumulation(buffer *SlowEvidenceBuffer, config SlowUpdateConfig) 
 		{"repair", &buffer.Repair, config.RepairThreshold},
 	}
 	for _, d := range dims {
-		if math.Abs(d.dim.PendingDelta) >= d.threshold {
+		if math.Abs(d.dim.PendingDelta)+1e-9 >= d.threshold {
 			visible := d.dim.PendingDelta
 			d.dim.VisibleChange = visible
 			d.dim.LastFlushedAt = now

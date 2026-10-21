@@ -108,6 +108,11 @@ func TestRecover_TypedContributionsRestored(t *testing.T) {
 		ModuleID:    "main",
 		Name:        "Test Skill",
 		Description: "A test skill for recovery",
+		Instructions: agent_skill.SkillInstructionRef{
+			Text:        "Use the recovery test skill.",
+			ContentHash: "recovery-test-skill",
+		},
+		ContentHash: "recovery-test-skill",
 	}
 	skillDefData, _ := json.Marshal(skillDef)
 	skillContrib := domain.ContributionDefinition{

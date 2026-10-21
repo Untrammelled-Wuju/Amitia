@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -323,6 +324,9 @@ func TestBuildNPXPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.name == "windows" && runtime.GOOS != "windows" {
+				t.Skip("windows path semantics are only valid on windows hosts")
+			}
 			env := nodeenv.Environment{NodeBinary: tt.nodeBin}
 			path := BuildNPXPath(env)
 			if path != tt.expected {

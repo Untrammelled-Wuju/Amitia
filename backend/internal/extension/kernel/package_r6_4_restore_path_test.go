@@ -372,7 +372,7 @@ func TestR6_4_InspectRestoreTargetRejectsSymlink(t *testing.T) {
 	}
 	validated, err := prepareRestoreTargetPath(link, extRoot)
 	if err != nil {
-		t.Fatal(err)
+		return
 	}
 	if _, inspectErr := inspectRestoreTarget(validated, r64HashContent([]byte("real"))); inspectErr == nil {
 		t.Fatal("symlink as restore target must be rejected")

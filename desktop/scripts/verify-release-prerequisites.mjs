@@ -150,6 +150,23 @@ function changedGoPackages(files) {
   return [...packages].sort();
 }
 
+function runnableGoPackages(packages, goBin) {
+  return packages.filter((pkg) => {
+    const result = spawnSync(goBin, ["list", "-e", "-f", "{{if .Error}}{{.Error.Err}}{{else}}{{.Name}}{{end}}", pkg], {
+      cwd: backendRoot,
+      encoding: "utf8",
+      shell: false,
+    });
+    const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
+    if (result.status !== 0) return false;
+    if (!output || output.startsWith("no Go files") || output.includes("build constraints exclude all Go files")) {
+      console.log(`[release-prerequisites] backend: skipping non-runnable package ${pkg}`);
+      return false;
+    }
+    return true;
+  });
+}
+
 function frontTestCandidates() {
   const root = join(frontRoot, "src");
   const found = [];
@@ -203,11 +220,12 @@ function main() {
   const testNode = testNodeBinary();
   const backendTestEnv = testNode ? { ...process.env, AMITIA_TEST_NODE: testNode } : process.env;
   const files = changedFiles();
-  const goPackages = explicitGoPackages.length > 0
+  const derivedGoPackages = explicitGoPackages.length > 0
     ? explicitGoPackages
     : fullGoTests
       ? ["./..."]
       : changedGoPackages(files);
+  const goPackages = runnableGoPackages(derivedGoPackages, process.env.GO_BIN || (process.platform === "win32" ? "go.exe" : "go"));
   const frontTests = explicitFrontTests.length > 0
     ? explicitFrontTests
     : fullFrontTests

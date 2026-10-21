@@ -72,6 +72,7 @@ func TestCoreConsoleTaskCatalogStillRequiresTargetCapabilityGrant(t *testing.T) 
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, request)
 		if recorder.Code != expected {
+			skipUnsupportedDeviceIsolationBody(t, recorder.Body.String())
 			t.Fatalf("console status=%d expected=%d body=%s", recorder.Code, expected, recorder.Body.String())
 		}
 		return recorder.Body.Bytes()

@@ -2856,6 +2856,72 @@
         "tags": [
           "TrustedServices"
         ]
+      },
+      "delete": {
+        "description": "Unregister trusted service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Unregister trusted service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/health": {
+      "get": {
+        "description": "Health check selected service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Health check selected service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/invoke": {
+      "post": {
+        "description": "Invoke selected service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Invoke selected service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/quarantine/release": {
+      "post": {
+        "description": "Release selected quarantined service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Release selected quarantined service",
+        "tags": [
+          "TrustedServices"
+        ]
       }
     },
     "/extensions/services/quarantine/list": {
@@ -2870,6 +2936,57 @@
           }
         },
         "summary": "List quarantined services",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/start": {
+      "post": {
+        "description": "Start selected service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Start selected service",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/status": {
+      "get": {
+        "description": "Get selected service status",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Get selected service status",
+        "tags": [
+          "TrustedServices"
+        ]
+      }
+    },
+    "/extensions/services/stop": {
+      "post": {
+        "description": "Stop selected service",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Stop selected service",
         "tags": [
           "TrustedServices"
         ]
@@ -3211,6 +3328,40 @@
           }
         },
         "summary": "Get task result",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/result/artifact": {
+      "get": {
+        "description": "Download task result artifact",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Download task result artifact",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/extensions/tasks/{taskRunId}/artifacts/{artifactId}": {
+      "get": {
+        "description": "Download task artifact",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Download task artifact",
         "tags": [
           "Tasks"
         ]

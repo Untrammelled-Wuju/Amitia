@@ -296,7 +296,9 @@ func (p *TriggerPlanner) planTrigger(ctx context.Context, def *ScheduleContribut
 	}
 
 	newState := *state
-	if !manual {
+	if manual {
+		newState.LastScheduledAt = &scheduledAt
+	} else {
 		newState.LastScheduledAt = &scheduledAt
 		newState.NextScheduledAt = nil
 		newState.NextEffectiveAt = nil

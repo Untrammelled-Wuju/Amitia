@@ -92,6 +92,7 @@ func TestLocalTaskApprovalUsesCurrentPairAndSourceRoleThroughActualAPI(t *testin
 	runtime := a.services.KernelContainer.TaskRuntimeService
 	pin, err := runtime.DescribeInstalledTask(ctx, definition.TaskID, a.device.DeviceID.String())
 	if err != nil {
+		skipUnsupportedDeviceIsolation(t, err)
 		t.Fatal(err)
 	}
 	input := json.RawMessage(`{"private":"source execution only"}`)
