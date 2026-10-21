@@ -34,6 +34,15 @@ describe("Core 模型配置授权", () => {
   });
   afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()); vi.clearAllTimers(); vi.useRealTimers(); });
 
+  it("用途分配使用后端数组契约且保留云端配置意图", async () => {
+    const configuration = open(() => useModelConfig());
+    await flushPromises();
+    await configuration.assignRoute("summary", 7);
+    expect(mocks.put).toHaveBeenCalledWith("/api/model/routes", { routes: [{ scenario: "summary", modelConfigId: 7 }] }, { headers: { "X-Amitia-Expected-Core-ID": "core-b", "X-Amitia-Expected-Configuration-Policy": "1:1:1" } });
+    await configuration.assignRoute("summary", null);
+    expect(mocks.put).toHaveBeenLastCalledWith("/api/model/routes", { routes: [{ scenario: "summary", modelConfigId: 0 }] }, expect.any(Object));
+  });
+
   it.each([{ canAdminister: false }, { policy: { coordinated: false } }, { policy: undefined }])("普通设备、未统筹及未知状态禁止配置 %j", async (change) => {
     Object.assign(status, change);
     const configuration = open(() => useModelConfig());

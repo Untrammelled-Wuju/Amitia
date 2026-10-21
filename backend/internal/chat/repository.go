@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"fmt"
 	"github.com/u-ai/backend/internal/configwrite"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -290,6 +291,9 @@ func (r *repository) DeleteModel(id int) error {
 		if err := tx.First(&target, id).Error; err != nil {
 			return err
 		}
+		if err := tx.Table("model_scenario_routes").Where("model_config_id = ?", id).Update("model_config_id", 0).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&target).Error
 	})
 }
@@ -308,24 +312,45 @@ func (r *repository) ActivateModel(id int) error {
 }
 
 func (r *repository) GetModelRoutes() ([]map[string]interface{}, error) {
-	var routes []map[string]interface{}
-	if err := r.db.Table("model_scenario_routes").Find(&routes).Error; err != nil {
+	var stored []struct {
+		Scenario      string
+		ModelConfigID int
+	}
+	if err := r.db.Table("model_scenario_routes").Find(&stored).Error; err != nil {
 		return nil, err
 	}
-	if routes == nil {
-		routes = []map[string]interface{}{}
+	ids := map[string]int{}
+	for _, row := range stored {
+		ids[row.Scenario] = row.ModelConfigID
+	}
+	routes := make([]map[string]interface{}, 0, len(modelScenarios))
+	for _, scenario := range modelScenarios {
+		routes = append(routes, map[string]interface{}{"scenario": scenario.ID, "modelConfigId": ids[scenario.ID], "label": scenario.Label, "description": scenario.Description})
 	}
 	return routes, nil
 }
 
 func (r *repository) UpdateModelRoutes(routes []map[string]interface{}) error {
 	return configwrite.Transaction(r.db, func(tx *gorm.DB) error {
-		if err := tx.Exec("DELETE FROM model_scenario_routes").Error; err != nil {
-			return err
-		}
+		seen := map[string]bool{}
 		for _, route := range routes {
-			if err := tx.Exec("INSERT INTO model_scenario_routes (scenario, model_config_id) VALUES (?, ?)",
-				route["scenario"], route["modelConfigId"]).Error; err != nil {
+			scenario, ok := route["scenario"].(string)
+			if !ok || !supportedModelScenario(scenario) || seen[scenario] {
+				return fmt.Errorf("模型用途无效或重复")
+			}
+			seen[scenario] = true
+			id, err := routeModelID(route["modelConfigId"])
+			if err != nil {
+				return err
+			}
+			if id > 0 {
+				var model ModelConfig
+				if err := tx.First(&model, id).Error; err != nil {
+					return fmt.Errorf("用途 %s 的模型不存在: %w", scenario, err)
+				}
+			}
+			if err := tx.Exec("INSERT INTO model_scenario_routes (scenario, model_config_id) VALUES (?, ?) ON CONFLICT(scenario) DO UPDATE SET model_config_id = excluded.model_config_id",
+				scenario, id).Error; err != nil {
 				return err
 			}
 		}

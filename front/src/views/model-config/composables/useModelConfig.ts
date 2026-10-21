@@ -438,7 +438,7 @@ export function useModelConfig(options?: ModelConfigOptions) {
     if (!withScenario) return;
     if (!await allowConfiguration(collectionContext.value)) return;
     try {
-      await put(`${apiBase}/routes`, { routes: { [scenario]: modelConfigId } }, coreConfigurationRequestConfig(collectionContext.value));
+      await put(`${apiBase}/routes`, { routes: [{ scenario, modelConfigId: modelConfigId ?? 0 }] }, coreConfigurationRequestConfig(collectionContext.value));
       ElMessage.success("用途分配已更新");
       await fetchRoutes();
     } catch {
@@ -446,27 +446,6 @@ export function useModelConfig(options?: ModelConfigOptions) {
     }
   }
 
-  function scenarioLabel(scenario: string): string {
-    const labels: Record<string, string> = {
-      chat: "聊天对话",
-      summary: "会话摘要",
-      memory_extract: "记忆提取",
-      safety_rewrite: "安全改写",
-      import_parse: "导入解析",
-      };
-    return labels[scenario] || scenario;
-  }
-
-  function scenarioDesc(scenario: string): string {
-    const descs: Record<string, string> = {
-      chat: "日常聊天和对话回复",
-      summary: "生成对话历史摘要",
-      memory_extract: "从对话中提取用户记忆",
-      safety_rewrite: "安全边界内容改写",
-      import_parse: "解析导入的聊天记录文本",
-      };
-    return descs[scenario] || "";
-  }
 
   onMounted(async () => {
     await loadProviders();
@@ -526,7 +505,5 @@ export function useModelConfig(options?: ModelConfigOptions) {
     delConfig,
     fetchRoutes,
     assignRoute,
-    scenarioLabel,
-    scenarioDesc,
   };
 }

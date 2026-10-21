@@ -40,15 +40,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	handler.SetContinuityRuntime(continuityRepo, continuityCoordinator)
 	handler.SetChannelAvailability(channelAccess)
 	svc.AttachTemporalService(temporalSvc)
-	chat.SetConversationTitleUpdatedPublisher(func(event chat.ConversationTitleUpdatedEvent) {
-		channel := event.Channel
-		if channel == "" {
-			channel = "web"
-		}
-		GetMessageEventBus().PublishConversationUpdated(event.ConversationID, channel, map[string]interface{}{
-			"title": event.Title,
-		})
-	})
 
 	if dpCoord != nil {
 		svc.SetDataPortabilityCoordinator(dpCoord)

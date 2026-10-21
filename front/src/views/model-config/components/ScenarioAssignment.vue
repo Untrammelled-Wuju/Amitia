@@ -16,14 +16,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         class="scenario-card"
       >
         <div class="sc-card-header">
-          <span class="sc-label">{{ label(route.scenario) }}</span>
+          <span class="sc-label">{{ route.label || route.scenario }}</span>
           <el-tag v-if="!route.modelConfigId" size="small" type="info"
             >使用默认</el-tag
           >
           <el-tag v-else size="small" type="success">已分配</el-tag>
         </div>
         <div class="sc-card-body">
-          <span class="sc-desc">{{ desc(route.scenario) }}</span>
+          <span class="sc-desc">{{ route.description }}</span>
         </div>
         <div class="sc-card-select">
           <el-select
@@ -60,27 +60,6 @@ const emit = defineEmits<{
   (e: "assign", scenario: string, modelConfigId: number | null): void;
 }>();
 
-function label(scenario: string): string {
-  const labels: Record<string, string> = {
-    chat: "聊天对话",
-    summary: "会话摘要",
-    memory_extract: "记忆提取",
-    safety_rewrite: "安全改写",
-    import_parse: "导入解析",
-  };
-  return labels[scenario] || scenario;
-}
-
-function desc(scenario: string): string {
-  const descs: Record<string, string> = {
-    chat: "日常聊天和对话回复",
-    summary: "生成对话历史摘要",
-    memory_extract: "从对话中提取用户记忆",
-    safety_rewrite: "安全边界内容改写",
-    import_parse: "解析导入的聊天记录文本",
-  };
-  return descs[scenario] || "";
-}
 </script>
 
 <style scoped>

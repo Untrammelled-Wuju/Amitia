@@ -21,7 +21,7 @@ func (s *service) ExtractOwnedMemoryCandidates(ctx context.Context, inference bu
 	if err := coordination.ValidateSnapshot(inference.Scope, inference.Snapshot); err != nil {
 		return nil, err
 	}
-	cfg, err := s.repo.GetActiveModel()
+	cfg, err := s.modelForScenario("memory_extract", 0)
 	if err != nil {
 		return nil, err
 	}

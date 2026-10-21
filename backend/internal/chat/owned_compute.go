@@ -307,10 +307,7 @@ func (s *service) generateOwnedReply(ctx context.Context, inference business.Inf
 		}
 		defer endSkills()
 	}
-	cfg, err := s.repo.GetActiveModel()
-	if inference.ModelConfigID > 0 {
-		cfg, err = s.repo.GetModelByID(inference.ModelConfigID)
-	}
+	cfg, err := s.modelForScenario("chat", inference.ModelConfigID)
 	if err != nil {
 		return business.Generation{}, err
 	}
@@ -404,7 +401,7 @@ func (s *service) ExtractOwnedMemory(ctx context.Context, inference business.Inf
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return nil, err
 	}
-	cfg, err := s.repo.GetActiveModel()
+	cfg, err := s.modelForScenario("memory_extract", 0)
 	if err != nil {
 		return nil, err
 	}

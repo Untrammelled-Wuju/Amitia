@@ -42,7 +42,7 @@ func (s *service) GenerateOwnedSummary(ctx context.Context, inference business.S
 	if err != nil || len(input) > 8<<20 {
 		return "", coordination.ErrPendingLimit
 	}
-	cfg, err := s.repo.GetActiveModel()
+	cfg, err := s.modelForScenario("summary", 0)
 	if err != nil {
 		return "", err
 	}

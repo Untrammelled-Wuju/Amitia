@@ -41,6 +41,11 @@ class _Api extends Fake implements BackendServiceApi {
       };
     } else if (path.endsWith('/providers')) {
       data = <dynamic>[];
+    } else if (path.endsWith('/routes')) {
+      data = <dynamic>[
+        {'scenario': 'chat', 'label': '聊天对话', 'description': '显式选择优先', 'modelConfigId': 0},
+        {'scenario': 'summary', 'label': '会话摘要', 'description': '会话与记忆摘要', 'modelConfigId': 0},
+      ];
     } else {
       configReads++;
       data = <dynamic>[
@@ -119,6 +124,20 @@ void main() {
       isNull,
     );
     expect(api.writes, 0);
+  });
+
+  testWidgets('云端管理员通过原配置意图保存用途分配', (tester) async {
+    final api = _Api()..admin = true;
+    await render(tester, api, cloud: true);
+    final select = find.byType(DropdownButton<int>).first;
+    await tester.ensureVisible(select);
+    await tester.tap(select);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('本机旧配置').last);
+    await tester.pumpAndSettle();
+    expect(api.writes, 1);
+    expect(find.text('用途分配已更新'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('旧本机编辑表单切云端后无法提交', (tester) async {

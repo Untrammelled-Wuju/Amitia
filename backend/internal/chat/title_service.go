@@ -7,85 +7,13 @@ import (
 	"io"
 	"regexp"
 	"strings"
-	"time"
 	"unicode"
-
-	syncapi "github.com/u-ai/backend/internal/sync"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
-	applog "github.com/u-ai/backend/log"
-	"gorm.io/gorm"
 )
 
 const conversationTitleMaxCharacters = 16
 const conversationTitleMaxTokens = 128
 
 var conversationTitleListPrefix = regexp.MustCompile(`^\d+[.)]\s`)
-
-type ConversationTitleUpdatedEvent struct {
-	ConversationID string
-	Title          string
-	Channel        string
-}
-
-var conversationTitleUpdatedPublisher func(ConversationTitleUpdatedEvent)
-
-func SetConversationTitleUpdatedPublisher(publisher func(ConversationTitleUpdatedEvent)) {
-	conversationTitleUpdatedPublisher = publisher
-}
-
-func publishConversationTitleUpdated(event ConversationTitleUpdatedEvent) {
-	if conversationTitleUpdatedPublisher == nil {
-		return
-	}
-	conversationTitleUpdatedPublisher(event)
-}
-
-func (s *service) generateConversationTitle(
-	conversationID string,
-	modelConfigID int,
-	userMessage string,
-	assistantReply string,
-) {
-	if s == nil || s.db == nil {
-		return
-	}
-	conversationID = strings.TrimSpace(conversationID)
-	userMessage = strings.TrimSpace(userMessage)
-	assistantReply = normalizeTitleGenerationReply(assistantReply)
-	if conversationID == "" || userMessage == "" || assistantReply == "" {
-		return
-	}
-
-	var conversation Conversation
-	if err := s.db.Where("id = ? AND deleted_at IS NULL", conversationID).First(&conversation).Error; err != nil {
-		return
-	}
-	originalTitle := strings.TrimSpace(conversation.Title)
-	if originalTitle != "" && originalTitle != userMessage && originalTitle != "新对话" {
-		return
-	}
-
-	if !s.isFirstCompletedAssistantTurn(conversationID) {
-		return
-	}
-
-	cfg, err := s.repo.GetActiveModel()
-	if modelConfigID > 0 {
-		cfg, err = s.repo.GetModelByID(modelConfigID)
-	}
-	if err != nil || cfg == nil {
-		return
-	}
-
-	ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	title, err := s.requestConversationTitle(ctx, cfg, userMessage, assistantReply)
-	if err != nil {
-		applog.WithFields(map[string]interface{}{"conversation_id": conversationID, "stage": "conversation_title"}).Warn("会话标题生成未通过，保留原有标题")
-		return
-	}
-	_, _ = s.updateGeneratedConversationTitle(conversationID, originalTitle, title)
-}
 
 func (s *service) requestConversationTitle(ctx context.Context, cfg *ModelConfig, userMessage, assistantReply string) (string, error) {
 	titleConfig := *cfg
@@ -181,19 +109,6 @@ func normalizeTitleGenerationReply(value string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-func (s *service) isFirstCompletedAssistantTurn(conversationID string) bool {
-	if s == nil || s.db == nil {
-		return false
-	}
-	var count int64
-	if err := s.db.Model(&AssistantTurn{}).
-		Where("conversation_id = ? AND status = ?", strings.TrimSpace(conversationID), assistantTurnStatusCompleted).
-		Count(&count).Error; err != nil {
-		return false
-	}
-	return count == 1
-}
-
 func normalizeGeneratedConversationTitle(value string) string {
 	value = strings.TrimSpace(value)
 	if strings.ContainsAny(value, "`*[]<>\r\n") || strings.Contains(value, "__") || strings.Contains(value, "~~") {
@@ -238,58 +153,4 @@ func normalizeGeneratedConversationTitle(value string) string {
 		return ""
 	}
 	return string(runes)
-}
-
-func (s *service) updateGeneratedConversationTitle(
-	conversationID string,
-	originalTitle string,
-	generatedTitle string,
-) (bool, error) {
-	generatedTitle = normalizeGeneratedConversationTitle(generatedTitle)
-	if generatedTitle == "" {
-		return false, nil
-	}
-	updated := false
-	channel := ""
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		var conversation Conversation
-		if err := tx.Where("id = ? AND deleted_at IS NULL", conversationID).First(&conversation).Error; err != nil {
-			return err
-		}
-		if strings.TrimSpace(conversation.Title) != strings.TrimSpace(originalTitle) {
-			return nil
-		}
-		nextRevision := conversation.Revision + 1
-		now := time.Now().Format("2006-01-02 15:04:05")
-		result := tx.Model(&Conversation{}).
-			Where("id = ? AND title = ? AND revision = ?", conversationID, originalTitle, conversation.Revision).
-			Updates(map[string]interface{}{
-				"title":      generatedTitle,
-				"revision":   nextRevision,
-				"updated_at": now,
-			})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return nil
-		}
-		conversation.Title = generatedTitle
-		conversation.Revision = nextRevision
-		conversation.UpdatedAt = now
-		channel = conversation.Channel
-		if err := s.recordConversationChangeTx(tx, &conversation, syncapi.OpUpdate, nextRevision, conversation.SpaceID); err != nil {
-			return err
-		}
-		updated = true
-		return nil
-	})
-	if updated {
-		publishConversationTitleUpdated(ConversationTitleUpdatedEvent{
-			ConversationID: conversationID,
-			Title:          generatedTitle,
-			Channel:        channel,
-		})
-	}
-	return updated, err
 }

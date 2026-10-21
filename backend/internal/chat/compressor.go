@@ -3,17 +3,12 @@
 package chat
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"gorm.io/gorm"
 )
 
@@ -30,7 +25,8 @@ type ConversationSummary struct {
 func (ConversationSummary) TableName() string { return "conversation_summaries" }
 
 type Compressor struct {
-	db *gorm.DB
+	db    *gorm.DB
+	model *service
 }
 
 func NewCompressor(db *gorm.DB) *Compressor {
@@ -134,18 +130,17 @@ func (c *Compressor) generateTaskHandoffSummary(ctx context.Context, history str
 }
 
 func (c *Compressor) generateSummaryWithPrompt(ctx context.Context, conversationText, parentSummary, systemPrompt string) string {
-	var baseURL, apiKey, modelName, apiType string
-	var temperature, maxTokens float64
-	var contextWindow int
-	err := c.db.WithContext(ctx).Table("model_configs").
-		Select("base_url, api_key, model_name, temperature, max_tokens, context_window, api_type").
-		Where("is_active = 1").Limit(1).Row().
-		Scan(&baseURL, &apiKey, &modelName, &temperature, &maxTokens, &contextWindow, &apiType)
+	model := c.model
+	if model == nil {
+		model = &service{repo: &repository{db: c.db}, db: c.db, localModels: make(map[string]LocalModelInfer)}
+	}
+	cfg, err := model.modelForScenario("summary", 0)
 	if err != nil {
 		return ""
 	}
-	if maxTokens <= 0 {
-		maxTokens = 2048
+	bounded := *cfg
+	if bounded.MaxTokens <= 0 {
+		bounded.MaxTokens = 2048
 	}
 
 	userPrompt := conversationText
@@ -159,85 +154,17 @@ func (c *Compressor) generateSummaryWithPrompt(ctx context.Context, conversation
 		{"role": "user", "content": userPrompt},
 	}
 
-	baseURL = strings.TrimRight(baseURL, "/")
-
-	if apiType == "ollama" {
-		return c.generateOllamaSummary(ctx, baseURL, modelName, temperature, int(maxTokens), contextWindow, messages)
+	var reply string
+	switch protocolForApiType(bounded.APIType) {
+	case "mnn", "llama_cpp":
+		reply, _, err = model.callLLM(ctx, &bounded, messages)
+	default:
+		reply, _, err = model.callLLMWithoutThinking(ctx, &bounded, messages)
 	}
-
-	reqBody := map[string]interface{}{
-		"model":       modelName,
-		"messages":    messages,
-		"temperature": temperature,
-		"max_tokens":  int(maxTokens),
-		"stream":      false,
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
 	if err != nil {
 		return ""
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})).Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return ""
-	}
-
-	var result struct {
-		Choices []struct{ Message struct{ Content string } }
-	}
-	json.Unmarshal(rb, &result)
-	if len(result.Choices) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(result.Choices[0].Message.Content)
-}
-
-func (c *Compressor) generateOllamaSummary(ctx context.Context, baseURL, modelName string, temperature float64, maxTokens, contextWindow int, messages []map[string]interface{}) string {
-	if contextWindow <= 0 {
-		contextWindow = 8192
-	}
-	reqBody := map[string]interface{}{
-		"model":    modelName,
-		"messages": messages,
-		"stream":   false,
-		"options": map[string]interface{}{
-			"temperature": temperature,
-			"num_ctx":     contextWindow,
-			"num_predict": maxTokens,
-		},
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/api/chat", bytes.NewReader(jsonBody))
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (timeoutpolicy.Client(&http.Client{Timeout: 120 * time.Second})).Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return ""
-	}
-	var result struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	}
-	if err := json.Unmarshal(rb, &result); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(result.Message.Content)
+	return strings.TrimSpace(reply)
 }
 
 func (c *Compressor) GetCompressionStatus(convID string) map[string]interface{} {

@@ -13,6 +13,10 @@ import (
 
 type summaryModelRepository struct{ Repository }
 
+func (summaryModelRepository) GetModelRoutes() ([]map[string]interface{}, error) {
+	return nil, nil
+}
+
 func (summaryModelRepository) GetActiveModel() (*ModelConfig, error) {
 	return &ModelConfig{ID: 42}, nil
 }

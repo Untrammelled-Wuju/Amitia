@@ -61,10 +61,7 @@ func (s *service) PlanOwnedTitle(ctx context.Context, inference business.Inferen
 			}
 		}
 	}
-	cfg, err := s.repo.GetActiveModel()
-	if inference.ModelConfigID > 0 {
-		cfg, err = s.repo.GetModelByID(inference.ModelConfigID)
-	}
+	cfg, err := s.modelForScenario("summary", 0)
 	if err != nil {
 		return "", err
 	}

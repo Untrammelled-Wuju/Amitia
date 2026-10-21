@@ -34,6 +34,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   final Map<String, int> _testStates = <String, int>{};
   List<Map<String, dynamic>> _configs = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _providers = const <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _routes = const [];
   bool _loading = true;
   bool _busy = false;
   bool _visionSuspended = false;
@@ -89,6 +90,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               : false,
           await _loadConfigs(),
           await _loadProviders(),
+          _isText ? await ref.read(modelConfigServiceProvider).routes() : <Map<String, dynamic>>[],
         ],
       );
       await coreConfigurationGuardFor(ref).validate(intent);
@@ -97,6 +99,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         _configs = values[1] as List<Map<String, dynamic>>;
         _visionSuspended = values[0] as bool;
         _providers = values[2] as List<Map<String, dynamic>>;
+        _routes = values[3] as List<Map<String, dynamic>>;
         _canConfigure = true;
         _loading = false;
       });
@@ -268,12 +271,51 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           )
         else
           ..._configs.map(_buildConfigCard),
+        if (_isText) ...<Widget>[
+          SizedBox(height: AppSpacing.sectionGap),
+          Text('用途分配', style: AppTypography.body(context)),
+          Text('未分配时使用当前 Core 的默认模型', style: AppTypography.caption(context)),
+          ..._routes.map((route) => ListTile(
+            title: Text('${route['label'] ?? route['scenario']}'),
+            subtitle: Text('${route['description'] ?? ''}'),
+            trailing: SizedBox(width: 140, child: DropdownButton<int>(
+              isExpanded: true,
+              value: (route['modelConfigId'] as num?)?.toInt() ?? 0,
+              items: [
+                const DropdownMenuItem(value: 0, child: Text('使用默认')),
+                ..._configs.map((config) => DropdownMenuItem(
+                  value: int.parse(_idOf(config)),
+                  child: Text('${config['name'] ?? config['modelName']}', overflow: TextOverflow.ellipsis),
+                )),
+              ],
+              onChanged: _busy || !_canConfigure ? null : (id) => _assignRoute('${route['scenario']}', id ?? 0),
+            )),
+          )),
+        ],
         if (widget.modelType == 'voice') ...<Widget>[
           SizedBox(height: AppSpacing.sectionGap),
           VoiceCloneManager(configurationIntent: _configurationIntent),
         ],
       ],
     );
+  }
+
+  Future<void> _assignRoute(String scenario, int modelConfigId) async {
+    final intent = _configurationIntent;
+    if (!await _ensureConfiguration(intent)) return;
+    setState(() => _busy = true);
+    try {
+      await intent!.run(() => ref.read(modelConfigServiceProvider).updateRoutes([
+        {'scenario': scenario, 'modelConfigId': modelConfigId},
+      ]));
+      await coreConfigurationGuardFor(ref).validate(intent);
+      await _load();
+      if (mounted && _error == null) _toast('用途分配已更新');
+    } catch (error) {
+      if (mounted) _toast('用途分配失败：$error', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Widget _buildConfigCard(Map<String, dynamic> config) {

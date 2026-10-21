@@ -37,7 +37,10 @@ func TestConversationCompressorWaitsForTokenPressureAndCommitsAtomically(t *test
 	if err := db.AutoMigrate(&Message{}, &ModelConfig{}, &ConversationSummary{}); err != nil {
 		t.Fatal(err)
 	}
-	cfg := ModelConfig{Name: "test", IsActive: 1, APIType: "openai", BaseURL: server.URL, ModelName: "mock", ContextWindow: 1000, MaxOutputTokens: 200, MaxTokens: 256}
+	if err := db.Exec(`CREATE TABLE model_scenario_routes (scenario TEXT PRIMARY KEY, model_config_id INTEGER NOT NULL DEFAULT 0)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	cfg := ModelConfig{Name: "test", IsActive: 1, APIType: "openai", Protocol: "openai_chat", BaseURL: server.URL, ModelName: "mock", ContextWindow: 1000, MaxOutputTokens: 200, MaxTokens: 256}
 	if err := db.Create(&cfg).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +115,22 @@ func TestOllamaConversationSummaryUsesContextWindowNotOutputTokens(t *testing.T)
 		_, _ = w.Write([]byte(`{"message":{"content":"summary"}}`))
 	}))
 	defer server.Close()
-	result := (&Compressor{}).generateOllamaSummary(context.Background(), server.URL, "mock", 0.2, 512, 8192, []map[string]interface{}{{"role": "user", "content": "history"}})
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "ollama.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, _ := db.DB()
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	if err := db.AutoMigrate(&ModelConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TABLE model_scenario_routes (scenario TEXT PRIMARY KEY, model_config_id INTEGER NOT NULL DEFAULT 0)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&ModelConfig{Name: "test", IsActive: 1, APIType: "ollama", BaseURL: server.URL, ModelName: "mock", Temperature: 0.2, MaxTokens: 512, ContextWindow: 8192}).Error; err != nil {
+		t.Fatal(err)
+	}
+	result := NewCompressor(db).generateSummary(context.Background(), "history", "")
 	if result != "summary" {
 		t.Fatalf("ollama summary not parsed: %q", result)
 	}

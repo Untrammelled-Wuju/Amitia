@@ -352,6 +352,9 @@ func NewService(repo Repository, ctx *app.AppContext, comp *Compressor, visionPo
 		r = recorder[0]
 	}
 	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, emotion: emotionstate.NewService(ctx.DB), visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	if comp != nil {
+		comp.model = svc
+	}
 	visioncfg.SetLocalImageGenerator(svc.generateLocalVision)
 	return svc
 }

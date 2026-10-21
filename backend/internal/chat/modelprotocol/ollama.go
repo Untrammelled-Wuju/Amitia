@@ -17,6 +17,25 @@ import (
 
 type OllamaAdapter struct{}
 
+func ollamaOptions(cfg ProviderConfig, req ModelRequest) map[string]interface{} {
+	contextWindow := cfg.ContextWindow
+	if contextWindow <= 0 {
+		contextWindow = 8192
+	}
+	output := req.MaxOutputTokens
+	if output <= 0 {
+		output = cfg.MaxOutputTokens
+	}
+	if output <= 0 {
+		output = cfg.MaxTokens
+	}
+	options := map[string]interface{}{"temperature": cfg.Temperature, "num_ctx": contextWindow}
+	if output > 0 {
+		options["num_predict"] = output
+	}
+	return options
+}
+
 func (a *OllamaAdapter) Protocol() ModelProtocol {
 	return ProtocolOllamaChat
 }
@@ -36,10 +55,7 @@ func (a *OllamaAdapter) Generate(ctx context.Context, cfg ProviderConfig, req Mo
 		"model":    cfg.ModelName,
 		"messages": a.buildMessages(req),
 		"stream":   false,
-		"options": map[string]interface{}{
-			"temperature": cfg.Temperature,
-			"num_ctx":     cfg.ContextWindow,
-		},
+		"options":  ollamaOptions(cfg, req),
 	}
 
 	if cfg.TopP > 0 && cfg.TopP < 1 {
@@ -88,10 +104,7 @@ func (a *OllamaAdapter) Stream(ctx context.Context, cfg ProviderConfig, req Mode
 		"model":    cfg.ModelName,
 		"messages": a.buildMessages(req),
 		"stream":   true,
-		"options": map[string]interface{}{
-			"temperature": cfg.Temperature,
-			"num_ctx":     cfg.ContextWindow,
-		},
+		"options":  ollamaOptions(cfg, req),
 	}
 
 	if cfg.TopP > 0 && cfg.TopP < 1 {

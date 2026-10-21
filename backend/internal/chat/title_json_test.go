@@ -105,22 +105,3 @@ func TestConversationTitleRetriesInvalidJSONOnce(t *testing.T) {
 		})
 	}
 }
-
-func TestGeneratedConversationTitleRejectsMarkdownBeforeStorage(t *testing.T) {
-	db, svc := newTitleServiceTest(t)
-	conversation := &Conversation{ID: "title-invalid", Title: "原有标题", Revision: 1}
-	if err := db.Create(conversation).Error; err != nil {
-		t.Fatal(err)
-	}
-	updated, err := svc.updateGeneratedConversationTitle(conversation.ID, conversation.Title, "**无效标题**")
-	if err != nil || updated {
-		t.Fatalf("invalid title changed conversation: %v %v", updated, err)
-	}
-	var stored Conversation
-	if err := db.First(&stored, "id = ?", conversation.ID).Error; err != nil {
-		t.Fatal(err)
-	}
-	if stored.Title != "原有标题" || stored.Revision != 1 {
-		t.Fatal("invalid title was persisted")
-	}
-}
