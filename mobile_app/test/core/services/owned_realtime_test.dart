@@ -32,6 +32,9 @@ Map<String, dynamic> scope() => {
 DeviceOwnedRealtimeService service(
   TaskTransport transport, {
   bool Function()? current,
+  String voiceType = '',
+  String resourceId = '',
+  String dialogId = '',
 }) => DeviceOwnedRealtimeService(
   api: BackendServiceApi(transport, 1),
   isCurrent: current ?? () => true,
@@ -39,6 +42,9 @@ DeviceOwnedRealtimeService service(
   characterId: 'role',
   conversationId: 'conversation',
   conversationOrigin: const {'ownerId': 'phone', 'id': 'conversation'},
+  voiceType: voiceType,
+  resourceId: resourceId,
+  dialogId: dialogId,
 );
 
 Map<String, dynamic> audio(String request) {
@@ -82,7 +88,12 @@ void main() {
         'executionScope': scope(),
       },
     ]);
-    final owned = service(transport);
+    final owned = service(
+      transport,
+      voiceType: 'voice.custom',
+      resourceId: 'resource.custom',
+      dialogId: 'dialog.custom',
+    );
     await owned.ticket();
     final body = transport.requests.last.body as Map;
     expect(body['expectedExecutionScope'], scope());
@@ -90,6 +101,9 @@ void main() {
       'ownerId': 'phone',
       'id': 'conversation',
     });
+    expect(body['voiceType'], 'voice.custom');
+    expect(body['resourceId'], 'resource.custom');
+    expect(body['dialogId'], 'dialog.custom');
     expect(() => owned.scope['roleRevision'] = 2, throwsUnsupportedError);
   });
   test('同Core ABA拒绝旧通话票据', () async {

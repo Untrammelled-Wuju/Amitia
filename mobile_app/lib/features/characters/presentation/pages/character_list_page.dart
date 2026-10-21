@@ -357,20 +357,25 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       if (confirmed != true) return;
 
       final authority = (payload['roleAuthority'] ?? '').toString();
+      final importId = (payload['importId'] ?? '').toString();
+      if (importId.isEmpty) throw StateError('角色卡预览响应缺少导入编号');
       roleAuthorityHeaders(authority);
       final result = await api.postMultipart<Map<String, dynamic>>(
         '/api/characters/import-card/confirm',
         files: {
           'card': [path],
         },
-        fields: {'roleAuthority': authority},
+        fields: {'roleAuthority': authority, 'importId': importId},
       );
       if (result == null) throw StateError('角色卡导入未完成');
       ref.invalidate(characterListProvider);
       if (!mounted) return;
       amitiaSnackBar(
         context,
-        '已导入角色 ${(result['name'] ?? preview['name'] ?? '').toString()}',
+        ((result['lorebookEntryCount'] as num?) ?? 0) > 0
+            ? '已导入角色 ${(result['name'] ?? preview['name'] ?? '').toString()}，'
+                  '世界书 ${((result['worldbookImportedCount'] as num?) ?? 0).toInt()} 条'
+            : '已导入角色 ${(result['name'] ?? preview['name'] ?? '').toString()}',
       );
     } catch (e) {
       if (!mounted) return;

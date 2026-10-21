@@ -138,7 +138,6 @@ const pageTitleOverrides: Record<string, string> = {
   "/kernel/dev-mode": "开发模式中心",
   "/devices": "我的设备",
   "/workspaces": "工作区",
-  "/realtime-voice": "实时语音",
   "/long-running": "长期运行维护",
   "/settings/system-logs": "系统运行日志",
   "/settings/feedback": "问题反馈",

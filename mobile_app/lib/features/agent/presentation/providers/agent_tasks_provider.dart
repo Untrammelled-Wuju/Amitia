@@ -103,8 +103,13 @@ class AgentTaskItem {
       attempt: (json['attempt'] as num?)?.toInt() ?? 0,
       maxAttempts: (json['maxAttempts'] as num?)?.toInt() ?? 0,
       executionPlacement: (json['executionPlacement'] ?? '').toString(),
-      checkpointSupported: definition?['checkpoint'] == true,
-      retrySupported: definitionRetrySupported,
+      checkpointSupported:
+          json['checkpointSupported'] == true ||
+          (json['checkpointSupported'] == null &&
+              definition?['checkpoint'] == true),
+      retrySupported:
+          json['retrySupported'] == true ||
+          (json['retrySupported'] == null && definitionRetrySupported),
       checkpointId: (json['checkpointId'] ?? '').toString(),
       sourceRun: json['executionScope'] is Map
           ? Map<String, dynamic>.unmodifiable(json)
@@ -251,22 +256,9 @@ class AgentTaskItem {
 class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   Future<List<AgentTaskItem>> _fetch() async {
     final service = ref.read(extensionTaskServiceProvider);
-    final values = await Future.wait<List<Map<String, dynamic>>>([
-      service.listRuns(limit: 200),
-      service.listDefinitions(),
-    ]);
-    final definitions = <String, Map<String, dynamic>>{
-      for (final definition in values[1])
-        if ((definition['taskId'] ?? '').toString().trim().isNotEmpty)
-          (definition['taskId'] ?? '').toString(): definition,
-    };
-    return values[0]
-        .map(
-          (row) => AgentTaskItem.fromJson(
-            row,
-            definition: definitions[(row['taskDefinitionId'] ?? '').toString()],
-          ),
-        )
+    final runs = await service.listRuns(limit: 200);
+    return runs
+        .map((row) => AgentTaskItem.fromJson(row))
         .toList(growable: false);
   }
 
@@ -278,44 +270,9 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     state = await AsyncValue.guard(_fetch);
   }
 
-  Future<void> createTask({
-    required String taskDefinitionId,
-    required String title,
-    required String description,
-    required List<String> abilities,
-    int stepCount = 3,
-    String? deviceId,
-  }) async {
+  Future<void> createTask(Map<String, dynamic> submission) async {
     final service = ref.read(extensionTaskServiceProvider);
-    final selectedTaskDefinitionId = taskDefinitionId.trim();
-    if (selectedTaskDefinitionId.isEmpty) {
-      throw StateError('请选择可执行的 Kernel Task 定义');
-    }
-    final rows = await service.listDefinitions();
-    Map<String, dynamic>? definition;
-    for (final row in rows) {
-      if ((row['taskId'] ?? '').toString() == selectedTaskDefinitionId) {
-        definition = row;
-        break;
-      }
-    }
-    if (definition == null) {
-      throw StateError('选定的 Kernel Task 定义不存在或已被移除');
-    }
-    await service.enqueue(
-      taskDefinitionId: selectedTaskDefinitionId,
-      extensionId: (definition['extensionId'] ?? '').toString(),
-      moduleId: (definition['moduleId'] ?? '').toString(),
-      input: {
-        'title': title,
-        'description': description,
-        'requiredAbilities': abilities,
-        'stepCount': stepCount,
-      },
-      priority: 0,
-      source: 'mobile_agent',
-      deviceId: deviceId,
-    );
+    await service.enqueueOwnedTask(submission);
     await refresh();
   }
 
@@ -330,16 +287,7 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     final run = detail['run'];
     if (run is! Map) throw StateError('任务运行不存在');
     final runMap = Map<String, dynamic>.from(run);
-    final definitions = await service.listDefinitions();
-    Map<String, dynamic>? definition;
-    final definitionId = (runMap['taskDefinitionId'] ?? '').toString();
-    for (final row in definitions) {
-      if ((row['taskId'] ?? '').toString() == definitionId) {
-        definition = row;
-        break;
-      }
-    }
-    return AgentTaskItem.fromJson(runMap, definition: definition);
+    return AgentTaskItem.fromJson(runMap);
   }
 
   Future<void> pause(String id, {AgentTaskItem? expectedTask}) async {
@@ -397,41 +345,61 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
 }
 
 class AgentTaskDefinitionOption {
-  final String taskId;
-  final String extensionId;
-  final String moduleId;
+  final String optionId;
+  final Map<String, dynamic> definition;
+  final Map<String, dynamic>? taskCatalogReference;
   final String executionPlacement;
-  final bool checkpointSupported;
-  final bool retrySupported;
 
   const AgentTaskDefinitionOption({
-    required this.taskId,
-    required this.extensionId,
-    required this.moduleId,
+    required this.optionId,
+    required this.definition,
+    required this.taskCatalogReference,
     required this.executionPlacement,
-    this.checkpointSupported = false,
-    this.retrySupported = false,
   });
 
+  String get taskId => taskCatalogReference == null
+      ? (definition['taskId'] ?? '').toString()
+      : (taskCatalogReference!['catalogId'] ?? '').toString();
+
   String get label {
+    final extensionId = (definition['extensionId'] ?? '').toString().trim();
+    final moduleId = (definition['moduleId'] ?? '').toString().trim();
+    final sourceTaskId = taskCatalogReference == null
+        ? taskId
+        : (taskCatalogReference!['sourceTaskId'] ?? taskId).toString();
     final owner = [
       extensionId,
       moduleId,
     ].where((part) => part.isNotEmpty).join(' / ');
     final placement = executionPlacement.isEmpty ? 'local' : executionPlacement;
     return owner.isEmpty
-        ? '$taskId · $placement'
-        : '$taskId · $owner · $placement';
+        ? '$sourceTaskId · $placement'
+        : '$sourceTaskId · $owner · $placement';
   }
 
-  factory AgentTaskDefinitionOption.fromJson(Map<String, dynamic> json) {
+  factory AgentTaskDefinitionOption.fromLocal(Map<String, dynamic> json) {
     return AgentTaskDefinitionOption(
-      taskId: (json['taskId'] ?? '').toString().trim(),
-      extensionId: (json['extensionId'] ?? '').toString().trim(),
-      moduleId: (json['moduleId'] ?? '').toString().trim(),
-      executionPlacement: (json['executionPlacement'] ?? '').toString().trim(),
-      checkpointSupported: json['checkpointSupported'] == true,
-      retrySupported: json['retrySupported'] == true,
+      optionId: (json['taskId'] ?? '').toString().trim(),
+      definition: Map<String, dynamic>.from(json),
+      taskCatalogReference: null,
+      executionPlacement:
+          (json['executionPlacement'] ?? '').toString().trim().isEmpty
+          ? 'local'
+          : (json['executionPlacement'] ?? '').toString().trim(),
+    );
+  }
+
+  factory AgentTaskDefinitionOption.fromCatalog(Map<String, dynamic> entry) {
+    final reference = entry['reference'];
+    final definition = entry['definition'];
+    if (reference is! Map || definition is! Map)
+      throw StateError('设备任务目录条目缺少定义或来源');
+    final normalizedReference = Map<String, dynamic>.from(reference);
+    return AgentTaskDefinitionOption(
+      optionId: (normalizedReference['catalogId'] ?? '').toString(),
+      definition: Map<String, dynamic>.from(definition),
+      taskCatalogReference: normalizedReference,
+      executionPlacement: 'device',
     );
   }
 }
@@ -454,17 +422,6 @@ class AgentTaskDeviceOption {
     return '$display · $deviceId';
   }
 }
-
-final agentTaskDefinitionsProvider =
-    FutureProvider.autoDispose<List<AgentTaskDefinitionOption>>((ref) async {
-      final rows = await ref
-          .read(extensionTaskServiceProvider)
-          .listDefinitions();
-      return rows
-          .map(AgentTaskDefinitionOption.fromJson)
-          .where((item) => item.taskId.isNotEmpty)
-          .toList(growable: false);
-    });
 
 final agentTaskDevicesProvider =
     FutureProvider.autoDispose<List<AgentTaskDeviceOption>>((ref) async {
@@ -490,17 +447,15 @@ class AgentTaskRuntimeDetail {
   final Map<String, dynamic> progress;
   final Map<String, dynamic> result;
   final Map<String, dynamic> checkpoint;
-  final Map<String, dynamic>? definition;
 
   const AgentTaskRuntimeDetail({
     required this.run,
     required this.progress,
     required this.result,
     required this.checkpoint,
-    this.definition,
   });
 
-  AgentTaskItem get task => AgentTaskItem.fromJson(run, definition: definition);
+  AgentTaskItem get task => AgentTaskItem.fromJson(run);
 
   double? get percentage {
     final value = progress['percentage'];
@@ -533,24 +488,11 @@ final agentTaskRuntimeDetailProvider = FutureProvider.autoDispose
             : const <String, dynamic>{};
       }
 
-      final run = part('run');
-      final definitionId = (run['taskDefinitionId'] ?? '').toString();
-      Map<String, dynamic>? definition;
-      if (definitionId.isNotEmpty) {
-        final definitions = await service.listDefinitions();
-        for (final row in definitions) {
-          if ((row['taskId'] ?? '').toString() == definitionId) {
-            definition = row;
-            break;
-          }
-        }
-      }
       return AgentTaskRuntimeDetail(
-        run: run,
+        run: part('run'),
         progress: part('progress'),
         result: part('result'),
         checkpoint: part('checkpoint'),
-        definition: definition,
       );
     });
 

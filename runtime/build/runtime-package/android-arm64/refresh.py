@@ -85,7 +85,10 @@ def main():
         runtime_tarball = root / runtime_relpath
         runtime_root = root / "runtime-root"
         with tarfile.open(runtime_tarball, "r:xz") as archive:
-            archive.extractall(runtime_root, filter="data")
+            if hasattr(tarfile, "data_filter"):
+                archive.extractall(runtime_root, filter="data")
+            else:
+                archive.extractall(runtime_root)
 
         shutil.rmtree(runtime_root / "sidecar", ignore_errors=True)
         shutil.rmtree(runtime_root / "qq-sidecar", ignore_errors=True)

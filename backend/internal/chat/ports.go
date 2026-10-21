@@ -8,10 +8,6 @@ import (
 	visioncfg "github.com/u-ai/backend/internal/vision"
 )
 
-type WorldBookPort interface {
-	ToSystemPromptForSpace(spaceID, characterID, userMessage, assistantReply string) string
-}
-
 // KnowledgePort is tenant-global: no character ID is accepted.
 type KnowledgePort interface {
 	Search(ctx context.Context, tenantID string, request knowledge.SearchRequest) (knowledge.SearchResponse, error)
@@ -20,14 +16,6 @@ type KnowledgePort interface {
 
 type VisionPort interface {
 	GetActive() (*visioncfg.VisionConfig, error)
-}
-
-type worldBookPortAdapter struct {
-	ToSystemPromptForSpaceFunc func(spaceID, characterID, userMessage, assistantReply string) string
-}
-
-func (a worldBookPortAdapter) ToSystemPromptForSpace(spaceID, characterID, userMessage, assistantReply string) string {
-	return a.ToSystemPromptForSpaceFunc(spaceID, characterID, userMessage, assistantReply)
 }
 
 type visionPortAdapter struct {

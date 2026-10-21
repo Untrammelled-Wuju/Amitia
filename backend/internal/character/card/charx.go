@@ -221,6 +221,15 @@ func buildV3JSON(card *CharacterCard, preserved map[string]json.RawMessage) ([]b
 				"enabled":         e.Enabled,
 				"insertion_order": e.InsertionOrder,
 			}
+			if e.Name != "" {
+				entry["name"] = e.Name
+			}
+			if len(e.ID) > 0 {
+				var id any
+				if json.Unmarshal(e.ID, &id) == nil {
+					entry["id"] = id
+				}
+			}
 			if len(e.SecondaryKeys) > 0 {
 				entry["secondary_keys"] = e.SecondaryKeys
 			}

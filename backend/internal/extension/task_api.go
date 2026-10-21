@@ -8,19 +8,14 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"sort"
 	"strings"
 	"unicode"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/internal/runtimeidentity"
-	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 type TaskAPI struct {
@@ -35,7 +30,6 @@ func (api *TaskAPI) RegisterRoutes(group *gin.RouterGroup) {
 	tasks := group.Group("/tasks")
 	tasks.Use(api.authorizeTaskRequest())
 	tasks.GET("", api.listTasks)
-	tasks.POST("", security.SharedCoreAdminOnly(), api.enqueueTask)
 	tasks.GET("/:taskRunId", api.getTask)
 	tasks.POST("/:taskRunId/cancel", api.cancelTask)
 	tasks.POST("/:taskRunId/pause", api.pauseTask)
@@ -151,6 +145,25 @@ func taskAuthorityPayload(ctx context.Context, payload any, readOnly bool) (map[
 	return result, nil
 }
 
+func taskCapabilities(ctx context.Context, svc *task_runtime.TaskRuntimeService, run *task_runtime.TaskRun) (bool, bool) {
+	if svc == nil || run == nil {
+		return false, false
+	}
+	definition, err := svc.GetTaskDefinition(ctx, run.TaskDefinitionID)
+	if err != nil || definition == nil {
+		return false, false
+	}
+	idempotency := definition.Idempotency
+	if idempotency == "" {
+		if definition.Idempotent {
+			idempotency = task_runtime.Idempotent
+		} else {
+			idempotency = task_runtime.NonIdempotent
+		}
+	}
+	return definition.Checkpoint, idempotency != task_runtime.NonIdempotent
+}
+
 func (api *TaskAPI) writeScopedTask(c *gin.Context, status int, payload any) {
 	readOnly := false
 	if c.Request.Method == http.MethodGet && c.Param("taskRunId") != "" {
@@ -164,6 +177,11 @@ func (api *TaskAPI) writeScopedTask(c *gin.Context, status int, payload any) {
 	if err != nil {
 		writeTaskError(c, err)
 		return
+	}
+	if run, ok := payload.(*task_runtime.TaskRun); ok {
+		checkpoint, retry := taskCapabilities(c.Request.Context(), api.service(c), run)
+		result["checkpointSupported"], _ = json.Marshal(checkpoint)
+		result["retrySupported"], _ = json.Marshal(retry)
 	}
 	c.JSON(status, result)
 }
@@ -272,6 +290,9 @@ func (api *TaskAPI) listTasks(c *gin.Context) {
 				if progressErr == nil {
 					item["progress"], _ = json.Marshal(progress)
 				}
+				checkpoint, retry := taskCapabilities(readCtx, svc, run)
+				item["checkpointSupported"], _ = json.Marshal(checkpoint)
+				item["retrySupported"], _ = json.Marshal(retry)
 				items = append(items, item)
 				finish()
 			}
@@ -282,214 +303,6 @@ func (api *TaskAPI) listTasks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total})
-}
-
-func (api *TaskAPI) enqueueTask(c *gin.Context) {
-	svc := api.service(c)
-	if svc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "task runtime unavailable"})
-		return
-	}
-	var req task_runtime.EnqueueTaskRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
-		return
-	}
-	if req.TaskDefinitionID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "taskDefinitionId required"})
-		return
-	}
-	if req.OperationID == "" {
-		req.OperationID = "op-" + uuid.NewString()
-	}
-	def, err := svc.GetTaskDefinition(c.Request.Context(), req.TaskDefinitionID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "task definition invalid: " + err.Error()})
-		return
-	}
-	if err := api.resolvePublicExecutionTarget(c, &req, def); err != nil {
-		writeTaskError(c, err)
-		return
-	}
-	result, err := svc.Enqueue(c.Request.Context(), req, def)
-	if err != nil {
-		writeTaskError(c, err)
-		return
-	}
-	c.JSON(http.StatusCreated, result)
-}
-
-func (api *TaskAPI) resolvePublicExecutionTarget(c *gin.Context, req *task_runtime.EnqueueTaskRequest, def *task_runtime.TaskDefinition) error {
-	if api == nil || api.runtime == nil || req == nil || def == nil {
-		return task_runtime.NewTaskError(task_runtime.ErrTaskExecutionTargetInvalid, "task runtime target resolver unavailable")
-	}
-
-	// A public caller may select a device, but it must not change an explicit
-	// placement declared by the task definition. Trusted coordinators (for
-	// example workflow execution) use the internal enqueue path and retain the
-	// ability to bind a pre-resolved target.
-	if req.ExecutionPlacement != "" && def.ExecutionPlacement != "" && req.ExecutionPlacement != def.ExecutionPlacement {
-		return task_runtime.NewTaskError(task_runtime.ErrTaskExecutionPlacementInvalid, "public enqueue placement conflicts with task definition")
-	}
-	placement, err := task_runtime.ResolveRequestedPlacement(req.ExecutionPlacement, def.ExecutionPlacement)
-	if err != nil {
-		return err
-	}
-
-	// A cloud task is local to the Cloud Core that accepted this authenticated
-	// request. Do not silently execute a cloud-only definition inside a local
-	// full runtime; cloud-to-cloud dispatch is intentionally not exposed by this
-	// public API.
-	if placement == task_runtime.TaskExecutionPlacementCloud {
-		container := api.runtime.Kernel.Container()
-		if container == nil || container.RuntimeProfile != runtimeprofile.ProfileCloudCore {
-			return task_runtime.NewTaskError(task_runtime.ErrRemoteTaskExecutorUnavailable, "cloud task must be enqueued on Cloud Core")
-		}
-		req.ExecutionPlacement = task_runtime.TaskExecutionPlacementLocal
-		req.TrustedExecutionTarget = nil
-		return nil
-	}
-	if placement != task_runtime.TaskExecutionPlacementDevice {
-		return nil
-	}
-
-	spaceID := strings.TrimSpace(workflowSpaceID(c))
-	if spaceID == "" {
-		return task_runtime.NewTaskError(task_runtime.ErrTaskDeviceBindingInvalid, "authenticated user is required for device execution")
-	}
-	control := api.runtime.WorkflowDeviceControl
-	if control == nil {
-		return task_runtime.NewTaskError(task_runtime.ErrRemoteTaskExecutorUnavailable, "device control plane unavailable")
-	}
-	devices, err := control.ListDevices(c.Request.Context(), spaceID)
-	if err != nil {
-		return task_runtime.NewTaskError(task_runtime.ErrRemoteTaskExecutorUnavailable, "list devices: "+err.Error())
-	}
-
-	requestedDeviceID := strings.TrimSpace(req.DeviceID)
-	if requestedDeviceID == "" {
-		requestedDeviceID = strings.TrimSpace(c.GetHeader("X-Amitia-Target-Device-ID"))
-	}
-	if requestedDeviceID == "" {
-		requestedDeviceID = strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
-	}
-
-	online := make([]WorkflowDeviceDescriptor, 0, len(devices))
-	for _, item := range devices {
-		if item.Online && strings.TrimSpace(item.DeviceID) != "" && strings.TrimSpace(item.RuntimeID) != "" {
-			online = append(online, item)
-		}
-	}
-	sort.Slice(online, func(i, j int) bool {
-		if online[i].LastSeenAt.Equal(online[j].LastSeenAt) {
-			return online[i].DeviceID < online[j].DeviceID
-		}
-		return online[i].LastSeenAt.After(online[j].LastSeenAt)
-	})
-
-	if len(online) == 0 {
-		return task_runtime.NewTaskError(task_runtime.ErrRemoteTaskExecutorUnavailable, "no online device is available for device task execution")
-	}
-
-	container := api.runtime.Kernel.Container()
-	if container == nil || container.CapabilityProviders == nil {
-		return task_runtime.NewTaskError(task_runtime.ErrTaskProviderBindingInvalid, "provider registry unavailable")
-	}
-	instances := container.CapabilityProviders.ListInstancesByPlacement(capability.ProviderPlacementDevice)
-
-	// Resolve only against an online device owned by the authenticated user and
-	// a provider instance that belongs to the task definition's extension/module.
-	// This prevents an older client (without deviceId) from selecting the most
-	// recently seen device when that device cannot actually execute the task.
-	type providerBinding struct {
-		descriptor *WorkflowDeviceDescriptor
-		provider   *capability.CapabilityProviderInstance
-	}
-	providerByDevice := make(map[string]providerBinding, len(online))
-	for _, instance := range instances {
-		if instance == nil || !instance.IsExecutable() || string(instance.SpaceID) != spaceID {
-			continue
-		}
-		if strings.TrimSpace(def.ExtensionID) != "" && strings.TrimSpace(instance.ExtensionID) != strings.TrimSpace(def.ExtensionID) {
-			continue
-		}
-		if strings.TrimSpace(def.ModuleID) != "" && strings.TrimSpace(instance.ModuleID) != strings.TrimSpace(def.ModuleID) {
-			continue
-		}
-		deviceID := strings.TrimSpace(string(instance.DeviceID))
-		runtimeID := strings.TrimSpace(string(instance.RuntimeID))
-		if deviceID == "" || runtimeID == "" {
-			continue
-		}
-		var descriptor *WorkflowDeviceDescriptor
-		for i := range online {
-			if online[i].DeviceID == deviceID && online[i].RuntimeID == runtimeID {
-				descriptor = &online[i]
-				break
-			}
-		}
-		if descriptor == nil {
-			continue
-		}
-
-		// A device can briefly expose more than one runtime generation while a
-		// reconnect is converging. Keep the newest online runtime, then use a
-		// stable provider-ID tie break. The trusted target below must take its
-		// RuntimeID from the same binding as the ProviderInstance; otherwise a
-		// device-only map can accidentally create an impossible mixed target.
-		current, exists := providerByDevice[deviceID]
-		if !exists || descriptor.LastSeenAt.After(current.descriptor.LastSeenAt) ||
-			(descriptor.LastSeenAt.Equal(current.descriptor.LastSeenAt) && instance.ID < current.provider.ID) {
-			providerByDevice[deviceID] = providerBinding{descriptor: descriptor, provider: instance}
-		}
-	}
-
-	var selected providerBinding
-	if requestedDeviceID != "" {
-		deviceOnline := false
-		for i := range online {
-			if online[i].DeviceID == requestedDeviceID {
-				deviceOnline = true
-				break
-			}
-		}
-		if !deviceOnline {
-			return task_runtime.NewTaskError(task_runtime.ErrTaskDeviceBindingInvalid, "requested device is not online or is not owned by the authenticated user")
-		}
-		var ok bool
-		selected, ok = providerByDevice[requestedDeviceID]
-		if !ok {
-			return task_runtime.NewTaskError(task_runtime.ErrTaskProviderBindingInvalid, "selected device has no executable provider instance for this task definition")
-		}
-	} else {
-		for i := range online {
-			binding, ok := providerByDevice[online[i].DeviceID]
-			if ok && binding.descriptor.RuntimeID == online[i].RuntimeID {
-				selected = binding
-				break
-			}
-		}
-		if selected.provider == nil {
-			return task_runtime.NewTaskError(task_runtime.ErrTaskProviderBindingInvalid, "no online device has an executable provider instance for this task definition")
-		}
-	}
-	providerInstance := selected.provider
-	descriptor := selected.descriptor
-
-	req.ExecutionPlacement = task_runtime.TaskExecutionPlacementDevice
-	req.TrustedExecutionTarget = &task_runtime.TrustedExecutionTargetRequest{
-		Placement: task_runtime.TaskExecutionPlacementDevice,
-		Target: task_runtime.TaskExecutionTarget{
-			ProviderID:         providerInstance.ProviderID,
-			ProviderInstanceID: providerInstance.ID,
-			SpaceID:            runtimeidentity.SpaceID(spaceID),
-			DeviceID:           runtimeidentity.DeviceID(descriptor.DeviceID),
-			RuntimeID:          runtimeidentity.RuntimeID(descriptor.RuntimeID),
-			RuntimeInstanceID:  providerInstance.RuntimeInstanceID,
-		},
-		ResolvedBy: "task_api_server",
-	}
-	return nil
 }
 
 func (api *TaskAPI) getTask(c *gin.Context) {

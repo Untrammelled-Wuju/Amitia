@@ -51,11 +51,9 @@ func (f *ToolFacade) handleUsePackage(ctx context.Context, input json.RawMessage
 		return ToolDispatchResult{Status: "FAILED", VisibleText: err.Error(), Error: &ToolDispatchError{Code: "INVALID_INPUT", Message: err.Error()}}, err
 	}
 
-	// Skills are the highest-confidence package-name lookup because the skill
-	// catalog is explicitly name-addressable and activation is conversation scoped.
 	var skillErr error
-	if f.agentSkillBackend != nil {
-		if result, err := f.agentSkillBackend.Activate(ctx, scope, name, true); err == nil {
+	if f.agentSkillRuntime != nil {
+		if result, err := f.agentSkillRuntime.Activate(ctx, scope, name, true); err == nil {
 			output, _ := json.Marshal(map[string]any{
 				"status":              "activated",
 				"kind":                "skill",

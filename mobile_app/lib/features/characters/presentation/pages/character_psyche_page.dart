@@ -26,7 +26,9 @@ class CharacterPsychePage extends ConsumerWidget {
       body: SafeArea(
         top: false,
         child: FutureBuilder<Map<String, dynamic>?>(
-          future: ref.read(companionServiceProvider).psycheSnapshot(characterId: characterId),
+          future: ref
+              .read(characterDetailServiceProvider)
+              .psycheSnapshot(characterId),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -36,7 +38,10 @@ class CharacterPsychePage extends ConsumerWidget {
             }
             final state = snapshot.data;
             if (state == null || state.isEmpty) {
-              return const AmitiaEmptyState(icon: Icons.psychology_outlined, title: '暂无心理状态数据');
+              return const AmitiaEmptyState(
+                icon: Icons.psychology_outlined,
+                title: '暂无心理状态数据',
+              );
             }
             return _buildContent(context, state);
           },
@@ -52,7 +57,12 @@ class CharacterPsychePage extends ConsumerWidget {
     final relationship = _asMap(state['relationship']);
     final beliefs = _asMapList(state['beliefs']);
     final affectLabel = (state['affectLabel'] ?? '平静').toString();
-    final collectedAt = (state['collectedAt'] ?? emotion['updatedAt'] ?? mood['updatedAt'] ?? '').toString();
+    final collectedAt =
+        (state['collectedAt'] ??
+                emotion['updatedAt'] ??
+                mood['updatedAt'] ??
+                '')
+            .toString();
 
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -63,20 +73,33 @@ class CharacterPsychePage extends ConsumerWidget {
               Container(
                 width: 80,
                 height: 80,
-                decoration: BoxDecoration(color: context.accentSoft, shape: BoxShape.circle),
-                child: Icon(Icons.psychology_outlined, size: 42, color: context.accentPrimary),
+                decoration: BoxDecoration(
+                  color: context.accentSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.psychology_outlined,
+                  size: 42,
+                  color: context.accentPrimary,
+                ),
               ),
               SizedBox(height: AppSpacing.md),
               Text('当前心理状态', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.xs),
               Text(
                 affectLabel,
-                style: AppTypography.pageLargeTitle(context).copyWith(color: context.accentPrimary),
+                style: AppTypography.pageLargeTitle(
+                  context,
+                ).copyWith(color: context.accentPrimary),
                 textAlign: TextAlign.center,
               ),
               if (collectedAt.isNotEmpty) ...[
                 SizedBox(height: AppSpacing.xs),
-                Text('采集时间：$collectedAt', style: AppTypography.label(context), textAlign: TextAlign.center),
+                Text(
+                  '采集时间：$collectedAt',
+                  style: AppTypography.label(context),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ],
           ),
@@ -84,9 +107,21 @@ class CharacterPsychePage extends ConsumerWidget {
         SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '状态指标'),
         SizedBox(height: AppSpacing.sm),
-        _metricCard(context, '压力', state['stress'], Icons.speed_outlined, context.warning),
+        _metricCard(
+          context,
+          '压力',
+          state['stress'],
+          Icons.speed_outlined,
+          context.warning,
+        ),
         SizedBox(height: AppSpacing.sm),
-        _metricCard(context, '精力', state['energy'], Icons.bolt_outlined, context.accentPrimary),
+        _metricCard(
+          context,
+          '精力',
+          state['energy'],
+          Icons.bolt_outlined,
+          context.accentPrimary,
+        ),
         SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '情绪维度'),
         SizedBox(height: AppSpacing.sm),
@@ -104,7 +139,9 @@ class CharacterPsychePage extends ConsumerWidget {
         if (needs.isEmpty)
           Text('暂无需求状态', style: AppTypography.caption(context))
         else
-          ...needs.entries.map((entry) => _needCard(context, entry.key, entry.value)),
+          ...needs.entries.map(
+            (entry) => _needCard(context, entry.key, entry.value),
+          ),
         SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '关系状态'),
         SizedBox(height: AppSpacing.sm),
@@ -124,7 +161,13 @@ class CharacterPsychePage extends ConsumerWidget {
     );
   }
 
-  Widget _metricCard(BuildContext context, String label, dynamic rawValue, IconData icon, Color color) {
+  Widget _metricCard(
+    BuildContext context,
+    String label,
+    dynamic rawValue,
+    IconData icon,
+    Color color,
+  ) {
     final value = _toPercent(rawValue);
     return AmitiaCard(
       child: Column(
@@ -136,7 +179,10 @@ class CharacterPsychePage extends ConsumerWidget {
               SizedBox(width: AppSpacing.sm),
               Text(label, style: AppTypography.body(context)),
               const Spacer(),
-              Text('$value', style: AppTypography.cardTitle(context).copyWith(color: color)),
+              Text(
+                '$value',
+                style: AppTypography.cardTitle(context).copyWith(color: color),
+              ),
               Text('/100', style: AppTypography.label(context)),
             ],
           ),
@@ -152,22 +198,33 @@ class CharacterPsychePage extends ConsumerWidget {
       child: Wrap(
         spacing: 12,
         runSpacing: 12,
-        children: values.entries.map((entry) {
-          final value = _toPercent(entry.value);
-          return SizedBox(
-            width: 132,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(entry.key, style: AppTypography.label(context)),
-                const SizedBox(height: 4),
-                Text('$value/100', style: AppTypography.cardTitle(context).copyWith(color: context.accentPrimary)),
-                const SizedBox(height: 6),
-                AmitiaProgressBar(progress: value / 100, color: context.accentPrimary, height: 5),
-              ],
-            ),
-          );
-        }).toList(growable: false),
+        children: values.entries
+            .map((entry) {
+              final value = _toPercent(entry.value);
+              return SizedBox(
+                width: 132,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(entry.key, style: AppTypography.label(context)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$value/100',
+                      style: AppTypography.cardTitle(
+                        context,
+                      ).copyWith(color: context.accentPrimary),
+                    ),
+                    const SizedBox(height: 6),
+                    AmitiaProgressBar(
+                      progress: value / 100,
+                      color: context.accentPrimary,
+                      height: 5,
+                    ),
+                  ],
+                ),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }
@@ -182,19 +239,31 @@ class CharacterPsychePage extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(_needLabel(key), style: AppTypography.cardTitle(context))),
+                Expanded(
+                  child: Text(
+                    _needLabel(key),
+                    style: AppTypography.cardTitle(context),
+                  ),
+                ),
                 Text('$value/100', style: AppTypography.label(context)),
               ],
             ),
             SizedBox(height: AppSpacing.sm),
-            AmitiaProgressBar(progress: value / 100, color: context.accentPrimary, height: 7),
+            AmitiaProgressBar(
+              progress: value / 100,
+              color: context.accentPrimary,
+              height: 7,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _relationshipCard(BuildContext context, Map<String, dynamic> relationship) {
+  Widget _relationshipCard(
+    BuildContext context,
+    Map<String, dynamic> relationship,
+  ) {
     const labels = <String, String>{
       'trust': '信任',
       'familiarity': '熟悉度',
@@ -205,20 +274,43 @@ class CharacterPsychePage extends ConsumerWidget {
     };
     return AmitiaCard(
       child: Column(
-        children: labels.entries.map((entry) {
-          final value = _toPercent(relationship[entry.key]);
-          return Padding(
-            padding: EdgeInsets.only(bottom: entry.key == labels.keys.last ? 0 : AppSpacing.sm),
-            child: Row(
-              children: [
-                SizedBox(width: 76, child: Text(entry.value, style: AppTypography.bodySmall(context))),
-                Expanded(child: AmitiaProgressBar(progress: value / 100, color: context.accentPrimary, height: 6)),
-                const SizedBox(width: 10),
-                SizedBox(width: 48, child: Text('$value', textAlign: TextAlign.end, style: AppTypography.label(context))),
-              ],
-            ),
-          );
-        }).toList(growable: false),
+        children: labels.entries
+            .map((entry) {
+              final value = _toPercent(relationship[entry.key]);
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: entry.key == labels.keys.last ? 0 : AppSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 76,
+                      child: Text(
+                        entry.value,
+                        style: AppTypography.bodySmall(context),
+                      ),
+                    ),
+                    Expanded(
+                      child: AmitiaProgressBar(
+                        progress: value / 100,
+                        color: context.accentPrimary,
+                        height: 6,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 48,
+                      child: Text(
+                        '$value',
+                        textAlign: TextAlign.end,
+                        style: AppTypography.label(context),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }
@@ -237,8 +329,17 @@ class CharacterPsychePage extends ConsumerWidget {
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-              child: Icon(conflicted ? Icons.compare_arrows_outlined : Icons.lightbulb_outline, color: context.accentPrimary, size: 20),
+              decoration: BoxDecoration(
+                color: context.accentSoft,
+                borderRadius: AppRadius.brSmall,
+              ),
+              child: Icon(
+                conflicted
+                    ? Icons.compare_arrows_outlined
+                    : Icons.lightbulb_outline,
+                color: context.accentPrimary,
+                size: 20,
+              ),
             ),
             SizedBox(width: AppSpacing.md),
             Expanded(
@@ -247,8 +348,18 @@ class CharacterPsychePage extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text(key, style: AppTypography.cardTitle(context))),
-                      AmitiaStatusBadge(label: conflicted ? '冲突' : '置信 $confidence%', type: conflicted ? BadgeType.warning : BadgeType.neutral),
+                      Expanded(
+                        child: Text(
+                          key,
+                          style: AppTypography.cardTitle(context),
+                        ),
+                      ),
+                      AmitiaStatusBadge(
+                        label: conflicted ? '冲突' : '置信 $confidence%',
+                        type: conflicted
+                            ? BadgeType.warning
+                            : BadgeType.neutral,
+                      ),
                     ],
                   ),
                   if (value.isNotEmpty) ...[
@@ -272,7 +383,10 @@ class CharacterPsychePage extends ConsumerWidget {
 
   static List<Map<String, dynamic>> _asMapList(dynamic value) {
     if (value is! List) return const [];
-    return value.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    return value
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 
   static double _toDouble(dynamic value) {

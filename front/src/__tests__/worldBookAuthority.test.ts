@@ -1,61 +1,132 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { defineComponent } from "vue";
-import { mount, flushPromises } from "@vue/test-utils";
+import { beforeEach, expect, it, vi } from "vitest";
+import { ref } from "vue";
 import { useWorldBook } from "../composables/useWorldBook";
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn(), deployment: vi.fn(), policy: vi.fn() }));
-vi.mock("../ui-index", () => ({ apiClient: mocks }));
-vi.mock("../composables/useApi", () => ({ useApi: () => ({ get: mocks.policy }) }));
-vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: mocks.deployment }));
-let status: any;
-let book: ReturnType<typeof useWorldBook>;
-let wrapper: ReturnType<typeof mount>;
+const mocks = vi.hoisted(() => ({
+  post: vi.fn(),
+  refresh: vi.fn(),
+  data: vi.fn(),
+}));
+
+vi.mock("../ui-index", () => ({ apiClient: { post: mocks.post } }));
+vi.mock("../composables/useDeviceOwnedConversation", () => ({
+  useDeviceOwnedConversation: () => ({
+    enabled: ref(true),
+    coreId: ref("b"),
+    roleOwnerId: ref("b"),
+    notice: ref(""),
+    roles: ref([{ id: "one", name: "角色一", revision: 1 }]),
+    refresh: mocks.refresh,
+    selectInitialRole: () => "one",
+    data: mocks.data,
+  }),
+}));
+
+function scope() {
+  return {
+    spaceId: "space",
+    initiatorDeviceId: "device-a",
+    targetDeviceId: "b",
+    coreId: "b",
+    providerEpoch: 1,
+    coordinated: true,
+    modeRevision: 1,
+    permissionRevision: 1,
+    roleOwnerId: "device-a",
+    resourceOwnerId: "b",
+    roleId: "one",
+    roleRevision: 1,
+  };
+}
+
+function snapshot() {
+  return {
+    executionScope: scope(),
+    snapshot: {
+      ownerId: "b",
+      resources: [
+        { kind: "worldbook", id: "global", roleId: "@global-worldbook", ownerId: "b", revision: 2, deleted: false, body: { scope: "global", matchType: "keyword", matchPattern: "晨星", matchScope: "full_context", injectContent: "全局规则", priority: 1, enabled: true } },
+        { kind: "worldbook", id: "role", roleId: "one", ownerId: "b", revision: 1, deleted: false, body: { scope: "role", matchType: "exact", matchPattern: "茶", matchScope: "user_message", injectContent: "角色规则", priority: 2, enabled: true } },
+      ],
+    },
+  };
+}
+
 beforeEach(() => {
   Object.values(mocks).forEach((mock) => mock.mockReset());
-  status = { coreId: "b", canAdminister: true, policy: { coordinated: true, providerEpoch: 1, modeRevision: 1, permissionRevision: 1 } };
-  mocks.deployment.mockResolvedValue({ mode: "cloud", serverURL: "https://b.example" });
-  mocks.policy.mockImplementation(async () => structuredClone(status));
-  mocks.get.mockResolvedValue({ data: { items: [{ id: "same-id", injectContent: "B内容" }], total: 1 } });
-  wrapper = mount(defineComponent({ setup() { book = useWorldBook(); return () => null; } }));
+  mocks.refresh.mockResolvedValue(true);
+  mocks.data.mockImplementation(async () => snapshot());
+  mocks.post.mockImplementation(async (_url, payload) => ({
+    code: 200,
+    data: {
+      saved: true,
+      executionScope: { ...scope(), requestId: payload.requestId, worldbookRoleId: payload.rule.scope === "global" ? "@global-worldbook" : "one" },
+      acknowledgement: {
+        ownerId: "b",
+        requestId: payload.requestId,
+        versions: { [`checkpoint/worldbook/${payload.requestId}`]: 1 },
+      },
+      rule: payload.action === "delete" ? undefined : { ...payload.rule, id: payload.rule.id || "created", ownerId: "b", roleId: "one", revision: 1 },
+    },
+  }));
 });
-afterEach(() => wrapper.unmount());
 
-it.each([false, undefined])("普通或未知权限不读取世界书 %s", async (value) => {
-  status.canAdminister = value;
-  await flushPromises();
+it("加载全局和角色世界书并保留所有者与修订", async () => {
+  const book = useWorldBook();
   await book.fetchRules();
-  expect(mocks.get).not.toHaveBeenCalled();
-  expect(book.rules.value).toEqual([]);
-  await expect(book.createRule({ injectContent: "不能保存" })).rejects.toThrow();
+  expect(book.rules.value.map((rule) => [rule.id, rule.scope, rule.revision])).toEqual([
+    ["global", "global", 2],
+    ["role", "role", 1],
+  ]);
+  expect(book.loadedContext.value).not.toBe("");
+});
+
+it("创建携带原执行范围并核验所有者确认", async () => {
+  const book = useWorldBook();
+  await book.fetchRules();
+  await book.createRule({ scope: "role", matchType: "keyword", matchPattern: "雨", injectContent: "下雨" });
+  expect(mocks.post).toHaveBeenCalledWith(
+    "/api/device-mesh/v1/business/worldbook/manage",
+    expect.objectContaining({
+      characterId: "one",
+      targetDeviceId: "b",
+      expectedExecutionScope: scope(),
+      action: "create",
+      rule: expect.objectContaining({ scope: "role", characterId: "one" }),
+    }),
+  );
+});
+
+it("所有者确认不匹配时拒绝显示保存成功", async () => {
+  mocks.post.mockImplementation(async (_url, payload) => ({
+    data: {
+      saved: true,
+      executionScope: { ...scope(), requestId: payload.requestId },
+      acknowledgement: { ownerId: "other", requestId: payload.requestId, versions: { [`checkpoint/worldbook/${payload.requestId}`]: 1 } },
+    },
+  }));
+  const book = useWorldBook();
+  await book.fetchRules();
+  await expect(book.createRule({ scope: "role", matchType: "keyword", matchPattern: "雨", injectContent: "下雨" })).rejects.toThrow("所有者保存确认");
+});
+
+it("Core 变化后旧页面不能继续更新世界书", async () => {
+  const book = useWorldBook();
+  await book.fetchRules();
+  const expected = book.loadedContext.value;
+  mocks.data.mockRejectedValue(new Error("Core 已变化"));
+  mocks.refresh.mockResolvedValue(false);
+  await expect(book.updateRule("role", { injectContent: "新内容" }, expected)).rejects.toThrow();
   expect(mocks.post).not.toHaveBeenCalled();
 });
 
-it("管理员请求绑定原Core权限版本，换Core后旧规则同ID不可更新", async () => {
+it("批量导入中保存失败后不再提交后续规则", async () => {
+  const book = useWorldBook();
   await book.fetchRules();
-  const original = book.loadedContext.value;
-  await book.updateRule("same-id", { injectContent: "原内容" }, original);
-  expect(mocks.put).toHaveBeenCalledWith("/api/world-book/same-id", expect.any(Object), { headers: { "X-Amitia-Expected-Core-ID": "b", "X-Amitia-Expected-Configuration-Policy": "1:1:1" } });
-  status.coreId = "c";
-  await expect(book.updateRule("same-id", {}, original)).rejects.toThrow();
-  expect(mocks.put).toHaveBeenCalledTimes(1);
-  expect(book.rules.value).toEqual([]);
-});
-
-it("权限撤销发生在列表返回前时丢弃私有世界书内容", async () => {
-  let complete!: (value: any) => void;
-  mocks.get.mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
-  const loading = book.fetchRules();
-  await flushPromises();
-  status.canAdminister = false;
-  complete({ data: { items: [{ id: "private" }], total: 1 } });
-  await loading;
-  expect(book.rules.value).toEqual([]);
-  expect(book.loadedContext.value).toBe("");
-});
-
-it("批量导入中权限版本变化不再提交后续规则", async () => {
-  await book.fetchRules();
-  mocks.post.mockImplementation(async () => { status.policy.permissionRevision = 3; });
-  await expect(book.createRules([{ injectContent: "1" }, { injectContent: "2" }])).rejects.toThrow();
+  mocks.post.mockRejectedValueOnce(new Error("请求冲突"));
+  await expect(book.createRules([
+    { scope: "role", matchType: "keyword", matchPattern: "一", injectContent: "一" },
+    { scope: "role", matchType: "keyword", matchPattern: "二", injectContent: "二" },
+  ])).rejects.toThrow("请求冲突");
   expect(mocks.post).toHaveBeenCalledTimes(1);
 });

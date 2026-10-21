@@ -26,6 +26,8 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	registerMeshRealtimeInvitationRouter(mesh, services, coreID)
 	registerMeshProjectRouter(mesh, services, coreID)
 	registerMeshMemoryManagementRouter(mesh, services, coreID)
+	registerMeshWorldbookRouter(mesh, services, coreID)
+	registerMeshRuntimeStateRouter(mesh, services, coreID)
 	registerMeshChatManagementRouter(mesh, services, coreID)
 	registerMeshChatRuntimeRouter(mesh, services, coreID)
 	registerMeshTaskOwnerRouter(mesh, services)
@@ -222,7 +224,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		kind := c.Query("kind")
 		switch kind {
-		case "memory", "working", "profile", "episodic", "fact", "vector", "graph", "summary", "continuity":
+		case "memory", "working", "profile", "episodic", "fact", "vector", "graph", "summary", "continuity", "worldbook":
 		default:
 			c.JSON(400, gin.H{"message": "记忆层类型无效"})
 			return

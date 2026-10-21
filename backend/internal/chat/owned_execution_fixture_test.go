@@ -32,7 +32,7 @@ func (p *ownedExecutionData) Roles(context.Context, coordination.ExecutionScope)
 }
 func (p *ownedExecutionData) Snapshot(ctx context.Context, scope coordination.ExecutionScope, _ coordination.DataQuery) (coordination.DataSnapshot, error) {
 	snapshot := coordination.DataSnapshot{OwnerID: scope.ResourceOwnerID, Role: p.role}
-	for _, kind := range []string{"conversation", "message", "checkpoint", "memory", "fact", "summary", "working", "profile", "episodic", "vector", "graph"} {
+	for _, kind := range []string{"conversation", "message", "checkpoint", "memory", "fact", "summary", "working", "profile", "episodic", "vector", "graph", "psyche", "relationship", "needs"} {
 		rows, err := coordination.NewOwnershipStore(p.db, scope.ResourceOwnerID).List(ctx, kind, coordination.StorageRole(scope, kind), false)
 		if err != nil {
 			return snapshot, err
@@ -101,14 +101,15 @@ func (f *ownedExecutionFixture) request(id string) business.Request {
 
 type ownedTestMessage struct {
 	ID                  string
-	Role                string `json:"role"`
-	Content             string `json:"content"`
-	RequestID           string `json:"requestId"`
-	ConversationID      string `json:"conversationId"`
-	Sequence            int64  `json:"sequence"`
-	Reasoning           string `json:"reasoningContent"`
-	ReasoningDurationMS int64  `json:"reasoningDurationMs"`
-	Tokens              int    `json:"tokens"`
+	Role                string             `json:"role"`
+	Content             string             `json:"content"`
+	CitationSnapshot    []CitationSnapshot `json:"citationSnapshot"`
+	RequestID           string             `json:"requestId"`
+	ConversationID      string             `json:"conversationId"`
+	Sequence            int64              `json:"sequence"`
+	Reasoning           string             `json:"reasoningContent"`
+	ReasoningDurationMS int64              `json:"reasoningDurationMs"`
+	Tokens              int                `json:"tokens"`
 }
 
 func (f *ownedExecutionFixture) messages(t *testing.T) []ownedTestMessage {
@@ -127,4 +128,20 @@ func (f *ownedExecutionFixture) messages(t *testing.T) []ownedTestMessage {
 		result = append(result, item)
 	}
 	return result
+}
+
+func (f *ownedExecutionFixture) runtimeState(t *testing.T, kind, id string) map[string]any {
+	t.Helper()
+	resource, err := coordination.NewOwnershipStore(f.db, "device").Get(t.Context(), kind, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resource == nil {
+		t.Fatalf("%s/%s not found", kind, id)
+	}
+	var value map[string]any
+	if err := json.Unmarshal(resource.Body, &value); err != nil {
+		t.Fatal(err)
+	}
+	return value
 }

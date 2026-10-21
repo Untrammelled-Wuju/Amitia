@@ -78,7 +78,7 @@ func defaultInvestigationBudget(result knowledge.SearchResponse) investigationBu
 	}
 }
 
-func (s *service) runKnowledgeInvestigation(ctx context.Context, tenantID, userGoal string, result knowledge.SearchResponse, turnRecorder *assistantTurnRecorder) knowledge.SearchResponse {
+func (s *service) runKnowledgeInvestigation(ctx context.Context, tenantID, userGoal string, result knowledge.SearchResponse, trace *ownedKnowledgeTrace, citations *ownedCitationAudit) knowledge.SearchResponse {
 	if s == nil || s.knowledgePort == nil || result.RetrievalLevel != knowledge.RetrievalLevelAgentic || result.Sufficient {
 		return result
 	}
@@ -113,14 +113,9 @@ func (s *service) runKnowledgeInvestigation(ctx context.Context, tenantID, userG
 	investigationCtx, cancel := context.WithTimeout(ctx, totalTimeout)
 	defer cancel()
 
-	var investigationTaskID string
-	var investigationStartedAt time.Time
-	if turnRecorder != nil {
-		investigationTaskID, investigationStartedAt, _ = turnRecorder.BeginAgentTask(context.WithoutCancel(ctx), "investigation.started", "正在调查知识证据", map[string]any{
-			"title": "正在调查知识证据", "status": "running", "progress": 5,
-			"maxRounds": budget.MaxRounds, "maxSearchCalls": budget.MaxSearchCalls, "maxReadCalls": budget.MaxReadCalls, "maxReadRunes": budget.MaxReadRunes,
-		})
-	}
+	investigationTask, _ := trace.begin(context.WithoutCancel(ctx), "investigation.started", "正在调查知识证据", map[string]any{
+		"maxRounds": budget.MaxRounds, "maxSearchCalls": budget.MaxSearchCalls, "maxReadCalls": budget.MaxReadCalls, "maxReadRunes": budget.MaxReadRunes,
+	})
 
 	for round := 1; round <= budget.MaxRounds; round++ {
 		if err := investigationCtx.Err(); err != nil {
@@ -133,9 +128,9 @@ func (s *service) runKnowledgeInvestigation(ctx context.Context, tenantID, userG
 			break
 		}
 		state.Round = round
-		if turnRecorder != nil && investigationTaskID != "" {
-			_ = turnRecorder.ProgressAgentTask(context.WithoutCancel(ctx), investigationTaskID, "investigation.round", map[string]any{
-				"title": "正在调查知识证据", "status": "running", "round": round, "maxRounds": budget.MaxRounds,
+		if investigationTask != nil {
+			_ = trace.progress(context.WithoutCancel(ctx), investigationTask, "investigation.round", map[string]any{
+				"round": round, "maxRounds": budget.MaxRounds,
 				"sufficiencyReason": result.SufficiencyReason, "evidenceCount": len(result.Evidence),
 				"searchCalls": state.SearchCalls, "readCalls": state.ReadCalls, "readRunes": state.ReadRunes,
 			})
@@ -267,25 +262,25 @@ func (s *service) runKnowledgeInvestigation(ctx context.Context, tenantID, userG
 	if !result.Sufficient {
 		result.Warnings = appendUniqueString(result.Warnings, "Agentic investigation stopped: "+state.Termination)
 	}
-	if turnRecorder != nil && investigationTaskID != "" {
-		status := assistantTurnStatusCompleted
+	if investigationTask != nil {
+		status := "completed"
 		eventType := "investigation.completed"
 		payloadStatus := "done"
 		if state.Termination == "cancelled" || state.Termination == "deadline" {
-			status = assistantTurnStatusInterrupted
+			status = "interrupted"
 			eventType = "investigation.interrupted"
 			payloadStatus = "failed"
 		} else if state.Termination == "planner_failed" {
-			status = assistantTurnStatusFailed
+			status = "failed"
 			eventType = "investigation.failed"
 			payloadStatus = "failed"
 		}
-		_ = turnRecorder.CompleteAgentTask(context.WithoutCancel(ctx), investigationTaskID, eventType, status, map[string]any{
-			"title": "知识证据调查完成", "status": payloadStatus, "progress": 100,
+		_ = trace.complete(ctx, investigationTask, eventType, status, "知识证据调查完成", map[string]any{
+			"state": payloadStatus,
 			"round": state.Round, "termination": state.Termination, "sufficient": result.Sufficient,
 			"answerState": result.AnswerState, "sufficiencyReason": result.SufficiencyReason,
 			"evidenceCount": len(result.Evidence), "searchCalls": state.SearchCalls, "readCalls": state.ReadCalls, "readRunes": state.ReadRunes,
-		}, investigationStartedAt)
+		})
 	}
 	return result
 }

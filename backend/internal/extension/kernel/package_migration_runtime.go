@@ -23,6 +23,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
 var ErrPackageMigrationTypeUnsupported = errors.New("PACKAGE_MIGRATION_TYPE_UNSUPPORTED")
@@ -245,6 +246,20 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 	if pmr.runtime.container == nil || pmr.runtime.container.JSRuntimeFactory == nil {
 		return nil, fmt.Errorf("kernel: migration javascript runtime unavailable for %s", def.MigrationID)
 	}
+	if pmr.runtime.container.NodeEnvironmentResolver == nil {
+		return nil, fmt.Errorf("kernel: migration javascript node resolver unavailable for %s", def.MigrationID)
+	}
+	if pmr.runtime.container.HostArtifactResolver == nil {
+		return nil, fmt.Errorf("kernel: migration javascript artifact resolver unavailable for %s", def.MigrationID)
+	}
+	nodeEnvironment, err := pmr.runtime.container.NodeEnvironmentResolver.Resolve(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: migration javascript resolve node for %s: %w", def.MigrationID, err)
+	}
+	hostArtifact, err := pmr.runtime.container.HostArtifactResolver.Resolve(ctx, script_host.KindPluginHost)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: migration javascript resolve plugin host for %s: %w", def.MigrationID, err)
+	}
 	migrationResourceLimits := javascript_main.CreateHostRequest{
 		ExtensionID:          pmr.extensionID,
 		ModuleID:             def.ModuleID,
@@ -261,7 +276,10 @@ func (pmr *packageMigrationRuntime) executeJavaScriptMigration(ctx context.Conte
 			MaxOpenHandles:     8,
 			MaxMessageSizeKB:   128,
 		},
-		NetworkDisabled: true,
+		NetworkDisabled:  true,
+		NodePath:         nodeEnvironment.NodeBinary,
+		PluginHostPath:   hostArtifact.EntryPath,
+		WorkingDirectory: pmr.stagingPath,
 		Env: []string{
 			"AMITIA_MIGRATION_SANDBOX=1",
 			"AMITIA_NETWORK_DISABLED=1",

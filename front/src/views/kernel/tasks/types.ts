@@ -134,6 +134,8 @@ export interface TaskRun extends TaskAuthority {
   errorMessage?: string;
   generation: number;
   executionPlacement?: "local" | "cloud" | "device";
+  checkpointSupported?: boolean;
+  retrySupported?: boolean;
   progress?: TaskRunProgress;
 }
 
@@ -167,18 +169,6 @@ export interface TaskRunResult {
   artifactId?: string;
   resultHash?: string;
   createdAt: string;
-}
-
-export interface EnqueueTaskRequest {
-  taskDefinitionId: string;
-  extensionId?: string;
-  moduleId?: string;
-  input?: unknown;
-  priority?: number;
-  deviceId?: string;
-  operationId?: string;
-  scopeSnapshotId?: string;
-  permissionSnapshotId?: string;
 }
 
 export interface EnqueueTaskResult {

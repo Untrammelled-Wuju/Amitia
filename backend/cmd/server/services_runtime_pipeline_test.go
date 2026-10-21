@@ -38,7 +38,7 @@ func TestRuntimeContextLoaderRegistryRegistersCompleteRuntimeInputs(t *testing.T
 	for _, stat := range registry.Stats() {
 		registered[stat.Name] = true
 	}
-	for _, name := range []string{"runtimeProfile", "channel", "conversation", "psyche", "relationship", "beliefs", "life", "needs", "unresolvedThreads"} {
+	for _, name := range []string{"runtimeProfile", "channel", "conversation", "beliefs", "life", "unresolvedThreads"} {
 		if !registered[name] {
 			t.Fatalf("expected runtime loader %s to be registered, got %#v", name, registered)
 		}
@@ -75,11 +75,8 @@ func createServicesRuntimeCharacterSchema(t *testing.T, db *gorm.DB) {
 	}
 	statements := []string{
 		`CREATE TABLE conversations (id TEXT PRIMARY KEY, message_count INTEGER DEFAULT 0, updated_at TEXT)`,
-		`CREATE TABLE psyche_states (character_id TEXT, stress REAL, energy REAL, updated_at TEXT)`,
-		`CREATE TABLE relationship_states (character_id TEXT, relation_data TEXT, updated_at TEXT)`,
 		`CREATE TABLE memories (character_id TEXT, key TEXT, value TEXT, confidence REAL, importance REAL, updated_at TEXT)`,
 		`CREATE TABLE moods (character_id TEXT, mood TEXT, mood_value TEXT, created_at TEXT)`,
-		`CREATE TABLE need_states (character_id TEXT, need_key TEXT, current_value REAL, baseline REAL, updated_at TEXT)`,
 		`CREATE TABLE unresolved_threads (id TEXT PRIMARY KEY, character_id TEXT, space_id TEXT, topic TEXT, reason TEXT, severity REAL, escalation_level INTEGER, created_at TEXT, resolved_at TEXT)`,
 	}
 	for _, statement := range statements {

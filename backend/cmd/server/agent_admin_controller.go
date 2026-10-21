@@ -18,7 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/graph"
-	"github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
 )
@@ -299,7 +299,7 @@ func (c *serverAgentAdminController) ExecuteAgentAdminTool(ctx context.Context, 
 		return jsonResult(map[string]any{"packageName": req.PackageName, "enabled": req.Enabled, "runtime": "amitia_extension_kernel"})
 	case "restart_mcp_with_logs":
 		if c.mcpRepo == nil || c.mcpConn == nil {
-			return nil, fmt.Errorf("MCP compatibility runtime unavailable")
+			return nil, fmt.Errorf("MCP runtime unavailable")
 		}
 		var req struct {
 			TimeoutMS int64 `json:"timeout_ms"`

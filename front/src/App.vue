@@ -71,7 +71,6 @@ const publicPaths = [
   "/onboarding",
   "/privacy",
   "/usage-boundary",
-  "/call-window",
 ];
 const isPublicPage = computed(() =>
   publicPaths.some((p) => route.path === p || route.path.startsWith(p + "/")),

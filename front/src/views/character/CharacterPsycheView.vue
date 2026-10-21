@@ -260,6 +260,10 @@ import { ref, inject, watch, onMounted, computed, type Ref } from "vue";
 import { Loading, WarningFilled } from "@element-plus/icons-vue";
 import { apiClient } from "@/composables/useApi";
 import type { PsycheStateSnapshot } from "../../types";
+import {
+  projectOwnedRuntimeState,
+  type OwnedRuntimeStateEnvelope,
+} from "@/runtime/owned-runtime-state";
 
 const currentCharacterId = inject<Ref<string | null>>("currentCharacterId");
 
@@ -286,14 +290,10 @@ async function loadPsycheState() {
   psycheLoading.value = true;
   psycheError.value = "";
   try {
-    const { data } = await apiClient.get("/api/psyche/snapshot", {
+    const { data } = await apiClient.get<OwnedRuntimeStateEnvelope>("/api/device-mesh/v1/business/runtime-state", {
       params: { characterId: currentCharacterId.value },
     });
-    if ((data as any)?.data) {
-      psycheState.value = (data as any).data;
-    } else if (data) {
-      psycheState.value = data as PsycheStateSnapshot;
-    }
+    psycheState.value = projectOwnedRuntimeState(data) as PsycheStateSnapshot;
   } catch (e: any) {
     psycheError.value = "心理状态不可用: " + (e?.message || "网络错误");
     psycheState.value = defaultPsycheState();

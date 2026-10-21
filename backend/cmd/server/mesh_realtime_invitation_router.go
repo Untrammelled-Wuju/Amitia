@@ -98,7 +98,7 @@ func registerMeshRealtimeInvitationRouter(mesh *gin.RouterGroup, services *AppSe
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
 		}
-		ticket, err := issueOwnedRealtimeTicket(services, request, origin, scope)
+		ticket, err := issueOwnedRealtimeTicket(services, request, "", "", "", origin, scope)
 		if err != nil {
 			c.JSON(503, gin.H{"message": err.Error(), "saved": true})
 			return

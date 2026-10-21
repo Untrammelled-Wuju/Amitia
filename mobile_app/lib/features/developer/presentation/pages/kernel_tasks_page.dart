@@ -10,8 +10,6 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/runtime/backend/mobile_backend_providers.dart';
-import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/models/task_pause_controls.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -404,13 +402,6 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     final definitionId = _definitionId(definition);
     if (definitionId.isEmpty) return;
     final controller = TextEditingController(text: '{}');
-    final priorityController = TextEditingController(text: '0');
-    final needsDevice =
-        (definition['executionPlacement'] ?? '').toString() == 'device';
-    final owned =
-        definition['taskCatalogReference'] is Map ||
-        ref.read(mobileDeploymentConfigProvider).mode ==
-            MobileDeploymentMode.cloud;
     final declaredPermissions = definition['permissionRequirements'];
     final permissionNames = definition['permissionRequirementStrings'];
     final needsResourcePermission =
@@ -428,44 +419,40 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     List<Map<String, dynamic>> onlineDevices = const [];
     String selectedDeviceId = '';
     final catalogReference = definition['taskCatalogReference'];
-    if (needsDevice) {
-      try {
-        final devices = await ref
-            .read(extensionServiceProvider)
-            .workflowDevices();
-        onlineDevices = devices
-            .where(
-              (item) =>
-                  item['online'] == true &&
-                  (item['deviceId'] ?? '').toString().trim().isNotEmpty,
-            )
-            .toList(growable: false);
-        if (onlineDevices.length == 1)
-          selectedDeviceId = (onlineDevices.first['deviceId'] ?? '').toString();
-        if (catalogReference is Map) {
-          final target = catalogReference['deviceId'].toString();
-          if (!onlineDevices.any((device) => device['deviceId'] == target))
-            throw StateError('来源设备已离线，请重新选择设备任务');
-          selectedDeviceId = target;
-        }
-      } catch (e) {
-        if (mounted)
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('设备列表加载失败：$e')));
-        if (catalogReference is Map) {
-          controller.dispose();
-          priorityController.dispose();
-          return;
-        }
+    try {
+      final devices = await ref
+          .read(extensionServiceProvider)
+          .workflowDevices();
+      onlineDevices = devices
+          .where(
+            (item) =>
+                item['online'] == true &&
+                (item['deviceId'] ?? '').toString().trim().isNotEmpty,
+          )
+          .toList(growable: false);
+      if (onlineDevices.length == 1)
+        selectedDeviceId = (onlineDevices.first['deviceId'] ?? '').toString();
+      if (catalogReference is Map) {
+        final target = catalogReference['deviceId'].toString();
+        if (!onlineDevices.any((device) => device['deviceId'] == target))
+          throw StateError('来源设备已离线，请重新选择设备任务');
+        selectedDeviceId = target;
+      }
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('设备列表加载失败：$e')));
+      if (catalogReference is Map) {
+        controller.dispose();
+        return;
       }
     }
     if (!mounted) {
       controller.dispose();
-      priorityController.dispose();
       return;
     }
-    if (owned && selectedDeviceId.isNotEmpty) {
+    if (selectedDeviceId.isNotEmpty) {
       try {
         final prepared = await ref
             .read(extensionTaskServiceProvider)
@@ -511,7 +498,6 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
       }
       if (!mounted) {
         controller.dispose();
-        priorityController.dispose();
         return;
       }
     }
@@ -564,92 +550,83 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (needsDevice) ...[
-                    DropdownButtonFormField<String>(
-                      value: selectedDeviceId.isEmpty ? null : selectedDeviceId,
-                      decoration: const InputDecoration(
-                        labelText: '执行设备',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: onlineDevices
-                          .map((device) {
-                            final id = (device['deviceId'] ?? '').toString();
-                            final label =
-                                (device['label'] ??
-                                        device['platform'] ??
-                                        'device')
-                                    .toString();
-                            return DropdownMenuItem(
-                              value: id,
-                              child: Text(
-                                '$label · $id',
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                  DropdownButtonFormField<String>(
+                    value: selectedDeviceId.isEmpty ? null : selectedDeviceId,
+                    decoration: const InputDecoration(
+                      labelText: '执行设备',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: onlineDevices
+                        .map((device) {
+                          final id = (device['deviceId'] ?? '').toString();
+                          final label =
+                              (device['label'] ??
+                                      device['platform'] ??
+                                      'device')
+                                  .toString();
+                          return DropdownMenuItem(
+                            value: id,
+                            child: Text(
+                              '$label · $id',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        })
+                        .toList(growable: false),
+                    onChanged: submitting || catalogReference is Map
+                        ? null
+                        : (value) {
+                            setDialogState(
+                              () => selectedDeviceId = value ?? '',
                             );
-                          })
-                          .toList(growable: false),
-                      onChanged: submitting || catalogReference is Map
-                          ? null
-                          : (value) {
-                              setDialogState(
-                                () => selectedDeviceId = value ?? '',
-                              );
-                              if (owned)
-                                refreshRoles(setDialogState, dialogContext);
-                            },
+                            refreshRoles(setDialogState, dialogContext);
+                          },
+                  ),
+                  if (onlineDevices.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('当前没有在线设备，设备任务无法入队。'),
                     ),
-                    if (onlineDevices.isEmpty) ...[
-                      const SizedBox(height: 8),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('当前没有在线设备，设备任务无法入队。'),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
                   ],
-                  if (owned) ...[
-                    DropdownButtonFormField<String>(
-                      value: selectedRole.isEmpty ? null : selectedRole,
-                      decoration: const InputDecoration(
-                        labelText: '执行角色',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: ((roleOptions?['roles'] as List?) ?? const [])
-                          .whereType<Map>()
-                          .map(
-                            (role) => DropdownMenuItem(
-                              value: role['id'].toString(),
-                              child: Text(
-                                (role['name'] ?? role['id']).toString(),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: submitting || roleLoading
-                          ? null
-                          : (value) => setDialogState(
-                              () => selectedRole = value ?? '',
-                            ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: selectedRole.isEmpty ? null : selectedRole,
+                    decoration: const InputDecoration(
+                      labelText: '执行角色',
+                      border: OutlineInputBorder(),
                     ),
-                    if (roleOptions != null)
-                      Text(
-                        'Core：${roleOptions!['executionScope']['coreId']} · 新数据所有者：${roleOptions!['roleOwnerId']}',
-                      ),
-                    TextButton(
-                      onPressed:
-                          submitting || roleLoading || selectedDeviceId.isEmpty
-                          ? null
-                          : () => refreshRoles(setDialogState, dialogContext),
-                      child: Text(roleLoading ? '正在加载角色' : '刷新角色与服务'),
+                    items: ((roleOptions?['roles'] as List?) ?? const [])
+                        .whereType<Map>()
+                        .map(
+                          (role) => DropdownMenuItem(
+                            value: role['id'].toString(),
+                            child: Text(
+                              (role['name'] ?? role['id']).toString(),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: submitting || roleLoading
+                        ? null
+                        : (value) =>
+                              setDialogState(() => selectedRole = value ?? ''),
+                  ),
+                  if (roleOptions != null)
+                    Text(
+                      'Core：${roleOptions!['executionScope']['coreId']} · 新数据所有者：${roleOptions!['roleOwnerId']}',
                     ),
-                    if (taskError != null)
-                      Text(
-                        taskError!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (owned && needsResourcePermission) ...[
+                  TextButton(
+                    onPressed:
+                        submitting || roleLoading || selectedDeviceId.isEmpty
+                        ? null
+                        : () => refreshRoles(setDialogState, dialogContext),
+                    child: Text(roleLoading ? '正在加载角色' : '刷新角色与服务'),
+                  ),
+                  if (taskError != null)
+                    Text(taskError!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 10),
+                  if (needsResourcePermission) ...[
                     const Text('本机资源权限须由目标设备批准，提交时会再次确认。'),
                     const SizedBox(height: 10),
                   ],
@@ -668,15 +645,6 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  if (!owned)
-                    TextField(
-                      controller: priorityController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Priority',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -693,18 +661,12 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               FilledButton(
                 onPressed:
                     submitting ||
-                        (needsDevice && selectedDeviceId.isEmpty) ||
-                        (owned &&
-                            (!needsDevice ||
-                                roleLoading ||
-                                roleOptions == null ||
-                                selectedRole.isEmpty))
+                        selectedDeviceId.isEmpty ||
+                        roleLoading ||
+                        roleOptions == null ||
+                        selectedRole.isEmpty
                     ? null
                     : () async {
-                        if (!owned) {
-                          Navigator.pop(dialogContext, true);
-                          return;
-                        }
                         setDialogState(() {
                           submitting = true;
                           taskError = null;
@@ -802,52 +764,17 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
       ),
     );
     roleGeneration++;
-    if (owned) {
-      controller.dispose();
-      priorityController.dispose();
-      if (confirmed == true && confirmedTask != null && mounted) {
-        final task = confirmedTask!;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${task['queued'] == true ? '任务已入队' : _statusLabel(task['status'].toString())}：${task['taskRunId']}',
-            ),
+    controller.dispose();
+    if (confirmed == true && confirmedTask != null && mounted) {
+      final task = confirmedTask!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${task['queued'] == true ? '任务已入队' : _statusLabel(task['status'].toString())}：${task['taskRunId']}',
           ),
-        );
-        await _load();
-      }
-      return;
-    }
-    if (confirmed != true) {
-      controller.dispose();
-      priorityController.dispose();
-      return;
-    }
-    try {
-      final decoded = jsonDecode(controller.text);
-      if (decoded is! Map) throw const FormatException('Input 必须是 JSON Object');
-      final priority = int.tryParse(priorityController.text.trim()) ?? 0;
-      await _runAction('任务已真实入队', () async {
-        await ref
-            .read(extensionTaskServiceProvider)
-            .enqueue(
-              taskDefinitionId: definitionId,
-              extensionId: (definition['extensionId'] ?? '').toString(),
-              moduleId: (definition['moduleId'] ?? '').toString(),
-              input: Map<String, dynamic>.from(decoded),
-              priority: priority,
-              source: 'mobile_kernel_tasks',
-              deviceId: needsDevice ? selectedDeviceId : null,
-            );
-      });
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('入队失败：$e')));
-    } finally {
-      controller.dispose();
-      priorityController.dispose();
+        ),
+      );
+      await _load();
     }
   }
 

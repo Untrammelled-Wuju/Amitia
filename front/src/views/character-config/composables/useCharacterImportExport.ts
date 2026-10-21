@@ -18,6 +18,7 @@ export function useCharacterImportExport() {
   const packHistory = ref<any[]>([]);
   const selectedFile = ref<File | null>(null);
   const previewAuthority = ref("");
+  const previewImportID = ref("");
   let previewFile: File | null = null;
 
   async function exportPack(characterId: string, characterName: string) {
@@ -60,6 +61,7 @@ export function useCharacterImportExport() {
     importPreviewing.value = true;
     importPreview.value = null;
     previewAuthority.value = "";
+    previewImportID.value = "";
     previewFile = null;
     try {
       const file = selectedFile.value;
@@ -69,6 +71,8 @@ export function useCharacterImportExport() {
       );
       if (selectedFile.value !== file) return;
       previewAuthority.value = d?.roleAuthority || "";
+      previewImportID.value = String(d?.importId || "").trim();
+      if (!previewImportID.value) throw new Error("预览响应缺少导入编号");
       previewFile = file;
       importPreview.value = d?.preview
         ? {
@@ -101,11 +105,17 @@ export function useCharacterImportExport() {
         selectedFile.value,
         "card",
         roleAuthorityConfig(previewAuthority.value),
+        { importId: previewImportID.value },
       );
-      ElMessage.success("导入成功");
+      ElMessage.success(
+        d?.lorebookEntryCount > 0
+          ? `导入成功，已写入 ${d?.worldbookImportedCount ?? 0} 条世界书`
+          : "导入成功",
+      );
       importPreview.value = null;
       importConfirmText.value = "";
       selectedFile.value = null;
+      previewImportID.value = "";
       showImportDialog.value = false;
       await loadPackHistory();
       return d;
@@ -130,6 +140,7 @@ export function useCharacterImportExport() {
 
   function cancelImportPreview() {
     previewAuthority.value = "";
+    previewImportID.value = "";
     previewFile = null;
     importPreview.value = null;
     importConfirmText.value = "";
@@ -140,6 +151,7 @@ export function useCharacterImportExport() {
     if (selectedFile.value !== file) {
       importPreview.value = null;
       previewAuthority.value = "";
+      previewImportID.value = "";
       previewFile = null;
     }
     selectedFile.value = file;

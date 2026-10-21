@@ -48,8 +48,7 @@ type ToolFacade struct {
 	capabilityResolver    capability.CapabilityResolver
 	hookService           *hook.Service
 	agentSkillCatalog     *agent_skill.AgentSkillCatalog
-	activationService     *agent_skill.ActivationService
-	agentSkillBackend     AgentSkillBackend
+	agentSkillRuntime     *AgentSkillRuntime
 	runSkillScriptHandler RunSkillScriptHandler
 	skillResourceHandler  SkillResourceHandler
 	acquisitionBridge     *acquisition.AgentCapabilityBridge
@@ -254,13 +253,10 @@ func (f *ToolFacade) SetHookService(svc *hook.Service) {
 
 func (f *ToolFacade) SetAgentSkillCatalog(catalog *agent_skill.AgentSkillCatalog) {
 	f.agentSkillCatalog = catalog
-	if catalog != nil {
-		f.activationService = agent_skill.NewActivationService(catalog)
-	}
 }
 
-func (f *ToolFacade) SetAgentSkillBackend(backend AgentSkillBackend) {
-	f.agentSkillBackend = backend
+func (f *ToolFacade) SetAgentSkillRuntime(runtime *AgentSkillRuntime) {
+	f.agentSkillRuntime = runtime
 }
 
 func (f *ToolFacade) SetRunSkillScriptHandler(handler RunSkillScriptHandler) {
@@ -292,8 +288,8 @@ func (f *ToolFacade) TryRecoverMissingCapability(ctx context.Context, err error,
 
 func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope InvocationScope, message string) (string, []ActivatedSkill, []string) {
 	f.counters.IncPrepareAgentSkillPrompt()
-	if f.agentSkillBackend != nil {
-		return f.prepareAgentSkillPromptFromBackend(ctx, scope, message)
+	if f.agentSkillRuntime != nil {
+		return f.agentSkillRuntime.PreparePrompt(ctx, scope, message)
 	}
 	if f.agentSkillCatalog == nil {
 		return "", nil, nil
@@ -303,66 +299,9 @@ func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope Invocati
 
 func (f *ToolFacade) EndAgentSkillRound(scope InvocationScope) {
 	f.counters.IncEndAgentSkillRound()
-	if f.agentSkillBackend != nil {
-		f.agentSkillBackend.EndRound(scope)
+	if f.agentSkillRuntime != nil {
+		f.agentSkillRuntime.EndRound(scope)
 	}
-}
-
-func (f *ToolFacade) prepareAgentSkillPromptFromBackend(ctx context.Context, scope InvocationScope, message string) (string, []ActivatedSkill, []string) {
-	catalog, err := f.agentSkillBackend.ResolveCatalog(ctx, scope)
-	if err != nil {
-		return "", nil, []string{err.Error()}
-	}
-
-	errorsList := []string{}
-	activated := []ActivatedSkill{}
-
-	explicitNames := parseExplicitSkillNames(message)
-	for _, name := range explicitNames {
-		result, activateErr := f.agentSkillBackend.Activate(ctx, scope, name, true)
-		if activateErr != nil {
-			errorsList = append(errorsList, activateErr.Error())
-			continue
-		}
-		prompts, promptErr := f.agentSkillBackend.ActivePrompts(ctx, scope)
-		if promptErr != nil {
-			errorsList = append(errorsList, promptErr.Error())
-			continue
-		}
-		for _, p := range prompts {
-			if p.ActivationID == result.ActivationID {
-				activated = append(activated, ActivatedSkill{
-					ActivationID:        p.ActivationID,
-					ExtensionID:         p.ExtensionID,
-					Name:                p.Name,
-					Source:              p.Source,
-					Scope:               p.Scope,
-					CompatibilityStatus: p.CompatibilityStatus,
-					Prompt:              p.Body,
-					BodyTokens:          p.BodyTokens,
-					Explicit:            p.Explicit,
-				})
-				break
-			}
-		}
-	}
-
-	catalogSection := renderSkillCatalogFromEntries(catalog)
-	return catalogSection, activated, errorsList
-}
-
-func renderSkillCatalogFromEntries(catalog []SkillCatalogEntry) string {
-	if len(catalog) == 0 {
-		return ""
-	}
-	var sb strings.Builder
-	sb.WriteString("# Available Agent Skills\n\n")
-	for _, s := range catalog {
-		sb.WriteString(fmt.Sprintf("- **%s**", s.Name))
-		sb.WriteString(fmt.Sprintf(": %s\n", s.Description))
-	}
-	sb.WriteString("\nTo activate a skill, use the activate_skill tool or include $skill-name in your message.\n")
-	return sb.String()
 }
 
 func (f *ToolFacade) BeforePrompt(ctx context.Context, scope InvocationScope) []ContextContribution {
@@ -487,13 +426,13 @@ func (f *ToolFacade) ModelTools(ctx context.Context, scope InvocationScope) ([]t
 	if err != nil {
 		return nil, err
 	}
-	if f.agentSkillBackend != nil {
+	if f.agentSkillRuntime != nil {
 		names, namesErr := f.resolveVisibleSkillNames(ctx, scope)
 		if namesErr == nil && len(names) > 0 {
 			tools = append(tools, buildActivateSkillTool(names))
 		}
 	}
-	if f.agentSkillBackend != nil || f.acquisitionBridge != nil {
+	if f.agentSkillRuntime != nil || f.acquisitionBridge != nil {
 		tools = append(tools, buildUsePackageTool())
 	}
 	if f.runSkillScriptHandler != nil {
@@ -602,11 +541,11 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 }
 
 func (f *ToolFacade) executeModelToolSpecial(ctx context.Context, modelName string, input json.RawMessage, scope InvocationScope) (ToolDispatchResult, bool) {
-	if modelName == ActivateSkillToolName && f.agentSkillBackend != nil {
+	if modelName == ActivateSkillToolName && f.agentSkillRuntime != nil {
 		result, _ := f.handleActivateSkill(ctx, input, scope)
 		return result, true
 	}
-	if modelName == UsePackageToolName && (f.agentSkillBackend != nil || f.acquisitionBridge != nil) {
+	if modelName == UsePackageToolName && (f.agentSkillRuntime != nil || f.acquisitionBridge != nil) {
 		result, _ := f.handleUsePackage(ctx, input, scope)
 		return result, true
 	}

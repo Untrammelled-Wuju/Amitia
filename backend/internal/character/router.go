@@ -15,7 +15,11 @@ func RegisterCharacterRouter(r *gin.RouterGroup, ctx *app.AppContext, chatTester
 
 func RegisterCharacterRouterWithRecorder(r *gin.RouterGroup, ctx *app.AppContext, chatTester ChatTester, recorder sync.ChangeRecorder) {
 	repo := NewRepository(ctx)
-	svc := NewService(repo, ctx, recorder)
+	var cardWorldbook CardWorldbookBridge
+	if bridge, ok := chatTester.(CardWorldbookBridge); ok {
+		cardWorldbook = bridge
+	}
+	svc := NewServiceWithCardWorldbook(repo, ctx, cardWorldbook, recorder)
 	handler := NewHandler(svc)
 	handler.chatTester = chatTester
 	admin := security.SharedCoreAdminOnly()

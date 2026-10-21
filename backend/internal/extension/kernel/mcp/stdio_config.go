@@ -3,7 +3,7 @@ package mcp
 import (
 	"time"
 
-	"github.com/u-ai/backend/internal/mcp/protocol"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 )
 
 type MCPStdioSpec struct {

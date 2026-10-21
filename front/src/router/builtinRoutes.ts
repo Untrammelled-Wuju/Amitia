@@ -26,14 +26,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
   { path: "/dashboard/run", redirect: "/settings/overview" },
   { path: "/dashboard/data", redirect: "/settings/data" },
   { path: "/chat", name: "chat", component: () => import("@/views/web-chat/WebChatView.vue"), meta: { requiresAuth: true } },
-  { path: "/call-window", name: "realtimeCallWindow", component: () => import("@/views/realtime/RealtimeCallWindowView.vue") },
   { path: "/call/:conversationId", name: "ownedIncomingCall", component: () => import("@/views/realtime/OwnedIncomingCallView.vue"), meta: { requiresAuth: true } },
-/**
- * Deprecated: Legacy extension architecture.
- * Do not add new static routes or navigation entries for the legacy
- * extension center. Retained only for compatibility, maintenance,
- * testing, and migration to Extension Kernel.
- */
 { path: "/extensions", name: "extensionCenter", component: () => import("@/views/extensions/ExtensionCenterView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel", name: "kernelCenter", component: () => import("@/views/kernel/KernelCenterView.vue"), meta: { requiresAuth: true } },
 { path: "/kernel/wasm", name: "wasmRuntime", component: () => import("@/views/kernel/WasmRuntimeDetailView.vue"), meta: { requiresAuth: true } },
@@ -152,6 +145,5 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/game-center", name: "gameCenter", component: () => import("@/views/game-center/GameCenterView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
 { path: "/game-center/plugin", name: "gamePlugin", component: () => import("@/views/game-center/GamePluginView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
 { path: "/devices", name: "devices", redirect: (to) => resolveMySpaceLegacy(to, "devices") },
-{ path: "/realtime-voice", name: "realtimeVoice", component: () => import("@/views/realtime/RealtimeVoiceView.vue"), meta: { requiresAuth: true } },
 { path: "/long-running", name: "longRunning", component: () => import("@/views/long-running/LongRunningView.vue"), meta: { requiresAuth: true } },
 ];

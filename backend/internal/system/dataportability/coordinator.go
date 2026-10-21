@@ -145,16 +145,6 @@ func (c *Coordinator) ExecuteFullRestore(ctx context.Context, archivePath string
 			return fmt.Errorf("restore episodic: %w", err)
 		}
 	}
-	if c.RestorePorts.Psyche != nil {
-		if err := c.RestorePorts.Psyche.RestorePsyche(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore psyche: %w", err)
-		}
-	}
-	if c.RestorePorts.Relationship != nil {
-		if err := c.RestorePorts.Relationship.RestoreRelationships(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore relationships: %w", err)
-		}
-	}
 	if c.RestorePorts.Worldbook != nil {
 		if err := c.RestorePorts.Worldbook.RestoreWorldbook(ctx, br, opts); err != nil {
 			return fmt.Errorf("restore worldbook: %w", err)

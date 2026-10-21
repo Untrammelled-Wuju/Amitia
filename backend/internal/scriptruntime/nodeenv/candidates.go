@@ -28,6 +28,35 @@ func nodeFileNameForGuest(guest platform.GuestPlatform) string {
 	}
 }
 
+func bundledNodeArchiveNames(guest platform.GuestPlatform) []string {
+	switch guest {
+	case platform.GuestPlatformWindows:
+		return []string{"node.exe.zip", "node.zip"}
+	case platform.GuestPlatformLinux, platform.GuestPlatformMacOS:
+		return []string{"node.zip"}
+	default:
+		return nil
+	}
+}
+
+func bundledNodePaths(guest platform.GuestPlatform, nodeDir string) []string {
+	fileName := nodeFileNameForGuest(guest)
+	switch guest {
+	case platform.GuestPlatformWindows:
+		return []string{
+			filepath.Join(nodeDir, fileName),
+			filepath.Join(nodeDir, "bin", fileName),
+		}
+	case platform.GuestPlatformLinux, platform.GuestPlatformMacOS:
+		return []string{
+			filepath.Join(nodeDir, "bin", fileName),
+			filepath.Join(nodeDir, fileName),
+		}
+	default:
+		return nil
+	}
+}
+
 func runtimePackageNodeCandidates(guest platform.GuestPlatform) []candidateURIPath {
 	switch guest {
 	case platform.GuestPlatformWindows:

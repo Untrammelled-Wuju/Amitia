@@ -15,7 +15,6 @@ import '../../../features/characters/presentation/pages/character_voice_page.dar
 import '../../../features/characters/presentation/pages/character_memory_page.dart';
 import '../../../features/characters/presentation/pages/character_timeline_page.dart';
 import '../../../features/characters/presentation/pages/character_psyche_page.dart';
-import '../../../features/characters/presentation/pages/character_debug_page.dart';
 import '../../../features/memory/presentation/pages/memory_page.dart';
 import '../../../features/memory/presentation/pages/memory_manager_page.dart';
 import '../../../features/memory/presentation/pages/episodic_memory_page.dart';
@@ -251,14 +250,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     ),
   ),
   GoRoute(
-    path: '/characters/:id/debug',
-    pageBuilder: (context, state) => slideFadePage(
-      context: context,
-      state: state,
-      child: CharacterDebugPage(characterId: state.pathParameters['id']!),
-    ),
-  ),
-  GoRoute(
     path: '/memory',
     pageBuilder: (context, state) =>
         drawerSlideFadePage(state: state, child: const MemoryPage()),
@@ -305,7 +296,8 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: AppRoutes.knowledge,
-    pageBuilder: (context, state) => drawerSlideFadePage(state: state, child: const KnowledgePage()),
+    pageBuilder: (context, state) =>
+        drawerSlideFadePage(state: state, child: const KnowledgePage()),
   ),
   GoRoute(
     path: '/memory/world-book',

@@ -10,7 +10,6 @@ import (
 
 func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtime) {
 	handler := NewHandler()
-	agentSkillHandler := NewAgentSkillHandler(runtime.AgentSkills, handler)
 	kernelAPI := NewKernelAPI(runtime)
 	devModeAPI := NewDevModeAPI(runtime)
 	hookAPI := NewHookAPI(runtime)
@@ -30,9 +29,11 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 
 	registerRetiredLegacyRoutes(extensions, retiredExtensionLegacyRoutes)
 	registerRetiredLegacyRoutes(group, retiredRootLegacyRoutes)
+	registerSelfHostedExtensionRegistryRoutes(group, runtime)
 
 	extensions.Use(extensionAuth())
 	registerExtensionPackageRoutes(extensions, runtime)
+	registerPackageDistributionRoutes(extensions, runtime)
 	kernelAPI.RegisterRoutes(extensions)
 	devModeAPI.RegisterRoutes(extensions)
 	hookAPI.RegisterRoutes(extensions)
@@ -47,19 +48,6 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 	updateAPI.RegisterRoutes(extensions)
 	canaryAPI.RegisterRoutes(extensions)
 	petPluginAPI.RegisterRoutes(extensions)
-	extensions.POST("/agent-skills/import/preview", agentSkillHandler.Preview)
-	extensions.POST("/agent-skills/import/install", agentSkillHandler.Install)
-	extensions.GET("/agent-skills", agentSkillHandler.List)
-	extensions.GET("/agent-skills/metrics", agentSkillHandler.Metrics)
-	extensions.GET("/agent-skills/:id", agentSkillHandler.Get)
-	extensions.POST("/agent-skills/:id/enable", agentSkillHandler.Enable)
-	extensions.POST("/agent-skills/:id/disable", agentSkillHandler.Disable)
-	extensions.DELETE("/agent-skills/:id", agentSkillHandler.Remove)
-	extensions.GET("/agent-skills/:id/compatibility", agentSkillHandler.Compatibility)
-	extensions.GET("/agent-skills/:id/resources", agentSkillHandler.Resources)
-	extensions.GET("/agent-skills/:id/resources/content", agentSkillHandler.ResourceContent)
-	extensions.GET("/agent-skills/:id/assets/content", agentSkillHandler.AssetContent)
-	extensions.GET("/agent-skills/:id/activations", agentSkillHandler.Activations)
 }
 
 func extensionAuth() gin.HandlerFunc {

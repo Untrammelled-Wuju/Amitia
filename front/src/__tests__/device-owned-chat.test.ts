@@ -29,6 +29,27 @@ describe("device owned chat stream", () => {
 	  expect(response.reply).toBe("你好");
 	  expect(seen.map(event => event.type)).toEqual(["started", "task", "delta", "completed"]);
 	});
+  it("normalizes the committed citation snapshot from the final response", async () => {
+    const result = {
+      requestId: "request",
+      conversationId: "conversation",
+      executionScope: scope,
+      saved: true,
+      reply: "项目代号是晨星。[K1]",
+      memoryStatus: "saved",
+      citationSnapshot: [
+        { marker: "[K1]", kind: "knowledge", index: 1, sourceId: "source-a", title: "项目资料", excerpt: "项目代号是晨星。" },
+      ],
+    };
+    const response = await consumeOwnedChatStream(stream([{ type: "started", executionScope: scope }, { type: "completed", data: result }]), "request", () => undefined);
+    expect(response.citationSnapshot).toEqual([
+      { marker: "[K1]", kind: "knowledge", index: 1, sourceId: "source-a", title: "项目资料", excerpt: "项目代号是晨星。" },
+    ]);
+  });
+  it("rejects malformed committed citation snapshots", async () => {
+    const result = { requestId: "request", conversationId: "conversation", executionScope: scope, saved: true, reply: "回答", memoryStatus: "saved", citationSnapshot: "invalid" };
+    await expect(consumeOwnedChatStream(stream([{ type: "started", executionScope: scope }, { type: "completed", data: result }]), "request", () => undefined)).rejects.toThrow("引用快照格式无效");
+  });
 	it("rejects task events from other scope, conversation and invalid task states", async () => {
 	  for (const change of [{ executionScope: { ...scope, coreId: "other" } }, { executionScope: { ...scope, roleId: "other" } }, { executionScope: { ...scope, resourceOwnerId: "other" } }, { conversationId: "other" }, { task: { coordinationId: "coordination-a", status: "invented" } }, { task: { status: "running" } }]) {
 	    const event = { type: "task", executionScope: scope, conversationId: "conversation", task: { coordinationId: "coordination-a", status: "running" }, ...change };

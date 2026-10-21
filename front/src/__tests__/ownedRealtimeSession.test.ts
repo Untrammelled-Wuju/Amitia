@@ -25,7 +25,7 @@ describe("Owned 单连接通话原权限及保存确认", () => {
   let scope: any;
   const sessions: OwnedRealtimeSession[] = [];
   const open = async () => {
-    const options = { characterId: "role", conversationId: "chat", expectedExecutionScope: scope, onReady: vi.fn(), onCompleted: vi.fn(), onAudio: vi.fn().mockResolvedValue(undefined), onError: vi.fn(), onInterrupted: vi.fn() };
+    const options = { characterId: "role", conversationId: "chat", expectedExecutionScope: scope, voiceType: "voice.custom", resourceId: "resource.custom", dialogId: "dialog.custom", onReady: vi.fn(), onCompleted: vi.fn(), onAudio: vi.fn().mockResolvedValue(undefined), onError: vi.fn(), onInterrupted: vi.fn(), onASRFinal: vi.fn(), onAssistantText: vi.fn() };
     const session = new OwnedRealtimeSession(options);
     sessions.push(session);
     await session.start();
@@ -58,6 +58,8 @@ describe("Owned 单连接通话原权限及保存确认", () => {
     const pcm = new Uint8Array([1,2]).buffer;
     session.appendAudio(pcm); session.endTurn();
     expect(socket.sent).toContain(pcm);
+    socket.frame({ type: "asr_final", requestId: id, data: { transcript: "已识别" } });
+    socket.frame({ type: "assistant_text", requestId: id, data: { text: "流式回复", delta: true } });
     socket.frame({ type: "completed", requestId: id, data: completed(id) });
     socket.frame({ type: "audio", requestId: id, data: await audio(id) });
     socket.frame({ type: "turn_ready", requestId: id });
@@ -65,9 +67,12 @@ describe("Owned 单连接通话原权限及保存确认", () => {
     await flushPromises();
     expect(options.onCompleted).toHaveBeenCalledOnce();
     expect(options.onAudio).toHaveBeenCalledOnce();
+    expect(options.onASRFinal).toHaveBeenCalledWith({ transcript: "已识别" });
+    expect(options.onAssistantText).toHaveBeenCalledWith("流式回复", true);
     expect(session.startTurn()).toBe(true);
     expect(socket.url).toContain("/internal/device-mesh/provider/api/device-mesh/v1/business/realtime/session?ticket=once");
     expect(mocks.post.mock.calls[0][0]).toBe("/api/device-mesh/v1/business/realtime/tickets");
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({ voiceType: "voice.custom", resourceId: "resource.custom", dialogId: "dialog.custom" });
   });
   it.each(["realm", "ack", "unsaved"])("拦截%s不一致的通话结果", async (kind) => {
     const { session, socket, options } = await open();

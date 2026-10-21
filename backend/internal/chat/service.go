@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/business"
@@ -20,7 +19,6 @@ import (
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/psyche"
 	syncapi "github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/temporal"
 	visioncfg "github.com/u-ai/backend/internal/vision"
@@ -62,15 +60,9 @@ type Service interface {
 	ListProviders() []ProviderInfo
 	SetDeliveryStore(store DeliveryStore)
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
-	GenerateVoiceStream(ctx context.Context, spaceID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error
-	SummarizeRealtimeVoiceRollingContext(ctx context.Context, existingSummary, rawTurns string) (string, error)
-	RealtimeVoiceReady() error
-	LoadRealtimeEmotionContext(ctx context.Context, spaceID, characterID string) (*RealtimeEmotionContext, error)
-	CommitRealtimeEmotion(ctx context.Context, commit RealtimeEmotionCommit) error
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
 	SetHookInvoker(HookInvoker)
-	SetDesktopPetLifecycleObserver(DesktopPetLifecycleObserver)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 	SetActionMaterializer(m *interaction.ActionMaterializer)
 	SetActionDispatcher(d interaction.ActionDispatcher)
@@ -110,42 +102,39 @@ type WorkspaceAvailabilityResolver interface {
 }
 
 type service struct {
-	repo                Repository
-	charRepo            character.Repository
-	db                  *gorm.DB
-	changeRecorder      syncapi.ChangeRecorder
-	psycheStore         psyche.PsycheStore
-	emotion             *emotionstate.Service
-	worldBookPort       WorldBookPort
-	knowledgePort       KnowledgePort
+	repo                 Repository
+	charRepo             character.Repository
+	db                   *gorm.DB
+	changeRecorder       syncapi.ChangeRecorder
+	emotion              *emotionstate.Service
+	knowledgePort        KnowledgePort
 	investigationPlanner investigationPlannerFunc
-	visionPort          VisionPort
-	wmCache             *WorkingMemoryCache
-	stateProvider       *ConversationStateProvider
-	compressor          *Compressor
-	llmWithTools        llmWithToolsFunc
-	deliveryStore       DeliveryStore
-	ownedToolRuntime    OwnedToolRuntime
-	memoryConsumers     business.MemoryConsumerPort
-	inferenceAuthority  InferenceAuthority
-	hookInvoker         HookInvoker
-	desktopPetLifecycle DesktopPetLifecycleObserver
-	actionMaterializer  *interaction.ActionMaterializer
-	actionDispatcher    interaction.ActionDispatcher
-	observationBuilder  interaction.ObservationBuilder
-	relTimeCoordinator  *temporal.RelationshipTimeCoordinator
-	goalProgressService interaction.GoalProgressService
-	continuationService interaction.ContinuationService
-	replanner           interaction.Replanner
-	reflectionProcessor interaction.ReflectionProcessor
-	artifactResolver    ArtifactResolver
-	artifactImporter    MessageArtifactImporter
-	extensionContext    extensioncontext.Provider
-	localModelMu        sync.Mutex
-	localModels         map[string]LocalModelInfer
-	cleanupMu           sync.Mutex
-	cleanupPlans        map[string]cleanupPlan
-	workspaceResolver   WorkspaceAvailabilityResolver
+	visionPort           VisionPort
+	wmCache              *WorkingMemoryCache
+	stateProvider        *ConversationStateProvider
+	compressor           *Compressor
+	llmWithTools         llmWithToolsFunc
+	deliveryStore        DeliveryStore
+	ownedToolRuntime     OwnedToolRuntime
+	memoryConsumers      business.MemoryConsumerPort
+	inferenceAuthority   InferenceAuthority
+	hookInvoker          HookInvoker
+	actionMaterializer   *interaction.ActionMaterializer
+	actionDispatcher     interaction.ActionDispatcher
+	observationBuilder   interaction.ObservationBuilder
+	relTimeCoordinator   *temporal.RelationshipTimeCoordinator
+	goalProgressService  interaction.GoalProgressService
+	continuationService  interaction.ContinuationService
+	replanner            interaction.Replanner
+	reflectionProcessor  interaction.ReflectionProcessor
+	artifactResolver     ArtifactResolver
+	artifactImporter     MessageArtifactImporter
+	extensionContext     extensioncontext.Provider
+	localModelMu         sync.Mutex
+	localModels          map[string]LocalModelInfer
+	cleanupMu            sync.Mutex
+	cleanupPlans         map[string]cleanupPlan
+	workspaceResolver    WorkspaceAvailabilityResolver
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -352,7 +341,7 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
-func NewService(repo Repository, ctx *app.AppContext, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore, recorder ...syncapi.ChangeRecorder) Service {
+func NewService(repo Repository, ctx *app.AppContext, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, recorder ...syncapi.ChangeRecorder) Service {
 	if visionPort != nil {
 		SetVisionModelConfigProvider(visionPort.GetActive)
 	}
@@ -362,7 +351,7 @@ func NewService(repo Repository, ctx *app.AppContext, wbPort WorldBookPort, comp
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, emotion: emotionstate.NewService(ctx.DB), worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, emotion: emotionstate.NewService(ctx.DB), visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
 	visioncfg.SetLocalImageGenerator(svc.generateLocalVision)
 	return svc
 }

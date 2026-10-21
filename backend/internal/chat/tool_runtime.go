@@ -83,14 +83,14 @@ type ToolProgressEvent struct {
 }
 
 type toolExecOutcome struct {
-	VisibleText string
-	Status string
-	ForceVoice bool
-	ErrorCode string
+	VisibleText  string
+	Status       string
+	ForceVoice   bool
+	ErrorCode    string
 	ErrorMessage string
-	Output json.RawMessage
-	HasError bool
-	Found bool
+	Output       json.RawMessage
+	HasError     bool
+	Found        bool
 }
 
 func toolResultToOutcome(r ToolResult, found bool) toolExecOutcome {

@@ -1,14 +1,10 @@
 package chat
 
 import (
-	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/psyche"
-	"gorm.io/gorm"
 )
 
 type AppraisalResultBridge struct {
@@ -18,70 +14,6 @@ type AppraisalResultBridge struct {
 	Severity          float64
 	EnergyDelta       float64
 	StressDelta       float64
-}
-
-func (s *service) updateOwnedPsycheStateTx(tx *gorm.DB, plan OwnedStatePlan) error {
-	if !runtimegate.IsEnabled(runtimegate.EmotionExtensionID) {
-		return nil
-	}
-	charID := plan.Character
-	if s.psycheStore == nil || charID == "" {
-		return nil
-	}
-	store := s.psycheStore
-	if sqliteStore, ok := s.psycheStore.(*psyche.SQLitePsycheStore); ok {
-		store = sqliteStore.WithDB(tx)
-	}
-	appraisal := &AppraisalResultBridge{}
-	if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
-		appraisal = &AppraisalResultBridge{
-			EventType:         plan.Runtime.Appraisal.EventType,
-			PsycheDelta:       plan.Runtime.Appraisal.PsycheDelta,
-			RelationshipDelta: plan.Runtime.Appraisal.RelationshipDelta,
-			Severity:          plan.Runtime.Appraisal.Severity,
-		}
-	}
-	if _, scheduleDelta := s.realtimeScheduleContext(tx.Statement.Context, charID, time.Now()); scheduleDelta.Energy != 0 || scheduleDelta.Stress != 0 {
-		appraisal.EnergyDelta += scheduleDelta.Energy
-		appraisal.StressDelta += scheduleDelta.Stress
-	}
-	return s.updatePsycheStateWithStore(store, charID, appraisal)
-}
-
-func (s *service) updatePsycheStateWithStore(store psyche.PsycheStore, charID string, appraisal *AppraisalResultBridge) error {
-	for attempt := 0; attempt < 3; attempt++ {
-		state, err := store.LoadState(charID)
-		if err != nil {
-			if !errors.Is(err, psyche.ErrStateNotFound) {
-				return err
-			}
-			initial := psyche.NewPsycheState(charID)
-			if err := store.SaveState(&initial); err != nil {
-				if errors.Is(err, psyche.ErrVersionConflict) {
-					continue
-				}
-				return err
-			}
-			state = &initial
-		}
-		event := buildPsycheEvent(charID, *state, appraisal)
-		newState := psyche.ApplyEvent(*state, event)
-		if err := store.SaveState(&newState); err != nil {
-			if errors.Is(err, psyche.ErrVersionConflict) {
-				continue
-			}
-			return err
-		}
-		if err := store.AppendEvent(&event); err != nil {
-			return err
-		}
-		snapshot := psyche.CreateSnapshot(newState)
-		if err := store.SaveSnapshot(&snapshot); err != nil {
-			return err
-		}
-		return nil
-	}
-	return fmt.Errorf("%w: character %s retry exhausted", psyche.ErrVersionConflict, charID)
 }
 
 func computePsycheEnergyDelta(state psyche.PsycheState) float64 {

@@ -23,6 +23,7 @@ describe("角色归属即时路由", () => {
     expect(await getApiBaseURLForPath("/api/characters/same-role")).toBe(LOCAL_DEVICE_RUNTIME_BASE_URL + "/internal/device-mesh/provider");
     coordinated = false;
     expect(await getApiBaseURLForPath("/api/companion/role-profile")).toBe(LOCAL_DEVICE_RUNTIME_BASE_URL);
+    expect(await getApiBaseURLForPath("/api/device-mesh/v1/business/runtime-state")).toBe(LOCAL_DEVICE_RUNTIME_BASE_URL + "/internal/device-mesh/provider");
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

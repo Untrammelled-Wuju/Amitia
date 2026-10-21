@@ -1,8 +1,3 @@
-/**
- * Deprecated: Legacy extension architecture.
- * Do not add new capabilities. This module is retained only for
- * compatibility, maintenance, testing, and migration to Extension Kernel.
- */
 export type MCPTransport = "streamable_http" | "stdio";
 export type MCPAuthType =
   | "none"
@@ -29,6 +24,14 @@ export interface MCPServer {
   enabled: number;
   status: string;
   source: string;
+  ownerKind: string;
+  ownerExtensionId: string;
+  ownerModuleId: string;
+  ownerContributionId: string;
+  runtimePlacement: string;
+  desiredEnabled: number;
+  configRevision: number;
+  packageGeneration: number;
   lastConnectedAt: string;
   lastErrorCode: string;
   lastErrorMessage: string;

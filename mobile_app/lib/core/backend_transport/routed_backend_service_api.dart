@@ -27,8 +27,15 @@ bool isDeviceLocalApiPath(String path) {
 
 bool isDeviceRoleManagementPath(String path) {
   final normalized = path.split('?').first;
-  if (normalized == '/api/characters/generate-card' || normalized.endsWith('/test')) return false;
-  return const ['/api/characters', '/api/character-templates', '/api/companion/role-profile'].any((prefix) => normalized == prefix || normalized.startsWith('$prefix/'));
+  if (normalized == '/api/characters/generate-card' ||
+      normalized.endsWith('/test')) {
+    return false;
+  }
+  return const [
+    '/api/characters',
+    '/api/character-templates',
+    '/api/companion/role-profile',
+  ].any((prefix) => normalized == prefix || normalized.startsWith('$prefix/'));
 }
 
 final class RoutedBackendServiceApiProxy implements BackendServiceApi {
@@ -36,9 +43,9 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
     required BackendServiceApi businessApi,
     required BackendServiceApi deviceLocalApi,
     bool Function()? isCloudDeployment,
-  })  : _businessApi = businessApi,
-        _deviceLocalApi = deviceLocalApi,
-        _isCloudDeployment = isCloudDeployment;
+  }) : _businessApi = businessApi,
+       _deviceLocalApi = deviceLocalApi,
+       _isCloudDeployment = isCloudDeployment;
 
   final BackendServiceApi _businessApi;
   final BackendServiceApi _deviceLocalApi;
@@ -47,13 +54,21 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
   int _requestCounter = 0;
 
   Future<BackendServiceApi> _apiFor(String path) async {
-    if (isDeviceRoleManagementPath(path) && (_isCloudDeployment?.call() ?? false)) {
+    if (isDeviceRoleManagementPath(path) &&
+        (_isCloudDeployment?.call() ?? false)) {
       final generation = _businessApi.generation;
-      final payload = await _businessApi.get<Map<String, dynamic>>('/api/device-mesh/v1/coordination/me');
-      if (generation != _businessApi.generation || !(_isCloudDeployment?.call() ?? false)) throw StateError('Core 已切换，请重新加载角色');
+      final payload = await _businessApi.get<Map<String, dynamic>>(
+        '/api/device-mesh/v1/coordination/me',
+      );
+      if (generation != _businessApi.generation ||
+          !(_isCloudDeployment?.call() ?? false)) {
+        throw StateError('Core 已切换，请重新加载角色');
+      }
       final data = payload?['data'] is Map ? payload!['data'] as Map : payload;
       final policy = data?['policy'];
-      if (policy is! Map || policy['coordinated'] is! bool) throw StateError('无法确认角色所属设备，请恢复 Core 连接后重试');
+      if (policy is! Map || policy['coordinated'] is! bool) {
+        throw StateError('无法确认角色所属设备，请恢复 Core 连接后重试');
+      }
       return policy['coordinated'] == true ? _businessApi : _deviceLocalApi;
     }
     return isDeviceLocalApiPath(path) ? _deviceLocalApi : _businessApi;

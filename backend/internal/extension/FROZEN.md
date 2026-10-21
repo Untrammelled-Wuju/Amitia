@@ -10,7 +10,7 @@
 
 ## 一、冻结开始原因
 
-本目录为 Amitia 旧扩展系统后端核心实现所在。旧 Skill Registry、Executor、Handler、Legacy Tool Adapter、Workflow Compiler/Executor 与 Workshop 已完成迁移和物理删除；Agent Skill 已切换到数据库状态与 Extension Kernel ToolFacade，Workflow 使用 Extension Kernel。
+本目录为 Amitia 旧扩展系统后端核心实现所在。旧 Skill Registry、Executor、Handler、Legacy Tool Adapter、Workflow Compiler/Executor 与 Workshop 已完成迁移和物理删除；Agent Skill 的导入、持久化、运行时、资源和激活历史已迁移到 Extension Kernel，Workflow 使用 Extension Kernel。
 
 为推进 Amitia 扩展系统重构与 Amitiax 插件平台规划的第 1 步"冻结现有扩展系统功能开发"，自 2026-07-25 起对本目录建立重构保护边界，防止在重构期间继续向旧架构增加功能、字段、接口、数据库表和兼容逻辑，避免历史遗留问题继续扩大。
 
@@ -28,7 +28,6 @@
 - **Protocol（Skill 协议与类型）**：`protocol.go`
 - **Handler（HTTP 处理器）**：`handler.go`
 - **Router（路由注册）**：`router.go`
-- **Agent Skill**：`agent_skill_handler.go`、`agent_skill_runtime.go`、`agent_skill_parser.go`、`agent_skill_protocol.go`、`agent_skill_repository.go`、`agent_skill_service.go`、`agent_skill_metrics.go`
 - **Package Parser / Installer / Lifecycle（`.amitiax` 旧扩展包系统）**：`package_parser.go`、`package_installer.go`、`package_lifecycle.go`、`package_archive.go`、`package_handler.go`、`package_protocol.go`、`package_recovery.go`、`package_repository.go`、`package_service.go`、`package_test_runner.go`
 - **Schema（Manifest v1 校验）**：`schema_validator.go` 与 `schema/manifest.schema.json`
 

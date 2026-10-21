@@ -49,6 +49,8 @@ type CharacterBook struct {
 }
 
 type CharacterBookEntry struct {
+	Name           string                     `json:"name,omitempty"`
+	ID             json.RawMessage            `json:"id,omitempty"`
 	Keys           []string                   `json:"keys"`
 	SecondaryKeys  []string                   `json:"secondary_keys"`
 	Content        string                     `json:"content"`

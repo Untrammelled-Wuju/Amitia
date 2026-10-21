@@ -44,7 +44,4 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	if services.MemoryConsumers == nil {
 		t.Fatal("missing unified memory consumer")
 	}
-	if services.WorldBook == nil {
-		t.Fatal("missing worldbook service")
-	}
 }

@@ -2,47 +2,82 @@ package wiring
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
-	"github.com/u-ai/backend/internal/psyche"
 )
 
 type AffectAdapter struct {
-	store psyche.PsycheStore
+	db     *sql.DB
+	owners []string
 }
 
-func NewAffectAdapter(store psyche.PsycheStore) *AffectAdapter {
-	return &AffectAdapter{store: store}
+func NewOwnedAffectAdapter(db *sql.DB, owners []string) *AffectAdapter {
+	return &AffectAdapter{db: db, owners: append([]string(nil), owners...)}
 }
 
 func (a *AffectAdapter) GetAffectSnapshot(ctx context.Context, spaceID, characterID string) (*behavior.AffectBehaviorSnapshot, error) {
-	state, err := a.store.LoadState(characterID)
-	if err != nil {
-		if errors.Is(err, psyche.ErrStateNotFound) || strings.Contains(err.Error(), "state not found") {
-			return &behavior.AffectBehaviorSnapshot{
-				Version:    "v0",
-				Label:      "neutral",
-				Confidence: 0.5,
-				UpdatedAt:  time.Now(),
-			}, nil
-		}
-		return nil, fmt.Errorf("affect adapter: load state failed: %w", err)
-	}
+	return a.getOwnedAffectSnapshot(ctx, characterID)
+}
 
+func (a *AffectAdapter) getOwnedAffectSnapshot(ctx context.Context, characterID string) (*behavior.AffectBehaviorSnapshot, error) {
+	if a.db == nil || len(a.owners) == 0 {
+		return defaultAffectSnapshot(), nil
+	}
+	var body []byte
+	var updatedAt string
+	var err error
+	for _, owner := range a.owners {
+		err = a.db.QueryRowContext(ctx, `SELECT CAST(body AS BLOB),updated_at FROM kernel_device_owned_resources WHERE owner_id=? AND kind='psyche' AND resource_id='role' AND role_id=? AND deleted=0`, owner, characterID).Scan(&body, &updatedAt)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("affect adapter: load owned state failed: %w", err)
+		}
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return defaultAffectSnapshot(), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("affect adapter: load owned state failed: %w", err)
+	}
+	var state struct {
+		Valence   float64 `json:"valence"`
+		Arousal   float64 `json:"arousal"`
+		Dominance float64 `json:"dominance"`
+		Stress    float64 `json:"stress"`
+	}
+	if err := json.Unmarshal(body, &state); err != nil {
+		return nil, fmt.Errorf("affect adapter: decode owned state failed: %w", err)
+	}
 	return &behavior.AffectBehaviorSnapshot{
-		Version:    state.Version,
-		Valence:    state.Emotion.Valence,
-		Arousal:    state.Emotion.Arousal,
-		Tension:    1.0 - state.Emotion.Dominance,
+		Version:    "owned-psyche:" + updatedAt,
+		Valence:    state.Valence,
+		Arousal:    state.Arousal,
+		Tension:    1 - state.Dominance,
 		Stress:     state.Stress,
-		Label:      mapEmotionLabel(state.Emotion.Valence, state.Emotion.Arousal),
-		Confidence: computeConfidence(state),
-		UpdatedAt:  state.UpdatedAt,
+		Label:      mapEmotionLabel(state.Valence, state.Arousal),
+		Confidence: 0.9,
+		UpdatedAt:  parseAffectTime(updatedAt),
 	}, nil
+}
+
+func defaultAffectSnapshot() *behavior.AffectBehaviorSnapshot {
+	return &behavior.AffectBehaviorSnapshot{Version: "v0", Label: "neutral", Confidence: 0.5, UpdatedAt: time.Now()}
+}
+
+func parseAffectTime(value string) time.Time {
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed
+		}
+	}
+	return time.Now()
 }
 
 func mapEmotionLabel(valence, arousal float64) string {
@@ -62,20 +97,6 @@ func mapEmotionLabel(valence, arousal float64) string {
 		return "excited"
 	}
 	return "neutral"
-}
-
-func computeConfidence(state *psyche.PsycheState) float64 {
-	confidence := 0.7
-	if state.StateVersion > 0 {
-		confidence = 0.9
-	}
-	if state.Stress > 0.7 {
-		confidence -= 0.1
-	}
-	if confidence < 0.3 {
-		confidence = 0.3
-	}
-	return confidence
 }
 
 var _ behavior.CharacterAffectPort = (*AffectAdapter)(nil)

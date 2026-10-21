@@ -38,6 +38,11 @@ type syncScopedCharacterService interface {
 	ImportCardForSpace(data []byte, filename string, confirm bool, spaceID string) (*CardImportResult, error)
 }
 
+type contextualCardService interface {
+	ImportCardForSpaceContext(ctx context.Context, data []byte, filename string, confirm bool, importID, spaceID string) (*CardImportResult, error)
+	ExportCardForSpaceContext(ctx context.Context, characterID, format, spaceID string) (*CardExportResult, []byte, error)
+}
+
 type ChatTester interface {
 	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
 }
@@ -267,7 +272,9 @@ func (h *Handler) ExportPack(c *gin.Context) {
 	var result *CardExportResult
 	var data []byte
 	var err error
-	if scoped, ok := h.service.(readScopedCharacterService); ok {
+	if contextual, ok := h.service.(contextualCardService); ok {
+		result, data, err = contextual.ExportCardForSpaceContext(c.Request.Context(), characterID, format, requestidentity.ResolveGin(c))
+	} else if scoped, ok := h.service.(readScopedCharacterService); ok {
 		result, data, err = scoped.ExportCardForSpace(characterID, format, requestidentity.ResolveGin(c))
 	} else {
 		result, data, err = h.service.ExportCard(characterID, format)
@@ -324,9 +331,12 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
+	importID := c.PostForm("importId")
 
 	var result *CardImportResult
-	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+	if contextual, ok := h.service.(contextualCardService); ok {
+		result, err = contextual.ImportCardForSpaceContext(c.Request.Context(), data, header.Filename, true, importID, requestidentity.ResolveGin(c))
+	} else if scoped, ok := h.service.(syncScopedCharacterService); ok {
 		result, err = scoped.ImportCardForSpace(data, header.Filename, true, requestidentity.ResolveGin(c))
 	} else {
 		result, err = h.service.ImportCard(data, header.Filename, true)
@@ -380,7 +390,9 @@ func (h *Handler) ExportCardV2(c *gin.Context) {
 	var result *CardExportResult
 	var data []byte
 	var err error
-	if scoped, ok := h.service.(readScopedCharacterService); ok {
+	if contextual, ok := h.service.(contextualCardService); ok {
+		result, data, err = contextual.ExportCardForSpaceContext(c.Request.Context(), characterID, format, requestidentity.ResolveGin(c))
+	} else if scoped, ok := h.service.(readScopedCharacterService); ok {
 		result, data, err = scoped.ExportCardForSpace(characterID, format, requestidentity.ResolveGin(c))
 	} else {
 		result, data, err = h.service.ExportCard(characterID, format)

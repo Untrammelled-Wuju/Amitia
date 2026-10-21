@@ -15,9 +15,16 @@ import (
 )
 
 type SpeechInference struct {
-	Scope coordination.ExecutionScope
-	Role  coordination.Role
-	Text  string
+	Scope      coordination.ExecutionScope
+	Role       coordination.Role
+	Text       string
+	VoiceType  string
+	ResourceID string
+}
+
+type SpeechOptions struct {
+	VoiceType  string
+	ResourceID string
 }
 
 type SpeechModel interface {
@@ -90,10 +97,19 @@ func (e *Engine) currentSpeechResult(ctx context.Context, result SpeechResponse,
 	return result, nil
 }
 
-func (e *Engine) Speech(ctx context.Context, request Request, text string) (SpeechResponse, error) {
+func (e *Engine) Speech(ctx context.Context, request Request, text string, options ...SpeechOptions) (SpeechResponse, error) {
 	model, ok := e.model.(SpeechModel)
 	if !ok {
 		return SpeechResponse{}, errors.New("当前 Core 没有私有语音合成服务")
+	}
+	var speechOptions SpeechOptions
+	if len(options) > 0 {
+		speechOptions = options[0]
+	}
+	speechOptions.VoiceType = strings.TrimSpace(speechOptions.VoiceType)
+	speechOptions.ResourceID = strings.TrimSpace(speechOptions.ResourceID)
+	if len(speechOptions.VoiceType) > 256 || len(speechOptions.ResourceID) > 256 {
+		return SpeechResponse{}, errors.New("朗读音色或资源标识超过长度限制")
 	}
 	if len(request.RequestID) > 96 || request.RequestID == "" || request.ExpectedScope == nil || len(text) > 8192 || strings.TrimSpace(text) == "" {
 		return SpeechResponse{}, errors.New("朗读请求缺少当前角色、页面权限版本或有效文本")
@@ -128,10 +144,12 @@ func (e *Engine) Speech(ctx context.Context, request Request, text string) (Spee
 	unlock := e.lock(scope.ResourceOwnerID + "\x00" + resourceID)
 	defer unlock()
 	digest := sha256.Sum256(body(struct {
-		Scope   coordination.ExecutionScope
-		Text    string
-		Profile json.RawMessage
-	}{summaryAuthority(scope), text, role.Profile}))
+		Scope      coordination.ExecutionScope
+		Text       string
+		Profile    json.RawMessage
+		VoiceType  string
+		ResourceID string
+	}{summaryAuthority(scope), text, role.Profile, speechOptions.VoiceType, speechOptions.ResourceID}))
 	fingerprint := hex.EncodeToString(digest[:])
 	if pending, proof, err := e.pendingMutation(ctx, scope, resourceID, fingerprint); err != nil {
 		return SpeechResponse{}, err
@@ -221,7 +239,7 @@ func (e *Engine) Speech(ctx context.Context, request Request, text string) (Spee
 			}
 		}
 	}()
-	data, err := model.GenerateOwnedSpeech(ctx, SpeechInference{Scope: scope, Role: role, Text: text})
+	data, err := model.GenerateOwnedSpeech(ctx, SpeechInference{Scope: scope, Role: role, Text: text, VoiceType: speechOptions.VoiceType, ResourceID: speechOptions.ResourceID})
 	if err != nil {
 		return SpeechResponse{}, err
 	}

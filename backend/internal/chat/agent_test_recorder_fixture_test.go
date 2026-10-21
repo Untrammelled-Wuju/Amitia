@@ -1,5 +1,11 @@
 package chat
 
-import("testing";"github.com/u-ai/backend/internal/conversationstream")
+import (
+	"github.com/u-ai/backend/internal/conversationstream"
+	"testing"
+)
 
-func testAgentLoopRecorder(t *testing.T,_,_,_ string)*conversationstream.ActiveTurnState {t.Helper();return nil}
+func testAgentLoopRecorder(t *testing.T, _, _, _ string) *conversationstream.ActiveTurnState {
+	t.Helper()
+	return nil
+}

@@ -22,8 +22,14 @@ func (e *Engine) PreviewReply(ctx context.Context, request Request) (Generation,
 	view.Snapshot.Resources, view.Snapshot.LegacyMessages, view.Snapshot.LegacySummary = nil, nil, nil
 	var result Generation
 	err = e.WithExecutionScope(ctx, view.Scope, func(ctx context.Context) error {
-		var err error
-		result, err = e.model.GenerateOwnedReply(ctx, Inference{Preview: true, Scope: view.Scope, Snapshot: view.Snapshot, Message: request.Message, ModelConfigID: request.ModelConfigID, ReasoningEffort: request.ReasoningEffort, ReasoningEnabled: request.ReasoningEnabled})
+		snapshot, err := e.data.Snapshot(ctx, view.Scope, coordination.DataQuery{Limit: 128})
+		if err != nil {
+			return err
+		}
+		if err := coordination.ValidateSnapshot(view.Scope, snapshot); err != nil {
+			return err
+		}
+		result, err = e.model.GenerateOwnedReply(ctx, Inference{Preview: true, Scope: view.Scope, Snapshot: snapshot, Message: request.Message, ModelConfigID: request.ModelConfigID, ReasoningEffort: request.ReasoningEffort, ReasoningEnabled: request.ReasoningEnabled})
 		return err
 	})
 	return result, err

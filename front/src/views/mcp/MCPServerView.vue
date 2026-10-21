@@ -1,8 +1,3 @@
-<!--
-Deprecated: Legacy extension architecture.
-Do not add new capabilities. This view is retained only for
-compatibility, maintenance, testing, and migration to Extension Kernel.
--->
 <template>
   <div class="mcp-page">
     <ExtensionPageHeader
@@ -146,12 +141,12 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
                   ><el-dropdown-menu
                     ><el-dropdown-item command="refresh"
                       >刷新能力</el-dropdown-item
-                    ><el-dropdown-item command="edit">编辑配置</el-dropdown-item
+                    ><el-dropdown-item v-if="row.ownerKind !== 'package'" command="edit">编辑配置</el-dropdown-item
                     ><el-dropdown-item
                       v-if="row.authType === 'oauth'"
                       command="oauth"
                       >授权</el-dropdown-item
-                    ><el-dropdown-item divided command="delete"
+                    ><el-dropdown-item v-if="row.ownerKind !== 'package'" divided command="delete"
                       >删除</el-dropdown-item
                     ></el-dropdown-menu
                   ></template
@@ -309,7 +304,9 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
               selected?.id
             }}</el-descriptions-item
             ><el-descriptions-item label="来源">{{
-              selected?.source
+              selected?.ownerKind === "package"
+                ? `包扩展 · ${selected?.ownerExtensionId || ""}`
+                : selected?.source
             }}</el-descriptions-item
             ><el-descriptions-item label="传输">{{
               transportLabel(selected?.transport || "streamable_http")

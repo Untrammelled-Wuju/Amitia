@@ -303,29 +303,6 @@ class ExtensionTaskService {
     return _items(resp).map((row) => _taskRow(row, policy)).toList();
   }
 
-  Future<Map<String, dynamic>?> enqueue({
-    required String taskDefinitionId,
-    required String extensionId,
-    required String moduleId,
-    required Map<String, dynamic> input,
-    int priority = 0,
-    String source = 'mobile',
-    String? deviceId,
-  }) {
-    return _api.post<Map<String, dynamic>>(
-      '/api/extensions/tasks',
-      data: {
-        'taskDefinitionId': taskDefinitionId,
-        'extensionId': extensionId,
-        'moduleId': moduleId,
-        'input': input,
-        'priority': priority,
-        'source': source,
-        if ((deviceId ?? '').trim().isNotEmpty) 'deviceId': deviceId!.trim(),
-      },
-    );
-  }
-
   Future<Map<String, dynamic>> prepareOwnedTask(String targetDeviceId) async {
     final before = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/coordination/me',
@@ -362,6 +339,57 @@ class ExtensionTaskService {
       throw StateError('服务提供者或目标数据归属已变化，请刷新后重新选择角色');
     }
     return result!;
+  }
+
+  Future<List<Map<String, dynamic>>> listOwnedTaskDefinitions(
+    Map<String, dynamic> options,
+    String characterId,
+  ) async {
+    final roles = options['roles'];
+    final proof = options['executionScope'];
+    if (roles is! List || proof is! Map) {
+      throw StateError('任务定义查询缺少有效授权');
+    }
+    final selected = roles
+        .whereType<Map>()
+        .where((role) => role['id'] == characterId)
+        .toList();
+    if (selected.length != 1) {
+      throw StateError('请先选择当前数据归属方提供的角色');
+    }
+    final expected = <String, dynamic>{
+      ...Map<String, dynamic>.from(proof),
+      'roleId': characterId,
+      'roleRevision': selected.single['revision'],
+    };
+    final random = Random.secure();
+    final requestId =
+        'defs-${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
+    final result = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/tasks/definitions',
+      data: {
+        'targetDeviceId': expected['targetDeviceId'],
+        'characterId': characterId,
+        'requestId': requestId,
+        'expectedExecutionScope': expected,
+      },
+    );
+    final actual = result?['executionScope'];
+    final definitions = result?['definitions'];
+    if (actual is! Map ||
+        !expected.entries.every(
+          (entry) =>
+              ['requestId', 'turnId', 'executionId'].contains(entry.key) ||
+              actual[entry.key] == entry.value,
+        ) ||
+        definitions is! List ||
+        definitions.length > 256) {
+      throw StateError('任务定义缺少当前服务提供者的有效确认');
+    }
+    return definitions
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>> enqueueOwnedTask(

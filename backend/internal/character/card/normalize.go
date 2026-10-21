@@ -67,6 +67,10 @@ func (card *CharacterCard) Clone() *CharacterCard {
 	if card.Assets != nil {
 		clone.Assets = append([]CharacterCardAsset{}, card.Assets...)
 	}
+	if card.CharacterBook != nil {
+		clone.CharacterBook = &CharacterBook{Entries: make([]CharacterBookEntry, len(card.CharacterBook.Entries))}
+		copy(clone.CharacterBook.Entries, card.CharacterBook.Entries)
+	}
 	if card.Extensions != nil {
 		clone.Extensions = make(map[string]any, len(card.Extensions))
 		for k, v := range card.Extensions {

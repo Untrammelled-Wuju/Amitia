@@ -1,0 +1,88 @@
+{
+  "manifestVersion": 1,
+  "extension": {
+    "id": "com.amitia.e2e/mcp-server",
+    "version": "1.0.0",
+    "name": {
+      "default": "MCP E2E Fixture",
+      "translations": {}
+    },
+    "description": {
+      "default": "Production-path MCP package integration fixture",
+      "translations": {}
+    }
+  },
+  "publisher": {
+    "id": "amitia-e2e",
+    "displayName": "Amitia E2E",
+    "trustLevel": "untrusted"
+  },
+  "compatibility": {
+    "minHostVersion": "26.2.0-beta.10",
+    "platforms": ["windows", "macos", "linux"]
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": ""
+  },
+  "modules": [
+    {
+      "id": "main",
+      "type": "service",
+      "name": {
+        "default": "MCP E2E",
+        "translations": {}
+      },
+      "contributions": [
+        {
+          "id": "echo",
+          "kind": "mcp_server",
+          "name": {
+            "default": "MCP E2E Echo",
+            "translations": {}
+          },
+          "description": {
+            "default": "Echo tool from a real .amitiax package",
+            "translations": {}
+          },
+          "spec": {
+            "schemaVersion": 1,
+            "transport": {
+              "type": "stdio",
+              "stdio": {
+                "command": "/Users/untrammelled/Desktop/Project/U-AI/AmitiaData/node/bin/node",
+                "args": [
+                  "/Users/untrammelled/Desktop/Project/U-AI/backend/testdata/mcp-e2e-package/modules/main/server.mjs"
+                ],
+                "env": {
+                  "values": {
+                    "AMITIA_MCP_E2E": "1"
+                  }
+                },
+                "runtimeHint": "node"
+              }
+            },
+            "capabilities": {
+              "server": {
+                "tools": "required"
+              },
+              "client": {
+                "roots": "required",
+                "sampling": "optional",
+                "tasks": "disabled"
+              }
+            },
+            "lifecycle": {
+              "autoStart": true,
+              "restartPolicy": "on_failure",
+              "refreshOnReconnect": true
+            },
+            "security": {
+              "allowPrivateNetwork": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

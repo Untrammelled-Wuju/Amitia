@@ -4,41 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
-
-func (s *service) emitOwnedChatLifecycle(ctx context.Context, inference business.Inference, messageID, phase string, version int64) {
-	if s == nil || s.desktopPetLifecycle == nil || inference.Preview || inference.InternalWorker {
-		return
-	}
-	if err := coordination.ValidateCurrent(ctx); err != nil {
-		return
-	}
-	source := "manual"
-	if inference.Ingress != nil && inference.Ingress.Source != "" {
-		source = inference.Ingress.Source
-	}
-	s.desktopPetLifecycle.OnDesktopPetChatLifecycle(ctx, DesktopPetChatLifecycle{
-		InteractionID:  inference.Scope.RequestID,
-		MessageID:      messageID,
-		CharacterID:    inference.Scope.RoleID,
-		SpaceID:        inference.Scope.SpaceID,
-		ConversationID: inference.ConversationID,
-		Phase:          phase,
-		StatusVersion:  version,
-		Origin:         source,
-		CorrelationID:  inference.Scope.RequestID,
-		OccurredAt:     time.Now().UTC(),
-	})
-}
-
-func (s *service) beginOwnedChatLifecycle(ctx context.Context, inference business.Inference) {
-	s.emitOwnedChatLifecycle(ctx, inference, "", "message.received", 1)
-	s.emitOwnedChatLifecycle(ctx, inference, "", "context.loading", 2)
-}
 
 func (s *service) PlanOwnedTitle(ctx context.Context, inference business.Inference, generation business.Generation) (string, error) {
 	if inference.Preview || inference.InternalWorker || generation.Partial || generation.Suppressed || strings.TrimSpace(inference.Message) == "" || strings.TrimSpace(generation.Text) == "" {

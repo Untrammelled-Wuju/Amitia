@@ -16,6 +16,7 @@ import '../../../shared/models/models.dart';
 import '../../conversation/rendering/stream/markdown_stream_scheduler.dart';
 import 'agent_event_reducer.dart';
 import 'citation_projection.dart';
+import 'citation_snapshot.dart';
 import '../../workbench/runtime/workbench_mobile_events.dart';
 import 'automation_status.dart';
 import 'conversation_message_ledger.dart';
@@ -481,6 +482,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _lastError = null;
     var text = '';
     var reasoning = '';
+    var citationSnapshot = const <Map<String, dynamic>>[];
     var accepted = false;
     var completed = false;
     final draftProjectId = wasDraft ? (_workspace?.projectId ?? '') : '';
@@ -504,6 +506,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           type: MessageType.text,
           content: text,
           reasoningContent: reasoning,
+          citationSnapshot: citationSnapshot,
           time: time,
           sequence: sequence,
           status: status,
@@ -592,6 +595,9 @@ class ConversationRuntimeController extends ChangeNotifier {
           final result = event['data'] as Map;
           text = (result['reply'] ?? text).toString();
           reasoning = (result['reasoning'] ?? reasoning).toString();
+          citationSnapshot = normalizeCitationSnapshot(
+            result['citationSnapshot'],
+          );
           completed = true;
           savedRevision = result['saved'] == true ? 1 : null;
           final current = _messages.findById(

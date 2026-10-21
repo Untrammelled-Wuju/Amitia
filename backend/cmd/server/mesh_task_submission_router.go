@@ -36,6 +36,13 @@ type meshTaskSubmission struct {
 	TaskCatalogReference *task_runtime.DeviceTaskDefinitionReference `json:"taskCatalogReference,omitempty"`
 }
 
+type meshTaskDefinitionRequest struct {
+	TargetDeviceID string                       `json:"targetDeviceId"`
+	RoleID         string                       `json:"characterId"`
+	RequestID      string                       `json:"requestId"`
+	ExpectedScope  *coordination.ExecutionScope `json:"expectedExecutionScope"`
+}
+
 func meshTaskCallerAllowed(actor *auth.ActorContext, coreID string) bool {
 	if actor == nil || actor.SpaceID.String() != coreID || actor.DeviceID == "" {
 		return false
@@ -82,6 +89,53 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 		}
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": gin.H{"roles": items, "selectedRole": selected, "executionScope": authority, "roleOwnerId": authority.RoleOwnerID}})
 	})
+	group.POST("/tasks/definitions", func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if !meshTaskCallerAllowed(actor, coreID) {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		if services.DeviceMesh == nil || !services.DeviceMesh.BusinessCoordinationReady || services.OwnedBusiness == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"message": "设备任务服务尚未就绪"})
+			return
+		}
+		var input meshTaskDefinitionRequest
+		decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&input) != nil || decoder.Decode(&struct{}{}) != io.EOF || input.TargetDeviceID == "" || len(input.TargetDeviceID) > 256 || input.RoleID == "" || len(input.RoleID) > 256 || input.RequestID == "" || len(input.RequestID) > 128 || input.ExpectedScope == nil || input.ExpectedScope.CoreID != coreID || input.ExpectedScope.RoleID != input.RoleID || input.ExpectedScope.RoleRevision < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "任务定义查询参数或权限范围无效"})
+			return
+		}
+		ctx, authority, finish, err := services.OwnedBusiness.OpenTaskExecution(c.Request.Context(), business.Request{SpaceID: coreID, CoreID: coreID, DeviceID: actor.DeviceID.String(), TargetDeviceID: input.TargetDeviceID, RoleID: input.RoleID, RequestID: input.RequestID, ExpectedScope: input.ExpectedScope})
+		if err != nil {
+			writeMeshTaskSubmissionError(c, err)
+			return
+		}
+		defer finish()
+		definitions, err := services.KernelContainer.TaskRuntimeService.ListTaskDefinitions(ctx, "")
+		if err != nil {
+			writeMeshTaskSubmissionError(c, err)
+			return
+		}
+		visible := make([]*task_runtime.TaskDefinition, 0, len(definitions))
+		for _, definition := range definitions {
+			if definition == nil || definition.RemoteSource != nil {
+				continue
+			}
+			placement, placeErr := task_runtime.ResolveRequestedPlacement("", definition.ExecutionPlacement)
+			if placeErr != nil {
+				continue
+			}
+			if placement != task_runtime.TaskExecutionPlacementDevice {
+				visible = append(visible, definition)
+			}
+		}
+		if err := coordination.ValidateCurrent(ctx); err != nil {
+			writeMeshTaskSubmissionError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 200, "data": gin.H{"definitions": visible, "executionScope": authority}})
+	})
 	group.POST("/tasks", func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if !meshTaskCallerAllowed(actor, coreID) {
@@ -120,6 +174,7 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 			return
 		}
 		var definition *task_runtime.TaskDefinition
+		executionPlacement := task_runtime.TaskExecutionPlacementLocal
 		if reference := input.TaskCatalogReference; reference != nil {
 			if reference.CatalogID != input.TaskDefinitionID || reference.CoreID != authority.CoreID || reference.DeviceID != authority.TargetDeviceID {
 				writeMeshTaskSubmissionError(c, coordination.ErrWrongOwner)
@@ -131,10 +186,17 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 				return
 			}
 			definition, err = runtime.ImportDeviceTaskDefinition(ctx, entry)
+			executionPlacement = task_runtime.TaskExecutionPlacementDevice
 		} else {
 			definition, err = runtime.GetTaskDefinition(ctx, input.TaskDefinitionID)
 			if err == nil && definition != nil && definition.RemoteSource != nil {
 				err = task_runtime.NewTaskError(task_runtime.ErrTaskDefinitionInvalid, "设备目录任务必须携带来源设备与版本引用")
+			}
+			if err == nil && definition != nil {
+				executionPlacement, err = task_runtime.ResolveRequestedPlacement("", definition.ExecutionPlacement)
+				if err == nil && executionPlacement == task_runtime.TaskExecutionPlacementDevice {
+					err = task_runtime.NewTaskError(task_runtime.ErrTaskDefinitionInvalid, "设备任务必须从目标设备目录选择")
+				}
 			}
 		}
 		if err != nil || definition == nil {
@@ -149,9 +211,12 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 			c.JSON(http.StatusBadRequest, gin.H{"message": "任务输入不符合已安装任务的参数要求"})
 			return
 		}
-		target, err := resolveMeshTaskSubmissionTarget(services, authority, definition)
 		var pin task_runtime.TargetTaskDefinitionPin
-		if err == nil {
+		var target task_runtime.TaskExecutionTarget
+		if executionPlacement == task_runtime.TaskExecutionPlacementDevice {
+			target, err = resolveMeshTaskSubmissionTarget(services, authority, definition)
+		}
+		if executionPlacement == task_runtime.TaskExecutionPlacementDevice && err == nil {
 			pin, err = services.DeviceMesh.TargetTaskDefinition(ctx, authority, task_runtime.SourceTaskDefinitionID(definition))
 			if err == nil {
 				err = task_runtime.ValidateTargetTaskDefinition(authority.TargetDeviceID, definition, pin)
@@ -162,7 +227,7 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 			return
 		}
 		id, err := task_runtime.OwnedRequestTaskRunID(authority)
-		if err == nil && (len(definition.PermissionRequirements) != 0 || len(definition.PermissionRequirementStrings) != 0) {
+		if executionPlacement == task_runtime.TaskExecutionPlacementDevice && err == nil && (len(definition.PermissionRequirements) != 0 || len(definition.PermissionRequirementStrings) != 0) {
 			digest := sha256.Sum256(input.Input)
 			permissionRequest := task_runtime.SourceTaskPermissionRequest{Scope: authority, Target: pin, Input: input.Input, Run: task_runtime.TaskRun{TaskRunID: id, TaskDefinitionID: task_runtime.SourceTaskDefinitionID(definition), ExtensionID: definition.ExtensionID, ModuleID: definition.ModuleID, InvocationID: id, ScopeSnapshotID: id, InputHash: hex.EncodeToString(digest[:]), ExecutionPlacement: task_runtime.TaskExecutionPlacementDevice, ExecutionTarget: target}}
 			err = services.DeviceMesh.TargetTaskPermissions(ctx, permissionRequest)
@@ -174,7 +239,11 @@ func registerMeshTaskSubmissionRouter(group *gin.RouterGroup, services *AppServi
 			writeMeshTaskSubmissionError(c, err)
 			return
 		}
-		result, err := runtime.Enqueue(ctx, task_runtime.EnqueueTaskRequest{DeduplicateOwnedRequest: true, TaskDefinitionID: definition.TaskID, ExtensionID: definition.ExtensionID, ModuleID: definition.ModuleID, Input: input.Input, InvocationID: id, ScopeSnapshotID: id, Source: "device-mesh", ExecutionPlacement: task_runtime.TaskExecutionPlacementDevice, TrustedExecutionTarget: &task_runtime.TrustedExecutionTargetRequest{Placement: task_runtime.TaskExecutionPlacementDevice, Target: target, ResolvedBy: "core"}}, definition)
+		enqueueRequest := task_runtime.EnqueueTaskRequest{DeduplicateOwnedRequest: true, TaskDefinitionID: definition.TaskID, ExtensionID: definition.ExtensionID, ModuleID: definition.ModuleID, Input: input.Input, InvocationID: id, ScopeSnapshotID: id, Source: "device-mesh", ExecutionPlacement: executionPlacement}
+		if executionPlacement == task_runtime.TaskExecutionPlacementDevice {
+			enqueueRequest.TrustedExecutionTarget = &task_runtime.TrustedExecutionTargetRequest{Placement: task_runtime.TaskExecutionPlacementDevice, Target: target, ResolvedBy: "core"}
+		}
+		result, err := runtime.Enqueue(ctx, enqueueRequest, definition)
 		if err == nil {
 			err = coordination.ValidateCurrent(ctx)
 		}

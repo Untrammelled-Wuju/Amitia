@@ -94,17 +94,24 @@ func (s *threeCoreSchemas) open(t *testing.T) *AppServices {
 }
 
 type threeCoreModel struct {
-	core      string
-	started   chan struct{}
-	cancelled chan struct{}
-	calls     atomic.Int32
-	forwarded chan *business.ForwardedContext
-	roles     chan string
+	core       string
+	started    chan struct{}
+	cancelled  chan struct{}
+	calls      atomic.Int32
+	forwarded  chan *business.ForwardedContext
+	roles      chan string
+	worldbooks chan []coordination.Resource
 }
 
 func (m *threeCoreModel) GenerateOwnedReply(ctx context.Context, input business.Inference) (business.Generation, error) {
 	m.calls.Add(1)
 	m.roles <- input.Snapshot.Role.Name
+	if m.worldbooks != nil {
+		select {
+		case m.worldbooks <- append([]coordination.Resource(nil), input.Snapshot.Resources...):
+		default:
+		}
+	}
 	if input.Message == "等待切换" {
 		close(m.started)
 		<-ctx.Done()
@@ -203,7 +210,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 		t.Fatal(err)
 	}
 	rt.BusinessCoordinationReady = true
-	model := &threeCoreModel{core: core, started: make(chan struct{}), cancelled: make(chan struct{}), forwarded: make(chan *business.ForwardedContext, 4), roles: make(chan string, 8)}
+	model := &threeCoreModel{core: core, started: make(chan struct{}), cancelled: make(chan struct{}), forwarded: make(chan *business.ForwardedContext, 4), roles: make(chan string, 8), worldbooks: make(chan []coordination.Resource, 16)}
 	services := sourceServices
 	services.DeviceMesh, services.OwnedBusiness = rt, business.NewEngine(rt.Coordination, rt, model)
 	f := &threeCoreFixture{core: core, services: services, local: local, identity: identity, device: device, pairing: pair, router: gin.New(), model: model, platform: platform}

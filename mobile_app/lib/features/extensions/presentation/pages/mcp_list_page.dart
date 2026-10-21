@@ -41,21 +41,26 @@ class _McpListPageState extends ConsumerState<McpListPage> {
   List<Map<String, dynamic>> get _searchResults {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return const [];
-    return _servers.where((server) {
-      final searchable = [
-        server['id'],
-        server['name'],
-        server['transport'],
-        server['command'],
-        server['endpoint'],
-        server['status'],
-      ].map((value) => (value ?? '').toString().toLowerCase());
-      return searchable.any((value) => value.contains(query));
-    }).toList(growable: false);
+    return _servers
+        .where((server) {
+          final searchable = [
+            server['id'],
+            server['name'],
+            server['transport'],
+            server['command'],
+            server['endpoint'],
+            server['status'],
+          ].map((value) => (value ?? '').toString().toLowerCase());
+          return searchable.any((value) => value.contains(query));
+        })
+        .toList(growable: false);
   }
 
   Future<void> _loadServers() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final svc = ref.read(mcpServiceProvider);
       final data = await svc.servers();
@@ -79,12 +84,18 @@ class _McpListPageState extends ConsumerState<McpListPage> {
       if (mounted) {
         setState(() {
           _servers = data;
-          _enabledCapabilities = Map<String, Set<String>>.fromEntries(capabilityEntries);
+          _enabledCapabilities = Map<String, Set<String>>.fromEntries(
+            capabilityEntries,
+          );
           _loading = false;
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
     }
   }
 
@@ -107,7 +118,8 @@ class _McpListPageState extends ConsumerState<McpListPage> {
   BadgeType _statusBadgeType(dynamic status) {
     final s = status.toString().toLowerCase();
     if (s.contains('connected') && !s.contains('dis')) return BadgeType.success;
-    if (s.contains('disconnected') || s.contains('disconnect')) return BadgeType.neutral;
+    if (s.contains('disconnected') || s.contains('disconnect'))
+      return BadgeType.neutral;
     if (s.contains('error')) return BadgeType.error;
     if (s.contains('connecting')) return BadgeType.warning;
     return BadgeType.neutral;
@@ -124,13 +136,22 @@ class _McpListPageState extends ConsumerState<McpListPage> {
     if (_loading) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(title: 'MCP 服务', showBackButton: true),
-        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+        body: SafeArea(
+          top: false,
+          child: const AmitiaLoadingState(message: '加载中...'),
+        ),
       );
     }
     if (_error != null) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(title: 'MCP 服务', showBackButton: true),
-        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadServers)),
+        body: SafeArea(
+          top: false,
+          child: AmitiaErrorState(
+            message: '加载失败: $_error',
+            onRetry: _loadServers,
+          ),
+        ),
       );
     }
     return AmitiaScaffold(
@@ -252,6 +273,7 @@ class _McpListPageState extends ConsumerState<McpListPage> {
     final hasRoots = enabledCapabilities.contains('roots');
     final hasElicitation = enabledCapabilities.contains('elicitation');
     final hasOAuth = (server['authType'] ?? '').toString() == 'oauth';
+    final packageManaged = server['ownerKind'] == 'package';
 
     return AmitiaCard(
       onTap: () => context.push(AppRoutes.mcpDetail(id)),
@@ -267,7 +289,11 @@ class _McpListPageState extends ConsumerState<McpListPage> {
                   color: context.accentSoft,
                   borderRadius: AppRadius.brSmall,
                 ),
-                child: Icon(Icons.dns_outlined, size: 22, color: context.accentPrimary),
+                child: Icon(
+                  Icons.dns_outlined,
+                  size: 22,
+                  color: context.accentPrimary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -279,21 +305,41 @@ class _McpListPageState extends ConsumerState<McpListPage> {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: context.surfaceSecondary,
                             borderRadius: AppRadius.brTag,
                           ),
-                          child: Text(_transportLabel(transport), style: TextStyle(fontSize: 10, color: context.textTertiary, fontWeight: FontWeight.w600)),
+                          child: Text(
+                            _transportLabel(transport),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: context.textTertiary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(address, style: AppTypography.label(context), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(
+                          child: Text(
+                            address,
+                            style: AppTypography.label(context),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
-              AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
+              AmitiaStatusBadge(
+                label: _statusLabel(status),
+                type: _statusBadgeType(status),
+              ),
             ],
           ),
           SizedBox(height: AppSpacing.md),
@@ -302,57 +348,112 @@ class _McpListPageState extends ConsumerState<McpListPage> {
             runSpacing: 6,
             children: [
               if (hasSampling)
-                _CapabilityTag(label: 'Sampling', icon: Icons.graphic_eq, color: context.warning),
+                _CapabilityTag(
+                  label: 'Sampling',
+                  icon: Icons.graphic_eq,
+                  color: context.warning,
+                ),
               if (hasTasks)
-                _CapabilityTag(label: 'Tasks', icon: Icons.task_outlined, color: context.accentSecondary),
+                _CapabilityTag(
+                  label: 'Tasks',
+                  icon: Icons.task_outlined,
+                  color: context.accentSecondary,
+                ),
               if (hasRoots)
-                _CapabilityTag(label: 'Roots', icon: Icons.account_tree_outlined, color: context.info),
+                _CapabilityTag(
+                  label: 'Roots',
+                  icon: Icons.account_tree_outlined,
+                  color: context.info,
+                ),
               if (hasElicitation)
-                _CapabilityTag(label: 'Elicitation', icon: Icons.dynamic_form_outlined, color: context.warning),
+                _CapabilityTag(
+                  label: 'Elicitation',
+                  icon: Icons.dynamic_form_outlined,
+                  color: context.warning,
+                ),
               if (hasOAuth)
-                _CapabilityTag(label: 'OAuth', icon: Icons.lock_outline, color: context.error),
+                _CapabilityTag(
+                  label: 'OAuth',
+                  icon: Icons.lock_outline,
+                  color: context.error,
+                ),
             ],
           ),
           SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              GestureDetector(
-                onTap: () => context.push(AppRoutes.mcpEdit(id)),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: context.accentSoft,
-                    borderRadius: AppRadius.brTag,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.edit_outlined, size: 15, color: context.accentPrimary),
-                      const SizedBox(width: 5),
-                      Text('编辑', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
-                    ],
+              if (packageManaged)
+                Text(
+                  '由扩展包 ${(server['ownerExtensionId'] ?? '').toString()} 管理',
+                  style: AppTypography.label(context),
+                )
+              else ...[
+                GestureDetector(
+                  onTap: () => context.push(AppRoutes.mcpEdit(id)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.accentSoft,
+                      borderRadius: AppRadius.brTag,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 15,
+                          color: context.accentPrimary,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '编辑',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.accentPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () => _showDeleteConfirm(server),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: context.error.withValues(alpha: 0.1),
-                    borderRadius: AppRadius.brTag,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.delete_outline, size: 15, color: context.error),
-                      const SizedBox(width: 5),
-                      Text('删除', style: TextStyle(fontSize: 13, color: context.error, fontWeight: FontWeight.w500)),
-                    ],
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _showDeleteConfirm(server),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.error.withValues(alpha: 0.1),
+                      borderRadius: AppRadius.brTag,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          size: 15,
+                          color: context.error,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '删除',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
               const Spacer(),
               Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
             ],
@@ -377,9 +478,15 @@ class _McpListPageState extends ConsumerState<McpListPage> {
         backgroundColor: context.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
         title: Text('删除 MCP 服务', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除「$name」吗？此操作不可撤销，相关配置将被清除。', style: AppTypography.bodySmall(context)),
+        content: Text(
+          '确定要删除「$name」吗？此操作不可撤销，相关配置将被清除。',
+          style: AppTypography.bodySmall(context),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('取消', style: TextStyle(color: context.textSecondary)),
+          ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -389,13 +496,19 @@ class _McpListPageState extends ConsumerState<McpListPage> {
                 _loadServers();
                 if (mounted) {
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    SnackBar(content: Text('$name 已删除'), backgroundColor: context.error),
+                    SnackBar(
+                      content: Text('$name 已删除'),
+                      backgroundColor: context.error,
+                    ),
                   );
                 }
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    SnackBar(content: Text('删除失败: $e'), backgroundColor: context.error),
+                    SnackBar(
+                      content: Text('删除失败: $e'),
+                      backgroundColor: context.error,
+                    ),
                   );
                 }
               }
@@ -413,7 +526,11 @@ class _CapabilityTag extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _CapabilityTag({required this.label, required this.icon, required this.color});
+  const _CapabilityTag({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -428,7 +545,14 @@ class _CapabilityTag extends StatelessWidget {
         children: [
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );

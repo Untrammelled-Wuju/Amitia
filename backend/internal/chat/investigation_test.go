@@ -60,7 +60,7 @@ func TestKnowledgeInvestigationReadCanSatisfyLocatorCoverage(t *testing.T) {
 		t.Fatal("fixture should start insufficient because page coverage is missing")
 	}
 
-	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "核对第37页原文", result, nil)
+	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "核对第37页原文", result, nil, nil)
 	if !got.Sufficient || got.SufficiencyReason != "evidence_covered" {
 		t.Fatalf("expected canonical read to satisfy deterministic gate: %#v", got)
 	}
@@ -95,7 +95,7 @@ func TestKnowledgeInvestigationStopsOnDuplicateNoProgress(t *testing.T) {
 		Evidence: []knowledge.Evidence{{ID: "chunk-1", SourceID: "source-a", SourceRevision: 1, Content: "same", FusionScore: 0.1}},
 	}
 	knowledge.ApplySufficiency("比较 A 和 B", &result)
-	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "比较 A 和 B", result, nil)
+	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "比较 A 和 B", result, nil, nil)
 	if got.Sufficient {
 		t.Fatal("duplicate/no-progress investigation must not bypass comparison coverage")
 	}
@@ -137,7 +137,7 @@ func TestKnowledgeInvestigationRejectsUnknownSearchSources(t *testing.T) {
 		Evidence:       []knowledge.Evidence{{ID: "e1", SourceID: "known", SourceRevision: 1, Content: "partial", FusionScore: 0.1}},
 	}
 	knowledge.ApplySufficiency("比较 A 和 B", &result)
-	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "比较 A 和 B", result, nil)
+	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "比较 A 和 B", result, nil, nil)
 	if port.searchCalls != 0 {
 		t.Fatalf("unknown source restriction must not broaden to a global search, calls=%d", port.searchCalls)
 	}
@@ -178,7 +178,7 @@ func TestKnowledgeInvestigationRejectedReadCountsSingleNoProgressRound(t *testin
 		RetrievalLevel: knowledge.RetrievalLevelAgentic, TraceMaxAgenticRounds: 5, TraceBudgetMs: 1000,
 		Evidence: []knowledge.Evidence{{ID: "chunk-1", SourceID: "source-a", SourceRevision: 1, Content: "partial", FusionScore: 0.1}},
 	}
-	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "比较 A 和 B", result, nil)
+	got := svc.runKnowledgeInvestigation(context.Background(), "space-1", "比较 A 和 B", result, nil, nil)
 	if port.readCalls != 0 {
 		t.Fatalf("rejected read must not call the reader: %d", port.readCalls)
 	}

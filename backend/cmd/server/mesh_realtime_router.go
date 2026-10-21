@@ -18,14 +18,25 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	voicewake "github.com/u-ai/backend/internal/devicemesh/wake"
 	"github.com/u-ai/backend/internal/middleware/security"
 )
 
 type ownedRealtimeTicket struct {
-	Engine  *business.Engine
-	Request business.Request
-	Origin  string
-	Expires time.Time
+	Engine    *business.Engine
+	Request   business.Request
+	VoiceType string
+	Resource  string
+	DialogID  string
+	Origin    string
+	Expires   time.Time
+}
+
+type meshRealtimeTicketRequest struct {
+	business.Request
+	VoiceType string `json:"voiceType,omitempty"`
+	Resource  string `json:"resourceId,omitempty"`
+	DialogID  string `json:"dialogId,omitempty"`
 }
 
 var ownedRealtimeTickets = struct {
@@ -51,12 +62,20 @@ func registerMeshRealtimeRouter(mesh *gin.RouterGroup, services *AppServices, co
 			c.AbortWithStatus(401)
 			return
 		}
-		var request business.Request
+		var input meshRealtimeTicketRequest
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
-		if c.ShouldBindJSON(&request) != nil || request.ExpectedScope == nil {
+		if c.ShouldBindJSON(&input) != nil || input.ExpectedScope == nil {
 			c.JSON(400, gin.H{"message": "通话缺少原角色与完整权限范围"})
 			return
 		}
+		input.VoiceType = strings.TrimSpace(input.VoiceType)
+		input.Resource = strings.TrimSpace(input.Resource)
+		input.DialogID = strings.TrimSpace(input.DialogID)
+		if len(input.VoiceType) > 256 || len(input.Resource) > 256 || len(input.DialogID) > 256 {
+			c.JSON(400, gin.H{"message": "通话音色、资源或旧对话标识超过长度限制"})
+			return
+		}
+		request := input.Request
 		if _, err := uuid.Parse(request.RequestID); err != nil {
 			c.JSON(400, gin.H{"message": "通话请求编号必须为 UUID"})
 			return
@@ -78,7 +97,7 @@ func registerMeshRealtimeRouter(mesh *gin.RouterGroup, services *AppServices, co
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
 		}
-		ticket, err := issueOwnedRealtimeTicket(services, request, origin, scope)
+		ticket, err := issueOwnedRealtimeTicket(services, request, input.VoiceType, input.Resource, input.DialogID, origin, scope)
 		if err != nil {
 			c.JSON(503, gin.H{"message": err.Error()})
 			return
@@ -87,7 +106,7 @@ func registerMeshRealtimeRouter(mesh *gin.RouterGroup, services *AppServices, co
 	})
 }
 
-func issueOwnedRealtimeTicket(services *AppServices, request business.Request, origin string, scope coordination.ExecutionScope) (gin.H, error) {
+func issueOwnedRealtimeTicket(services *AppServices, request business.Request, voiceType, resource, dialogID, origin string, scope coordination.ExecutionScope) (gin.H, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return nil, err
@@ -104,8 +123,8 @@ func issueOwnedRealtimeTicket(services *AppServices, request business.Request, o
 	if len(ownedRealtimeTickets.Items) >= 4096 {
 		return nil, errors.New("通话票据已达上限，请稍后重试")
 	}
-	ownedRealtimeTickets.Items[sha256.Sum256([]byte(token))] = ownedRealtimeTicket{Engine: services.OwnedBusiness, Request: request, Origin: origin, Expires: expires}
-	return gin.H{"ticket": token, "expiresAt": expires, "wsPath": "/api/device-mesh/v1/business/realtime/session", "executionScope": scope}, nil
+	ownedRealtimeTickets.Items[sha256.Sum256([]byte(token))] = ownedRealtimeTicket{Engine: services.OwnedBusiness, Request: request, VoiceType: voiceType, Resource: resource, DialogID: dialogID, Origin: origin, Expires: expires}
+	return gin.H{"ticket": token, "expiresAt": expires, "wsPath": "/api/device-mesh/v1/business/realtime/session", "executionScope": scope, "voiceType": voiceType, "resourceId": resource, "dialogId": dialogID}, nil
 }
 
 func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices) {
@@ -178,12 +197,21 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 				}
 			}
 		}()
-		if write(gin.H{"type": "ready", "executionScope": scope, "conversationId": ticket.Request.ConversationID}) != nil {
+		if write(gin.H{"type": "ready", "executionScope": scope, "conversationId": ticket.Request.ConversationID, "voiceType": ticket.VoiceType, "resourceId": ticket.Resource, "dialogId": ticket.DialogID, "capabilities": gin.H{"audioInput": true, "audioOutput": true, "cameraInput": true, "screenInput": true, "visualContext": true, "streamingASR": true, "streamingText": true, "turnBasedTTS": true, "wakeWord": true, "playbackProgress": true}}) != nil {
 			return
 		}
 		var pcm []byte
 		var visual *business.Attachment
 		turnID := ""
+		var wakeDetector voicewake.WakeDetector
+		var wakeConfigID string
+		var wakeSequence uint64
+		wakeArmed := false
+		defer func() {
+			if wakeDetector != nil {
+				_ = wakeDetector.Unload()
+			}
+		}()
 		for {
 			kind, payload, err := conn.ReadMessage()
 			if err != nil {
@@ -193,6 +221,21 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 			active := busy
 			state.Unlock()
 			if kind == websocket.BinaryMessage {
+				if wakeArmed && wakeDetector != nil {
+					wakeSequence++
+					detected, detectErr := wakeDetector.Process(&voicewake.VoiceAudioFrame{SessionID: ticket.Request.RequestID, Sequence: wakeSequence, TimestampNS: time.Now().UnixNano(), SampleRate: voicewake.CanonicalSampleRate, Channels: voicewake.CanonicalChannels, Encoding: voicewake.CanonicalEncoding, PCM: payload})
+					if detectErr != nil {
+						write(gin.H{"type": "error", "message": detectErr.Error()})
+						return
+					}
+					if detected.Detected {
+						wakeArmed = false
+						if write(gin.H{"type": "wake_detected", "data": gin.H{"configId": wakeConfigID, "phraseId": detected.PhraseID, "confidence": detected.Confidence, "detectedAt": time.Unix(0, detected.DetectedAtNS).UTC()}}) != nil {
+							return
+						}
+					}
+					continue
+				}
 				if active || turnID == "" || len(pcm)+len(payload) > (1<<20)-44 || len(payload)%2 != 0 {
 					write(gin.H{"type": "error", "message": "语音轮次无效或超过单轮 32 秒限制"})
 					return
@@ -205,6 +248,8 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 				RequestID  string                       `json:"requestId"`
 				Scope      *coordination.ExecutionScope `json:"expectedExecutionScope"`
 				Attachment *business.Attachment         `json:"attachment"`
+				ConfigID   string                       `json:"configId"`
+				Generation int64                        `json:"generationId"`
 			}
 			if json.Unmarshal(payload, &input) != nil {
 				write(gin.H{"type": "error", "message": "实时消息格式无效"})
@@ -213,6 +258,28 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 			switch input.Type {
 			case "stop":
 				return
+			case "wake_arm":
+				if wakeDetector != nil {
+					_ = wakeDetector.Unload()
+				}
+				wakeDetector, wakeConfigID, err = loadMeshWakeDetector(ctx, services.DB, input.ConfigID)
+				if err != nil {
+					write(gin.H{"type": "wake_status", "armed": false, "message": err.Error()})
+					continue
+				}
+				wakeArmed = true
+				wakeSequence = 0
+				write(gin.H{"type": "wake_status", "armed": true, "configId": wakeConfigID})
+			case "wake_disarm":
+				wakeArmed = false
+				if wakeDetector != nil {
+					wakeDetector.Reset()
+				}
+				write(gin.H{"type": "wake_status", "armed": false, "configId": wakeConfigID})
+			case "playback_progress":
+				write(gin.H{"type": "playback_status", "requestId": input.RequestID, "generationId": input.Generation, "acknowledged": true})
+			case "tts_playback_ended":
+				write(gin.H{"type": "tts_ended", "requestId": input.RequestID, "generationId": input.Generation})
 			case "interrupt":
 				state.Lock()
 				if workerCancel != nil {
@@ -242,6 +309,7 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 					continue
 				}
 				visual = input.Attachment
+				write(gin.H{"type": "vision_status", "requestId": turnID, "data": gin.H{"available": true, "kind": input.Attachment.Kind, "hash": input.Attachment.Hash}})
 			case "turn_end":
 				if active || turnID == "" {
 					write(gin.H{"type": "error", "message": "没有可提交的语音轮次"})
@@ -269,6 +337,12 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 						if err := workerContext.Err(); err != nil {
 							return err
 						}
+						switch event.Type {
+						case "transcribed":
+							return write(gin.H{"type": "asr_final", "requestId": request.RequestID, "data": gin.H{"eventId": "realtime-asr-" + event.Scope.TurnID, "transcript": event.Text, "conversationId": event.ConversationID, "turnId": event.Scope.TurnID, "executionId": event.Scope.ExecutionID}})
+						case "delta":
+							return write(gin.H{"type": "assistant_text", "requestId": request.RequestID, "data": gin.H{"text": event.Text, "delta": true}})
+						}
 						return write(gin.H{"type": "event", "requestId": request.RequestID, "data": event})
 					})
 					if err != nil {
@@ -285,7 +359,7 @@ func registerMeshRealtimePublicRoutes(router *gin.Engine, services *AppServices)
 						return
 					}
 					request.ExpectedScope = &result.Scope
-					speech, err := services.OwnedBusiness.Speech(workerContext, request, result.Text)
+					speech, err := services.OwnedBusiness.Speech(workerContext, request, result.Text, business.SpeechOptions{VoiceType: ticket.VoiceType, ResourceID: ticket.Resource})
 					if err != nil {
 						write(gin.H{"type": "error", "requestId": request.RequestID, "message": err.Error(), "saved": true})
 						return

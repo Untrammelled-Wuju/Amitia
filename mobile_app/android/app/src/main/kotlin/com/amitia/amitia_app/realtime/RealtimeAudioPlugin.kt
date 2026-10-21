@@ -4,11 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
-import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
@@ -23,7 +21,6 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
-import java.util.concurrent.Executors
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
@@ -51,11 +48,6 @@ class RealtimeAudioPlugin : FlutterPlugin,
     private val realtimeCaptureLeaseHeld = AtomicBoolean(false)
     private var audioRecord: AudioRecord? = null
     private var captureThread: Thread? = null
-
-    private val playbackExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "amitia-realtime-playback").apply { isDaemon = true }
-    }
-    private var audioTrack: AudioTrack? = null
 
     private var pendingStartResult: MethodChannel.Result? = null
 
@@ -119,19 +111,6 @@ class RealtimeAudioPlugin : FlutterPlugin,
                 stopCapture()
                 result.success(null)
             }
-            "playPcm" -> {
-                val bytes = call.arguments as? ByteArray
-                if (bytes == null) {
-                    result.error("INVALID_AUDIO", "playPcm requires Uint8List PCM data", null)
-                    return
-                }
-                enqueuePlayback(bytes)
-                result.success(null)
-            }
-            "stopPlayback" -> {
-                stopPlayback()
-                result.success(null)
-            }
             "reset" -> {
                 resetAudio()
                 result.success(null)
@@ -140,7 +119,6 @@ class RealtimeAudioPlugin : FlutterPlugin,
             "status" -> result.success(
                 mapOf(
                     "capturing" to capturing.get(),
-                    "playing" to (audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING),
                 ),
             )
             else -> result.notImplemented()
@@ -375,80 +353,8 @@ class RealtimeAudioPlugin : FlutterPlugin,
         }
     }
 
-    private fun ensureAudioTrack(): AudioTrack? {
-        val existing = audioTrack
-        if (existing != null && existing.state == AudioTrack.STATE_INITIALIZED) return existing
-
-        val minimum = AudioTrack.getMinBufferSize(
-            PLAYBACK_SAMPLE_RATE,
-            AudioFormat.CHANNEL_OUT_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-        )
-        if (minimum <= 0) return null
-        val format = AudioFormat.Builder()
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setSampleRate(PLAYBACK_SAMPLE_RATE)
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-            .build()
-        val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
-        val track = try {
-            AudioTrack.Builder()
-                .setAudioAttributes(attributes)
-                .setAudioFormat(format)
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(max(minimum, PLAYBACK_BUFFER_BYTES))
-                .build()
-        } catch (_: Throwable) {
-            return null
-        }
-        if (track.state != AudioTrack.STATE_INITIALIZED) {
-            track.release()
-            return null
-        }
-        track.play()
-        audioTrack = track
-        return track
-    }
-
-    private fun enqueuePlayback(bytes: ByteArray) {
-        if (bytes.isEmpty()) return
-        val copy = bytes.copyOf()
-        playbackExecutor.execute {
-            val track = ensureAudioTrack() ?: return@execute
-            var offset = 0
-            while (offset < copy.size) {
-                val written = try {
-                    track.write(copy, offset, copy.size - offset, AudioTrack.WRITE_BLOCKING)
-                } catch (_: Throwable) {
-                    break
-                }
-                if (written <= 0) break
-                offset += written
-            }
-        }
-    }
-
-    private fun stopPlayback() {
-        val track = audioTrack
-        audioTrack = null
-        try {
-            track?.pause()
-            track?.flush()
-            track?.stop()
-        } catch (_: Throwable) {
-        }
-        try {
-            track?.release()
-        } catch (_: Throwable) {
-        }
-    }
-
     private fun resetAudio() {
         stopCapture()
-        stopPlayback()
         val context = applicationContext
         val audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         if (audioManager?.mode == AudioManager.MODE_IN_COMMUNICATION) {
@@ -461,9 +367,7 @@ class RealtimeAudioPlugin : FlutterPlugin,
         private const val INPUT_CHANNEL = "com.amitia.realtime_audio/input"
         private const val PERMISSION_REQUEST = 43120
         private const val CAPTURE_SAMPLE_RATE = 16_000
-        private const val PLAYBACK_SAMPLE_RATE = 24_000
         private const val CAPTURE_CHUNK_BYTES = 3_200
-        private const val PLAYBACK_BUFFER_BYTES = 9_600
         private const val MAX_ASR_TRANSCRIPT_CHARS = 16_384
         private const val MAX_VISUAL_CONTEXT_CHARS = 6000
         private const val MAX_CONTEXT_ID_CHARS = 200

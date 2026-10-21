@@ -179,13 +179,18 @@ func emitOwnedToolEvent(inference business.Inference, eventType, call, name stri
 	if inference.Emit == nil {
 		return nil
 	}
-	content:=result.VisibleText
-	if len(result.Output)>0 {content=string(result.Output)}
-	payload := map[string]any{"toolCallId": call, "toolName": name, "arguments": string(input), "result": content, "durationMs": result.DurationMS,"status":result.Status,"forceVoice":result.ForceVoice}
+	content := result.VisibleText
+	if len(result.Output) > 0 {
+		content = string(result.Output)
+	}
+	payload := map[string]any{"toolCallId": call, "toolName": name, "arguments": string(input), "result": content, "durationMs": result.DurationMS, "status": result.Status, "forceVoice": result.ForceVoice}
 	if result.Error != nil {
 		payload["errorCode"], payload["error"] = result.Error.Code, result.Error.Message
 	}
-	if eventType=="tool-completed" && result.Error==nil && result.Status!="" && !strings.EqualFold(result.Status,"SUCCESS") && !strings.EqualFold(result.Status,"SUCCEEDED") {payload["errorCode"]="TOOL_"+strings.ToUpper(result.Status);payload["error"]="工具未成功完成"}
+	if eventType == "tool-completed" && result.Error == nil && result.Status != "" && !strings.EqualFold(result.Status, "SUCCESS") && !strings.EqualFold(result.Status, "SUCCEEDED") {
+		payload["errorCode"] = "TOOL_" + strings.ToUpper(result.Status)
+		payload["error"] = "工具未成功完成"
+	}
 	if executionErr != nil {
 		payload["error"] = executionErr.Error()
 	}

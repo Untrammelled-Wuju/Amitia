@@ -43,7 +43,7 @@
         "summary": "Verify the final gate for a package operation (compatibility view)"
       }
     },
-    "/extensions/agent-skills": {
+    "/extensions/kernel/agent-skills": {
       "get": {
         "parameters": [
           {
@@ -66,7 +66,9 @@
             "schema": {
               "enum": [
                 "global",
-                "character"
+                "space",
+                "character",
+                "conversation"
               ]
             }
           },
@@ -91,13 +93,42 @@
         "summary": "List visible Agent Skills"
       }
     },
-    "/extensions/agent-skills/import/install": {
+    "/extensions/kernel/agent-skills/import/install": {
       "post": {
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AgentSkillInstallRequest"
+                "type": "object",
+                "required": [
+                  "previewId"
+                ],
+                "properties": {
+                  "previewId": {
+                    "type": "string"
+                  },
+                  "enable": {
+                    "type": "boolean"
+                  },
+                  "scopeType": {
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "space",
+                      "character",
+                      "conversation"
+                    ]
+                  },
+                  "scopeId": {
+                    "type": "string"
+                  },
+                  "confirmations": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "boolean"
+                    }
+                  }
+                }
               }
             }
           },
@@ -111,7 +142,7 @@
         "summary": "Install a previously validated Agent Skill preview"
       }
     },
-    "/extensions/agent-skills/import/preview": {
+    "/extensions/kernel/agent-skills/import/preview": {
       "post": {
         "requestBody": {
           "content": {
@@ -166,7 +197,7 @@
         "summary": "Validate and preview a ZIP or directory Agent Skill import"
       }
     },
-    "/extensions/agent-skills/metrics": {
+    "/extensions/kernel/agent-skills/metrics": {
       "get": {
         "responses": {
           "200": {
@@ -176,7 +207,7 @@
         "summary": "Get Agent Skill runtime counters and token totals"
       }
     },
-    "/extensions/agent-skills/{id}": {
+    "/extensions/kernel/agent-skills/{id}": {
       "delete": {
         "parameters": [
           {
@@ -221,7 +252,7 @@
         "summary": "Get Agent Skill details, compatibility and activation trace"
       }
     },
-    "/extensions/agent-skills/{id}/activations": {
+    "/extensions/kernel/agent-skills/{id}/activations": {
       "get": {
         "parameters": [
           {
@@ -241,7 +272,7 @@
         "summary": "List redacted Agent Skill activation traces"
       }
     },
-    "/extensions/agent-skills/{id}/assets/content": {
+    "/extensions/kernel/agent-skills/{id}/assets/content": {
       "get": {
         "parameters": [
           {
@@ -279,7 +310,7 @@
         "summary": "Download a controlled non-executable Agent Skill asset"
       }
     },
-    "/extensions/agent-skills/{id}/compatibility": {
+    "/extensions/kernel/agent-skills/{id}/compatibility": {
       "get": {
         "parameters": [
           {
@@ -299,7 +330,7 @@
         "summary": "Get Agent Skill compatibility report"
       }
     },
-    "/extensions/agent-skills/{id}/disable": {
+    "/extensions/kernel/agent-skills/{id}/disable": {
       "post": {
         "parameters": [
           {
@@ -319,7 +350,7 @@
         "summary": "Disable an Agent Skill and evict prompt cache"
       }
     },
-    "/extensions/agent-skills/{id}/enable": {
+    "/extensions/kernel/agent-skills/{id}/enable": {
       "post": {
         "parameters": [
           {
@@ -339,7 +370,7 @@
         "summary": "Enable a non-blocked Agent Skill"
       }
     },
-    "/extensions/agent-skills/{id}/resources": {
+    "/extensions/kernel/agent-skills/{id}/resources": {
       "get": {
         "parameters": [
           {
@@ -366,7 +397,7 @@
         "summary": "List Agent Skill resource metadata"
       }
     },
-    "/extensions/agent-skills/{id}/resources/content": {
+    "/extensions/kernel/agent-skills/{id}/resources/content": {
       "get": {
         "parameters": [
           {
@@ -1815,19 +1846,18 @@
     },
     "/extensions/kernel/extensions/rollback": {
       "post": {
-        "description": "Rollback kernel extension",
+        "deprecated": true,
+        "description": "Retired rollback endpoint. Use the package version rollback preview, confirm and execute flow.",
         "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
+          "410": {
+            "description": "LEGACY_PACKAGE_ENDPOINT_RETIRED"
           }
         },
-        "summary": "Rollback kernel extension",
+        "summary": "Retired kernel extension rollback endpoint",
         "tags": [
           "Kernel"
-        ]
+        ],
+        "x-replacement-endpoint": "/api/extensions/{id}/versions/{version}/rollback"
       }
     },
     "/extensions/kernel/extensions/uninstall": {
@@ -2349,6 +2379,32 @@
           }
         },
         "summary": "Get extension package service status"
+      }
+    },
+    "/extensions/registry/api/v1/extensions/{extensionKey}/latest": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Signed extension release index"
+          },
+          "404": {
+            "description": "Release index not found"
+          }
+        },
+        "summary": "Read a self-hosted signed extension release index"
+      }
+    },
+    "/extensions/registry/packages/{extensionKey}/{artifact}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Extension package artifact"
+          },
+          "404": {
+            "description": "Extension package not found"
+          }
+        },
+        "summary": "Read a self-hosted extension package artifact"
       }
     },
     "/extensions/recovery/execute": {
@@ -3047,21 +3103,6 @@
         "tags": [
           "Tasks"
         ]
-      },
-      "post": {
-        "description": "Enqueue task",
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "Enqueue task",
-        "tags": [
-          "Tasks"
-        ]
       }
     },
     "/extensions/tasks/{taskRunId}": {
@@ -3233,6 +3274,126 @@
         "tags": [
           "Updates"
         ]
+      }
+    },
+    "/extensions/updates/downloads/{downloadId}": {
+      "get": {
+        "description": "Get package download progress and registry metadata",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "downloadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package download state"
+          },
+          "404": {
+            "description": "Package download not found"
+          }
+        },
+        "summary": "Get extension package download",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/updates/downloads/{downloadId}/cancel": {
+      "post": {
+        "description": "Cancel an in-progress extension package download",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "downloadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package download cancelled"
+          },
+          "404": {
+            "description": "Package download not found"
+          }
+        },
+        "summary": "Cancel extension package download",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/updates/downloads/{downloadId}/retry": {
+      "post": {
+        "description": "Resume an interrupted extension package download",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "downloadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Package download resumed"
+          },
+          "404": {
+            "description": "Package download not found"
+          }
+        },
+        "summary": "Retry extension package download",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
+    "/extensions/updates/check": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Signed registry update check"
+          },
+          "503": {
+            "description": "Extension update registry is not configured"
+          }
+        },
+        "summary": "Check an installed extension for updates"
+      }
+    },
+    "/extensions/updates/downloads": {
+      "post": {
+        "responses": {
+          "202": {
+            "description": "Package download accepted"
+          },
+          "409": {
+            "description": "No update or update incompatible"
+          }
+        },
+        "summary": "Start an extension package update download"
+      }
+    },
+    "/extensions/updates/previews": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Canonical package preview"
+          },
+          "409": {
+            "description": "Downloaded package identity mismatch"
+          }
+        },
+        "summary": "Preview a downloaded extension update"
       }
     },
     "/extensions/workflow-devices": {
@@ -4130,6 +4291,33 @@
         ]
       }
     },
+    "/extensions/{id}/updates/downloads": {
+      "post": {
+        "description": "Start a signed extension package download without creating an update operation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Package download accepted"
+          },
+          "503": {
+            "description": "Extension update registry is not configured"
+          }
+        },
+        "summary": "Start extension package download",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
     "/extensions/{id}/updates/install": {
       "post": {
         "description": "Install extension update",
@@ -4181,6 +4369,33 @@
         ]
       }
     },
+    "/extensions/{id}/updates/previews": {
+      "post": {
+        "description": "Import a completed registry download into the canonical package preview flow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Canonical package preview"
+          },
+          "409": {
+            "description": "Downloaded package identity does not match the extension update"
+          }
+        },
+        "summary": "Preview a downloaded extension update",
+        "tags": [
+          "ExtensionUpdates"
+        ]
+      }
+    },
     "/extensions/{id}/upgrade": {
       "post": {
         "deprecated": true,
@@ -4225,6 +4440,56 @@
         },
         "summary": "Retired package preview endpoint",
         "x-replacement-endpoint": "/api/extensions/packages/artifacts"
+      }
+    },
+    "/extensions/versions": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Immutable package version history"
+          }
+        },
+        "summary": "List immutable package versions by extensionId query"
+      }
+    },
+    "/extensions/versions/compare": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Structured version comparison"
+          }
+        },
+        "summary": "Compare two immutable package versions by extensionId query"
+      }
+    },
+    "/extensions/versions/rollback": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Rollback result"
+          }
+        },
+        "summary": "Execute a confirmed package rollback"
+      }
+    },
+    "/extensions/versions/rollback/confirm": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Rollback confirmation token"
+          }
+        },
+        "summary": "Confirm a package rollback preview"
+      }
+    },
+    "/extensions/versions/rollback/preview": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Canonical rollback preview"
+          }
+        },
+        "summary": "Preview a package rollback"
       }
     },
     "/extensions/{id}/versions": {
@@ -4351,6 +4616,37 @@
           }
         },
         "summary": "Preview a version rollback without executing it"
+      }
+    },
+    "/extensions/{id}/versions/{version}/rollback/confirm": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rollback confirmation token"
+          },
+          "403": {
+            "description": "Required rollback confirmations are missing"
+          }
+        },
+        "summary": "Confirm a rollback preview and issue a short-lived token"
       }
     }
   }

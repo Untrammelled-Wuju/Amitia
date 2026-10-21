@@ -4,13 +4,12 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Refresh, Search, VideoPause, VideoPlay, RefreshRight, SetUp } from "@element-plus/icons-vue";
 import { listWorkflowDevices, type WorkflowDeviceDescriptor } from "@/api/workflow";
 import { taskPauseControls } from "./control";
-import { getRuntimeConnection, isCurrentDevicePaired } from "@/runtime/runtime-adapter";
 import { currentDeviceServiceMode, deviceProviderChangedNotice } from "@/runtime/device-service-label";
 import {
   listTasks,
   getTask,
-  enqueueTask,
   prepareOwnedTask,
+  listOwnedTaskDefinitions,
   enqueueOwnedTask,
   listOwnedDeviceTaskCatalog,
   cancelTask,
@@ -33,7 +32,6 @@ import {
   type TaskRunResult,
   type TaskCheckpoint,
   type TaskRunStatus,
-  type EnqueueTaskRequest,
   type OwnedTaskRoleOptions,
   type DeviceTaskCatalogPage,
 	type SourceTaskApproval,
@@ -113,19 +111,20 @@ const detailCheckpoint = ref<TaskCheckpoint | null>(null);
 const detailLoading = ref(false);
 let detailGeneration = 0;
 const enqueueDialogVisible = ref(false);
-const enqueueForm = ref<{ taskDefinitionId: string; input: string; priority: number; deviceId: string }>({
+const enqueueForm = ref<{ taskDefinitionId: string; input: string; deviceId: string }>({
   taskDefinitionId: "",
   input: "{}",
-  priority: 0,
   deviceId: "",
 });
 const workflowDevices = ref<WorkflowDeviceDescriptor[]>([]);
-const enqueueDefinitions = computed(() => ownedEnqueue.value ? enqueueCatalog.value.map(entry => ({ ...entry.definition, taskId: entry.reference.catalogId, executionPlacement: "device" as const })) : definitions.value);
+const enqueueLocalDefinitions = ref<TaskDefinition[]>([]);
+const enqueueDefinitions = computed(() => [
+  ...enqueueLocalDefinitions.value,
+  ...enqueueCatalog.value.map(entry => ({ ...entry.definition, taskId: entry.reference.catalogId, executionPlacement: "device" as const })),
+]);
 const selectedEnqueueDefinition = computed(() => enqueueDefinitions.value.find((d) => d.taskId === enqueueForm.value.taskDefinitionId));
-const enqueueNeedsDevice = computed(() => ownedEnqueue.value || selectedEnqueueDefinition.value?.executionPlacement === "device");
 const onlineWorkflowDevices = computed(() => workflowDevices.value.filter((device) => device.online));
 const enqueueLoading = ref(false);
-const ownedEnqueue = ref(false);
 const enqueueRoles = ref<OwnedTaskRoleOptions | null>(null);
 const enqueueRoleId = ref("");
 const enqueueRoleLoading = ref(false);
@@ -139,6 +138,14 @@ let catalogLoadGeneration = 0;
 let roleLoadGeneration = 0;
 let lastSubmission = { key: "", requestId: "" };
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+function enqueueDefinitionLabel(definition: TaskDefinition): string {
+  const catalog = enqueueCatalog.value.find(entry => entry.reference.catalogId === definition.taskId);
+  if (catalog) {
+    return `${catalog.reference.sourceTaskId} · ${definition.version || "当前版本"} · 设备任务`;
+  }
+  return `${definition.taskId} · ${definition.extensionId || "Core"} · ${definition.executionPlacement || "local"}`;
+}
 
 const filteredTasks = computed(() => {
   return tasks.value.filter((t) => {
@@ -186,6 +193,7 @@ function canRetryTask(task: TaskRun): boolean {
   if (task.readOnly === true) return false;
   if (!isTerminal(task.status) || task.maxAttempts <= 0 || task.attempt >= task.maxAttempts) return false;
   const definition = definitionForTask(task);
+  if (typeof task.retrySupported === "boolean") return task.retrySupported;
   if (!definition) return false;
   const idempotency = definition.idempotency || (definition.idempotent ? "idempotent" : "non_idempotent");
   return idempotency !== "non_idempotent";
@@ -336,12 +344,6 @@ async function handleRecover(task: TaskRun) {
 }
 
 async function refreshEnqueueDeviceOptions() {
-  const def = definitions.value.find((item) => item.taskId === enqueueForm.value.taskDefinitionId);
-  if (!ownedEnqueue.value && def?.executionPlacement !== "device") {
-    workflowDevices.value = [];
-    enqueueForm.value.deviceId = "";
-    return;
-  }
   try {
     workflowDevices.value = await listWorkflowDevices();
     const online = workflowDevices.value.filter((device) => device.online && !!device.deviceId);
@@ -355,17 +357,14 @@ async function refreshEnqueueDeviceOptions() {
   }
 }
 
-async function openEnqueue(def?: TaskDefinition, deviceCatalog = false) {
-  const connection = await getRuntimeConnection();
-  ownedEnqueue.value = deviceCatalog || def?.executionPlacement === "device" || Boolean(def?.taskId.startsWith("mesh-task-")) || await isCurrentDevicePaired(connection.apiBaseURL);
+async function openEnqueue() {
   enqueueRoles.value = null;
   enqueueRoleId.value = "";
   enqueueRoleError.value = "";
   lastSubmission = { key: "", requestId: "" };
   enqueueForm.value = {
-    taskDefinitionId: ownedEnqueue.value ? "" : def?.taskId || "",
+    taskDefinitionId: "",
     input: "{}",
-    priority: 0,
     deviceId: "",
   };
   enqueueDialogVisible.value = true;
@@ -378,7 +377,7 @@ async function refreshEnqueueRoles() {
   enqueueRoles.value = null;
   enqueueRoleId.value = "";
   enqueueRoleError.value = "";
-  if (!ownedEnqueue.value || !target || !enqueueDialogVisible.value) {
+  if (!target || !enqueueDialogVisible.value) {
     enqueueRoleLoading.value = false;
     return;
   }
@@ -409,22 +408,27 @@ async function refreshEnqueueCatalog(more = false) {
     enqueueForm.value.taskDefinitionId = "";
   }
   enqueueCatalogError.value = "";
-  if (!ownedEnqueue.value || !options || !roleId || !enqueueDialogVisible.value || (more && !cursor)) {
+  if (!options || !roleId || !enqueueDialogVisible.value || (more && !cursor)) {
     enqueueCatalogLoading.value = false;
     return;
   }
   enqueueCatalogLoading.value = true;
   try {
-    const page = await listOwnedDeviceTaskCatalog(options, roleId, cursor);
+    const [localDefinitions, page] = await Promise.all([
+      listOwnedTaskDefinitions(options, roleId),
+      listOwnedDeviceTaskCatalog(options, roleId, cursor),
+    ]);
     if (ticket !== catalogLoadGeneration || enqueueRoles.value !== options || enqueueRoleId.value !== roleId || !enqueueDialogVisible.value) return;
     if (more && (page.revision !== enqueueCatalogRevision.value || page.entries.some(entry => enqueueCatalog.value.some(existing => existing.reference.catalogId === entry.reference.catalogId)))) throw new Error("设备任务目录已更新，请刷新角色与服务后重新选择");
     if (enqueueCatalog.value.length + page.entries.length > 256) throw new Error("设备任务目录超过上限");
+    enqueueLocalDefinitions.value = localDefinitions;
     enqueueCatalog.value = more ? [...enqueueCatalog.value, ...page.entries] : page.entries;
     enqueueCatalogCursor.value = page.nextCursor || "";
     enqueueCatalogRevision.value = page.revision;
   } catch (error) {
     if (ticket === catalogLoadGeneration) {
       enqueueCatalog.value = [];
+      enqueueLocalDefinitions.value = [];
       enqueueCatalogCursor.value = "";
       enqueueForm.value.taskDefinitionId = "";
       enqueueCatalogError.value = error instanceof Error ? error.message : String(error);
@@ -446,47 +450,35 @@ async function handleEnqueue() {
     ElMessage.error("输入 JSON 格式无效");
     return;
   }
-  if (enqueueNeedsDevice.value && !enqueueForm.value.deviceId) {
+  if (!enqueueForm.value.deviceId) {
     ElMessage.warning("设备任务需要选择在线设备");
     return;
   }
-  if (ownedEnqueue.value && (!enqueueNeedsDevice.value || !enqueueRoles.value || !enqueueRoleId.value || enqueueRoleLoading.value)) {
+  if (!enqueueRoles.value || !enqueueRoleId.value || enqueueRoleLoading.value) {
     ElMessage.warning("绑定设备任务需要在线目标设备与有效角色，请先刷新角色");
     return;
   }
   enqueueLoading.value = true;
   try {
     const def = selectedEnqueueDefinition.value;
-    const req: EnqueueTaskRequest = {
-      taskDefinitionId: enqueueForm.value.taskDefinitionId,
-      extensionId: def?.extensionId,
-      moduleId: def?.moduleId,
-      input,
-      priority: enqueueForm.value.priority,
-      deviceId: enqueueNeedsDevice.value ? enqueueForm.value.deviceId : undefined,
-    };
-    let result;
-    if (ownedEnqueue.value) {
-      const options = enqueueRoles.value!;
-      const role = options.roles.find(item => item.id === enqueueRoleId.value);
-      if (!role) throw new Error("角色已失效，请刷新角色");
-      const current = await prepareOwnedTask(enqueueForm.value.deviceId);
-      const expected = options.executionScope;
-      const actual = current.executionScope;
-      if (actual.coreId !== expected.coreId || actual.modeRevision !== expected.modeRevision || actual.providerEpoch !== expected.providerEpoch || actual.permissionRevision !== expected.permissionRevision || actual.targetPermissionRevision !== expected.targetPermissionRevision || actual.targetProviderEpoch !== expected.targetProviderEpoch || actual.resourceOwnerId !== expected.resourceOwnerId || !current.roles.some(item => item.id === role.id && item.revision === role.revision)) {
-        const serviceMode = await currentDeviceServiceMode();
-        throw new Error(actual.coreId !== expected.coreId ? deviceProviderChangedNotice(serviceMode, expected.coreId, actual.coreId, "请刷新后重新提交。") : "目标角色、权限或统筹状态已变化，请刷新后重新提交");
-      }
-      const expectedExecutionScope = { ...expected, requestId: "", turnId: "", executionId: "", roleId: role.id, roleRevision: role.revision };
-      const catalog = enqueueCatalog.value.find(entry => entry.reference.catalogId === req.taskDefinitionId);
-      if (!catalog || catalog.reference.deviceId !== enqueueForm.value.deviceId || catalog.reference.coreId !== expected.coreId) throw new Error("任务目录来源已失效，请重新选择设备任务");
-      const body = { taskDefinitionId: req.taskDefinitionId, taskCatalogReference: catalog.reference, targetDeviceId: enqueueForm.value.deviceId, characterId: role.id, input, expectedCoreId: expected.coreId, expectedModeRevision: expected.modeRevision, expectedRoleRevision: role.revision, expectedExecutionScope };
-      const key = JSON.stringify(body);
-      if (lastSubmission.key !== key) lastSubmission = { key, requestId: crypto.randomUUID() };
-      result = await enqueueOwnedTask({ ...body, requestId: lastSubmission.requestId });
-    } else {
-      result = await enqueueTask(req);
+    const options = enqueueRoles.value!;
+    const role = options.roles.find(item => item.id === enqueueRoleId.value);
+    if (!role) throw new Error("角色已失效，请刷新角色");
+    const current = await prepareOwnedTask(enqueueForm.value.deviceId);
+    const expected = options.executionScope;
+    const actual = current.executionScope;
+    if (actual.coreId !== expected.coreId || actual.modeRevision !== expected.modeRevision || actual.providerEpoch !== expected.providerEpoch || actual.permissionRevision !== expected.permissionRevision || actual.targetPermissionRevision !== expected.targetPermissionRevision || actual.targetProviderEpoch !== expected.targetProviderEpoch || actual.resourceOwnerId !== expected.resourceOwnerId || !current.roles.some(item => item.id === role.id && item.revision === role.revision)) {
+      const serviceMode = await currentDeviceServiceMode();
+      throw new Error(actual.coreId !== expected.coreId ? deviceProviderChangedNotice(serviceMode, expected.coreId, actual.coreId, "请刷新后重新提交。") : "目标角色、权限或统筹状态已变化，请刷新后重新提交");
     }
+    const expectedExecutionScope = { ...expected, requestId: "", turnId: "", executionId: "", roleId: role.id, roleRevision: role.revision };
+    const catalog = enqueueCatalog.value.find(entry => entry.reference.catalogId === enqueueForm.value.taskDefinitionId);
+    if (catalog && (catalog.reference.deviceId !== enqueueForm.value.deviceId || catalog.reference.coreId !== expected.coreId)) throw new Error("任务目录来源已失效，请重新选择设备任务");
+    if (!catalog && !enqueueLocalDefinitions.value.some(item => item.taskId === enqueueForm.value.taskDefinitionId)) throw new Error("任务定义已失效，请重新选择");
+    const body = { taskDefinitionId: enqueueForm.value.taskDefinitionId, ...(catalog ? { taskCatalogReference: catalog.reference } : {}), targetDeviceId: enqueueForm.value.deviceId, characterId: role.id, input, expectedCoreId: expected.coreId, expectedModeRevision: expected.modeRevision, expectedRoleRevision: role.revision, expectedExecutionScope };
+    const key = JSON.stringify(body);
+    if (lastSubmission.key !== key) lastSubmission = { key, requestId: crypto.randomUUID() };
+    const result = await enqueueOwnedTask({ ...body, requestId: lastSubmission.requestId });
     ElMessage.success(`${result.queued ? "任务已入队" : STATUS_LABELS[result.status]}: ${result.taskRunId}`);
     enqueueDialogVisible.value = false;
     fetchTasks();
@@ -536,14 +528,7 @@ watch(activeTab, (val) => {
   }
 });
 
-watch(
-  () => enqueueForm.value.taskDefinitionId,
-  () => {
-    if (enqueueDialogVisible.value && !ownedEnqueue.value) void refreshEnqueueDeviceOptions();
-  },
-);
-
-watch(() => [enqueueForm.value.deviceId, ownedEnqueue.value, enqueueDialogVisible.value], () => { void refreshEnqueueRoles(); });
+watch(() => [enqueueForm.value.deviceId, enqueueDialogVisible.value], () => { void refreshEnqueueRoles(); });
 watch(() => [enqueueRoles.value, enqueueRoleId.value, enqueueDialogVisible.value], () => { void refreshEnqueueCatalog(); });
 
 onMounted(() => {
@@ -574,7 +559,6 @@ onUnmounted(() => {
       <div class="header-right">
 		<el-button v-if="hasLocalRuntime" @click="openSourceApprovals">本机资源审批{{ pendingApprovalCount ? `（${pendingApprovalCount} 待处理）` : "" }}</el-button>
         <el-button @click="openEnqueue()">执行任务</el-button>
-        <el-button @click="openEnqueue(undefined, true)">执行设备任务</el-button>
         <el-button :icon="Refresh" @click="handleRefresh" :loading="loading">刷新</el-button>
       </div>
     </div>
@@ -670,7 +654,7 @@ onUnmounted(() => {
           </el-table-column>
           <el-table-column label="操作" width="100" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" type="primary" :icon="SetUp" @click="openEnqueue(row)">执行</el-button>
+              <el-button size="small" type="primary" :icon="SetUp" @click="openEnqueue">执行</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -749,14 +733,14 @@ onUnmounted(() => {
     <el-dialog v-model="enqueueDialogVisible" title="执行任务" width="560px" :close-on-click-modal="!enqueueLoading" :close-on-press-escape="!enqueueLoading" :show-close="!enqueueLoading">
       <el-form label-width="100px" :disabled="enqueueLoading">
         <el-form-item label="任务定义">
-          <el-select v-model="enqueueForm.taskDefinitionId" :loading="enqueueCatalogLoading" :disabled="ownedEnqueue && (!enqueueRoleId || enqueueCatalogLoading)" placeholder="选择任务定义" style="width: 100%">
-            <el-option v-for="def in enqueueDefinitions" :key="def.taskId" :label="ownedEnqueue ? `${enqueueCatalog.find(entry => entry.reference.catalogId === def.taskId)?.reference.sourceTaskId} · ${def.version || '当前版本'} (${def.extensionId})` : `${def.taskId} (${def.extensionId})`" :value="def.taskId" />
+          <el-select v-model="enqueueForm.taskDefinitionId" :loading="enqueueCatalogLoading" :disabled="!enqueueRoleId || enqueueCatalogLoading" placeholder="选择任务定义" style="width: 100%">
+            <el-option v-for="def in enqueueDefinitions" :key="def.taskId" :label="enqueueDefinitionLabel(def)" :value="def.taskId" />
           </el-select>
           <div v-if="enqueueCatalogError" class="form-tip">{{ enqueueCatalogError }}</div>
-          <div v-if="ownedEnqueue && enqueueRoleId && !enqueueCatalogLoading && !enqueueCatalogError && !enqueueCatalog.length" class="form-tip">目标设备没有可用的已安装任务。</div>
-          <el-button v-if="ownedEnqueue && enqueueCatalogCursor" :loading="enqueueCatalogLoading" @click="refreshEnqueueCatalog(true)">加载更多设备任务</el-button>
+          <div v-if="enqueueRoleId && !enqueueCatalogLoading && !enqueueCatalogError && !enqueueDefinitions.length" class="form-tip">当前目标设备与角色没有可执行任务。</div>
+          <el-button v-if="enqueueCatalogCursor" :loading="enqueueCatalogLoading" @click="refreshEnqueueCatalog(true)">加载更多设备任务</el-button>
         </el-form-item>
-        <el-form-item v-if="enqueueNeedsDevice" label="执行设备">
+        <el-form-item label="执行设备">
           <el-select v-model="enqueueForm.deviceId" placeholder="选择在线设备" style="width: 100%">
             <el-option
               v-for="device in onlineWorkflowDevices"
@@ -767,20 +751,15 @@ onUnmounted(() => {
           </el-select>
           <div v-if="onlineWorkflowDevices.length === 0" class="form-tip">当前没有在线设备，设备任务无法入队。</div>
         </el-form-item>
-        <template v-if="ownedEnqueue">
-          <el-form-item label="执行角色">
-            <el-select v-model="enqueueRoleId" :loading="enqueueRoleLoading" :disabled="enqueueLoading || enqueueRoleLoading" placeholder="选择目标数据来源的角色" style="width: 100%">
-              <el-option v-for="role in enqueueRoles?.roles || []" :key="role.id" :label="role.name" :value="role.id" />
-            </el-select>
-            <div v-if="enqueueRoles" class="form-tip">Core：{{ enqueueRoles.executionScope.coreId }} · 新数据所有者：{{ enqueueRoles.roleOwnerId }}</div>
-            <div v-if="enqueueRoleError" class="form-tip">{{ enqueueRoleError }}</div>
-            <el-button :disabled="enqueueLoading" :loading="enqueueRoleLoading" @click="refreshEnqueueRoles">刷新角色与服务</el-button>
-          </el-form-item>
-        </template>
-        <el-form-item v-else label="优先级">
-          <el-input-number v-model="enqueueForm.priority" :min="0" :max="10" />
+        <el-form-item label="执行角色">
+          <el-select v-model="enqueueRoleId" :loading="enqueueRoleLoading" :disabled="enqueueLoading || enqueueRoleLoading" placeholder="选择目标数据来源的角色" style="width: 100%">
+            <el-option v-for="role in enqueueRoles?.roles || []" :key="role.id" :label="role.name" :value="role.id" />
+          </el-select>
+          <div v-if="enqueueRoles" class="form-tip">Core：{{ enqueueRoles.executionScope.coreId }} · 新数据所有者：{{ enqueueRoles.roleOwnerId }}</div>
+          <div v-if="enqueueRoleError" class="form-tip">{{ enqueueRoleError }}</div>
+          <el-button :disabled="enqueueLoading" :loading="enqueueRoleLoading" @click="refreshEnqueueRoles">刷新角色与服务</el-button>
         </el-form-item>
-        <el-form-item v-if="ownedEnqueue && (selectedEnqueueDefinition?.permissionRequirements?.length || selectedEnqueueDefinition?.permissionRequirementStrings?.length)" label="资源权限">
+        <el-form-item v-if="selectedEnqueueDefinition?.permissionRequirements?.length || selectedEnqueueDefinition?.permissionRequirementStrings?.length" label="资源权限">
           <el-alert title="本机资源权限须由目标设备批准，提交时会再次确认。" type="info" :closable="false" />
         </el-form-item>
         <el-form-item label="输入(JSON)">
@@ -792,7 +771,7 @@ onUnmounted(() => {
         <el-button
           type="primary"
           :loading="enqueueLoading"
-          :disabled="(enqueueNeedsDevice && !enqueueForm.deviceId) || (ownedEnqueue && (!enqueueNeedsDevice || !enqueueRoleId || enqueueRoleLoading))"
+          :disabled="!enqueueForm.deviceId || !enqueueRoleId || enqueueRoleLoading"
           @click="handleEnqueue"
         >入队</el-button>
       </template>

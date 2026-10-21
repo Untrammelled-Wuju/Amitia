@@ -247,7 +247,10 @@ func DefaultMigrations() []Migration {
 		RetireLegacyReminderDataMigration(),
 		UserFeedbackTicketsMigration(),
 		KernelSecurityAuditOutboxMigration(),
+		AgentSkillCutoverStateMigration(),
 		WorldBookOrphanAuditLatestMigration(),
+		CharacterCardImportOperationsMigration(),
+		MCPOwnedBindingsMigration(),
 	}
 }
 

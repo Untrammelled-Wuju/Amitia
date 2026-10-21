@@ -54,7 +54,14 @@ func (f *ToolFacade) handleActivateSkill(ctx context.Context, input json.RawMess
 		}, fmt.Errorf("skill name is required")
 	}
 
-	result, err := f.agentSkillBackend.Activate(ctx, scope, req.Name, true)
+	if f.agentSkillRuntime == nil {
+		return ToolDispatchResult{
+			Status:      "FAILED",
+			VisibleText: "agent skill runtime unavailable",
+			Error:       &ToolDispatchError{Code: "ACTIVATION_UNAVAILABLE", Message: "agent skill runtime unavailable"},
+		}, fmt.Errorf("agent skill runtime unavailable")
+	}
+	result, err := f.agentSkillRuntime.Activate(ctx, scope, req.Name, true)
 	if err != nil {
 		return ToolDispatchResult{
 			Status:      "FAILED",
@@ -69,7 +76,7 @@ func (f *ToolFacade) handleActivateSkill(ctx context.Context, input json.RawMess
 		"name":                result.Name,
 		"scope":               result.Scope,
 		"compatibilityStatus": result.CompatibilityStatus,
-		"tokens":              result.Tokens,
+		"tokens":              result.BodyTokens,
 		"contentHash":         result.ContentHash,
 		"explicit":            result.Explicit,
 		"status":              "activated",
@@ -84,13 +91,10 @@ func (f *ToolFacade) handleActivateSkill(ctx context.Context, input json.RawMess
 }
 
 func (f *ToolFacade) resolveVisibleSkillNames(ctx context.Context, scope InvocationScope) ([]string, error) {
-	if f.agentSkillBackend == nil {
+	if f.agentSkillRuntime == nil {
 		return nil, nil
 	}
-	catalog, err := f.agentSkillBackend.ResolveCatalog(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
+	catalog := f.agentSkillRuntime.Available(ctx, scope)
 	names := make([]string, 0, len(catalog))
 	for _, entry := range catalog {
 		names = append(names, entry.Name)

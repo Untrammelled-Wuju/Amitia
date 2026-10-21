@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/u-ai/backend/internal/extension/kernel"
-	"github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
 )
 
 type mcpDuplicateMetricAdapter struct {

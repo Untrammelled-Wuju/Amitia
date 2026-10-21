@@ -34,7 +34,9 @@ func workbenchConversationAccess(services *AppServices, coreID string) workbench
 				}
 				requestID := record.Scope.RequestID
 				if turn := record.RecoveryDescriptor.OwnedTurn; turn != nil {
-					if turn.Scope.CoreID != scope.CoreID || turn.Scope.ResourceOwnerID != scope.ResourceOwnerID || turn.Scope.RoleID != scope.RoleID { return false, nil }
+					if turn.Scope.CoreID != scope.CoreID || turn.Scope.ResourceOwnerID != scope.ResourceOwnerID || turn.Scope.RoleID != scope.RoleID {
+						return false, nil
+					}
 					requestID = turn.RequestID
 				}
 				return services.OwnedBusiness.OwnsConversationTurn(ctx, scope, id, requestID)

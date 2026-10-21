@@ -20,7 +20,7 @@ func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coord
 		legacyScope.Channel, legacyScope.Source, legacyScope.PeerID = query.ChatRuntime.Channel, query.ChatRuntime.Source, query.ChatRuntime.PeerID
 		ctx = temporal.ContextWithDeviceTimezone(ctx, query.ChatRuntime.DeviceTimezone)
 	}
-	loaders := []interaction.ContextLoader{interaction.NewPsycheContextLoader(p.services.DB), interaction.NewRelationshipContextLoader(p.services.DB), interaction.NewNeedContextLoader(p.services.DB), interaction.NewUnresolvedThreadContextLoader(p.services.DB)}
+	loaders := []interaction.ContextLoader{interaction.NewUnresolvedThreadContextLoader(p.services.DB)}
 	if p.services.Temporal != nil {
 		loaders = append(loaders, interaction.NewTemporalContextLoader(p.services.Temporal))
 	}

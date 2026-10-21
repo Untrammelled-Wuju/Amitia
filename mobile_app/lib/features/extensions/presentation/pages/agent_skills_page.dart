@@ -44,32 +44,46 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   List<Map<String, dynamic>> get _searchResults {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return const [];
-    return _skills.where((skill) {
-      final searchable = [
-        skill['name'],
-        skill['description'],
-        skill['compatibilityStatus'],
-        skill['compatibility'],
-        (skill['metadata'] as Map?)?['version'],
-      ].map((value) => (value ?? '').toString().toLowerCase());
-      return searchable.any((value) => value.contains(query));
-    }).toList(growable: false);
+    return _skills
+        .where((skill) {
+          final searchable = [
+            skill['name'],
+            skill['description'],
+            skill['compatibilityStatus'],
+            skill['compatibility'],
+            (skill['metadata'] as Map?)?['version'],
+          ].map((value) => (value ?? '').toString().toLowerCase());
+          return searchable.any((value) => value.contains(query));
+        })
+        .toList(growable: false);
   }
 
   Future<void> _loadSkills() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final svc = ref.read(extensionServiceProvider);
       final data = await svc.agentSkills();
-      if (mounted) setState(() { _skills = data; _loading = false; });
+      if (mounted)
+        setState(() {
+          _skills = data;
+          _loading = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = safeErrorMessage(e);
+          _loading = false;
+        });
     }
   }
 
   Future<Dio> _dio() async {
     final availability = await ref.read(backendConnectionProvider.future);
-    if (availability is! BackendConnectionAvailable) throw StateError('后端当前不可用');
+    if (availability is! BackendConnectionAvailable)
+      throw StateError('后端当前不可用');
     return createAuthenticatedDio(availability.config);
   }
 
@@ -98,13 +112,22 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     if (_loading) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(title: 'Agent Skills', showBackButton: true),
-        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+        body: SafeArea(
+          top: false,
+          child: const AmitiaLoadingState(message: '加载中...'),
+        ),
       );
     }
     if (_error != null) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(title: 'Agent Skills', showBackButton: true),
-        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadSkills)),
+        body: SafeArea(
+          top: false,
+          child: AmitiaErrorState(
+            message: '加载失败: $_error',
+            onRetry: _loadSkills,
+          ),
+        ),
       );
     }
     return AmitiaScaffold(
@@ -212,13 +235,20 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   }
 
   Widget _buildSkillCard(BuildContext context, Map<String, dynamic> skill) {
-    final isEnabled = (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
+    final isEnabled =
+        (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
     final name = (skill['name'] ?? '').toString();
     final description = (skill['description'] ?? '').toString();
     final version = ((skill['metadata'] as Map?)?['version'] ?? '').toString();
     final skillMd = (skill['rawSkillMd'] ?? skill['body'] ?? '').toString();
-    final compatibility = (skill['compatibilityStatus'] ?? skill['compatibility'] ?? 'unknown').toString();
-    final requiredMcp = ((skill['mcpDependencies'] as List?) ?? const []).whereType<Map>().map((e) => (e['id'] ?? e['description'] ?? '').toString()).where((e) => e.isNotEmpty).toList();
+    final compatibility =
+        (skill['compatibilityStatus'] ?? skill['compatibility'] ?? 'unknown')
+            .toString();
+    final requiredMcp = ((skill['mcpDependencies'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => (e['id'] ?? e['description'] ?? '').toString())
+        .where((e) => e.isNotEmpty)
+        .toList();
 
     return AmitiaCard(
       onTap: () => _showDetailSheet(skill),
@@ -234,7 +264,11 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                   color: context.accentSoft,
                   borderRadius: AppRadius.brSmall,
                 ),
-                child: Icon(Icons.auto_awesome, size: 22, color: context.accentPrimary),
+                child: Icon(
+                  Icons.auto_awesome,
+                  size: 22,
+                  color: context.accentPrimary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -245,11 +279,20 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                       children: [
                         Text(name, style: AppTypography.cardTitle(context)),
                         const SizedBox(width: 8),
-                        if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
+                        if (version.isNotEmpty)
+                          Text(
+                            'v$version',
+                            style: AppTypography.label(context),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      description,
+                      style: AppTypography.caption(context),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
@@ -271,9 +314,18 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.description_outlined, size: 14, color: context.textTertiary),
+                    Icon(
+                      Icons.description_outlined,
+                      size: 14,
+                      color: context.textTertiary,
+                    ),
                     const SizedBox(width: 4),
-                    Text('SKILL.md', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600)),
+                    Text(
+                      'SKILL.md',
+                      style: AppTypography.label(
+                        context,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -291,44 +343,72 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              ...requiredMcp.map((mcp) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: context.info.withValues(alpha: 0.1),
-                      borderRadius: AppRadius.brTag,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.link, size: 12, color: context.info),
-                        const SizedBox(width: 4),
-                        Text(mcp, style: TextStyle(fontSize: 11, color: context.info, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  )),
-              Builder(builder: (context) {
-                final badgeType = _compatibilityBadgeType(compatibility);
-                final color = badgeType == BadgeType.success
-                    ? context.success
-                    : badgeType == BadgeType.warning
-                        ? context.warning
-                        : context.info;
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              ...requiredMcp.map(
+                (mcp) => Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
+                    color: context.info.withValues(alpha: 0.1),
                     borderRadius: AppRadius.brTag,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle_outline, size: 12, color: color),
+                      Icon(Icons.link, size: 12, color: context.info),
                       const SizedBox(width: 4),
-                      Text(compatibility, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
+                      Text(
+                        mcp,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.info,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
-                );
-              }),
+                ),
+              ),
+              Builder(
+                builder: (context) {
+                  final badgeType = _compatibilityBadgeType(compatibility);
+                  final color = badgeType == BadgeType.success
+                      ? context.success
+                      : badgeType == BadgeType.warning
+                      ? context.warning
+                      : context.info;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: AppRadius.brTag,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 12,
+                          color: color,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          compatibility,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: color,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ],
           ),
           SizedBox(height: AppSpacing.md),
@@ -337,17 +417,35 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               GestureDetector(
                 onTap: () => _toggleSkill(skill),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
-                    color: isEnabled ? context.warning.withValues(alpha: 0.1) : context.success.withValues(alpha: 0.1),
+                    color: isEnabled
+                        ? context.warning.withValues(alpha: 0.1)
+                        : context.success.withValues(alpha: 0.1),
                     borderRadius: AppRadius.brTag,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(isEnabled ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 15, color: isEnabled ? context.warning : context.success),
+                      Icon(
+                        isEnabled
+                            ? Icons.pause_circle_outline
+                            : Icons.play_circle_outline,
+                        size: 15,
+                        color: isEnabled ? context.warning : context.success,
+                      ),
                       const SizedBox(width: 5),
-                      Text(isEnabled ? '停用' : '启用', style: TextStyle(fontSize: 13, color: isEnabled ? context.warning : context.success, fontWeight: FontWeight.w500)),
+                      Text(
+                        isEnabled ? '停用' : '启用',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isEnabled ? context.warning : context.success,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -356,7 +454,10 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               GestureDetector(
                 onTap: () => _showDetailSheet(skill),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: context.accentSoft,
                     borderRadius: AppRadius.brTag,
@@ -364,9 +465,20 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.info_outline, size: 15, color: context.accentPrimary),
+                      Icon(
+                        Icons.info_outline,
+                        size: 15,
+                        color: context.accentPrimary,
+                      ),
                       const SizedBox(width: 5),
-                      Text('详情', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
+                      Text(
+                        '详情',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.accentPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -375,7 +487,10 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               GestureDetector(
                 onTap: () => _showRemoveConfirm(skill),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: context.error.withValues(alpha: 0.1),
                     borderRadius: AppRadius.brTag,
@@ -383,9 +498,20 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.delete_outline, size: 15, color: context.error),
+                      Icon(
+                        Icons.delete_outline,
+                        size: 15,
+                        color: context.error,
+                      ),
                       const SizedBox(width: 5),
-                      Text('移除', style: TextStyle(fontSize: 13, color: context.error, fontWeight: FontWeight.w500)),
+                      Text(
+                        '移除',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.error,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -406,14 +532,17 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     if (picked == null || picked.files.isEmpty) return;
     final file = picked.files.first;
     if (file.path == null || file.path!.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法读取所选文件')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法读取所选文件')));
       return;
     }
     Dio? dio;
     try {
       dio = await _dio();
       final previewResponse = await dio.post(
-        '/api/extensions/agent-skills/import/preview',
+        '/api/extensions/kernel/agent-skills/import/preview',
         data: FormData.fromMap({
           'file': await MultipartFile.fromFile(file.path!, filename: file.name),
         }),
@@ -424,8 +553,17 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       final previewMap = Map<String, dynamic>.from(preview);
       final previewId = (previewMap['previewId'] ?? '').toString();
       if (previewId.isEmpty) throw StateError('导入预览缺少 previewId');
-      final definition = previewMap['definition'] is Map ? Map<String, dynamic>.from(previewMap['definition'] as Map) : <String, dynamic>{};
-      final report = previewMap['compatibilityReport'] is Map ? Map<String, dynamic>.from(previewMap['compatibilityReport'] as Map) : <String, dynamic>{};
+      final definition = previewMap['definition'] is Map
+          ? Map<String, dynamic>.from(previewMap['definition'] as Map)
+          : <String, dynamic>{};
+      final report = previewMap['compatibilityReport'] is Map
+          ? Map<String, dynamic>.from(previewMap['compatibilityReport'] as Map)
+          : <String, dynamic>{};
+      final requiredConfirmations =
+          ((previewMap['requiredConfirmations'] as List?) ?? const <dynamic>[])
+              .map((item) => item.toString())
+              .where((item) => item.isNotEmpty)
+              .toList(growable: false);
       if (!mounted) return;
       final confirmed = await showDialog<bool>(
         context: context,
@@ -433,40 +571,76 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
           builder: (dialogContext, setDialogState) => AlertDialog(
             backgroundColor: dialogContext.surfacePrimary,
             shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-            title: Text('Agent Skill 导入预览', style: AppTypography.cardTitle(dialogContext)),
+            title: Text(
+              'Agent Skill 导入预览',
+              style: AppTypography.cardTitle(dialogContext),
+            ),
             content: SizedBox(
               width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text((definition['displayName'] ?? definition['name'] ?? file.name).toString(), style: AppTypography.bodySmall(dialogContext).copyWith(fontWeight: FontWeight.w600)),
+                  Text(
+                    (definition['displayName'] ??
+                            definition['name'] ??
+                            file.name)
+                        .toString(),
+                    style: AppTypography.bodySmall(
+                      dialogContext,
+                    ).copyWith(fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 6),
-                  Text((definition['description'] ?? '').toString(), style: AppTypography.caption(dialogContext)),
+                  Text(
+                    (definition['description'] ?? '').toString(),
+                    style: AppTypography.caption(dialogContext),
+                  ),
                   const SizedBox(height: 10),
-                  Text('兼容性：${report['status'] ?? definition['compatibilityStatus'] ?? 'unknown'}', style: AppTypography.label(dialogContext)),
-                  Text('文件数：${(previewMap['files'] as List?)?.length ?? 0}', style: AppTypography.label(dialogContext)),
+                  Text(
+                    '兼容性：${report['status'] ?? definition['compatibilityStatus'] ?? 'unknown'}',
+                    style: AppTypography.label(dialogContext),
+                  ),
+                  Text(
+                    '文件数：${(previewMap['files'] as List?)?.length ?? 0}',
+                    style: AppTypography.label(dialogContext),
+                  ),
                   if (((report['errors'] as List?) ?? const []).isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    Text('存在兼容性错误，后端可能拒绝安装。', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.error)),
+                    Text(
+                      '存在兼容性错误，后端可能拒绝安装。',
+                      style: AppTypography.label(
+                        dialogContext,
+                      ).copyWith(color: dialogContext.error),
+                    ),
                   ],
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('安装')),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('安装'),
+              ),
             ],
           ),
         ),
       );
       if (confirmed != true) return;
-      final dependencies = (definition['mcpDependencies'] as List?) ?? const <dynamic>[];
+      final dependencies =
+          (definition['mcpDependencies'] as List?) ?? const <dynamic>[];
       Map<String, dynamic>? dependencyPlan;
       Map<String, bool>? dependencyOptions;
       if (dependencies.isNotEmpty) {
-        dependencyPlan = await ref.read(mcpServiceProvider).previewAgentSkillDependencies(
-              agentSkillExtensionId: (definition['extensionId'] ?? definition['id'] ?? '').toString(),
+        dependencyPlan = await ref
+            .read(mcpServiceProvider)
+            .previewAgentSkillDependencies(
+              agentSkillExtensionId:
+                  (definition['extensionId'] ?? definition['id'] ?? '')
+                      .toString(),
               dependencies: dependencies,
             );
         if (dependencyPlan == null) throw StateError('MCP 依赖计划生成失败');
@@ -475,53 +649,93 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       }
 
       dynamic installed;
-      String installedId = '';
+      String installedExtensionId = '';
+      String installedSkillId = '';
       try {
         final installResponse = await dio.post(
-          '/api/extensions/agent-skills/import/install',
+          '/api/extensions/kernel/agent-skills/import/install',
           data: {
             'previewId': previewId,
             'enable': true,
+            'confirmations': {
+              for (final item in requiredConfirmations) item: true,
+            },
           },
         );
         installed = installResponse.data;
-        if (installed is Map && installed['data'] != null) installed = installed['data'];
+        if (installed is Map && installed['data'] != null)
+          installed = installed['data'];
         if (installed == null) throw StateError('安装未完成');
-        if (installed is Map) installedId = (installed['extensionId'] ?? installed['id'] ?? '').toString();
+        if (installed is Map) {
+          installedExtensionId = (installed['extensionId'] ?? '').toString();
+          installedSkillId = (installed['id'] ?? '').toString();
+        }
 
         if (dependencyPlan != null && dependencyOptions != null) {
-          if (installedId.isEmpty) throw StateError('安装结果缺少 extensionId，无法绑定 MCP 依赖');
-          dependencyPlan['agentSkillExtensionId'] = installedId;
-          final dependencyResult = await ref.read(mcpServiceProvider).installAgentSkillDependencies(
+          if (installedExtensionId.isEmpty)
+            throw StateError('安装结果缺少 extensionId，无法绑定 MCP 依赖');
+          dependencyPlan['agentSkillExtensionId'] = installedExtensionId;
+          final dependencyResult = await ref
+              .read(mcpServiceProvider)
+              .installAgentSkillDependencies(
                 dependencyPlan,
                 installOptional: dependencyOptions['installOptional'] ?? false,
                 confirmHttp: dependencyOptions['confirmHttp'] ?? false,
                 confirmStdio: dependencyOptions['confirmStdio'] ?? false,
               );
-          final authServers = (dependencyResult?['authorizationServerIds'] as List?) ?? const <dynamic>[];
+          final authServers =
+              (dependencyResult?['authorizationServerIds'] as List?) ??
+              const <dynamic>[];
           if (authServers.isNotEmpty && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Skill 已安装；${authServers.length} 个 MCP 依赖仍需要 OAuth 授权'), backgroundColor: context.warning),
+              SnackBar(
+                content: Text(
+                  'Skill 已安装；${authServers.length} 个 MCP 依赖仍需要 OAuth 授权',
+                ),
+                backgroundColor: context.warning,
+              ),
             );
           }
         }
       } catch (_) {
-        if (installedId.isNotEmpty) {
-          await ref.read(mcpServiceProvider).removeAgentSkillDependencies(installedId).catchError((_) => null);
-          await ref.read(extensionServiceProvider).removeAgentSkill(installedId).catchError((_) => false);
+        if (installedExtensionId.isNotEmpty) {
+          await ref
+              .read(mcpServiceProvider)
+              .removeAgentSkillDependencies(installedExtensionId)
+              .catchError((_) => null);
+        }
+        if (installedSkillId.isNotEmpty) {
+          await ref
+              .read(extensionServiceProvider)
+              .removeAgentSkill(installedSkillId)
+              .catchError((_) => false);
         }
         rethrow;
       }
       await _loadSkills();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Agent Skill 与 MCP 依赖已按确认计划安装'), backgroundColor: context.success));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Agent Skill 与 MCP 依赖已按确认计划安装'),
+            backgroundColor: context.success,
+          ),
+        );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导入失败: ${safeErrorMessage(e)}'),
+            backgroundColor: context.error,
+          ),
+        );
     } finally {
       dio?.close(force: true);
     }
   }
 
-  Future<Map<String, bool>?> _confirmDependencyPlan(Map<String, dynamic> plan) async {
+  Future<Map<String, bool>?> _confirmDependencyPlan(
+    Map<String, dynamic> plan,
+  ) async {
     final items = ((plan['items'] as List?) ?? const <dynamic>[])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
@@ -529,9 +743,21 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     bool installOptional = false;
     bool confirmHttp = false;
     bool confirmStdio = false;
-    final hasHttp = items.any((item) => ((item['dependency'] as Map?)?['transport'] ?? '').toString() == 'streamable_http' && item['installed'] != true);
-    final hasStdio = items.any((item) => ((item['dependency'] as Map?)?['transport'] ?? '').toString() == 'stdio' && item['installed'] != true);
-    final hasOptional = items.any((item) => ((item['dependency'] as Map?)?['required'] ?? true) == false);
+    final hasHttp = items.any(
+      (item) =>
+          ((item['dependency'] as Map?)?['transport'] ?? '').toString() ==
+              'streamable_http' &&
+          item['installed'] != true,
+    );
+    final hasStdio = items.any(
+      (item) =>
+          ((item['dependency'] as Map?)?['transport'] ?? '').toString() ==
+              'stdio' &&
+          item['installed'] != true,
+    );
+    final hasOptional = items.any(
+      (item) => ((item['dependency'] as Map?)?['required'] ?? true) == false,
+    );
     if (!mounted) return null;
     return showDialog<Map<String, bool>>(
       context: context,
@@ -545,35 +771,51 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('风险等级：${plan['riskLevel'] ?? 'unknown'}${plan['requiredMissing'] == true ? ' · 存在必需依赖需要确认/配置' : ''}'),
+                  Text(
+                    '风险等级：${plan['riskLevel'] ?? 'unknown'}${plan['requiredMissing'] == true ? ' · 存在必需依赖需要确认/配置' : ''}',
+                  ),
                   const SizedBox(height: 12),
                   ...items.map((item) {
-                    final dep = item['dependency'] is Map ? Map<String, dynamic>.from(item['dependency'] as Map) : <String, dynamic>{};
-                    final name = (dep['id'] ?? dep['description'] ?? 'MCP dependency').toString();
-                    final transport = (dep['transport'] ?? 'unknown').toString();
+                    final dep = item['dependency'] is Map
+                        ? Map<String, dynamic>.from(item['dependency'] as Map)
+                        : <String, dynamic>{};
+                    final name =
+                        (dep['id'] ?? dep['description'] ?? 'MCP dependency')
+                            .toString();
+                    final transport = (dep['transport'] ?? 'unknown')
+                        .toString();
                     final required = dep['required'] != false;
                     final installed = item['installed'] == true;
                     final needsConfig = item['needsUserConfiguration'] == true;
                     return ListTile(
                       dense: true,
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(installed ? Icons.check_circle_outline : Icons.link_outlined),
+                      leading: Icon(
+                        installed
+                            ? Icons.check_circle_outline
+                            : Icons.link_outlined,
+                      ),
                       title: Text(name),
-                      subtitle: Text('$transport · ${required ? '必需' : '可选'}${installed ? ' · 已安装' : ''}${needsConfig ? ' · 需要手动配置' : ''}'),
+                      subtitle: Text(
+                        '$transport · ${required ? '必需' : '可选'}${installed ? ' · 已安装' : ''}${needsConfig ? ' · 需要手动配置' : ''}',
+                      ),
                     );
                   }),
                   if (hasOptional)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       value: installOptional,
-                      onChanged: (value) => setDialogState(() => installOptional = value ?? false),
+                      onChanged: (value) => setDialogState(
+                        () => installOptional = value ?? false,
+                      ),
                       title: const Text('同时安装可选依赖'),
                     ),
                   if (hasHttp)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       value: confirmHttp,
-                      onChanged: (value) => setDialogState(() => confirmHttp = value ?? false),
+                      onChanged: (value) =>
+                          setDialogState(() => confirmHttp = value ?? false),
                       title: const Text('确认自动连接远程 HTTP MCP'),
                       subtitle: const Text('可能向远程服务发送工具参数、资源请求或授权信息。'),
                     ),
@@ -581,7 +823,8 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       value: confirmStdio,
-                      onChanged: (value) => setDialogState(() => confirmStdio = value ?? false),
+                      onChanged: (value) =>
+                          setDialogState(() => confirmStdio = value ?? false),
                       title: const Text('确认启动本地 STDIO MCP 进程'),
                       subtitle: const Text('会在设备上启动依赖声明中的本地命令。'),
                     ),
@@ -590,7 +833,10 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, <String, bool>{
                 'installOptional': installOptional,
@@ -610,14 +856,17 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       context: context,
       backgroundColor: context.surfacePrimary,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
       builder: (context) => _SkillDetailSheet(skill: skill),
     );
   }
 
   Future<void> _toggleSkill(Map<String, dynamic> skill) async {
     final id = (skill['id'] ?? '').toString();
-    final isEnabled = (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
+    final isEnabled =
+        (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
     try {
       final svc = ref.read(extensionServiceProvider);
       if (isEnabled) {
@@ -652,22 +901,36 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
         backgroundColor: context.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
         title: Text('移除 Agent Skill', style: AppTypography.cardTitle(context)),
-        content: Text('确定要移除「$name」吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
+        content: Text(
+          '确定要移除「$name」吗？此操作不可撤销。',
+          style: AppTypography.bodySmall(context),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('取消', style: TextStyle(color: context.textSecondary)),
+          ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
-                final dependencyResult = await ref.read(mcpServiceProvider).removeAgentSkillDependencies(id);
+                final dependencyResult = await ref
+                    .read(mcpServiceProvider)
+                    .removeAgentSkillDependencies(id);
                 final svc = ref.read(extensionServiceProvider);
                 await svc.removeAgentSkill(id);
                 _loadSkills();
                 if (mounted) {
-                  final unreferenced = (dependencyResult?['unreferencedServerIds'] as List?) ?? const <dynamic>[];
+                  final unreferenced =
+                      (dependencyResult?['unreferencedServerIds'] as List?) ??
+                      const <dynamic>[];
                   ScaffoldMessenger.of(this.context).showSnackBar(
                     SnackBar(
-                      content: Text(unreferenced.isEmpty ? '$name 已移除，MCP 依赖引用已解除' : '$name 已移除；${unreferenced.length} 个 MCP 服务已无依赖引用，可在 MCP 页面确认删除'),
+                      content: Text(
+                        unreferenced.isEmpty
+                            ? '$name 已移除，MCP 依赖引用已解除'
+                            : '$name 已移除；${unreferenced.length} 个 MCP 服务已无依赖引用，可在 MCP 页面确认删除',
+                      ),
                       backgroundColor: context.error,
                     ),
                   );
@@ -675,7 +938,10 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    SnackBar(content: Text('移除失败: $e'), backgroundColor: context.error),
+                    SnackBar(
+                      content: Text('移除失败: $e'),
+                      backgroundColor: context.error,
+                    ),
                   );
                 }
               }
@@ -715,13 +981,20 @@ class _SkillDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isEnabled = (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
+    final isEnabled =
+        (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
     final name = (skill['name'] ?? '').toString();
     final description = (skill['description'] ?? '').toString();
     final version = ((skill['metadata'] as Map?)?['version'] ?? '').toString();
     final skillMd = (skill['rawSkillMd'] ?? skill['body'] ?? '').toString();
-    final compatibility = (skill['compatibilityStatus'] ?? skill['compatibility'] ?? 'unknown').toString();
-    final requiredMcp = ((skill['mcpDependencies'] as List?) ?? const []).whereType<Map>().map((e) => (e['id'] ?? e['description'] ?? '').toString()).where((e) => e.isNotEmpty).toList();
+    final compatibility =
+        (skill['compatibilityStatus'] ?? skill['compatibility'] ?? 'unknown')
+            .toString();
+    final requiredMcp = ((skill['mcpDependencies'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => (e['id'] ?? e['description'] ?? '').toString())
+        .where((e) => e.isNotEmpty)
+        .toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
@@ -738,7 +1011,11 @@ class _SkillDetailSheet extends StatelessWidget {
                   color: context.accentSoft,
                   borderRadius: AppRadius.brSmall,
                 ),
-                child: Icon(Icons.auto_awesome, size: 22, color: context.accentPrimary),
+                child: Icon(
+                  Icons.auto_awesome,
+                  size: 22,
+                  color: context.accentPrimary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -747,7 +1024,8 @@ class _SkillDetailSheet extends StatelessWidget {
                   children: [
                     Text(name, style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
+                    if (version.isNotEmpty)
+                      Text('v$version', style: AppTypography.label(context)),
                   ],
                 ),
               ),
@@ -771,33 +1049,67 @@ class _SkillDetailSheet extends StatelessWidget {
               borderRadius: AppRadius.brSmall,
             ),
             child: SingleChildScrollView(
-              child: Text(skillMd, style: AppTypography.label(context).copyWith(fontFamily: 'monospace', height: 1.6)),
+              child: Text(
+                skillMd,
+                style: AppTypography.label(
+                  context,
+                ).copyWith(fontFamily: 'monospace', height: 1.6),
+              ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('所需 MCP', style: AppTypography.caption(context).copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            '所需 MCP',
+            style: AppTypography.caption(
+              context,
+            ).copyWith(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: requiredMcp.map((mcp) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: context.info.withValues(alpha: 0.1),
-                borderRadius: AppRadius.brTag,
-              ),
-              child: Text(mcp, style: TextStyle(fontSize: 12, color: context.info, fontWeight: FontWeight.w500)),
-            )).toList(),
+            children: requiredMcp
+                .map(
+                  (mcp) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.info.withValues(alpha: 0.1),
+                      borderRadius: AppRadius.brTag,
+                    ),
+                    child: Text(
+                      mcp,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.info,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: Text('兼容性', style: AppTypography.caption(context))),
-              AmitiaStatusBadge(label: compatibility, type: _compatibilityBadgeTypeStatic(compatibility)),
+              Expanded(
+                child: Text('兼容性', style: AppTypography.caption(context)),
+              ),
+              AmitiaStatusBadge(
+                label: compatibility,
+                type: _compatibilityBadgeTypeStatic(compatibility),
+              ),
             ],
           ),
           const SizedBox(height: 20),
-          AmitiaButton(label: '关闭', isFullWidth: true, isSecondary: true, onPressed: () => Navigator.pop(context)),
+          AmitiaButton(
+            label: '关闭',
+            isFullWidth: true,
+            isSecondary: true,
+            onPressed: () => Navigator.pop(context),
+          ),
         ],
       ),
     );

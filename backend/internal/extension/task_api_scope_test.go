@@ -186,3 +186,15 @@ func TestTaskAuthorityHTTPResultPreservesOriginalJSONAndHash(t *testing.T) {
 		t.Fatal("HTTP result no longer matches artifact hash")
 	}
 }
+
+func TestTaskAPIRemovesLegacyEnqueueRoute(t *testing.T) {
+	router := gin.New()
+	NewTaskAPI(nil).RegisterRoutes(router.Group("/api/extensions"))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/extensions/tasks", bytes.NewBufferString(`{"taskDefinitionId":"legacy"}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("旧任务入队入口仍可访问: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}

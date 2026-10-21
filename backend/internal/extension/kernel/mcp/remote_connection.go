@@ -1,5 +1,3 @@
-// migration-only: temporary compatibility adapter
-// remove at step 65 cutover
 package mcp
 
 import (
@@ -10,10 +8,10 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/mcp/client"
-	"github.com/u-ai/backend/internal/mcp/discovery"
-	"github.com/u-ai/backend/internal/mcp/protocol"
-	"github.com/u-ai/backend/internal/mcp/transport"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/client"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/discovery"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
 )
 
 type CanonicalRemoteConnection struct {
@@ -82,11 +80,6 @@ func (c *CanonicalRemoteConnection) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	transport := NewStreamableHTTP(c.spec, c.policy)
-
-	if err := transport.Start(ctx); err != nil {
-		c.setState(MCPStdioStateFailed)
-		return err
-	}
 
 	c.mu.Lock()
 	c.transport = transport
@@ -162,7 +155,7 @@ func (c *CanonicalRemoteConnection) Close(ctx context.Context) error {
 	return closeErr
 }
 
-// ClientConnection exposes the initialized MCP client for compatibility HTTP APIs
+// ClientConnection exposes the initialized MCP client to the runtime API.
 // while the canonical remote registry remains the connection owner.
 func (c *CanonicalRemoteConnection) ClientConnection() (*client.Connection, bool) {
 	c.mu.RLock()

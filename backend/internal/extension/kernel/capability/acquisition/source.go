@@ -197,7 +197,7 @@ func (s *AgentSkillSource) Search(ctx context.Context, request AcquisitionReques
 		return nil, fmt.Errorf("agent_skill source: catalog not configured")
 	}
 
-	items := s.catalog.List(agent_skill.CatalogFilter{})
+	items := s.catalog.List(agent_skill.CatalogFilter{SpaceID: request.SpaceID.String()})
 	if len(items) == 0 {
 		return nil, nil
 	}

@@ -85,6 +85,7 @@ func validateForwardedContext(request Request) error {
 
 type Generation struct {
 	StateEffects        json.RawMessage `json:"-"`
+	CitationSnapshot    json.RawMessage `json:"citationSnapshot,omitempty"`
 	ReasoningDurationMS int64           `json:"reasoningDurationMs,omitempty"`
 	Suppressed          bool            `json:"suppressed,omitempty"`
 	Outputs             json.RawMessage `json:"outputs,omitempty"`
@@ -147,6 +148,10 @@ type DerivedMemory struct {
 type Model interface {
 	GenerateOwnedReply(context.Context, Inference) (Generation, error)
 	ExtractOwnedMemory(context.Context, Inference, Generation) ([]DerivedMemory, error)
+}
+
+type OwnedStateMutator interface {
+	OwnedStateMutations(context.Context, Inference, Generation) ([]coordination.Mutation, error)
 }
 
 type AudioModel interface {
@@ -742,6 +747,13 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	if err := coordination.ValidateRoleRevision(ctx, e.data, scope); err != nil {
 		return Response{}, err
 	}
+	var stateMutations []coordination.Mutation
+	if mutator, ok := e.model.(OwnedStateMutator); ok && !generation.Suppressed && (!hasIngress || !ingress.SuppressReplyPersistence) {
+		stateMutations, err = mutator.OwnedStateMutations(ctx, inference, generation)
+		if err != nil {
+			return Response{}, fmt.Errorf("角色运行状态尚未确认保存: %w", err)
+		}
+	}
 	response := Response{Transcription: transcription, UserRevision: userRevision, ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, Scope: scope, Generation: generation, Saved: true, MemoryStatus: "pending"}
 	if generation.Suppressed || hasIngress && ingress.SuppressReplyPersistence {
 		response.MemoryStatus = "skipped"
@@ -769,11 +781,16 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		return response, err
 	}
 	assistantDocument["sequence"], assistantDocument["reasoningDurationMs"] = userSequence+1, generation.ReasoningDurationMS
-	assistantDocument["stateEffects"] = generation.StateEffects
+	if len(generation.CitationSnapshot) == 0 {
+		assistantDocument["citationSnapshot"] = json.RawMessage("[]")
+	} else {
+		assistantDocument["citationSnapshot"] = generation.CitationSnapshot
+	}
 	output[0].Body = body(assistantDocument)
 	if generation.Suppressed || hasIngress && ingress.SuppressReplyPersistence {
 		output = output[1:]
 	}
+	output = append(output, stateMutations...)
 	if hasIngress && !generation.Suppressed && !ingress.SuppressReplyPersistence && ingress.Channel != "" && ingress.Channel != "web" && ingress.Channel != "voice" && ingress.Channel != "device-mesh" && ingress.PeerID != "" {
 		pending := coordination.PendingChannelDelivery{Pending: true, Scope: scope, Request: coordination.ChannelDeliveryRequest{ConversationID: request.ConversationID, RequestID: scope.RequestID, Channel: ingress.Channel, PeerID: ingress.PeerID, Text: generation.Text, Outputs: generation.Outputs}}
 		output = append(output, coordination.Mutation{Kind: "checkpoint", ID: "channel-delivery/" + scope.RequestID, RoleID: scope.RoleID, Body: body(pending)})

@@ -3,7 +3,7 @@ package extension
 import (
 	"testing"
 
-	"github.com/u-ai/backend/internal/realtime"
+	realtime "github.com/u-ai/backend/internal/devicemesh/wake"
 )
 
 func TestMatchWorkflowWakePhrase(t *testing.T) {

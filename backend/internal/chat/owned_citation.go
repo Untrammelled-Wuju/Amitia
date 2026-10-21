@@ -1,17 +1,37 @@
 package chat
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
-	"strconv"
+	"fmt"
+	"sort"
 	"strings"
 	"sync"
+
+	"github.com/u-ai/backend/internal/knowledge"
 )
 
+type ownedCitationAuditContextKey struct{}
+
+func withOwnedCitationAudit(ctx context.Context, audit *ownedCitationAudit) context.Context {
+	if audit == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, ownedCitationAuditContextKey{}, audit)
+}
+
+func ownedCitationAuditFromContext(ctx context.Context) *ownedCitationAudit {
+	audit, _ := ctx.Value(ownedCitationAuditContextKey{}).(*ownedCitationAudit)
+	return audit
+}
+
 type ownedCitationAudit struct {
-	citationMu       sync.RWMutex
-	citationIDs      map[int]struct{}
-	citationEvidence map[int]citationEvidence
-	webResearchUsed  bool
+	citationMu                sync.RWMutex
+	citationIDs               map[int]struct{}
+	citationEvidence          map[int]citationEvidence
+	knowledgeCitationEvidence map[int]citationEvidence
+	webResearchUsed           bool
 }
 
 func (r *ownedCitationAudit) captureCitationIDs(toolName, result string) {
@@ -59,6 +79,80 @@ func (r *ownedCitationAudit) captureCitationIDs(toolName, result string) {
 	}
 }
 
+func (r *ownedCitationAudit) registerKnowledgeCitation(index int, ev knowledge.Evidence, shownText string) {
+	if r == nil || index <= 0 || index > 64 {
+		return
+	}
+	r.citationMu.Lock()
+	defer r.citationMu.Unlock()
+	if r.knowledgeCitationEvidence == nil {
+		r.knowledgeCitationEvidence = make(map[int]citationEvidence)
+	}
+	r.knowledgeCitationEvidence[index] = citationEvidence{
+		EvidenceID: ev.ID, RefID: ev.ID, Title: ev.Title, Text: shownText,
+		SourceID: ev.SourceID, SourceRevision: ev.SourceRevision,
+		UnitID: ev.UnitID, Locator: safeCitationLocator(ev.Locator), Checksum: ev.Checksum,
+	}
+}
+
+func (r *ownedCitationAudit) BuildCitationSnapshot(markdown string) []CitationSnapshot {
+	if r == nil || strings.TrimSpace(markdown) == "" {
+		return []CitationSnapshot{}
+	}
+	r.citationMu.RLock()
+	web := make(map[int]citationEvidence, len(r.citationEvidence))
+	for index, ev := range r.citationEvidence {
+		web[index] = ev
+	}
+	knowledgeItems := make(map[int]citationEvidence, len(r.knowledgeCitationEvidence))
+	for index, ev := range r.knowledgeCitationEvidence {
+		knowledgeItems[index] = ev
+	}
+	r.citationMu.RUnlock()
+	seen := make(map[string]bool)
+	out := make([]CitationSnapshot, 0, 8)
+	add := func(kind string, index int, ev citationEvidence) {
+		if len(out) >= maxCitationSnapshotEntries {
+			return
+		}
+		key := fmt.Sprintf("%s:%d", kind, index)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		raw := strings.TrimSpace(ev.Text)
+		sum := sha256.Sum256([]byte(raw))
+		marker := fmt.Sprintf("[%d]", index)
+		if kind == "knowledge" {
+			marker = fmt.Sprintf("[K%d]", index)
+		}
+		out = append(out, CitationSnapshot{
+			Marker: marker, Kind: kind, Index: index, EvidenceID: ev.EvidenceID,
+			RefID: ev.RefID, SourceID: ev.SourceID, SourceRevision: ev.SourceRevision,
+			UnitID: ev.UnitID, Title: citationExcerpt(ev.Title, 200), URL: ev.URL,
+			Locator: safeCitationLocator(ev.Locator), Excerpt: citationExcerpt(raw, 1200),
+			ContentHash: fmt.Sprintf("%x", sum[:]), Checksum: ev.Checksum,
+		})
+	}
+	for _, index := range citationMarkersInProse(markdown, knowledgeMarkerRE) {
+		if ev, ok := knowledgeItems[index]; ok {
+			add("knowledge", index, ev)
+		}
+	}
+	for _, index := range citationMarkersInProse(markdown, numericCitationPattern) {
+		if ev, ok := web[index]; ok {
+			add("web", index, ev)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].Index < out[j].Index
+	})
+	return normalizeCitationSnapshotRecords(out)
+}
+
 func (r *ownedCitationAudit) AuditCitationMarkers(markdown string) citationAudit {
 	if r == nil {
 		return citationAudit{}
@@ -76,11 +170,7 @@ func (r *ownedCitationAudit) AuditCitationMarkers(markdown string) citationAudit
 	r.citationMu.RUnlock()
 	usedSet := make(map[int]struct{})
 	unknownSet := make(map[int]struct{})
-	for _, match := range citationMarkersOutsideCode(markdown) {
-		id, err := strconv.Atoi(match)
-		if err != nil || id <= 0 {
-			continue
-		}
+	for _, id := range citationMarkersInProse(markdown, numericCitationPattern) {
 		if _, ok := availableSet[id]; ok {
 			usedSet[id] = struct{}{}
 		} else {
@@ -98,55 +188,4 @@ func (r *ownedCitationAudit) AuditCitationMarkers(markdown string) citationAudit
 		Claims:          auditCitationClaims(markdown, availableSet, evidenceByCitation),
 		MissingCitation: missing,
 	}
-}
-
-func citationMarkersOutsideCode(markdown string) []string {
-	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
-	out := make([]string, 0)
-	inFence := false
-	fence := ""
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			current := trimmed[:3]
-			if !inFence {
-				inFence = true
-				fence = current
-			} else if current == fence {
-				inFence = false
-				fence = ""
-			}
-			continue
-		}
-		if inFence {
-			continue
-		}
-		out = append(out, citationMarkersOutsideInlineCode(line)...)
-	}
-	return out
-}
-
-func citationMarkersOutsideInlineCode(line string) []string {
-	out := make([]string, 0)
-	start := 0
-	inCode := false
-	for i := 0; i <= len(line); i++ {
-		if i < len(line) && line[i] != '`' {
-			continue
-		}
-		if !inCode && i > start {
-			segment := line[start:i]
-			for _, match := range numericCitationPattern.FindAllStringSubmatch(segment, -1) {
-				if len(match) > 1 {
-					out = append(out, match[1])
-				}
-			}
-		}
-		if i == len(line) {
-			break
-		}
-		inCode = !inCode
-		start = i + 1
-	}
-	return out
 }

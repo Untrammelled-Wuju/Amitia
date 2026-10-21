@@ -218,6 +218,53 @@ func TestNodeFileNameForGuest(t *testing.T) {
 	}
 }
 
+func TestBundledNodeArchiveNamesByGuest(t *testing.T) {
+	tests := []struct {
+		guest platform.GuestPlatform
+		want  []string
+	}{
+		{platform.GuestPlatformWindows, []string{"node.exe.zip", "node.zip"}},
+		{platform.GuestPlatformLinux, []string{"node.zip"}},
+		{platform.GuestPlatformMacOS, []string{"node.zip"}},
+		{platform.GuestPlatformAndroid, nil},
+	}
+	for _, test := range tests {
+		got := bundledNodeArchiveNames(test.guest)
+		if len(got) != len(test.want) {
+			t.Fatalf("guest=%s archive count=%d want=%d", test.guest, len(got), len(test.want))
+		}
+		for index := range test.want {
+			if got[index] != test.want[index] {
+				t.Fatalf("guest=%s archive[%d]=%s want=%s", test.guest, index, got[index], test.want[index])
+			}
+		}
+	}
+}
+
+func TestBundledNodePathsByGuest(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "runtime", "node")
+	tests := []struct {
+		guest platform.GuestPlatform
+		want  []string
+	}{
+		{platform.GuestPlatformWindows, []string{filepath.Join(root, "node.exe"), filepath.Join(root, "bin", "node.exe")}},
+		{platform.GuestPlatformLinux, []string{filepath.Join(root, "bin", "node"), filepath.Join(root, "node")}},
+		{platform.GuestPlatformMacOS, []string{filepath.Join(root, "bin", "node"), filepath.Join(root, "node")}},
+		{platform.GuestPlatformAndroid, nil},
+	}
+	for _, test := range tests {
+		got := bundledNodePaths(test.guest, root)
+		if len(got) != len(test.want) {
+			t.Fatalf("guest=%s path count=%d want=%d", test.guest, len(got), len(test.want))
+		}
+		for index := range test.want {
+			if got[index] != test.want[index] {
+				t.Fatalf("guest=%s path[%d]=%s want=%s", test.guest, index, got[index], test.want[index])
+			}
+		}
+	}
+}
+
 func TestIsShellWrapperExtension(t *testing.T) {
 	wrappers := []string{"npm.cmd", "npm.bat", "npm.ps1", "npm.sh"}
 	for _, w := range wrappers {

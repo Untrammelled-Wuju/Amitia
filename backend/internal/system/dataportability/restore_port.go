@@ -14,13 +14,13 @@ const (
 )
 
 type RestoreOptions struct {
-	OperationID      string
-	Purpose          RestorePurpose
-	CharacterPolicy  CollisionPolicy
+	OperationID        string
+	Purpose            RestorePurpose
+	CharacterPolicy    CollisionPolicy
 	DefaultCharacterID string
-	ActivateImported bool
-	IdentityMap      *ImportIdentityMap
-	SecretProvider   SecretProvider
+	ActivateImported   bool
+	IdentityMap        *ImportIdentityMap
+	SecretProvider     SecretProvider
 }
 
 type CharacterRestorePort interface {
@@ -33,14 +33,6 @@ type ChatRestorePort interface {
 
 type EpisodicRestorePort interface {
 	RestoreEpisodic(ctx context.Context, in BackupReader, opts RestoreOptions) error
-}
-
-type PsycheRestorePort interface {
-	RestorePsyche(ctx context.Context, in BackupReader, opts RestoreOptions) error
-}
-
-type RelationshipRestorePort interface {
-	RestoreRelationships(ctx context.Context, in BackupReader, opts RestoreOptions) error
 }
 
 type WorldbookRestorePort interface {
@@ -76,24 +68,22 @@ type MemoryRestorePort interface {
 }
 
 type RestorePorts struct {
-	Character    CharacterRestorePort
-	Chat         ChatRestorePort
-	Episodic     EpisodicRestorePort
-	Psyche       PsycheRestorePort
-	Relationship RelationshipRestorePort
-	Worldbook    WorldbookRestorePort
-	ModelConfig  ModelConfigRestorePort
-	Voice        VoiceRestorePort
-	Embedding    EmbeddingRestorePort
-	Resource     ResourceRestorePort
-	Extension    ExtensionRestorePort
-	Workspace    WorkspaceRestorePort
-	Memory       MemoryRestorePort
+	Character   CharacterRestorePort
+	Chat        ChatRestorePort
+	Episodic    EpisodicRestorePort
+	Worldbook   WorldbookRestorePort
+	ModelConfig ModelConfigRestorePort
+	Voice       VoiceRestorePort
+	Embedding   EmbeddingRestorePort
+	Resource    ResourceRestorePort
+	Extension   ExtensionRestorePort
+	Workspace   WorkspaceRestorePort
+	Memory      MemoryRestorePort
 }
 
 func (p RestorePorts) HasAny() bool {
 	return p.Character != nil || p.Chat != nil || p.Episodic != nil ||
-		p.Psyche != nil || p.Relationship != nil || p.Worldbook != nil ||
+		p.Worldbook != nil ||
 		p.ModelConfig != nil || p.Voice != nil || p.Embedding != nil ||
 		p.Resource != nil || p.Extension != nil || p.Workspace != nil ||
 		p.Memory != nil

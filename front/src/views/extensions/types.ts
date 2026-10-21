@@ -16,7 +16,7 @@ export type AgentSkillCompatibilityStatus =
   | "compatible_with_warnings"
   | "partially_compatible"
   | "blocked";
-export type AgentSkillScope = "global" | "character";
+export type AgentSkillScope = "global" | "space" | "character" | "conversation";
 export type AgentSkillResourceKind =
   | "skill"
   | "reference"
@@ -31,7 +31,7 @@ export interface AgentSkillResource {
   size: number;
   sha256: string;
   textReadable: boolean;
-  executable: false;
+  executable: boolean;
   supported: boolean;
 }
 export interface AgentSkillToolMapping {
@@ -55,7 +55,7 @@ export interface AgentSkillMCPDependency {
   args?: string[];
   authType: string;
   toolAllowlist?: string[];
-  defaultScope: "global" | "character";
+  defaultScope: "global" | "space" | "character" | "conversation";
   autoConfigure?: boolean;
 }
 export interface AgentSkillCompatibilityReport {
@@ -68,6 +68,8 @@ export interface AgentSkillCompatibilityReport {
   errors: AgentSkillWarning[];
 }
 export interface AgentSkillDefinition {
+  id: string;
+  contributionId?: string;
   extensionId: string;
   name: string;
   description: string;
@@ -81,10 +83,10 @@ export interface AgentSkillDefinition {
   iconSmall?: string;
   iconLarge?: string;
   brandColor?: string;
-  source: "bundled" | "local-directory" | "local-zip" | "workshop";
+  source: "bundled" | "local-directory" | "local-zip" | "local-import" | "agent_skill" | "workshop";
   scope: AgentSkillScope;
   scopeId?: string;
-  artifactId: string;
+  artifactId?: string;
   contentHash: string;
   body?: string;
   rawSkillMd?: string;
@@ -103,6 +105,8 @@ export interface AgentSkillPreview {
   compatibilityReport: AgentSkillCompatibilityReport;
   files: AgentSkillResource[];
   expiresAt: string;
+  requiredConfirmations?: string[];
+  riskFlags?: string[];
 }
 export interface AgentSkillPage {
   items: AgentSkillDefinition[];
@@ -197,7 +201,6 @@ export interface PackageImportPreview {
   capabilityConfirmations: string[];
   triggers: SkillTrigger[];
   dependencies: PackageDependency[];
-  agentSkill?: AgentSkillPreview;
   workflowSteps?: string[];
   scripts: number;
   scriptsRequired: boolean;
@@ -274,6 +277,78 @@ export interface PackageOperation {
   traceId: string;
   createdAt: string;
   completedAt?: string;
+  currentStep?: string;
+  steps?: PackageOperationStep[];
+}
+export interface PackageOperationStep {
+  name: string;
+  order: number;
+  status: string;
+  attemptCount: number;
+  resultJson?: string;
+  errorCode?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+export interface ExtensionUpdateMetadata {
+  extensionId: string;
+  version: string;
+  manifestVersion: number;
+  packageUrl: string;
+  packageSha256: string;
+  packageSha512?: string;
+  packageSize: number;
+  publisherId: string;
+  publisherKeyId: string;
+  signature?: string;
+  minimumHostVersion?: string;
+  maximumHostVersion?: string;
+  supportedPlatforms?: string[];
+  supportedArch?: string[];
+  publishedAt: string;
+  releaseChannel?: string;
+  rollbackPolicy?: string;
+  signedIndex: boolean;
+}
+export interface ExtensionUpdateCheck {
+  available: boolean;
+  extensionId: string;
+  currentVersion: string;
+  update?: ExtensionUpdateMetadata;
+  items: ExtensionUpdateMetadata[];
+  total: number;
+}
+export interface ExtensionUpdateDownload {
+  downloadId: string;
+  url: string;
+  expectedHash: string;
+  expectedSize: number;
+  downloadedSize: number;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+export interface PackageRollbackPreview {
+  extensionId: string;
+  currentVersion: string;
+  targetVersion: string;
+  currentGeneration: number;
+  rollbackPointId: string;
+  snapshotHash: string;
+  retentionState: string;
+  retentionUntil: string;
+  manualRequired: boolean;
+  manualReason?: string;
+  dependents: string[];
+  installable: boolean;
+  previewSessionId: string;
+  requiredConfirmations: string[];
+}
+export interface PackageRollbackConfirmation {
+  confirmationToken: string;
+  expiresAt: string;
+  previewSessionId: string;
 }
 export interface PackageVersion {
   version: string;
@@ -296,6 +371,11 @@ export interface PackageVersion {
   operationId?: string;
   failureCode?: string;
   archived: boolean;
+  versionState?: string;
+  generationId?: string;
+  installedPath?: string;
+  installedTreeHash?: string;
+  retainedUntil?: string;
 }
 export interface PackageSigner {
   fingerprint: string;

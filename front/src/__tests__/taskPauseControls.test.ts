@@ -22,4 +22,9 @@ describe("task pause controls", () => {
     expect(taskPauseControls({ ...paused, checkpointId: undefined }, definition).resume).toBe(false);
     expect(taskPauseControls({ ...paused, executionPlacement: "cloud" }, definition).resume).toBe(false);
   });
+  it("uses run capabilities before legacy definition lookup", () => {
+    const paused = { ...task, executionPlacement: "device", status: "paused", checkpointSupported: true } as TaskRun;
+    expect(taskPauseControls(paused).resume).toBe(true);
+    expect(taskPauseControls({ ...paused, checkpointSupported: false }, definition).resume).toBe(false);
+  });
 });

@@ -355,7 +355,10 @@ function ensureCoreBinaries(dataDir: string): void {
   const extraRoots = isDevMode()
     ? [path.resolve(getInstallDir(), "..", "backend")]
     : [];
-  const nodeArchive = ["node.exe.zip", "node.zip"]
+  const nodeArchiveNames = process.platform === "win32"
+    ? ["node.exe.zip", "node.zip"]
+    : ["node.zip"];
+  const nodeArchive = nodeArchiveNames
     .map((name) => path.join(resourcesPath, "core", "node", name))
     .find((file) => fs.existsSync(file));
   const binaries = [

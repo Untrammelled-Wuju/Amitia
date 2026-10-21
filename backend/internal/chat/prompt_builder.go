@@ -38,24 +38,12 @@ type sys1Result struct {
 	CharacterConfig     string
 	ProfileContext      string
 	EpisodicContext     string
-	Worldbook           string
 	PersonalityPresetID string
 }
 
 func (s *service) sys1Builder(convID string, profile *character.RoleRuntimeProfile, userMessage string, runtime *interaction.RuntimeAssembly) sys1Result {
 	parts := buildRoleSystemParts(profile, runtime)
-	characterID := ""
-	if profile != nil {
-		characterID = strings.TrimSpace(profile.CharacterID)
-	}
-	var profileCtx, epiCtx, wbCtx string
-	spaceID := s.profileExtractionSpaceID(convID, characterID)
-	if s.worldBookPort != nil {
-		wbPrompt := s.worldBookPort.ToSystemPromptForSpace(spaceID, characterID, userMessage, "")
-		if wbPrompt != "" {
-			wbCtx = wbPrompt
-		}
-	}
+	var profileCtx, epiCtx string
 
 	presetID := ""
 	if profile != nil {
@@ -66,7 +54,6 @@ func (s *service) sys1Builder(convID string, profile *character.RoleRuntimeProfi
 		CharacterConfig:     strings.Join(parts, "\n\n"),
 		ProfileContext:      profileCtx,
 		EpisodicContext:     epiCtx,
-		Worldbook:           wbCtx,
 		PersonalityPresetID: presetID,
 	}
 }

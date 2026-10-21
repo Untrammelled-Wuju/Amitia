@@ -30,7 +30,6 @@ export const NAVIGATION_WHITELIST: readonly string[] = [
   "/game-center",
   "/runtime-debug",
   "/workspaces",
-  "/realtime-voice",
   "/long-running",
 ];
 

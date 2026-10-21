@@ -110,7 +110,7 @@ func TestCfgToProviderConfigFallsBackToMaxTokens(t *testing.T) {
 
 func TestInvokeLLMWithToolsContinuesUntilFinalAnswer(t *testing.T) {
 	runtime := &dynamicRoundToolRuntime{}
-	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime: runtime}}
 	modelCalls := 0
 	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		modelCalls++

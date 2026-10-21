@@ -26,7 +26,6 @@
 
 - `ExtensionCenterView.vue`：扩展中心主入口；
 - `packages/PackageManagerView.vue`：扩展包管理页；
-- `agent-skills/AgentSkillListView.vue`：Agent Skill 列表页；
 - `api.ts`：扩展中心 API Client；
 - `types.ts`：扩展中心类型定义；
 - `components/`：扩展中心共用组件，包括：
@@ -101,7 +100,7 @@
 
 ## 六、旧系统预计删除说明
 
-旧 Skill 页面、Workshop 页面、执行记录页面及对应路由和 API Client 已完成迁移并物理删除。Agent Skill 与 Workflow 页面使用 Extension Kernel 主链。
+旧 Skill 页面、Workshop 页面、执行记录页面及对应路由和 API Client 已完成迁移并物理删除。Agent Skill 页面统一使用 Extension Kernel 包、运行时目录和 `/api/extensions/kernel/agent-skills` 接口；Workflow 页面使用 Extension Kernel 主链。
 
 - 旧系统不立即删除，避免在重构期间破坏现有用户可见功能；
 - 旧系统预计在新 Extension Kernel 完成对应能力并完成数据迁移、用户引导迁移后，按总体规划文档中的步骤分批下线；

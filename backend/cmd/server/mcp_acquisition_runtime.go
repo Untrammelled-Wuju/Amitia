@@ -9,7 +9,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	kernelmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
-	"github.com/u-ai/backend/internal/mcp/discovery"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/discovery"
+	mcpservice "github.com/u-ai/backend/internal/extension/mcpruntime/service"
 )
 
 // mcpAcquisitionRuntime bridges capability acquisition to the canonical MCP
@@ -18,10 +19,10 @@ import (
 type mcpAcquisitionRuntime struct {
 	stdio     *kernelmcp.CanonicalStdioRegistry
 	remote    *kernelmcp.CanonicalRemoteRegistry
-	canonical func() *MCPCompatibilityRuntime
+	canonical func() *mcpservice.Runtime
 }
 
-func newMCPAcquisitionRuntime(stdio *kernelmcp.CanonicalStdioRegistry, remote *kernelmcp.CanonicalRemoteRegistry, canonical ...func() *MCPCompatibilityRuntime) acquisition.MCPRuntimeConnectPort {
+func newMCPAcquisitionRuntime(stdio *kernelmcp.CanonicalStdioRegistry, remote *kernelmcp.CanonicalRemoteRegistry, canonical ...func() *mcpservice.Runtime) acquisition.MCPRuntimeConnectPort {
 	runtime := &mcpAcquisitionRuntime{stdio: stdio, remote: remote}
 	if len(canonical) > 0 {
 		runtime.canonical = canonical[0]

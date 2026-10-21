@@ -10,6 +10,9 @@ export interface OwnedRealtimeOptions {
   conversationId: string;
   conversationOrigin?: OwnedConversationOrigin;
   historicalRoleId?: string;
+  voiceType?: string;
+  resourceId?: string;
+  dialogId?: string;
   expectedExecutionScope: OwnedExecutionScope;
   acceptedTicket?: Record<string, any>;
   onReady: () => void;
@@ -17,6 +20,11 @@ export interface OwnedRealtimeOptions {
   onAudio: (bytes: Uint8Array) => Promise<void>;
   onError: (message: string) => void;
   onInterrupted: () => void;
+  onASRFinal?: (data: Record<string, unknown>) => void;
+  onAssistantText?: (text: string, delta: boolean) => void;
+  onVision?: (data: Record<string, unknown>) => void;
+  onWakeStatus?: (data: Record<string, unknown>) => void;
+  onPlaybackStatus?: (data: Record<string, unknown>) => void;
 }
 
 export class OwnedRealtimeSession {
@@ -45,7 +53,7 @@ export class OwnedRealtimeSession {
     const captured = this.generation;
     window.addEventListener("amitia:runtime-connection-changed", this.invalidated);
     window.addEventListener("amitia:execution-scope-changed", this.invalidated);
-    const response = this.options.acceptedTicket ? undefined : await apiClient.post("/api/device-mesh/v1/business/realtime/tickets", { requestId: crypto.randomUUID(), characterId: this.options.characterId, conversationId: this.options.conversationId, conversationOrigin: this.options.conversationOrigin, historicalRoleId: this.options.historicalRoleId, expectedExecutionScope: this.scope }, { signal: this.controller.signal });
+    const response = this.options.acceptedTicket ? undefined : await apiClient.post("/api/device-mesh/v1/business/realtime/tickets", { requestId: crypto.randomUUID(), characterId: this.options.characterId, conversationId: this.options.conversationId, conversationOrigin: this.options.conversationOrigin, historicalRoleId: this.options.historicalRoleId, voiceType: this.options.voiceType || "", resourceId: this.options.resourceId || "", dialogId: this.options.dialogId || "", expectedExecutionScope: this.scope }, { signal: this.controller.signal });
     const ticket = this.options.acceptedTicket ?? response?.data?.data ?? response?.data;
     if (captured !== this.generation) throw new Error("通话服务已变化");
     if (!ticket?.ticket || ticket.wsPath !== "/api/device-mesh/v1/business/realtime/session" || !sameOwnedAuthority(this.scope, ticket.executionScope)) throw new Error("通话票据归属不一致");
@@ -135,9 +143,35 @@ export class OwnedRealtimeSession {
       this.options.onReady();
       return;
     }
+    if (frame.type === "wake_status") {
+      this.options.onWakeStatus?.(frame);
+      return;
+    }
+    if (frame.type === "wake_detected") {
+      this.options.onWakeStatus?.(frame);
+      return;
+    }
+    if (frame.type === "playback_status" || frame.type === "tts_ended") {
+      this.options.onPlaybackStatus?.(frame);
+      return;
+    }
     if (!frame.requestId || frame.requestId !== this.turnId) return;
     if (frame.type === "turn_ready") { this.turnReady = true; return; }
     if (this.cancelled) return;
+    if (frame.type === "asr_final") {
+      this.options.onASRFinal?.(frame.data as Record<string, unknown>);
+      return;
+    }
+    if (frame.type === "assistant_text") {
+      const data = frame.data as Record<string, unknown>;
+      const text = typeof data?.text === "string" ? data.text : "";
+      if (text) this.options.onAssistantText?.(text, data.delta === true);
+      return;
+    }
+    if (frame.type === "vision_status") {
+      this.options.onVision?.(frame.data as Record<string, unknown>);
+      return;
+    }
     if (frame.type === "error") {
       this.recording = false;
       this.completed = true;
@@ -161,5 +195,17 @@ export class OwnedRealtimeSession {
       return;
     }
     if (frame.type === "event" && frame.data?.executionScope && !sameOwnedAuthority(this.scope, frame.data.executionScope)) throw new Error("通话草稿归属变化");
+  }
+
+  setWakeArmed(armed: boolean, configId = ""): void {
+    this.send({ type: armed ? "wake_arm" : "wake_disarm", configId });
+  }
+
+  reportPlayback(generationId: number, playedAudioMs: number, receivedAudioMs: number): void {
+    this.send({ type: "playback_progress", requestId: this.turnId, generationId, played_audio_ms: playedAudioMs, received_audio_ms: receivedAudioMs });
+  }
+
+  reportPlaybackEnded(generationId: number): void {
+    this.send({ type: "tts_playback_ended", requestId: this.turnId, generationId });
   }
 }

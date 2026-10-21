@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/asr"
+	realtime "github.com/u-ai/backend/internal/devicemesh/wake"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
-	"github.com/u-ai/backend/internal/realtime"
 )
 
 const (

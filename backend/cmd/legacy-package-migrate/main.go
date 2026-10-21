@@ -15,7 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	legacymigration "github.com/u-ai/backend/internal/extension/package_legacy_migration"
-	"github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/database/mysql"

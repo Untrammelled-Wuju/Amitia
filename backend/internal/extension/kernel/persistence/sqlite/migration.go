@@ -2570,6 +2570,13 @@ var schemaMigrations = []string{
 	meshaudit.Schema,
 	`UPDATE kernel_device_owned_resources SET role_id='@global-memory',revision=revision+1 WHERE kind='profile' AND role_id<>'@global-memory'`,
 	`ALTER TABLE kernel_device_business_requests ADD COLUMN queued_scope_json TEXT NOT NULL DEFAULT ''`,
+	`CREATE TABLE IF NOT EXISTS extension_agent_skill_overrides (
+		owner_space_id TEXT NOT NULL,
+		skill_id TEXT NOT NULL,
+		enabled INTEGER NOT NULL,
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (owner_space_id, skill_id)
+	)`,
 }
 
 type dbExecutor interface {

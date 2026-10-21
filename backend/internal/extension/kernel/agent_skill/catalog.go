@@ -2,12 +2,17 @@ package agent_skill
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
 type CatalogFilter struct {
-	Enabled *bool
-	Query   string
+	Enabled        *bool
+	Query          string
+	SpaceID        string
+	CharacterID    string
+	ConversationID string
+	ExtensionID    string
 }
 
 type AgentSkillCatalog struct {
@@ -24,25 +29,48 @@ func NewAgentSkillCatalog() *AgentSkillCatalog {
 func (c *AgentSkillCatalog) Register(definition AgentSkillDefinition) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, exists := c.items[definition.ExtensionID]; exists {
-		return fmt.Errorf("agent skill %s already registered", definition.ExtensionID)
+	key := catalogKey(definition)
+	if _, exists := c.items[key]; exists {
+		return fmt.Errorf("agent skill %s already registered", definition.StateID())
 	}
-	c.items[definition.ExtensionID] = definition
+	c.items[key] = definition
 	return nil
 }
 
 func (c *AgentSkillCatalog) Unregister(extensionID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.items, extensionID)
+	for key, item := range c.items {
+		if item.ExtensionID == extensionID {
+			delete(c.items, key)
+		}
+	}
 	return nil
 }
 
 func (c *AgentSkillCatalog) Get(extensionID string) (AgentSkillDefinition, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	item, ok := c.items[extensionID]
-	return item, ok
+	for _, item := range c.items {
+		if item.ExtensionID == extensionID || item.ID == extensionID || item.ContributionID == extensionID {
+			return item, true
+		}
+	}
+	return AgentSkillDefinition{}, false
+}
+
+func (c *AgentSkillCatalog) GetScoped(spaceID, skillID string) (AgentSkillDefinition, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, item := range c.items {
+		if !skillMatchesSpace(item, spaceID) {
+			continue
+		}
+		if item.ExtensionID == skillID || item.ID == skillID || item.ContributionID == skillID {
+			return item, true
+		}
+	}
+	return AgentSkillDefinition{}, false
 }
 
 func (c *AgentSkillCatalog) List(filter CatalogFilter) []AgentSkillDefinition {
@@ -50,6 +78,15 @@ func (c *AgentSkillCatalog) List(filter CatalogFilter) []AgentSkillDefinition {
 	defer c.mu.RUnlock()
 	result := make([]AgentSkillDefinition, 0, len(c.items))
 	for _, item := range c.items {
+		if !skillMatchesSpace(item, filter.SpaceID) {
+			continue
+		}
+		if filter.ExtensionID != "" && item.ExtensionID != filter.ExtensionID {
+			continue
+		}
+		if !item.MatchesScope(filter.SpaceID, filter.CharacterID, filter.ConversationID) {
+			continue
+		}
 		if filter.Enabled != nil && item.Enabled != *filter.Enabled {
 			continue
 		}
@@ -64,12 +101,32 @@ func (c *AgentSkillCatalog) List(filter CatalogFilter) []AgentSkillDefinition {
 func (c *AgentSkillCatalog) SetEnabled(extensionID string, enabled bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	item, ok := c.items[extensionID]
-	if !ok {
-		return nil
+	for key, item := range c.items {
+		if item.ExtensionID != extensionID && item.ID != extensionID && item.ContributionID != extensionID {
+			continue
+		}
+		item.Enabled = enabled
+		c.items[key] = item
 	}
-	item.Enabled = enabled
-	c.items[extensionID] = item
+	return nil
+}
+
+func (c *AgentSkillCatalog) SetEnabledForSpace(spaceID, extensionID, skillID string, enabled bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, item := range c.items {
+		if !skillMatchesSpace(item, spaceID) {
+			continue
+		}
+		if item.ExtensionID != extensionID {
+			continue
+		}
+		if item.ID != skillID && item.ContributionID != skillID {
+			continue
+		}
+		item.Enabled = enabled
+		c.items[key] = item
+	}
 	return nil
 }
 
@@ -114,4 +171,15 @@ func equalFold(a, b string) bool {
 		}
 	}
 	return true
+}
+
+func catalogKey(definition AgentSkillDefinition) string {
+	return strings.TrimSpace(definition.OwnerSpaceID) + "\x00" + strings.TrimSpace(definition.StateID())
+}
+
+func skillMatchesSpace(item AgentSkillDefinition, spaceID string) bool {
+	if item.OwnerSpaceID == "" || spaceID == "" {
+		return true
+	}
+	return item.OwnerSpaceID == spaceID
 }

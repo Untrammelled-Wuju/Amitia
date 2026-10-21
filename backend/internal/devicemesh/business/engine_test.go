@@ -24,7 +24,7 @@ func (p testDataPort) Roles(context.Context, coordination.ExecutionScope) ([]coo
 func (p testDataPort) Snapshot(ctx context.Context, scope coordination.ExecutionScope, _ coordination.DataQuery) (coordination.DataSnapshot, error) {
 	snapshot := coordination.DataSnapshot{OwnerID: scope.ResourceOwnerID, Role: p.role}
 	store := coordination.NewOwnershipStore(p.db, scope.ResourceOwnerID)
-	for _, kind := range []string{"conversation", "message", "checkpoint", "memory", "fact", "vector", "graph", "working", "summary", "profile", "episodic"} {
+	for _, kind := range []string{"conversation", "message", "checkpoint", "memory", "fact", "vector", "graph", "working", "summary", "profile", "episodic", "worldbook"} {
 		resources, err := store.List(ctx, kind, coordination.StorageRole(scope, kind), false)
 		if err != nil {
 			return snapshot, err

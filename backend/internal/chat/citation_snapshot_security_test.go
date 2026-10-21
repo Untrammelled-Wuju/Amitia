@@ -13,13 +13,13 @@ import (
 )
 
 func TestCitationSnapshotRestrictsUntrustedSourceMetadata(t *testing.T) {
-	recorder := &assistantTurnRecorder{}
+	recorder := &ownedCitationAudit{}
 	locator := map[string]any{
 		"page": 42, "row": float64(8), "sheet": "2", "kind": "pdf_page",
 		"path": "/home/user/secrets/notes.pdf", "accessToken": "private", "metadata": map[string]any{"password": "private"},
 		"field": "C:\\private\\key", "injected": strings.Repeat("X", 10000),
 	}
-	recorder.RegisterKnowledgeCitation(1, knowledge.Evidence{ID: "e1", SourceID: "source-a", Locator: locator}, "confirmed evidence")
+	recorder.registerKnowledgeCitation(1, knowledge.Evidence{ID: "e1", SourceID: "source-a", Locator: locator}, "confirmed evidence")
 	locator["page"] = 9000
 	recorder.captureCitationIDs("web_run", `{"citations":[{"index":1,"url":"https://example.com/article?q=ok&api_key=secret&access_token=private#part","title":"Public"},{"index":2,"url":"file:///tmp/private","title":"Private"}]}`)
 	got := recorder.BuildCitationSnapshot("Document [K1]. Website [1]. Unsafe link [2].")
@@ -98,9 +98,9 @@ func TestCitationSnapshotsEnforceConversationSpaceOwner(t *testing.T) {
 }
 
 func TestCitationMarkersIgnoreFencedAndVariableBacktickCode(t *testing.T) {
-	recorder := &assistantTurnRecorder{}
+	recorder := &ownedCitationAudit{}
 	for index := 1; index <= 8; index++ {
-		recorder.RegisterKnowledgeCitation(index, knowledge.Evidence{ID: "ev"}, "evidence")
+		recorder.registerKnowledgeCitation(index, knowledge.Evidence{ID: "ev"}, "evidence")
 	}
 	markdown := "Visible [K1] and escaped \\[K2]. ` [K3] ` and `` [K4] ``.\n" +
 		"````md\n[K5]\n```\n[K6]\n````\n" +
@@ -124,8 +124,8 @@ func TestPhase20SpreadsheetAndDocumentLocatorRoundTrip(t *testing.T) {
 		{name: "unsafe-sheet", input: map[string]any{"sheetName": "C:\\private\\file", "rowStart": 2}, want: map[string]any{"row": 2}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			recorder := &assistantTurnRecorder{}
-			recorder.RegisterKnowledgeCitation(1, knowledge.Evidence{ID: "ev", SourceID: "src", Locator: tc.input}, "evidence")
+			recorder := &ownedCitationAudit{}
+			recorder.registerKnowledgeCitation(1, knowledge.Evidence{ID: "ev", SourceID: "src", Locator: tc.input}, "evidence")
 			snapshot := recorder.BuildCitationSnapshot("According to [K1]")
 			if len(snapshot) != 1 || !reflect.DeepEqual(snapshot[0].Locator, tc.want) {
 				t.Fatalf("locator lost or leaked: %+v want %+v", snapshot, tc.want)

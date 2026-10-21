@@ -84,6 +84,8 @@ class _FakeOwnedService extends DeviceOwnedChatService {
         'conversationId': id,
         'executionScope': scope(),
         'reply': '回答',
+        if (owner.completedCitationSnapshot.isNotEmpty)
+          'citationSnapshot': owner.completedCitationSnapshot,
         'saved': true,
         'memoryStatus': 'completed',
       },
@@ -108,6 +110,8 @@ class _FakeChatService extends ChatService {
   bool moreTurns = false;
   String turnCursor = '';
   String requestedTurnCursor = '';
+  List<Map<String, dynamic>> completedCitationSnapshot =
+      const <Map<String, dynamic>>[];
   Completer<AssistantTurnPageDto>? pendingTurnPage;
 
   @override
@@ -296,6 +300,28 @@ void main() {
     expect(service.submittedStyle, 'bubble');
     controller.dispose();
     appearance.dispose();
+    await events.close();
+  });
+  test('完成回执中的引用快照写入当前助手消息', () async {
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events)
+      ..completedCitationSnapshot = const [
+        {
+          'marker': '[K1]',
+          'kind': 'knowledge',
+          'index': 1,
+          'sourceId': 'source-a',
+          'title': '项目资料',
+          'excerpt': '项目代号是晨星。',
+        },
+      ];
+    final controller = ConversationRuntimeController(service);
+    await controller.sendText('请检索知识库资料');
+    final assistant = controller.messages.singleWhere(
+      (message) => message.role == MessageRole.assistant,
+    );
+    expect(assistant.citationSnapshot, service.completedCitationSnapshot);
+    controller.dispose();
     await events.close();
   });
   test('自动化指示随工具事件更新，断线后等待确认，完成后撤下', () async {

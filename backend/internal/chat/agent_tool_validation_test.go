@@ -33,7 +33,7 @@ func TestAgentToolArgumentValidation(t *testing.T) {
 
 func TestAgentModelCanRepairInvalidToolCalls(t *testing.T) {
 	runtime := &agentRegressionRuntime{}
-	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime: runtime}}
 	rounds := 0
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, definitions []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		rounds++

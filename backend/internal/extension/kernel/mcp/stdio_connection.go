@@ -1,5 +1,3 @@
-// migration-only: temporary compatibility adapter
-// remove at step 65 cutover
 package mcp
 
 import (
@@ -10,10 +8,10 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/mcp/client"
-	"github.com/u-ai/backend/internal/mcp/discovery"
-	"github.com/u-ai/backend/internal/mcp/protocol"
-	"github.com/u-ai/backend/internal/mcp/transport"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/client"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/discovery"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/transport"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 )
 
@@ -108,11 +106,6 @@ func (c *CanonicalStdioConnection) Start(ctx context.Context) error {
 	if err != nil {
 		c.setState(MCPStdioStateFailed)
 		return err
-	}
-
-	if err := tr.Start(startCtx); err != nil {
-		c.setState(MCPStdioStateFailed)
-		return fmt.Errorf("MCP_TRANSPORT_START_FAILED: %w", err)
 	}
 
 	c.mu.Lock()
@@ -213,7 +206,7 @@ func (c *CanonicalStdioConnection) Close(ctx context.Context) error {
 	return closeErr
 }
 
-// ClientConnection exposes the initialized MCP client for compatibility HTTP APIs
+// ClientConnection exposes the initialized MCP client to the runtime API.
 // such as resources, prompts and notifications. Runtime ownership stays in the
 // canonical registry.
 func (c *CanonicalStdioConnection) ClientConnection() (*client.Connection, bool) {

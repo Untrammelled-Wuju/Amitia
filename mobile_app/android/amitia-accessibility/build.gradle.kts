@@ -57,10 +57,28 @@ android {
         versionName = "1.0.0"
     }
 
-    val keystorePath: String? = System.getenv("AMITIA_KEYSTORE_PATH")?.trim()?.takeIf { it.isNotEmpty() }
-    val keystorePassword: String? = System.getenv("AMITIA_KEYSTORE_PASSWORD")?.takeIf { it.isNotEmpty() }
-    val keyAliasValue: String? = System.getenv("AMITIA_KEY_ALIAS")?.trim()?.takeIf { it.isNotEmpty() }
-    val keyPasswordValue: String? = System.getenv("AMITIA_KEY_PASSWORD")?.takeIf { it.isNotEmpty() }
+    fun amitiaSigningValue(name: String): String? {
+        System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        if (!System.getProperty("os.name").lowercase().contains("mac")) return null
+        return runCatching {
+            val process = ProcessBuilder(
+                "security",
+                "find-generic-password",
+                "-s",
+                "amitia-release-signing",
+                "-a",
+                name,
+                "-w",
+            ).redirectErrorStream(true).start()
+            val value = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            if (process.waitFor() == 0 && value.isNotEmpty()) value else null
+        }.getOrNull()
+    }
+
+    val keystorePath: String? = amitiaSigningValue("AMITIA_KEYSTORE_PATH")
+    val keystorePassword: String? = amitiaSigningValue("AMITIA_KEYSTORE_PASSWORD")
+    val keyAliasValue: String? = amitiaSigningValue("AMITIA_KEY_ALIAS")
+    val keyPasswordValue: String? = amitiaSigningValue("AMITIA_KEY_PASSWORD")
 
     signingConfigs {
         create("release") {

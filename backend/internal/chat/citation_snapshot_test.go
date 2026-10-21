@@ -12,13 +12,13 @@ import (
 )
 
 func TestPhase17FreezeOnlyUsedKnowledgeAndWebReferences(t *testing.T) {
-	r := &assistantTurnRecorder{}
-	r.RegisterKnowledgeCitation(1, knowledge.Evidence{
+	r := &ownedCitationAudit{}
+	r.registerKnowledgeCitation(1, knowledge.Evidence{
 		ID: "ev-1", SourceID: "src-a", SourceRevision: 9,
 		UnitID: "u-37", Title: "a.pdf", Locator: map[string]any{"page": 37},
 		Checksum: "original-checksum",
 	}, strings.Repeat("甲", 2500))
-	r.RegisterKnowledgeCitation(2, knowledge.Evidence{ID: "ev-2", SourceID: "src-b", SourceRevision: 1}, "unused")
+	r.registerKnowledgeCitation(2, knowledge.Evidence{ID: "ev-2", SourceID: "src-b", SourceRevision: 1}, "unused")
 	r.captureCitationIDs("web_run", `{"citations":[{"index":1,"evidence_id":"web-1","url":"https://example.org","title":"web","text":"source text"}]}`)
 	got := r.BuildCitationSnapshot("引用 [K1] 与 [1]。`[K2]` 只是示例。\n```md\n[K2]\n```\n[K999] 未找到")
 	if len(got) != 2 {

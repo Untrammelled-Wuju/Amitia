@@ -25,13 +25,11 @@ func (a *DesktopAPIAdapter) container() *desktopCtx {
 	}
 	return &desktopCtx{
 		desktopAPI: c.DesktopAPI,
-		updateAPI:  c.UpdateAPI,
 	}
 }
 
 type desktopCtx struct {
 	desktopAPI *desktop.DesktopAPI
-	updateAPI  *desktop.UpdateAPI
 }
 
 func (a *DesktopAPIAdapter) RegisterRoutes(group *gin.RouterGroup) {
@@ -54,15 +52,6 @@ func (a *DesktopAPIAdapter) RegisterRoutes(group *gin.RouterGroup) {
 	desktopGroup.GET("/circuit/status", a.circuitStatus)
 	desktopGroup.POST("/circuit/reset", a.circuitReset)
 
-	group.GET("/:id/updates", a.listUpdates)
-	group.POST("/:id/updates/check", a.checkUpdates)
-	group.POST("/:id/updates/download", a.downloadUpdate)
-	group.POST("/:id/updates/install", a.installUpdate)
-	group.POST("/:id/updates/cancel", a.cancelUpdate)
-	group.POST("/:id/updates/retry", a.retryUpdate)
-	group.POST("/:id/updates/rollback", a.rollbackUpdate)
-	group.GET("/updates/operations/:operationId", a.getOperation)
-	group.GET("/updates/operations/:operationId/steps", a.getOperationSteps)
 }
 
 func (a *DesktopAPIAdapter) reportSnapshotApply(c *gin.Context) {
@@ -218,85 +207,4 @@ func (a *DesktopAPIAdapter) circuitReset(c *gin.Context) {
 		return
 	}
 	ctx.desktopAPI.CircuitReset(c)
-}
-
-func (a *DesktopAPIAdapter) listUpdates(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.ListUpdates(c)
-}
-
-func (a *DesktopAPIAdapter) checkUpdates(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.CheckUpdates(c)
-}
-
-func (a *DesktopAPIAdapter) downloadUpdate(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.DownloadUpdate(c)
-}
-
-func (a *DesktopAPIAdapter) installUpdate(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.InstallUpdate(c)
-}
-
-func (a *DesktopAPIAdapter) cancelUpdate(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.CancelUpdate(c)
-}
-
-func (a *DesktopAPIAdapter) retryUpdate(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.RetryUpdate(c)
-}
-
-func (a *DesktopAPIAdapter) rollbackUpdate(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.RollbackUpdate(c)
-}
-
-func (a *DesktopAPIAdapter) getOperation(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.GetOperation(c)
-}
-
-func (a *DesktopAPIAdapter) getOperationSteps(c *gin.Context) {
-	ctx := a.container()
-	if ctx == nil || ctx.updateAPI == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update manager unavailable"})
-		return
-	}
-	ctx.updateAPI.GetOperationSteps(c)
 }

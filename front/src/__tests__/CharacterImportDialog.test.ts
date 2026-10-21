@@ -49,6 +49,7 @@ describe("角色包导入弹窗", () => {
       },
       format: "tavern_json",
       sourceHash: "source-hash",
+      importId: "import-id",
     });
 
     const state = useCharacterImportExport();
@@ -70,5 +71,38 @@ describe("角色包导入弹窗", () => {
       risks: [],
       sourceHash: "source-hash",
     });
+  });
+
+  it("确认导入携带预览生成的幂等导入编号", async () => {
+    apiMocks.postUpload
+      .mockResolvedValueOnce({
+        preview: { format: "v3_charx", name: "阿澈", lorebookEntryCount: 2, risks: [] },
+        format: "v3_charx",
+        sourceHash: "source-hash",
+        importId: "import-123",
+        roleAuthority: "a".repeat(64),
+      })
+      .mockResolvedValueOnce({
+        importId: "import-123",
+        characterId: "character-1",
+        lorebookEntryCount: 2,
+        worldbookImportedCount: 2,
+      });
+    apiMocks.get.mockResolvedValue([]);
+
+    const state = useCharacterImportExport();
+    const file = new File(["charx"], "character.charx");
+    state.setSelectedFile(file);
+    await state.previewImport();
+    state.importConfirmText.value = "确认导入";
+    await state.confirmImport();
+
+    expect(apiMocks.postUpload).toHaveBeenLastCalledWith(
+      "/api/characters/import-card/confirm",
+      file,
+      "card",
+      expect.anything(),
+      { importId: "import-123" },
+    );
   });
 });

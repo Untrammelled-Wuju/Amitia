@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/interaction"
 )
 
 type ConversationStateProvider struct {

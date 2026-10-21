@@ -1,13 +1,8 @@
-<!--
-Deprecated: Legacy extension architecture.
-Do not add new capabilities. This view is retained only for
-compatibility, maintenance, testing, and migration to Extension Kernel.
--->
 <template>
   <main class="agent-page">
     <ExtensionPageHeader
       title="Agent Skills"
-      description="导入并管理通用 SKILL.md。脚本始终只能查看，不能执行。"
+        description="导入并管理 Extension Kernel 技能包、资源和激活策略。"
     >
       <template #actions
         ><div class="header-actions">
@@ -25,7 +20,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
       type="info"
       :closable="false"
       show-icon
-      description="allowed-tools 不会授予权限；MCP 依赖必须展示计划并经用户确认；scripts 不会执行。"
+      description="allowed-tools 不会授予权限；MCP 依赖必须展示计划并经用户确认；脚本仅通过受控运行时执行。"
     />
 
     <el-card shadow="never">
@@ -65,7 +60,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
       <el-table
         v-loading="loading"
         :data="items"
-        row-key="extensionId"
+        row-key="id"
         empty-text="暂无 Agent Skill"
         stripe
       >
@@ -74,7 +69,7 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
             ><button
               class="name-button"
               type="button"
-              @click="openDetail(row.extensionId)"
+              @click="openDetail(row.id)"
             >
               <strong>{{ row.displayName || row.name }}</strong
               ><code>${{ row.name }}</code>
@@ -110,11 +105,11 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
         >
         <el-table-column label="操作" width="210" fixed="right"
           ><template #default="{ row }"
-            ><el-button @click="openDetail(row.extensionId)">详情</el-button
+            ><el-button @click="openDetail(row.id)">详情</el-button
             ><el-button
               :type="row.enabled ? 'danger' : 'primary'"
               plain
-              :loading="changing === row.extensionId"
+              :loading="changing === row.id"
               :disabled="row.compatibilityStatus === 'blocked' && !row.enabled"
               @click="toggle(row)"
               >{{ row.enabled ? "禁用" : "启用" }}</el-button
@@ -593,7 +588,14 @@ async function install() {
   installing.value = true;
   let installed: AgentSkillDefinition | null = null;
   try {
-    installed = await installAgentSkill(preview.value.previewId);
+    const confirmations = Object.fromEntries(
+      (preview.value.requiredConfirmations || []).map((item) => [item, true]),
+    );
+    installed = await installAgentSkill(
+      preview.value.previewId,
+      confirmations,
+      false,
+    );
     if (dependencyPlan.value) {
       dependencyPlan.value.agentSkillExtensionId = installed.extensionId;
       const result = await installAgentSkillMCPDependencies(
@@ -616,7 +618,7 @@ async function install() {
       await removeAgentSkillMCPDependencies(installed.extensionId).catch(
         () => undefined,
       );
-      await removeAgentSkill(installed.extensionId).catch(
+      await removeAgentSkill(installed.id).catch(
         () => undefined,
       );
     }
@@ -636,13 +638,13 @@ async function openDetail(id: string) {
   }
 }
 async function toggle(item: AgentSkillDefinition) {
-  changing.value = item.extensionId;
+  changing.value = item.id;
   try {
-    await setAgentSkillEnabled(item.extensionId, !item.enabled);
+    await setAgentSkillEnabled(item.id, !item.enabled);
     ElMessage.success(item.enabled ? "已禁用" : "已启用");
     await load();
     if (detailOpen.value)
-      detail.value = await fetchAgentSkill(item.extensionId);
+      detail.value = await fetchAgentSkill(item.id);
   } finally {
     changing.value = "";
   }
@@ -657,7 +659,7 @@ async function removeCurrent() {
   const dependencyResult = await removeAgentSkillMCPDependencies(
     detail.value.definition.extensionId,
   );
-  await removeAgentSkill(detail.value.definition.extensionId);
+  await removeAgentSkill(detail.value.definition.id);
   detailOpen.value = false;
   detail.value = null;
   ElMessage.success("已移除，未删除可能共享的 MCP 服务");

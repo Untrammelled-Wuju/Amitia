@@ -33,9 +33,9 @@ func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel.POST("/extensions/uninstall", api.uninstall)
 	kernel.POST("/extensions/resume-uninstall", api.resumeUninstall)
 	kernel.POST("/extensions/pause", api.pause)
-	kernel.POST("/extensions/rollback", api.rollback)
 	kernel.POST("/extensions/permissions", api.updateExtensionPermission)
 	kernel.GET("/status", api.status)
+	api.registerAgentSkillRoutes(group)
 }
 
 type extensionPermissionView struct {
@@ -615,45 +615,4 @@ func (api *KernelAPI) pause(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"extensionId": extID, "state": "paused"})
-}
-
-func (api *KernelAPI) rollback(c *gin.Context) {
-	if api.runtime == nil || api.runtime.Kernel == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
-		return
-	}
-	var body struct {
-		ID                string `json:"id"`
-		Version           string `json:"version"`
-		ScopeType         string `json:"scopeType"`
-		ScopeID           string `json:"scopeId"`
-		ConfirmationToken string `json:"confirmationToken"`
-	}
-	_ = c.ShouldBindJSON(&body)
-	extID := c.Query("id")
-	version := c.Query("version")
-	scopeType := c.Query("scopeType")
-	scopeID := c.Query("scopeId")
-	confirmationToken := body.ConfirmationToken
-	if extID == "" && body.ID != "" {
-		extID = body.ID
-		version = body.Version
-		scopeType = body.ScopeType
-		scopeID = body.ScopeID
-		confirmationToken = body.ConfirmationToken
-	}
-	if extID == "" || version == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id and version required"})
-		return
-	}
-	if scopeType == "" {
-		scopeType = "global"
-	}
-	result, err := api.runtime.Kernel.ExecutePackageRollback(c.Request.Context(), extID, version, kernelAPIUser(c), scopeType, scopeID, confirmationToken)
-	if err != nil {
-		status, code, msg := kernelruntime.PackageErrorResponse(err)
-		c.JSON(status, gin.H{"error": msg, "code": code})
-		return
-	}
-	c.JSON(http.StatusOK, result)
 }

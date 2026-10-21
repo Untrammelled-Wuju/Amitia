@@ -99,6 +99,63 @@ func TestCoreConsoleTaskCatalogStillRequiresTargetCapabilityGrant(t *testing.T) 
 	}
 }
 
+func TestOwnedTaskDefinitionsReturnCoreDefinitionsUnderTargetScope(t *testing.T) {
+	schemas := newThreeCoreSchemas(t)
+	a, b := newThreeCoreFixture(t, "definitions-a", schemas), newThreeCoreFixture(t, "definitions-b", schemas)
+	pairThreeCoreFixtures(t, a, b)
+	installThreeCoreCatalogTasks(t, a, "1.0.0")
+	b.services.KernelContainer.TaskRuntimeService = task_runtime.NewTaskRuntimeService(kernelsqlite.NewTaskRepository(b.services.KernelContainer.DeviceRegistry.Database()), task_runtime.DefaultTaskRuntimeConfig())
+	local := &task_runtime.TaskDefinition{TaskID: "core-local-task", ExtensionID: "core-extension", ModuleID: "core-module", ContributionID: "core-local-task", Entry: "task.cjs", ExecutionPlacement: task_runtime.TaskExecutionPlacementLocal}
+	if err := b.services.KernelContainer.TaskRuntimeService.PutTaskDefinition(t.Context(), local); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.services.DeviceMesh.Coordination.InitializeCoreConsole(t.Context(), b.core, b.device.DeviceID.String()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.services.DeviceMesh.Coordination.SetCapabilityGrant(t.Context(), b.core, b.device.DeviceID.String(), a.device.DeviceID.String(), "task.execute", 0, true); err != nil {
+		t.Fatal(err)
+	}
+	actor := &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: runtimeidentity.SpaceID(b.core), DeviceID: b.device.DeviceID, IsLocalTrusted: true, Permissions: []string{auth.PermSystemAdmin}}
+	router := gin.New()
+	registerMeshTaskSubmissionRouter(router.Group("/api/device-mesh/v1/business", func(c *gin.Context) {
+		c.Set("actorContext", actor)
+		c.Request = c.Request.WithContext(auth.WithActor(c.Request.Context(), actor))
+	}), b.services, b.core)
+	call := func(method, path string, body []byte, expected int) []byte {
+		t.Helper()
+		request := httptest.NewRequest(method, path, bytes.NewReader(body))
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		if recorder.Code != expected {
+			t.Fatalf("definitions status=%d expected=%d body=%s", recorder.Code, expected, recorder.Body.String())
+		}
+		return recorder.Body.Bytes()
+	}
+	var options struct {
+		Data struct {
+			Scope coordination.ExecutionScope `json:"executionScope"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(call(http.MethodGet, "/api/device-mesh/v1/business/tasks/roles?targetDeviceId="+a.device.DeviceID.String(), nil, http.StatusOK), &options); err != nil {
+		t.Fatal(err)
+	}
+	options.Data.Scope.RoleID, options.Data.Scope.RoleRevision = "one", 3
+	request := meshTaskDefinitionRequest{TargetDeviceID: a.device.DeviceID.String(), RoleID: "one", RequestID: "owned-definitions", ExpectedScope: &options.Data.Scope}
+	body, _ := json.Marshal(request)
+	var result struct {
+		Data struct {
+			Definitions []*task_runtime.TaskDefinition `json:"definitions"`
+			Scope       coordination.ExecutionScope    `json:"executionScope"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(call(http.MethodPost, "/api/device-mesh/v1/business/tasks/definitions", body, http.StatusOK), &result); err != nil || len(result.Data.Definitions) != 1 || result.Data.Definitions[0].TaskID != local.TaskID || result.Data.Scope.RoleID != "one" || result.Data.Scope.RoleRevision != 3 {
+		t.Fatalf("Owner 任务定义响应无效: %+v %v", result, err)
+	}
+	request.ExpectedScope = nil
+	missingScope, _ := json.Marshal(request)
+	call(http.MethodPost, "/api/device-mesh/v1/business/tasks/definitions", missingScope, http.StatusBadRequest)
+}
+
 func readThreeCoreCatalogAuthority(t *testing.T, provider, caller, target *threeCoreFixture) coordination.ExecutionScope {
 	t.Helper()
 	var options struct {

@@ -11,7 +11,7 @@ import (
 	"unicode"
 
 	"github.com/u-ai/backend/internal/asr"
-	"github.com/u-ai/backend/internal/realtime"
+	realtime "github.com/u-ai/backend/internal/devicemesh/wake"
 )
 
 const (

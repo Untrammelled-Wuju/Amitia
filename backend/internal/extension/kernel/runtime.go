@@ -254,6 +254,12 @@ func (r *Runtime) SetContainer(c *Container) {
 	r.mu.Lock()
 	r.container = c
 	r.mu.Unlock()
+	if c != nil && c.AcquisitionSkillPort != nil {
+		c.AcquisitionSkillPort.BindRuntime(r)
+	}
+	if c != nil && c.AgentSkillRuntime != nil {
+		c.AgentSkillRuntime.BindRuntime(r)
+	}
 }
 
 func (r *Runtime) SetSagaRepo(repo *LifecycleSagaRepository) {

@@ -177,7 +177,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	snapshot := coordination.DataSnapshot{OwnerID: p.ownerID, Role: role, Resources: make([]coordination.Resource, 0), NextCursors: make(map[string]string)}
 	usableMemories := make(map[string]bool)
-	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "project", "tool-result"} {
+	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "project", "tool-result", "worldbook", coordination.RuntimeStateKindPsyche, coordination.RuntimeStateKindRelationship, coordination.RuntimeStateKindNeeds} {
 		if kind == "tool-result" && !query.RuntimeTurns {
 			continue
 		}
@@ -200,7 +200,13 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 				resourceQuery.ResourceID = lease.ContinuityID
 			}
 		}
-		resources, nextCursor, err := p.store.ListPage(ctx, kind, partition, resourceQuery)
+		var resources []coordination.Resource
+		var nextCursor string
+		if kind == "worldbook" {
+			resources, err = p.listAllWorldbookResources(ctx, partition, resourceQuery)
+		} else {
+			resources, nextCursor, err = p.store.ListPage(ctx, kind, partition, resourceQuery)
+		}
 		if err != nil {
 			return snapshot, err
 		}
@@ -301,6 +307,13 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			}
 			snapshot.Resources = append(snapshot.Resources, resource)
 		}
+	}
+	if (query.ResourceKind == "" || query.ResourceKind == "worldbook") && scope.WorldbookRoleID != coordination.GlobalWorldbookRole {
+		resources, err := p.listAllWorldbookResources(ctx, coordination.GlobalWorldbookRole, coordination.DataQuery{ResourceKind: "worldbook"})
+		if err != nil {
+			return snapshot, err
+		}
+		snapshot.Resources = append(snapshot.Resources, resources...)
 	}
 	conversationIndexes := make([]int, 0)
 	conversationBodies := make([]json.RawMessage, 0)
@@ -424,15 +437,37 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 	}
 	if !query.Management && query.ResourceKind == "" {
-		if p.services.WorldBook != nil {
-			snapshot.WorldBookPrompt = p.services.WorldBook.ToSystemPromptForSpace(p.legacySpaceID, scope.RoleID, query.Query, "")
-		}
 		snapshot.RuntimeContext, err = p.ownedRuntimeContext(ctx, scope, query)
 		if err != nil {
 			return snapshot, err
 		}
 	}
 	return snapshot, coordination.ValidateSnapshot(scope, snapshot)
+}
+
+func (p *meshLocalDataPort) listAllWorldbookResources(ctx context.Context, partition string, query coordination.DataQuery) ([]coordination.Resource, error) {
+	result := make([]coordination.Resource, 0, 128)
+	cursor := ""
+	for {
+		pageQuery := query
+		pageQuery.Cursor = cursor
+		pageQuery.Limit = 128
+		page, next, err := p.store.ListPage(ctx, "worldbook", partition, pageQuery)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, page...)
+		if len(result) > 4096 {
+			return nil, coordination.ErrPendingLimit
+		}
+		if next == "" {
+			return result, nil
+		}
+		if next == cursor {
+			return nil, coordination.ErrWrongOwner
+		}
+		cursor = next
+	}
 }
 
 func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope coordination.ExecutionScope) ([]json.RawMessage, error) {

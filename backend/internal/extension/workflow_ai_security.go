@@ -1,8 +1,11 @@
 package extension
 
 import (
+	"regexp"
 	"strings"
 )
+
+var workflowSecretPattern = regexp.MustCompile(`(?i)(api[_ -]?key|access[_ -]?token|secret|password|authorization)\s*[:=]\s*["']?[A-Za-z0-9_\-]{12,}`)
 
 type generationSecretIssue struct {
 	Level   string
@@ -10,7 +13,7 @@ type generationSecretIssue struct {
 }
 
 func ScanWorkflowSecrets(raw []byte) []generationSecretIssue {
-	if len(raw) == 0 || !secretPattern.Match(raw) {
+	if len(raw) == 0 || !workflowSecretPattern.Match(raw) {
 		return nil
 	}
 	return []generationSecretIssue{{Level: "error", Message: "possible plaintext secret detected"}}

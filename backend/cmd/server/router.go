@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
@@ -49,21 +48,19 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
-	workflowkernel "github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/imagegen"
-	"github.com/u-ai/backend/internal/knowledge"
 	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
-	"github.com/u-ai/backend/internal/mcpapi"
+	"github.com/u-ai/backend/internal/knowledge"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/api"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/notificationruntime"
-	"github.com/u-ai/backend/internal/realtime"
 	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
@@ -81,7 +78,6 @@ import (
 	"github.com/u-ai/backend/internal/workbenchtasks"
 	"github.com/u-ai/backend/internal/workbenchterminal"
 	"github.com/u-ai/backend/internal/workspace"
-	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 )
@@ -492,8 +488,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		})
 	}
 
-	if services.MCPCompatibility != nil {
-		mcpapi.RegisterOAuthCallback(r, services.MCPCompatibility.API)
+	if services.MCPRuntime != nil {
+		mcpapi.RegisterOAuthCallback(r, services.MCPRuntime.API)
 	}
 
 	// ASR providers such as Volcengine fetch audio by URL. Expose only the
@@ -555,8 +551,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": updated})
 		})
 		registerAndroidAutomationStatusRoute(apiGroup, services)
-		if services.MCPCompatibility != nil {
-			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPCompatibility.API)
+		if services.MCPRuntime != nil {
+			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPRuntime.API)
 		}
 		if services.Sync != nil && services.Sync.ChangeLog != nil {
 			character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, ownedCharacterPreview{services: services}, services.Sync.ChangeLog)
@@ -571,7 +567,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.KernelContainer != nil {
 			agentToolFacade = services.KernelContainer.ToolFacade
 		}
-		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		knowledge.RegisterKnowledgeRouter(apiGroup, services.Knowledge)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		userfeedback.RegisterRouter(apiGroup, ctx)
@@ -596,58 +591,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, services.Continuity, services.ContinuityCoordinator, channelAccess, systemRouterOptions...)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
-		if services.AdapterManager != nil {
-			realtime.SetDesktopPetVoiceObserver(newDesktopPetLifecycleBridge(services.AdapterManager))
-		}
-		realtime.SetWorkflowTriggerPublisher(func(callCtx context.Context, event realtime.VoiceWorkflowTriggerEvent) error {
-			if services.RuntimeProfile == runtimeprofile.ProfileCloudCore || services.KernelContainer == nil || services.KernelContainer.WorkflowTriggerManager == nil {
-				return nil
-			}
-			spaceID := strings.TrimSpace(event.SpaceID)
-			if spaceID == "" || strings.TrimSpace(event.EventID) == "" || strings.TrimSpace(event.EventType) == "" {
-				return nil
-			}
-			return services.KernelContainer.WorkflowTriggerManager.HandleStructuredEvent(callCtx, workflowkernel.WorkflowTriggerEvent{
-				EventID: event.EventID, EventType: "space:" + spaceID + ":" + event.EventType, Source: event.Source,
-				OwnerSpaceID: spaceID, OccurredAt: time.Now().UTC(), Payload: event.Payload,
-			}, workflowkernel.ExecutionContext{SpaceID: spaceID})
-		})
-		realtime.SetCascadeVoiceProvider(func(callCtx context.Context, req realtime.CascadeVoiceGenerationRequest, onDelta func(string) error) error {
-			history := make([]chat.VoiceStreamTurn, 0, len(req.History))
-			for _, turn := range req.History {
-				history = append(history, chat.VoiceStreamTurn{UserText: turn.UserText, SpeechText: turn.SpeechText})
-			}
-			spaceID, spaceErr := uuid.Parse(req.SpaceID)
-			if spaceErr != nil {
-				return spaceErr
-			}
-			characterID, characterErr := uuid.Parse(req.CharacterID)
-			if characterErr != nil {
-				return characterErr
-			}
-			return services.Chat.GenerateVoiceStream(callCtx, spaceID, characterID, req.SystemPrompt, history, req.RollingSummary, req.UserText, onDelta)
-		}, services.Chat.RealtimeVoiceReady)
-		realtime.SetCascadeRollingSummarizer(func(callCtx context.Context, existingSummary, rawTurns string) (string, error) {
-			return services.Chat.SummarizeRealtimeVoiceRollingContext(callCtx, existingSummary, rawTurns)
-		})
-		realtime.SetCascadeEmotionProvider(cascadeEmotionAdapter{chat: services.Chat})
-		if err := realtime.CascadeVoiceReadiness(); err != nil {
-			log.Warn("realtime voice not ready:", err.Error())
-		} else {
-			log.Info("realtime voice ready")
-		}
-		realtime.RegisterRealtimeRouter(apiGroup, ctx, services.Vision)
-		r.GET("/api/realtime/v2/ws/session", realtime.HandleTicketedSession)
 		registerMeshRealtimePublicRoutes(r, services)
-		r.GET("/api/realtime/v2/ws/visual", realtime.HandleTicketedVisualSession)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
 		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx, services.PathRegistry)
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, services.Readiness)
-		system.RegisterPsycheAPIRouter(apiGroup)
-		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB, services.MemoryConsumers.Beliefs)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)

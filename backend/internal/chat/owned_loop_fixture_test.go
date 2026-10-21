@@ -20,10 +20,13 @@ type ownedLoopTestRuntime struct {
 }
 
 type ownedFixtureToolRuntime interface {
-	ExecuteModelTool(context.Context,string,json.RawMessage,SkillScope,string)(ToolResult,bool)
+	ExecuteModelTool(context.Context, string, json.RawMessage, SkillScope, string) (ToolResult, bool)
 }
 
-func (a *ownedCitationAudit) captureToolResultFixture(_ context.Context,_ string,name,result,_ string,_ string,_ int64)error{a.captureCitationIDs(name,result);return nil}
+func (a *ownedCitationAudit) captureToolResultFixture(_ context.Context, _ string, name, result, _ string, _ string, _ int64) error {
+	a.captureCitationIDs(name, result)
+	return nil
+}
 
 func (r *ownedLoopTestRuntime) Tools(context.Context, business.Inference) ([]tool.Tool, error) {
 	return r.definitions, nil
@@ -51,7 +54,7 @@ func (s *service) invokeOwnedLoopFixture(ctx context.Context, cfg *ModelConfig, 
 	if exec != nil && exec.WorkspaceID != "" {
 		inference.Workspaces = []business.ProjectWorkspace{{ID: exec.WorkspaceID}}
 	}
-	inference.RecoveredRuntime=recovered
+	inference.RecoveredRuntime = recovered
 
 	result, err := s.generateOwnedWithTools(ctx, inference, cfg, messages, &ownedReplySink{inference: inference})
 	return result.Text, result.Reasoning, result.ForceVoice, result.Tokens, result.ReasoningDurationMS, err

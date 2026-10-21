@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -10,21 +11,22 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/persistence"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
-	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/log"
 
 	"gorm.io/gorm"
 )
 
 type AssemblyDeps struct {
-	DB                *gorm.DB
-	ActivePetPort     behavior.ActivePetPort
-	RuntimeActionPort behavior.RuntimeActionPort
-	InstallRepo       installation.Repository
-	PsycheStore       psyche.PsycheStore
-	DataDir           string
-	ShadowMode        bool
-	RuntimeCmdOn      bool
+	DB                 *gorm.DB
+	ActivePetPort      behavior.ActivePetPort
+	RuntimeActionPort  behavior.RuntimeActionPort
+	InstallRepo        installation.Repository
+	AffectPort         behavior.CharacterAffectPort
+	RuntimeStateDB     *sql.DB
+	RuntimeStateOwners []string
+	DataDir            string
+	ShadowMode         bool
+	RuntimeCmdOn       bool
 }
 
 type AssembledBehavior struct {
@@ -39,8 +41,8 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 	if deps.DB == nil {
 		return nil, fmt.Errorf("wiring/assembly: DB is required")
 	}
-	if deps.PsycheStore == nil {
-		return nil, fmt.Errorf("wiring/assembly: PsycheStore is required")
+	if deps.AffectPort == nil && (deps.RuntimeStateDB == nil || len(deps.RuntimeStateOwners) == 0) {
+		return nil, fmt.Errorf("wiring/assembly: owned runtime state is required")
 	}
 
 	stateRepo := persistence.NewGormBehaviorStateRepository(deps.DB)
@@ -60,7 +62,12 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 	} else {
 		runtimeActionPort = &NoopRuntimeActionPort{}
 	}
-	affectPort := NewAffectAdapter(deps.PsycheStore)
+	var affectPort behavior.CharacterAffectPort
+	if deps.AffectPort != nil {
+		affectPort = deps.AffectPort
+	} else {
+		affectPort = NewOwnedAffectAdapter(deps.RuntimeStateDB, deps.RuntimeStateOwners)
+	}
 	activityPort := NewActivityAdapter(behavior.NewRealClock())
 
 	clock := behavior.NewRealClock()

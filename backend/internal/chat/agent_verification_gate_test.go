@@ -51,7 +51,7 @@ func workspaceVerificationCall(id, name, args string) []map[string]interface{} {
 
 func testWorkspaceVerificationRun(t *testing.T, runtime *verificationGateRuntime, toolDefinitions []tool.Tool, model func([]map[string]interface{}) (string, []map[string]interface{})) (string, error) {
 	t.Helper()
-	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime: runtime}}
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		content, calls := model(messages)
 		return content, "", calls, 1, nil
@@ -194,7 +194,7 @@ func TestDuplicateModelToolIDsFailBeforeAnySideEffects(t *testing.T) {
 	runtime := &verificationGateRuntime{}
 	definitions := []tool.Tool{{Function: tool.Function{Name: "apply_file"}}}
 	rounds := 0
-	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime: runtime}}
 	svc.llmWithTools = func(context.Context, *ModelConfig, []map[string]interface{}, []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		rounds++
 		calls := workspaceVerificationCall("same-id", "apply_file", `{"path":"a.go"}`)

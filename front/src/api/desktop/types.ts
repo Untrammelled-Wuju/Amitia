@@ -51,43 +51,6 @@ export interface ConflictRecord {
   createdAt: string
 }
 
-export interface ExtensionUpdateMeta {
-  extensionId: string
-  version: string
-  manifestVersion: number
-  packageUrl: string
-  packageSha256: string
-  packageSize: number
-  publisherId: string
-  publisherKeyId?: string
-  signature?: string
-  minimumHostVersion?: string
-  maximumHostVersion?: string
-  supportedPlatforms?: string[]
-  supportedArch?: string[]
-  publishedAt: string
-  releaseChannel?: string
-}
-
-export interface UpdateOperationInfo {
-  operationId: string
-  extensionId: string
-  status: string
-  version?: string
-  createdAt: string
-  updatedAt: string
-  error?: string
-}
-
-export interface UpdateOperationStepInfo {
-  stepId: string
-  name: string
-  status: string
-  startedAt?: string
-  endedAt?: string
-  error?: string
-}
-
 export interface DesktopContract {
   contractId: string
   version: number

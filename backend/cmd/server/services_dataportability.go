@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"runtime"
 
@@ -13,8 +14,6 @@ import (
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/migration"
-	"github.com/u-ai/backend/internal/psyche"
-	"github.com/u-ai/backend/internal/relationship"
 	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/system/dataportability"
@@ -28,6 +27,7 @@ import (
 type dataPortabilityDeps struct {
 	DataDir   string
 	DB        *gorm.DB
+	KernelDB  *sql.DB
 	Memory    business.MemoryArchivePort
 	ExtSvc    *extension.Runtime
 	Workspace *workspace.Service
@@ -43,15 +43,14 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 		dataportability.NewCharacterContributor(deps.DB),
 		business.NewMemoryBackupContributor(deps.Memory),
 		chat.NewChatBackupContributor(deps.DB),
-		relationship.NewRelationshipBackupContributor(deps.DB),
-		psyche.NewPsycheBackupContributor(deps.DB),
-		worldbook.NewWorldbookBackupContributor(deps.DB),
+		business.NewRuntimeStateBackupContributor(deps.KernelDB),
+		worldbook.NewWorldbookBackupContributor(deps.KernelDB),
 		system.NewSettingsBackupContributor(deps.DB),
 		chat.NewModelConfigBackupContributor(deps.DB),
 		tts.NewVoiceBackupContributor(deps.DB),
 		embedding_config.NewEmbeddingBackupContributor(deps.DB),
 		system.NewResourceBackupContributor(deps.DB, deps.DataDir),
-		extension.NewExtensionBackupContributor(deps.DB),
+		extension.NewExtensionBackupContributor(deps.KernelDB, deps.ExtSvc.Kernel),
 		workspace.NewWorkspaceBackupContributor(deps.DB),
 	}
 

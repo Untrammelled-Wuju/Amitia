@@ -30,6 +30,7 @@ type realtimeOwnedModel struct {
 	frames    atomic.Int32
 	started   chan struct{}
 	cancelled chan struct{}
+	speech    chan business.SpeechInference
 }
 
 func (m *realtimeOwnedModel) TranscribeOwnedAudio(ctx context.Context, input business.Inference, item business.Attachment) (string, error) {
@@ -50,13 +51,22 @@ func (m *realtimeOwnedModel) GenerateOwnedReply(ctx context.Context, input busin
 	return m.threeCoreMemoryModel.GenerateOwnedReply(ctx, input)
 }
 
-func (m *realtimeOwnedModel) GenerateOwnedSpeech(context.Context, business.SpeechInference) ([]byte, error) {
+func (m *realtimeOwnedModel) GenerateOwnedSpeech(_ context.Context, input business.SpeechInference) ([]byte, error) {
+	if m.speech != nil {
+		m.speech <- input
+	}
 	return []byte("ID3owned realtime"), nil
 }
 
-func realtimeTicketHTTP(t *testing.T, provider, caller *threeCoreFixture, scope coordination.ExecutionScope, origin string) map[string]any {
+func realtimeTicketHTTP(t *testing.T, provider, caller *threeCoreFixture, scope coordination.ExecutionScope, origin string, media ...map[string]any) map[string]any {
 	t.Helper()
-	body, _ := json.Marshal(business.Request{RoleID: "one", RequestID: uuid.NewString(), ExpectedScope: &scope})
+	payload := map[string]any{"characterId": "one", "requestId": uuid.NewString(), "expectedExecutionScope": scope}
+	for _, values := range media {
+		for key, value := range values {
+			payload[key] = value
+		}
+	}
+	body, _ := json.Marshal(payload)
 	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, provider.endpoint.URL+"/api/device-mesh/v1/business/realtime/tickets", bytes.NewReader(body))
 	credential, err := caller.local.LoadCredential()
 	if err != nil {
@@ -106,10 +116,26 @@ func TestOwnedRealtimeRealTLSRejectsReplayForeignCoreOriginAndSavesEachMode(t *t
 	for _, fixture := range []*threeCoreFixture{a, b, c} {
 		registerMeshRealtimePublicRoutes(fixture.router, fixture.services)
 	}
-	model := &realtimeOwnedModel{threeCoreMemoryModel: &threeCoreMemoryModel{core: b.core}, source: a}
+	model := &realtimeOwnedModel{threeCoreMemoryModel: &threeCoreMemoryModel{core: b.core}, source: a, speech: make(chan business.SpeechInference, 8)}
 	b.services.OwnedBusiness = business.NewEngine(b.services.DeviceMesh.Coordination, b.services.DeviceMesh, model)
 	pairThreeCoreFixtures(t, a, b)
 	scope := threeCoreSpeechScope(t, b, a)
+	for _, legacy := range []struct{ method, path string }{{http.MethodPost, "/api/realtime/v2/tickets"}, {http.MethodGet, "/api/voice/status"}} {
+		request, _ := http.NewRequestWithContext(t.Context(), legacy.method, b.endpoint.URL+legacy.path, bytes.NewReader([]byte(`{}`)))
+		request.Header.Set("Content-Type", "application/json")
+		response, err := b.http.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("旧实时路由仍然可用: %s status=%d", legacy.path, response.StatusCode)
+		}
+	}
+	customTicket := realtimeTicketHTTP(t, b, a, scope, "", map[string]any{"voiceType": "voice.custom", "resourceId": "resource.custom", "dialogId": "dialog.custom"})
+	if customTicket["voiceType"] != "voice.custom" || customTicket["resourceId"] != "resource.custom" || customTicket["dialogId"] != "dialog.custom" {
+		t.Fatal("新实时票据丢失音色、资源或对话元数据")
+	}
 	for _, wrong := range []string{"foreignCore", "origin"} {
 		ticket := realtimeTicketHTTP(t, b, a, scope, "https://app.example")
 		provider, origin := b, "https://foreign.example"
@@ -134,6 +160,9 @@ func TestOwnedRealtimeRealTLSRejectsReplayForeignCoreOriginAndSavesEachMode(t *t
 			scope = threeCoreSpeechScope(t, b, a)
 		}
 		ticket := realtimeTicketHTTP(t, b, a, scope, "")
+		if !coordinated {
+			ticket = realtimeTicketHTTP(t, b, a, scope, "", map[string]any{"voiceType": "voice.custom", "resourceId": "resource.custom"})
+		}
 		conn, _, err := realtimeDial(t, b, ticket, "")
 		if err != nil {
 			t.Fatal(err)
@@ -142,6 +171,9 @@ func TestOwnedRealtimeRealTLSRejectsReplayForeignCoreOriginAndSavesEachMode(t *t
 		var ready map[string]any
 		if conn.ReadJSON(&ready) != nil || ready["type"] != "ready" {
 			t.Fatal("missing original scope readiness")
+		}
+		if ready["capabilities"] == nil || ready["voiceType"] == nil || ready["resourceId"] == nil {
+			t.Fatal("实时就绪帧缺少统一能力或音频配置")
 		}
 		requestID := uuid.NewString()
 		if err := conn.WriteJSON(map[string]any{"type": "turn_start", "requestId": requestID, "expectedExecutionScope": scope}); err != nil {
@@ -202,6 +234,11 @@ func TestOwnedRealtimeRealTLSRejectsReplayForeignCoreOriginAndSavesEachMode(t *t
 	}
 	if model.asr.Load() != 2 || model.frames.Load() != 2 {
 		t.Fatal("realtime bypassed Core ASR")
+	}
+	firstSpeech := <-model.speech
+	secondSpeech := <-model.speech
+	if firstSpeech.VoiceType != "voice.custom" || firstSpeech.ResourceID != "resource.custom" || secondSpeech.VoiceType != "" || secondSpeech.ResourceID != "" {
+		t.Fatal("实时朗读没有继承当前票据的音色与资源配置")
 	}
 }
 

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +9,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../core/services/extension_task_service.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../presentation/providers/agent_tasks_provider.dart';
@@ -80,29 +85,11 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       ),
       builder: (sheetCtx) {
         return _CreateTaskSheet(
-          onCreate:
-              (
-                taskDefinitionId,
-                title,
-                desc,
-                abilities,
-                stepCount,
-                deviceId,
-              ) async {
-                await ref
-                    .read(agentTasksProvider.notifier)
-                    .createTask(
-                      taskDefinitionId: taskDefinitionId,
-                      title: title,
-                      description: desc,
-                      abilities: abilities,
-                      stepCount: stepCount,
-                      deviceId: deviceId,
-                    );
-                if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-                if (mounted)
-                  amitiaSnackBar(context, '任务已提交到选定的 TaskDefinition');
-              },
+          onCreate: (submission) async {
+            await ref.read(agentTasksProvider.notifier).createTask(submission);
+            if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+            if (mounted) amitiaSnackBar(context, '任务已提交到选定的 TaskDefinition');
+          },
         );
       },
     );
@@ -528,15 +515,7 @@ const Map<String, List<String>> _quickTaskAbilities = {
 };
 
 class _CreateTaskSheet extends ConsumerStatefulWidget {
-  final Future<void> Function(
-    String taskDefinitionId,
-    String title,
-    String description,
-    List<String> abilities,
-    int stepCount,
-    String? deviceId,
-  )
-  onCreate;
+  final Future<void> Function(Map<String, dynamic> submission) onCreate;
 
   const _CreateTaskSheet({required this.onCreate});
 
@@ -549,9 +528,17 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
   final _descCtrl = TextEditingController();
   final List<String> _abilities = [];
   int _stepCount = 3;
-  String? _taskDefinitionId;
-  String _taskExecutionPlacement = '';
   String? _deviceId;
+  Map<String, dynamic>? _roleOptions;
+  String _roleId = '';
+  List<AgentTaskDefinitionOption> _definitions = const [];
+  String? _definitionId;
+  bool _authorityLoading = false;
+  bool _definitionsLoading = false;
+  String? _authorityError;
+  int _loadGeneration = 0;
+  String _submissionKey = '';
+  String _requestId = '';
   bool _submitting = false;
   _QuickTask? _selectedQuickTask;
 
@@ -607,6 +594,147 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
     });
   }
 
+  Future<void> _selectDevice(String? value) async {
+    final target = (value ?? '').trim();
+    final generation = ++_loadGeneration;
+    setState(() {
+      _deviceId = target.isEmpty ? null : target;
+      _roleOptions = null;
+      _roleId = '';
+      _definitions = const [];
+      _definitionId = null;
+      _authorityError = null;
+      _authorityLoading = target.isNotEmpty;
+      _definitionsLoading = false;
+      _submissionKey = '';
+      _requestId = '';
+    });
+    if (target.isEmpty) return;
+    try {
+      final options = await ref
+          .read(extensionTaskServiceProvider)
+          .prepareOwnedTask(target);
+      if (!mounted || generation != _loadGeneration) return;
+      final roles = (options['roles'] as List).whereType<Map>().toList();
+      final preferred = (options['selectedRole'] ?? '').toString();
+      final roleId = roles.length == 1
+          ? roles.single['id'].toString()
+          : roles.any((role) => role['id'] == preferred)
+          ? preferred
+          : '';
+      setState(() {
+        _roleOptions = options;
+        _roleId = roleId;
+        _authorityLoading = false;
+        if (roles.isEmpty) _authorityError = '目标数据来源没有可用角色，拒绝调用';
+      });
+      if (roleId.isNotEmpty) await _loadDefinitions(generation);
+    } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _authorityLoading = false;
+        _authorityError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _selectRole(String? value) async {
+    final roleId = (value ?? '').trim();
+    final generation = ++_loadGeneration;
+    setState(() {
+      _roleId = roleId;
+      _definitions = const [];
+      _definitionId = null;
+      _definitionsLoading = roleId.isNotEmpty;
+      _authorityError = null;
+      _submissionKey = '';
+      _requestId = '';
+    });
+    if (roleId.isNotEmpty) await _loadDefinitions(generation);
+  }
+
+  Future<List<Map<String, dynamic>>> _loadDeviceCatalog(
+    ExtensionTaskService service,
+    Map<String, dynamic> options,
+    String roleId,
+  ) async {
+    final entries = <Map<String, dynamic>>[];
+    final seen = <String>{};
+    String cursor = '';
+    String? revision;
+    do {
+      final page = await service.listOwnedDeviceTaskCatalog(
+        options,
+        roleId,
+        cursor: cursor,
+      );
+      if (revision != null && revision != page['revision'])
+        throw StateError('设备任务目录已更新，请重新选择角色');
+      revision = page['revision'].toString();
+      final rows = page['entries'];
+      if (rows is! List) throw StateError('设备任务目录响应无效');
+      for (final raw in rows) {
+        if (raw is! Map) throw StateError('设备任务目录条目无效');
+        final entry = Map<String, dynamic>.from(raw);
+        final option = AgentTaskDefinitionOption.fromCatalog(entry);
+        if (option.optionId.isEmpty || !seen.add(option.optionId))
+          throw StateError('设备任务目录出现无效或重复条目');
+        entries.add(entry);
+      }
+      if (entries.length > 256) throw StateError('设备任务目录超过上限');
+      final next = (page['nextCursor'] ?? '').toString();
+      if (next.isNotEmpty && (next == cursor || rows.isEmpty))
+        throw StateError('设备任务目录分页无效');
+      cursor = next;
+    } while (cursor.isNotEmpty);
+    return entries;
+  }
+
+  Future<void> _loadDefinitions(int generation) async {
+    final options = _roleOptions;
+    final roleId = _roleId;
+    if (options == null || roleId.isEmpty) return;
+    final service = ref.read(extensionTaskServiceProvider);
+    setState(() {
+      _definitionsLoading = true;
+      _definitions = const [];
+      _definitionId = null;
+      _authorityError = null;
+    });
+    try {
+      final localFuture = service.listOwnedTaskDefinitions(options, roleId);
+      final catalog = await _loadDeviceCatalog(service, options, roleId);
+      final local = await localFuture;
+      if (!mounted || generation != _loadGeneration) return;
+      final result = <AgentTaskDefinitionOption>[];
+      final seen = <String>{};
+      for (final row in local) {
+        final option = AgentTaskDefinitionOption.fromLocal(row);
+        if (option.optionId.isEmpty || !seen.add(option.optionId))
+          throw StateError('任务定义缺少唯一标识或出现重复');
+        result.add(option);
+      }
+      for (final entry in catalog) {
+        final option = AgentTaskDefinitionOption.fromCatalog(entry);
+        if (!seen.add(option.optionId)) throw StateError('设备任务目录与当前任务定义冲突');
+        result.add(option);
+      }
+      if (result.length > 256) throw StateError('可用任务定义超过上限');
+      setState(() {
+        _definitions = result;
+        _definitionsLoading = false;
+        if (result.isEmpty) _authorityError = '目标设备没有可执行的任务定义';
+      });
+    } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _definitions = const [];
+        _definitionsLoading = false;
+        _authorityError = error.toString();
+      });
+    }
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
     final title = _titleCtrl.text.trim();
@@ -614,12 +742,19 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
       amitiaSnackBar(context, '请输入任务名称');
       return;
     }
-    if ((_taskDefinitionId ?? '').isEmpty) {
-      amitiaSnackBar(context, '请选择实际执行的 Kernel Task 定义');
+    final option = _definitions
+        .where((item) => item.optionId == _definitionId)
+        .firstOrNull;
+    if ((_deviceId ?? '').isEmpty) {
+      amitiaSnackBar(context, '请选择目标设备');
       return;
     }
-    if (_taskExecutionPlacement == 'device' && (_deviceId ?? '').isEmpty) {
-      amitiaSnackBar(context, '设备任务需要选择在线设备');
+    if (_roleOptions == null || _roleId.isEmpty) {
+      amitiaSnackBar(context, '请选择目标数据归属角色');
+      return;
+    }
+    if (option == null) {
+      amitiaSnackBar(context, '请选择目标设备目录中的真实任务定义');
       return;
     }
     final desc = _descCtrl.text.trim();
@@ -628,14 +763,67 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
         : List<String>.from(_abilities);
     setState(() => _submitting = true);
     try {
-      await widget.onCreate(
-        _taskDefinitionId!,
-        title,
-        desc,
-        abilities,
-        _stepCount,
-        _taskExecutionPlacement == 'device' ? _deviceId : null,
-      );
+      final service = ref.read(extensionTaskServiceProvider);
+      final current = await service.prepareOwnedTask(_deviceId!);
+      final expected = _roleOptions!['executionScope'] as Map;
+      final role = (_roleOptions!['roles'] as List)
+          .whereType<Map>()
+          .where((item) => item['id'] == _roleId)
+          .firstOrNull;
+      final actual = current['executionScope'] as Map;
+      final fields = [
+        'coreId',
+        'modeRevision',
+        'providerEpoch',
+        'permissionRevision',
+        'targetPermissionRevision',
+        'targetProviderEpoch',
+        'resourceOwnerId',
+      ];
+      if (role == null ||
+          fields.any((field) => actual[field] != expected[field]) ||
+          !(current['roles'] as List).whereType<Map>().any(
+            (item) =>
+                item['id'] == _roleId && item['revision'] == role['revision'],
+          )) {
+        throw StateError(
+          actual['coreId'] != expected['coreId']
+              ? '服务提供者已从「${expected['coreId']}」切换为「${actual['coreId']}」，请刷新后重新提交。'
+              : '目标角色、权限或统筹状态已变化，请刷新后重新提交',
+        );
+      }
+      final body = <String, dynamic>{
+        'taskDefinitionId': option.taskId,
+        if (option.taskCatalogReference != null)
+          'taskCatalogReference': option.taskCatalogReference,
+        'targetDeviceId': _deviceId,
+        'characterId': _roleId,
+        'input': {
+          'title': title,
+          'description': desc,
+          'requiredAbilities': abilities,
+          'stepCount': _stepCount,
+        },
+        'expectedCoreId': expected['coreId'],
+        'expectedModeRevision': expected['modeRevision'],
+        'expectedRoleRevision': role['revision'],
+        'expectedExecutionScope': {
+          ...Map<String, dynamic>.from(expected),
+          'requestId': '',
+          'turnId': '',
+          'executionId': '',
+          'roleId': _roleId,
+          'roleRevision': role['revision'],
+        },
+      };
+      final key = jsonEncode(body);
+      if (_submissionKey != key) {
+        final random = Random.secure();
+        _submissionKey = key;
+        _requestId =
+            'agent-${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
+      }
+      await widget.onCreate({...body, 'requestId': _requestId});
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '任务创建失败：$error');
     } finally {
@@ -759,14 +947,7 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final definitionsAsync = ref.watch(agentTaskDefinitionsProvider);
-    final deviceTaskSelected = _taskExecutionPlacement == 'device';
-    final AsyncValue<List<AgentTaskDeviceOption>> devicesAsync =
-        deviceTaskSelected
-        ? ref.watch(agentTaskDevicesProvider)
-        : const AsyncData<List<AgentTaskDeviceOption>>(
-            <AgentTaskDeviceOption>[],
-          );
+    final devicesAsync = ref.watch(agentTaskDevicesProvider);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -787,164 +968,160 @@ class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
               _buildQuickTaskSelector(),
               const SizedBox(height: 16),
               Text(
-                '执行定义',
+                '目标设备',
                 style: AppTypography.label(
                   context,
                 ).copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 6),
-              definitionsAsync.when(
+              devicesAsync.when(
                 loading: () => const LinearProgressIndicator(),
                 error: (error, _) => Text(
-                  '任务定义加载失败：$error',
+                  '在线设备加载失败：$error',
                   style: AppTypography.caption(
                     context,
                   ).copyWith(color: context.error),
                 ),
-                data: (definitions) {
-                  if (definitions.isEmpty) {
+                data: (devices) {
+                  if (devices.isEmpty) {
                     return Text(
-                      '当前没有可执行的 Kernel Task 定义',
+                      '当前没有在线设备，无法读取真实任务目录。',
                       style: AppTypography.caption(
                         context,
                       ).copyWith(color: context.warning),
                     );
                   }
-                  final selectedDefinitionID = _taskDefinitionId;
-                  final selectedDefinitionIsValid =
-                      selectedDefinitionID == null ||
-                      definitions.any(
-                        (item) => item.taskId == selectedDefinitionID,
-                      );
-                  final dropdownDefinitionID = selectedDefinitionIsValid
-                      ? selectedDefinitionID
-                      : null;
-                  if (!selectedDefinitionIsValid) {
+                  final selectedDevice = devices
+                      .where((item) => item.deviceId == _deviceId)
+                      .firstOrNull;
+                  if (_deviceId == null && devices.length == 1) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      final currentID = _taskDefinitionId;
-                      if (currentID != null &&
-                          !definitions.any(
-                            (item) => item.taskId == currentID,
-                          )) {
-                        setState(() {
-                          _taskDefinitionId = null;
-                          _taskExecutionPlacement = '';
-                          _deviceId = null;
-                        });
-                      }
+                      if (mounted && _deviceId == null)
+                        _selectDevice(devices.single.deviceId);
                     });
                   }
                   return DropdownButtonFormField<String>(
-                    value: dropdownDefinitionID,
+                    value: selectedDevice?.deviceId,
                     isExpanded: true,
-                    decoration: const InputDecoration(
-                      hintText: '选择真正要执行的 TaskDefinition',
-                    ),
-                    items: definitions
+                    decoration: const InputDecoration(hintText: '选择在线设备'),
+                    items: devices
                         .map(
                           (item) => DropdownMenuItem<String>(
-                            value: item.taskId,
+                            value: item.deviceId,
                             child: Text(
-                              item.label,
+                              item.displayLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         )
                         .toList(growable: false),
-                    onChanged: (value) {
-                      AgentTaskDefinitionOption? selected;
-                      for (final item in definitions) {
-                        if (item.taskId == value) {
-                          selected = item;
-                          break;
-                        }
-                      }
-                      setState(() {
-                        _taskDefinitionId = value;
-                        _taskExecutionPlacement =
-                            selected?.executionPlacement ?? '';
-                        _deviceId = null;
-                      });
-                    },
+                    onChanged: _submitting ? null : _selectDevice,
                   );
                 },
               ),
-              if (deviceTaskSelected) ...[
+              if (_authorityLoading) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+              ],
+              if (_roleOptions != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  '执行设备',
+                  '目标数据归属角色',
                   style: AppTypography.label(
                     context,
                   ).copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),
-                devicesAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (error, _) => Text(
-                    '在线设备加载失败：$error',
-                    style: AppTypography.caption(
-                      context,
-                    ).copyWith(color: context.error),
-                  ),
-                  data: (devices) {
-                    if (devices.isEmpty) {
-                      return Text(
-                        '当前没有在线设备，设备任务无法提交。',
-                        style: AppTypography.caption(
-                          context,
-                        ).copyWith(color: context.warning),
-                      );
-                    }
-                    final selectedDeviceID = _deviceId;
-                    final selectedDeviceIsValid =
-                        selectedDeviceID == null ||
-                        devices.any(
-                          (item) => item.deviceId == selectedDeviceID,
-                        );
-                    String? dropdownDeviceID = selectedDeviceIsValid
-                        ? selectedDeviceID
-                        : null;
-                    if (!selectedDeviceIsValid ||
-                        (dropdownDeviceID == null && devices.length == 1)) {
-                      final nextDeviceID = devices.length == 1
-                          ? devices.first.deviceId
-                          : null;
-                      dropdownDeviceID = nextDeviceID;
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!mounted) return;
-                        final currentID = _deviceId;
-                        final currentIsValid =
-                            currentID == null ||
-                            devices.any((item) => item.deviceId == currentID);
-                        if (!currentIsValid ||
-                            (currentID == null && nextDeviceID != null)) {
-                          setState(() => _deviceId = nextDeviceID);
-                        }
-                      });
-                    }
-                    return DropdownButtonFormField<String>(
-                      value: dropdownDeviceID,
-                      isExpanded: true,
-                      decoration: const InputDecoration(hintText: '选择在线设备'),
-                      items: devices
-                          .map(
-                            (item) => DropdownMenuItem<String>(
-                              value: item.deviceId,
-                              child: Text(
-                                item.displayLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (value) => setState(() => _deviceId = value),
-                    );
-                  },
+                DropdownButtonFormField<String>(
+                  value: _roleId.isEmpty ? null : _roleId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(hintText: '选择数据归属角色'),
+                  items: (_roleOptions!['roles'] as List)
+                      .whereType<Map>()
+                      .map(
+                        (role) => DropdownMenuItem<String>(
+                          value: role['id'].toString(),
+                          child: Text(
+                            (role['name'] ?? role['id']).toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: _submitting ? null : _selectRole,
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed:
+                      _submitting || _deviceId == null || _authorityLoading
+                      ? null
+                      : () => _selectDevice(_deviceId),
+                  child: const Text('刷新设备、角色与任务目录'),
                 ),
               ],
+              if (_authorityError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _authorityError!,
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: context.error),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Text(
+                '执行定义',
+                style: AppTypography.label(
+                  context,
+                ).copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              if (_deviceId != null && _roleId.isEmpty && !_authorityLoading)
+                Text(
+                  '请选择角色后读取本机定义与目标设备任务目录。',
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: context.warning),
+                )
+              else if (_definitionsLoading)
+                const LinearProgressIndicator()
+              else if (_definitions.isEmpty)
+                Text(
+                  _deviceId == null ? '请先选择目标设备。' : '当前归属角色没有可执行的任务定义。',
+                  style: AppTypography.caption(
+                    context,
+                  ).copyWith(color: context.warning),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  value:
+                      _definitions.any((item) => item.optionId == _definitionId)
+                      ? _definitionId
+                      : null,
+                  isExpanded: true,
+                  decoration: const InputDecoration(hintText: '选择当前范围可执行的任务定义'),
+                  items: _definitions
+                      .map(
+                        (item) => DropdownMenuItem<String>(
+                          value: item.optionId,
+                          child: Text(
+                            item.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() {
+                          _definitionId = value;
+                          _submissionKey = '';
+                          _requestId = '';
+                        }),
+                ),
               const SizedBox(height: 16),
               Text(
                 '任务名称',

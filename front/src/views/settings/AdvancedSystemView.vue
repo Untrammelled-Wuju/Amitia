@@ -58,9 +58,6 @@
         <el-card shadow="never"><template #header><div class="card-head"><span>Usage 分析</span><el-button size="small" type="danger" plain @click="clearUsage">清空统计</el-button></div></template><h4>按天</h4><pre class="json">{{ pretty(usageDaily) }}</pre><h4>按模型</h4><pre class="json">{{ pretty(usageModels) }}</pre><h4>按来源</h4><pre class="json">{{ pretty(usageSources) }}</pre></el-card>
       </el-tab-pane>
 
-      <el-tab-pane label="语音" name="bridge">
-        <el-card shadow="never"><template #header>Voice Sessions</template><el-table :data="voiceSessions"><el-table-column prop="sessionId" label="Session" min-width="220"/><el-table-column prop="conversationId" label="Conversation" min-width="180"/><el-table-column prop="characterId" label="Character" min-width="160"/><el-table-column label="控制" min-width="300"><template #default="{row}"><el-button size="small" @click="voiceAction(row.sessionId,'start')">启动</el-button><el-button size="small" @click="voiceAction(row.sessionId,'interrupt')">打断</el-button><el-button size="small" @click="voiceAction(row.sessionId,'wake/arm')">唤醒</el-button><el-button size="small" @click="voiceAction(row.sessionId,'wake/disarm')">取消唤醒</el-button><el-button size="small" type="danger" plain @click="voiceAction(row.sessionId,'stop')">停止</el-button></template></el-table-column></el-table></el-card>
-      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -90,7 +87,6 @@ const shadowRollbacks = ref<any>({});
 const accessConfig = reactive<any>({ requireAuth: true, allowedOrigins: "*", rateLimit: true });
 const accessStatus = ref<any>({});
 const identityCheck = ref<any>({});
-const voiceSessions = ref<any[]>([]);
 const logOpen = ref(false);
 const logName = ref("");
 const logContent = ref("");
@@ -101,7 +97,7 @@ const safe = async <T,>(fn: () => Promise<T>, fallback: T) => { try { return awa
 async function loadAll() {
   loading.value = true;
   try {
-    const [aa, al, aset, ast, md, rm, hh, me, lf, ud, um, us, shs, sht, shr, ac, acs, identity, vs] = await Promise.all([
+    const [aa, al, aset, ast, md, rm, hh, me, lf, ud, um, us, shs, sht, shr, ac, acs, identity] = await Promise.all([
       safe(() => apiClient.get("/api/audit/actions").then(r => r.data), []),
       safe(() => apiClient.get("/api/audit/logs", { params: { limit: 200 } }).then(r => r.data), []),
       safe(() => apiClient.get("/api/audit/settings").then(r => r.data), {}),
@@ -120,7 +116,6 @@ async function loadAll() {
       safe(() => apiClient.get("/api/security/access-config").then(r => r.data), {}),
       safe(() => apiClient.get("/api/security/access-status").then(r => r.data), {}),
       safe(() => apiClient.get("/api/security/identity-check").then(r => r.data), {}),
-      safe(() => apiClient.get("/api/voice/sessions").then(r => r.data), {}),
     ]);
     auditActions.value = Array.isArray(aa) ? aa : [];
     auditLogs.value = Array.isArray(al) ? al : [];
@@ -132,7 +127,6 @@ async function loadAll() {
     usageDaily.value = ud; usageModels.value = um; usageSources.value = us;
     shadowStatus.value = shs; shadowThresholds.value = sht; shadowRollbacks.value = shr;
     Object.assign(accessConfig, ac); accessStatus.value = acs; identityCheck.value = identity;
-    voiceSessions.value = Array.isArray((vs as any)?.sessions) ? (vs as any).sessions : [];
   } finally { loading.value = false; }
 }
 
@@ -143,7 +137,6 @@ async function clearModelErrors(){ await ElMessageBox.confirm("确定清空模�
 async function clearUsage(){ await ElMessageBox.confirm("确定清空 Usage 统计？该操作不可撤销。", "确认"); await apiClient.delete("/api/usage/clear"); await loadAll(); }
 async function openLog(name: string){ const r = await apiClient.get(`/api/logs/files/${encodeURIComponent(name)}`); logName.value = name; logContent.value = typeof r.data === "string" ? r.data : pretty(r.data); logOpen.value = true; }
 async function saveAccess(){ await apiClient.put("/api/security/access-config", { ...accessConfig }); ElMessage.success("访问安全设置已保存"); await loadAll(); }
-async function voiceAction(id: string, action: string){ await apiClient.post(`/api/voice/sessions/${encodeURIComponent(id)}/${action}`, {}); await loadAll(); }
 async function shadowStart(){ await apiClient.post("/api/shadow/start", { phase: "interaction" }); ElMessage.success("Shadow Mode 已启动"); await loadAll(); }
 async function shadowStop(){ await apiClient.post("/api/shadow/stop", {}); ElMessage.success("Shadow Mode 已停止"); await loadAll(); }
 async function shadowAdvance(){ await apiClient.post("/api/shadow/phase/advance", {}); await loadAll(); }

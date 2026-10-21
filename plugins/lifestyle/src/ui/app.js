@@ -291,7 +291,7 @@ function formPayload(form) {
     if (!element.name) continue;
     if (element.type === "checkbox") payload[element.name] = element.checked;
     else if (element.type === "number" || element.type === "range") payload[element.name] = Number(element.value);
-    else if (["enabled", "allowOvertime", "delayedReplyEnabled", "commuteHomeShareEnabled"].includes(element.name)) payload[element.name] = bool(element.value);
+    else if (["enabled", "allowOvertime", "commuteHomeShareEnabled"].includes(element.name)) payload[element.name] = bool(element.value);
     else payload[element.name] = element.value;
   }
   return payload;

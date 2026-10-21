@@ -12,7 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp"
-	legacymcp "github.com/u-ai/backend/internal/mcp"
+	legacymcp "github.com/u-ai/backend/internal/extension/mcpruntime"
 )
 
 // MCPRuntimeConnectRequest describes the canonical runtime connection required

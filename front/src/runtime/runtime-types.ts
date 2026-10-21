@@ -74,17 +74,6 @@ export interface LocalVoiceASRFinalEvent {
   occurredAt?: string;
 }
 
-export type RealtimeCallMode = "voice" | "video" | "screen";
-
-export interface RealtimeCallWindowRequest {
-  mode: RealtimeCallMode;
-  voiceType?: string;
-  resourceId?: string;
-  conversationId?: string;
-  charName?: string;
-  charAvatar?: string;
-}
-
 export interface RuntimeEndpoint {
   schemaVersion: number;
   version?: string;
@@ -181,9 +170,6 @@ export interface AmitiaDesktopAPI {
   onUpdateError(callback: (event: unknown, data: unknown) => void): () => void;
   getBackendAuthHeaders(target?: "local" | "business"): Promise<Record<string, string>>;
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }>;
-  openRealtimeCallWindow(request: RealtimeCallWindowRequest): Promise<{ opened: boolean }>;
-  closeRealtimeCallWindow(): Promise<void>;
-  onRealtimeCallWindowClosed(callback: () => void): () => void;
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null>;
   getMeshStatus(): Promise<{ state: string; cloudBaseUrl: string; deviceId: string; runtimeId: string; runtimeSessionId: string; fingerprint?: string; coreId?: string; providerChangePending?: boolean; successorCoreId?: string; previousCoreId?: string; providerChangeId?: string } | null>;
   getMeshPairingStatus(cloudBaseUrl: string): Promise<{ spaceId: string; trustedDeviceCount: number; firstDeviceSetupRequired: boolean }>;

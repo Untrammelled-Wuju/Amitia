@@ -18,7 +18,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop"
-	"github.com/u-ai/backend/internal/extension/kernel/desktop_update"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -35,6 +34,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
+	"github.com/u-ai/backend/internal/extension/kernel/package_distribution"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
@@ -57,7 +57,9 @@ import (
 	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	"github.com/u-ai/backend/pkg/resourceuri"
 )
 
 type MCPDuplicateDetail struct {
@@ -111,6 +113,8 @@ type Container struct {
 	ScopeSnapshotCreator           func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
 	ContextualScopeSnapshotCreator func(context.Context, string, string, int64, string, string) (string, error)
 	AgentSkillCatalog              *agent_skill.AgentSkillCatalog
+	AgentSkillRuntime              *AgentSkillRuntime
+	AcquisitionSkillPort           *canonicalSkillInstallBridge
 	WorkflowRegistry               *workflow.WorkflowRegistry
 	WorkflowExecutor               *workflow.WorkflowExecutor
 	WorkflowTriggerManager         *workflow.TriggerManager
@@ -147,6 +151,7 @@ type Container struct {
 	TrustedServiceFactory    *trusted_service.TrustedServiceFactory
 	ServiceDefinitions       ServiceDefinitionRegistry
 	NodeEnvironmentResolver  script_host.NodeEnvironmentResolver
+	HostArtifactResolver     script_host.ArtifactResolver
 	HookService              *hook.Service
 	EventService             *event.Service
 	EventRuntimeBridge       *event.RuntimeBridge
@@ -171,12 +176,10 @@ type Container struct {
 	ResourceLinks       *ResourceLinkManager
 
 	DesktopHost              *desktop.DesktopHost
-	UpdateManager            *desktop_update.UpdateManager
-	UpdateAdapter            *UpdateManagerAdapter
 	DesktopAPI               *desktop.DesktopAPI
-	UpdateAPI                *desktop.UpdateAPI
 	DesktopActionBridge      *DesktopActionBridge
 	DesktopPetPluginBoundary *plugin_boundary.DesktopPetPluginBoundary
+	PackageDistribution      *package_distribution.Service
 
 	ObservabilityStore observability.StorageBackend
 
@@ -231,6 +234,7 @@ type Container struct {
 
 	RuntimeProfile              runtimeprofile.Profile
 	RuntimePolicy               runtimeprofile.Policy
+	RuntimeIdentity             runtimeidentity.Identity
 	DeviceRegistry              *host_registry.Registry
 	DeviceRuntimePresence       *host_registry.DeviceRuntimePresenceAdapter
 	DeviceRuntimeSessions       *deviceruntime.Service
@@ -255,6 +259,8 @@ type Container struct {
 	NativeBridgeRelay interface{}
 
 	AcquisitionService *acquisition.AcquisitionService
+	MCPBindings        MCPBindingService
+	ResourceResolver   *resourceuri.PhysicalResolver
 
 	BackgroundRemovalRegistry backgroundremoval.Registry
 	ChannelResolver           delivery.ChannelResolver

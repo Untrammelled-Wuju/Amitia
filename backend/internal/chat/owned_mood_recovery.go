@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/interaction"
 	"gorm.io/gorm"
 )
 
-func (s *service) RecoverOwnedMood(ctx context.Context, scope coordination.ExecutionScope, lastUserAt time.Time, currentUserAt time.Time, source string) error {
+func (s *service) RecoverOwnedMood(ctx context.Context, scope coordination.ExecutionScope, lastUserAt time.Time, currentUserAt time.Time, source string, currentPsyche interaction.PsycheState) error {
 	if scope.RoleID == "" || scope.ResourceOwnerID != scope.RoleOwnerID {
 		return coordination.ErrWrongOwner
 	}
@@ -26,8 +27,7 @@ func (s *service) RecoverOwnedMood(ctx context.Context, scope coordination.Execu
 		if !latestTime(latest.CreatedAt).Before(currentUserAt.Truncate(time.Second)) {
 			return nil
 		}
-		local := &service{db: tx, psycheStore: s.psycheStore}
-		state, ok := local.recoveredMoodState(ctx, scope.RoleID, currentUserAt.Sub(lastUserAt))
+		state, ok := recoveredMoodStateFromValue(currentPsyche.MoodValence, currentUserAt.Sub(lastUserAt))
 		if !ok {
 			return nil
 		}

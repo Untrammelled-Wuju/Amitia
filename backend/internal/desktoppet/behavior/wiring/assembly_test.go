@@ -9,9 +9,14 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/persistence"
-	"github.com/u-ai/backend/internal/psyche"
 	"gorm.io/gorm"
 )
+
+type testAffectPort struct{}
+
+func (testAffectPort) GetAffectSnapshot(context.Context, string, string) (*behavior.AffectBehaviorSnapshot, error) {
+	return &behavior.AffectBehaviorSnapshot{Version: "v0", Label: "neutral", Confidence: 0.5, UpdatedAt: time.Now()}, nil
+}
 
 func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -43,11 +48,9 @@ func TestAssembleBehavior_ValidDeps(t *testing.T) {
 	db := setupTestDB(t)
 	defer closeTestDB(db)
 
-	store := psyche.NewInMemoryPsycheStore()
-
 	deps := AssemblyDeps{
 		DB:           db,
-		PsycheStore:  store,
+		AffectPort:   testAffectPort{},
 		DataDir:      "",
 		ShadowMode:   true,
 		RuntimeCmdOn: false,
@@ -79,11 +82,9 @@ func TestAssembledEngine_StartStop(t *testing.T) {
 	db := setupTestDB(t)
 	defer closeTestDB(db)
 
-	store := psyche.NewInMemoryPsycheStore()
-
 	deps := AssemblyDeps{
 		DB:           db,
-		PsycheStore:  store,
+		AffectPort:   testAffectPort{},
 		ShadowMode:   true,
 		RuntimeCmdOn: false,
 	}
@@ -117,11 +118,9 @@ func TestAssembledEngine_SubmitEvent(t *testing.T) {
 	db := setupTestDB(t)
 	defer closeTestDB(db)
 
-	store := psyche.NewInMemoryPsycheStore()
-
 	deps := AssemblyDeps{
 		DB:           db,
-		PsycheStore:  store,
+		AffectPort:   testAffectPort{},
 		ShadowMode:   true,
 		RuntimeCmdOn: false,
 	}
@@ -192,8 +191,7 @@ func TestActivityAdapter_GetActivitySnapshot(t *testing.T) {
 }
 
 func TestAffectAdapter_NoState(t *testing.T) {
-	store := psyche.NewInMemoryPsycheStore()
-	adapter := NewAffectAdapter(store)
+	adapter := NewOwnedAffectAdapter(nil, nil)
 
 	ctx := context.Background()
 	snapshot, err := adapter.GetAffectSnapshot(ctx, "user-1", "char-1")
@@ -213,24 +211,23 @@ func TestAffectAdapter_NoState(t *testing.T) {
 }
 
 func TestAffectAdapter_WithState(t *testing.T) {
-	store := psyche.NewInMemoryPsycheStore()
-
-	state := &psyche.PsycheState{
-		CharacterID: "char-1",
-		Version:     "v1",
-		Emotion: psyche.EmotionDimensions{
-			Valence:   0.8,
-			Arousal:   0.7,
-			Dominance: 0.5,
-		},
-		Stress:    0.2,
-		UpdatedAt: time.Now(),
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := store.SaveState(state); err != nil {
-		t.Fatalf("SaveState failed: %v", err)
+	if err := db.Exec(`CREATE TABLE kernel_device_owned_resources (owner_id TEXT,kind TEXT,resource_id TEXT,role_id TEXT,source_id TEXT,revision INTEGER,deleted INTEGER,body BLOB,updated_at TEXT)`).Error; err != nil {
+		t.Fatal(err)
 	}
-
-	adapter := NewAffectAdapter(store)
+	if err := db.Exec(`INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+		"device", "psyche", "role", "char-1", "", 1, 0, `{"valence":0.8,"arousal":0.7,"dominance":0.5,"stress":0.2}`, "2026-10-21T00:00:00Z").Error; err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	adapter := NewOwnedAffectAdapter(sqlDB, []string{"device"})
 	ctx := context.Background()
 	snapshot, err := adapter.GetAffectSnapshot(ctx, "user-1", "char-1")
 	if err != nil {

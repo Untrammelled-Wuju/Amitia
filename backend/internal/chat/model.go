@@ -112,43 +112,43 @@ func (c *Conversation) BeforeCreate(tx *gorm.DB) error {
 }
 
 type Message struct {
-	ID                  string  `gorm:"column:id;primaryKey" json:"id"`
-	ConversationID      string  `gorm:"column:conversation_id;not null;index" json:"conversationId"`
-	CharacterID         string  `gorm:"column:character_id;not null;default:'';index" json:"characterId"`
-	Sequence            int64   `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Role                string  `gorm:"column:role;not null" json:"role"`
-	Content             string  `gorm:"column:content;not null" json:"content"`
-	ReasoningContent    string  `gorm:"column:reasoning_content;not null;default:''" json:"reasoningContent,omitempty"`
-	ReasoningDurationMS int64   `gorm:"column:reasoning_duration_ms;not null;default:0" json:"reasoningDurationMs"`
-	MsgType             string  `gorm:"column:msg_type;default:text" json:"msgType"`
-	ExtensionType       string  `gorm:"column:extension_type;default:" json:"extensionType"`
-	Tokens              int     `gorm:"column:tokens;default:0" json:"tokens"`
-	Source              string  `gorm:"column:source;default:manual" json:"source"`
-	SafetyLevel         string  `gorm:"column:safety_level;default:normal" json:"safetyLevel"`
-	Status              string  `gorm:"column:status;default:sent" json:"status"`
-	IncludeInCtx        int     `gorm:"column:include_in_context;default:1" json:"includeInContext"`
-	AudioUrl            string  `gorm:"column:audio_url;default:" json:"audioUrl"`
-	AudioDuration       float64 `gorm:"column:audio_duration;default:0" json:"audioDuration"`
-	ImageUrl            string  `gorm:"column:image_url;default:" json:"imageUrl"`
-	VideoUrl            string  `gorm:"column:video_url;default:" json:"videoUrl"`
-	AltText             string  `gorm:"column:alt_text;default:" json:"altText"`
-	IsAnimated          int     `gorm:"column:is_animated;default:0" json:"isAnimated"`
-	MediaWidth          int     `gorm:"column:media_width;default:0" json:"width"`
-	MediaHeight         int     `gorm:"column:media_height;default:0" json:"height"`
-	OriginalAsset       string  `gorm:"column:original_asset_reference;default:" json:"originalAssetReference"`
-	FallbackAsset       string  `gorm:"column:fallback_asset_reference;default:" json:"fallbackAssetReference"`
-	DeliveryGroupID     string  `gorm:"column:delivery_group_id;default:" json:"-"`
-	DeliverySequence    int     `gorm:"column:delivery_sequence;default:0" json:"-"`
-	RequestID           string  `gorm:"column:request_id;default:" json:"requestId"`
-	ReplyToMessageID    *string `gorm:"column:reply_to_message_id" json:"replyToMessageId,omitempty"`
-	ReplyToRole         *string `gorm:"column:reply_to_role" json:"replyToRole,omitempty"`
-	ReplyToExcerpt      *string `gorm:"column:reply_to_excerpt" json:"replyToExcerpt,omitempty"`
+	ID                   string             `gorm:"column:id;primaryKey" json:"id"`
+	ConversationID       string             `gorm:"column:conversation_id;not null;index" json:"conversationId"`
+	CharacterID          string             `gorm:"column:character_id;not null;default:'';index" json:"characterId"`
+	Sequence             int64              `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Role                 string             `gorm:"column:role;not null" json:"role"`
+	Content              string             `gorm:"column:content;not null" json:"content"`
+	ReasoningContent     string             `gorm:"column:reasoning_content;not null;default:''" json:"reasoningContent,omitempty"`
+	ReasoningDurationMS  int64              `gorm:"column:reasoning_duration_ms;not null;default:0" json:"reasoningDurationMs"`
+	MsgType              string             `gorm:"column:msg_type;default:text" json:"msgType"`
+	ExtensionType        string             `gorm:"column:extension_type;default:" json:"extensionType"`
+	Tokens               int                `gorm:"column:tokens;default:0" json:"tokens"`
+	Source               string             `gorm:"column:source;default:manual" json:"source"`
+	SafetyLevel          string             `gorm:"column:safety_level;default:normal" json:"safetyLevel"`
+	Status               string             `gorm:"column:status;default:sent" json:"status"`
+	IncludeInCtx         int                `gorm:"column:include_in_context;default:1" json:"includeInContext"`
+	AudioUrl             string             `gorm:"column:audio_url;default:" json:"audioUrl"`
+	AudioDuration        float64            `gorm:"column:audio_duration;default:0" json:"audioDuration"`
+	ImageUrl             string             `gorm:"column:image_url;default:" json:"imageUrl"`
+	VideoUrl             string             `gorm:"column:video_url;default:" json:"videoUrl"`
+	AltText              string             `gorm:"column:alt_text;default:" json:"altText"`
+	IsAnimated           int                `gorm:"column:is_animated;default:0" json:"isAnimated"`
+	MediaWidth           int                `gorm:"column:media_width;default:0" json:"width"`
+	MediaHeight          int                `gorm:"column:media_height;default:0" json:"height"`
+	OriginalAsset        string             `gorm:"column:original_asset_reference;default:" json:"originalAssetReference"`
+	FallbackAsset        string             `gorm:"column:fallback_asset_reference;default:" json:"fallbackAssetReference"`
+	DeliveryGroupID      string             `gorm:"column:delivery_group_id;default:" json:"-"`
+	DeliverySequence     int                `gorm:"column:delivery_sequence;default:0" json:"-"`
+	RequestID            string             `gorm:"column:request_id;default:" json:"requestId"`
+	ReplyToMessageID     *string            `gorm:"column:reply_to_message_id" json:"replyToMessageId,omitempty"`
+	ReplyToRole          *string            `gorm:"column:reply_to_role" json:"replyToRole,omitempty"`
+	ReplyToExcerpt       *string            `gorm:"column:reply_to_excerpt" json:"replyToExcerpt,omitempty"`
 	CitationSnapshotJSON string             `gorm:"column:citation_snapshot_json;not null;default:'[]'" json:"-"`
 	CitationSnapshot     []CitationSnapshot `gorm:"-" json:"citationSnapshot,omitempty"`
-	CreatedAt           string  `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt           string  `gorm:"column:updated_at" json:"updatedAt"`
-	Revision            int64   `gorm:"column:revision;not null;default:1" json:"revision"`
-	DeletedAt           *string `gorm:"column:deleted_at" json:"-"`
+	CreatedAt            string             `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt            string             `gorm:"column:updated_at" json:"updatedAt"`
+	Revision             int64              `gorm:"column:revision;not null;default:1" json:"revision"`
+	DeletedAt            *string            `gorm:"column:deleted_at" json:"-"`
 }
 
 func (Message) TableName() string { return "messages" }

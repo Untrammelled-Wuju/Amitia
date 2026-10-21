@@ -94,7 +94,7 @@ func payloadHash(payload []byte) string {
 
 func validKind(kind string) bool {
 	switch kind {
-	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "tool-result", "project":
+	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "tool-result", "project", "worldbook", RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:
 		return true
 	default:
 		return false

@@ -75,6 +75,7 @@ type ActivatedSkill struct {
 	CompatibilityStatus string
 	Prompt              string
 	BodyTokens          int
+	ContentHash         string
 	Explicit            bool
 	ToolMappings        []map[string]any
 }

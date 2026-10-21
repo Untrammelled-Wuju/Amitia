@@ -1,24 +1,29 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
-
 package extension
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/system/dataportability"
-	"gorm.io/gorm"
 )
 
 type ExtensionBackupContributor struct {
-	DB *gorm.DB
+	KernelDB *sql.DB
+	Runtime  *kernel.Runtime
 }
 
-func NewExtensionBackupContributor(db *gorm.DB) *ExtensionBackupContributor {
-	return &ExtensionBackupContributor{DB: db}
+func NewExtensionBackupContributor(kernelDB *sql.DB, runtime *kernel.Runtime) *ExtensionBackupContributor {
+	return &ExtensionBackupContributor{KernelDB: kernelDB, Runtime: runtime}
 }
 
 func (c *ExtensionBackupContributor) ID() string   { return "extension" }
@@ -29,271 +34,251 @@ func (c *ExtensionBackupContributor) Dependencies() []string {
 }
 
 type extensionSkillExportRecord struct {
-	ID                   string `json:"id"`
-	ExtensionID          string `json:"extension_id"`
-	SpaceID              string `json:"space_id"`
-	Name                 string `json:"name"`
-	Description          string `json:"description"`
-	License              string `json:"license"`
-	Compatibility        string `json:"compatibility"`
-	MetadataJSON         string `json:"metadata_json"`
-	AllowedTools         string `json:"allowed_tools"`
-	DisplayName          string `json:"display_name"`
-	ShortDescription     string `json:"short_description"`
-	DefaultPrompt        string `json:"default_prompt"`
-	OpenAIMetadataJSON   string `json:"openai_metadata_json"`
-	ScopeType            string `json:"scope_type"`
-	ScopeID              string `json:"scope_id"`
-	Source               string `json:"source"`
-	CompatibilityStatus  string `json:"compatibility_status"`
-	ContentHash          string `json:"content_hash"`
-	RawFrontmatterJSON   string `json:"raw_frontmatter_json"`
-	ExtraFrontmatterJSON string `json:"extra_frontmatter_json"`
-	ToolMappingsJSON     string `json:"tool_mappings_json"`
-	ScriptsPresent       int    `json:"scripts_present"`
-	ScriptsRequired      int    `json:"scripts_required"`
-	Enabled              int    `json:"enabled"`
-	CreatedAt            string `json:"created_at"`
-	UpdatedAt            string `json:"updated_at"`
+	ExtensionID    string `json:"extension_id"`
+	ContributionID string `json:"contribution_id"`
+	Version        string `json:"version"`
+	OwnerSpaceID   string `json:"owner_space_id"`
+	ScopeType      string `json:"scope_type"`
+	ScopeID        string `json:"scope_id"`
+	Enabled        bool   `json:"enabled"`
+	ArchiveName    string `json:"archive_name"`
+	ArchiveBase64  string `json:"archive_base64"`
 }
 
 const extensionComponentID = "extension.records.v1"
 const extensionLogicalName = "extension.records"
 
 func (c *ExtensionBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if c.KernelDB == nil {
+		return nil, fmt.Errorf("extension kernel database unavailable")
+	}
 	var count int64
-	c.DB.WithContext(ctx).Model(&agentSkillMetadataRecord{}).Where("removed_at = ''").Count(&count)
-	return []dataportability.BackupComponentPlan{
-		{
-			ID:            extensionComponentID,
-			Kind:          dataportability.KindNDJSON,
-			LogicalName:   extensionLogicalName,
-			Required:      false,
-			SourceOfTruth: true,
-			ItemCount:     count,
-			EstimatedSize: count * 2048,
-		},
-	}, nil
+	if err := c.KernelDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_contributions WHERE contribution_type = 'agent_skill'`).Scan(&count); err != nil {
+		return nil, err
+	}
+	return []dataportability.BackupComponentPlan{{
+		ID: extensionComponentID, Kind: dataportability.KindNDJSON, LogicalName: extensionLogicalName,
+		Required: false, SourceOfTruth: true, ItemCount: count, EstimatedSize: count * 64 << 10,
+	}}, nil
 }
 
 func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
-	compW, err := out.CreateComponent(extensionComponentID, extensionLogicalName, dataportability.KindNDJSON)
+	if c.KernelDB == nil || c.Runtime == nil || c.Runtime.Container() == nil {
+		return fmt.Errorf("extension kernel runtime unavailable")
+	}
+	component, err := out.CreateComponent(extensionComponentID, extensionLogicalName, dataportability.KindNDJSON)
 	if err != nil {
 		return err
 	}
-	defer compW.Close()
-
-	query := c.DB.WithContext(ctx).Table("extension_agent_skill_metadata").Select(
-		"id, extension_id, space_id, name, description, license, compatibility, metadata_json, allowed_tools, display_name, short_description, default_prompt, openai_metadata_json, scope_type, scope_id, source, compatibility_status, content_hash, raw_frontmatter_json, extra_frontmatter_json, tool_mappings_json, scripts_present, scripts_required, enabled, created_at, updated_at",
-	).Where("removed_at = ''").Order("name ASC, scope_type ASC, scope_id ASC")
-
-	rows, err := query.Rows()
+	defer component.Close()
+	rows, err := c.KernelDB.QueryContext(ctx, `
+		SELECT c.extension_id, c.contribution_id, COALESCE(definition_json, ''), COALESCE(installation_json, '')
+		FROM extension_contributions c
+		JOIN extension_installations i ON i.extension_id = c.extension_id
+		WHERE c.contribution_type = 'agent_skill'
+		ORDER BY c.extension_id, c.contribution_id`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-
+	container := c.Runtime.Container()
 	for rows.Next() {
-		var rec extensionSkillExportRecord
-		if err := c.DB.ScanRows(rows, &rec); err != nil {
-			continue
+		var extensionID, contributionID, definitionJSON, installationJSON string
+		if err := rows.Scan(&extensionID, &contributionID, &definitionJSON, &installationJSON); err != nil {
+			return err
 		}
-		data, err := json.Marshal(rec)
+		var definition struct {
+			ID          string `json:"id"`
+			Version     string `json:"version"`
+			ExtensionID string `json:"extensionId"`
+		}
+		_ = json.Unmarshal([]byte(definitionJSON), &definition)
+		var installation domain.ExtensionInstallation
+		if err := json.Unmarshal([]byte(installationJSON), &installation); err != nil {
+			return err
+		}
+		artifact, err := container.PackageRepository.GetArtifact(ctx, installation.PackageID)
 		if err != nil {
-			continue
+			return err
 		}
-		compW.Write(data)
-		compW.Write([]byte("\n"))
+		raw, err := os.ReadFile(artifact.ArchivePath)
+		if err != nil {
+			return err
+		}
+		record := extensionSkillExportRecord{
+			ExtensionID: extensionID, ContributionID: contributionID, Version: installation.InstalledVersion.String(),
+			OwnerSpaceID: metadataText(installation.Metadata["ownerSpaceId"]), ScopeType: metadataText(installation.Metadata["scopeType"]),
+			ScopeID: metadataText(installation.Metadata["scopeId"]), Enabled: installation.EnablementState == domain.EnablementEnabled,
+			ArchiveName:   fmt.Sprintf("%s-%s.amitiax", strings.ReplaceAll(extensionID, "/", "__"), installation.InstalledVersion.String()),
+			ArchiveBase64: base64.StdEncoding.EncodeToString(raw),
+		}
+		data, err := json.Marshal(record)
+		if err != nil {
+			return err
+		}
+		if _, err := component.Write(data); err != nil {
+			return err
+		}
+		if _, err := component.Write([]byte("\n")); err != nil {
+			return err
+		}
 	}
 	return rows.Err()
 }
 
 func (c *ExtensionBackupContributor) PreviewImport(ctx context.Context, req dataportability.ImportPreviewRequest, in dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
-	rc, err := in.ReadComponent(extensionComponentID)
+	reader, err := in.ReadComponent(extensionComponentID)
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
-
-	preview := dataportability.ImportComponentPreview{
-		ComponentID: extensionComponentID,
-		Kind:        dataportability.KindNDJSON,
-		LogicalName: extensionLogicalName,
-	}
-
-	reader := bufio.NewReader(rc)
+	defer reader.Close()
+	preview := dataportability.ImportComponentPreview{ComponentID: extensionComponentID, Kind: dataportability.KindNDJSON, LogicalName: extensionLogicalName}
+	buffered := bufio.NewReader(reader)
 	for {
-		line, err := reader.ReadBytes('\n')
-		if len(line) > 0 {
-			if len(line) > 0 && line[len(line)-1] == '\n' {
-				line = line[:len(line)-1]
-				if len(line) > 0 && line[len(line)-1] == '\r' {
-					line = line[:len(line)-1]
+		line, readErr := buffered.ReadBytes('\n')
+		if len(strings.TrimSpace(string(line))) > 0 {
+			var record extensionSkillExportRecord
+			if json.Unmarshal(bytes.TrimSpace(line), &record) == nil {
+				preview.ItemCount++
+				var existing string
+				_ = c.KernelDB.QueryRowContext(ctx, `SELECT extension_id FROM extension_installations WHERE extension_id = ?`, record.ExtensionID).Scan(&existing)
+				if existing != "" {
+					preview.Collisions = append(preview.Collisions, dataportability.ComponentCollision{
+						SourceID: record.ExtensionID, TargetID: existing, EntityType: "agent_skill", Policy: dataportability.CollisionDuplicate,
+					})
 				}
 			}
-			if len(line) == 0 {
-				continue
-			}
-			var rec extensionSkillExportRecord
-			if err := json.Unmarshal(line, &rec); err != nil {
-				continue
-			}
-			preview.ItemCount++
-
-			var existing struct {
-				ID          string
-				ExtensionID string
-			}
-			c.DB.WithContext(ctx).Table("extension_agent_skill_metadata").Select("id, extension_id").Where("extension_id = ?", rec.ExtensionID).Scan(&existing)
-			if existing.ID != "" {
-				preview.Collisions = append(preview.Collisions, dataportability.ComponentCollision{
-					SourceID:   rec.ExtensionID,
-					TargetID:   existing.ExtensionID,
-					EntityType: "extension",
-					Policy:     dataportability.CollisionDuplicate,
-				})
-			}
 		}
-		if err != nil {
-			if err.Error() == "EOF" {
+		if readErr != nil {
+			if readErr == io.EOF {
 				break
 			}
-			return nil, err
+			return nil, readErr
 		}
 	}
-
 	return []dataportability.ImportComponentPreview{preview}, nil
 }
 
 func (c *ExtensionBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
 	opts := dataportability.RestoreOptions{
-		OperationID:        req.OperationID,
-		Purpose:            dataportability.RestorePurposeOrdinary,
-		CharacterPolicy:    req.CharacterPolicy,
-		DefaultCharacterID: req.DefaultCharacterID,
-		ActivateImported:   req.ActivateImported,
-		IdentityMap:        req.IdentityMap,
-		SecretProvider:     req.SecretProvider,
+		OperationID: req.OperationID, Purpose: dataportability.RestorePurposeOrdinary,
+		CharacterPolicy: req.CharacterPolicy, DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported: req.ActivateImported, IdentityMap: req.IdentityMap, SecretProvider: req.SecretProvider,
 	}
 	return c.RestoreExtensions(ctx, in, opts)
 }
 
 func (c *ExtensionBackupContributor) RestoreExtensions(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
-	rc, err := in.ReadComponent(extensionComponentID)
+	if c.Runtime == nil || c.Runtime.Container() == nil {
+		return fmt.Errorf("extension kernel runtime unavailable")
+	}
+	reader, err := in.ReadComponent(extensionComponentID)
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
-
-	reader := bufio.NewReader(rc)
+	defer reader.Close()
+	container := c.Runtime.Container()
+	buffered := bufio.NewReader(reader)
 	for {
-		line, err := reader.ReadBytes('\n')
-		if len(line) > 0 {
-			if len(line) > 0 && line[len(line)-1] == '\n' {
-				line = line[:len(line)-1]
-				if len(line) > 0 && line[len(line)-1] == '\r' {
-					line = line[:len(line)-1]
-				}
+		line, readErr := buffered.ReadBytes('\n')
+		if len(strings.TrimSpace(string(line))) > 0 {
+			var record extensionSkillExportRecord
+			if err := json.Unmarshal(bytes.TrimSpace(line), &record); err != nil {
+				return err
 			}
-			if len(line) == 0 {
-				continue
-			}
-			var rec extensionSkillExportRecord
-			if jsonErr := json.Unmarshal(line, &rec); jsonErr != nil {
-				continue
-			}
-
-			metadata := agentSkillMetadataRecord{
-				ID:                      rec.ID,
-				ExtensionID:             rec.ExtensionID,
-				SpaceID:                 rec.SpaceID,
-				Name:                    rec.Name,
-				Description:             rec.Description,
-				License:                 rec.License,
-				Compatibility:           rec.Compatibility,
-				MetadataJSON:            rec.MetadataJSON,
-				AllowedTools:            rec.AllowedTools,
-				DisplayName:             rec.DisplayName,
-				ShortDescription:        rec.ShortDescription,
-				DefaultPrompt:           rec.DefaultPrompt,
-				OpenAIMetadataJSON:      rec.OpenAIMetadataJSON,
-				ScopeType:               rec.ScopeType,
-				ScopeID:                 rec.ScopeID,
-				Source:                  rec.Source,
-				CompatibilityStatus:     rec.CompatibilityStatus,
-				ContentHash:             rec.ContentHash,
-				RawFrontmatterJSON:      rec.RawFrontmatterJSON,
-				ExtraFrontmatterJSON:    rec.ExtraFrontmatterJSON,
-				ToolMappingsJSON:        rec.ToolMappingsJSON,
-				ScriptsPresent:          rec.ScriptsPresent,
-				ScriptsRequired:         rec.ScriptsRequired,
-				Enabled:                 0,
-				CreatedAt:               rec.CreatedAt,
-				UpdatedAt:               rec.UpdatedAt,
-				CompatibilityReportJSON: "{}",
-				ArtifactID:              uuid.NewString(),
-				ResourceIndexJSON:       "[]",
-			}
-
-			var existing struct {
-				ID          string
-				ExtensionID string
-			}
-			c.DB.WithContext(ctx).Table("extension_agent_skill_metadata").Select("id, extension_id").Where("extension_id = ?", rec.ExtensionID).Scan(&existing)
-
-			if existing.ID != "" {
+			if _, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(record.ExtensionID)); err == nil {
 				switch opts.CharacterPolicy {
 				case dataportability.CollisionSkip:
+					if readErr != nil && readErr != io.EOF {
+						return readErr
+					}
+					if readErr == io.EOF {
+						return nil
+					}
 					continue
 				case dataportability.CollisionReplace:
-					c.DB.WithContext(ctx).Model(&agentSkillMetadataRecord{}).Where("extension_id = ?", rec.ExtensionID).Updates(map[string]interface{}{
-						"name":                      metadata.Name,
-						"description":               metadata.Description,
-						"license":                   metadata.License,
-						"compatibility":             metadata.Compatibility,
-						"metadata_json":             metadata.MetadataJSON,
-						"allowed_tools":             metadata.AllowedTools,
-						"display_name":              metadata.DisplayName,
-						"short_description":         metadata.ShortDescription,
-						"default_prompt":            metadata.DefaultPrompt,
-						"openai_metadata_json":      metadata.OpenAIMetadataJSON,
-						"scope_type":                metadata.ScopeType,
-						"scope_id":                  metadata.ScopeID,
-						"source":                    metadata.Source,
-						"compatibility_status":      metadata.CompatibilityStatus,
-						"content_hash":              metadata.ContentHash,
-						"raw_frontmatter_json":      metadata.RawFrontmatterJSON,
-						"extra_frontmatter_json":    metadata.ExtraFrontmatterJSON,
-						"tool_mappings_json":        metadata.ToolMappingsJSON,
-						"scripts_present":           metadata.ScriptsPresent,
-						"scripts_required":          metadata.ScriptsRequired,
-						"compatibility_report_json": metadata.CompatibilityReportJSON,
-						"resource_index_json":       metadata.ResourceIndexJSON,
-						"updated_at":                metadata.UpdatedAt,
-					})
+					if err := c.removePackage(ctx, record); err != nil {
+						return err
+					}
 				default:
-					metadata.ID = uuid.NewString()
-					metadata.ExtensionID = fmt.Sprintf("%s.import.%s", rec.ExtensionID, uuid.NewString()[:8])
-					metadata.Enabled = 0
-					c.DB.WithContext(ctx).Create(&metadata)
+					return fmt.Errorf("agent skill %s already exists", record.ExtensionID)
 				}
-			} else {
-				metadata.ArtifactID = uuid.NewString()
-				metadata.ResourceIndexJSON = "[]"
-				metadata.CompatibilityReportJSON = "{}"
-				metadata.Enabled = 0
-				c.DB.WithContext(ctx).Create(&metadata)
+			}
+			raw, err := base64.StdEncoding.DecodeString(record.ArchiveBase64)
+			if err != nil {
+				return err
+			}
+			preview, err := c.Runtime.PreviewPackage(ctx, kernel.PackagePreviewRequest{
+				SpaceID: record.OwnerSpaceID, ScopeType: record.ScopeType, ScopeID: record.ScopeID,
+				FileName: record.ArchiveName, AllowUnsignedLocal: true,
+			}, bytes.NewReader(raw))
+			if err != nil {
+				return err
+			}
+			confirmations := map[string]bool{}
+			for _, item := range preview.RequiredConfirmations {
+				confirmations[item] = true
+			}
+			confirmation, err := c.Runtime.ConfirmPackagePreview(ctx, kernel.PackagePreviewConfirmationRequest{
+				SessionID: preview.SessionID, SpaceID: record.OwnerSpaceID, ScopeType: record.ScopeType, ScopeID: record.ScopeID, Confirmations: confirmations,
+			})
+			if err != nil {
+				return err
+			}
+			result, err := c.Runtime.ExecutePackageInstall(ctx, kernel.PackageInstallRequest{
+				SessionID: preview.SessionID, SpaceID: record.OwnerSpaceID, ScopeType: record.ScopeType, ScopeID: record.ScopeID,
+				ConfirmationToken: confirmation.ConfirmationToken, IdempotencyKey: "restore-agent-skill-" + record.ExtensionID + "-" + opts.OperationID,
+			})
+			if err != nil {
+				return err
+			}
+			if record.Enabled || opts.ActivateImported {
+				if err := c.Runtime.Enable(ctx, result.ExtensionID); err != nil {
+					return err
+				}
 			}
 		}
-		if err != nil {
-			if err.Error() == "EOF" {
+		if readErr != nil {
+			if readErr == io.EOF {
 				break
 			}
-			return err
+			return readErr
 		}
 	}
-
 	return nil
+}
+
+func (c *ExtensionBackupContributor) removePackage(ctx context.Context, record extensionSkillExportRecord) error {
+	scopeType := record.ScopeType
+	if scopeType == "" {
+		scopeType = "global"
+	}
+	preview, err := c.Runtime.PreviewPackageUninstall(ctx, record.ExtensionID, record.OwnerSpaceID, scopeType, record.ScopeID)
+	if err != nil {
+		return err
+	}
+	confirmations := map[string]bool{}
+	for _, item := range kernel.RequiredUninstallConfirmations(preview) {
+		confirmations[item] = true
+	}
+	confirmation, err := c.Runtime.ConfirmPackageUninstall(ctx, kernel.ConfirmPackageUninstallRequest{
+		ExtensionID: record.ExtensionID, SpaceID: record.OwnerSpaceID, ScopeType: scopeType, ScopeID: record.ScopeID, Confirmations: confirmations,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = c.Runtime.ExecutePackageUninstall(ctx, kernel.ExecutePackageUninstallRequest{
+		ExtensionID: record.ExtensionID, SpaceID: record.OwnerSpaceID, ScopeType: scopeType, ScopeID: record.ScopeID,
+		ConfirmationToken: confirmation.Token, IdempotencyKey: "restore-replace-" + preview.PreviewHash,
+	})
+	return err
+}
+
+func metadataText(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return fmt.Sprint(value)
 }
 
 var _ dataportability.ExtensionRestorePort = (*ExtensionBackupContributor)(nil)

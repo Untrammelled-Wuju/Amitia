@@ -9,7 +9,7 @@ const manifestInfo = JSON.parse(readFileSync(join(scriptRoot, "amitia-extension.
 const packageFile =
   process.argv[2] ||
   process.env.AMITIA_LIFESTYLE_PACKAGE ||
-  resolve(scriptRoot, "..", "..", "Plugin", "Character", `amitia-lifestyle-${manifestInfo.extension.version}.amitiax`);
+  resolve(scriptRoot, "..", "..", "plugin", "lifestyle", `amitia-lifestyle-${manifestInfo.extension.version}.amitiax`);
 
 function readEntries(buffer) {
   const entries = new Map();
@@ -77,6 +77,12 @@ function main() {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
   }
   if (manifest.extension?.id !== "com.amitia/lifestyle") throw new Error("unexpected extension id");
+  const command = manifest.modules
+    ?.flatMap((module) => module.contributions || [])
+    .find((item) => item.id === "lifestyle-command");
+  if (!command?.spec?.inputSchema?.properties?.payload?.required?.includes("characterId")) {
+    throw new Error("lifestyle command must require payload.characterId");
+  }
   for (const platform of ["android", "ios"]) {
     if (!manifest.compatibility?.platforms?.includes(platform)) {
       throw new Error(`package must declare ${platform}`);

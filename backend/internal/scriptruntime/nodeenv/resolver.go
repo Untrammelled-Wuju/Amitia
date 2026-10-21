@@ -327,12 +327,14 @@ func (r *nodeEnvResolver) installBundledNode(ctx context.Context, guest platform
 		return err
 	}
 	nodeDir := filepath.Join(runtimeRoot, "node")
-	nodePath := filepath.Join(nodeDir, nodeFileNameForGuest(guest))
-	if info, err := r.inspector.Stat(nodePath); err == nil && !info.IsDir() {
-		return nil
+	paths := bundledNodePaths(guest, nodeDir)
+	for _, nodePath := range paths {
+		if info, err := r.inspector.Stat(nodePath); err == nil && !info.IsDir() {
+			return nil
+		}
 	}
 
-	for _, archiveName := range []string{"node.exe.zip", "node.zip"} {
+	for _, archiveName := range bundledNodeArchiveNames(guest) {
 		archivePath := filepath.Join(nodeDir, archiveName)
 		if _, err := r.inspector.Stat(archivePath); err != nil {
 			if os.IsNotExist(err) {
@@ -343,10 +345,12 @@ func (r *nodeEnvResolver) installBundledNode(ctx context.Context, guest platform
 		if err := util.UnzipFile(archivePath, nodeDir); err != nil {
 			return fmt.Errorf("nodeenv: extract bundled node archive %s: %w", archivePath, err)
 		}
-		if info, err := r.inspector.Stat(nodePath); err == nil && !info.IsDir() {
-			return nil
+		for _, nodePath := range paths {
+			if info, err := r.inspector.Stat(nodePath); err == nil && !info.IsDir() {
+				return nil
+			}
 		}
-		return fmt.Errorf("nodeenv: bundled node archive missing binary %s", nodePath)
+		return fmt.Errorf("nodeenv: bundled node archive missing binary %s", strings.Join(paths, ", "))
 	}
 	return nil
 }

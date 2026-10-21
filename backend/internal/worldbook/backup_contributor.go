@@ -5,99 +5,89 @@ package worldbook
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
-	"github.com/google/uuid"
+	"errors"
+
 	"github.com/u-ai/backend/internal/system/dataportability"
-	"gorm.io/gorm"
 )
 
 const ComponentIDWorldbookRecords = "worldbook.records"
 
 type WorldbookBackupContributor struct {
-	DB *gorm.DB
+	KernelDB *sql.DB
 }
 
-func NewWorldbookBackupContributor(db *gorm.DB) *WorldbookBackupContributor {
-	return &WorldbookBackupContributor{DB: db}
+func NewWorldbookBackupContributor(kernelDB *sql.DB) *WorldbookBackupContributor {
+	return &WorldbookBackupContributor{KernelDB: kernelDB}
 }
 
 func (w *WorldbookBackupContributor) ID() string   { return "worldbook" }
 func (w *WorldbookBackupContributor) Name() string { return "Worldbook" }
 
 func (w *WorldbookBackupContributor) Dependencies() []string {
-	return []string{"character"}
+	return nil
 }
 
-type worldbookRecordV1 struct {
-	ID            string `json:"id"`
-	MatchType     string `json:"matchType"`
-	MatchPattern  string `json:"matchPattern"`
-	MatchScope    string `json:"matchScope"`
-	InjectContent string `json:"injectContent"`
-	Priority      int    `json:"priority"`
-	HitCount      int    `json:"hitCount"`
-	CharacterID   string `json:"characterId"`
-	ConfigJSON    string `json:"configJson"`
-	CreatedAt     string `json:"createdAt"`
-	UpdatedAt     string `json:"updatedAt"`
+type ownedWorldbookRecordV1 struct {
+	OwnerID   string          `json:"ownerId"`
+	RoleID    string          `json:"roleId"`
+	ID        string          `json:"id"`
+	Revision  int64           `json:"revision"`
+	Body      json.RawMessage `json:"body"`
+	UpdatedAt string          `json:"updatedAt"`
 }
 
 func (w *WorldbookBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
-	var count int64
-	if req.Scope == dataportability.ScopeCharacter && req.CharacterID != "" {
-		w.DB.WithContext(ctx).Model(&WorldBookEntry{}).Where("character_id = ?", req.CharacterID).Count(&count)
-	} else {
-		w.DB.WithContext(ctx).Model(&WorldBookEntry{}).Count(&count)
+	if w == nil || w.KernelDB == nil {
+		return nil, errors.New("世界书备份数据库不可用")
 	}
-
-	return []dataportability.BackupComponentPlan{
-		{
-			ID:            ComponentIDWorldbookRecords,
-			Kind:          dataportability.KindNDJSON,
-			LogicalName:   "worldbook.records.v1",
-			Required:      false,
-			SourceOfTruth: false,
-			ItemCount:     count,
-			EstimatedSize: count * 1024,
-		},
-	}, nil
+	var count int64
+	if err := w.KernelDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE kind='worldbook' AND deleted=0`).Scan(&count); err != nil {
+		return nil, err
+	}
+	return []dataportability.BackupComponentPlan{{
+		ID:            ComponentIDWorldbookRecords,
+		Kind:          dataportability.KindNDJSON,
+		LogicalName:   "worldbook.owned.v1",
+		Required:      false,
+		SourceOfTruth: true,
+		ItemCount:     count,
+		EstimatedSize: count * 4096,
+	}}, nil
 }
 
 func (w *WorldbookBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
-	compW, err := out.CreateComponent(ComponentIDWorldbookRecords, "worldbook.records.v1", dataportability.KindNDJSON)
+	compW, err := out.CreateComponent(ComponentIDWorldbookRecords, "worldbook.owned.v1", dataportability.KindNDJSON)
 	if err != nil {
 		return err
 	}
 	defer compW.Close()
-
-	query := w.DB.WithContext(ctx).Table("world_book").Select(
-		"id, match_type, match_pattern, match_scope, inject_content, priority, hit_count, character_id, config_json, created_at, updated_at",
-	)
-	if req.Scope == dataportability.ScopeCharacter && req.CharacterID != "" {
-		query = query.Where("character_id = ?", req.CharacterID)
-	}
-
-	rows, err := query.Rows()
+	rows, err := w.KernelDB.QueryContext(ctx, `SELECT owner_id,role_id,resource_id,revision,body,updated_at FROM kernel_device_owned_resources WHERE kind='worldbook' AND deleted=0 ORDER BY owner_id,role_id,resource_id`)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-
-	bw := bufio.NewWriter(compW)
+	writer := bufio.NewWriter(compW)
 	for rows.Next() {
-		var rec worldbookRecordV1
-		if err := w.DB.ScanRows(rows, &rec); err != nil {
-			continue
+		var record ownedWorldbookRecordV1
+		var body []byte
+		if err := rows.Scan(&record.OwnerID, &record.RoleID, &record.ID, &record.Revision, &body, &record.UpdatedAt); err != nil {
+			return err
 		}
-		data, err := json.Marshal(rec)
+		record.Body = body
+		encoded, err := json.Marshal(record)
 		if err != nil {
-			continue
+			return err
 		}
-		bw.Write(data)
-		bw.WriteByte('\n')
+		if _, err := writer.Write(append(encoded, '\n')); err != nil {
+			return err
+		}
 	}
-	bw.Flush()
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return writer.Flush()
 }
 
 func (w *WorldbookBackupContributor) PreviewImport(ctx context.Context, req dataportability.ImportPreviewRequest, in dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
@@ -106,38 +96,27 @@ func (w *WorldbookBackupContributor) PreviewImport(ctx context.Context, req data
 		return nil, err
 	}
 	defer rc.Close()
-
-	preview := dataportability.ImportComponentPreview{
-		ComponentID: ComponentIDWorldbookRecords,
-		Kind:        dataportability.KindNDJSON,
-		LogicalName: "worldbook.records.v1",
-	}
-
+	preview := dataportability.ImportComponentPreview{ComponentID: ComponentIDWorldbookRecords, Kind: dataportability.KindNDJSON, LogicalName: "worldbook.owned.v1"}
 	scanner := bufio.NewScanner(rc)
+	scanner.Buffer(make([]byte, 64<<10), 1<<20)
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
+		if len(scanner.Bytes()) == 0 {
 			continue
 		}
-		var rec worldbookRecordV1
-		if err := json.Unmarshal(line, &rec); err != nil {
+		var record ownedWorldbookRecordV1
+		if json.Unmarshal(scanner.Bytes(), &record) != nil || record.OwnerID == "" || record.RoleID == "" || record.ID == "" || record.Revision < 1 || !json.Valid(record.Body) {
 			continue
 		}
 		preview.ItemCount++
-
-		var existing struct{ ID string }
-		w.DB.WithContext(ctx).Table("world_book").Select("id").Where("id = ?", rec.ID).Scan(&existing)
-		if existing.ID != "" {
-			preview.Collisions = append(preview.Collisions, dataportability.ComponentCollision{
-				SourceID:   rec.ID,
-				TargetID:   existing.ID,
-				EntityType: "worldbook_entry",
-				Policy:     dataportability.CollisionDuplicate,
-			})
+		var existing int
+		if err := w.KernelDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id=? AND kind='worldbook' AND resource_id=?`, record.OwnerID, record.ID).Scan(&existing); err != nil {
+			return nil, err
+		}
+		if existing > 0 {
+			preview.Collisions = append(preview.Collisions, dataportability.ComponentCollision{SourceID: record.OwnerID + "/" + record.ID, TargetID: record.ID, EntityType: "worldbook_rule", Policy: dataportability.CollisionDuplicate})
 		}
 	}
-
-	return []dataportability.ImportComponentPreview{preview}, nil
+	return []dataportability.ImportComponentPreview{preview}, scanner.Err()
 }
 
 func (w *WorldbookBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
@@ -159,65 +138,33 @@ func (w *WorldbookBackupContributor) RestoreWorldbook(ctx context.Context, in da
 		return err
 	}
 	defer rc.Close()
-
+	tx, err := w.KernelDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	scanner := bufio.NewScanner(rc)
+	scanner.Buffer(make([]byte, 64<<10), 1<<20)
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
+		if len(scanner.Bytes()) == 0 {
 			continue
 		}
-		var rec worldbookRecordV1
-		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
+		var record ownedWorldbookRecordV1
+		if json.Unmarshal(scanner.Bytes(), &record) != nil || record.OwnerID == "" || record.RoleID == "" || record.ID == "" || record.Revision < 1 || !json.Valid(record.Body) {
+			return errors.New("世界书备份记录无效")
 		}
-
-		newID := rec.ID
-		var existing struct{ ID string }
-		w.DB.WithContext(ctx).Table("world_book").Select("id").Where("id = ?", rec.ID).Scan(&existing)
-		if existing.ID != "" {
-			switch opts.CharacterPolicy {
-			case dataportability.CollisionSkip:
-				continue
-			case dataportability.CollisionReplace:
-				newID = rec.ID
-			default:
-				newID = uuid.New().String()
-			}
+		clause := ` ON CONFLICT(owner_id,kind,resource_id) DO NOTHING`
+		if opts.CharacterPolicy == dataportability.CollisionReplace {
+			clause = ` ON CONFLICT(owner_id,kind,resource_id) DO UPDATE SET role_id=excluded.role_id,revision=excluded.revision,deleted=0,body=excluded.body,updated_at=excluded.updated_at`
 		}
-
-		entry := WorldBookEntry{
-			ID:            newID,
-			MatchType:     rec.MatchType,
-			MatchPattern:  rec.MatchPattern,
-			MatchScope:    rec.MatchScope,
-			InjectContent: rec.InjectContent,
-			Priority:      rec.Priority,
-			HitCount:      rec.HitCount,
-			CharacterID:   rec.CharacterID,
-			ConfigJSON:    rec.ConfigJSON,
-			CreatedAt:     rec.CreatedAt,
-			UpdatedAt:     rec.UpdatedAt,
-		}
-
-		if newID == rec.ID && existing.ID != "" {
-			w.DB.WithContext(ctx).Model(&WorldBookEntry{}).Where("id = ?", rec.ID).Updates(map[string]interface{}{
-				"match_type":     entry.MatchType,
-				"match_pattern":  entry.MatchPattern,
-				"match_scope":    entry.MatchScope,
-				"inject_content": entry.InjectContent,
-				"priority":       entry.Priority,
-				"hit_count":      entry.HitCount,
-				"character_id":   entry.CharacterID,
-				"config_json":    entry.ConfigJSON,
-				"created_at":     entry.CreatedAt,
-				"updated_at":     entry.UpdatedAt,
-			})
-		} else {
-			w.DB.WithContext(ctx).Create(&entry)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,'worldbook',?,?,'',?,0,?,?)`+clause, record.OwnerID, record.ID, record.RoleID, record.Revision, record.Body, record.UpdatedAt); err != nil {
+			return err
 		}
 	}
-
-	return nil
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 var _ dataportability.WorldbookRestorePort = (*WorldbookBackupContributor)(nil)

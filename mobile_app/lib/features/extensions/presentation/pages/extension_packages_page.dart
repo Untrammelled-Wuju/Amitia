@@ -51,44 +51,50 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   List<Map<String, dynamic>> get _searchResults {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return const [];
-    return _packages.where((pkg) {
-      final searchable = [
-        pkg['name'],
-        pkg['extensionId'],
-        pkg['version'],
-        pkg['state'],
-        pkg['enablement'],
-      ].map((value) => (value ?? '').toString().toLowerCase());
-      return searchable.any((value) => value.contains(query));
-    }).toList(growable: false);
+    return _packages
+        .where((pkg) {
+          final searchable = [
+            pkg['name'],
+            pkg['extensionId'],
+            pkg['version'],
+            pkg['state'],
+            pkg['enablement'],
+          ].map((value) => (value ?? '').toString().toLowerCase());
+          return searchable.any((value) => value.contains(query));
+        })
+        .toList(growable: false);
   }
 
   Future<void> _loadPackages() async {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = true;
         _error = null;
       });
+    }
     try {
       final data = await ref.read(extensionServiceProvider).kernelExtensions();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _packages = data;
           _loading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = safeErrorMessage(e);
           _loading = false;
         });
+      }
     }
   }
 
   Future<Dio> _dio() async {
     final availability = await ref.read(backendConnectionProvider.future);
-    if (availability is! BackendConnectionAvailable)
+    if (availability is! BackendConnectionAvailable) {
       throw StateError('后端当前不可用');
+    }
     return createAuthenticatedDio(availability.config);
   }
 
@@ -211,10 +217,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
         ),
         PopupMenuItem(
           value: 'dev-console',
-          child: _PackageMenuLabel(
-            icon: Icons.terminal,
-            label: '开发者诊断控制台',
-          ),
+          child: _PackageMenuLabel(icon: Icons.terminal, label: '开发者诊断控制台'),
         ),
         PopupMenuItem(
           value: 'migrations',
@@ -236,8 +239,9 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
 
   Widget _body() {
     if (_loading) return const AmitiaLoadingState(message: '加载已安装扩展...');
-    if (_error != null)
+    if (_error != null) {
       return AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadPackages);
+    }
     if (_searchVisible) return _buildSearchView();
     if (_packages.isEmpty) {
       return AmitiaEmptyState(
@@ -622,65 +626,137 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     if (_busy) return;
     final id = (pkg['extensionId'] ?? '').toString();
     if (id.isEmpty) return;
-    final currentVersion = (pkg['version'] ?? '').toString();
-    final controller = TextEditingController();
-    final targetVersion = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: dialogContext.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('回滚扩展', style: AppTypography.cardTitle(dialogContext)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              currentVersion.isEmpty ? id : '$id · v$currentVersion',
-              style: AppTypography.bodySmall(dialogContext),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: '目标版本',
-                hintText: '例如 1.0.0',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('开始回滚'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (targetVersion == null || targetVersion.isEmpty) return;
     setState(() => _busy = true);
     try {
-      final result = await ref
+      final versions = await ref
           .read(extensionServiceProvider)
-          .rollbackKernelExtension(id, targetVersion);
-      await _loadPackages();
-      final operationId = (result['operationId'] ?? '').toString();
-      _toast(
-        operationId.isEmpty
-            ? '$id 已回滚到 v$targetVersion'
-            : '$id 回滚操作已提交 · $operationId',
+          .kernelPackageVersions(id);
+      final candidates = versions
+          .where(
+            (item) =>
+                item['active'] != true &&
+                !const {
+                  'removed',
+                  'blocked',
+                  'corrupted',
+                }.contains((item['versionState'] ?? '').toString()),
+          )
+          .toList(growable: false);
+      if (!mounted) return;
+      if (candidates.isEmpty) {
+        _toast('没有可回滚的历史版本');
+        return;
+      }
+      final target = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        backgroundColor: context.surfacePrimary,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        builder: (sheetContext) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
+            children: [
+              Text('回滚扩展', style: AppTypography.sectionTitle(sheetContext)),
+              SizedBox(height: AppSpacing.sm),
+              Text(
+                '$id · 当前版本 ${pkg['version'] ?? ''}',
+                style: AppTypography.caption(sheetContext),
+              ),
+              SizedBox(height: AppSpacing.md),
+              ...candidates.map(
+                (item) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('v${item['version'] ?? ''}'),
+                  subtitle: Text((item['versionState'] ?? '').toString()),
+                  trailing: const Icon(Icons.undo_outlined),
+                  onTap: () => Navigator.pop(sheetContext, item),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
+      if (target != null) {
+        await _executeRollbackVersion(id, (target['version'] ?? '').toString());
+      }
     } catch (e) {
       _toast('回滚失败: ${safeErrorMessage(e)}', error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _executeRollbackVersion(
+    String extensionId,
+    String targetVersion,
+  ) async {
+    if (targetVersion.isEmpty) return;
+    final service = ref.read(extensionServiceProvider);
+    final preview = await service.previewPackageRollback(
+      extensionId,
+      targetVersion,
+    );
+    if (preview['installable'] != true) throw StateError('该版本当前不可回滚');
+    if (preview['manualRequired'] == true) {
+      throw StateError((preview['manualReason'] ?? '该回滚需要人工恢复').toString());
+    }
+    final dependents = ((preview['dependents'] as List?) ?? const [])
+        .map((item) => item.toString())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: dialogContext.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+        title: Text('真实回滚', style: AppTypography.cardTitle(dialogContext)),
+        content: Text(
+          '将从 v${preview['currentVersion'] ?? ''} 回滚到 v$targetVersion，'
+          '并恢复文件、配置、权限和迁移状态。'
+          '${dependents.isEmpty ? '' : '\n依赖项目：${dependents.join('、')}'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('确认回滚'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final confirmations = <String, bool>{};
+    for (final item
+        in (preview['requiredConfirmations'] as List?) ?? const []) {
+      final key = item.toString();
+      if (key.isNotEmpty) confirmations[key] = true;
+    }
+    final confirmation = await service.confirmPackageRollback(
+      extensionId,
+      targetVersion,
+      preview,
+      confirmations,
+    );
+    final token = (confirmation['confirmationToken'] ?? '').toString();
+    if (token.isEmpty) throw StateError('回滚确认令牌缺失');
+    final result = await service.executePackageRollback(
+      extensionId,
+      targetVersion,
+      token,
+    );
+    await _loadPackages();
+    final operationId = (result['operationId'] ?? '').toString();
+    _toast(
+      operationId.isEmpty
+          ? '$extensionId 已回滚到 v$targetVersion'
+          : '$extensionId 已回滚到 v$targetVersion · $operationId',
+    );
   }
 
   Future<void> _checkUpdate(Map<String, dynamic> pkg) async {
@@ -691,13 +767,10 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     try {
       final result = await ref
           .read(extensionServiceProvider)
-          .checkKernelExtensionUpdate(extensionId);
-      final rawItems = result['items'];
-      final items = rawItems is List
-          ? rawItems
-                .whereType<Map>()
-                .map((item) => item.cast<String, dynamic>())
-                .toList(growable: false)
+          .checkExtensionUpdate(extensionId);
+      final rawUpdate = result['update'];
+      final items = rawUpdate is Map
+          ? <Map<String, dynamic>>[Map<String, dynamic>.from(rawUpdate)]
           : const <Map<String, dynamic>>[];
       if (!mounted) return;
       if (items.isEmpty) {
@@ -713,7 +786,12 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
         ),
         builder: (sheetContext) => SafeArea(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              0,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -785,206 +863,83 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   Future<void> _downloadUpdate(String extensionId, String version) async {
     if (mounted) setState(() => _busy = true);
     try {
-      final result = await ref
-          .read(extensionServiceProvider)
-          .downloadKernelExtensionUpdate(extensionId, version);
+      final service = ref.read(extensionServiceProvider);
+      var download = await service.startExtensionUpdateDownload(
+        extensionId,
+        version,
+      );
+      final downloadId = (download['downloadId'] ?? '').toString();
+      if (downloadId.isEmpty) throw StateError('后端未返回下载 ID');
+      for (var attempt = 0; attempt < 720; attempt += 1) {
+        final payload = await service.extensionUpdateDownload(downloadId);
+        final next = payload['download'];
+        if (next is Map) download = Map<String, dynamic>.from(next);
+        final status = (download['status'] ?? '').toString();
+        if (status == 'completed') break;
+        if (status == 'failed' || status == 'cancelled') {
+          throw StateError(
+            (download['error'] ?? '').toString().isEmpty
+                ? '扩展包下载状态 $status'
+                : download['error'].toString(),
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      if ((download['status'] ?? '').toString() != 'completed') {
+        throw StateError('扩展包下载等待超时');
+      }
+      final previewResult = await service.previewExtensionUpdate(
+        extensionId,
+        downloadId,
+      );
+      final rawPreview = previewResult['preview'];
+      if (rawPreview is! Map) throw StateError('后端未返回 Kernel 包预览');
+      final preview = Map<String, dynamic>.from(rawPreview);
+      if (!mounted) return;
+      final accepted = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: context.surfacePrimary,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        builder: (sheetContext) => _PackagePreviewSheet(
+          fileName: 'registry-update.amitiax',
+          preview: preview,
+        ),
+      );
+      if (accepted != true) return;
+      final result = await service.commitPackagePreview(
+        preview,
+        _buildInstallConfirmations(preview),
+        expectedExtensionId: extensionId,
+      );
       final operationId = (result['operationId'] ?? '').toString();
       if (operationId.isEmpty) throw StateError('后端未返回更新操作 ID');
-      _toast('更新包下载任务已创建');
-      if (!mounted) return;
-      await _showUpdateOperation(extensionId, operationId);
+      await _waitForPackageOperation(operationId);
+      await _loadPackages();
+      _toast('扩展已更新到 v${preview['version'] ?? version}');
     } catch (e) {
-      _toast('下载更新失败: ${safeErrorMessage(e)}', error: true);
+      _toast('下载或更新失败: ${safeErrorMessage(e)}', error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _showUpdateOperation(
-    String extensionId,
+  Future<Map<String, dynamic>> _waitForPackageOperation(
     String operationId,
   ) async {
-    Map<String, dynamic> operation = const <String, dynamic>{};
-    List<Map<String, dynamic>> steps = const <Map<String, dynamic>>[];
-    String? localError;
-    bool localBusy = false;
-
-    Future<void> refresh(StateSetter setDialogState) async {
-      setDialogState(() {
-        localBusy = true;
-        localError = null;
-      });
-      try {
-        final service = ref.read(extensionServiceProvider);
-        final values = await Future.wait<dynamic>([
-          service.kernelUpdateOperation(operationId),
-          service.kernelUpdateOperationSteps(operationId),
-        ]);
-        setDialogState(() {
-          operation = Map<String, dynamic>.from(values[0] as Map);
-          steps = (values[1] as List)
-              .whereType<Map>()
-              .map((item) => item.cast<String, dynamic>())
-              .toList(growable: false);
-          localBusy = false;
-        });
-      } catch (e) {
-        setDialogState(() {
-          localError = safeErrorMessage(e);
-          localBusy = false;
-        });
+    final service = ref.read(extensionServiceProvider);
+    for (var attempt = 0; attempt < 240; attempt += 1) {
+      final operation = await service.kernelPackageOperation(operationId);
+      final status = (operation['status'] ?? '').toString();
+      if (status == 'completed') return operation;
+      if (status == 'failed' || status == 'requires_recovery') {
+        throw StateError((operation['errorCode'] ?? '扩展包操作失败').toString());
       }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
     }
-
-    Future<void> runAction(StateSetter setDialogState, String action) async {
-      setDialogState(() => localBusy = true);
-      try {
-        final service = ref.read(extensionServiceProvider);
-        switch (action) {
-          case 'install':
-            await service.installKernelExtensionUpdate(
-              extensionId,
-              operationId,
-            );
-            break;
-          case 'cancel':
-            await service.cancelKernelExtensionUpdate(extensionId, operationId);
-            break;
-          case 'retry':
-            await service.retryKernelExtensionUpdate(extensionId, operationId);
-            break;
-          case 'rollback':
-            await service.rollbackKernelExtensionUpdate(
-              extensionId,
-              operationId,
-            );
-            break;
-        }
-        await refresh(setDialogState);
-        await _loadPackages();
-      } catch (e) {
-        setDialogState(() {
-          localError = safeErrorMessage(e);
-          localBusy = false;
-        });
-      }
-    }
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          if (operation.isEmpty && !localBusy && localError == null) {
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => refresh(setDialogState),
-            );
-          }
-          final status = (operation['status'] ?? 'loading').toString();
-          return AlertDialog(
-            backgroundColor: dialogContext.surfacePrimary,
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-            title: Text('更新操作', style: AppTypography.cardTitle(dialogContext)),
-            content: SizedBox(
-              width: 520,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _DetailRow(label: '扩展', value: extensionId),
-                    _DetailRow(label: '操作 ID', value: operationId),
-                    _DetailRow(label: '状态', value: status),
-                    if ((operation['version'] ?? '').toString().isNotEmpty)
-                      _DetailRow(
-                        label: '版本',
-                        value: operation['version'].toString(),
-                      ),
-                    if ((operation['error'] ?? '').toString().isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          operation['error'].toString(),
-                          style: AppTypography.caption(
-                            dialogContext,
-                          ).copyWith(color: dialogContext.error),
-                        ),
-                      ),
-                    if (localError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          localError!,
-                          style: AppTypography.caption(
-                            dialogContext,
-                          ).copyWith(color: dialogContext.error),
-                        ),
-                      ),
-                    if (steps.isNotEmpty) ...[
-                      SizedBox(height: AppSpacing.md),
-                      Text(
-                        '执行步骤',
-                        style: AppTypography.bodySmall(
-                          dialogContext,
-                        ).copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      ...steps.map(
-                        (step) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            '• ${step['name'] ?? step['stepId'] ?? '-'} · ${step['status'] ?? '-'}',
-                            style: AppTypography.caption(dialogContext),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (localBusy) ...[
-                      SizedBox(height: AppSpacing.md),
-                      const LinearProgressIndicator(),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: localBusy ? null : () => refresh(setDialogState),
-                child: const Text('刷新'),
-              ),
-              TextButton(
-                onPressed: localBusy
-                    ? null
-                    : () => runAction(setDialogState, 'cancel'),
-                child: const Text('取消任务'),
-              ),
-              TextButton(
-                onPressed: localBusy
-                    ? null
-                    : () => runAction(setDialogState, 'retry'),
-                child: const Text('重试'),
-              ),
-              TextButton(
-                onPressed: localBusy
-                    ? null
-                    : () => runAction(setDialogState, 'rollback'),
-                child: const Text('回滚'),
-              ),
-              FilledButton(
-                onPressed: localBusy
-                    ? null
-                    : () => runAction(setDialogState, 'install'),
-                child: const Text('安装更新'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('关闭'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    throw StateError('扩展包操作等待超时');
   }
 
   Future<void> _toggleExtension(Map<String, dynamic> pkg, bool enabled) async {
@@ -1084,8 +1039,9 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
         },
       );
       dynamic confirmed = confirmResponse.data;
-      if (confirmed is Map && confirmed['data'] is Map)
+      if (confirmed is Map && confirmed['data'] is Map) {
         confirmed = confirmed['data'];
+      }
       if (confirmed is! Map) throw StateError('安装确认失败');
       final token = (confirmed['confirmationToken'] ?? '').toString();
       if (token.isEmpty) throw StateError('安装确认令牌缺失');
@@ -1108,8 +1064,9 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
         },
       );
       dynamic operation = operationResponse.data;
-      if (operation is Map && operation['data'] is Map)
+      if (operation is Map && operation['data'] is Map) {
         operation = operation['data'];
+      }
       final operationId = operation is Map
           ? (operation['operationId'] ?? '').toString()
           : '';
@@ -1138,15 +1095,18 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
     if (signatureStatus == 'unsigned') result['confirm.unsigned_dev'] = true;
     final scriptCount = (preview['scripts'] as num?)?.toInt() ?? 0;
     if (scriptCount > 0) result['confirm.scripts'] = true;
-    if ((preview['currentVersion'] ?? '').toString().isNotEmpty)
+    if ((preview['currentVersion'] ?? '').toString().isNotEmpty) {
       result['confirm.version_change'] = true;
-    if (((preview['highRiskCapabilities'] as List?) ?? const []).isNotEmpty)
+    }
+    if (((preview['highRiskCapabilities'] as List?) ?? const []).isNotEmpty) {
       result['confirm.permission_escalation'] = true;
+    }
     if (preview['upgradeDiff'] is Map) {
       final diff = preview['upgradeDiff'] as Map;
       if (diff['signerChanged'] == true) result['confirm.signer_change'] = true;
-      if (diff['configMigrationRequired'] == true)
+      if (diff['configMigrationRequired'] == true) {
         result['confirm.config_migration'] = true;
+      }
     }
     return result;
   }

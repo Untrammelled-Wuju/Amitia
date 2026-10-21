@@ -61,6 +61,9 @@ class DeviceOwnedRealtimeService {
   final String conversationId;
   final Map<String, String>? conversationOrigin;
   final String historicalRoleId;
+  final String voiceType;
+  final String resourceId;
+  final String dialogId;
   bool _closed = false;
 
   DeviceOwnedRealtimeService({
@@ -71,6 +74,9 @@ class DeviceOwnedRealtimeService {
     required this.conversationId,
     this.conversationOrigin,
     this.historicalRoleId = '',
+    this.voiceType = '',
+    this.resourceId = '',
+    this.dialogId = '',
   }) : scope = Map.unmodifiable(scope) {
     ownedRealtimeAuthority(scope);
     if (scope['roleId'] != characterId) throw StateError('通话角色与原范围不一致');
@@ -123,6 +129,9 @@ class DeviceOwnedRealtimeService {
           if (conversationOrigin != null)
             'conversationOrigin': conversationOrigin,
           if (historicalRoleId.isNotEmpty) 'historicalRoleId': historicalRoleId,
+          if (voiceType.isNotEmpty) 'voiceType': voiceType,
+          if (resourceId.isNotEmpty) 'resourceId': resourceId,
+          if (dialogId.isNotEmpty) 'dialogId': dialogId,
           'expectedExecutionScope': scope,
         },
       ),

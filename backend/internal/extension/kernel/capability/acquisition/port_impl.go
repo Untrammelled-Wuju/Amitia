@@ -2,20 +2,12 @@ package acquisition
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"github.com/u-ai/backend/internal/timeoutpolicy"
-	"io"
-	"net/http"
-	"os"
-	"strings"
 	"time"
 
-	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
-	legacymcp "github.com/u-ai/backend/internal/mcp"
+	legacymcp "github.com/u-ai/backend/internal/extension/mcpruntime"
 )
 
 // RemoteArtifactStorer is the interface needed to resolve a remote PackageURI
@@ -253,129 +245,8 @@ func (b *mcpRepositoryBridge) RemoveMCP(ctx context.Context, serverName string) 
 }
 
 // ---------------------------------------------------------------------------
-// SkillInstallPort implementation
-// ---------------------------------------------------------------------------
-
-// skillCatalogBridge wraps agent_skill.AgentSkillCatalog to implement SkillServicePort.
-type skillCatalogBridge struct {
-	catalog *agent_skill.AgentSkillCatalog
-	builder *agent_skill.SkillDefinitionBuilder
-}
-
-// NewSkillCatalogBridge creates a SkillServicePort backed by AgentSkillCatalog.
-func NewSkillCatalogBridge(catalog *agent_skill.AgentSkillCatalog) SkillServicePort {
-	return &skillCatalogBridge{
-		catalog: catalog,
-		builder: agent_skill.NewSkillDefinitionBuilder("1.0.0", "windows"),
-	}
-}
-
-// readSkillSource reads the skill source content from the given URI.
-// Supports file:// scheme, http/https URLs, and plain file paths.
-func (b *skillCatalogBridge) readSkillSource(sourceURI string) ([]byte, error) {
-	if sourceURI == "" {
-		return nil, fmt.Errorf("skill catalog bridge: source URI is empty")
-	}
-	if len(sourceURI) >= 7 && sourceURI[:7] == "file://" {
-		content, err := os.ReadFile(sourceURI[7:])
-		if err != nil {
-			return nil, fmt.Errorf("skill catalog bridge: read source %s: %w", sourceURI, err)
-		}
-		return content, nil
-	}
-	if len(sourceURI) >= 5 && (sourceURI[:5] == "http:" || sourceURI[:6] == "https:") {
-		return b.downloadSkillSource(sourceURI)
-	}
-	content, err := os.ReadFile(sourceURI)
-	if err != nil {
-		return nil, fmt.Errorf("skill catalog bridge: read source %s: %w", sourceURI, err)
-	}
-	return content, nil
-}
-
-func (b *skillCatalogBridge) downloadSkillSource(sourceURI string) ([]byte, error) {
-	client := timeoutpolicy.Client(&http.Client{Timeout: 60 * time.Second})
-	req, err := http.NewRequest(http.MethodGet, sourceURI, nil)
-	if err != nil {
-		return nil, fmt.Errorf("skill catalog bridge: create request for %s: %w", sourceURI, err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("skill catalog bridge: download %s: %w", sourceURI, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("skill catalog bridge: download %s returned status %d", sourceURI, resp.StatusCode)
-	}
-	content, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024))
-	if err != nil {
-		return nil, fmt.Errorf("skill catalog bridge: read response from %s: %w", sourceURI, err)
-	}
-	if len(content) == 0 {
-		return nil, fmt.Errorf("skill catalog bridge: downloaded empty content from %s", sourceURI)
-	}
-	return content, nil
-}
-
-func (b *skillCatalogBridge) ImportSkill(ctx context.Context, sourceURI string, skillName string, hash string) (string, error) {
-	if b.catalog == nil {
-		return "", fmt.Errorf("skill catalog bridge: catalog not configured")
-	}
-
-	// Step 1: Source read — must actually read the source file
-	raw, err := b.readSkillSource(sourceURI)
-	if err != nil {
-		return "", err
-	}
-
-	// Step 1.5: Hash verification — if hash provided, verify integrity
-	if hash != "" {
-		rawHash := sha256.Sum256(raw)
-		computed := hex.EncodeToString(rawHash[:])
-		if !strings.EqualFold(computed, hash) {
-			return "", fmt.Errorf("skill catalog bridge: hash mismatch for %s: expected %s, got %s", skillName, hash, computed)
-		}
-	}
-
-	// Step 2: Parser + Step 3: Validator
-	extID := "imported.skill." + skillName
-	def, err := b.builder.Build(raw, extID)
-	if err != nil {
-		// Validator failure must NOT write to the formal Skill Registry
-		return "", fmt.Errorf("skill catalog bridge: build skill %s: %w", skillName, err)
-	}
-
-	// Step 4: Install
-	if err := b.catalog.Register(*def); err != nil {
-		return "", fmt.Errorf("skill catalog bridge: register skill %s: %w", skillName, err)
-	}
-
-	// Step 5: Scope Enable
-	if err := b.catalog.SetEnabled(extID, true); err != nil {
-		return "", fmt.Errorf("skill catalog bridge: enable skill %s: %w", skillName, err)
-	}
-
-	return extID, nil
-}
-
-func (b *skillCatalogBridge) RemoveSkill(ctx context.Context, skillID string) error {
-	if b.catalog == nil {
-		return fmt.Errorf("skill catalog bridge: catalog not configured")
-	}
-	return b.catalog.Unregister(skillID)
-}
-
-func (b *skillCatalogBridge) EnableSkill(ctx context.Context, skillID string) error {
-	if b.catalog == nil {
-		return fmt.Errorf("skill catalog bridge: catalog not configured")
-	}
-	return b.catalog.SetEnabled(skillID, true)
-}
-
-// ---------------------------------------------------------------------------
 // Interface compliance
 // ---------------------------------------------------------------------------
 
 var _ PackageInstallPort = (*packagePortBridge)(nil)
 var _ MCPInstallPort = (*mcpRepositoryBridge)(nil)
-var _ SkillServicePort = (*skillCatalogBridge)(nil)

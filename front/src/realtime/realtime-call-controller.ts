@@ -1,11 +1,3 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
-
-import {
-  resolveApiUrl,
-  resolveWebSocketUrl,
-} from "../runtime/runtime-adapter";
-import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { RealtimeVoiceActivityDetector } from "./realtime-vad";
 import { OwnedRealtimeSession } from "./owned-realtime-session";
 import { ownedImageAttachment } from "../runtime/device-owned-attachments";
@@ -28,38 +20,38 @@ export interface RealtimeCallCapabilities {
   cameraInput?: boolean;
   screenInput?: boolean;
   visualContext?: boolean;
-  visualLatestWins?: boolean;
-  separateVisualWs?: boolean;
-  dynamicSourceSwap?: boolean;
-  maxVisualFps?: number;
-  maxVisualBytes?: number;
+  streamingASR?: boolean;
+  streamingText?: boolean;
+  turnBasedTTS?: boolean;
+  wakeWord?: boolean;
+  playbackProgress?: boolean;
 }
 
 export interface RealtimeCallConnectedInfo {
   callId: string;
   sessionId: string;
-  visualEndpoint: string;
-  visualTicket: string;
   capabilities: RealtimeCallCapabilities;
 }
 
 export interface RealtimeCallControllerOptions {
   conversationId: string;
-  characterId?: string;
-  expectedExecutionScope?: OwnedExecutionScope;
+  characterId: string;
+  expectedExecutionScope: OwnedExecutionScope;
   acceptedTicket?: Record<string, any>;
   conversationOrigin?: { ownerId: string; id: string };
   historicalRoleId?: string;
-  onOwnedCompleted?: (response: OwnedChatResponse) => void;
-  dialogId?: string;
   voiceType?: string;
   resourceId?: string;
+  dialogId?: string;
+  onOwnedCompleted?: (response: OwnedChatResponse) => void;
   onState?: (state: RealtimeCallState, error?: string) => void;
   onConnected?: (info: RealtimeCallConnectedInfo) => void;
-  onAssistantText?: (text: string) => void;
+  onAssistantText?: (text: string, delta?: boolean) => void;
   onAssistantSpeaking?: (speaking: boolean) => void;
   onASRFinal?: (data: Record<string, unknown>) => void;
   onVision?: (data: Record<string, unknown>) => void;
+  onWakeStatus?: (data: Record<string, unknown>) => void;
+  onPlaybackStatus?: (data: Record<string, unknown>) => void;
   onMediaState?: (state: RealtimeMediaState) => void;
   onCameraPreview?: (stream: MediaStream | null) => void;
   onScreenPreview?: (stream: MediaStream | null) => void;
@@ -86,9 +78,7 @@ const VISUAL_INTERVAL_MS: Record<RealtimeVisualSource, number> = {
 
 export class RealtimeCallController {
   private readonly options: RealtimeCallControllerOptions;
-  private controlSocket: WebSocket | null = null;
   private ownedSession: OwnedRealtimeSession | null = null;
-  private visualSocket: WebSocket | null = null;
   private audioContext: AudioContext | null = null;
   private playbackContext: AudioContext | null = null;
   private audioStream: MediaStream | null = null;
@@ -97,15 +87,7 @@ export class RealtimeCallController {
   private cameraRuntime: VisualCaptureRuntime | null = null;
   private screenRuntime: VisualCaptureRuntime | null = null;
   private state: RealtimeCallState = "idle";
-  private mediaState: RealtimeMediaState = {
-    audio: false,
-    camera: false,
-    screen: false,
-    muted: false,
-  };
-  private connectedInfo: RealtimeCallConnectedInfo | null = null;
-  private nextPlayTime = 0;
-  private aiSpeaking = false;
+  private mediaState: RealtimeMediaState = { audio: false, camera: false, screen: false, muted: false };
   private activeSources = new Set<AudioBufferSourceNode>();
   private sourcePlayback = new Map<AudioBufferSourceNode, { generation: number; durationMs: number }>();
   private playbackGeneration = 0;
@@ -113,10 +95,8 @@ export class RealtimeCallController {
   private playedAudioMs = 0;
   private ttsEndedGeneration = 0;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private lastSpeechVisualBoostAt = 0;
-  private failureCleanup: Promise<void> | null = null;
   private readonly vad = new RealtimeVoiceActivityDetector();
+  private failureCleanup: Promise<void> | null = null;
 
   constructor(options: RealtimeCallControllerOptions) {
     this.options = options;
@@ -136,11 +116,11 @@ export class RealtimeCallController {
 
   async start(): Promise<void> {
     if (this.isActive()) return;
-    // A failure cleanup may still be closing the previous microphone/audio
-    // graph. Starting a new call before it settles lets that cleanup race with
-    // the newly-created resources and close the new session by mistake.
     if (this.failureCleanup) await this.failureCleanup;
     if (this.isActive()) return;
+    if (!this.options.characterId || this.options.expectedExecutionScope.roleId !== this.options.characterId) {
+      throw new Error("通话缺少当前角色与完整数据归属");
+    }
     this.setState("connecting");
     this.vad.reset();
     try {
@@ -156,77 +136,64 @@ export class RealtimeCallController {
       this.mediaState.audio = true;
       this.emitMediaState();
       this.prepareAudioCapture();
-
-      if (this.options.expectedExecutionScope) {
-        const origin = parseConversationReference(this.options.conversationId);
-        this.ownedSession = new OwnedRealtimeSession({
-          characterId: this.options.characterId || "",
-          conversationId: origin?.id || this.options.conversationId,
-          conversationOrigin: this.options.conversationOrigin ?? origin,
-          historicalRoleId: this.options.historicalRoleId,
-          expectedExecutionScope: this.options.expectedExecutionScope,
-          acceptedTicket: this.options.acceptedTicket,
-          onReady: () => { this.setState("connected"); this.attachAudioProcessor(); },
-          onCompleted: (result) => { this.options.onAssistantText?.(result.reply); this.options.onOwnedCompleted?.(result); },
-          onAudio: async (bytes) => {
-            const context = this.playbackContext;
-            const generation = this.playbackGeneration;
-            if (!context) return;
-            const decoded = await context.decodeAudioData(bytes.slice().buffer as ArrayBuffer);
-            if (context !== this.playbackContext || generation !== this.playbackGeneration || !this.ownedSession) return;
-            const source = context.createBufferSource();
-            source.buffer = decoded;
-            source.connect(context.destination);
-            this.activeSources.add(source);
-            this.setAISpeaking(true);
-            source.onended = () => { this.activeSources.delete(source); if (!this.activeSources.size) this.setAISpeaking(false); };
-            source.start();
-          },
-          onError: (message) => { void this.fail(message); },
-          onInterrupted: () => this.flushPlayback(),
-        });
-        await this.ownedSession.start();
-        return;
-      }
-
-      const access = await this.createAccessTicket();
-      const endpoint = await resolveWebSocketUrl(access.wsPath);
-      const params = new URLSearchParams({ ticket: access.ticket });
-      this.controlSocket = new WebSocket(`${endpoint}?${params.toString()}`);
-      this.bindControlSocket(this.controlSocket);
+      const origin = parseConversationReference(this.options.conversationId);
+      this.ownedSession = new OwnedRealtimeSession({
+        characterId: this.options.characterId,
+        conversationId: origin?.id || this.options.conversationId,
+        conversationOrigin: this.options.conversationOrigin ?? origin,
+        historicalRoleId: this.options.historicalRoleId,
+        voiceType: this.options.voiceType,
+        resourceId: this.options.resourceId,
+        dialogId: this.options.dialogId,
+        expectedExecutionScope: this.options.expectedExecutionScope,
+        acceptedTicket: this.options.acceptedTicket,
+        onReady: () => {
+          this.setState("connected");
+          this.attachAudioProcessor();
+          this.options.onConnected?.({ callId: this.options.conversationId, sessionId: this.options.expectedExecutionScope.executionId || "", capabilities: { audioInput: true, audioOutput: true, cameraInput: true, screenInput: true, visualContext: true, streamingASR: true, streamingText: true, turnBasedTTS: true, wakeWord: true, playbackProgress: true } });
+        },
+        onCompleted: (result) => this.options.onOwnedCompleted?.(result),
+        onAudio: (bytes) => this.playOwnedAudio(bytes),
+        onError: (message) => { void this.fail(message); },
+        onInterrupted: () => this.flushPlayback(),
+        onASRFinal: (data) => this.options.onASRFinal?.(data),
+        onAssistantText: (text, delta) => this.options.onAssistantText?.(text, delta),
+        onVision: (data) => this.options.onVision?.(data),
+        onWakeStatus: (data) => this.options.onWakeStatus?.(data),
+        onPlaybackStatus: (data) => {
+          this.options.onPlaybackStatus?.(data);
+          if (data.type === "tts_ended") {
+            this.ttsEndedGeneration = Number(data.generationId) || this.playbackGeneration;
+            this.reportPlaybackEndedIfDrained();
+          }
+        },
+      });
+      await this.ownedSession.start();
     } catch (error) {
-      await this.cleanup(false);
+      await this.cleanup();
       this.setState("error", error instanceof Error ? error.message : String(error));
       throw error;
     }
   }
 
   async stop(): Promise<void> {
-    const control = this.controlSocket;
-    if (control && control.readyState === WebSocket.OPEN) {
-      try {
-        control.send(JSON.stringify({ event: "stop" }));
-      } catch {}
-    }
-    const visual = this.visualSocket;
-    if (visual && visual.readyState === WebSocket.OPEN) {
-      try {
-        visual.send(JSON.stringify({ event: "stop" }));
-      } catch {}
-    }
-    await this.cleanup(true);
+    await this.cleanup();
     this.setState("idle");
   }
 
   async setMuted(muted: boolean): Promise<void> {
     if (muted && this.ownedSession) this.ownedSession.endTurn();
-    const socket = this.controlSocket;
-    if (muted && this.vad.isSpeechActive && socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ event: "speech_end" }));
-    }
     if (muted) this.vad.reset();
     this.mediaState.muted = muted;
     this.emitMediaState();
+  }
+
+  armWake(configId = ""): void {
+    this.ownedSession?.setWakeArmed(true, configId);
+  }
+
+  disarmWake(): void {
+    this.ownedSession?.setWakeArmed(false);
   }
 
   async toggleCamera(): Promise<void> {
@@ -235,18 +202,13 @@ export class RealtimeCallController {
       return;
     }
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 24, max: 30 },
-      },
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } },
       audio: false,
     });
     this.cameraRuntime = await this.startVisualSource("camera", stream);
     this.mediaState.camera = true;
     this.options.onCameraPreview?.(stream);
     this.emitMediaState();
-    this.publishSources();
   }
 
   async toggleScreen(): Promise<void> {
@@ -254,21 +216,13 @@ export class RealtimeCallController {
       this.stopVisualSource("screen");
       return;
     }
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        frameRate: { ideal: 10, max: 15 },
-      },
-      audio: false,
-    });
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 10, max: 15 } }, audio: false });
     const track = stream.getVideoTracks()[0];
-    track?.addEventListener("ended", () => this.stopVisualSource("screen"), {
-      once: true,
-    });
+    track?.addEventListener("ended", () => this.stopVisualSource("screen"), { once: true });
     this.screenRuntime = await this.startVisualSource("screen", stream);
     this.mediaState.screen = true;
     this.options.onScreenPreview?.(stream);
     this.emitMediaState();
-    this.publishSources();
   }
 
   requestImmediateVisualFrame(): void {
@@ -276,189 +230,6 @@ export class RealtimeCallController {
     if (this.screenRuntime) this.screenRuntime.immediateRequested = true;
     void this.captureVisualFrame(this.cameraRuntime);
     void this.captureVisualFrame(this.screenRuntime);
-  }
-
-  private async createAccessTicket(): Promise<{ ticket: string; wsPath: string }> {
-    const path = "/api/realtime/v2/tickets";
-    const url = await resolveApiUrl(path);
-    const init = await createAuthenticatedFetchInit(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        conversationId: this.options.conversationId || "",
-        dialogId: this.options.dialogId || "",
-        voiceType: this.options.voiceType || "",
-        resourceId: this.options.resourceId || "",
-      }),
-    });
-    const response = await fetch(url, init);
-    let body: any = null;
-    try {
-      body = await response.json();
-    } catch {}
-    if (!response.ok) {
-      throw new Error(
-        body?.message || body?.msg || `创建实时通话授权失败 (${response.status})`,
-      );
-    }
-    const data = body?.data ?? body;
-    const ticket = String(data?.ticket || "").trim();
-    const wsPath = String(data?.wsPath || "").trim();
-    if (!ticket || !wsPath.startsWith("/api/realtime/")) {
-      throw new Error("实时通话授权返回无效");
-    }
-    return { ticket, wsPath };
-  }
-
-  private bindControlSocket(socket: WebSocket): void {
-    socket.onopen = () => {
-      this.attachAudioProcessor();
-      this.startHeartbeat();
-    };
-    socket.onmessage = (event) => {
-      void this.handleControlMessage(event.data).catch((error) => {
-        void this.fail(error instanceof Error ? error.message : String(error));
-      });
-    };
-    socket.onerror = () => {
-      void this.fail("实时通话连接失败");
-    };
-    socket.onclose = () => {
-      this.stopHeartbeat();
-      if (this.state !== "idle") void this.fail("实时通话连接已断开");
-    };
-  }
-
-  private async handleControlMessage(raw: unknown): Promise<void> {
-    if (typeof raw !== "string") return;
-    let message: any;
-    try {
-      message = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    switch (message.event) {
-      case "connected": {
-        const call = message.call || {};
-        if (!call.callId || !call.visualEndpoint || !call.visualTicket) {
-          await this.fail("实时通话视觉会话初始化失败");
-          return;
-        }
-        this.connectedInfo = {
-          callId: String(call.callId),
-          sessionId: String(call.sessionId || ""),
-          visualEndpoint: String(call.visualEndpoint),
-          visualTicket: String(call.visualTicket),
-          capabilities: call.capabilities || {},
-        };
-        await this.connectVisualSocket(this.connectedInfo);
-        this.setState("connected");
-        this.options.onConnected?.(this.connectedInfo);
-        this.publishSources();
-        break;
-      }
-      case "audio":
-        if (typeof message.data === "string") {
-          this.playAudio(message.data, Number(message.generationId) || 0, message.microReaction === true);
-        }
-        break;
-      case "speaking":
-        this.setAISpeaking(true);
-        break;
-      case "listening":
-        this.setAISpeaking(false);
-        break;
-      case "interrupted":
-        this.flushPlayback();
-        break;
-      case "pong":
-        break;
-      case "turn_error":
-        this.flushPlayback();
-        break;
-      case "assistant_text": {
-        const data = (message.data || {}) as Record<string, unknown>;
-        if (data.delta === true) break;
-        const text = typeof data.text === "string" ? data.text.trim() : "";
-        if (text) this.options.onAssistantText?.(text);
-        break;
-      }
-      case "tts_ended":
-        // The server has finished sending TTS frames, but queued WebAudio may
-        // still be playing. Report the real playback end only after the local
-        // queue drains, so interrupted turns commit the text that was heard.
-        this.ttsEndedGeneration = Number(message.generationId) || 0;
-        this.reportPlaybackEndedIfDrained();
-        if (!this.playbackContext || this.playbackContext.currentTime + 0.04 >= this.nextPlayTime) {
-          this.setAISpeaking(false);
-        }
-        break;
-      case "asr_final":
-        if (message.data && typeof message.data === "object") {
-          this.options.onASRFinal?.(message.data as Record<string, unknown>);
-        }
-        break;
-      case "vision.updated":
-      case "vision.status":
-        if (message.data && typeof message.data === "object") {
-          this.options.onVision?.(message.data as Record<string, unknown>);
-        }
-        break;
-      case "error":
-        await this.fail(String(message.data || "实时通话连接失败"));
-        break;
-    }
-  }
-
-  private async connectVisualSocket(info: RealtimeCallConnectedInfo): Promise<void> {
-    const endpoint = await resolveWebSocketUrl(info.visualEndpoint);
-    const params = new URLSearchParams({
-      callId: info.callId,
-      ticket: info.visualTicket,
-    });
-    const socket = new WebSocket(`${endpoint}?${params.toString()}`);
-    this.visualSocket = socket;
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const rejectConnection = (error: Error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        socket.onopen = null;
-        socket.onerror = null;
-        socket.onclose = null;
-        if (this.visualSocket === socket) this.visualSocket = null;
-        try { socket.close(); } catch {}
-        reject(error);
-      };
-      const timeout = setTimeout(
-        () => rejectConnection(new Error("视觉通道连接超时")),
-        8000,
-      );
-      socket.onopen = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        socket.onerror = () => {
-          void this.fail("视觉通道连接失败");
-        };
-        socket.onclose = () => {
-          if (this.state !== "idle") void this.fail("视觉通道连接已断开");
-        };
-        resolve();
-      };
-      socket.onerror = () => rejectConnection(new Error("视觉通道连接失败"));
-      socket.onclose = () => rejectConnection(new Error("视觉通道连接已断开"));
-      socket.onmessage = (event) => {
-        if (typeof event.data !== "string") return;
-        try {
-          const message = JSON.parse(event.data);
-          if (message.event === "visual.rejected") {
-            console.warn("[RealtimeCall] visual frame rejected", message.data);
-          }
-        } catch {}
-      };
-    });
   }
 
   private prepareAudioCapture(): void {
@@ -475,70 +246,94 @@ export class RealtimeCallController {
   }
 
   private attachAudioProcessor(): void {
-    if (!this.audioNode) return;
+    if (!this.audioNode || !this.ownedSession) return;
     this.audioNode.onaudioprocess = (event) => {
-      const socket = this.controlSocket;
-      if (
-        (!this.ownedSession && (!socket || socket.readyState !== WebSocket.OPEN)) ||
-        this.mediaState.muted
-      ) {
-        return;
-      }
+      const session = this.ownedSession;
+      if (!session || this.mediaState.muted) return;
       const input = event.inputBuffer.getChannelData(0);
       let sumSquares = 0;
-      for (let i = 0; i < input.length; i++) {
-        sumSquares += input[i] * input[i];
-      }
+      for (let index = 0; index < input.length; index++) sumSquares += input[index] * input[index];
       const rms = Math.sqrt(sumSquares / input.length);
       const vadEvent = this.vad.process(rms);
-      if (this.ownedSession) {
-        if (vadEvent === "speech_start") this.ownedSession.startTurn();
-        this.ownedSession.appendAudio(float32ToPCM(input));
-        if (vadEvent === "speech_end") this.ownedSession.endTurn();
-        if (rms >= 0.02) this.requestImmediateVisualFrame();
-        return;
-      }
-      if (!socket) return;
-      if (vadEvent === "speech_start") {
-        this.flushPlayback();
-        socket.send(JSON.stringify({ event: "speech_start" }));
-      } else if (vadEvent === "speech_end") {
-        socket.send(JSON.stringify({ event: "speech_end" }));
-      }
-      if (rms >= 0.02 && performance.now() - this.lastSpeechVisualBoostAt > 900) {
-        this.lastSpeechVisualBoostAt = performance.now();
-        this.requestImmediateVisualFrame();
-      }
-      const pcm = float32ToPCM(input);
-      socket.send(JSON.stringify({ event: "audio", data: arrayBufferToBase64(pcm) }));
+      if (vadEvent === "speech_start") session.startTurn();
+      session.appendAudio(float32ToPCM(input));
+      if (vadEvent === "speech_end") session.endTurn();
+      if (rms >= 0.02) this.requestImmediateVisualFrame();
     };
   }
 
-  private async startVisualSource(
-    source: RealtimeVisualSource,
-    stream: MediaStream,
-  ): Promise<VisualCaptureRuntime> {
+  private async playOwnedAudio(bytes: Uint8Array): Promise<void> {
+    const context = this.playbackContext;
+    if (!context) return;
+    const decoded = await context.decodeAudioData(bytes.slice().buffer as ArrayBuffer);
+    if (context !== this.playbackContext || !this.ownedSession) return;
+    const generation = ++this.playbackGeneration;
+    this.receivedAudioMs = decoded.duration * 1000;
+    this.playedAudioMs = 0;
+    this.sourcePlayback.clear();
+    const source = context.createBufferSource();
+    source.buffer = decoded;
+    source.connect(context.destination);
+    this.activeSources.add(source);
+    this.sourcePlayback.set(source, { generation, durationMs: decoded.duration * 1000 });
+    this.startProgressTimer();
+    source.onended = () => {
+      this.activeSources.delete(source);
+      this.playedAudioMs = decoded.duration * 1000;
+      this.sendPlaybackProgress(generation);
+      this.sourcePlayback.delete(source);
+      if (!this.activeSources.size) {
+        this.options.onAssistantSpeaking?.(false);
+        this.reportPlaybackEndedIfDrained();
+      }
+    };
+    this.options.onAssistantSpeaking?.(true);
+    source.start();
+  }
+
+  private startProgressTimer(): void {
+    if (this.progressTimer) return;
+    this.progressTimer = setInterval(() => {
+      if (this.playbackGeneration) this.sendPlaybackProgress(this.playbackGeneration);
+    }, 400);
+  }
+
+  private sendPlaybackProgress(generation: number): void {
+    this.ownedSession?.reportPlayback(generation, Math.round(this.playedAudioMs), Math.round(this.receivedAudioMs));
+  }
+
+  private reportPlaybackEndedIfDrained(): void {
+    if (!this.ttsEndedGeneration || this.activeSources.size) return;
+    const generation = this.ttsEndedGeneration;
+    this.ttsEndedGeneration = 0;
+    this.ownedSession?.reportPlaybackEnded(generation);
+    if (this.progressTimer) clearInterval(this.progressTimer);
+    this.progressTimer = null;
+  }
+
+  private flushPlayback(): void {
+    if (this.playbackGeneration) this.sendPlaybackProgress(this.playbackGeneration);
+    for (const source of this.activeSources) {
+      try { source.stop(); } catch {}
+      try { source.disconnect(); } catch {}
+    }
+    this.activeSources.clear();
+    this.sourcePlayback.clear();
+    this.options.onAssistantSpeaking?.(false);
+    this.ttsEndedGeneration = 0;
+    if (this.progressTimer) clearInterval(this.progressTimer);
+    this.progressTimer = null;
+  }
+
+  private async startVisualSource(source: RealtimeVisualSource, stream: MediaStream): Promise<VisualCaptureRuntime> {
     const video = document.createElement("video");
     video.autoplay = true;
     video.muted = true;
     video.playsInline = true;
     video.srcObject = stream;
     await video.play();
-    const canvas = document.createElement("canvas");
-    const runtime: VisualCaptureRuntime = {
-      source,
-      stream,
-      video,
-      canvas,
-      timer: null,
-      sequence: 0,
-      encoding: false,
-      lastSignature: 0,
-      immediateRequested: true,
-    };
-    runtime.timer = setInterval(() => {
-      void this.captureVisualFrame(runtime);
-    }, VISUAL_INTERVAL_MS[source]);
+    const runtime: VisualCaptureRuntime = { source, stream, video, canvas: document.createElement("canvas"), timer: null, sequence: 0, encoding: false, lastSignature: 0, immediateRequested: true };
+    runtime.timer = setInterval(() => { void this.captureVisualFrame(runtime); }, VISUAL_INTERVAL_MS[source]);
     void this.captureVisualFrame(runtime);
     return runtime;
   }
@@ -559,13 +354,10 @@ export class RealtimeCallController {
       this.options.onScreenPreview?.(null);
     }
     this.emitMediaState();
-    this.publishSources();
   }
 
   private async captureVisualFrame(runtime: VisualCaptureRuntime | null): Promise<void> {
-    if (!runtime || runtime.encoding || runtime.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-    const socket = this.visualSocket;
-    if (!this.ownedSession && (!socket || socket.readyState !== WebSocket.OPEN)) return;
+    if (!runtime || runtime.encoding || runtime.video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !this.ownedSession) return;
     runtime.encoding = true;
     try {
       const originalWidth = runtime.video.videoWidth;
@@ -581,233 +373,36 @@ export class RealtimeCallController {
       const context = runtime.canvas.getContext("2d", { alpha: false });
       if (!context) return;
       context.drawImage(runtime.video, 0, 0, width, height);
-
       const signature = computeFrameSignature(context, width, height);
       const immediate = runtime.immediateRequested;
       runtime.immediateRequested = false;
       if (!immediate && signature === runtime.lastSignature) return;
       runtime.lastSignature = signature;
-
       const blob = await canvasToBlob(runtime.canvas, "image/jpeg", runtime.source === "screen" ? 0.78 : 0.72);
       if (!blob || blob.size === 0 || blob.size > 2 * 1024 * 1024) return;
-      if (this.ownedSession) {
-        const session = this.ownedSession;
-        const attachment = await ownedImageAttachment(await blobToDataURL(blob));
-        if (session === this.ownedSession) session.setVisual(attachment);
-        return;
-      }
-      if (!socket) return;
+      const attachment = await ownedImageAttachment(await blobToDataURL(blob));
       runtime.sequence++;
-      const bytes = await blob.arrayBuffer();
-      socket.send(
-        JSON.stringify({
-          event: "visual.frame",
-          data: {
-            source: runtime.source,
-            sequence: runtime.sequence,
-            captureTimestamp: new Date().toISOString(),
-            mime: "image/jpeg",
-            width,
-            height,
-            immediate,
-            data: arrayBufferToBase64(bytes),
-          },
-        }),
-      );
+      this.ownedSession?.setVisual(attachment);
+      this.options.onVision?.({ available: true, source: runtime.source, sequence: runtime.sequence });
     } finally {
       runtime.encoding = false;
     }
   }
 
-  private publishSources(): void {
-    const socket = this.controlSocket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(
-      JSON.stringify({
-        event: "media.sources",
-        data: {
-          audio: this.mediaState.audio && !this.mediaState.muted,
-          camera: this.mediaState.camera,
-          screen: this.mediaState.screen,
-        },
-      }),
-    );
-  }
-
-  private playAudio(base64Data: string, generation: number, microReaction: boolean): void {
-    try {
-      if (!this.playbackContext || this.playbackContext.state === "closed") {
-        this.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE });
-      }
-      if (this.playbackContext.state === "suspended") void this.playbackContext.resume();
-      const bytes = base64ToUint8Array(base64Data);
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      const samples = Math.floor(bytes.byteLength / 2);
-      const buffer = this.playbackContext.createBuffer(1, samples, PLAYBACK_SAMPLE_RATE);
-      const channel = buffer.getChannelData(0);
-      for (let index = 0; index < samples; index++) {
-        channel[index] = view.getInt16(index * 2, true) / 32768;
-      }
-      const source = this.playbackContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(this.playbackContext.destination);
-      const now = this.playbackContext.currentTime;
-      this.nextPlayTime = Math.max(now, this.nextPlayTime);
-      source.start(this.nextPlayTime);
-      this.nextPlayTime += buffer.duration;
-      this.activeSources.add(source);
-      if (!microReaction && generation > 0) {
-        this.trackPlayback(source, generation, buffer.duration * 1000);
-      }
-      this.setAISpeaking(true);
-      source.addEventListener("ended", () => {
-        this.activeSources.delete(source);
-        this.settlePlayback(source);
-        try { source.disconnect(); } catch {}
-        if (!this.playbackContext) return;
-        if (this.playbackContext.currentTime + 0.04 >= this.nextPlayTime) {
-          this.setAISpeaking(false);
-        }
-        this.reportPlaybackEndedIfDrained();
-      });
-    } catch (error) {
-      console.warn("[RealtimeCall] audio playback failed", error);
-    }
-  }
-
-  private trackPlayback(source: AudioBufferSourceNode, generation: number, durationMs: number): void {
-    if (this.playbackGeneration !== generation) {
-      this.playbackGeneration = generation;
-      this.receivedAudioMs = 0;
-      this.playedAudioMs = 0;
-      this.sourcePlayback.clear();
-    }
-    this.receivedAudioMs += durationMs;
-    this.sourcePlayback.set(source, { generation, durationMs });
-    this.startProgressTimer();
-  }
-
-  private settlePlayback(source: AudioBufferSourceNode): void {
-    const info = this.sourcePlayback.get(source);
-    if (!info) return;
-    this.sourcePlayback.delete(source);
-    this.playedAudioMs += info.durationMs;
-    this.sendPlaybackProgress(info.generation);
-  }
-
-  private startProgressTimer(): void {
-    if (this.progressTimer) return;
-    this.progressTimer = setInterval(() => {
-      if (!this.playbackGeneration) return;
-      this.sendPlaybackProgress(this.playbackGeneration);
-    }, 400);
-  }
-
-  private startHeartbeat(): void {
-    this.stopHeartbeat();
-    this.heartbeatTimer = setInterval(() => {
-      const socket = this.controlSocket;
-      if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ event: "ping" }));
-      }
-    }, 15000);
-  }
-
-  private stopHeartbeat(): void {
-    if (!this.heartbeatTimer) return;
-    clearInterval(this.heartbeatTimer);
-    this.heartbeatTimer = null;
-  }
-
-  private stopProgressTimer(): void {
-    if (!this.progressTimer) return;
-    clearInterval(this.progressTimer);
-    this.progressTimer = null;
-  }
-
-  private sendPlaybackProgress(generation: number): void {
-    const socket = this.controlSocket;
-    if (!socket || socket.readyState !== WebSocket.OPEN || generation <= 0) return;
-    socket.send(
-      JSON.stringify({
-        event: "playback_progress",
-        generationId: generation,
-        played_audio_ms: Math.round(this.playedAudioMs),
-        received_audio_ms: Math.round(this.receivedAudioMs),
-      }),
-    );
-  }
-
-  private reportPlaybackEndedIfDrained(): void {
-    const generation = this.ttsEndedGeneration;
-    if (!generation || this.activeSources.size > 0) return;
-    const socket = this.controlSocket;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    this.ttsEndedGeneration = 0;
-    this.sendPlaybackProgress(generation);
-    socket.send(JSON.stringify({ event: "tts_playback_ended", generationId: generation }));
-    this.stopProgressTimer();
-  }
-
-  private flushPlayback(): void {
-    if (this.playbackGeneration > 0) this.sendPlaybackProgress(this.playbackGeneration);
-    for (const source of this.activeSources) {
-      try { source.stop(); } catch {}
-      try { source.disconnect(); } catch {}
-    }
-    this.activeSources.clear();
-    this.sourcePlayback.clear();
-    this.nextPlayTime = this.playbackContext ? this.playbackContext.currentTime : 0;
-    this.ttsEndedGeneration = 0;
-    this.stopProgressTimer();
-    this.setAISpeaking(false);
-  }
-
-  private setAISpeaking(speaking: boolean): void {
-    if (this.aiSpeaking === speaking) return;
-    this.aiSpeaking = speaking;
-    this.options.onAssistantSpeaking?.(speaking);
-  }
-
   private async fail(message: string): Promise<void> {
     this.setState("error", message);
     if (!this.failureCleanup) {
-      this.failureCleanup = this.cleanup(true).finally(() => {
-        this.failureCleanup = null;
-      });
+      this.failureCleanup = this.cleanup().finally(() => { this.failureCleanup = null; });
     }
     await this.failureCleanup;
   }
 
-  private async cleanup(closeSockets: boolean): Promise<void> {
+  private async cleanup(): Promise<void> {
     this.ownedSession?.stop();
     this.ownedSession = null;
     this.flushPlayback();
     this.stopVisualSource("camera");
     this.stopVisualSource("screen");
-    const visual = this.visualSocket;
-    this.visualSocket = null;
-    const control = this.controlSocket;
-    this.controlSocket = null;
-    // Always detach handlers and close the peer channel as well. If one
-    // realtime socket dies, leaving the other one open leaks camera/screen
-    // sessions until the remote timeout fires.
-    if (visual) {
-      visual.onopen = null;
-      visual.onmessage = null;
-      visual.onerror = null;
-      visual.onclose = null;
-      try { visual.close(); } catch {}
-    }
-    if (control) {
-      control.onopen = null;
-      control.onmessage = null;
-      control.onerror = null;
-      control.onclose = null;
-      if (closeSockets || control.readyState !== WebSocket.CLOSED) {
-        try { control.close(); } catch {}
-      }
-    }
     if (this.audioNode) {
       this.audioNode.onaudioprocess = null;
       try { this.audioNode.disconnect(); } catch {}
@@ -827,17 +422,6 @@ export class RealtimeCallController {
       try { await this.playbackContext.close(); } catch {}
     }
     this.playbackContext = null;
-    this.connectedInfo = null;
-    this.nextPlayTime = 0;
-    this.activeSources.clear();
-    this.sourcePlayback.clear();
-    this.playbackGeneration = 0;
-    this.receivedAudioMs = 0;
-    this.playedAudioMs = 0;
-    this.ttsEndedGeneration = 0;
-    this.stopHeartbeat();
-    this.stopProgressTimer();
-    this.setAISpeaking(false);
     this.mediaState = { audio: false, camera: false, screen: false, muted: false };
     this.emitMediaState();
   }
@@ -855,29 +439,22 @@ export class RealtimeCallController {
 function float32ToPCM(float32: Float32Array): ArrayBuffer {
   const buffer = new ArrayBuffer(float32.length * 2);
   const view = new DataView(buffer);
-  for (let i = 0; i < float32.length; i++) {
-    let sample = Math.max(-1, Math.min(1, float32[i]));
-    sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-    view.setInt16(i * 2, sample, true);
+  for (let index = 0; index < float32.length; index++) {
+    const sample = Math.max(-1, Math.min(1, float32[index]));
+    view.setInt16(index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
   }
   return buffer;
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const chunk = 0x8000;
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunk, bytes.length)));
+function computeFrameSignature(context: CanvasRenderingContext2D, width: number, height: number): number {
+  const data = context.getImageData(0, 0, width, height).data;
+  let signature = 2166136261;
+  const step = Math.max(4, Math.floor(data.length / 2048 / 4) * 4);
+  for (let index = 0; index < data.length; index += step) {
+    signature ^= data[index];
+    signature = Math.imul(signature, 16777619);
   }
-  return btoa(binary);
-}
-
-function base64ToUint8Array(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+  return signature >>> 0;
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
@@ -887,27 +464,8 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("通话画面读取失败"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("视觉帧编码失败"));
     reader.readAsDataURL(blob);
   });
-}
-
-function computeFrameSignature(context: CanvasRenderingContext2D, width: number, height: number): number {
-  const sampleWidth = Math.min(32, width);
-  const sampleHeight = Math.min(20, height);
-  const scratch = document.createElement("canvas");
-  scratch.width = sampleWidth;
-  scratch.height = sampleHeight;
-  const scratchContext = scratch.getContext("2d", { willReadFrequently: true });
-  if (!scratchContext) return Date.now();
-  scratchContext.drawImage(context.canvas, 0, 0, sampleWidth, sampleHeight);
-  const data = scratchContext.getImageData(0, 0, sampleWidth, sampleHeight).data;
-  let hash = 2166136261;
-  for (let i = 0; i < data.length; i += 4) {
-    const luminance = ((data[i] * 3 + data[i + 1] * 6 + data[i + 2]) / 10) | 0;
-    hash ^= luminance;
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
 }

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
@@ -71,11 +70,10 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		return coordination.ErrWrongOwner
 	}
 	var assistant struct {
-		ConversationID string          `json:"conversationId"`
-		Role           string          `json:"role"`
-		Content        string          `json:"content"`
-		RequestID      string          `json:"requestId"`
-		StateEffects   json.RawMessage `json:"stateEffects"`
+		ConversationID string `json:"conversationId"`
+		Role           string `json:"role"`
+		Content        string `json:"content"`
+		RequestID      string `json:"requestId"`
 	}
 	if err := json.Unmarshal(resource.Body, &assistant); err != nil {
 		return err
@@ -138,12 +136,23 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		}
 	} else if p.services.Chat != nil {
 		recovery, ok := p.services.Chat.(interface {
-			RecoverOwnedMood(context.Context, coordination.ExecutionScope, time.Time, time.Time, string) error
+			RecoverOwnedMood(context.Context, coordination.ExecutionScope, time.Time, time.Time, string, interaction.PsycheState) error
 		})
 		if !ok {
 			return errors.New("Owner 情绪后处理端口未接通")
 		}
-		if err := recovery.RecoverOwnedMood(ctx, scope, previous, currentAt, request.Source); err != nil {
+		psycheResource, err := p.store.Get(ctx, coordination.RuntimeStateKindPsyche, "role")
+		if err != nil {
+			return err
+		}
+		if psycheResource == nil || psycheResource.Deleted || psycheResource.RoleID != scope.RoleID {
+			return coordination.ErrWrongOwner
+		}
+		var currentPsyche interaction.PsycheState
+		if err := json.Unmarshal(psycheResource.Body, &currentPsyche); err != nil {
+			return err
+		}
+		if err := recovery.RecoverOwnedMood(ctx, scope, previous, currentAt, request.Source, currentPsyche); err != nil {
 			return err
 		}
 		encoded, err := json.Marshal(map[string]any{"hash": fingerprint})
@@ -153,22 +162,6 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		phaseScope := scope
 		phaseScope.RequestID += "|effects-mood"
 		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: phaseScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: receiptID + "/mood", RoleID: scope.RoleID, Body: encoded}}}); err != nil {
-			return err
-		}
-	}
-	if len(assistant.StateEffects) > 0 && string(assistant.StateEffects) != "null" {
-		var runtime interaction.RuntimeAssembly
-		if err := json.Unmarshal(assistant.StateEffects, &runtime); err != nil {
-			return err
-		}
-		committer, ok := p.services.Chat.(interface {
-			CommitOwnedState(context.Context, chat.OwnedStatePlan) error
-		})
-		if !ok {
-			return errors.New("Owner 心理、关系与需求状态提交端口未接通")
-		}
-		plan := chat.OwnedStatePlan{Scope: scope, SpaceID: p.legacySpaceID, Character: scope.RoleID, Conversation: request.ConversationID, InteractionID: scope.TurnID, Channel: request.Channel, PeerID: request.PeerID, Source: request.Source, IsInternal: request.IsInternal, Reply: assistant.Content, MessageID: request.MessageID, Runtime: &runtime}
-		if err := committer.CommitOwnedState(ctx, plan); err != nil {
 			return err
 		}
 	}

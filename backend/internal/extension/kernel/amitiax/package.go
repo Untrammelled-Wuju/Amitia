@@ -232,7 +232,7 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 		return nil, err
 	}
 	if report.HasErrors() {
-		return nil, fmt.Errorf("%w: manifest validation failed", manifest_v1.ErrInvalidManifest)
+		return nil, fmt.Errorf("%w: manifest validation failed: %+v", manifest_v1.ErrInvalidManifest, report.Errors)
 	}
 	if pkg.Tree.TreeHash != "" && m.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
 		return nil, fmt.Errorf("%w: manifest content tree hash mismatch", ErrIntegrityMismatch)

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/u-ai/backend/internal/realtime"
+	realtime "github.com/u-ai/backend/internal/devicemesh/wake"
 )
 
 func TestWorkflowLocalKWSCapabilitiesAreLocalAndModelBacked(t *testing.T) {

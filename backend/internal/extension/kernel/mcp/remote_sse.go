@@ -1,5 +1,3 @@
-// migration-only: temporary compatibility adapter
-// remove at step 65 cutover
 package mcp
 
 import (
@@ -12,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/u-ai/backend/internal/mcp/protocol"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 )
 
 type SSEParser struct {

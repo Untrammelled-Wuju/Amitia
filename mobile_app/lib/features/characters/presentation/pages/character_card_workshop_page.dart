@@ -636,10 +636,12 @@ class _CharacterCardWorkshopPageState
       );
       if (confirmed != true) return;
       final authority = (previewResult?['roleAuthority'] ?? '').toString();
+      final importId = (previewResult?['importId'] ?? '').toString();
+      if (importId.isEmpty) throw StateError('角色卡预览响应缺少导入编号');
       roleAuthorityHeaders(authority);
       final result = await api.postMultipart<Map<String, dynamic>>(
         '/api/characters/import-card/confirm',
-        fields: {'roleAuthority': authority},
+        fields: {'roleAuthority': authority, 'importId': importId},
         files: {
           'card': [path],
         },
@@ -664,7 +666,16 @@ class _CharacterCardWorkshopPageState
         }
         await _openEditor(character: imported);
       }
-      if (mounted) amitiaSnackBar(context, '角色卡导入成功');
+      if (mounted) {
+        final lorebookCount = ((result['lorebookEntryCount'] as num?) ?? 0)
+            .toInt();
+        final importedCount = ((result['worldbookImportedCount'] as num?) ?? 0)
+            .toInt();
+        amitiaSnackBar(
+          context,
+          lorebookCount > 0 ? '角色卡导入成功，已写入 $importedCount 条世界书' : '角色卡导入成功',
+        );
+      }
     } catch (error) {
       if (mounted) amitiaSnackBar(context, '角色卡导入失败：$error');
     } finally {

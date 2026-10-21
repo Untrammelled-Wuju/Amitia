@@ -14,21 +14,25 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
+	"github.com/u-ai/backend/internal/extension/kernel/mcp_manifest"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/extension/runtimegate"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
+	"github.com/u-ai/backend/pkg/resourceuri"
 )
 
 type TypedContributionInstaller struct {
@@ -262,7 +266,7 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 	case domain.ContributionKindBackgroundTask:
 		return i.buildTaskDefinitionOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindMCPServer:
-		return i.buildMCPServerOp(ctx, contrib, defData)
+		return i.buildMCPServerOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
 		return i.buildUIContributionOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindUIProvider:
@@ -754,6 +758,18 @@ func (i *TypedContributionInstaller) buildAgentSkillOp(ctx context.Context, cont
 	if def.ID == "" {
 		def.ID = string(contrib.ID)
 	}
+	if def.ContributionID == "" {
+		def.ContributionID = string(contrib.ID)
+	}
+	if def.EntryPoint != "" || def.Instructions.Text == "" {
+		loaded, loadErr := i.loadInstalledAgentSkill(ctx, contrib, def)
+		if loadErr != nil {
+			return installOp{}, loadErr
+		}
+		def = loaded
+	}
+	def.ID = agent_skill.PublicSkillID(def.ExtensionID)
+	def.Enabled = false
 	return installOp{
 		kind: domain.ContributionKindAgentSkill,
 		doInstall: func(ctx context.Context) error {
@@ -766,6 +782,46 @@ func (i *TypedContributionInstaller) buildAgentSkillOp(ctx context.Context, cont
 			_ = i.container.AgentSkillCatalog.Unregister(string(contrib.ExtensionID))
 		},
 	}, nil
+}
+
+func (i *TypedContributionInstaller) loadInstalledAgentSkill(ctx context.Context, contrib domain.ContributionDefinition, definition agent_skill.AgentSkillDefinition) (agent_skill.AgentSkillDefinition, error) {
+	packageRoot := resolveExtensionBundlePath(i.container.ExtRoot, string(contrib.ExtensionID))
+	if packageRoot == "" {
+		return agent_skill.AgentSkillDefinition{}, fmt.Errorf("agent skill package root unavailable")
+	}
+	entryPoint := definition.EntryPoint
+	if entryPoint == "" {
+		for _, candidate := range []string{"resources/SKILL.md", "SKILL.md"} {
+			if _, err := os.Stat(filepath.Join(packageRoot, filepath.FromSlash(candidate))); err == nil {
+				entryPoint = candidate
+				break
+			}
+		}
+	}
+	if entryPoint == "" {
+		return agent_skill.AgentSkillDefinition{}, fmt.Errorf("agent skill entryPoint is required")
+	}
+	definition.EntryPoint = entryPoint
+	if installation, err := i.container.InstallationRepository.GetInstallation(ctx, contrib.ExtensionID); err == nil {
+		definition.OwnerSpaceID = metadataString(installation.Metadata["ownerSpaceId"])
+		if scopeType := metadataString(installation.Metadata["scopeType"]); scopeType != "" {
+			definition.Scope = agent_skill.AgentSkillScope(scopeType)
+		}
+		definition.ScopeID = metadataString(installation.Metadata["scopeId"])
+	}
+	loaded, err := agent_skill.LoadDefinitionFromPackage(ctx, packageRoot, entryPoint, definition)
+	if err != nil {
+		return agent_skill.AgentSkillDefinition{}, fmt.Errorf("load agent skill: %w", err)
+	}
+	loaded.ID = agent_skill.PublicSkillID(definition.ExtensionID)
+	loaded.ContributionID = definition.ContributionID
+	loaded.ExtensionID = definition.ExtensionID
+	loaded.ModuleID = definition.ModuleID
+	loaded.OwnerSpaceID = definition.OwnerSpaceID
+	loaded.Scope = definition.Scope
+	loaded.ScopeID = definition.ScopeID
+	loaded.Enabled = false
+	return loaded, nil
 }
 
 func (i *TypedContributionInstaller) buildWorkflowOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) (installOp, error) {
@@ -843,38 +899,240 @@ func (i *TypedContributionInstaller) buildTaskDefinitionOp(ctx context.Context, 
 	}, nil
 }
 
-func (i *TypedContributionInstaller) buildMCPServerOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) (installOp, error) {
-	mcpToolAdapter := capability.GetGlobalMCPToolAdapter()
-	if mcpToolAdapter == nil {
-		return installOp{}, fmt.Errorf("mcp tool adapter not available")
+func (i *TypedContributionInstaller) buildMCPServerOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
+	if i.container.MCPBindings == nil {
+		return installOp{}, fmt.Errorf("mcp binding service not configured")
 	}
-	var def struct {
-		ServerName string            `json:"serverName"`
-		Command    string            `json:"command,omitempty"`
-		Args       []string          `json:"args,omitempty"`
-		Env        map[string]string `json:"env,omitempty"`
-		URL        string            `json:"url,omitempty"`
-		Tools      json.RawMessage   `json:"tools,omitempty"`
+	binding, err := i.mcpBindingDescriptor(ctx, contrib, defData, generation)
+	if err != nil {
+		return installOp{}, err
 	}
-	if err := json.Unmarshal(defData, &def); err != nil {
-		return installOp{}, fmt.Errorf("unmarshal mcp server: %w", err)
-	}
-	serverID := def.ServerName
-	if serverID == "" {
-		serverID = string(contrib.ID)
-	}
+	var serverID string
 	return installOp{
 		kind: domain.ContributionKindMCPServer,
 		doInstall: func(ctx context.Context) error {
-			if err := mcpToolAdapter.RegisterServerWithDefinition(ctx, serverID, defData, string(contrib.ExtensionID)); err != nil {
-				return fmt.Errorf("register mcp server: %w", err)
+			id, err := i.container.MCPBindings.PutContributionBinding(ctx, binding)
+			if err != nil {
+				return fmt.Errorf("register MCP package binding: %w", err)
 			}
+			serverID = id
 			return nil
 		},
 		doRollback: func(ctx context.Context) {
-			_ = mcpToolAdapter.UnregisterServer(ctx, serverID)
+			if serverID != "" {
+				_ = i.container.MCPBindings.DeactivateContributionBinding(ctx, string(contrib.ExtensionID), string(contrib.ID))
+			}
+			_ = i.container.MCPBindings.RemoveContributionBinding(ctx, string(contrib.ExtensionID), string(contrib.ID))
 		},
 	}, nil
+}
+
+func (i *TypedContributionInstaller) mcpBindingDescriptor(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (MCPBindingDescriptor, error) {
+	if spec, err := mcp_manifest.ParseSpec(contrib.Definition); err == nil {
+		return i.canonicalMCPBindingDescriptor(ctx, contrib, spec, generation)
+	}
+	var def struct {
+		ServerName  string            `json:"serverName"`
+		DisplayName string            `json:"displayName"`
+		Description string            `json:"description"`
+		Transport   string            `json:"transport"`
+		Command     string            `json:"command,omitempty"`
+		Args        []string          `json:"args,omitempty"`
+		Env         map[string]string `json:"env,omitempty"`
+		WorkDir     string            `json:"workDir,omitempty"`
+		AuthType    string            `json:"authType,omitempty"`
+		URL         string            `json:"url,omitempty"`
+	}
+	if err := json.Unmarshal(defData, &def); err != nil {
+		return MCPBindingDescriptor{}, fmt.Errorf("unmarshal mcp server: %w", err)
+	}
+	placement := ""
+	if i.container.ModuleRepository != nil {
+		if module, err := i.container.ModuleRepository.GetModule(ctx, contrib.ExtensionID, contrib.ModuleID); err == nil {
+			placement = string(module.Placement)
+		}
+	}
+	return MCPBindingDescriptor{
+		ExtensionID:       string(contrib.ExtensionID),
+		ModuleID:          string(contrib.ModuleID),
+		ContributionID:    string(contrib.ID),
+		PackageGeneration: generation,
+		ServerName:        def.ServerName,
+		DisplayName:       def.DisplayName,
+		Description:       def.Description,
+		Transport:         def.Transport,
+		Endpoint:          def.URL,
+		Command:           def.Command,
+		Args:              def.Args,
+		Env:               def.Env,
+		WorkDir:           def.WorkDir,
+		AuthType:          def.AuthType,
+		RuntimePlacement:  placement,
+	}, nil
+}
+
+func (i *TypedContributionInstaller) canonicalMCPBindingDescriptor(ctx context.Context, contrib domain.ContributionDefinition, spec mcp_manifest.MCPServerSpec, generation int64) (MCPBindingDescriptor, error) {
+	placement := ""
+	if i.container.ModuleRepository != nil {
+		if module, err := i.container.ModuleRepository.GetModule(ctx, contrib.ExtensionID, contrib.ModuleID); err == nil {
+			placement = string(module.Placement)
+		}
+	}
+	name := strings.TrimSpace(contrib.Name.Default)
+	if name == "" {
+		name = string(contrib.ID)
+	}
+	binding := MCPBindingDescriptor{
+		ExtensionID:         string(contrib.ExtensionID),
+		ModuleID:            string(contrib.ModuleID),
+		ContributionID:      string(contrib.ID),
+		PackageGeneration:   generation,
+		ServerName:          name,
+		DisplayName:         name,
+		Description:         contrib.Description.Default,
+		RuntimePlacement:    placement,
+		AllowPrivateNetwork: spec.Security.AllowPrivateNetwork,
+		Capabilities:        map[string]bool{},
+	}
+	switch spec.Transport.Type {
+	case mcp_manifest.MCPTransportTypeStdio:
+		if spec.Transport.Stdio == nil {
+			return MCPBindingDescriptor{}, fmt.Errorf("MCP stdio transport is missing")
+		}
+		binding.Transport = "stdio"
+		binding.Command = spec.Transport.Stdio.Command
+		binding.Args = append([]string(nil), spec.Transport.Stdio.Args...)
+		if spec.Transport.Stdio.WorkDir != "" {
+			if i.container.ResourceResolver == nil {
+				return MCPBindingDescriptor{}, fmt.Errorf("MCP working directory resolver is unavailable")
+			}
+			uri, err := resourceuri.Parse(spec.Transport.Stdio.WorkDir)
+			if err != nil {
+				return MCPBindingDescriptor{}, err
+			}
+			resolved, err := i.container.ResourceResolver.Resolve(uri)
+			if err != nil {
+				return MCPBindingDescriptor{}, err
+			}
+			if resolved.Kind != resourceuri.ResourceKindFilesystem || resolved.LocalPath == "" {
+				return MCPBindingDescriptor{}, fmt.Errorf("MCP working directory is not a filesystem resource")
+			}
+			binding.WorkDir = resolved.LocalPath
+		}
+		binding.Env = map[string]string{}
+		for key, value := range spec.Transport.Stdio.Env.Values {
+			binding.Env[key] = value
+		}
+		for key, rawRef := range spec.Transport.Stdio.Env.Secrets {
+			value, err := i.resolveMCPSecret(ctx, contrib, generation, rawRef)
+			if err != nil {
+				return MCPBindingDescriptor{}, fmt.Errorf("resolve MCP stdio secret %s: %w", key, err)
+			}
+			binding.Env[key] = value
+		}
+		if len(binding.Env) > 0 {
+			binding.AuthType = string(mcp_manifest.MCPAuthTypeStdioEnv)
+		}
+	case mcp_manifest.MCPTransportTypeStreamableHTTP, mcp_manifest.MCPTransportTypeSSE:
+		if spec.Transport.Remote == nil {
+			return MCPBindingDescriptor{}, fmt.Errorf("MCP remote transport is missing")
+		}
+		binding.Transport = "streamable_http"
+		binding.Endpoint = spec.Transport.Remote.URL
+		binding.AllowPrivateNetwork = binding.AllowPrivateNetwork || spec.Transport.Remote.AllowPrivateNetwork
+		headers := map[string]string{}
+		for key, value := range spec.Transport.Remote.Headers {
+			if value.SecretRef != "" {
+				resolved, err := i.resolveMCPSecret(ctx, contrib, generation, value.SecretRef)
+				if err != nil {
+					return MCPBindingDescriptor{}, fmt.Errorf("resolve MCP header %s: %w", key, err)
+				}
+				headers[key] = resolved
+			} else {
+				headers[key] = value.Value
+			}
+		}
+		if len(headers) > 0 {
+			raw, err := json.Marshal(headers)
+			if err != nil {
+				return MCPBindingDescriptor{}, err
+			}
+			binding.AuthType = string(mcp_manifest.MCPAuthTypeCustomHeaders)
+			binding.CredentialType = string(mcp_manifest.MCPAuthTypeCustomHeaders)
+			binding.Credential = raw
+		}
+		if auth := spec.Transport.Remote.Auth; auth != nil {
+			binding.AuthType = string(auth.Type)
+			switch auth.Type {
+			case mcp_manifest.MCPAuthTypeBearerToken:
+				resolved, err := i.resolveMCPSecret(ctx, contrib, generation, auth.SecretRef)
+				if err != nil {
+					return MCPBindingDescriptor{}, fmt.Errorf("resolve MCP bearer token: %w", err)
+				}
+				binding.CredentialType = string(mcp_manifest.MCPAuthTypeBearerToken)
+				binding.Credential = []byte(resolved)
+			case mcp_manifest.MCPAuthTypeCustomHeaders:
+				if auth.SecretRef != "" {
+					resolved, err := i.resolveMCPSecret(ctx, contrib, generation, auth.SecretRef)
+					if err != nil {
+						return MCPBindingDescriptor{}, fmt.Errorf("resolve MCP custom headers: %w", err)
+					}
+					binding.CredentialType = string(mcp_manifest.MCPAuthTypeCustomHeaders)
+					binding.Credential = []byte(resolved)
+				}
+			}
+		}
+	default:
+		return MCPBindingDescriptor{}, fmt.Errorf("unsupported MCP transport: %s", spec.Transport.Type)
+	}
+	for name, enabled := range map[string]mcp_manifest.MCPCapabilityState{
+		"roots":       spec.Capabilities.Client.Roots,
+		"sampling":    spec.Capabilities.Client.Sampling,
+		"elicitation": spec.Capabilities.Client.Elicitation,
+		"tasks":       spec.Capabilities.Client.Tasks,
+	} {
+		switch enabled {
+		case mcp_manifest.MCPCapabilityStateOptional, mcp_manifest.MCPCapabilityStateRequired:
+			binding.Capabilities[name] = true
+		}
+	}
+	return binding, nil
+}
+
+func (i *TypedContributionInstaller) resolveMCPSecret(ctx context.Context, contrib domain.ContributionDefinition, generation int64, raw string) (string, error) {
+	if i.container.SecretBroker == nil {
+		return "", fmt.Errorf("secret broker is unavailable")
+	}
+	ref, err := secret.ParseRef(raw)
+	if err != nil {
+		return "", err
+	}
+	lease, err := i.container.SecretBroker.Issue(ctx, secret.LeaseRequest{
+		Ref:               ref,
+		Purpose:           "mcp.binding",
+		RuntimeInstanceID: "mcp-" + string(contrib.ExtensionID) + "-" + string(contrib.ID),
+		ExtensionID:       string(contrib.ExtensionID),
+		ModuleID:          string(contrib.ModuleID),
+		Generation:        generation,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer i.container.SecretBroker.RevokeLease(lease.ID)
+	value, err := i.container.SecretBroker.Consume(ctx, lease.ID, secret.LeaseUseContext{
+		ExtensionID: string(contrib.ExtensionID),
+		ModuleID:    string(contrib.ModuleID),
+		Generation:  generation,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		for index := range value {
+			value[index] = 0
+		}
+	}()
+	return string(value), nil
 }
 
 func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
@@ -1320,6 +1578,8 @@ func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib
 		return i.activateAgentSkill(ctx, contrib)
 	case domain.ContributionKindWorkflow:
 		return i.activateWorkflow(ctx, contrib)
+	case domain.ContributionKindMCPServer:
+		return i.activateMCPServer(ctx, contrib, generation)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
 		return i.activateUI(ctx, contrib, generation)
 	case domain.ContributionKindUIProvider:
@@ -1600,8 +1860,54 @@ func (i *TypedContributionInstaller) activateAgentSkill(ctx context.Context, con
 	if i.container.AgentSkillCatalog == nil {
 		return fmt.Errorf("agent skill catalog not configured")
 	}
-	if err := i.container.AgentSkillCatalog.SetEnabled(string(contrib.ExtensionID), true); err != nil {
+	definition, ok := i.container.AgentSkillCatalog.Get(string(contrib.ExtensionID))
+	if !ok {
+		defData, _ := json.Marshal(contrib.Definition)
+		if err := json.Unmarshal(defData, &definition); err != nil {
+			return fmt.Errorf("unmarshal agent skill for activate: %w", err)
+		}
+		if definition.ExtensionID == "" {
+			definition.ExtensionID = string(contrib.ExtensionID)
+		}
+		if definition.ModuleID == "" {
+			definition.ModuleID = string(contrib.ModuleID)
+		}
+		if definition.ID == "" {
+			definition.ID = string(contrib.ID)
+		}
+		if definition.ContributionID == "" {
+			definition.ContributionID = string(contrib.ID)
+		}
+		loaded, err := i.loadInstalledAgentSkill(ctx, contrib, definition)
+		if err != nil {
+			return fmt.Errorf("load agent skill %s for activate: %w", contrib.ID, err)
+		}
+		definition = loaded
+		if err := i.container.AgentSkillCatalog.Register(definition); err != nil {
+			return fmt.Errorf("register agent skill %s for activate: %w", contrib.ID, err)
+		}
+	}
+	enabled := true
+	if i.container.Store != nil {
+		var override int
+		if err := i.container.Store.DB().QueryRowContext(ctx, `SELECT enabled FROM extension_agent_skill_overrides WHERE owner_space_id = ? AND skill_id = ?`, definition.OwnerSpaceID, definition.OverrideID()).Scan(&override); err == nil {
+			enabled = override != 0
+		}
+	}
+	if err := i.container.AgentSkillCatalog.SetEnabledForSpace(definition.OwnerSpaceID, definition.ExtensionID, string(contrib.ID), enabled); err != nil {
 		return fmt.Errorf("activate agent skill %s: %w", contrib.ID, err)
+	}
+	if i.container.EnablementService != nil {
+		subject := enablement.StateSubject{Kind: enablement.SubjectAgentSkill, ID: definition.StateID(), ParentID: string(contrib.ExtensionID), OwnerID: definition.OwnerSpaceID}
+		var stateErr error
+		if enabled {
+			stateErr = i.container.EnablementService.Enable(ctx, subject)
+		} else {
+			stateErr = i.container.EnablementService.Disable(ctx, subject)
+		}
+		if stateErr != nil {
+			return fmt.Errorf("apply agent skill enablement %s: %w", contrib.ID, stateErr)
+		}
 	}
 	return nil
 }
@@ -1623,6 +1929,31 @@ func (i *TypedContributionInstaller) activateWorkflow(ctx context.Context, contr
 		return fmt.Errorf("activate workflow %s: %w", def.ID, err)
 	}
 	return nil
+}
+
+func (i *TypedContributionInstaller) activateMCPServer(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
+	if i.container.MCPBindings == nil {
+		return fmt.Errorf("mcp binding service not configured")
+	}
+	defData, err := json.Marshal(contrib.Definition)
+	if err != nil {
+		return err
+	}
+	binding, err := i.mcpBindingDescriptor(ctx, contrib, defData, generation)
+	if err != nil {
+		return err
+	}
+	if _, err := i.container.MCPBindings.ActivateContributionBinding(ctx, binding); err != nil {
+		return fmt.Errorf("activate MCP server %s: %w", contrib.ID, err)
+	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) deactivateMCPServer(ctx context.Context, contrib domain.ContributionDefinition) error {
+	if i.container.MCPBindings == nil {
+		return fmt.Errorf("mcp binding service not configured")
+	}
+	return i.container.MCPBindings.DeactivateContributionBinding(ctx, string(contrib.ExtensionID), string(contrib.ID))
 }
 
 func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
@@ -1726,6 +2057,8 @@ func (i *TypedContributionInstaller) deactivateSingle(ctx context.Context, contr
 		return i.deactivateAgentSkill(ctx, contrib)
 	case domain.ContributionKindWorkflow:
 		return i.deactivateWorkflow(ctx, contrib)
+	case domain.ContributionKindMCPServer:
+		return i.deactivateMCPServer(ctx, contrib)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
 		return i.deactivateUI(ctx, contrib)
 	case domain.ContributionKindUIProvider:
@@ -1854,8 +2187,14 @@ func (i *TypedContributionInstaller) deactivateAgentSkill(ctx context.Context, c
 	if i.container.AgentSkillCatalog == nil {
 		return fmt.Errorf("agent skill catalog not configured")
 	}
-	if err := i.container.AgentSkillCatalog.SetEnabled(string(contrib.ExtensionID), false); err != nil {
+	definition, _ := i.container.AgentSkillCatalog.GetScoped("", string(contrib.ID))
+	if err := i.container.AgentSkillCatalog.SetEnabledForSpace(definition.OwnerSpaceID, definition.ExtensionID, string(contrib.ID), false); err != nil {
 		return fmt.Errorf("deactivate agent skill %s: %w", contrib.ID, err)
+	}
+	if i.container.EnablementService != nil {
+		if err := i.container.EnablementService.Disable(ctx, enablement.StateSubject{Kind: enablement.SubjectAgentSkill, ID: definition.StateID(), ParentID: string(contrib.ExtensionID), OwnerID: definition.OwnerSpaceID}); err != nil {
+			return fmt.Errorf("disable agent skill %s: %w", contrib.ID, err)
+		}
 	}
 	return nil
 }
@@ -1971,7 +2310,32 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 			return fmt.Errorf("uninstall tools for %s: %w", extID, err)
 		}
 	}
+	if i.container.MCPBindings != nil {
+		if err := i.container.MCPBindings.RemoveExtensionBindings(ctx, string(extID)); err != nil {
+			i.recordAudit(domain.ContributionDefinition{ID: "mcp_servers", Kind: domain.ContributionKindMCPServer, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			return fmt.Errorf("uninstall MCP servers for %s: %w", extID, err)
+		}
+	}
 	if i.container.AgentSkillCatalog != nil {
+		ownerSpaceID := ""
+		if installation, err := i.container.InstallationRepository.GetInstallation(ctx, extID); err == nil {
+			ownerSpaceID = metadataString(installation.Metadata["ownerSpaceId"])
+		}
+		if contributions, err := i.container.ContributionRepository.ListContributions(ctx, extID); err == nil && i.container.Store != nil {
+			for _, contribution := range contributions {
+				if contribution.Kind != domain.ContributionKindAgentSkill {
+					continue
+				}
+				if _, err := i.container.Store.DB().ExecContext(ctx, `DELETE FROM extension_agent_skill_overrides WHERE owner_space_id = ? AND skill_id = ?`, ownerSpaceID, string(contribution.ExtensionID)+":"+string(contribution.ID)); err != nil {
+					return fmt.Errorf("uninstall agent skill override for %s: %w", contribution.ID, err)
+				}
+				if store, ok := i.container.EnablementStore.(interface {
+					Delete(context.Context, enablement.StateSubject) error
+				}); ok {
+					_ = store.Delete(ctx, enablement.StateSubject{Kind: enablement.SubjectAgentSkill, ID: ownerSpaceID + ":" + string(contribution.ID), ParentID: string(extID), OwnerID: ownerSpaceID})
+				}
+			}
+		}
 		if err := i.container.AgentSkillCatalog.Unregister(string(extID)); err != nil {
 			i.recordAudit(domain.ContributionDefinition{ID: "agent_skills", Kind: domain.ContributionKindAgentSkill, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
 			return fmt.Errorf("uninstall agent skills for %s: %w", extID, err)
@@ -2179,6 +2543,16 @@ func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Co
 					}
 					if def.ModuleID == "" {
 						def.ModuleID = string(contrib.ModuleID)
+					}
+					if def.ContributionID == "" {
+						def.ContributionID = string(contrib.ID)
+					}
+					if def.EntryPoint != "" || def.Instructions.Text == "" {
+						if loaded, loadErr := i.loadInstalledAgentSkill(ctx, contrib, def); loadErr == nil {
+							def = loaded
+						} else {
+							continue
+						}
 					}
 					_ = i.container.AgentSkillCatalog.Register(def)
 				}
@@ -2491,21 +2865,11 @@ func (i *TypedContributionInstaller) discardTaskDefinition(ctx context.Context, 
 	return nil
 }
 
-func (i *TypedContributionInstaller) discardMCPServer(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
-	mcpToolAdapter := capability.GetGlobalMCPToolAdapter()
-	if mcpToolAdapter == nil {
+func (i *TypedContributionInstaller) discardMCPServer(ctx context.Context, contrib domain.ContributionDefinition, _ []byte) error {
+	if i.container.MCPBindings == nil {
 		return nil
 	}
-	var def struct {
-		ServerName string `json:"serverName"`
-	}
-	_ = json.Unmarshal(defData, &def)
-	serverID := def.ServerName
-	if serverID == "" {
-		serverID = string(contrib.ID)
-	}
-	_ = mcpToolAdapter.UnregisterServer(ctx, serverID)
-	return nil
+	return i.container.MCPBindings.RemoveContributionBinding(ctx, string(contrib.ExtensionID), string(contrib.ID))
 }
 
 func (i *TypedContributionInstaller) discardUIContribution(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {

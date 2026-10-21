@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"sync"
 )
 
@@ -194,7 +195,88 @@ func (s *SQLiteStorage) GetInvocation(ctx context.Context, invocationID string) 
 }
 
 func (s *SQLiteStorage) ListInvocations(ctx context.Context, filter InvocationFilter) ([]InvocationRecord, string, error) {
-	return nil, "", nil
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	query := `
+		SELECT invocation_id, trace_id, operation_id, parent_id, root_id, capability_id,
+			capability_type, source, owner_type, owner_id, extension_id, module_id,
+			runtime_type, runtime_id, space_id, character_id, conversation_id,
+			scope_snapshot_id, permission_snapshot_id, status, risk_level, approval_mode,
+			input_hash, output_hash, input_summary, output_summary, error_code,
+			error_summary, retry_count, side_effect_count, created_at, queued_at,
+			started_at, finished_at, duration_ms, metadata_json
+		FROM kernel_observability_invocations WHERE 1=1`
+	args := make([]any, 0)
+	add := func(column, value string) {
+		if value == "" {
+			return
+		}
+		query += " AND " + column + " = ?"
+		args = append(args, value)
+	}
+	add("trace_id", filter.TraceID)
+	add("operation_id", filter.OperationID)
+	add("parent_id", filter.ParentID)
+	add("extension_id", filter.ExtensionID)
+	add("module_id", filter.ModuleID)
+	add("capability_id", filter.CapabilityID)
+	add("character_id", filter.CharacterID)
+	add("conversation_id", filter.ConversationID)
+	add("space_id", filter.SpaceID)
+	add("runtime_id", filter.RuntimeID)
+	add("status", string(filter.Status))
+	add("risk_level", string(filter.RiskLevel))
+	add("error_code", filter.ErrorCode)
+	if filter.Since != nil {
+		query += " AND created_at >= ?"
+		args = append(args, *filter.Since)
+	}
+	if filter.Until != nil {
+		query += " AND created_at <= ?"
+		args = append(args, *filter.Until)
+	}
+	if filter.Cursor != "" {
+		query += " AND invocation_id < ?"
+		args = append(args, filter.Cursor)
+	}
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	query += " ORDER BY created_at DESC, invocation_id DESC LIMIT ?"
+	args = append(args, limit+1)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	items := make([]InvocationRecord, 0)
+	for rows.Next() {
+		var inv InvocationRecord
+		var metadataJSON string
+		if err := rows.Scan(&inv.InvocationID, &inv.TraceID, &inv.OperationID, &inv.ParentID,
+			&inv.RootID, &inv.CapabilityID, &inv.CapabilityType, &inv.Source,
+			&inv.OwnerType, &inv.OwnerID, &inv.ExtensionID, &inv.ModuleID,
+			&inv.RuntimeType, &inv.RuntimeID, &inv.SpaceID, &inv.CharacterID,
+			&inv.ConversationID, &inv.ScopeSnapshotID, &inv.PermissionSnapshotID,
+			&inv.Status, &inv.RiskLevel, &inv.ApprovalMode, &inv.InputHash,
+			&inv.OutputHash, &inv.InputSummary, &inv.OutputSummary, &inv.ErrorCode,
+			&inv.ErrorSummary, &inv.RetryCount, &inv.SideEffectCount, &inv.CreatedAt,
+			&inv.QueuedAt, &inv.StartedAt, &inv.FinishedAt, &inv.DurationMs, &metadataJSON); err != nil {
+			return nil, "", err
+		}
+		inv.Metadata = fromJSONMap(metadataJSON)
+		items = append(items, inv)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(items) > limit {
+		items = items[:limit]
+		next = items[len(items)-1].InvocationID
+	}
+	return items, next, nil
 }
 
 func (s *SQLiteStorage) UpdateInvocationStatus(ctx context.Context, invocationID string, status ExecutionStatus) error {
@@ -207,7 +289,8 @@ func (s *SQLiteStorage) UpdateInvocationStatus(ctx context.Context, invocationID
 }
 
 func (s *SQLiteStorage) GetInvocationChildren(ctx context.Context, parentID string) ([]InvocationRecord, error) {
-	return nil, nil
+	items, _, err := s.ListInvocations(ctx, InvocationFilter{ParentID: strings.TrimSpace(parentID), ListOptions: ListOptions{Limit: 1000}})
+	return items, err
 }
 
 func (s *SQLiteStorage) IncrementSideEffectCount(ctx context.Context, invocationID string, delta int) error {

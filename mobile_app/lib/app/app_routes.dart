@@ -91,7 +91,6 @@ abstract final class AppRoutes {
   static String characterTimeline(String id) => '/characters/$id/timeline';
   static String characterProactive(String id) => '/characters/$id/proactive';
   static String characterPsyche(String id) => '/characters/$id/psyche';
-  static String characterDebug(String id) => '/characters/$id/debug';
   static String agentTask(String id) => '/agent/task/$id';
   static String continuityDetail(String id) => '/continuity/$id';
   static String mcpDetail(String id) => '/extensions/mcp/$id';

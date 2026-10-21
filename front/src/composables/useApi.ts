@@ -193,10 +193,19 @@ export function useApi() {
     }
   }
 
-  async function postUpload<T>(url: string, file: File, fieldName: string = "card", config?: AxiosRequestConfig): Promise<T> {
+  async function postUpload<T>(
+    url: string,
+    file: File,
+    fieldName: string = "card",
+    config?: AxiosRequestConfig,
+    fields: Record<string, string> = {},
+  ): Promise<T> {
     loading.value = true;
     try {
       const formData = new FormData();
+      for (const [key, value] of Object.entries(fields)) {
+        formData.append(key, value);
+      }
       formData.append(fieldName, file);
       const res = await apiClient.post(url, formData, {
         ...config,

@@ -397,6 +397,23 @@ void main() {
     expect(transport.requests[0].body, transport.requests[1].body);
     expect(transport.requests[0].path, '/api/device-mesh/v1/business/tasks');
   });
+  test('任务定义只通过 Owner 范围接口读取', () async {
+    final definitions = [
+      {'taskId': 'local-task', 'checkpoint': true},
+    ];
+    final transport = TaskTransport([
+      {'definitions': definitions, 'executionScope': scope()},
+    ]);
+    final result = await ExtensionTaskService(
+      BackendServiceApi(transport, 1),
+    ).listOwnedTaskDefinitions(options(), 'role');
+    expect(result, definitions);
+    expect(
+      transport.requests.single.path,
+      '/api/device-mesh/v1/business/tasks/definitions',
+    );
+    expect(transport.requests.single.body, containsPair('characterId', 'role'));
+  });
   for (final field in [
     'coreId',
     'targetDeviceId',

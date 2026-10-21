@@ -80,6 +80,24 @@ CREATE TABLE IF NOT EXISTS characters (
     deleted_at DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS character_card_import_operations (
+    space_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    source_hash TEXT NOT NULL,
+    character_id TEXT NOT NULL,
+    character_name TEXT NOT NULL DEFAULT '',
+    source_format TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    worldbook_expected INTEGER NOT NULL DEFAULT 0,
+    worldbook_imported INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(space_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_character_card_import_source ON character_card_import_operations(space_id, source_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_character_card_import_character ON character_card_import_operations(space_id, character_id);
+
 CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     space_id TEXT NOT NULL DEFAULT '',
@@ -3149,68 +3167,6 @@ UNIQUE(skill_id, character_id, conversation_id, idempotency_key)
 );
 
 -- 来源: extension_agent_skills.go
-CREATE TABLE IF NOT EXISTS extension_agent_skill_metadata (
-id TEXT PRIMARY KEY,
-extension_id TEXT NOT NULL UNIQUE,
-space_id TEXT NOT NULL,
-name TEXT NOT NULL,
-description TEXT NOT NULL,
-license TEXT NOT NULL DEFAULT '',
-compatibility TEXT NOT NULL DEFAULT '',
-metadata_json TEXT NOT NULL DEFAULT '{}',
-allowed_tools TEXT NOT NULL DEFAULT '',
-display_name TEXT NOT NULL DEFAULT '',
-short_description TEXT NOT NULL DEFAULT '',
-default_prompt TEXT NOT NULL DEFAULT '',
-openai_metadata_json TEXT NOT NULL DEFAULT '{}',
-scope_type TEXT NOT NULL,
-scope_id TEXT NOT NULL DEFAULT '',
-source TEXT NOT NULL,
-compatibility_status TEXT NOT NULL,
-compatibility_report_json TEXT NOT NULL DEFAULT '{}',
-content_hash TEXT NOT NULL,
-artifact_id TEXT NOT NULL,
-raw_frontmatter_json TEXT NOT NULL DEFAULT '{}',
-extra_frontmatter_json TEXT NOT NULL DEFAULT '{}',
-resource_index_json TEXT NOT NULL DEFAULT '[]',
-tool_mappings_json TEXT NOT NULL DEFAULT '[]',
-scripts_present INTEGER NOT NULL DEFAULT 0,
-scripts_required INTEGER NOT NULL DEFAULT 0,
-enabled INTEGER NOT NULL DEFAULT 0,
-created_at TEXT NOT NULL,
-updated_at TEXT NOT NULL,
-removed_at TEXT NOT NULL DEFAULT '',
-UNIQUE(space_id, name, scope_type, scope_id)
-);
-
--- 来源: extension_agent_skills.go
-CREATE TABLE IF NOT EXISTS extension_agent_skill_activations (
-id TEXT PRIMARY KEY,
-activation_id TEXT NOT NULL UNIQUE,
-extension_id TEXT NOT NULL,
-space_id TEXT NOT NULL,
-character_id TEXT NOT NULL DEFAULT '',
-conversation_id TEXT NOT NULL DEFAULT '',
-channel TEXT NOT NULL DEFAULT '',
-trigger_type TEXT NOT NULL,
-explicit INTEGER NOT NULL DEFAULT 0,
-status TEXT NOT NULL,
-loaded_tokens INTEGER NOT NULL DEFAULT 0,
-resource_reads INTEGER NOT NULL DEFAULT 0,
-resource_paths_json TEXT NOT NULL DEFAULT '[]',
-trace_id TEXT NOT NULL DEFAULT '',
-error_code TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL,
-agent_skill_name TEXT NOT NULL DEFAULT '',
-source TEXT NOT NULL DEFAULT '',
-scope_type TEXT NOT NULL DEFAULT '',
-compatibility_status TEXT NOT NULL DEFAULT '',
-scripts_used INTEGER NOT NULL DEFAULT 0,
-tool_mappings_json TEXT NOT NULL DEFAULT '[]',
-instruction_position TEXT NOT NULL DEFAULT '',
-token_limit_hit INTEGER NOT NULL DEFAULT 0
-);
-
 --- 来源: extension_owned_resources.go
 CREATE TABLE IF NOT EXISTS extension_owned_resources (
 id TEXT PRIMARY KEY,
@@ -4064,6 +4020,14 @@ auth_type TEXT NOT NULL DEFAULT 'none',
 enabled INTEGER NOT NULL DEFAULT 0,
 status TEXT NOT NULL DEFAULT 'draft',
 source TEXT NOT NULL DEFAULT 'manual',
+owner_kind TEXT NOT NULL DEFAULT 'manual',
+owner_extension_id TEXT NOT NULL DEFAULT '',
+owner_module_id TEXT NOT NULL DEFAULT '',
+owner_contribution_id TEXT NOT NULL DEFAULT '',
+runtime_placement TEXT NOT NULL DEFAULT '',
+desired_enabled INTEGER NOT NULL DEFAULT 0,
+config_revision INTEGER NOT NULL DEFAULT 1,
+package_generation INTEGER NOT NULL DEFAULT 0,
 normalized_identity TEXT NOT NULL UNIQUE,
 configuration_hash TEXT NOT NULL DEFAULT '',
 last_connected_at TEXT NOT NULL DEFAULT '',
@@ -6317,4 +6281,14 @@ CREATE TABLE IF NOT EXISTS kernel_security_audit_outbox (
     occurred_at TEXT NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
     last_error TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS extension_agent_skill_cutover (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    status TEXT NOT NULL DEFAULT 'pending',
+    migrated_skills INTEGER NOT NULL DEFAULT 0,
+    migrated_activations INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL DEFAULT ''
 );

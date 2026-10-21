@@ -171,6 +171,7 @@
       @closed="resetInstallState"
     >
       <div
+        v-if="!installPreview"
         class="package-drop-zone"
         :class="{ 'has-file': !!installFile }"
         @dragover.prevent
@@ -304,7 +305,7 @@
       </div>
 
       <template #footer>
-        <el-button @click="installDialogVisible = false">取消</el-button>
+        <el-button @click="cancelInstallFlow">取消</el-button>
         <el-button
           type="primary"
           :loading="installLoading"
@@ -494,46 +495,6 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="updateDialogVisible" title="扩展更新" width="680px">
-      <div v-if="updateTarget">
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="扩展ID">{{ updateTarget.extensionId }}</el-descriptions-item>
-          <el-descriptions-item label="当前版本">{{ updateTarget.version }}</el-descriptions-item>
-        </el-descriptions>
-
-        <div v-if="updateMeta" class="update-meta-section">
-          <h4>可用更新</h4>
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="新版本">{{ updateMeta.version }}</el-descriptions-item>
-            <el-descriptions-item label="发布通道">{{ updateMeta.releaseChannel || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="发布者">{{ updateMeta.publisherId }}</el-descriptions-item>
-            <el-descriptions-item label="包大小">{{ formatSize(updateMeta.packageSize) }}</el-descriptions-item>
-            <el-descriptions-item label="发布时间">{{ formatDate(updateMeta.publishedAt) }}</el-descriptions-item>
-            <el-descriptions-item label="包格式版本">{{ updateMeta.manifestVersion }}</el-descriptions-item>
-          </el-descriptions>
-          <div class="update-actions">
-            <el-button type="primary" :loading="updateActionLoading" @click="doDownloadUpdate">下载</el-button>
-            <el-button type="success" :loading="updateActionLoading" :disabled="!updateOperationId" @click="doInstallUpdate">安装</el-button>
-            <el-button type="warning" :loading="updateActionLoading" :disabled="!updateOperationId" @click="doCancelUpdate">取消</el-button>
-            <el-button :loading="updateActionLoading" :disabled="!updateOperationId" @click="doRetryUpdate">重试</el-button>
-            <el-button type="danger" :loading="updateActionLoading" :disabled="!updateOperationId" @click="doRollbackUpdate">回滚</el-button>
-          </div>
-        </div>
-
-        <div v-if="updateOperation" class="update-op-section">
-          <h4>当前操作</h4>
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="操作ID">{{ updateOperation.operationId }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-              <el-tag :type="opStatusTagType(updateOperation.status)" size="small">{{ updateOperation.status }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="版本">{{ updateOperation.version || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ formatDate(updateOperation.createdAt) }}</el-descriptions-item>
-            <el-descriptions-item v-if="updateOperation.error" label="错误" :span="2">{{ updateOperation.error }}</el-descriptions-item>
-          </el-descriptions>
-        </div>
-      </div>
-    </el-dialog>
   </main>
 </template>
 
@@ -552,7 +513,6 @@ import {
   disableExtension,
   uninstallExtension,
   pauseExtension,
-  rollbackExtension,
   setExtensionPermission,
   type KernelStatus,
   type KernelExtension,
@@ -560,22 +520,19 @@ import {
   type KernelPermission,
 } from "@/views/kernel/api";
 import {
+  cancelExtensionUpdateDownload,
+  checkExtensionUpdate,
+  confirmPackageRollback,
+  fetchPackageVersions,
+  getExtensionUpdateDownload,
   installExtensionPackage,
   previewExtensionPackage,
+  previewExtensionUpdate,
+  previewPackageRollback,
+  rollbackExtensionPackage,
+  startExtensionUpdateDownload,
 } from "@/views/extensions/api";
 import type { PackageImportPreview } from "@/views/extensions/types";
-import {
-  checkUpdates,
-  downloadUpdate,
-  installUpdate,
-  cancelUpdate,
-  retryUpdate,
-  rollbackUpdate,
-} from "@/api/desktop";
-import type {
-  ExtensionUpdateMeta,
-  UpdateOperationInfo,
-} from "@/api/desktop";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 
 const router = useRouter();
@@ -737,6 +694,7 @@ async function setPackageFile(file: File) {
   installPreview.value = null;
   installAcknowledged.value = false;
   newPermissionAcknowledged.value = false;
+  activeDownloadId.value = "";
   installMode.value = "install";
   installDialogVisible.value = true;
   await buildPackagePreview();
@@ -823,6 +781,7 @@ function resetInstallState() {
   uploadProgress.value = 0;
   installAcknowledged.value = false;
   newPermissionAcknowledged.value = false;
+  activeDownloadId.value = "";
 }
 
 function signatureLabel(status?: string) {
@@ -919,17 +878,64 @@ async function handleRowCommand(row: KernelExtension, command: string) {
 
 async function doRollback(row: KernelExtension) {
   try {
-    await ElMessageBox.confirm(
-      `确定要回滚扩展 ${row.extensionId} 吗？`,
-      "回滚确认",
-      { type: "warning" }
+    const versions = await fetchPackageVersions(row.extensionId, "global", "");
+    const candidates = versions.filter((item) =>
+      !item.active
+      && !["removed", "blocked", "corrupted"].includes(String(item.versionState || ""))
     );
-    await rollbackExtension(row.extensionId);
-    ElMessage.success("已回滚: " + row.extensionId);
+    if (!candidates.length) {
+      ElMessage.warning("没有可回滚的历史版本");
+      return;
+    }
+    const { value } = await ElMessageBox.prompt(
+      `当前版本 ${row.version}。可用版本：${candidates.map((item) => item.version).join("、")}`,
+      "选择回滚版本",
+      {
+        inputValue: candidates[0]?.version || "",
+        inputValidator: (input) => candidates.some((item) => item.version === input)
+          || "请输入列表中的历史版本",
+        type: "warning",
+      },
+    );
+    const preview = await previewPackageRollback(row.extensionId, value, "global", "");
+    if (!preview.installable) {
+      throw new Error("该版本当前不可回滚");
+    }
+    if (preview.manualRequired) {
+      throw new Error(preview.manualReason || "该回滚需要人工恢复");
+    }
+    const dependentText = preview.dependents.length
+      ? `\n依赖该扩展的项目：${preview.dependents.join("、")}`
+      : "";
+    await ElMessageBox.confirm(
+      `将从 v${preview.currentVersion} 回滚到 v${preview.targetVersion}，并恢复当时的文件、配置、权限与迁移状态。${dependentText}`,
+      "真实回滚确认",
+      { type: "warning", confirmButtonText: "确认回滚" },
+    );
+    const confirmations = Object.fromEntries(
+      preview.requiredConfirmations.map((item) => [item, true]),
+    );
+    const confirmation = await confirmPackageRollback(
+      row.extensionId,
+      value,
+      preview,
+      confirmations,
+      "global",
+      "",
+    );
+    const result = await rollbackExtensionPackage(
+      row.extensionId,
+      value,
+      "global",
+      "",
+      confirmation.confirmationToken,
+    );
+    await waitForPackageOperation(result.operationId);
+    ElMessage.success(`已回滚到 v${value}`);
     extensionUIStore.dispatchExtensionChanged("update");
     await refreshList();
   } catch (e: any) {
-    if (e !== "cancel" && e?.message !== "cancel") {
+    if (e !== "cancel" && e !== "close" && e?.message !== "cancel") {
       ElMessage.error("回滚失败: " + (e?.message || e));
     }
   }
@@ -979,19 +985,7 @@ async function togglePermission(row: KernelPermission, granted: boolean) {
 }
 
 const updateChecking = ref<Record<string, boolean>>({});
-const updateDialogVisible = ref(false);
-const updateTarget = ref<KernelExtension | null>(null);
-const updateMeta = ref<ExtensionUpdateMeta | null>(null);
-const updateOperation = ref<UpdateOperationInfo | null>(null);
-const updateOperationId = ref("");
-const updateActionLoading = ref(false);
-
-function opStatusTagType(status: string): "success" | "info" | "warning" | "danger" {
-  if (status === "completed" || status === "installed" || status === "success") return "success";
-  if (status === "pending" || status === "downloading" || status === "installing" || status === "queued") return "warning";
-  if (status === "failed" || status === "cancelled") return "danger";
-  return "info";
-}
+const activeDownloadId = ref("");
 
 function formatSize(bytes: number): string {
   if (!bytes && bytes !== 0) return "-";
@@ -1004,109 +998,71 @@ function formatSize(bytes: number): string {
 async function checkRowUpdate(row: KernelExtension) {
   updateChecking.value[row.extensionId] = true;
   try {
-    const result = await checkUpdates(row.extensionId);
-    updateTarget.value = row;
-    updateOperation.value = null;
-    updateOperationId.value = "";
-    if (result.available && result.update) {
-      updateMeta.value = result.update;
-      ElMessage.success(`发现可用更新: ${result.update.version}`);
-    } else {
-      updateMeta.value = null;
+    const result = await checkExtensionUpdate(row.extensionId);
+    if (!result.available || !result.update) {
       ElMessage.info("当前已是最新版本");
+      return;
     }
-    updateDialogVisible.value = true;
+    installFile.value = null;
+    installPreview.value = null;
+    installMode.value = "update";
+    installAcknowledged.value = false;
+    newPermissionAcknowledged.value = false;
+    previewLoading.value = true;
+    uploadProgress.value = 0;
+    installDialogVisible.value = true;
+    ElMessage.success(`发现可用更新 v${result.update.version}，开始下载`);
+    const download = await startExtensionUpdateDownload(row.extensionId, result.update.version);
+    activeDownloadId.value = download.downloadId;
+    const completed = await waitForExtensionUpdateDownload(download.downloadId);
+    uploadProgress.value = 95;
+    const previewResult = await previewExtensionUpdate(
+      row.extensionId,
+      completed.downloadId,
+      "global",
+      "",
+    );
+    activeDownloadId.value = "";
+    installPreview.value = previewResult.preview;
+    uploadProgress.value = 100;
   } catch (e: any) {
     ElMessage.error("检查更新失败: " + (e?.message || e));
+    if (activeDownloadId.value) {
+      await cancelExtensionUpdateDownload(activeDownloadId.value).catch(() => undefined);
+      activeDownloadId.value = "";
+    }
+    installDialogVisible.value = false;
   } finally {
+    previewLoading.value = false;
     updateChecking.value[row.extensionId] = false;
   }
 }
 
-async function doDownloadUpdate() {
-  if (!updateTarget.value || !updateMeta.value) {
-    ElMessage.warning("无可用更新");
-    return;
+async function waitForExtensionUpdateDownload(downloadId: string) {
+  for (let attempt = 0; attempt < 720; attempt += 1) {
+    const payload = await getExtensionUpdateDownload(downloadId);
+    const download = payload.download;
+    if (download.expectedSize > 0) {
+      uploadProgress.value = Math.min(
+        90,
+        Math.max(1, Math.round((download.downloadedSize / download.expectedSize) * 90)),
+      );
+    }
+    if (download.status === "completed") return download;
+    if (download.status === "failed" || download.status === "cancelled") {
+      throw new Error(download.error || `下载状态: ${download.status}`);
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
   }
-  updateActionLoading.value = true;
-  try {
-    const op = await downloadUpdate(updateTarget.value.extensionId, updateMeta.value.version);
-    updateOperation.value = op;
-    updateOperationId.value = op.operationId;
-    ElMessage.success("下载已开始: " + op.operationId);
-  } catch (e: any) {
-    ElMessage.error("下载失败: " + (e?.message || e));
-  } finally {
-    updateActionLoading.value = false;
-  }
+  throw new Error("扩展包下载等待超时");
 }
 
-async function doInstallUpdate() {
-  if (!updateTarget.value || !updateOperationId.value) {
-    ElMessage.warning("无可用操作");
-    return;
+async function cancelInstallFlow() {
+  if (activeDownloadId.value) {
+    await cancelExtensionUpdateDownload(activeDownloadId.value).catch(() => undefined);
+    activeDownloadId.value = "";
   }
-  updateActionLoading.value = true;
-  try {
-    const op = await installUpdate(updateTarget.value.extensionId, updateOperationId.value);
-    updateOperation.value = op;
-    ElMessage.success("安装已触发");
-    extensionUIStore.dispatchExtensionChanged("update");
-    await refreshList();
-  } catch (e: any) {
-    ElMessage.error("安装失败: " + (e?.message || e));
-  } finally {
-    updateActionLoading.value = false;
-  }
-}
-
-async function doCancelUpdate() {
-  if (!updateTarget.value || !updateOperationId.value) return;
-  updateActionLoading.value = true;
-  try {
-    const op = await cancelUpdate(updateTarget.value.extensionId, updateOperationId.value);
-    updateOperation.value = op;
-    ElMessage.success("操作已取消");
-  } catch (e: any) {
-    ElMessage.error("取消失败: " + (e?.message || e));
-  } finally {
-    updateActionLoading.value = false;
-  }
-}
-
-async function doRetryUpdate() {
-  if (!updateTarget.value || !updateOperationId.value) return;
-  updateActionLoading.value = true;
-  try {
-    const op = await retryUpdate(updateTarget.value.extensionId, updateOperationId.value);
-    updateOperation.value = op;
-    ElMessage.success("已重试");
-  } catch (e: any) {
-    ElMessage.error("重试失败: " + (e?.message || e));
-  } finally {
-    updateActionLoading.value = false;
-  }
-}
-
-async function doRollbackUpdate() {
-  if (!updateTarget.value || !updateOperationId.value) return;
-  try {
-    await ElMessageBox.confirm("确定要回滚此更新操作吗？", "回滚确认", { type: "warning" });
-  } catch {
-    return;
-  }
-  updateActionLoading.value = true;
-  try {
-    const op = await rollbackUpdate(updateTarget.value.extensionId, updateOperationId.value);
-    updateOperation.value = op;
-    ElMessage.success("已回滚");
-    extensionUIStore.dispatchExtensionChanged("update");
-    await refreshList();
-  } catch (e: any) {
-    ElMessage.error("回滚失败: " + (e?.message || e));
-  } finally {
-    updateActionLoading.value = false;
-  }
+  installDialogVisible.value = false;
 }
 
 function goDiagnose() {

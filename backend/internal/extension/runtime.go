@@ -14,7 +14,6 @@ import (
 type Runtime struct {
 	Repository                  *Repository
 	Validator                   *SchemaValidator
-	AgentSkills                 *AgentSkillService
 	Kernel                      *kernelruntime.Runtime
 	WorkflowDeviceControl       WorkflowDeviceControlPlane
 	workflowMutationLocks       sync.Map
@@ -188,11 +187,7 @@ func newRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtim
 		return nil, err
 	}
 	repository := NewRepository(db)
-	agentSkills := NewAgentSkillService(repository, validator)
-	if err := agentSkills.Restore(ctx); err != nil {
-		return nil, err
-	}
-	return &Runtime{Repository: repository, Validator: validator, AgentSkills: agentSkills}, nil
+	return &Runtime{Repository: repository, Validator: validator}, nil
 }
 
 func (r *Runtime) Close(ctx context.Context) error {

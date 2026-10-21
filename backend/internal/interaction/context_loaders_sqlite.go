@@ -10,7 +10,6 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/extensioncontext"
-	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -138,99 +137,6 @@ func (l *ConversationContextLoader) Load(ctx context.Context, scope InteractionS
 	return FieldReady[any](state, l.Name(), version), nil
 }
 
-type PsycheContextLoader struct {
-	db *gorm.DB
-}
-
-func NewPsycheContextLoader(db *gorm.DB) *PsycheContextLoader {
-	return &PsycheContextLoader{db: db}
-}
-
-func (l *PsycheContextLoader) Name() string           { return "psyche" }
-func (l *PsycheContextLoader) IsRequired() bool       { return false }
-func (l *PsycheContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
-func (l *PsycheContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":psyche:" + scope.CharacterID
-}
-func (l *PsycheContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
-	var row struct {
-		Emotion string
-		Mood    string
-		Stress  float64
-		Energy  float64
-	}
-	err := l.db.WithContext(ctx).Table("psyche_states").Select("emotion, mood, stress, energy").Where("character_id = ?", scope.CharacterID).Take(&row).Error
-	if err != nil {
-		return FieldUnavailable[any](l.Name()), err
-	}
-	state := PsycheState{
-		Stress:  row.Stress,
-		Fatigue: clamp01(1 - row.Energy),
-		Arousal: clamp01(0.5 + row.Stress/2),
-	}
-	if row.Emotion != "" && row.Emotion != "{}" {
-		var emo struct {
-			Valence   float64 `json:"valence"`
-			Arousal   float64 `json:"arousal"`
-			Dominance float64 `json:"dominance"`
-		}
-		if json.Unmarshal([]byte(row.Emotion), &emo) == nil {
-			state.Valence = emo.Valence
-			state.Dominance = emo.Dominance
-			if emo.Arousal > 0 {
-				state.Arousal = emo.Arousal
-			}
-		}
-	}
-	if row.Mood != "" && row.Mood != "{}" {
-		var m struct {
-			MoodValence float64 `json:"moodValence"`
-			MoodArousal float64 `json:"moodArousal"`
-		}
-		if json.Unmarshal([]byte(row.Mood), &m) == nil {
-			state.MoodValence = m.MoodValence
-			state.MoodArousal = m.MoodArousal
-		}
-	}
-	return FieldReady[any](state, l.Name(), version), nil
-}
-
-type RelationshipContextLoader struct {
-	db *gorm.DB
-}
-
-func NewRelationshipContextLoader(db *gorm.DB) *RelationshipContextLoader {
-	return &RelationshipContextLoader{db: db}
-}
-
-func (l *RelationshipContextLoader) Name() string           { return "relationship" }
-func (l *RelationshipContextLoader) IsRequired() bool       { return false }
-func (l *RelationshipContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
-func (l *RelationshipContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":relationship:" + scope.CharacterID + ":" + scope.SpaceID
-}
-func (l *RelationshipContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
-	var row struct {
-		RelationData string
-	}
-	spaceID := requestidentity.NormalizeSpaceID(scope.SpaceID)
-	err := l.db.WithContext(ctx).Table("relationship_states").Select("relation_data").Where("character_id = ? AND space_id = ?", scope.CharacterID, spaceID).Order("CASE WHEN channel = '*' AND relation_type = 'user_character' THEN 0 ELSE 1 END, updated_at DESC").Take(&row).Error
-	if err != nil {
-		return FieldUnavailable[any](l.Name()), err
-	}
-	var raw map[string]float64
-	json.Unmarshal([]byte(row.RelationData), &raw)
-	state := RelationshipState{
-		Trust:            raw["trust"],
-		Familiarity:      raw["familiarity"],
-		Security:         raw["security"],
-		Tension:          raw["tension"],
-		RepairConfidence: raw["repairConfidence"],
-		Boundary:         raw["boundary"],
-	}
-	return FieldReady[any](state, l.Name(), version), nil
-}
-
 type BeliefContextLoader struct {
 	read business.MemoryConsumerReader
 }
@@ -342,31 +248,6 @@ func (l *LifeContextLoader) Load(ctx context.Context, scope InteractionScope, ve
 	return FieldReady[any](state, "extension_context", version), nil
 }
 
-type NeedContextLoader struct {
-	db *gorm.DB
-}
-
-func NewNeedContextLoader(db *gorm.DB) *NeedContextLoader {
-	return &NeedContextLoader{db: db}
-}
-
-func (l *NeedContextLoader) Name() string           { return "needs" }
-func (l *NeedContextLoader) IsRequired() bool       { return false }
-func (l *NeedContextLoader) Timeout() time.Duration { return 800 * time.Millisecond }
-func (l *NeedContextLoader) CacheKey(scope InteractionScope, version string) string {
-	return version + ":needs:" + scope.CharacterID
-}
-func (l *NeedContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
-	if l.db == nil {
-		return FieldUnavailable[any](l.Name()), errors.New("database unavailable")
-	}
-	needs, err := loadNeedSummaries(ctx, l.db, scope.CharacterID)
-	if err != nil {
-		return FieldUnavailable[any](l.Name()), err
-	}
-	return FieldReady[any](NeedState{Needs: needs, Count: len(needs)}, l.Name(), version), nil
-}
-
 type UnresolvedThreadContextLoader struct {
 	db *gorm.DB
 }
@@ -420,32 +301,6 @@ func (l *UnresolvedThreadContextLoader) Load(ctx context.Context, scope Interact
 		threads = append(threads, thread)
 	}
 	return FieldReady[any](UnresolvedThreadSet{Threads: threads, Count: len(threads)}, l.Name(), version), nil
-}
-
-func loadNeedSummaries(ctx context.Context, db *gorm.DB, characterID string) ([]NeedSummary, error) {
-	if !db.Migrator().HasTable("need_states") {
-		return nil, nil
-	}
-	var rows []struct {
-		NeedKey      string
-		CurrentValue float64
-		Baseline     float64
-		UpdatedAt    string
-	}
-	err := db.WithContext(ctx).Table("need_states").Select("need_key, current_value, baseline, updated_at").Where("character_id = ?", characterID).Order("need_key").Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	needs := make([]NeedSummary, 0, len(rows))
-	for _, row := range rows {
-		needs = append(needs, NeedSummary{
-			Kind:      row.NeedKey,
-			Level:     row.CurrentValue,
-			Baseline:  row.Baseline,
-			UpdatedAt: row.UpdatedAt,
-		})
-	}
-	return needs, nil
 }
 
 func parseSQLiteTime(value string) (time.Time, bool) {

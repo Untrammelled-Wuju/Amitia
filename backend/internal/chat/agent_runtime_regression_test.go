@@ -61,7 +61,7 @@ func TestAgentLoopDispatchesMappedWorkspaceToolWithIdempotency(t *testing.T) {
 	}
 	definitions := []tool.Tool{{Function: tool.Function{Name: "workspace.read", Parameters: parameters}}}
 	runtime := &agentRegressionRuntime{}
-	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime: runtime}}
 	calls := 0
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, _ []map[string]interface{}, modelTools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		calls++
@@ -141,7 +141,7 @@ func TestAgentCompactionKeepsToolCallsAndResultsTogether(t *testing.T) {
 
 func TestAgentContinuesBeyondFormerRoundLimit(t *testing.T) {
 	runtime := &agentRegressionRuntime{}
-	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime:runtime}}
+	svc := &service{ownedToolRuntime: &ownedLoopTestRuntime{runtime: runtime}}
 	modelCalls := 0
 	svc.llmWithTools = func(_ context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		modelCalls++

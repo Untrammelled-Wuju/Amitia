@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
-	"github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 )

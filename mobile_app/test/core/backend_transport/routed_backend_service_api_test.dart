@@ -1,21 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
-import 'package:amitia_app/core/backend_transport/errors/backend_transport_error.dart';
-import 'package:amitia_app/core/backend_transport/errors/backend_transport_error_code.dart';
-import 'package:amitia_app/core/backend_transport/http/backend_http_method.dart';
-import 'package:amitia_app/core/backend_transport/http/backend_http_request.dart';
-import 'package:amitia_app/core/backend_transport/http/backend_http_response.dart';
 import 'package:amitia_app/core/backend_transport/routed_backend_service_api.dart';
 
 class _RecordingApi implements BackendServiceApi {
   final List<_RoutedCall> calls = [];
-  final int generationValue;
-
-  _RecordingApi({this.generationValue = 1});
 
   @override
-  int get generation => generationValue;
+  int get generation => 1;
 
   @override
   Future<T?> get<T>(
@@ -126,10 +118,12 @@ class _RecordingApi implements BackendServiceApi {
     Map<String, dynamic>? queryParameters,
     T Function(dynamic)? fromJson,
   }) async {
-    calls.add(_RoutedCall('POST_MULTIPART', path, null, <String, Object?>{
-      'fields': fields,
-      'files': files,
-    }));
+    calls.add(
+      _RoutedCall('POST_MULTIPART', path, null, <String, Object?>{
+        'fields': fields,
+        'files': files,
+      }),
+    );
     return null;
   }
 }
@@ -164,11 +158,27 @@ void main() {
       expect(businessApi.calls.first.path, '/api/characters');
     });
 
+    test('runtime state uses the owned business API', () async {
+      await proxy.get(
+        '/api/device-mesh/v1/business/runtime-state',
+        queryParameters: {'characterId': 'role'},
+      );
+      expect(businessApi.calls.length, 1);
+      expect(deviceLocalApi.calls.length, 0);
+      expect(
+        businessApi.calls.first.path,
+        '/api/device-mesh/v1/business/runtime-state',
+      );
+    });
+
     test('desktop pet device API routes to device agent', () async {
       await proxy.get('/api/desktop-pets/installations');
       expect(deviceLocalApi.calls.length, 1);
       expect(businessApi.calls.length, 0);
-      expect(deviceLocalApi.calls.first.path, '/api/desktop-pets/installations');
+      expect(
+        deviceLocalApi.calls.first.path,
+        '/api/desktop-pets/installations',
+      );
     });
 
     test('desktop pet singular prefix routes to device agent', () async {
@@ -197,11 +207,13 @@ void main() {
     });
 
     test('path with query string classifies correctly', () async {
-      await proxy.get('/api/desktop-pets/installations', queryParameters: {'active': 'true'});
+      await proxy.get(
+        '/api/desktop-pets/installations',
+        queryParameters: {'active': 'true'},
+      );
       expect(deviceLocalApi.calls.length, 1);
       expect(businessApi.calls.length, 0);
     });
-
 
     test('chat command stays on business core', () async {
       await proxy.post(
@@ -225,17 +237,29 @@ void main() {
       await proxy.getStream('/api/local/workflow-runs/run-1/events');
       expect(deviceLocalApi.calls.length, 1);
       expect(businessApi.calls.length, 0);
-      expect(deviceLocalApi.calls.first.headers?['X-Amitia-Client-Type'], 'mobile');
+      expect(
+        deviceLocalApi.calls.first.headers?['X-Amitia-Client-Type'],
+        'mobile',
+      );
     });
 
-    test('multipart follows the same business/device route classifier', () async {
-      await proxy.postMultipart('/api/characters/avatar', fields: const {'x': '1'});
-      await proxy.postMultipart('/api/storage/upload', fields: const {'x': '2'});
-      expect(businessApi.calls.length, 1);
-      expect(deviceLocalApi.calls.length, 1);
-      expect(businessApi.calls.first.method, 'POST_MULTIPART');
-      expect(deviceLocalApi.calls.first.method, 'POST_MULTIPART');
-    });
+    test(
+      'multipart follows the same business/device route classifier',
+      () async {
+        await proxy.postMultipart(
+          '/api/characters/avatar',
+          fields: const {'x': '1'},
+        );
+        await proxy.postMultipart(
+          '/api/storage/upload',
+          fields: const {'x': '2'},
+        );
+        expect(businessApi.calls.length, 1);
+        expect(deviceLocalApi.calls.length, 1);
+        expect(businessApi.calls.first.method, 'POST_MULTIPART');
+        expect(deviceLocalApi.calls.first.method, 'POST_MULTIPART');
+      },
+    );
   });
 
   group('RoutedBackendServiceApiProxy headers', () {
@@ -266,7 +290,10 @@ void main() {
     });
 
     test('POST to device local auto-generates Idempotency-Key', () async {
-      await proxy.post('/api/desktop-pets/installations', data: {'action': 'enable'});
+      await proxy.post(
+        '/api/desktop-pets/installations',
+        data: {'action': 'enable'},
+      );
       final headers = deviceLocalApi.calls.first.headers;
       expect(headers, isNotNull);
       expect(headers!['Idempotency-Key'], isNotNull);
@@ -274,14 +301,20 @@ void main() {
     });
 
     test('PUT to device local auto-generates Idempotency-Key', () async {
-      await proxy.put('/api/desktop-pets/installations/123', data: {'enabled': true});
+      await proxy.put(
+        '/api/desktop-pets/installations/123',
+        data: {'enabled': true},
+      );
       final headers = deviceLocalApi.calls.first.headers;
       expect(headers, isNotNull);
       expect(headers!['Idempotency-Key'], isNotNull);
     });
 
     test('PATCH to device local auto-generates Idempotency-Key', () async {
-      await proxy.patch('/api/desktop-pets/installations/123', data: {'alpha': 0.5});
+      await proxy.patch(
+        '/api/desktop-pets/installations/123',
+        data: {'alpha': 0.5},
+      );
       final headers = deviceLocalApi.calls.first.headers;
       expect(headers, isNotNull);
       expect(headers!['Idempotency-Key'], isNotNull);

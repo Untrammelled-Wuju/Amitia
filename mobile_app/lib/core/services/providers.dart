@@ -15,7 +15,6 @@ import 'episodic_service.dart';
 import 'worldbook_service.dart';
 import 'continuity_service.dart';
 import 'reminder_service.dart';
-import 'companion_service.dart';
 import 'model_config_service.dart';
 import 'feedback_service.dart';
 import 'voice_service.dart';
@@ -138,7 +137,10 @@ final episodicServiceProvider = Provider<EpisodicService>(
 );
 
 final worldBookServiceProvider = Provider<WorldBookService>(
-  (ref) => WorldBookService(_getDynamicServiceApi(ref)),
+  (ref) => WorldBookService(
+    ref.read(chatServiceProvider).owned,
+    _getDynamicServiceApi(ref),
+  ),
 );
 
 final continuityServiceProvider = Provider<ContinuityService>(
@@ -152,10 +154,6 @@ final continuityServiceProvider = Provider<ContinuityService>(
 
 final reminderServiceProvider = Provider<ReminderService>(
   (ref) => ReminderService(_getDynamicServiceApi(ref)),
-);
-
-final companionServiceProvider = Provider<CompanionService>(
-  (ref) => CompanionService(_getDynamicServiceApi(ref)),
 );
 
 final modelConfigServiceProvider = Provider<ModelConfigService>(
@@ -216,8 +214,9 @@ final extensionTaskServiceProvider = Provider<ExtensionTaskService>((ref) {
 
 final sourceTaskApprovalServiceProvider = Provider<ExtensionTaskService>((ref) {
   final api = ref.watch(rawDeviceLocalBackendServiceApiProvider);
-  if (api == null || api.generation <= 0)
+  if (api == null || api.generation <= 0) {
     throw StateError('本机 Device Agent Runtime 尚未就绪');
+  }
   return ExtensionTaskService(
     api,
     sourceIsCurrent: () =>
@@ -517,36 +516,6 @@ final modelConfigListProvider =
     FutureProvider.autoDispose<List<ModelConfigDto>>((ref) async {
       final svc = ref.read(modelConfigServiceProvider);
       return svc.available();
-    });
-
-final companionStateProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
-      final svc = ref.read(companionServiceProvider);
-      final state = await svc.state();
-      if (state == null) return null;
-      return {
-        'state': state.state,
-        'isSleeping': state.isSleeping,
-        'currentActivity': state.currentActivity,
-        'nextActivity': state.nextActivity,
-        'wakeTime': state.wakeTime,
-        'sleepTime': state.sleepTime,
-      };
-    });
-
-final companionStateByCharacterProvider = FutureProvider.autoDispose
-    .family<Map<String, dynamic>?, String>((ref, characterId) async {
-      final svc = ref.read(companionServiceProvider);
-      final state = await svc.state(characterId: characterId);
-      if (state == null) return null;
-      return {
-        'state': state.state,
-        'isSleeping': state.isSleeping,
-        'currentActivity': state.currentActivity,
-        'nextActivity': state.nextActivity,
-        'wakeTime': state.wakeTime,
-        'sleepTime': state.sleepTime,
-      };
     });
 
 final startupStageProvider = FutureProvider<String>((ref) async => 'ready');

@@ -8,7 +8,6 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
     private var audioRecorder: AVAudioRecorder?
 
     private var realtimeEngine: AVAudioEngine?
-    private var realtimePlayer: AVAudioPlayerNode?
     private var captureConverter: AVAudioConverter?
     private var captureSink: FlutterEventSink?
     private var captureTapInstalled = false
@@ -16,8 +15,6 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
     private var realtimeEventChannel: FlutterEventChannel?
 
     private let captureSampleRate: Double = 16_000
-    private let playbackSampleRate: Double = 24_000
-
     private override init() {
         super.init()
     }
@@ -67,19 +64,6 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
                 self.stopRealtimeCapture()
                 result(nil)
             }
-        case "playPcm":
-            guard let typed = call.arguments as? FlutterStandardTypedData else {
-                result(FlutterError(code: "INVALID_AUDIO", message: "playPcm requires Uint8List PCM data", details: nil))
-                return
-            }
-            Task { @MainActor in
-                do {
-                    try self.playRealtimePCM(typed.data)
-                    result(nil)
-                } catch {
-                    result(FlutterError(code: "AUDIO_PLAYBACK_FAILED", message: error.localizedDescription, details: nil))
-                }
-            }
         case "reset":
             Task { @MainActor in
                 self.resetRealtimeAudio()
@@ -88,7 +72,6 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
         case "status":
             result([
                 "capturing": captureTapInstalled,
-                "playing": realtimePlayer?.isPlaying ?? false,
             ])
         default:
             result(FlutterMethodNotImplemented)
@@ -128,17 +111,9 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
 
         try configureRealtimeSession()
         let engine = AVAudioEngine()
-        let player = AVAudioPlayerNode()
-        engine.attach(player)
-        let playbackFormat = AVAudioFormat(
-            standardFormatWithSampleRate: playbackSampleRate,
-            channels: 1
-        )!
-        engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
         engine.prepare()
         try engine.start()
         realtimeEngine = engine
-        realtimePlayer = player
         return engine
     }
 
@@ -206,41 +181,9 @@ public class AudioRecorderAdapter: NSObject, FlutterStreamHandler {
     }
 
     @MainActor
-    private func playRealtimePCM(_ data: Data) throws {
-        guard !data.isEmpty else { return }
-        _ = try ensureRealtimeEngine()
-        guard let player = realtimePlayer,
-              let format = AVAudioFormat(standardFormatWithSampleRate: playbackSampleRate, channels: 1) else {
-            throw NSError(domain: "AmitiaRealtimeAudio", code: 3, userInfo: [NSLocalizedDescriptionKey: "Playback engine unavailable"])
-        }
-        let frameCount = data.count / MemoryLayout<Int16>.size
-        guard frameCount > 0,
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)),
-              let output = buffer.floatChannelData?[0] else {
-            return
-        }
-        buffer.frameLength = AVAudioFrameCount(frameCount)
-        data.withUnsafeBytes { rawBuffer in
-            let input = rawBuffer.bindMemory(to: Int16.self)
-            for index in 0..<frameCount {
-                output[index] = Float(input[index]) / 32768.0
-            }
-        }
-        player.scheduleBuffer(buffer, completionHandler: nil)
-        if !player.isPlaying {
-            player.play()
-        }
-    }
-
-    @MainActor
     private func resetRealtimeAudio() {
         stopRealtimeCapture()
-        realtimePlayer?.stop()
         realtimeEngine?.stop()
-        if let player = realtimePlayer, let engine = realtimeEngine {
-            engine.detach(player)
-        }
-        realtimePlayer = nil
         realtimeEngine = nil
         captureConverter = nil
         do {

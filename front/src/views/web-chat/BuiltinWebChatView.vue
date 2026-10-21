@@ -252,54 +252,31 @@ const boundCallConversation = ref("");
 const boundCallHistoricalRole = ref<string | undefined>();
 const ttsVoiceType = ref("");
 const ttsResourceId = ref("");
-let stopCallWindowListener: (() => void) | null = null;
 
 async function handleStartCall(mode: "voice" | "video" | "screen") {
   callMode.value = mode;
   try {
-    if (await owned.refresh()) {
-      const originalRole = characterId.value;
-      const originalConversation = convId.value;
-      if (!originalRole) throw new Error("请先选择一个已保存的角色，再发起通话");
-      const snapshot = originalConversation ? await owned.query(originalConversation, originalRole) : await owned.data("working", originalRole);
-      if (characterId.value !== originalRole || convId.value !== originalConversation || !snapshot?.executionScope || snapshot.executionScope.roleId !== originalRole) throw new Error("通话角色或会话已变化，请重新发起");
-      boundCallScope.value = JSON.parse(JSON.stringify(snapshot.executionScope));
-      boundCallConversation.value = originalConversation;
-      const historicalConversation = snapshot.historicalSnapshot?.resources.find((item) => item.kind === "conversation");
-      boundCallHistoricalRole.value = historicalConversation?.roleId || snapshot.historicalSnapshot?.legacyConversations?.[0]?.characterId || undefined;
-      callActive.value = true;
-      return;
-    }
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : "无法确认通话服务"); return; }
-  const desktopApi = window.amitiaDesktop;
-  if (!desktopApi?.openRealtimeCallWindow) {
-    ElMessage.error("当前环境不支持独立通话窗口");
-    return;
-  }
-  try {
-    const result = await desktopApi.openRealtimeCallWindow({
-      mode,
-      voiceType: ttsVoiceType.value,
-      resourceId: ttsResourceId.value,
-      conversationId: convId.value,
-      charName: charName.value,
-      charAvatar: charAvatar.value,
-    });
-    callActive.value = result.opened;
+    if (!(await owned.refresh())) throw new Error("设备对话服务未就绪，无法发起通话");
+    const originalRole = characterId.value;
+    const originalConversation = convId.value;
+    if (!originalRole) throw new Error("请先选择一个已保存的角色，再发起通话");
+    const snapshot = originalConversation ? await owned.query(originalConversation, originalRole) : await owned.data("working", originalRole);
+    if (characterId.value !== originalRole || convId.value !== originalConversation || !snapshot?.executionScope || snapshot.executionScope.roleId !== originalRole) throw new Error("通话角色或会话已变化，请重新发起");
+    boundCallScope.value = JSON.parse(JSON.stringify(snapshot.executionScope));
+    boundCallConversation.value = originalConversation;
+    const historicalConversation = snapshot.historicalSnapshot?.resources.find((item) => item.kind === "conversation");
+    boundCallHistoricalRole.value = historicalConversation?.roleId || snapshot.historicalSnapshot?.legacyConversations?.[0]?.characterId || undefined;
+    callActive.value = true;
   } catch (error) {
     callActive.value = false;
-    ElMessage.error(error instanceof Error ? error.message : "打开通话窗口失败");
+    boundCallScope.value = null;
+    ElMessage.error(error instanceof Error ? error.message : "无法确认通话服务");
   }
 }
 
 async function handleEndCall() {
-  if (boundCallScope.value) {
-    callActive.value = false;
-    boundCallScope.value = null;
-    return;
-  }
-  await window.amitiaDesktop?.closeRealtimeCallWindow?.();
   callActive.value = false;
+  boundCallScope.value = null;
 }
 
 async function handleOwnedCallSaved(result: OwnedChatResponse) {
@@ -1011,10 +988,6 @@ watch(isOffline, (offline) => {
 onMounted(async () => {
   startChatLayoutObserver();
   window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
-  stopCallWindowListener =
-    window.amitiaDesktop?.onRealtimeCallWindowClosed?.(() => {
-      callActive.value = false;
-    }) ?? null;
   void loadLlmModels();
   let ownedInitialized = false;
   let ownedDataRefreshPending = false;
@@ -1108,8 +1081,6 @@ onUnmounted(() => {
   ownedDisposed = true;
   if (ownedPolicyTimer) clearInterval(ownedPolicyTimer);
   ownedPolicyTimer = null;
-  stopCallWindowListener?.();
-  stopCallWindowListener = null;
   cleanupSSE();
   window.removeEventListener("resize", updateViewport);
 });

@@ -121,14 +121,3 @@ export interface LocalVoiceASRFinalEvent {
   visualSource?: "camera" | "screen";
   occurredAt?: string;
 }
-
-export type RealtimeCallMode = "voice" | "video" | "screen";
-
-export interface RealtimeCallWindowRequest {
-  mode: RealtimeCallMode;
-  voiceType?: string;
-  resourceId?: string;
-  conversationId?: string;
-  charName?: string;
-  charAvatar?: string;
-}

@@ -12,8 +12,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/worldbook.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/services/core_configuration_guard.dart';
-import '../../../../core/services/core_configuration_session.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -28,7 +26,6 @@ class WorldBookPage extends ConsumerStatefulWidget {
 
 class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   String _filterType = '';
-  late final CoreConfigurationSession _configuration;
   AsyncValue<List<WorldBookDto>> _entries = const AsyncLoading();
   BuildContext? _overlayContext;
   int _loadEpoch = 0;
@@ -36,17 +33,6 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   @override
   void initState() {
     super.initState();
-    _configuration = CoreConfigurationSession(
-      coreConfigurationGuardFor(ref),
-      onInvalidated: (reason) {
-        if (!mounted) return;
-        _loadEpoch++;
-        final overlay = _overlayContext;
-        _overlayContext = null;
-        if (overlay != null && overlay.mounted) Navigator.pop(overlay);
-        setState(() => _entries = AsyncError(reason, StackTrace.current));
-      },
-    );
     _load();
   }
 
@@ -54,20 +40,19 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     final epoch = ++_loadEpoch;
     setState(() => _entries = const AsyncLoading());
     try {
-      final value = await _configuration.load(
-        () => ref.read(worldBookServiceProvider).list(),
-      );
-      if (mounted && epoch == _loadEpoch)
+      final value = await ref.read(worldBookServiceProvider).list();
+      if (mounted && epoch == _loadEpoch) {
         setState(() => _entries = AsyncData(value));
+      }
     } catch (error, stack) {
-      if (mounted && epoch == _loadEpoch)
+      if (mounted && epoch == _loadEpoch) {
         setState(() => _entries = AsyncError(error, stack));
+      }
     }
   }
 
   @override
   void dispose() {
-    _configuration.close();
     super.dispose();
   }
 
@@ -84,40 +69,39 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(
-      rawBackendServiceApiProvider,
-      (_, __) => _configuration.invalidate(StateError('Core 连接已变化，请重新加载世界书')),
-    );
-    ref.listen(
-      mobileDeploymentConfigProvider,
-      (_, __) => _configuration.invalidate(StateError('设备模式已变化，请重新加载世界书')),
-    );
+    ref.listen(rawBackendServiceApiProvider, (_, __) {
+      final overlay = _overlayContext;
+      _overlayContext = null;
+      if (overlay != null && overlay.mounted) Navigator.pop(overlay);
+      _load();
+    });
+    ref.listen(mobileDeploymentConfigProvider, (_, __) {
+      final overlay = _overlayContext;
+      _overlayContext = null;
+      if (overlay != null && overlay.mounted) Navigator.pop(overlay);
+      _load();
+    });
     final entriesAsync = _entries;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '世界书',
         showBackButton: true,
         fallbackRoute: AppRoutes.memory,
-        actions: _configuration.intent == null
-            ? const []
-            : [
-                AmitiaIconButton(
-                  icon: Icons.science_outlined,
-                  onPressed: _showMatchTester,
-                ),
-                AmitiaIconButton(
-                  icon: Icons.file_upload_outlined,
-                  onPressed: _importJson,
-                ),
-                AmitiaIconButton(
-                  icon: Icons.file_download_outlined,
-                  onPressed: _exportJson,
-                ),
-                AmitiaIconButton(
-                  icon: Icons.add,
-                  onPressed: () => _showEditor(null),
-                ),
-              ],
+        actions: [
+          AmitiaIconButton(
+            icon: Icons.science_outlined,
+            onPressed: _showMatchTester,
+          ),
+          AmitiaIconButton(
+            icon: Icons.file_upload_outlined,
+            onPressed: _importJson,
+          ),
+          AmitiaIconButton(
+            icon: Icons.file_download_outlined,
+            onPressed: _exportJson,
+          ),
+          AmitiaIconButton(icon: Icons.add, onPressed: () => _showEditor(null)),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -283,18 +267,13 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _showEditor(WorldBookDto? existing) async {
-    final intent = _configuration.intent;
-    await _configuration.validate(intent);
-    if (!mounted) return;
     final patternController = TextEditingController(
       text: existing?.matchPattern ?? '',
     );
     final contentController = TextEditingController(
       text: existing?.injectContent ?? '',
     );
-    final characterController = TextEditingController(
-      text: existing?.characterId ?? '',
-    );
+    var ruleScope = existing?.scope ?? 'role';
     var matchType = existing?.matchType ?? 'keyword';
     var matchScope = existing?.matchScope ?? 'full_context';
     var priority = existing?.priority ?? 0;
@@ -323,7 +302,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                   ),
                   SizedBox(height: AppSpacing.lg),
                   DropdownButtonFormField<String>(
-                    value: matchType,
+                    initialValue: matchType,
                     decoration: const InputDecoration(
                       labelText: '匹配类型',
                       border: OutlineInputBorder(),
@@ -347,7 +326,22 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                   ),
                   SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
-                    value: matchScope,
+                    initialValue: ruleScope,
+                    decoration: const InputDecoration(
+                      labelText: '规则作用域',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'role', child: Text('当前角色')),
+                      DropdownMenuItem(value: 'global', child: Text('全局世界书')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setSheetState(() => ruleScope = value);
+                    },
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    initialValue: matchScope,
                     decoration: const InputDecoration(
                       labelText: '匹配范围',
                       border: OutlineInputBorder(),
@@ -361,8 +355,9 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                         )
                         .toList(growable: false),
                     onChanged: (value) {
-                      if (value != null)
+                      if (value != null) {
                         setSheetState(() => matchScope = value);
+                      }
                     },
                   ),
                   SizedBox(height: AppSpacing.md),
@@ -370,11 +365,6 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                     controller: contentController,
                     hintText: '命中后注入的内容',
                     maxLines: 4,
-                  ),
-                  SizedBox(height: AppSpacing.md),
-                  AmitiaTextField(
-                    controller: characterController,
-                    hintText: '角色 ID（留空表示全局）',
                   ),
                   SizedBox(height: AppSpacing.md),
                   Row(
@@ -414,20 +404,15 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                         'matchScope': matchScope,
                         'injectContent': contentController.text.trim(),
                         'priority': priority,
-                        'characterId': characterController.text.trim(),
+                        'scope': ruleScope,
+                        'enabled': true,
                       };
                       try {
                         final service = ref.read(worldBookServiceProvider);
                         if (existing == null) {
-                          await _configuration.write(
-                            intent,
-                            () => service.create(payload),
-                          );
+                          await service.create(payload);
                         } else {
-                          await _configuration.write(
-                            intent,
-                            () => service.update(existing.id, payload),
-                          );
+                          await service.update(existing.id, payload);
                         }
                         await _load();
                         if (sheetContext.mounted) Navigator.pop(sheetContext);
@@ -451,9 +436,6 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _showMatchTester() async {
-    final intent = _configuration.intent;
-    await _configuration.validate(intent);
-    if (!mounted) return;
     final controller = TextEditingController();
     List<WorldBookMatchDto> matches = const [];
     var testing = false;
@@ -493,17 +475,16 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                             if (text.isEmpty) return;
                             setSheetState(() => testing = true);
                             try {
-                              final result = await _configuration.write(
-                                intent,
-                                () => ref
-                                    .read(worldBookServiceProvider)
-                                    .testMatch(text),
-                              );
-                              if (sheetContext.mounted)
+                              final result = await ref
+                                  .read(worldBookServiceProvider)
+                                  .testMatch(text);
+                              if (sheetContext.mounted) {
                                 setSheetState(() => matches = result);
+                              }
                             } finally {
-                              if (sheetContext.mounted)
+                              if (sheetContext.mounted) {
                                 setSheetState(() => testing = false);
+                              }
                             }
                           },
                   ),
@@ -548,8 +529,6 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
   }
 
   Future<void> _importJson() async {
-    final intent = _configuration.intent;
-    await _configuration.validate(intent);
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['json'],
@@ -573,31 +552,28 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
             (data['injectContent'] ?? '').toString().isEmpty) {
           continue;
         }
-        await _configuration.write(
-          intent,
-          () => ref.read(worldBookServiceProvider).create(data),
-        );
+        await ref.read(worldBookServiceProvider).create(data);
         success++;
       }
       await _load();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('导入完成：$success 条')));
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('导入失败：$error')));
+      }
     }
   }
 
   Future<void> _exportJson() async {
-    final intent = _configuration.intent;
-    final entries = await _configuration.write(
-      intent,
-      () => ref.read(worldBookServiceProvider).list(pageSize: 500),
-    );
+    final entries = await ref
+        .read(worldBookServiceProvider)
+        .list(pageSize: 500);
     final payload = entries
         .map(
           (entry) => {
@@ -606,6 +582,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
             'matchScope': entry.matchScope,
             'injectContent': entry.injectContent,
             'priority': entry.priority,
+            'scope': entry.scope,
             if (entry.characterId.isNotEmpty) 'characterId': entry.characterId,
           },
         )
@@ -616,26 +593,24 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     );
     if (path == null) return;
     try {
-      await _configuration.validate(intent);
       await File(
         path,
       ).writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('世界书已导出')));
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('导出失败：$error')));
+      }
     }
   }
 
   Future<void> _delete(WorldBookDto entry) async {
-    final intent = _configuration.intent;
-    await _configuration.validate(intent);
-    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -658,10 +633,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
     );
     _overlayContext = null;
     if (confirmed != true) return;
-    await _configuration.write(
-      intent,
-      () => ref.read(worldBookServiceProvider).delete(entry.id),
-    );
+    await ref.read(worldBookServiceProvider).delete(entry.id);
     await _load();
   }
 }

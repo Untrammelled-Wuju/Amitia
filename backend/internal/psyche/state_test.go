@@ -46,97 +46,6 @@ func TestNewPsycheStateIndependent(t *testing.T) {
 	}
 }
 
-func TestInMemoryStoreSaveAndLoadState(t *testing.T) {
-	store := NewInMemoryPsycheStore()
-	state := NewPsycheState("char-002")
-	state.Stress = 0.3
-
-	if err := store.SaveState(&state); err != nil {
-		t.Fatalf("save failed: %v", err)
-	}
-
-	loaded, err := store.LoadState("char-002")
-	if err != nil {
-		t.Fatalf("load failed: %v", err)
-	}
-
-	if loaded.Stress != 0.3 {
-		t.Fatalf("stress not preserved: %f", loaded.Stress)
-	}
-	if loaded.CharacterID != state.CharacterID {
-		t.Fatalf("character id not preserved: %s", loaded.CharacterID)
-	}
-}
-
-func TestInMemoryStoreLoadMissingState(t *testing.T) {
-	store := NewInMemoryPsycheStore()
-	_, err := store.LoadState("nonexistent")
-	if err == nil {
-		t.Fatal("expected error for missing state")
-	}
-}
-
-func TestInMemoryStoreSaveAndLoadSnapshots(t *testing.T) {
-	store := NewInMemoryPsycheStore()
-	state := NewPsycheState("char-003")
-
-	snap1 := CreateSnapshot(state)
-	snap1.EmotionValence = 0.75
-	if err := store.SaveSnapshot(&snap1); err != nil {
-		t.Fatalf("save snapshot 1 failed: %v", err)
-	}
-
-	snap2 := CreateSnapshot(state)
-	snap2.EmotionValence = 0.25
-	if err := store.SaveSnapshot(&snap2); err != nil {
-		t.Fatalf("save snapshot 2 failed: %v", err)
-	}
-
-	snaps, err := store.LoadSnapshots("char-003", 0)
-	if err != nil {
-		t.Fatalf("load snapshots failed: %v", err)
-	}
-	if len(snaps) != 2 {
-		t.Fatalf("expected 2 snapshots, got %d", len(snaps))
-	}
-	if snaps[0].EmotionValence != 0.75 {
-		t.Fatalf("first snapshot valence: %f", snaps[0].EmotionValence)
-	}
-	if snaps[1].EmotionValence != 0.25 {
-		t.Fatalf("second snapshot valence: %f", snaps[1].EmotionValence)
-	}
-}
-
-func TestInMemoryStoreLoadEmptySnapshots(t *testing.T) {
-	store := NewInMemoryPsycheStore()
-	snaps, err := store.LoadSnapshots("unknown", 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(snaps) != 0 {
-		t.Fatalf("expected empty slice, got %d", len(snaps))
-	}
-}
-
-func TestInMemoryStoreUpdateState(t *testing.T) {
-	store := NewInMemoryPsycheStore()
-	state := NewPsycheState("char-004")
-	if err := store.SaveState(&state); err != nil {
-		t.Fatalf("initial save failed: %v", err)
-	}
-
-	modified := state
-	modified.Stress = 0.75
-	if err := store.SaveState(&modified); err != nil {
-		t.Fatalf("update save failed: %v", err)
-	}
-
-	loaded, _ := store.LoadState("char-004")
-	if loaded.Stress != 0.75 {
-		t.Fatalf("stress not updated: %f", loaded.Stress)
-	}
-}
-
 func TestApplyEventInteractionIncreasesPositiveEmotion(t *testing.T) {
 	state := NewPsycheState("char-005")
 	now := time.Now().UTC()
@@ -409,7 +318,7 @@ func TestCreateSnapshotPreservesAllDimensions(t *testing.T) {
 	if snap.CharacterID != "char-013" {
 		t.Fatalf("character id mismatch")
 	}
-	if snap.Version != StateVersionV1() {
+	if snap.Version != state.Version {
 		t.Fatalf("version mismatch")
 	}
 	if snap.EmotionValence != 0.72 {

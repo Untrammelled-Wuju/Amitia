@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/u-ai/backend/internal/mcp"
-	"github.com/u-ai/backend/internal/mcp/auth"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/auth"
+	mcpservice "github.com/u-ai/backend/internal/extension/mcpruntime/service"
 	"gorm.io/gorm"
 )
 
@@ -27,7 +28,7 @@ func newMCPAcquisitionPersistence(repository *mcp.Repository, dataDir string) (*
 }
 
 func (p *mcpAcquisitionPersistence) SaveMCPConfiguration(ctx context.Context, name, transport, command string, args []string, env map[string]string) (string, error) {
-	input := mcp.ServerInput{Name: name, DisplayName: name, Transport: transport, Command: command, Args: args, Enabled: true, Source: "acquisition"}
+	input := mcp.ServerInput{Name: name, DisplayName: name, Transport: transport, Command: command, Args: args, Enabled: true, Source: "acquisition", OwnerKind: "acquisition"}
 	if transport == "streamable_http" || transport == "sse" || transport == "remote" {
 		input.Endpoint = command
 		input.Command = ""
@@ -96,7 +97,7 @@ func (p *mcpAcquisitionPersistence) RemoveMCPConfiguration(ctx context.Context, 
 
 type mcpExistingConnector struct {
 	repository *mcp.Repository
-	runtime    func() *MCPCompatibilityRuntime
+	runtime    func() *mcpservice.Runtime
 }
 
 func (p *mcpExistingConnector) EnableExistingMCP(ctx context.Context, id string) error {
@@ -114,7 +115,10 @@ func (p *mcpExistingConnector) EnableExistingMCP(ctx context.Context, id string)
 	}
 	input := mcp.ServerInput{Name: server.Name, DisplayName: server.DisplayName, Description: server.Description,
 		Transport: server.Transport, Endpoint: server.Endpoint, Command: server.Command, Args: args, WorkDir: server.WorkDir,
-		AuthType: server.AuthType, Source: server.Source, Enabled: true}
+		AuthType: server.AuthType, Source: server.Source, Enabled: true, OwnerKind: server.OwnerKind,
+		OwnerExtensionID: server.OwnerExtensionID, OwnerModuleID: server.OwnerModuleID,
+		OwnerContributionID: server.OwnerContributionID, RuntimePlacement: server.RuntimePlacement,
+		PackageGeneration: server.PackageGeneration}
 	if _, err := p.repository.UpdateServer(ctx, id, input); err != nil {
 		return err
 	}

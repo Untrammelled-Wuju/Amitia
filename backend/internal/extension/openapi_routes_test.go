@@ -90,6 +90,24 @@ func TestKernelAPIUserUsesExtensionAuthenticationIdentity(t *testing.T) {
 	}
 }
 
+func TestAgentSkillRoutesUseKernelOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	RegisterRouter(engine.Group("/api"), &app.AppContext{}, &Runtime{})
+	hasCanonical := false
+	for _, route := range engine.Routes() {
+		if strings.HasPrefix(route.Path, "/api/extensions/agent-skills") {
+			t.Fatalf("legacy agent skill route remains registered: %s", route.Path)
+		}
+		if strings.HasPrefix(route.Path, "/api/extensions/kernel/agent-skills") {
+			hasCanonical = true
+		}
+	}
+	if !hasCanonical {
+		t.Fatal("canonical kernel agent skill routes are not registered")
+	}
+}
+
 func TestRetiredPackageRoutesOpenAPIContract(t *testing.T) {
 	var document struct {
 		Paths map[string]map[string]struct {

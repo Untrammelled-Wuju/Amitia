@@ -25,6 +25,8 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="call-name">{{ displayName }}</div>
           <div class="call-status" :class="{ error: callState === 'error' }">{{ statusText }}</div>
           <div class="call-detail" :class="{ error: callState === 'error' }">{{ detailText }}</div>
+          <div v-if="liveTranscript" class="call-detail">你：{{ liveTranscript }}</div>
+          <div v-if="liveReply" class="call-detail">AI：{{ liveReply }}</div>
         </div>
         <div class="call-controls">
           <template v-if="callState === 'error'">
@@ -51,6 +53,16 @@ SPDX-License-Identifier: AGPL-3.0-only
             >
               <span class="call-control-icon"><el-icon><Microphone /></el-icon></span>
               <span class="call-control-label">{{ media.muted ? "取消静音" : "静音" }}</span>
+            </button>
+            <button
+              class="call-control"
+              :class="{ selected: wakeArmed }"
+              type="button"
+              :disabled="callState !== 'connected'"
+              @click="toggleWake"
+            >
+              <span class="call-control-icon"><el-icon><Bell /></el-icon></span>
+              <span class="call-control-label">{{ wakeArmed ? "关闭唤醒" : "开启唤醒" }}</span>
             </button>
             <button
               v-if="mode === 'screen'"
@@ -88,6 +100,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from "vue";
 import {
+  Bell,
   Close,
   Microphone,
   Monitor,
@@ -113,8 +126,8 @@ const props = defineProps<{
   voiceType: string;
   resourceId: string;
   conversationId: string;
-  characterId?: string;
-  expectedExecutionScope?: OwnedExecutionScope;
+  characterId: string;
+  expectedExecutionScope: OwnedExecutionScope;
   acceptedTicket?: Record<string, any>;
   conversationOrigin?: { ownerId: string; id: string };
   historicalRoleId?: string;
@@ -133,6 +146,9 @@ const callDuration = ref(0);
 const errorMsg = ref("");
 const visionStatus = ref("");
 const aiSpeaking = ref(false);
+const liveTranscript = ref("");
+const liveReply = ref("");
+const wakeArmed = ref(false);
 const media = ref<RealtimeMediaState>({ audio: false, camera: false, screen: false, muted: false });
 const cameraPreview = ref<HTMLVideoElement | null>(null);
 const cameraPip = ref<HTMLVideoElement | null>(null);
@@ -187,7 +203,10 @@ function createController(): RealtimeCallController {
     acceptedTicket: props.acceptedTicket,
     conversationOrigin: props.conversationOrigin,
     historicalRoleId: props.historicalRoleId,
-    onOwnedCompleted: (result) => emit("conversationSaved", result),
+    onOwnedCompleted: (result) => {
+      liveReply.value = result.reply;
+      emit("conversationSaved", result);
+    },
     voiceType: props.voiceType,
     resourceId: props.resourceId,
     onState: (state, error) => {
@@ -215,11 +234,25 @@ function createController(): RealtimeCallController {
         notifyDesktopPetChatState("assistant_listening", props.conversationId || undefined);
       }
     },
-    onASRFinal: (data) => { if (!props.expectedExecutionScope) void forwardASRFinalToLocalWorkflow(data); },
+    onASRFinal: (data) => {
+      const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
+      if (transcript) {
+        liveTranscript.value = transcript;
+        liveReply.value = "";
+      }
+      void forwardASRFinalToLocalWorkflow(data);
+    },
+    onAssistantText: (text, delta) => {
+      liveReply.value = delta ? liveReply.value + text : text;
+    },
     onVision: (data) => {
       const context = typeof data.context === "string" ? data.context.trim() : "";
       if (context) visionStatus.value = "视觉已更新";
       else if (data.available === false) visionStatus.value = "视觉模型不可用";
+    },
+    onWakeStatus: (data) => {
+      wakeArmed.value = data.armed === true;
+      if (typeof data.message === "string" && data.message) visionStatus.value = data.message;
     },
     onMediaState: (state) => { media.value = state; },
     onCameraPreview: (stream) => void assignPreview(stream, cameraPreview, cameraPip),
@@ -233,6 +266,9 @@ async function start() {
   callDuration.value = 0;
   visionStatus.value = "";
   aiSpeaking.value = false;
+  liveTranscript.value = "";
+  liveReply.value = "";
+  wakeArmed.value = false;
   try {
     await controller.start();
   } catch (error) {
@@ -267,6 +303,12 @@ async function applyInitialMedia() {
 async function toggleMute() {
   if (!controller) return;
   await controller.setMuted(!media.value.muted);
+}
+
+function toggleWake() {
+  if (!controller) return;
+  if (wakeArmed.value) controller.disarmWake();
+  else controller.armWake();
 }
 
 async function toggleCamera() {

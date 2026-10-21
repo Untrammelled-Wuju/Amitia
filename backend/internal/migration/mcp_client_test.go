@@ -14,7 +14,7 @@ func TestMCPClientMigrationCreatesSafeSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply([]Migration{MCPClientMigration()}); err != nil {
+	if err := runner.Apply([]Migration{MCPClientMigration(), MCPOwnedBindingsMigration()}); err != nil {
 		t.Fatal(err)
 	}
 	tables := []string{"mcp_servers", "mcp_server_scope_bindings", "mcp_server_credentials", "mcp_server_capabilities", "mcp_tools", "mcp_resources", "mcp_resource_templates", "mcp_prompts", "mcp_dependency_links", "mcp_operations", "mcp_oauth_sessions", "mcp_tasks", "mcp_audit_logs"}
@@ -35,10 +35,29 @@ func TestMCPClientMigrationCreatesSafeSchema(t *testing.T) {
 			t.Fatalf("plaintext secret column is forbidden: %s", item.Name)
 		}
 	}
+	var serverColumns []column
+	if err := db.Raw("PRAGMA table_info(mcp_servers)").Scan(&serverColumns).Error; err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, item := range serverColumns {
+		found[strings.ToLower(item.Name)] = true
+	}
+	for _, name := range []string{"owner_kind", "owner_extension_id", "owner_module_id", "owner_contribution_id", "runtime_placement", "desired_enabled", "config_revision", "package_generation"} {
+		if !found[name] {
+			t.Fatalf("missing MCP ownership column %s", name)
+		}
+	}
 	if err := db.Exec("INSERT INTO mcp_servers (id,name,transport,normalized_identity) VALUES ('1','one','streamable_http','same')").Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec("INSERT INTO mcp_servers (id,name,transport,normalized_identity) VALUES ('2','two','streamable_http','same')").Error; err == nil {
 		t.Fatal("expected normalized server identity uniqueness")
+	}
+	if err := db.Exec("INSERT INTO mcp_servers (id,name,transport,normalized_identity,owner_kind,owner_extension_id,owner_contribution_id) VALUES ('3','three','streamable_http','three','package','ext.a','server.a')").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO mcp_servers (id,name,transport,normalized_identity,owner_kind,owner_extension_id,owner_contribution_id) VALUES ('4','four','streamable_http','four','package','ext.a','server.a')").Error; err == nil {
+		t.Fatal("expected package owner uniqueness")
 	}
 }

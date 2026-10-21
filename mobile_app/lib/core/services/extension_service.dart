@@ -527,13 +527,14 @@ class ExtensionService {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/extension-center/view',
     );
-    if (resp == null)
+    if (resp == null) {
       return ExtensionCenterView(
         installed: [],
         discover: [],
         updates: [],
         needsAction: [],
       );
+    }
     return ExtensionCenterView.fromJson(resp);
   }
 
@@ -549,99 +550,203 @@ class ExtensionService {
         .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> checkKernelExtensionUpdate(
-    String extensionId,
-  ) async {
+  Future<Map<String, dynamic>> checkExtensionUpdate(String extensionId) async {
     return await _api.post<Map<String, dynamic>>(
-          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/check',
+          '/api/extensions/updates/check',
+          data: {'extensionId': extensionId},
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> downloadKernelExtensionUpdate(
+  Future<Map<String, dynamic>> startExtensionUpdateDownload(
     String extensionId,
     String version,
   ) async {
     return await _api.post<Map<String, dynamic>>(
-          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/download',
-          data: {'version': version},
+          '/api/extensions/updates/downloads',
+          data: {'extensionId': extensionId, 'version': version},
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> installKernelExtensionUpdate(
-    String extensionId,
-    String operationId,
+  Future<Map<String, dynamic>> extensionUpdateDownload(
+    String downloadId,
   ) async {
-    final result =
-        await _api.post<Map<String, dynamic>>(
-          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/install',
-          data: {'operationId': operationId},
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/updates/downloads/${Uri.encodeComponent(downloadId)}',
         ) ??
         <String, dynamic>{};
-    UIRuntimeInvalidationBus.notifyChanged();
-    return result;
   }
 
-  Future<Map<String, dynamic>> cancelKernelExtensionUpdate(
-    String extensionId,
-    String operationId,
+  Future<void> cancelExtensionUpdateDownload(String downloadId) async {
+    await _api.post(
+      '/api/extensions/updates/downloads/${Uri.encodeComponent(downloadId)}/cancel',
+    );
+  }
+
+  Future<Map<String, dynamic>> retryExtensionUpdateDownload(
+    String downloadId,
   ) async {
     return await _api.post<Map<String, dynamic>>(
-          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/cancel',
-          data: {'operationId': operationId},
+          '/api/extensions/updates/downloads/${Uri.encodeComponent(downloadId)}/retry',
         ) ??
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> retryKernelExtensionUpdate(
+  Future<Map<String, dynamic>> previewExtensionUpdate(
     String extensionId,
-    String operationId,
-  ) async {
-    final result =
-        await _api.post<Map<String, dynamic>>(
-          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/retry',
-          data: {'operationId': operationId},
-        ) ??
-        <String, dynamic>{};
-    UIRuntimeInvalidationBus.notifyChanged();
-    return result;
-  }
-
-  Future<Map<String, dynamic>> rollbackKernelExtensionUpdate(
-    String extensionId,
-    String operationId,
-  ) async {
-    final result =
-        await _api.post<Map<String, dynamic>>(
-          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/rollback',
-          data: {'operationId': operationId},
-        ) ??
-        <String, dynamic>{};
-    UIRuntimeInvalidationBus.notifyChanged();
-    return result;
-  }
-
-  Future<Map<String, dynamic>> kernelUpdateOperation(String operationId) async {
-    return await _api.get<Map<String, dynamic>>(
-          '/api/extensions/updates/operations/${Uri.encodeComponent(operationId)}',
+    String downloadId, {
+    String scopeType = 'global',
+    String scopeId = '',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/updates/previews',
+          data: {
+            'extensionId': extensionId,
+            'downloadId': downloadId,
+            'scopeType': scopeType,
+            'scopeId': scopeId,
+          },
         ) ??
         <String, dynamic>{};
   }
 
-  Future<List<Map<String, dynamic>>> kernelUpdateOperationSteps(
-    String operationId,
-  ) async {
-    final resp = await _api.get<dynamic>(
-      '/api/extensions/updates/operations/${Uri.encodeComponent(operationId)}/steps',
+  Future<Map<String, dynamic>> commitPackagePreview(
+    Map<String, dynamic> preview,
+    Map<String, bool> confirmations, {
+    String expectedExtensionId = '',
+    String managementTarget = '',
+  }) async {
+    final sessionId = (preview['sessionId'] ?? '').toString();
+    if (sessionId.isEmpty) throw StateError('预览会话无效');
+    final targetExtensionId = expectedExtensionId.isEmpty
+        ? (preview['currentVersion'] ?? '').toString().isNotEmpty
+              ? (preview['id'] ?? '').toString()
+              : ''
+        : expectedExtensionId;
+    final operationType = targetExtensionId.isEmpty ? 'install' : 'update';
+    final idempotencyKey =
+        'mobile-package-$operationType-${DateTime.now().microsecondsSinceEpoch}';
+    final headers = <String, String>{
+      if (managementTarget.isNotEmpty)
+        'X-Amitia-Management-Target': managementTarget,
+      'Idempotency-Key': idempotencyKey,
+    };
+    final confirmed = await _api.post<Map<String, dynamic>>(
+      '/api/extensions/packages/previews/${Uri.encodeComponent(sessionId)}/confirm',
+      data: {
+        'scopeType': (preview['scopeType'] ?? 'global').toString(),
+        'scopeId': (preview['scopeId'] ?? '').toString(),
+        'confirmations': confirmations,
+      },
+      headers: headers,
     );
-    dynamic raw = resp;
-    if (raw is Map && raw['items'] is List) raw = raw['items'];
-    if (raw is! List) return const [];
-    return raw
+    final token = (confirmed?['confirmationToken'] ?? '').toString();
+    if (token.isEmpty) throw StateError('更新确认令牌缺失');
+    final result = await _api.post<Map<String, dynamic>>(
+      targetExtensionId.isEmpty
+          ? '/api/extensions/packages/operations/install'
+          : '/api/extensions/packages/operations/update',
+      data: {
+        'sessionId': sessionId,
+        'scopeType': (preview['scopeType'] ?? 'global').toString(),
+        'scopeId': (preview['scopeId'] ?? '').toString(),
+        'confirmationToken': token,
+        if (targetExtensionId.isNotEmpty)
+          'expectedExtensionId': targetExtensionId,
+        'idempotencyKey': idempotencyKey,
+      },
+      headers: headers,
+    );
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> kernelPackageOperation(
+    String operationId,
+  ) async {
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/packages/operations/${Uri.encodeComponent(operationId)}',
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<List<Map<String, dynamic>>> kernelPackageVersions(
+    String extensionId,
+  ) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/versions',
+      queryParameters: {'extensionId': extensionId},
+    );
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> previewPackageRollback(
+    String extensionId,
+    String version, {
+    String scopeType = 'global',
+    String scopeId = '',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/versions/rollback/preview',
+          data: {
+            'extensionId': extensionId,
+            'targetVersion': version,
+            'scopeType': scopeType,
+            'scopeId': scopeId,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> confirmPackageRollback(
+    String extensionId,
+    String version,
+    Map<String, dynamic> preview,
+    Map<String, bool> confirmations, {
+    String scopeType = 'global',
+    String scopeId = '',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/versions/rollback/confirm',
+          data: {
+            'extensionId': extensionId,
+            'targetVersion': version,
+            'scopeType': scopeType,
+            'scopeId': scopeId,
+            'previewSessionId': (preview['previewSessionId'] ?? '').toString(),
+            'confirmations': confirmations,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> executePackageRollback(
+    String extensionId,
+    String version,
+    String confirmationToken, {
+    String scopeType = 'global',
+    String scopeId = '',
+  }) async {
+    final result =
+        await _api.post<Map<String, dynamic>>(
+          '/api/extensions/versions/rollback',
+          data: {
+            'extensionId': extensionId,
+            'targetVersion': version,
+            'scopeType': scopeType,
+            'scopeId': scopeId,
+            'confirmationToken': confirmationToken,
+          },
+        ) ??
+        <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<Map<String, dynamic>> kernelExtension(String id) async {
@@ -674,20 +779,6 @@ class ExtensionService {
       data: {'id': id},
     );
     UIRuntimeInvalidationBus.notifyChanged();
-  }
-
-  Future<Map<String, dynamic>> rollbackKernelExtension(
-    String id,
-    String version,
-  ) async {
-    final result =
-        await _api.post<Map<String, dynamic>>(
-          '/api/extensions/kernel/extensions/rollback',
-          data: {'id': id, 'version': version},
-        ) ??
-        <String, dynamic>{};
-    UIRuntimeInvalidationBus.notifyChanged();
-    return result;
   }
 
   Future<void> setKernelExtensionEnabled(String id, bool enabled) async {
@@ -756,7 +847,7 @@ class ExtensionService {
     int pageSize = 100,
   }) async {
     final resp = await _api.get<Map<String, dynamic>>(
-      '/api/extensions/agent-skills',
+      '/api/extensions/kernel/agent-skills',
       queryParameters: {'page': page, 'pageSize': pageSize},
     );
     final items = resp?['items'];
@@ -768,17 +859,17 @@ class ExtensionService {
   }
 
   Future<bool> enableAgentSkill(String id) async {
-    await _api.post('/api/extensions/agent-skills/$id/enable');
+    await _api.post('/api/extensions/kernel/agent-skills/$id/enable');
     return true;
   }
 
   Future<bool> disableAgentSkill(String id) async {
-    await _api.post('/api/extensions/agent-skills/$id/disable');
+    await _api.post('/api/extensions/kernel/agent-skills/$id/disable');
     return true;
   }
 
   Future<bool> removeAgentSkill(String id) async {
-    await _api.delete('/api/extensions/agent-skills/$id');
+    await _api.delete('/api/extensions/kernel/agent-skills/$id');
     return true;
   }
 
@@ -929,8 +1020,9 @@ class ExtensionService {
     if (target.isLocal) return '/api/local/workflows';
     if (target.isDevice) {
       final deviceId = target.deviceId.trim();
-      if (deviceId.isEmpty)
+      if (deviceId.isEmpty) {
         throw StateError('device workflow target requires deviceId');
+      }
       return '/api/extensions/workflow-devices/${Uri.encodeComponent(deviceId)}/workflows';
     }
     return '/api/extensions/workflows';
@@ -940,8 +1032,9 @@ class ExtensionService {
     if (target.isLocal) return '/api/local/workflow-runs';
     if (target.isDevice) {
       final deviceId = target.deviceId.trim();
-      if (deviceId.isEmpty)
+      if (deviceId.isEmpty) {
         throw StateError('device workflow target requires deviceId');
+      }
       return '/api/extensions/workflow-devices/${Uri.encodeComponent(deviceId)}/runs';
     }
     return '/api/extensions/workflow-runs';
@@ -959,10 +1052,11 @@ class ExtensionService {
     WorkflowApiTarget target,
     String feature,
   ) {
-    if (target.isDevice)
+    if (target.isDevice) {
       throw StateError(
         '$feature is not exposed through the remote device control plane',
       );
+    }
     return target;
   }
 
@@ -1044,10 +1138,11 @@ class ExtensionService {
     String backend = 'local',
     String modelResourceUri = '',
   }) async {
-    if (target.isCloud)
+    if (target.isCloud) {
       throw StateError(
         'Wake config requires a local or device workflow target',
       );
+    }
     final path = target.isLocal
         ? '/api/local/workflows/trigger-wake-configs'
         : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-wake-configs';
@@ -1073,10 +1168,11 @@ class ExtensionService {
   Future<Map<String, dynamic>> createWorkflowTaskerSecret({
     required WorkflowApiTarget target,
   }) async {
-    if (target.isCloud)
+    if (target.isCloud) {
       throw StateError(
         'Tasker trigger secret requires a local or device workflow target',
       );
+    }
     final path = target.isLocal
         ? '/api/local/workflows/trigger-secrets/tasker'
         : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-secrets/tasker';

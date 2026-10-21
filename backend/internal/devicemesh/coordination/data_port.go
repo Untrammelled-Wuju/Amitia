@@ -65,7 +65,6 @@ func NormalizeConversationSearch(value string) (string, error) {
 const OwnedConversationSearchPredicate = ` AND (instr(lower(COALESCE(json_extract(CAST(body AS TEXT),'$.title'),'')),?)>0 OR EXISTS (SELECT 1 FROM kernel_device_owned_resources AS matched WHERE matched.owner_id=kernel_device_owned_resources.owner_id AND matched.role_id=kernel_device_owned_resources.role_id AND matched.kind='message' AND matched.deleted=0 AND json_extract(CAST(matched.body AS TEXT),'$.conversationId')=kernel_device_owned_resources.resource_id AND instr(lower(COALESCE(json_extract(CAST(matched.body AS TEXT),'$.content'),'')),?)>0))`
 
 type DataSnapshot struct {
-	WorldBookPrompt     string                     `json:"worldBookPrompt,omitempty"`
 	RuntimeContext      map[string]json.RawMessage `json:"runtimeContext,omitempty"`
 	NextCursors         map[string]string          `json:"nextCursors,omitempty"`
 	OwnerID             string                     `json:"ownerId"`
@@ -133,9 +132,6 @@ func ResolveRole(requested string, available []Role) (Role, error) {
 }
 
 func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
-	if len(snapshot.WorldBookPrompt) > 256<<10 || !utf8.ValidString(snapshot.WorldBookPrompt) {
-		return ErrPendingLimit
-	}
 	if snapshot.OwnerID != scope.ResourceOwnerID || snapshot.Role.ID != scope.RoleID || snapshot.Role.Revision != scope.RoleRevision || !json.Valid(snapshot.Role.Profile) {
 		return ErrWrongOwner
 	}
@@ -166,7 +162,8 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	seen := make(map[string]bool)
 	for _, resource := range snapshot.Resources {
 		key := resource.Kind + "/" + resource.ID
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
+		validWorldbookRole := resource.Kind == "worldbook" && (resource.RoleID == scope.RoleID || resource.RoleID == GlobalWorldbookRole)
+		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
 			return fmt.Errorf("%w: 无效上下文记录", ErrWrongOwner)
 		}
 		seen[key] = true

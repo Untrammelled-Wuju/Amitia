@@ -1,5 +1,3 @@
-// migration-only: temporary compatibility adapter
-// remove at step 65 cutover
 package mcp
 
 import (
@@ -13,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/mcp/protocol"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/protocol"
 )
 
 type RemoteTransport interface {

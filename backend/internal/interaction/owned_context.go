@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/u-ai/backend/internal/character"
@@ -92,12 +93,12 @@ func WithOwnedContext(ctx context.Context, scope coordination.ExecutionScope, da
 			if err := json.Unmarshal(row.Body, &snapshot.Psyche.Value); err != nil {
 				return ctx, err
 			}
-			snapshot.Psyche.Source, snapshot.Psyche.Status, snapshot.Psyche.Version = "owned-psyche", LoadStatusReady, version
+			snapshot.Psyche.Source, snapshot.Psyche.Status, snapshot.Psyche.Version = "owned-psyche", LoadStatusReady, "owned-psyche:"+strconv.FormatInt(row.Revision, 10)
 		case "relationship":
 			if err := json.Unmarshal(row.Body, &snapshot.Relationship.Value); err != nil {
 				return ctx, err
 			}
-			snapshot.Relationship.Source, snapshot.Relationship.Status, snapshot.Relationship.Version = "owned-relationship", LoadStatusReady, version
+			snapshot.Relationship.Source, snapshot.Relationship.Status, snapshot.Relationship.Version = "owned-relationship", LoadStatusReady, "owned-relationship:"+strconv.FormatInt(row.Revision, 10)
 		case "beliefs":
 			if err := json.Unmarshal(row.Body, &snapshot.Beliefs.Value); err != nil {
 				return ctx, err
@@ -112,7 +113,7 @@ func WithOwnedContext(ctx context.Context, scope coordination.ExecutionScope, da
 			if err := json.Unmarshal(row.Body, &snapshot.Needs.Value); err != nil {
 				return ctx, err
 			}
-			snapshot.Needs.Source, snapshot.Needs.Status, snapshot.Needs.Version = "owned-needs", LoadStatusReady, version
+			snapshot.Needs.Source, snapshot.Needs.Status, snapshot.Needs.Version = "owned-needs", LoadStatusReady, "owned-needs:"+strconv.FormatInt(row.Revision, 10)
 		}
 	}
 	snapshot.Conversation = FieldReady(conversation, "owned-conversation", version)

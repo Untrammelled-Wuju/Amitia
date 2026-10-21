@@ -5,9 +5,14 @@ import type {
   AgentSkillPage,
   AgentSkillPreview,
   LocalExtensionPackage,
+  ExtensionUpdateCheck,
+  ExtensionUpdateDownload,
+  ExtensionUpdateMetadata,
   PackageImportPreview,
   PackageOperation,
   PackageOperationResult,
+  PackageRollbackConfirmation,
+  PackageRollbackPreview,
   PackageSigner,
   PackageVersion,
   ExportedPackage,
@@ -22,7 +27,7 @@ import type {
 export type { PackageImportPreview, PackageOperationResult } from "./types";
 
 const agentSkillPath = (id = "") =>
-  `/api/extensions/agent-skills${id ? `/${encodeURIComponent(id)}` : ""}`;
+  `/api/extensions/kernel/agent-skills${id ? `/${encodeURIComponent(id)}` : ""}`;
 export async function previewAgentSkillZIP(file: File) {
   const data = new FormData();
   data.append("source", "zip");
@@ -58,10 +63,15 @@ export async function fetchAgentSkill(id: string) {
   const response = await apiClient.get(agentSkillPath(id));
   return response.data as AgentSkillDetail;
 }
-export async function installAgentSkill(previewId: string) {
+export async function installAgentSkill(
+  previewId: string,
+  confirmations: Record<string, boolean> = {},
+  enable = false,
+) {
   const response = await apiClient.post(`${agentSkillPath()}/import/install`, {
     previewId,
-    enable: false,
+    enable,
+    confirmations,
   });
   return response.data as AgentSkillDefinition;
 }
@@ -219,6 +229,70 @@ export async function installExtensionPackage(
   );
   return response.data as PackageOperationResult;
 }
+export async function getPackageOperation(operationId: string) {
+  const response = await apiClient.get(
+    `/api/extensions/packages/operations/${encodeURIComponent(operationId)}`,
+  );
+  return response.data as PackageOperation;
+}
+export async function checkExtensionUpdate(extensionId: string) {
+  const response = await apiClient.post(
+    "/api/extensions/updates/check",
+    { extensionId },
+  );
+  return response.data as ExtensionUpdateCheck;
+}
+export async function startExtensionUpdateDownload(
+  extensionId: string,
+  version?: string,
+) {
+  const response = await apiClient.post(
+    "/api/extensions/updates/downloads",
+    { extensionId, ...(version ? { version } : {}) },
+  );
+  return response.data as ExtensionUpdateDownload;
+}
+export async function getExtensionUpdateDownload(downloadId: string) {
+  const response = await apiClient.get(
+    `/api/extensions/updates/downloads/${encodeURIComponent(downloadId)}`,
+  );
+  return response.data as {
+    download: ExtensionUpdateDownload;
+    update: ExtensionUpdateMetadata;
+  };
+}
+export async function cancelExtensionUpdateDownload(downloadId: string) {
+  const response = await apiClient.post(
+    `/api/extensions/updates/downloads/${encodeURIComponent(downloadId)}/cancel`,
+  );
+  return response.data as { downloadId: string; status: string };
+}
+export async function retryExtensionUpdateDownload(downloadId: string) {
+  const response = await apiClient.post(
+    `/api/extensions/updates/downloads/${encodeURIComponent(downloadId)}/retry`,
+  );
+  return response.data as ExtensionUpdateDownload;
+}
+export async function previewExtensionUpdate(
+  extensionId: string,
+  downloadId: string,
+  scopeType = "global",
+  scopeId = "",
+  allowUnsignedDev = false,
+  developerSessionId = "",
+) {
+  const response = await apiClient.post(
+    "/api/extensions/updates/previews",
+    { extensionId, downloadId, scopeType, scopeId, allowUnsignedDev, developerSessionId },
+  );
+  return response.data as {
+    artifactId: string;
+    archiveHash: string;
+    downloadId: string;
+    preview: PackageImportPreview;
+    update: ExtensionUpdateMetadata;
+  };
+}
 export async function setGameCenterExtensionEnabled(extensionId: string, enabled: boolean) {
   const response = await apiClient.post(
     `/api/game-center/extensions/${enabled ? "enable" : "disable"}`,
@@ -232,10 +306,10 @@ export async function fetchPackageVersions(
   scopeId: string,
 ) {
   const response = await apiClient.get(
-    `/api/extensions/${encodeURIComponent(id)}/versions`,
-    { params: { scopeType, scopeId } },
+    "/api/extensions/versions",
+    { params: { extensionId: id, scopeType, scopeId } },
   );
-  return response.data as PackageVersion[];
+  return (response.data?.items ?? []) as PackageVersion[];
 }
 export async function comparePackageVersions(
   id: string,
@@ -245,8 +319,8 @@ export async function comparePackageVersions(
   scopeId: string,
 ) {
   const response = await apiClient.get(
-    `/api/extensions/${encodeURIComponent(id)}/versions/compare`,
-    { params: { from, to, scopeType, scopeId } },
+    "/api/extensions/versions/compare",
+    { params: { extensionId: id, from, to, scopeType, scopeId } },
   );
   return response.data as Record<string, unknown>;
 }
@@ -296,12 +370,46 @@ export async function rollbackExtensionPackage(
   version: string,
   scopeType: string,
   scopeId: string,
+  confirmationToken: string,
 ) {
   const response = await apiClient.post(
-    `/api/extensions/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/rollback`,
-    { scopeType, scopeId },
+    "/api/extensions/versions/rollback",
+    { extensionId: id, targetVersion: version, scopeType, scopeId, confirmationToken },
   );
   return response.data as PackageOperationResult;
+}
+export async function previewPackageRollback(
+  id: string,
+  version: string,
+  scopeType = "global",
+  scopeId = "",
+) {
+  const response = await apiClient.post(
+    "/api/extensions/versions/rollback/preview",
+    { extensionId: id, targetVersion: version, scopeType, scopeId },
+  );
+  return response.data as PackageRollbackPreview;
+}
+export async function confirmPackageRollback(
+  id: string,
+  version: string,
+  preview: PackageRollbackPreview,
+  confirmations: Record<string, boolean>,
+  scopeType = "global",
+  scopeId = "",
+) {
+  const response = await apiClient.post(
+    "/api/extensions/versions/rollback/confirm",
+    {
+      extensionId: id,
+      targetVersion: version,
+      scopeType,
+      scopeId,
+      previewSessionId: preview.previewSessionId,
+      confirmations,
+    },
+  );
+  return response.data as PackageRollbackConfirmation;
 }
 export async function fetchPackageDependencies(
   id: string,

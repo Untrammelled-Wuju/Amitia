@@ -2,8 +2,7 @@ import 'package:flutter/services.dart';
 
 /// Platform audio bridge used by realtime voice calls.
 ///
-/// Capture is mono PCM16 at 16 kHz. Playback accepts mono PCM16 at 24 kHz,
-/// matching backend/internal/realtime/proxy.go and the desktop client.
+/// Capture is mono PCM16 at 16 kHz for the Device Mesh realtime session.
 class RealtimeAudioBridge {
   static const MethodChannel _control = MethodChannel(
     'com.amitia.realtime_audio/control',
@@ -30,15 +29,6 @@ class RealtimeAudioBridge {
 
   Future<void> stopCapture() async {
     await _control.invokeMethod<void>('stopCapture');
-  }
-
-  Future<void> playPcm(Uint8List pcm) async {
-    if (pcm.isEmpty) return;
-    await _control.invokeMethod<void>('playPcm', pcm);
-  }
-
-  Future<void> stopPlayback() async {
-    await _control.invokeMethod<void>('stopPlayback');
   }
 
   Future<void> reset() async {

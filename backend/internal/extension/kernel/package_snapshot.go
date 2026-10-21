@@ -338,6 +338,14 @@ func (r *Runtime) capturePackageStateSnapshots(ctx context.Context, installed do
 		userState.AffectedTables = append(userState.AffectedTables, table)
 	}
 	sort.Strings(userState.AffectedTables)
+	if len(userState.AffectedTables) == 0 {
+		userState.Mode = "none"
+		userState.Snapshots = nil
+		userState.Completed = nil
+		userState.RecordCounts = nil
+		userState.DataExports = nil
+		userState.TableManifests = nil
+	}
 	if userState.DataExports != nil {
 		db := r.container.Store.DB()
 		if db != nil {

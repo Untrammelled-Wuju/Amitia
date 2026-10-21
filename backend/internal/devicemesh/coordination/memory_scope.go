@@ -7,6 +7,27 @@ import (
 
 const GlobalMemoryRole = "@global-memory"
 const AllMemoryRole = "@all-memory"
+const GlobalWorldbookRole = "@global-worldbook"
+
+const (
+	RuntimeStateKindPsyche       = "psyche"
+	RuntimeStateKindRelationship = "relationship"
+	RuntimeStateKindNeeds        = "needs"
+)
+
+var RuntimeStateKinds = []string{
+	RuntimeStateKindPsyche,
+	RuntimeStateKindRelationship,
+	RuntimeStateKindNeeds,
+}
+
+func RuntimeStateKind(kind string) bool {
+	switch kind {
+	case RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:
+		return true
+	}
+	return false
+}
 
 func MemoryKind(kind string) bool {
 	switch kind {
@@ -20,6 +41,9 @@ func StorageRole(scope ExecutionScope, kind string) string {
 	if kind == "continuity" && scope.ContinuityRoleID != "" {
 		return scope.ContinuityRoleID
 	}
+	if kind == "worldbook" && scope.WorldbookRoleID != "" {
+		return scope.WorldbookRoleID
+	}
 	if scope.MemoryRoleID == "" {
 		return scope.RoleID
 	}
@@ -30,6 +54,13 @@ func StorageRole(scope ExecutionScope, kind string) string {
 		return scope.MemoryRoleID
 	}
 	return scope.RoleID
+}
+
+func ResolveWorldbookScope(scope *ExecutionScope, global bool) {
+	scope.WorldbookRoleID = scope.RoleID
+	if global {
+		scope.WorldbookRoleID = GlobalWorldbookRole
+	}
 }
 
 func ResolveMemoryScope(scope *ExecutionScope, role Role, view string) error {

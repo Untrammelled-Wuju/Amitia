@@ -258,8 +258,3 @@ export async function pauseExtension(id: string): Promise<{ extensionId: string;
   const res = await apiClient.post(`${BASE}/extensions/pause`, { id });
   return res.data;
 }
-
-export async function rollbackExtension(id: string): Promise<{ extensionId: string; rolledBack: boolean }> {
-  const res = await apiClient.post(`${BASE}/extensions/rollback`, { id });
-  return res.data;
-}

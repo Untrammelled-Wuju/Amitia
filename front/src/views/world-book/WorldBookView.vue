@@ -91,6 +91,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       @closed="showAddForm = false"
     >
       <el-form label-width="80px">
+        <el-form-item label="作用域">
+          <el-select v-model="form.scope" style="width: 100%">
+            <el-option label="当前角色" value="role" />
+            <el-option label="全局世界书" value="global" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="匹配类型">
           <el-select v-model="form.matchType" style="width: 100%">
             <el-option label="正则匹配" value="regex" />
@@ -243,6 +249,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       @closed="editingEntry = null"
     >
       <el-form label-width="80px">
+        <el-form-item label="作用域">
+          <el-select v-model="editForm.scope" style="width: 100%">
+            <el-option label="当前角色" value="role" />
+            <el-option label="全局世界书" value="global" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="匹配类型">
           <el-select v-model="editForm.matchType" style="width: 100%">
             <el-option label="正则匹配" value="regex" />
@@ -400,6 +412,7 @@ const canImportJson = computed(
 );
 
 const form = reactive({
+  scope: "role" as "role" | "global",
   matchType: "keyword",
   matchPattern: "",
   matchScope: "full_context",
@@ -407,6 +420,7 @@ const form = reactive({
   priority: 0,
 });
 const editForm = reactive({
+  scope: "role" as "role" | "global",
   matchType: "",
   matchPattern: "",
   matchScope: "",
@@ -431,6 +445,7 @@ async function handleCreate() {
   await createRule(form, editorContext.value);
   showAddForm.value = false;
   form.matchType = "keyword";
+  form.scope = "role";
   form.matchPattern = "";
   form.matchScope = "full_context";
   form.injectContent = "";
@@ -440,6 +455,7 @@ async function handleCreate() {
 function startEdit(rule: any) {
   editorContext.value = loadedContext.value;
   editingEntry.value = rule;
+  editForm.scope = rule.scope || "role";
   editForm.matchType = rule.matchType;
   editForm.matchPattern = rule.matchPattern;
   editForm.matchScope = rule.matchScope;

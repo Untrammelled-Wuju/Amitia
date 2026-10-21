@@ -4,6 +4,10 @@ import { ownedManagementRequest } from "@/runtime/owned-chat-management";
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useApi } from "../../../composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import {
+  projectOwnedRuntimeState,
+  type OwnedRuntimeStateEnvelope,
+} from "@/runtime/owned-runtime-state";
 
 export function useDashboardData() {
   const { get, post } = useApi();
@@ -343,12 +347,11 @@ export function useDashboardData() {
         psycheState.value = null;
         return;
       }
-      const r = await get<any>("/api/psyche/state", { characterId: charId });
-      const data = r?.data || r;
-      if (data && data.emotion) {
-        psycheState.value =
-          data as import("../../../types").PsycheStateSnapshot;
-      }
+      const data = await get<OwnedRuntimeStateEnvelope>(
+        "/api/device-mesh/v1/business/runtime-state",
+        { characterId: charId },
+      );
+      psycheState.value = projectOwnedRuntimeState(data) as import("../../../types").PsycheStateSnapshot;
     } catch {
       psycheState.value = null;
     } finally {

@@ -18,9 +18,9 @@ func TestPhase43CitationMarkersDoNotCaptureMarkdownLinks(t *testing.T) {
 }
 
 func TestPhase43SnapshotAndAuditUseSameMarkerContract(t *testing.T) {
-	recorder := &assistantTurnRecorder{}
+	recorder := &ownedCitationAudit{}
 	for i := 1; i <= 6; i++ {
-		recorder.RegisterKnowledgeCitation(i, knowledge.Evidence{ID: "ev", SourceID: "source", SourceRevision: 1}, "text")
+		recorder.registerKnowledgeCitation(i, knowledge.Evidence{ID: "ev", SourceID: "source", SourceRevision: 1}, "text")
 	}
 	recorder.captureCitationIDs("web_run", `{"citations":[{"index":1,"evidence_id":"web1","text":"released in 2026"},{"index":2,"evidence_id":"web2","text":"unused"}]}`)
 	body := "报告 [K1] 和 [1]。网页 [2](https://example.org) 与图片 ![K2](https://example.org/a.png)。"

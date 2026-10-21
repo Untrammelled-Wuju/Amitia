@@ -22,7 +22,7 @@ func (p fakeLifeContextProvider) Resolve(context.Context, string, extensionconte
 	return p.raw, p.err
 }
 
-func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
+func TestRuntimeInputLoadersLoadRoleLifeAndUnresolvedThreads(t *testing.T) {
 	db := openRuntimeLoaderTestDB(t)
 	createRuntimeLoaderTestSchema(t, db)
 	insertRuntimeLoaderTestData(t, db)
@@ -32,7 +32,6 @@ func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
 	reg.Register(NewLifeContextLoader(fakeLifeContextProvider{
 		raw: json.RawMessage(`{"slot":"chat.realtime.schedule","contributions":[{"source":"test","priority":100,"data":{"stateLife":{"mood":"calm","energy":72,"busy":false,"available":true,"currentState":"IDLE","currentActivity":"空闲时间"}}}]}`),
 	}))
-	reg.Register(NewNeedContextLoader(db))
 	reg.Register(NewUnresolvedThreadContextLoader(db))
 
 	snapshot := reg.LoadAll(context.Background(), InteractionScope{CharacterID: "char-runtime", SpaceID: "user-1"}, "v-test")
@@ -54,12 +53,6 @@ func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
 	}
 	if !snapshot.Life.Value.Available || snapshot.Life.Value.CurrentState != "IDLE" {
 		t.Fatalf("expected plugin life runtime state, got %#v", snapshot.Life.Value)
-	}
-	if snapshot.Needs.Status != LoadStatusReady || snapshot.Needs.Value.Count != 2 {
-		t.Fatalf("expected two needs, got %#v", snapshot.Needs)
-	}
-	if snapshot.Needs.Value.Needs[0].Kind != "connection" || snapshot.Needs.Value.Needs[0].Level != 0.81 {
-		t.Fatalf("unexpected first need: %#v", snapshot.Needs.Value.Needs)
 	}
 	if snapshot.UnresolvedThreads.Status != LoadStatusReady || snapshot.UnresolvedThreads.Value.Count != 1 {
 		t.Fatalf("expected one unresolved thread, got %#v", snapshot.UnresolvedThreads)
@@ -99,54 +92,6 @@ func TestRuntimeBudgetIncludesNewRuntimeInputs(t *testing.T) {
 		if !names[name] {
 			t.Fatalf("expected budget module %s in %#v", name, modules)
 		}
-	}
-}
-
-func TestPsycheContextLoaderReadsEmotionMoodJSON(t *testing.T) {
-	db := openRuntimeLoaderTestDB(t)
-	if err := db.Exec(`CREATE TABLE psyche_states (
-		character_id TEXT,
-		emotion TEXT DEFAULT '{}',
-		mood TEXT DEFAULT '{}',
-		stress REAL,
-		energy REAL,
-		updated_at TEXT
-	)`).Error; err != nil {
-		t.Fatalf("create psyche_states: %v", err)
-	}
-	if err := db.Exec(`INSERT INTO psyche_states (character_id, emotion, mood, stress, energy, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		"char-psyche", `{"valence":0.7,"arousal":0.6,"dominance":0.4}`,
-		`{"moodValence":0.5,"moodArousal":0.3}`, 0.3, 0.85, "2026-07-08").Error; err != nil {
-		t.Fatalf("insert psyche: %v", err)
-	}
-
-	loader := NewPsycheContextLoader(db)
-	state, err := loader.Load(context.Background(), InteractionScope{CharacterID: "char-psyche"}, "v-test")
-	if err != nil {
-		t.Fatalf("load psyche: %v", err)
-	}
-	ready, ok := state.Value.(PsycheState)
-	if !ok {
-		t.Fatalf("expected PsycheState, got %T", state.Value)
-	}
-	if ready.Valence != 0.7 {
-		t.Errorf("expected Valence=0.7, got %f", ready.Valence)
-	}
-	if ready.Dominance != 0.4 {
-		t.Errorf("expected Dominance=0.4, got %f", ready.Dominance)
-	}
-	if ready.MoodValence != 0.5 {
-		t.Errorf("expected MoodValence=0.5, got %f", ready.MoodValence)
-	}
-	if ready.MoodArousal != 0.3 {
-		t.Errorf("expected MoodArousal=0.3, got %f", ready.MoodArousal)
-	}
-	if ready.Stress != 0.3 {
-		t.Errorf("expected Stress=0.3, got %f", ready.Stress)
-	}
-	if ready.Fatigue >= 0.18 {
-		t.Errorf("expected Fatigue<0.18 from energy=0.85, got %f", ready.Fatigue)
 	}
 }
 
@@ -201,21 +146,6 @@ func createRuntimeLoaderTestSchema(t *testing.T, db *gorm.DB) {
 			mood_value TEXT,
 			created_at TEXT
 		)`,
-		`CREATE TABLE psyche_states (
-			character_id TEXT,
-			emotion TEXT DEFAULT '{}',
-			mood TEXT DEFAULT '{}',
-			stress REAL,
-			energy REAL,
-			updated_at TEXT
-		)`,
-		`CREATE TABLE need_states (
-			character_id TEXT,
-			need_key TEXT,
-			current_value REAL,
-			baseline REAL,
-			updated_at TEXT
-		)`,
 		`CREATE TABLE unresolved_threads (
 			id TEXT PRIMARY KEY,
 			character_id TEXT,
@@ -252,23 +182,6 @@ func insertRuntimeLoaderTestData(t *testing.T, db *gorm.DB) {
 	if err := db.Exec(`INSERT INTO moods (character_id, mood, mood_value, created_at) VALUES (?, ?, ?, ?)`,
 		"char-runtime", "neutral", "calm", "2026-07-01 11:00:00").Error; err != nil {
 		t.Fatalf("insert mood: %v", err)
-	}
-	if err := db.Exec(`INSERT INTO psyche_states (character_id, emotion, mood, stress, energy, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		"char-runtime", `{"valence":0.5,"arousal":0.5,"dominance":0.5}`, `{"moodValence":0.5,"moodArousal":0.5}`, 0.2, 0.72, "2026-07-01 11:00:00").Error; err != nil {
-		t.Fatalf("insert psyche: %v", err)
-	}
-	for _, row := range []struct {
-		key      string
-		current  float64
-		baseline float64
-	}{
-		{"connection", 0.81, 0.5},
-		{"rest", 0.33, 0.6},
-	} {
-		if err := db.Exec(`INSERT INTO need_states (character_id, need_key, current_value, baseline, updated_at) VALUES (?, ?, ?, ?, ?)`,
-			"char-runtime", row.key, row.current, row.baseline, "2026-07-01 12:00:00").Error; err != nil {
-			t.Fatalf("insert need: %v", err)
-		}
 	}
 	if err := db.Exec(`INSERT INTO unresolved_threads (id, character_id, space_id, topic, reason, severity, escalation_level, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		"thr-1", "char-runtime", "user-1", "boundary repair", "pending apology", 0.67, 2, "2026-07-01 09:00:00").Error; err != nil {

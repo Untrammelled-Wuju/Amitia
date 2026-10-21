@@ -3,6 +3,7 @@ import { createAuthenticatedFetchInit } from "./request-auth";
 import type { OwnedAttachment } from "./device-owned-attachments";
 import type { OwnedConversationOrigin } from "./device-owned-conversation-reference";
 import { sameOwnedAuthority } from "./owned-speech-result";
+import { normalizeCitationSnapshot, type CitationSnapshotEntry } from "@/conversation/runtime/citationSnapshot";
 
 export interface OwnedExecutionScope {
   memoryRoleId?: string;
@@ -40,6 +41,7 @@ export interface OwnedChatResponse {
   executionScope: OwnedExecutionScope;
   reply: string;
   reasoning?: string;
+  citationSnapshot?: CitationSnapshotEntry[];
   saved: boolean;
   interrupted?: boolean;
   memoryStatus: string;
@@ -139,6 +141,8 @@ export async function consumeOwnedChatStream(
       if (event.type === "completed") {
         if (!event.data?.saved || event.data.requestId !== requestId) throw new Error("回复尚未确认保存");
         validateScope(event.data.executionScope, requestId);
+        if (event.data.citationSnapshot !== undefined && !Array.isArray(event.data.citationSnapshot)) throw new Error("引用快照格式无效");
+        if (event.data.citationSnapshot) event.data.citationSnapshot = normalizeCitationSnapshot(event.data.citationSnapshot);
         if (transcription !== undefined || event.data.transcription !== undefined) {
           const text = event.data.transcription;
           if (typeof text !== "string" || !text.trim() || new TextEncoder().encode(text).byteLength > 65536 || event.data.userRevision !== 2 || (transcription !== undefined && text !== transcription)) throw new Error("语音转写结果与保存确认不一致");

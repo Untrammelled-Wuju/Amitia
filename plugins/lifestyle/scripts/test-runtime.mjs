@@ -42,6 +42,15 @@ const command = (action, payload = {}) => toolHandlers.get("command")({
   payload: { ...payload, characterId: "char-1" },
 });
 
+await assert.rejects(
+  toolHandlers.get("command")({
+    action: "sleep.update",
+    payload: { sleep: { bedTime: "22:30", wakeTime: "06:30", enabled: true } },
+  }),
+  /缺少所属角色/,
+);
+assert.equal(kv.has("v1/profile/"), false);
+
 await command("work.update", {
   work: { enabled: true, workStartTime: "09:00", workEndTime: "18:00" },
 });
@@ -57,7 +66,11 @@ await command("fixed.create", {
 
 const snapshot = await command("snapshot", { at: "2026-09-14T09:30:00+08:00" });
 assert.equal(snapshot.fixedEvents.length, 1);
+assert.equal(snapshot.fixedEvents[0].startTime, "09:00");
+assert.equal(snapshot.fixedEvents[0].endTime, "10:00");
+assert.equal(snapshot.fixedEvents[0].eventType, "MEETING");
 assert.equal(snapshot.workProfile.enabled, true);
+assert.equal(Object.hasOwn(snapshot.workProfile, "delayedReplyEnabled"), false);
 assert.equal(snapshot.lifestyleTendency.activityEnergy, 71);
 assert.equal(snapshot.state.currentState, "WORKING");
 
@@ -68,6 +81,24 @@ assert.equal(updated.sleepSetting.bedTime, "22:30");
 await command("fixed.create", { title: "晚间阅读", eventType: "STUDY", startTime: "20:00", endTime: "21:00" });
 const created = await command("snapshot");
 assert.ok(created.fixedEvents.length >= 2);
+
+await command("class.create", {
+  date: "2026-09-14",
+  slotIndex: 2,
+  className: "高等数学",
+  adjustType: "reschedule",
+});
+await command("special.create", {
+  title: "复习周",
+  eventType: "EXAM_WEEK",
+  startDate: "2026-09-14",
+  endDate: "2026-09-18",
+});
+const events = await command("snapshot");
+assert.equal(events.classAdjustments[0].className, "高等数学");
+assert.equal(events.classAdjustments[0].slotIndex, 2);
+assert.equal(events.specialEvents[0].startDate, "2026-09-14");
+assert.equal(events.specialEvents[0].endDate, "2026-09-18");
 
 const context = await toolHandlers.get("context")({
   characterId: "char-1",

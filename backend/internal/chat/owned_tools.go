@@ -52,7 +52,10 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	definitions = filtered
 	modelSink := sink
 	verification := agentVerificationGate{}
-	citations:=&ownedCitationAudit{}
+	citations := ownedCitationAuditFromContext(ctx)
+	if citations == nil {
+		citations = &ownedCitationAudit{}
+	}
 	workspaceVerification := len(inference.Workspaces) > 0
 	if workspaceVerification {
 		bufferNativeOutput = true
@@ -78,7 +81,11 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 		}
 		messages = append(messages, recovered...)
 		verification.Restore(items)
-		for _,item:=range items {if item.ItemType==assistantTurnItemToolResult {citations.captureCitationIDs(item.ToolName,item.ResultJSON)}}
+		for _, item := range items {
+			if item.ItemType == assistantTurnItemToolResult {
+				citations.captureCitationIDs(item.ToolName, item.ResultJSON)
+			}
+		}
 		for _, item := range items {
 			if item.ItemType == assistantTurnItemToolCall {
 				seen[item.CallID] = true
@@ -141,8 +148,10 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			}
 			if workspaceVerification && verification.Pending() {
 				if agentVerificationToolAvailable(modelDefinitions) && verification.ShouldRequestVerification() {
-					instruction:="【执行验收门禁】最新工作区修改尚无成功测试、构建或静态检查证据。检查上一个工具的退出码和错误，实际修复后执行相关验证，不能只声称完成。"
-					if verification.verificationAttempt>0 {instruction="【执行验收门禁·失败修复】刚才验证未通过。检查上一个工具的错误信息和退出码，实际修复后重新运行相关验证；不得只重复声称完成。"}
+					instruction := "【执行验收门禁】最新工作区修改尚无成功测试、构建或静态检查证据。检查上一个工具的退出码和错误，实际修复后执行相关验证，不能只声称完成。"
+					if verification.verificationAttempt > 0 {
+						instruction = "【执行验收门禁·失败修复】刚才验证未通过。检查上一个工具的错误信息和退出码，实际修复后重新运行相关验证；不得只重复声称完成。"
+					}
 					messages = append(messages, map[string]interface{}{"role": "system", "content": instruction})
 					continue
 				}
@@ -175,9 +184,17 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 					}
 				}
 			}
-			audit:=citations.AuditCitationMarkers(sink.text.String())
-			if len(audit.Available)+len(audit.Unknown)+len(audit.MissingCitation)>0 {applog.TraceInfo(newProcessTrace(inference.Scope.RequestID,inference.ConversationID,inference.Scope.RoleID,"owned").WithStage("citation_audit_completed"),applog.Fields{"available_citations":len(audit.Available),"unknown_citations":len(audit.Unknown),"missing_citation_claims":len(audit.MissingCitation)},"owned reply citation audit completed")}
-			return s.finishOwnedOutputs(ctx, inference, business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, ForceVoice: forceVoice}, outputs)
+			audit := citations.AuditCitationMarkers(sink.text.String())
+			if len(audit.Available)+len(audit.Unknown)+len(audit.MissingCitation) > 0 {
+				applog.TraceInfo(newProcessTrace(inference.Scope.RequestID, inference.ConversationID, inference.Scope.RoleID, "owned").WithStage("citation_audit_completed"), applog.Fields{"available_citations": len(audit.Available), "unknown_citations": len(audit.Unknown), "missing_citation_claims": len(audit.MissingCitation)}, "owned reply citation audit completed")
+			}
+			generation := business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, ForceVoice: forceVoice}
+			snapshot, err := json.Marshal(citations.BuildCitationSnapshot(generation.Text))
+			if err != nil {
+				return partial(err)
+			}
+			generation.CitationSnapshot = snapshot
+			return s.finishOwnedOutputs(ctx, inference, generation, outputs)
 		}
 		if len(calls) > 16 || s.ownedToolRuntime == nil {
 			return partial(errors.New("设备能力调用超出授权范围或数量上限"))
@@ -237,7 +254,7 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 				output = string(result.Output)
 			}
 			outcome := toolResultToOutcome(result, true)
-			citations.captureCitationIDs(modelName,string(result.Output))
+			citations.captureCitationIDs(modelName, string(result.Output))
 			forceVoice = forceVoice || result.ForceVoice
 			if !outcome.HasError {
 				outputs = append(outputs, messageOutputsFromTurnItems([]AssistantTurnItem{{ItemType: assistantTurnItemToolResult, Status: assistantTurnStatusCompleted, ToolName: modelName, ResultJSON: string(result.Output)}})...)

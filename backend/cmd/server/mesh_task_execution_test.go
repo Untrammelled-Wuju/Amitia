@@ -552,6 +552,39 @@ func testOwnedTaskExecutionOverActualTLS(t *testing.T, rt *devicemesh.Runtime, d
 	expectedTaskScope.RoleID, expectedTaskScope.RoleRevision = submission.RoleID, submission.ExpectedRoleRevision
 	submission.ExpectedScope = &expectedTaskScope
 	encodedSubmission, _ = json.Marshal(submission)
+	localDefinition := &task_runtime.TaskDefinition{TaskID: "owned-local-definition", ExtensionID: "core-extension", ModuleID: "core-module", ContributionID: "owned-local-definition", Entry: "task.cjs", ExecutionPlacement: task_runtime.TaskExecutionPlacementLocal}
+	if err := service.PutTaskDefinition(t.Context(), localDefinition); err != nil {
+		t.Fatal(err)
+	}
+	definitionRequest := meshTaskDefinitionRequest{TargetDeviceID: device.String(), RoleID: "one", RequestID: "owned-task-definitions", ExpectedScope: &expectedTaskScope}
+	ownedDefinitionBody, _ := json.Marshal(definitionRequest)
+	var definitions struct {
+		Data struct {
+			Definitions []*task_runtime.TaskDefinition `json:"definitions"`
+			Scope       coordination.ExecutionScope    `json:"executionScope"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(callAPI(http.MethodPost, "/device-mesh/v1/business/tasks/definitions", ownedDefinitionBody, http.StatusOK), &definitions) != nil || definitions.Data.Scope.RoleID != "one" || definitions.Data.Scope.RoleRevision != 3 {
+		t.Fatal("Owner 范围任务定义读取没有返回有效执行范围")
+	}
+	foundLocal, foundDevice := false, false
+	for _, definition := range definitions.Data.Definitions {
+		foundLocal = foundLocal || definition != nil && definition.TaskID == localDefinition.TaskID
+		foundDevice = foundDevice || definition != nil && definition.TaskID == "tls-executing-task"
+	}
+	if !foundLocal || foundDevice {
+		t.Fatalf("Owner 定义目录混入设备定义或遗漏 Core 定义: local=%v device=%v", foundLocal, foundDevice)
+	}
+	missingDefinitionScope := definitionRequest
+	missingDefinitionScope.ExpectedScope = nil
+	missingDefinitionBody, _ := json.Marshal(missingDefinitionScope)
+	callAPI(http.MethodPost, "/device-mesh/v1/business/tasks/definitions", missingDefinitionBody, http.StatusBadRequest)
+	staleDefinitionScope := definitionRequest
+	staleScope := expectedTaskScope
+	staleScope.RoleRevision++
+	staleDefinitionScope.ExpectedScope = &staleScope
+	staleDefinitionBody, _ := json.Marshal(staleDefinitionScope)
+	callAPI(http.MethodPost, "/device-mesh/v1/business/tasks/definitions", staleDefinitionBody, http.StatusConflict)
 	callAPI(http.MethodGet, "/device-mesh/v1/business/tasks/roles?targetDeviceId=caller", nil, http.StatusForbidden)
 	var unknownFields map[string]any
 	_ = json.Unmarshal(encodedSubmission, &unknownFields)

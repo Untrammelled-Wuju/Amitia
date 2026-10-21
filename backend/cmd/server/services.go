@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,6 +84,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
+	mcpservice "github.com/u-ai/backend/internal/extension/mcpruntime/service"
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
@@ -92,7 +95,6 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/knowledge"
-	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/middleware/security"
 	migrationcore "github.com/u-ai/backend/internal/migration"
@@ -102,7 +104,6 @@ import (
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
-	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/psyche/appraisal"
 	"github.com/u-ai/backend/internal/psyche/budget"
 	"github.com/u-ai/backend/internal/queue"
@@ -117,7 +118,6 @@ import (
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
 	workspacegit "github.com/u-ai/backend/internal/workspace/git"
-	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/resourceuri"
@@ -138,7 +138,6 @@ type AppServices struct {
 	Browser                      browser.BrowserProvider
 	Graph                        graph.Service
 	MemoryConsumers              *ownedMemoryConsumers
-	WorldBook                    worldbook.Service
 	Knowledge                    knowledge.Service
 	Vision                       vision.Service
 	Chat                         chat.Service
@@ -190,7 +189,7 @@ type AppServices struct {
 	CanonicalStdioRegistry       *extensionmcp.CanonicalStdioRegistry
 	CanonicalRemoteRegistry      *extensionmcp.CanonicalRemoteRegistry
 	CanonicalStdioCaller         *CanonicalStdioCaller
-	MCPCompatibility             *MCPCompatibilityRuntime
+	MCPRuntime                   *mcpservice.Runtime
 	DesktopInstanceStore         *security.DesktopInstanceStore
 	DeviceRepository             *device.Repository
 	RuntimeOrchestrator          RuntimeOrchestrator
@@ -278,25 +277,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
 	relTimeCoordinator := temporal.NewRelationshipTimeCoordinator(relTimeRepo, temporal.SystemClock{})
 	temporalSvc.SetRelationshipTimeProvider(relTimeCoordinator)
-	wbRepo := worldbook.NewRepository(ctx)
-	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
 	knowledgeSvc := knowledge.NewService(ctx)
 	tool.SetKnowledgeService(knowledgeSvc)
 	visionRepo := vision.NewRepository(ctx.DB)
 	visionSvc := vision.NewService(visionRepo)
 	compressor := chat.NewCompressor(ctx.DB)
-	psycheStore := psyche.NewSQLitePsycheStore(ctx.DB)
-	if err := psycheStore.InitSchema(); err != nil {
-		log.Error("failed to init psyche store schema:", err)
-		panic("failed to init psyche store schema")
-	}
-	if err := ctx.DB.AutoMigrate(&chat.RelationshipStateRecord{}, &chat.NeedStateRecord{}); err != nil {
-		log.Error("failed to init relationship/need store schema:", err)
-		panic("failed to init relationship/need store schema")
-	}
 	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
 	syncService := syncpkg.NewService(ctx.DB, syncApplier)
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, compressor, visionSvc, graphSvc, syncService.ChangeLog)
 	if binder, ok := chatSvc.(interface{ SetKnowledgePort(chat.KnowledgePort) }); ok {
 		binder.SetKnowledgePort(knowledgeSvc)
 	}
@@ -407,13 +395,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
 	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
 	mcpRepository := mcp.NewRepository(ctx.DB)
-	var mcpCompatibility *MCPCompatibilityRuntime
-	var mcpCompatibilityErr error
+	var mcpRuntime *mcpservice.Runtime
+	var mcpRuntimeErr error
 	mcpAcquisitionPersistence, err := newMCPAcquisitionPersistence(mcpRepository, mcpDataDirectory(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("initialize MCP acquisition persistence: %w", err)
 	}
-	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry, func() *MCPCompatibilityRuntime { return mcpCompatibility })
+	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry, func() *mcpservice.Runtime { return mcpRuntime })
 	agentAdminController := newServerAgentAdminController(chatSvc, charRepo, ctx.DB, graphSvc, extensionRuntime.Kernel, mcpRepository)
 	agentAdminController.memory = memoryConsumers
 	if setter, ok := chatSvc.(interface {
@@ -487,12 +475,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap, androidImageIntelligence, resourceResolver, config.AppCfg.Storage.DataDir)
 	}
 
-	if extensionRuntime.AgentSkills != nil {
-		acquisitionSkills := extension.NewAgentSkillAcquisitionAdapter(extensionRuntime.AgentSkills)
-		kernelBuilder.WithAcquisitionSkills(acquisitionSkills, acquisitionSkills)
-	}
 	kernelBuilder.WithMCPAcquisitionPersistence(mcpAcquisitionPersistence)
-	kernelBuilder.WithMCPExistingConnector(&mcpExistingConnector{repository: mcpRepository, runtime: func() *MCPCompatibilityRuntime { return mcpCompatibility }})
+	kernelBuilder.WithMCPExistingConnector(&mcpExistingConnector{repository: mcpRepository, runtime: func() *mcpservice.Runtime { return mcpRuntime }})
 	kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
@@ -500,12 +484,33 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	wireConversationEventDurableStore(kernelContainer.EventService)
+	mcpRuntime, mcpRuntimeErr = mcpservice.NewRuntime(
+		ctx.DB,
+		mcpRepository,
+		canonicalStdioRegistry,
+		canonicalRemoteRegistry,
+		commandResolver,
+		kernelContainer.ToolFacade,
+		chatSvc,
+		mcpDataDirectory(ctx),
+		runtimeProfile,
+		mcpAcquisitionPersistence.secrets,
+	)
+	if mcpRuntimeErr != nil {
+		return nil, fmt.Errorf("initialize MCP runtime: %w", mcpRuntimeErr)
+	}
+	kernelContainer.MCPBindings = mcpRuntime
+	agentAdminController.SetMCPConnections(mcpRuntime.Connections)
 	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
 		log.Error("package operation recovery failed: ", err)
 		panic("failed to recover package operations")
 	}
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
+	}
+	if err := extension.MigrateLegacyAgentSkills(context.Background(), ctx.DB, extensionRuntime.Kernel); err != nil {
+		log.Error("legacy agent skill migration failed: ", err)
+		panic("failed to migrate legacy agent skills")
 	}
 	if kernelContainer.WorkflowExecutor != nil {
 		if _, err := kernelContainer.WorkflowExecutor.ReapStuck(context.Background(), 90*time.Second, 24*time.Hour, 100); err != nil {
@@ -586,10 +591,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if toolFacade == nil {
 		panic("kernel container did not construct ToolFacade")
 	}
-	if extensionRuntime.AgentSkills != nil {
-		toolFacade.SetAgentSkillBackend(extension.NewAgentSkillKernelAdapter(extensionRuntime.AgentSkills))
+	if agentSkills := kernelContainer.AgentSkillRuntime; agentSkills != nil {
+		toolFacade.SetSkillResourceHandler(agentSkills)
 	}
-	if extensionRuntime.AgentSkills != nil && bootstrap != nil {
+	if kernelContainer.AgentSkillRuntime != nil && bootstrap != nil {
 		if host := bootstrap.RuntimeHost(); host != nil {
 			nodeEnvResolver := bootstrap.NodeEnvironmentResolver()
 			interpResolver, interpErr := skill.NewScriptInterpreterResolver(skill.InterpreterResolveContext{
@@ -601,15 +606,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 					InterpreterResolver: interpResolver,
 					ProcessSupervisor:   host.Processes(),
 				})
-				toolFacade.SetRunSkillScriptHandler(extension.NewSkillScriptHandler(extensionRuntime.AgentSkills, scriptRuntime))
+				kernelContainer.AgentSkillRuntime.SetScriptRuntime(scriptRuntime)
+				toolFacade.SetRunSkillScriptHandler(kernelContainer.AgentSkillRuntime)
 			} else {
 				log.Warn("failed to create skill script interpreter resolver: ", interpErr)
 			}
 		}
-	}
-	if extensionRuntime.AgentSkills != nil {
-		baseURL := "http://" + config.AppCfg.Server.Addr()
-		toolFacade.SetSkillResourceHandler(extension.NewSkillResourceAdapter(extensionRuntime.AgentSkills, baseURL))
 	}
 	extensionContextProvider := newKernelExtensionContextProvider(toolFacade)
 	if setter, ok := interface{}(chatSvc).(interface {
@@ -1010,16 +1012,28 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	v1BehaviorRuntimePort := wiring.NewV1RuntimeActionAdapter(runtimeV1Facade)
 	v1ActivePetPort := wiring.NewV1ActivePetAdapter(installationRepo, runtimeV1Facade, processingDataDir)
+	runtimeStateOwners := make([]string, 0, 2)
+	if behaviorSpace, behaviorSpaceErr := spaceidentity.Open(mcpDataDirectory(ctx)); behaviorSpaceErr == nil {
+		runtimeStateOwners = append(runtimeStateOwners, behaviorSpace.SpaceID())
+	}
+	if behaviorIdentity, behaviorIdentityErr := devicemeshagent.NewIdentityStore(mcpDataDirectory(ctx)).Load(); behaviorIdentityErr == nil {
+		runtimeStateOwners = append(runtimeStateOwners, behaviorIdentity.DeviceID.String())
+	}
+	var runtimeStateDB *sql.DB
+	if kernelContainer != nil && kernelContainer.DeviceRegistry != nil {
+		runtimeStateDB = kernelContainer.DeviceRegistry.Database()
+	}
 
 	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
-		DB:                ctx.DB,
-		ActivePetPort:     v1ActivePetPort,
-		RuntimeActionPort: v1BehaviorRuntimePort,
-		InstallRepo:       installationRepo,
-		PsycheStore:       psycheStore,
-		DataDir:           processingDataDir,
-		ShadowMode:        false,
-		RuntimeCmdOn:      true,
+		DB:                 ctx.DB,
+		ActivePetPort:      v1ActivePetPort,
+		RuntimeActionPort:  v1BehaviorRuntimePort,
+		InstallRepo:        installationRepo,
+		RuntimeStateDB:     runtimeStateDB,
+		RuntimeStateOwners: runtimeStateOwners,
+		DataDir:            processingDataDir,
+		ShadowMode:         false,
+		RuntimeCmdOn:       true,
 	})
 	var behaviorSvc *behavior.BehaviorService
 	if assembleErr != nil {
@@ -1070,9 +1084,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		)
 		if behaviorSvc != nil {
 			behaviorSvc.SetAdapterManager(adapterManager)
-		}
-		if servicesChat := chatSvc; servicesChat != nil {
-			servicesChat.SetDesktopPetLifecycleObserver(newDesktopPetLifecycleBridge(adapterManager))
 		}
 	}
 
@@ -1136,22 +1147,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	syncApplier = syncpkg.NewBusinessApplier(ctx.DB)
 	syncService = syncpkg.NewService(ctx.DB, syncApplier)
 
-	mcpCompatibility, mcpCompatibilityErr = buildMCPCompatibilityRuntime(
-		ctx,
-		mcpRepository,
-		canonicalStdioRegistry,
-		canonicalRemoteRegistry,
-		commandResolver,
-		kernelContainer.ToolFacade,
-		chatSvc,
-		mcpDataDirectory(ctx),
-		mcpAcquisitionPersistence.secrets,
-	)
-	if mcpCompatibilityErr != nil {
-		return nil, fmt.Errorf("initialize canonical MCP compatibility runtime: %w", mcpCompatibilityErr)
-	}
-	agentAdminController.SetMCPConnections(mcpCompatibility.Connections)
-
 	var notificationRuntime *notificationruntime.Runtime
 	if !runtimeProfile.IsDeviceAgent() {
 		var notificationBridge nativebridge.Bridge
@@ -1192,7 +1187,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
 		MemoryConsumers:              memoryConsumers,
-		WorldBook:                    wbSvc,
 		Knowledge:                    knowledgeSvc,
 		Vision:                       visionSvc,
 		Chat:                         chatSvc,
@@ -1246,7 +1240,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		CanonicalStdioRegistry:       canonicalStdioRegistry,
 		CanonicalRemoteRegistry:      canonicalRemoteRegistry,
 		CanonicalStdioCaller:         NewCanonicalStdioCaller(canonicalStdioRegistry),
-		MCPCompatibility:             mcpCompatibility,
+		MCPRuntime:                   mcpRuntime,
 		DesktopInstanceStore:         desktopInstanceStore,
 		DeviceRepository:             deviceRepo,
 		RuntimeDomainEventConsumer:   runtimeDomainEventConsumer,
@@ -1273,6 +1267,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	dataPortability, dataPortabilityErr := buildDataPortabilityCoordinator(dataPortabilityDeps{
 		DataDir:   config.AppCfg.Storage.DataDir,
 		DB:        ctx.DB,
+		KernelDB:  kernelContainer.DeviceRegistry.Database(),
 		Memory:    memoryConsumers,
 		ExtSvc:    extensionRuntime,
 		Workspace: workspaceService,
@@ -1334,6 +1329,24 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 		deviceMeshRuntime.LocalDeviceID = physicalIdentity.DeviceID.String()
 		deviceMeshRuntime.LocalDeviceDataPort = deviceData
+		worldbookMigrationOwner := physicalIdentity.DeviceID.String()
+		if runtimeProfile == runtimeprofile.ProfileCloudCore {
+			worldbookMigrationOwner = localSpace.SpaceID()
+		}
+		if err := migrateLegacyWorldbook(context.Background(), services.DB, meshDB, localSpace.SpaceID(), worldbookMigrationOwner); err != nil {
+			return nil, fmt.Errorf("migrate legacy worldbook: %w", err)
+		}
+		runtimeStateOwners := []string{localSpace.SpaceID(), physicalIdentity.DeviceID.String()}
+		seenRuntimeStateOwners := map[string]bool{}
+		for _, runtimeStateOwner := range runtimeStateOwners {
+			if runtimeStateOwner == "" || seenRuntimeStateOwners[runtimeStateOwner] {
+				continue
+			}
+			seenRuntimeStateOwners[runtimeStateOwner] = true
+			if err := migrateLegacyRuntimeState(context.Background(), services.DB, meshDB, localSpace.SpaceID(), runtimeStateOwner); err != nil {
+				return nil, fmt.Errorf("migrate legacy runtime state for %s: %w", runtimeStateOwner, err)
+			}
+		}
 		if err := bindCoreOwnedTaskRuntime(taskOwnershipBinding, deviceMeshRuntime, localSpace.SpaceID()); err != nil {
 			return nil, fmt.Errorf("initialize owned task runtime: %w", err)
 		}
@@ -1656,11 +1669,8 @@ func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Rep
 	runtimeRegistry.Register(interaction.NewRoleRuntimeProfileContextLoader(charRepo))
 	runtimeRegistry.Register(interaction.NewChannelContextLoader())
 	runtimeRegistry.Register(interaction.NewConversationContextLoader(ctx.DB))
-	runtimeRegistry.Register(interaction.NewPsycheContextLoader(ctx.DB))
-	runtimeRegistry.Register(interaction.NewRelationshipContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewBeliefContextLoader(memoryReader))
 	runtimeRegistry.Register(interaction.NewLifeContextLoader(extensionContext))
-	runtimeRegistry.Register(interaction.NewNeedContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewUnresolvedThreadContextLoader(ctx.DB))
 	if len(temporalServices) > 0 && temporalServices[0] != nil {
 		runtimeRegistry.Register(interaction.NewTemporalContextLoader(temporalServices[0]))

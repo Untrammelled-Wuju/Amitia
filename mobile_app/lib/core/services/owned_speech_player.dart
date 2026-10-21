@@ -40,11 +40,16 @@ class OwnedSpeechPlayer {
   int _generation = 0;
   Timer? _watch;
   Timer? _cleanup;
+  Timer? _progress;
   Directory? _directory;
 
   OwnedSpeechPlayer({required this.platform, required this.execute});
 
-  Future<void> play(OwnedSpeechAudio audio) async {
+  Future<void> play(
+    OwnedSpeechAudio audio, {
+    void Function(int playedMs, int receivedMs)? onProgress,
+    void Function()? onEnded,
+  }) async {
     if (_closed || _starting || platform == null) {
       throw StateError('语音播放器不可用或正在启动');
     }
@@ -93,10 +98,19 @@ class OwnedSpeechPlayer {
       final duration = rawDuration is int && rawDuration >= 0
           ? (rawDuration + 1000).clamp(1000, 301000)
           : 301000;
-      _cleanup = Timer(
-        Duration(milliseconds: duration),
-        () => unawaited(stop()),
-      );
+      final stopwatch = Stopwatch()..start();
+      _progress = Timer.periodic(const Duration(milliseconds: 400), (_) {
+        final played = stopwatch.elapsedMilliseconds.clamp(0, duration);
+        onProgress?.call(played, duration);
+      });
+      _cleanup = Timer(Duration(milliseconds: duration), () {
+        stopwatch.stop();
+        _progress?.cancel();
+        _progress = null;
+        onProgress?.call(duration, duration);
+        onEnded?.call();
+        unawaited(stop());
+      });
     } catch (_) {
       if (generation == _generation) await stop();
       if (directory != null && await directory.exists()) {
@@ -114,6 +128,8 @@ class OwnedSpeechPlayer {
     _watch = null;
     _cleanup?.cancel();
     _cleanup = null;
+    _progress?.cancel();
+    _progress = null;
     final directory = _directory;
     _directory = null;
     final shouldStop = _playing || _starting;

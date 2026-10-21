@@ -1,15 +1,11 @@
 package chat
 
 import (
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/u-ai/backend/internal/knowledge"
 	"gorm.io/gorm"
 )
 
@@ -143,80 +139,4 @@ func citationExcerpt(text string, limit int) string {
 		runes = runes[:limit]
 	}
 	return string(runes)
-}
-
-func (r *assistantTurnRecorder) RegisterKnowledgeCitation(index int, ev knowledge.Evidence, shownText string) {
-	if r == nil || index <= 0 || index > 64 {
-		return
-	}
-	r.citationMu.Lock()
-	defer r.citationMu.Unlock()
-	if r.knowledgeCitationEvidence == nil {
-		r.knowledgeCitationEvidence = make(map[int]citationEvidence)
-	}
-	r.knowledgeCitationEvidence[index] = citationEvidence{
-		EvidenceID: ev.ID, Title: ev.Title, Text: shownText,
-		SourceID: ev.SourceID, SourceRevision: ev.SourceRevision,
-		UnitID: ev.UnitID, Locator: safeCitationLocator(ev.Locator), Checksum: ev.Checksum,
-	}
-}
-
-// BuildCitationSnapshot freezes only evidence referenced in the final text,
-// never all retrieval candidates. Historical citations survive reindexing.
-func (r *assistantTurnRecorder) BuildCitationSnapshot(markdown string) []CitationSnapshot {
-	if r == nil || strings.TrimSpace(markdown) == "" {
-		return nil
-	}
-	r.citationMu.RLock()
-	web := make(map[int]citationEvidence, len(r.citationEvidence))
-	for index, ev := range r.citationEvidence {
-		web[index] = ev
-	}
-	knowledgeItems := make(map[int]citationEvidence, len(r.knowledgeCitationEvidence))
-	for index, ev := range r.knowledgeCitationEvidence {
-		knowledgeItems[index] = ev
-	}
-	r.citationMu.RUnlock()
-	seen := make(map[string]bool)
-	out := make([]CitationSnapshot, 0, 8)
-	add := func(kind string, index int, ev citationEvidence) {
-		if len(out) >= 24 {
-			return
-		}
-		key := fmt.Sprintf("%s:%d", kind, index)
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		raw := strings.TrimSpace(ev.Text)
-		sum := sha256.Sum256([]byte(raw))
-		marker := fmt.Sprintf("[%d]", index)
-		if kind == "knowledge" {
-			marker = fmt.Sprintf("[K%d]", index)
-		}
-		out = append(out, CitationSnapshot{
-			Marker: marker, Kind: kind, Index: index, EvidenceID: ev.EvidenceID,
-			RefID: ev.RefID, SourceID: ev.SourceID, SourceRevision: ev.SourceRevision,
-			UnitID: ev.UnitID, Title: citationExcerpt(ev.Title, 200), URL: ev.URL,
-			Locator: safeCitationLocator(ev.Locator), Excerpt: citationExcerpt(raw, 1200),
-			ContentHash: fmt.Sprintf("%x", sum[:]), Checksum: ev.Checksum,
-		})
-	}
-	for _, index := range citationMarkersInProse(markdown, knowledgeMarkerRE) {
-		if ev, ok := knowledgeItems[index]; ok {
-			add("knowledge", index, ev)
-		}
-	}
-	for _, index := range citationMarkersInProse(markdown, numericCitationPattern) {
-		if ev, ok := web[index]; ok {
-			add("web", index, ev)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Kind != out[j].Kind {
-			return out[i].Kind < out[j].Kind
-		}
-		return out[i].Index < out[j].Index
-	})
-	return normalizeCitationSnapshotRecords(out)
 }

@@ -78,26 +78,25 @@ type AssistantTurnItem struct {
 func (AssistantTurnItem) TableName() string { return "assistant_turn_items" }
 
 type assistantTurnRecorder struct {
-	db                        *gorm.DB
-	TurnID                    string
-	ConversationID            string
-	CharacterID               string
-	UserMessageID             string
-	RequestID                 string
-	ExecutionID               string
-	TurnSequence              int64
-	Provider                  string
-	enabled                   bool
-	itemMu                    sync.Mutex
-	items                     []AssistantTurnItem
-	itemByID                  map[string]int
-	toolCallByID              map[string]int
-	progressMu                sync.Mutex
-	citationMu                sync.RWMutex
-	citationIDs               map[int]struct{}
-	citationEvidence          map[int]citationEvidence
-	knowledgeCitationEvidence map[int]citationEvidence
-	webResearchUsed           bool
+	db               *gorm.DB
+	TurnID           string
+	ConversationID   string
+	CharacterID      string
+	UserMessageID    string
+	RequestID        string
+	ExecutionID      string
+	TurnSequence     int64
+	Provider         string
+	enabled          bool
+	itemMu           sync.Mutex
+	items            []AssistantTurnItem
+	itemByID         map[string]int
+	toolCallByID     map[string]int
+	progressMu       sync.Mutex
+	citationMu       sync.RWMutex
+	citationIDs      map[int]struct{}
+	citationEvidence map[int]citationEvidence
+	webResearchUsed  bool
 }
 
 func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMessageID, requestID string, ids ...string) *assistantTurnRecorder {
@@ -118,18 +117,17 @@ func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMess
 		executionID = uuid.NewString()
 	}
 	return &assistantTurnRecorder{
-		db:                        db,
-		TurnID:                    turnID,
-		ConversationID:            strings.TrimSpace(conversationID),
-		CharacterID:               strings.TrimSpace(characterID),
-		UserMessageID:             strings.TrimSpace(userMessageID),
-		RequestID:                 strings.TrimSpace(requestID),
-		ExecutionID:               executionID,
-		itemByID:                  make(map[string]int),
-		toolCallByID:              make(map[string]int),
-		citationIDs:               make(map[int]struct{}),
-		citationEvidence:          make(map[int]citationEvidence),
-		knowledgeCitationEvidence: make(map[int]citationEvidence),
+		db:               db,
+		TurnID:           turnID,
+		ConversationID:   strings.TrimSpace(conversationID),
+		CharacterID:      strings.TrimSpace(characterID),
+		UserMessageID:    strings.TrimSpace(userMessageID),
+		RequestID:        strings.TrimSpace(requestID),
+		ExecutionID:      executionID,
+		itemByID:         make(map[string]int),
+		toolCallByID:     make(map[string]int),
+		citationIDs:      make(map[int]struct{}),
+		citationEvidence: make(map[int]citationEvidence),
 	}
 }
 

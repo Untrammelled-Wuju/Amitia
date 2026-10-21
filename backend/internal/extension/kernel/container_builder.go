@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +36,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop"
-	"github.com/u-ai/backend/internal/extension/kernel/desktop_update"
 	"github.com/u-ai/backend/internal/extension/kernel/dev_mode"
 	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -54,6 +55,7 @@ import (
 	kernelmcpinstaller "github.com/u-ai/backend/internal/extension/kernel/mcp/installer"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
+	"github.com/u-ai/backend/internal/extension/kernel/package_distribution"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
@@ -73,6 +75,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
 	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/upgrade"
@@ -81,7 +84,6 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
-	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/platform/process"
@@ -1278,9 +1280,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.mcpRuntimeConnectPort != nil {
 		mcpInstallPort = acquisition.NewPersistentMCPPortBridge(mcpLifecycle, b.mcpRuntimeConnectPort, mcpToolSync, b.mcpPersistence)
 	}
+	canonicalSkillPort := newCanonicalSkillInstallBridge()
 	skillInstallPort := b.acquisitionSkillPort
 	if skillInstallPort == nil {
-		skillInstallPort = acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog))
+		skillInstallPort = canonicalSkillPort
 	}
 
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
@@ -1560,6 +1563,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
 	toolFacade.SetLocalDeviceID(b.runtimeIdentity.DeviceID)
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
+	agentSkillRuntime := NewAgentSkillRuntime(agentSkillCatalog, observabilityStore, b.extRoot)
+	toolFacade.SetAgentSkillRuntime(agentSkillRuntime)
 	toolFacade.SetCapabilityResolver(capabilityResolver)
 	toolFacade.SetCapabilityService(capabilityService)
 	toolFacade.SetAcquisitionBridge(acquisitionBridge)
@@ -1828,18 +1833,35 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	orderingEngine := ui_ordering.NewOrderingEngine()
 
 	desktopHost := desktop.NewDesktopHost()
-	updateBaseDir := filepath.Join(b.extRoot, "update-downloads")
+	updateBaseDir := filepath.Join(b.extRoot, "package-distribution")
 	if b.extRoot == "" {
-		updateBaseDir = filepath.Join(os.TempDir(), "amitia-update-downloads")
+		updateBaseDir = filepath.Join(os.TempDir(), "amitia-package-distribution")
 	}
-	updateManager := desktop_update.NewUpdateManager(updateBaseDir, appconfig.AppVersion())
-	updateAdapter := NewUpdateManagerAdapter(updateManager, desktopHost)
+	registryURL := strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_UPDATE_REGISTRY_URL"))
+	if registryURL == "" {
+		registryURL = package_distribution.DefaultRegistryURL
+	}
+	registryPublicKey := strings.TrimSpace(os.Getenv("AMITIA_REGISTRY_PUBLIC_KEY"))
+	if registryPublicKey == "" {
+		registryPublicKey = package_distribution.DefaultRegistryPublicKey
+	}
+	allowPrivateDownloads, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_UPDATE_ALLOW_PRIVATE")))
+	allowPrivateDownloads = allowPrivateDownloads || registryURL == package_distribution.DefaultRegistryURL
+	packageDistribution := package_distribution.NewService(package_distribution.Config{
+		RegistryURL:           registryURL,
+		RegistryPublicKey:     registryPublicKey,
+		DataDir:               updateBaseDir,
+		HostVersion:           appconfig.AppVersion(),
+		RuntimeProfile:        b.runtimeProfile.String(),
+		Platform:              goruntime.GOOS,
+		Architecture:          goruntime.GOARCH,
+		AllowPrivateDownloads: allowPrivateDownloads,
+	})
 	desktopActionBridge := NewDesktopActionBridge(permBroker, scopeManager, executionKernel)
 	desktopHost.SetPermissionChecker(desktopActionBridge)
 	desktopHost.SetScopeChecker(desktopActionBridge)
 	desktopHost.SetActionExecutor(desktopActionBridge)
 	desktopAPI := desktop.NewDesktopAPI(desktopHost)
-	updateAPI := desktop.NewUpdateAPI(updateAdapter)
 
 	amitiaxInstaller := amitiax.NewInstaller()
 
@@ -1973,6 +1995,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			return snapshot.SnapshotID, nil
 		},
 		AgentSkillCatalog:         agentSkillCatalog,
+		AgentSkillRuntime:         agentSkillRuntime,
+		AcquisitionSkillPort:      canonicalSkillPort,
 		WorkflowRegistry:          workflowRegistry,
 		WorkflowExecutor:          workflowExecutor,
 		WorkflowTriggerManager:    workflowTriggerManager,
@@ -2010,6 +2034,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		TrustedServiceFactory:    trustedFactory,
 		ServiceDefinitions:       defProvider,
 		NodeEnvironmentResolver:  nodeResolver,
+		HostArtifactResolver:     artifactResolver,
 		HookService:              hookService,
 		EventService:             eventSvc,
 		EventRuntimeBridge:       eventBridge,
@@ -2036,12 +2061,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ResourceLinks:       resourceLinks,
 
 		DesktopHost:              desktopHost,
-		UpdateManager:            updateManager,
-		UpdateAdapter:            updateAdapter,
 		DesktopAPI:               desktopAPI,
-		UpdateAPI:                updateAPI,
 		DesktopActionBridge:      desktopActionBridge,
 		DesktopPetPluginBoundary: petPluginBoundary,
+		PackageDistribution:      packageDistribution,
 
 		ObservabilityStore: observabilityStore,
 
@@ -2086,6 +2109,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 		RuntimeProfile:              b.runtimeProfile,
 		RuntimePolicy:               b.runtimePolicy,
+		RuntimeIdentity:             b.runtimeIdentity,
 		DeviceRegistry:              deviceRegistry,
 		DeviceRuntimePresence:       deviceRuntimePresence,
 		DeviceRuntimeSessions:       sessionService,
@@ -2104,6 +2128,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ProviderInvoker:           kernelProviderInvoker,
 
 		AcquisitionService: acquisitionService,
+		ResourceResolver:   b.resourceResolver,
 
 		BackgroundRemovalRegistry: bgRegistry,
 
@@ -2111,6 +2136,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 		EventBridgePublisher: eventBridgePublisher,
 	}
+	agentSkillRuntime.BindContainer(container)
 
 	builtin.SetUIAgentPublisher(newUIAgentPublisher(b.extRoot, schemaRegistry, uiContribRepo, uiHost))
 	builtin.SetUIAgentClientRuntime(uiHostNotifier)

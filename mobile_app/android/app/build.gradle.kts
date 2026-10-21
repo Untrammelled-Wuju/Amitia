@@ -14,6 +14,24 @@ fun amitiaConfigValue(name: String): String =
 fun quotedBuildConfig(value: String): String =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
+fun amitiaSigningValue(name: String): String? {
+    System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    if (!System.getProperty("os.name").lowercase().contains("mac")) return null
+    return runCatching {
+        val process = ProcessBuilder(
+            "security",
+            "find-generic-password",
+            "-s",
+            "amitia-release-signing",
+            "-a",
+            name,
+            "-w",
+        ).redirectErrorStream(true).start()
+        val value = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        if (process.waitFor() == 0 && value.isNotEmpty()) value else null
+    }.getOrNull()
+}
+
 val vendorPushLibDir = file("libs")
 val vendorPushArchives =
     vendorPushLibDir.listFiles()
@@ -148,10 +166,10 @@ android {
         buildConfigField("boolean", "AMITIA_VIVO_NATIVE_DATA_ENABLED", vivoNativeDataEnabled.toString())
     }
 
-    val keystorePath: String? = System.getenv("AMITIA_KEYSTORE_PATH")?.trim()?.takeIf { it.isNotEmpty() }
-    val keystorePassword: String? = System.getenv("AMITIA_KEYSTORE_PASSWORD")?.takeIf { it.isNotEmpty() }
-    val keyAliasValue: String? = System.getenv("AMITIA_KEY_ALIAS")?.trim()?.takeIf { it.isNotEmpty() }
-    val keyPasswordValue: String? = System.getenv("AMITIA_KEY_PASSWORD")?.takeIf { it.isNotEmpty() }
+    val keystorePath: String? = amitiaSigningValue("AMITIA_KEYSTORE_PATH")
+    val keystorePassword: String? = amitiaSigningValue("AMITIA_KEYSTORE_PASSWORD")
+    val keyAliasValue: String? = amitiaSigningValue("AMITIA_KEY_ALIAS")
+    val keyPasswordValue: String? = amitiaSigningValue("AMITIA_KEY_PASSWORD")
 
     signingConfigs {
         create("release") {
@@ -245,25 +263,19 @@ android {
 
 
 val releaseSigningEnvironment = mapOf(
-    "AMITIA_KEYSTORE_PATH" to System.getenv("AMITIA_KEYSTORE_PATH")?.trim(),
-    "AMITIA_KEYSTORE_PASSWORD" to System.getenv("AMITIA_KEYSTORE_PASSWORD"),
-    "AMITIA_KEY_ALIAS" to System.getenv("AMITIA_KEY_ALIAS")?.trim(),
-    "AMITIA_KEY_PASSWORD" to System.getenv("AMITIA_KEY_PASSWORD"),
+    "AMITIA_KEYSTORE_PATH" to amitiaSigningValue("AMITIA_KEYSTORE_PATH"),
+    "AMITIA_KEYSTORE_PASSWORD" to amitiaSigningValue("AMITIA_KEYSTORE_PASSWORD"),
+    "AMITIA_KEY_ALIAS" to amitiaSigningValue("AMITIA_KEY_ALIAS"),
+    "AMITIA_KEY_PASSWORD" to amitiaSigningValue("AMITIA_KEY_PASSWORD"),
 )
 
 val validateReleaseSigning by tasks.registering {
     group = "verification"
     description = "Fails closed when production Android signing credentials are missing or invalid"
     doLast {
-        val missing = releaseSigningEnvironment
-            .filterValues { it.isNullOrBlank() }
-            .keys
-            .sorted()
-        if (missing.isNotEmpty()) {
-            throw GradleException(
-                "Release signing is not configured. Missing: ${missing.joinToString(", ")}. " +
-                    "Debug signing fallback is intentionally disabled."
-            )
+        val missing = releaseSigningEnvironment.values.any { it.isNullOrBlank() }
+        if (missing) {
+            throw GradleException("Release signing credentials are unavailable")
         }
 
         val configuredKeystore = file(releaseSigningEnvironment.getValue("AMITIA_KEYSTORE_PATH")!!)

@@ -3,11 +3,16 @@ package agent_skill
 import "crypto/sha256"
 import "encoding/hex"
 import "encoding/json"
+import "strings"
+import "time"
 
 type AgentSkillScope string
 
 const (
-	AgentSkillScopeGlobal AgentSkillScope = "global"
+	AgentSkillScopeGlobal       AgentSkillScope = "global"
+	AgentSkillScopeSpace        AgentSkillScope = "space"
+	AgentSkillScopeCharacter    AgentSkillScope = "character"
+	AgentSkillScopeConversation AgentSkillScope = "conversation"
 )
 
 type ActivationMode string
@@ -58,7 +63,44 @@ type SkillResourceDescriptor struct {
 	TextReadable  bool              `json:"textReadable"`
 	TokenEstimate int               `json:"tokenEstimate,omitempty"`
 	Description   string            `json:"description,omitempty"`
+	Executable    bool              `json:"executable"`
+	Supported     bool              `json:"supported"`
 	Metadata      map[string]any    `json:"metadata,omitempty"`
+}
+
+type SkillWarning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Path    string `json:"path,omitempty"`
+}
+
+type SkillError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Path    string `json:"path,omitempty"`
+}
+
+type SkillToolMapping struct {
+	SourceTool    string `json:"sourceTool"`
+	TargetSkillID string `json:"targetSkillId,omitempty"`
+	Status        string `json:"status"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+type SkillMCPDependency struct {
+	ID                         string   `json:"id"`
+	Description                string   `json:"description,omitempty"`
+	Required                   bool     `json:"required"`
+	Transport                  string   `json:"transport"`
+	URL                        string   `json:"url,omitempty"`
+	Command                    string   `json:"command,omitempty"`
+	Args                       []string `json:"args,omitempty"`
+	AuthType                   string   `json:"authType"`
+	ToolAllowlist              []string `json:"toolAllowlist"`
+	DefaultScope               string   `json:"defaultScope"`
+	AutoConfigure              bool     `json:"autoConfigure"`
+	AutoEnable                 bool     `json:"autoEnable"`
+	RequiresManualConfirmation bool     `json:"requiresManualConfirmation"`
 }
 
 type SkillTokenPolicy struct {
@@ -94,23 +136,33 @@ type SkillInstructionRef struct {
 }
 
 type AgentSkillDefinition struct {
-	ID            string `json:"id"`
-	ExtensionID   string `json:"extensionId"`
-	ModuleID      string `json:"moduleId,omitempty"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	DisplayName   string `json:"displayName,omitempty"`
-	Version       string `json:"version"`
-	SchemaVersion int    `json:"schemaVersion"`
+	ID             string `json:"id"`
+	ContributionID string `json:"contributionId"`
+	ExtensionID    string `json:"extensionId"`
+	ModuleID       string `json:"moduleId,omitempty"`
+	OwnerSpaceID   string `json:"ownerSpaceId,omitempty"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	DisplayName    string `json:"displayName,omitempty"`
+	Version        string `json:"version"`
+	SchemaVersion  int    `json:"schemaVersion"`
 
-	Instructions  SkillInstructionRef       `json:"instructions"`
-	Activation    ActivationRule            `json:"activation"`
-	Resources     []SkillResourceDescriptor `json:"resources,omitempty"`
-	RequiredTools []ToolReference           `json:"requiredTools,omitempty"`
-	RequiredMCP   []MCPReference            `json:"requiredMCP,omitempty"`
-	TokenPolicy   SkillTokenPolicy          `json:"tokenPolicy,omitempty"`
-	Compatibility SkillCompatibility        `json:"compatibility,omitempty"`
-	Integrity     SkillIntegrity            `json:"integrity,omitempty"`
+	Instructions        SkillInstructionRef       `json:"instructions"`
+	Activation          ActivationRule            `json:"activation"`
+	Resources           []SkillResourceDescriptor `json:"resources,omitempty"`
+	RequiredTools       []ToolReference           `json:"requiredTools,omitempty"`
+	RequiredMCP         []MCPReference            `json:"requiredMCP,omitempty"`
+	TokenPolicy         SkillTokenPolicy          `json:"tokenPolicy,omitempty"`
+	Compatibility       SkillCompatibility        `json:"compatibility,omitempty"`
+	CompatibilityStatus string                    `json:"compatibilityStatus,omitempty"`
+	Integrity           SkillIntegrity            `json:"integrity,omitempty"`
+	CompatibilityReport *SkillCompatibilityReport `json:"compatibilityReport,omitempty"`
+	Warnings            []SkillWarning            `json:"warnings,omitempty"`
+	MCPDependencies     []SkillMCPDependency      `json:"mcpDependencies,omitempty"`
+	RawSkillMD          string                    `json:"rawSkillMd,omitempty"`
+	RawFrontmatter      map[string]any            `json:"rawFrontmatter,omitempty"`
+	ExtraFrontmatter    map[string]any            `json:"extraFrontmatter,omitempty"`
+	EntryPoint          string                    `json:"entryPoint,omitempty"`
 
 	Scope      AgentSkillScope `json:"scope"`
 	ScopeID    string          `json:"scopeId,omitempty"`
@@ -122,6 +174,33 @@ type AgentSkillDefinition struct {
 
 	ToolMappings []map[string]any `json:"toolMappings,omitempty"`
 	Metadata     map[string]any   `json:"metadata,omitempty"`
+	CreatedAt    time.Time        `json:"createdAt"`
+	UpdatedAt    time.Time        `json:"updatedAt"`
+
+	ArtifactID       string `json:"artifactId,omitempty"`
+	ContentHash      string `json:"contentHash,omitempty"`
+	ShortDescription string `json:"shortDescription,omitempty"`
+	DefaultPrompt    string `json:"defaultPrompt,omitempty"`
+	IconSmall        string `json:"iconSmall,omitempty"`
+	IconLarge        string `json:"iconLarge,omitempty"`
+	BrandColor       string `json:"brandColor,omitempty"`
+	AllowedTools     string `json:"allowedTools,omitempty"`
+}
+
+type SkillCompatibilityReport struct {
+	Status             string             `json:"status"`
+	DetectedProfiles   []map[string]any   `json:"detectedProfiles,omitempty"`
+	FieldMappings      []map[string]any   `json:"fieldMappings,omitempty"`
+	ToolMappings       []SkillToolMapping `json:"toolMappings,omitempty"`
+	MappedFeatures     []map[string]any   `json:"mappedFeatures,omitempty"`
+	DependencyMappings []map[string]any   `json:"dependencyMappings,omitempty"`
+	RequiredScripts    []string           `json:"requiredScripts,omitempty"`
+	MissingFiles       []string           `json:"missingFiles,omitempty"`
+	Unsupported        []string           `json:"unsupported,omitempty"`
+	Warnings           []SkillWarning     `json:"warnings,omitempty"`
+	Errors             []SkillError       `json:"errors,omitempty"`
+	Fingerprint        map[string]any     `json:"fingerprint,omitempty"`
+	EvaluatedAt        time.Time          `json:"evaluatedAt"`
 }
 
 type AgentSkillCatalogEntry struct {
@@ -153,6 +232,41 @@ func (d AgentSkillDefinition) ToCatalogEntry() AgentSkillCatalogEntry {
 		Keywords:      d.Activation.Keywords,
 		ResourceCount: len(d.Resources),
 		TokenBudget:   d.TokenPolicy.MaxInstructionTokens,
+	}
+}
+
+func (d AgentSkillDefinition) StateID() string {
+	return d.OwnerSpaceID + ":" + d.OverrideID()
+}
+
+func (d AgentSkillDefinition) OverrideID() string {
+	id := d.ContributionID
+	if id == "" {
+		id = d.ID
+	}
+	if id == "" {
+		id = d.ExtensionID
+	}
+	return d.ExtensionID + ":" + id
+}
+
+func PublicSkillID(extensionID string) string {
+	replacer := strings.NewReplacer("/", "__", "\\", "__", ":", "_", " ", "_")
+	return replacer.Replace(strings.TrimSpace(extensionID))
+}
+
+func (d AgentSkillDefinition) MatchesScope(scopeID, characterID, conversationID string) bool {
+	switch d.Scope {
+	case "", AgentSkillScopeGlobal:
+		return true
+	case "character":
+		return d.ScopeID == characterID
+	case "conversation":
+		return d.ScopeID == conversationID
+	case "space":
+		return d.ScopeID == scopeID
+	default:
+		return d.ScopeID == "" || d.ScopeID == scopeID
 	}
 }
 

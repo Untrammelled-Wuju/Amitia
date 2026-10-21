@@ -17,7 +17,7 @@ func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope Invocation
 	}
 
 	unique := f.agentSkillCatalog.List(agent_skill.CatalogFilter{
-		Enabled: boolPtr(true),
+		Enabled: boolPtr(true), SpaceID: scope.SpaceID, CharacterID: scope.CharacterID, ConversationID: scope.ConversationID,
 	})
 
 	if len(unique) == 0 {
@@ -42,22 +42,19 @@ func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope Invocation
 		}
 	}
 
-	if f.activationService != nil {
-		autoCandidates := f.activationService.EvaluateAuto(ctx, message)
-		for _, c := range autoCandidates {
-			if c.MatchType != "keyword" {
-				continue
+	for _, skill := range unique {
+		if !agentSkillKeywordMatch(skill.Activation.Keywords, message) {
+			continue
+		}
+		alreadyActivated := false
+		for _, item := range activated {
+			if item.Name == skill.Name {
+				alreadyActivated = true
+				break
 			}
-			alreadyActivated := false
-			for _, a := range activated {
-				if a.Name == c.Definition.Name {
-					alreadyActivated = true
-					break
-				}
-			}
-			if !alreadyActivated {
-				activated = append(activated, skillToActivated(c.Definition, false))
-			}
+		}
+		if !alreadyActivated {
+			activated = append(activated, skillToActivated(skill, false))
 		}
 	}
 
@@ -109,6 +106,7 @@ func skillToActivated(def agent_skill.AgentSkillDefinition, explicit bool) Activ
 		CompatibilityStatus: def.Compatibility.Status,
 		Prompt:              prompt,
 		BodyTokens:          def.Instructions.TokenCount,
+		ContentHash:         def.ContentHash,
 		Explicit:            explicit,
 	}
 }

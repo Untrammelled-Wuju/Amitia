@@ -1,6 +1,9 @@
 package chat
 
-import("strings";"testing")
+import (
+	"strings"
+	"testing"
+)
 
 func TestAgentRecoveryKeepsParallelCallGroups(t *testing.T) {
 	alias := map[string]string{"read_file": "read_file"}

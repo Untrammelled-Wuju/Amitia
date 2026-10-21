@@ -3,7 +3,7 @@ package acquisition
 import (
 	"context"
 
-	"github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/extension/mcpruntime"
 )
 
 // mcpRepositoryAdapter wraps the legacy mcp.Repository to provide

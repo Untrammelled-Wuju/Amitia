@@ -122,6 +122,7 @@ func parseV3CardJSON(data []byte, sourceFormat CharacterCardFormat) (*CharacterC
 		}
 		for _, e := range card.CharacterBook.Entries {
 			result.CharacterBook.Entries = append(result.CharacterBook.Entries, CharacterBookEntry{
+				Name:           e.Name,
 				Keys:           e.Keys,
 				SecondaryKeys:  e.SecondaryKeys,
 				Content:        e.Content,
@@ -134,6 +135,13 @@ func parseV3CardJSON(data []byte, sourceFormat CharacterCardFormat) (*CharacterC
 				Extensions:     e.Extensions,
 				Priority:       e.Priority,
 			})
+			if e.ID != nil {
+				encodedID, err := json.Marshal(e.ID)
+				if err != nil {
+					return nil, nil, ErrJSONInvalid
+				}
+				result.CharacterBook.Entries[len(result.CharacterBook.Entries)-1].ID = encodedID
+			}
 		}
 	}
 

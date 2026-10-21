@@ -46,7 +46,7 @@
         "default": "生活系统运行时"
       },
       "description": {
-        "default": "以插件自有状态管理生活规则、日程、状态和旧数据迁移。"
+        "default": "以插件自有状态管理生活规则、日程和状态。"
       },
       "type": "javascript",
       "placement": "device",
@@ -89,7 +89,16 @@
                   "type": "string"
                 },
                 "payload": {
-                  "type": "object"
+                  "type": "object",
+                  "required": [
+                    "characterId"
+                  ],
+                  "properties": {
+                    "characterId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
                 }
               },
               "additionalProperties": false

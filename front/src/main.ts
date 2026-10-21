@@ -30,7 +30,7 @@ async function bootstrap() {
   const extensionUI = useExtensionUIStore(pinia);
   await initializeRuntimeCapabilities(true);
   const initialRoute = router.resolve(window.location.href);
-  const bootstrapPublicRoute = ["/web-access", "/onboarding", "/privacy", "/usage-boundary", "/call-window"].includes(initialRoute.path);
+  const bootstrapPublicRoute = ["/web-access", "/onboarding", "/privacy", "/usage-boundary"].includes(initialRoute.path);
   if (!bootstrapPublicRoute) {
     await extensionUI.refreshSnapshot().catch(() => undefined);
     syncProviderRoutes(router, extensionUI);

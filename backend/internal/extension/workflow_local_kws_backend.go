@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
+	realtime "github.com/u-ai/backend/internal/devicemesh/wake"
 	workflowmetrics "github.com/u-ai/backend/internal/extension/kernel/workflow"
-	"github.com/u-ai/backend/internal/realtime"
 )
 
 const (

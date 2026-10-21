@@ -26,7 +26,12 @@ type OwnedVoiceSnapshot struct {
 	SilenceDuration int     `json:"silenceDuration"`
 }
 
-func SynthesizePrivateRole(ctx context.Context, db *gorm.DB, space string, profile json.RawMessage, coreOwned bool, text string) ([]byte, error) {
+type PrivateSpeechOptions struct {
+	VoiceType  string
+	ResourceID string
+}
+
+func SynthesizePrivateRole(ctx context.Context, db *gorm.DB, space string, profile json.RawMessage, coreOwned bool, text string, options ...PrivateSpeechOptions) ([]byte, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -40,6 +45,15 @@ func SynthesizePrivateRole(ctx context.Context, db *gorm.DB, space string, profi
 		return nil, errors.New("角色缺少当前声学配置，请刷新角色后重试")
 	}
 	voice := snapshot.Voice
+	var requested PrivateSpeechOptions
+	if len(options) > 0 {
+		requested = options[0]
+	}
+	requested.VoiceType = strings.TrimSpace(requested.VoiceType)
+	requested.ResourceID = strings.TrimSpace(requested.ResourceID)
+	if len(requested.VoiceType) > 256 || len(requested.ResourceID) > 256 {
+		return nil, errors.New("请求音色或资源标识超过允许范围")
+	}
 	if voice.VoiceSpeed < 0 || voice.VoiceSpeed > 3 || voice.VoicePitch < 0 || voice.VoicePitch > 3 || voice.VoiceVolume < 0 || voice.VoiceVolume > 3 || voice.EmotionScale < 0 || voice.EmotionScale > 5 || voice.SilenceDuration < 0 || voice.SilenceDuration > 10000 || len(voice.VoiceType) > 256 || len(voice.Emotion) > 128 {
 		return nil, errors.New("角色声学配置超过允许范围")
 	}
@@ -49,11 +63,18 @@ func SynthesizePrivateRole(ctx context.Context, db *gorm.DB, space string, profi
 		return nil, errors.New("当前 Core 没有可用的语音服务配置")
 	}
 	cfg := *active
-	if !coreOwned && voice.VoiceMode != "clone" && voice.CustomVoiceID == "" && strings.TrimSpace(voice.VoiceType) != "" && !publicSourceVoice(active, strings.TrimSpace(voice.VoiceType)) {
+	effectiveVoiceType := strings.TrimSpace(voice.VoiceType)
+	if requested.VoiceType != "" {
+		effectiveVoiceType = requested.VoiceType
+	}
+	if !coreOwned && voice.VoiceMode != "clone" && voice.CustomVoiceID == "" && effectiveVoiceType != "" && !publicSourceVoice(active, effectiveVoiceType) {
 		return nil, errors.New("设备音色不是当前 Core 支持的公共预设，请选择兼容音色")
 	}
-	if strings.TrimSpace(voice.VoiceType) != "" {
-		cfg.VoiceType = strings.TrimSpace(voice.VoiceType)
+	if effectiveVoiceType != "" {
+		cfg.VoiceType = effectiveVoiceType
+	}
+	if requested.ResourceID != "" {
+		cfg.ResourceId = requested.ResourceID
 	}
 	if !coreOwned {
 		if strings.TrimSpace(voice.VoiceType) == "" && (active.IsCustom != 0 || strings.TrimSpace(active.CustomVoiceID) != "") {

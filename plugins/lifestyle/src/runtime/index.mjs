@@ -44,7 +44,6 @@ function defaultProfile() {
       overtimeMinMinutes: 30,
       overtimeMaxMinutes: 180,
       overtimeReplyMode: "SHORT_REPLY",
-      delayedReplyEnabled: false,
       commuteHomeShareEnabled: true,
       commuteHomeShareProbability: 60,
     },
@@ -75,6 +74,10 @@ function boolean(value) {
 
 function string(value, fallback = "") {
   return value === null || value === undefined ? fallback : String(value);
+}
+
+function field(row, camelName, snakeName) {
+  return row[camelName] !== undefined ? row[camelName] : row[snakeName];
 }
 
 function dateKey(value) {
@@ -212,15 +215,15 @@ function normalizeFixed(row) {
     id: number(row.id),
     title: string(row.title),
     description: string(row.description),
-    weekDay: number(row.week_day, -1),
-    startTime: string(row.start_time),
-    endTime: string(row.end_time),
-    eventType: string(row.event_type, "CUSTOM_BUSY"),
-    repeatType: string(row.repeat_type, "weekly"),
-    repeatDays: string(row.repeat_days),
-    prepareMinMinutes: number(row.prepare_min_minutes, 10),
-    prepareMaxMinutes: number(row.prepare_max_minutes, 40),
-    replyMode: string(row.reply_mode, "SHORT_REPLY"),
+    weekDay: number(field(row, "weekDay", "week_day"), -1),
+    startTime: string(field(row, "startTime", "start_time")),
+    endTime: string(field(row, "endTime", "end_time")),
+    eventType: string(field(row, "eventType", "event_type"), "CUSTOM_BUSY"),
+    repeatType: string(field(row, "repeatType", "repeat_type"), "weekly"),
+    repeatDays: string(field(row, "repeatDays", "repeat_days")),
+    prepareMinMinutes: number(field(row, "prepareMinMinutes", "prepare_min_minutes"), 10),
+    prepareMaxMinutes: number(field(row, "prepareMaxMinutes", "prepare_max_minutes"), 40),
+    replyMode: string(field(row, "replyMode", "reply_mode"), "SHORT_REPLY"),
     enabled: boolean(row.enabled),
   };
 }
@@ -230,21 +233,21 @@ function normalizeSpecial(row) {
     id: number(row.id),
     title: string(row.title),
     description: string(row.description),
-    startDate: string(row.start_date),
-    endDate: string(row.end_date),
-    startTime: string(row.start_time),
-    endTime: string(row.end_time),
-    eventType: string(row.event_type, "CUSTOM"),
-    repeatType: string(row.repeat_type, "none"),
-    repeatDays: string(row.repeat_days),
+    startDate: string(field(row, "startDate", "start_date")),
+    endDate: string(field(row, "endDate", "end_date")),
+    startTime: string(field(row, "startTime", "start_time")),
+    endTime: string(field(row, "endTime", "end_time")),
+    eventType: string(field(row, "eventType", "event_type"), "CUSTOM"),
+    repeatType: string(field(row, "repeatType", "repeat_type"), "none"),
+    repeatDays: string(field(row, "repeatDays", "repeat_days")),
     enabled: boolean(row.enabled),
     priority: number(row.priority),
-    activeMessageAllowed: boolean(row.active_message_allowed),
-    replyMode: string(row.reply_mode, "SHORT_REPLY"),
-    affectSchedule: boolean(row.affect_schedule),
-    affectSleep: boolean(row.affect_sleep),
-    affectMeal: boolean(row.affect_meal),
-    affectEnergy: boolean(row.affect_energy),
+    activeMessageAllowed: boolean(field(row, "activeMessageAllowed", "active_message_allowed")),
+    replyMode: string(field(row, "replyMode", "reply_mode"), "SHORT_REPLY"),
+    affectSchedule: boolean(field(row, "affectSchedule", "affect_schedule")),
+    affectSleep: boolean(field(row, "affectSleep", "affect_sleep")),
+    affectMeal: boolean(field(row, "affectMeal", "affect_meal")),
+    affectEnergy: boolean(field(row, "affectEnergy", "affect_energy")),
   };
 }
 
@@ -252,9 +255,9 @@ function normalizeAdjustment(row) {
   return {
     id: number(row.id),
     date: string(row.date),
-    slotIndex: number(row.slot_index),
-    className: string(row.class_name),
-    adjustType: string(row.adjust_type, "swap"),
+    slotIndex: number(field(row, "slotIndex", "slot_index")),
+    className: string(field(row, "className", "class_name")),
+    adjustType: string(field(row, "adjustType", "adjust_type"), "swap"),
     description: string(row.description),
   };
 }
@@ -669,6 +672,7 @@ async function dispatchCommand(host, logger, input) {
   const action = string(input && input.action);
   const payload = input && input.payload && typeof input.payload === "object" ? input.payload : {};
   const characterId = string(payload.characterId || input && input.characterId);
+  if (!characterId) throw new Error("缺少所属角色");
   switch (action) {
     case "ui.snapshot": {
       const loaded = await loadCharacter(host, characterId);

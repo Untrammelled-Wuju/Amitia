@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock("@/composables/useApi", () => ({ apiClient: api }));
-import { enqueueOwnedTask, prepareOwnedTask, listOwnedDeviceTaskCatalog } from "../views/kernel/tasks/api";
+import { enqueueOwnedTask, prepareOwnedTask, listOwnedDeviceTaskCatalog, listOwnedTaskDefinitions } from "../views/kernel/tasks/api";
 
 const scope = { coreId: "core-b", targetDeviceId: "phone", roleOwnerId: "phone", resourceOwnerId: "phone", modeRevision: 4, roleId: "role", roleRevision: 2, spaceId: "core-b", initiatorDeviceId: "phone", providerEpoch: 1, coordinated: false, permissionRevision: 1, targetPermissionRevision: 1, targetProviderEpoch: 1, requestId: "", turnId: "", executionId: "" };
 const options = { roles: [{ id: "role", name: "角色", revision: 2 }], selectedRole: "role", roleOwnerId: "phone", executionScope: scope };
@@ -10,6 +10,13 @@ const catalog = () => ({ executionScope: { ...scope }, revision: "a".repeat(64),
 beforeEach(() => vi.resetAllMocks());
 
 describe("普通设备任务提交", () => {
+  it("任务定义只能通过 Owner 范围接口读取", async () => {
+    const definitions = [{ taskId: "local-task", checkpoint: true, idempotent: true }];
+    api.post.mockResolvedValueOnce({ data: { definitions, executionScope: scope } });
+    expect(await listOwnedTaskDefinitions(options, "role")).toEqual(definitions);
+    expect(api.post.mock.calls[0][0]).toBe("/api/device-mesh/v1/business/tasks/definitions");
+    expect(api.post.mock.calls[0][1]).toMatchObject({ targetDeviceId: "phone", characterId: "role", expectedExecutionScope: scope });
+  });
   it("任务目录使用已选择角色的完整授权且不导入来源任务", async () => {
     const page = catalog();
     api.post.mockResolvedValueOnce({ data: page });

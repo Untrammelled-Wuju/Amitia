@@ -87,7 +87,6 @@ void main() {
       expect(AppRoutes.characterTimeline('c1'), '/characters/c1/timeline');
       expect(AppRoutes.characterProactive('c1'), '/characters/c1/proactive');
       expect(AppRoutes.characterPsyche('c1'), '/characters/c1/psyche');
-      expect(AppRoutes.characterDebug('c1'), '/characters/c1/debug');
       expect(AppRoutes.agentTask('t1'), '/agent/task/t1');
       expect(AppRoutes.continuityDetail('c1'), '/continuity/c1');
       expect(AppRoutes.mcpDetail('m1'), '/extensions/mcp/m1');

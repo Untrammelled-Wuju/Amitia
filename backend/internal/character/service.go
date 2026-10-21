@@ -3,7 +3,9 @@
 package character
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -20,14 +22,19 @@ type CardPreviewResult struct {
 	RoleAuthority string                     `json:"roleAuthority,omitempty"`
 	Preview       *card.CharacterCardPreview `json:"preview"`
 	SourceHash    string                     `json:"sourceHash"`
+	ImportID      string                     `json:"importId"`
 	Format        card.CharacterCardFormat   `json:"format"`
 }
 
 type CardImportResult struct {
-	RoleAuthority string `json:"roleAuthority,omitempty"`
-	CharacterID   string `json:"characterId"`
-	Name          string `json:"name"`
-	SourceFormat  string `json:"sourceFormat"`
+	RoleAuthority          string `json:"roleAuthority,omitempty"`
+	ImportID               string `json:"importId"`
+	CharacterID            string `json:"characterId"`
+	Name                   string `json:"name"`
+	SourceFormat           string `json:"sourceFormat"`
+	Status                 string `json:"status"`
+	LorebookEntryCount     int    `json:"lorebookEntryCount"`
+	WorldbookImportedCount int    `json:"worldbookImportedCount"`
 }
 
 type CardExportResult struct {
@@ -59,18 +66,47 @@ type Service interface {
 	UpdateCardData(characterID string, cardData *card.CharacterCardData) error
 }
 
+type CardWorldbookBridge interface {
+	ImportCardWorldbook(ctx context.Context, importID, sourceHash, spaceID, characterID string, entries []card.CharacterBookEntry) (int, error)
+	ExportCardWorldbook(ctx context.Context, spaceID, characterID string) (*card.CharacterBook, error)
+}
+
+type CardImportOperation struct {
+	SpaceID           string `gorm:"column:space_id;primaryKey"`
+	ID                string `gorm:"column:id;primaryKey"`
+	SourceHash        string `gorm:"column:source_hash"`
+	CharacterID       string `gorm:"column:character_id"`
+	CharacterName     string `gorm:"column:character_name"`
+	SourceFormat      string `gorm:"column:source_format"`
+	Status            string `gorm:"column:status"`
+	WorldbookExpected int    `gorm:"column:worldbook_expected"`
+	WorldbookImported int    `gorm:"column:worldbook_imported"`
+	LastError         string `gorm:"column:last_error"`
+	CreatedAt         string `gorm:"column:created_at"`
+	UpdatedAt         string `gorm:"column:updated_at"`
+}
+
+func (CardImportOperation) TableName() string {
+	return "character_card_import_operations"
+}
+
 type service struct {
 	repo           Repository
 	db             *gorm.DB
 	changeRecorder sync.ChangeRecorder
+	cardWorldbook  CardWorldbookBridge
 }
 
 func NewService(repo Repository, ctx *app.AppContext, recorder ...sync.ChangeRecorder) Service {
+	return NewServiceWithCardWorldbook(repo, ctx, nil, recorder...)
+}
+
+func NewServiceWithCardWorldbook(repo Repository, ctx *app.AppContext, bridge CardWorldbookBridge, recorder ...sync.ChangeRecorder) Service {
 	var r sync.ChangeRecorder
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	return &service{repo: repo, db: ctx.DB, changeRecorder: r}
+	return &service{repo: repo, db: ctx.DB, changeRecorder: r, cardWorldbook: bridge}
 }
 
 func (s *service) List(includeDisabled bool) ([]Character, error) {
@@ -725,17 +761,29 @@ func (s *service) PreviewCard(data []byte, filename string) (*CardPreviewResult,
 	return &CardPreviewResult{
 		Preview:    c.BuildPreview(),
 		SourceHash: sourceHash,
+		ImportID:   uuid.NewString(),
 		Format:     format,
 	}, nil
 }
 
 func (s *service) ImportCard(data []byte, filename string, confirm bool) (*CardImportResult, error) {
-	return s.ImportCardForSpace(data, filename, confirm, requestidentity.CanonicalSpaceID())
+	return s.ImportCardForSpaceContext(context.Background(), data, filename, confirm, "", requestidentity.CanonicalSpaceID())
 }
 
 func (s *service) ImportCardForSpace(data []byte, filename string, confirm bool, spaceID string) (*CardImportResult, error) {
+	return s.ImportCardForSpaceContext(context.Background(), data, filename, confirm, "", spaceID)
+}
+
+func (s *service) ImportCardForSpaceContext(ctx context.Context, data []byte, filename string, confirm bool, importID, spaceID string) (*CardImportResult, error) {
+	if !confirm {
+		return nil, fmt.Errorf("角色卡导入尚未确认")
+	}
 	unlock := LockRoleSource(s.db)
-	defer unlock()
+	defer func() {
+		if unlock != nil {
+			unlock()
+		}
+	}()
 	parser := card.NewCardParser()
 	c, _, err := parser.Parse(data, filename)
 	if err != nil {
@@ -746,58 +794,163 @@ func (s *service) ImportCardForSpace(data []byte, filename string, confirm bool,
 		return nil, err
 	}
 
+	sourceHash := card.ComputeSourceHash(data)
+	importID = strings.TrimSpace(importID)
+	if importID == "" {
+		importID = "card-" + sourceHash[:32]
+	}
+	if !validCardImportID(importID) {
+		return nil, fmt.Errorf("角色卡导入编号无效")
+	}
+	entries := []card.CharacterBookEntry{}
+	if c.CharacterBook != nil {
+		entries = append(entries, c.CharacterBook.Entries...)
+	}
 	mapping := c.ToCharacterMapping()
 	name := c.SanitizeName()
-
-	char := &Character{
-		GlobalMemoryEnabled: true,
-		ID:                  uuid.New().String(),
-		SpaceID:             normalizeCharacterOwner(spaceID),
-		Name:                name,
-		Description:         mapping.Description,
-		Personality:         mapping.Personality,
-		BasePrompt:          mapping.SystemPrompt,
-		Status:              "enabled",
-		CardDataJSON:        "",
-		CharacterBase:       mapping.Scenario,
-	}
-
 	cardData := c.ToCardData()
+	globalMemoryEnabled := true
 	if enabled, ok := cardData.ExternalExtensions["amitia_global_memory_enabled"].(bool); ok {
-		char.GlobalMemoryEnabled = enabled
+		globalMemoryEnabled = enabled
 	}
 	cardDataBytes, err := json.Marshal(cardData)
 	if err != nil {
 		return nil, fmt.Errorf("序列化卡片数据失败: %w", err)
 	}
-	char.CardDataJSON = string(cardDataBytes)
-
-	char.Revision = 1
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	operation := CardImportOperation{}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Where("space_id = ? AND id = ?", spaceID, importID).First(&operation).Error
+		if err == nil {
+			if operation.SourceHash != sourceHash {
+				return fmt.Errorf("角色卡导入编号已绑定其他文件")
+			}
+			var current Character
+			if err := s.characterOwnerQuery(tx.Where("id = ? AND deleted_at IS NULL", operation.CharacterID), spaceID).First(&current).Error; err != nil {
+				return fmt.Errorf("角色卡导入会话缺少角色: %w", err)
+			}
+			return nil
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		char := &Character{
+			GlobalMemoryEnabled: globalMemoryEnabled,
+			ID:                  uuid.New().String(),
+			SpaceID:             normalizeCharacterOwner(spaceID),
+			Name:                name,
+			Description:         mapping.Description,
+			Personality:         mapping.Personality,
+			BasePrompt:          mapping.SystemPrompt,
+			Status:              "enabled",
+			CardDataJSON:        string(cardDataBytes),
+			CharacterBase:       mapping.Scenario,
+			Revision:            1,
+		}
+		var count int64
+		if err := s.characterOwnerQuery(tx.Table("characters"), spaceID).Count(&count).Error; err == nil && count == 0 {
+			char.IsDefault = 1
+		}
 		if err := tx.Create(char).Error; err != nil {
 			return err
 		}
 		if err := s.recordCharacterChangeTx(tx, char, sync.OpCreate, spaceID); err != nil {
 			return err
 		}
-		return nil
+		operation = CardImportOperation{
+			SpaceID:           spaceID,
+			ID:                importID,
+			SourceHash:        sourceHash,
+			CharacterID:       char.ID,
+			CharacterName:     char.Name,
+			SourceFormat:      string(c.SourceFormat),
+			Status:            "pending",
+			WorldbookExpected: len(entries),
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+		return tx.Create(&operation).Error
 	})
 	if err != nil {
-		return nil, fmt.Errorf("创建角色失败: %w", err)
+		return nil, fmt.Errorf("创建角色与导入会话失败: %w", err)
 	}
+	unlock()
+	unlock = nil
+	if operation.Status == "ready" {
+		return cardImportResult(operation), nil
+	}
+	if s.cardWorldbook == nil {
+		if len(entries) > 0 {
+			err = fmt.Errorf("世界书导入服务尚未就绪")
+		}
+	} else {
+		operation.WorldbookImported, err = s.cardWorldbook.ImportCardWorldbook(ctx, importID, sourceHash, spaceID, operation.CharacterID, entries)
+	}
+	operation.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if err != nil {
+		operation.Status = "failed"
+		operation.LastError = truncateCardImportError(err.Error())
+	} else {
+		operation.Status = "ready"
+		operation.LastError = ""
+	}
+	if updateErr := s.db.WithContext(ctx).Model(&CardImportOperation{}).
+		Where("space_id = ? AND id = ?", spaceID, importID).
+		Updates(map[string]any{
+			"status":             operation.Status,
+			"worldbook_imported": operation.WorldbookImported,
+			"last_error":         operation.LastError,
+			"updated_at":         operation.UpdatedAt,
+		}).Error; updateErr != nil {
+		return nil, errors.Join(err, fmt.Errorf("更新角色卡导入会话失败: %w", updateErr))
+	}
+	if err != nil {
+		return nil, err
+	}
+	return cardImportResult(operation), nil
+}
 
+func validCardImportID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for _, character := range value {
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '-' || character == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func truncateCardImportError(value string) string {
+	if len(value) <= 4096 {
+		return value
+	}
+	return value[:4096]
+}
+
+func cardImportResult(operation CardImportOperation) *CardImportResult {
 	return &CardImportResult{
-		CharacterID:  char.ID,
-		Name:         char.Name,
-		SourceFormat: string(c.SourceFormat),
-	}, nil
+		ImportID:               operation.ID,
+		CharacterID:            operation.CharacterID,
+		Name:                   operation.CharacterName,
+		SourceFormat:           operation.SourceFormat,
+		Status:                 operation.Status,
+		LorebookEntryCount:     operation.WorldbookExpected,
+		WorldbookImportedCount: operation.WorldbookImported,
+	}
 }
 
 func (s *service) ExportCard(characterID string, format string) (*CardExportResult, []byte, error) {
-	return s.ExportCardForSpace(characterID, format, requestidentity.CanonicalSpaceID())
+	return s.ExportCardForSpaceContext(context.Background(), characterID, format, requestidentity.CanonicalSpaceID())
 }
 
 func (s *service) ExportCardForSpace(characterID, format, spaceID string) (*CardExportResult, []byte, error) {
+	return s.ExportCardForSpaceContext(context.Background(), characterID, format, spaceID)
+}
+
+func (s *service) ExportCardForSpaceContext(ctx context.Context, characterID, format, spaceID string) (*CardExportResult, []byte, error) {
 	char, err := s.requireCharacterOwner(characterID, spaceID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("角色不存在")
@@ -822,6 +975,13 @@ func (s *service) ExportCardForSpace(characterID, format, spaceID string) (*Card
 	if systemPrompt == "" {
 		systemPrompt = strings.TrimSpace(char.BasePrompt)
 	}
+	var characterBook *card.CharacterBook
+	if s.cardWorldbook != nil {
+		characterBook, err = s.cardWorldbook.ExportCardWorldbook(ctx, spaceID, characterID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("读取角色世界书失败: %w", err)
+		}
+	}
 	input := card.ExportInput{
 		Name:               char.Name,
 		Description:        char.Description,
@@ -839,6 +999,7 @@ func (s *service) ExportCardForSpace(characterID, format, spaceID string) (*Card
 		GroupOnlyGreetings: cardData.GroupOnlyGreetings,
 		Source:             "Amitia",
 		Extensions:         cardData.ExternalExtensions,
+		CharacterBook:      characterBook,
 		AvatarURL:          char.Avatar,
 		SourceFormat:       string(card.FormatV3CHARX),
 	}

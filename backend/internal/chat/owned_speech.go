@@ -12,5 +12,5 @@ func (s *service) GenerateOwnedSpeech(ctx context.Context, input business.Speech
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return nil, err
 	}
-	return tts.SynthesizePrivateRole(ctx, s.db, input.Scope.SpaceID, input.Role.Profile, input.Scope.RoleOwnerID == input.Scope.CoreID, input.Text)
+	return tts.SynthesizePrivateRole(ctx, s.db, input.Scope.SpaceID, input.Role.Profile, input.Scope.RoleOwnerID == input.Scope.CoreID, input.Text, tts.PrivateSpeechOptions{VoiceType: input.VoiceType, ResourceID: input.ResourceID})
 }

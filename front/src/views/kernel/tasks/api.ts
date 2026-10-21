@@ -6,7 +6,6 @@ import type {
   TaskRunProgress,
   TaskCheckpoint,
   TaskRunResult,
-  EnqueueTaskRequest,
   EnqueueTaskResult,
   ListTasksFilter,
   OwnedTaskRoleOptions,
@@ -57,11 +56,6 @@ export async function getTask(taskRunId: string, expected?: TaskRun): Promise<Ta
   return expected ? validateTaskPart(res.data, expected, intent) : retainTaskAuthority(res.data, intent);
 }
 
-export async function enqueueTask(req: EnqueueTaskRequest): Promise<EnqueueTaskResult> {
-  const res = await apiClient.post(TASKS_BASE, req);
-  return res.data;
-}
-
 export async function prepareOwnedTask(targetDeviceId: string): Promise<OwnedTaskRoleOptions> {
   const before = (await apiClient.get("/api/device-mesh/v1/coordination/me")).data;
   if (!before?.coreId || !before.coordinationAvailable) throw new Error("Core 的设备任务服务尚未就绪");
@@ -71,6 +65,21 @@ export async function prepareOwnedTask(targetDeviceId: string): Promise<OwnedTas
     throw new Error("服务提供者或目标数据归属已变化，请刷新后重新选择角色");
   }
   return result;
+}
+
+export async function listOwnedTaskDefinitions(options: OwnedTaskRoleOptions, characterId: string): Promise<TaskDefinition[]> {
+  const role = options.roles.find(candidate => candidate.id === characterId);
+  if (!role) throw new Error("请先选择当前数据归属方提供的角色");
+  const expected = { ...options.executionScope, roleId: role.id, roleRevision: role.revision };
+  const result = (await apiClient.post("/api/device-mesh/v1/business/tasks/definitions", {
+    targetDeviceId: expected.targetDeviceId,
+    characterId: role.id,
+    requestId: crypto.randomUUID(),
+    expectedExecutionScope: expected,
+  })).data;
+  const scopeMatches = result?.executionScope && Object.entries(expected).every(([key, value]) => ["requestId", "turnId", "executionId"].includes(key) || result.executionScope[key as keyof typeof expected] === value);
+  if (!scopeMatches || !Array.isArray(result.definitions) || result.definitions.length > 256) throw new Error("任务定义缺少当前服务提供者的有效确认");
+  return result.definitions;
 }
 
 export async function enqueueOwnedTask(req: OwnedTaskSubmission): Promise<EnqueueTaskResult> {
