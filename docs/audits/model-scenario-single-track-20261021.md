@@ -35,3 +35,26 @@ P1：模型用途配置与实际推理脱节。model_scenario_routes 只有配�
 - 手机相关页面测试 4 项通过，含云端管理员分配、普通设备拒绝及切换 Core 后旧编辑表单拒绝。页面定向 analyze 无错误、无警告，保留 7 条既有信息级提示。
 
 以上使用受控模型响应验证协议、路由和数据归属，不代表外部供应商模型质量或手机真机验收。后续核心、Runtime、Release APK、完整服务健康与制品验证结果单独补充；未执行生产服务器发布或 Git 推送。
+
+## 本地构建与运行验收结果
+
+源码基线：f9622bcb8b621a26e66968e9748a1b4883fc4641，提交日志 fix(model): connect scenario routing across clients and core。本次只提交本轮源码、定向测试、更新说明和冻结清单，不包含制品、依赖或运行数据；未推送 Git。
+
+使用同一份源码重新编译 macOS ARM64 核心与 Linux ARM64 后端，重新编译两个运行时宿主，重新生成 Runtime Package。
+
+- macOS 核心 SHA-256：8a80138513bbceebac3f67a4388b0a73da45fd06e87a624212875588fdd18080
+- Android 后端 SHA-256：b7b11fbf550b00aadef888f8cd1a99dbc153855765a94a35c417e853cbf84885
+- Runtime Package SHA-256：a7011fd2f8ea7dd2976cd38385d996d6fac5133fe3cc83b4e21a975053419529
+- APK：artifacts/apk/amitia-26.2.0-beta.11-release-arm64-v8a-20261021-180011.apk，161091839 字节
+- APK SHA-256：743af721f2213e1d6bafc0d6a81ffeaee8a07a2dc794bb7204bc02c22b390120
+- 版本：26.2.0-beta.11，versionCode 17，未调整版本。
+- 正式签名证书与钥匙串保存的 Release 证书一致，apksigner、zipalign、包名、单 ABI、Runtime 源码提交及包内 Runtime/后端/宿主哈希验证全部通过。
+- Flutter clean、pub get、Release config-only 成功；Release lint 和 assembleRelease 串行执行且退出码均为 0。单 worker、关闭并行、Kotlin 进程内编译、JVM 自动内存配置且禁用自动堆转储。
+
+本机 Gradle 新制品实际输出在 mobile_app/build/app/outputs/flutter-apk/app-release.apk；mobile_app/android/app/build/outputs/flutter-apk/app-release.apk 是 10 月 20 日旧文件，未用于归档或验收。旧输出没有被手工改写。
+
+完整项目已重新启动，前端、核心 health、模型目录、Qdrant healthz 和 SurrealDB health 均 HTTP 200；/api/health.ready=true。/readyz 为 HTTP 200、blockingCount=0、failedCount=0，但 state=degraded、readyCount=5、degradedCount=1，因此不能宣称全环境完全健康。启动日志还保留 SurrealDB 表已存在告警；尚未确认该告警与这一项降级的因果关系，本轮不扩展到第二项系统整改。
+
+实际扩展包与受信服务列表均为空，没有已安装渠道插件可验证。SDK 完整路径 adb 未检测到真机，未执行安装、debug 包检查或冷启动验证。未构建桌面 NSIS、未发布服务器更新、未推送 Git。
+
+原始验证记录位于 artifacts/audits/model-scenario-20261021/；记录时间 2026-10-21 18:01:49 +0800。
