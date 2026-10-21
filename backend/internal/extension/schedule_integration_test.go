@@ -191,8 +191,11 @@ func TestScheduleServiceRunNow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get schedule after run now: %v", err)
 	}
-	if state.LastScheduledAt == nil {
-		t.Fatal("expected non-nil last scheduled at after run now")
+	if state.LastScheduledAt != nil {
+		t.Fatal("manual run must preserve the recurring occurrence cursor")
+	}
+	if state.NextScheduledAt == nil {
+		t.Fatal("expected recurring next scheduled time after run now")
 	}
 }
 

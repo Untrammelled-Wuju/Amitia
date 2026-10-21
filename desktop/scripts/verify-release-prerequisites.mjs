@@ -152,6 +152,13 @@ function changedGoPackages(files) {
 
 function runnableGoPackages(packages, goBin) {
   return packages.filter((pkg) => {
+    const packagePath = pkg === "."
+      ? backendRoot
+      : resolve(backendRoot, pkg.replace(/^\.\//, ""));
+    if (!existsSync(packagePath)) {
+      console.log(`[release-prerequisites] backend: skipping removed package ${pkg}`);
+      return false;
+    }
     const result = spawnSync(goBin, ["list", "-e", "-f", "{{if .Error}}{{.Error.Err}}{{else}}{{.Name}}{{end}}", pkg], {
       cwd: backendRoot,
       encoding: "utf8",
@@ -159,7 +166,7 @@ function runnableGoPackages(packages, goBin) {
     });
     const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
     if (result.status !== 0) return false;
-    if (!output || output.startsWith("no Go files") || output.includes("build constraints exclude all Go files")) {
+    if (!output || output.startsWith("no Go files") || output.startsWith("stat ") || output.includes("build constraints exclude all Go files")) {
       console.log(`[release-prerequisites] backend: skipping non-runnable package ${pkg}`);
       return false;
     }
