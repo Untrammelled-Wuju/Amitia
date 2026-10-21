@@ -1,7 +1,6 @@
 package psyche
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -9,7 +8,7 @@ import (
 )
 
 func StateVersionV1() string {
-	return fmt.Sprintf("psyche-state-%d", time.Now().UnixNano())
+	return "psyche-state-v1"
 }
 
 func NewPsycheState(characterID string) PsycheState {
