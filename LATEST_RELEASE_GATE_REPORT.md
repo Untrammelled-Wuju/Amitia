@@ -1,33 +1,33 @@
 # AMITIA Release Gate Report
 
-Generated: 2026-10-19T14:49:27.360Z
+Generated: 2026-10-22T13:38:08.660Z
 
 Status: **PASS**
 
 | Gate | Result |
 |---|---|
-| Canonical freeze verification | PASS (10452 files) |
-| Source Gate SHA256 | `899a84993b657e7dc570b216ad92d19414d50b40c8d633513578563451284ef7` |
+| Canonical freeze verification | PASS (11047 files) |
+| Source Gate SHA256 | `55b45780e9232e76985a7c5424e2cf9bd05b000c32a55eadcae0a5e742a93c41` |
 | AmitiaCore provenance | PASS |
-| Runtime asset provenance | PASS (6 files) |
+| Runtime asset provenance | PASS (7 files) |
 | Packaged artifact integrity | PASS |
 
 ## Core provenance
 
-- Core SHA256: `b9e429ec9b9129e51c49ade3366e7bfe1bd91d83973163d99d2bd05488a1957c`
-- Core SourceGate SHA256: `899a84993b657e7dc570b216ad92d19414d50b40c8d633513578563451284ef7`
-- Go: go version go1.26.1 windows/amd64
-- Commit: 52ae7fb79
+- Core SHA256: `390d31ddb5963473a3ad6a11220456680fdf01dced36369f635ede022b370e6b`
+- Core SourceGate SHA256: `55b45780e9232e76985a7c5424e2cf9bd05b000c32a55eadcae0a5e742a93c41`
+- Go: go version go1.26.1 darwin/arm64
+- Commit: 7306794
 
 ## Runtime assets
 
-- Runtime asset SourceGate SHA256: `899a84993b657e7dc570b216ad92d19414d50b40c8d633513578563451284ef7`
-- Verified packaged runtime files: 6
+- Runtime asset SourceGate SHA256: `55b45780e9232e76985a7c5424e2cf9bd05b000c32a55eadcae0a5e742a93c41`
+- Verified packaged runtime files: 7
 
 ## Release artifacts
 
 | Artifact | Bytes | SHA256 |
 |---|---:|---|
-| AmitiaSetup-26.2.0-beta.9-x64.exe | 275793862 | `8aa1327ab5f052488d897ba9e15d30334b2e795de24e1d55efa71a4022ed70d9` |
-| AmitiaSetup-26.2.0-beta.9-x64.exe.blockmap | 287519 | `1e04eaaa85a7a8dd3ac6a4da259847a210ca06836edeb58fc7cac0c3287d5980` |
-| latest.yml | 54438 | `dbaff02fd53f50a5eccd0ea1eeb4d602d9786b75b3c1df9c513d08c244a722b3` |
+| AmitiaSetup-26.2.0-beta.12-x64.exe | 320356200 | `0baf4772b0ac9162d3b238cee7b43735a53fa806a5371e0f70938e3c0c9dc49a` |
+| AmitiaSetup-26.2.0-beta.12-x64.exe.blockmap | 333867 | `292475f093744e13b6452fd49da06b3c7c921077bd0e4e2a289448a8ed76a4e2` |
+| latest.yml | 2101 | `3f249bcd062e30c108269c9e07d4575ac20e568afc0fc08478a0a14a5391e9f3` |
