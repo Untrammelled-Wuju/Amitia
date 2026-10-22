@@ -14,14 +14,15 @@ import (
 	"strings"
 )
 
-func ownedExpressionPrompt(ctx context.Context, inference business.Inference, role *character.RoleRuntimeProfile) []string {
+func ownedExpressionPrompt(ctx context.Context, inference business.Inference, role *character.RoleRuntimeProfile) ([]string, []string) {
 	if role == nil {
-		return nil
+		return nil, nil
 	}
 	runtime, _ := interaction.RuntimeFromContext(ctx)
 	preset := role.PersonalityPresetID()
 	template := personality.CompilePersonalityTemplate(role.Name, preset, role.Gender)
-	parts := []string{promptir.BuildPersonalityRawSection(role.Name, role.Gender, template), buildAdultIntimacyRaw(runtime, preset, inference.Message), promptir.BuildAntiRepeatRawSection()}
+	parts := []string{promptir.BuildPersonalityRawSection(role.Name, role.Gender, template), promptir.BuildAntiRepeatRawSection()}
+	dynamic := []string{buildAdultIntimacyRaw(runtime, preset, inference.Message)}
 	channel := "web"
 	source := "manual"
 	if inference.Ingress != nil {
@@ -41,7 +42,7 @@ func ownedExpressionPrompt(ctx context.Context, inference business.Inference, ro
 	}
 	compiled := expression.CompileChannelPrompt(kind)
 	parts = append(parts, compiled.SystemInstruction, compiled.StyleInstruction)
-	appendCompiledPersonality(runtime, &parts)
+	appendCompiledPersonality(runtime, &dynamic)
 	if source == "proactive" {
 		aff := 0.5
 		if runtime != nil && runtime.Appraisal != nil {
@@ -56,7 +57,7 @@ func ownedExpressionPrompt(ctx context.Context, inference business.Inference, ro
 		}
 		aff = min(aff, 1.0)
 		proactive := personality.BuildProactivePersonalityBlock(role.Name, preset, role.Gender, aff, false)
-		parts = append(parts, promptir.ProactiveSceneSection(), promptir.ProactivePersonalityInstructionHeader()+"\n\n"+proactive+"\n\n"+promptir.ProactivePersonalityBoundarySection(), buildProactiveEmotionFromPsyche(runtime))
+		dynamic = append(dynamic, promptir.ProactiveSceneSection(), promptir.ProactivePersonalityInstructionHeader()+"\n\n"+proactive+"\n\n"+promptir.ProactivePersonalityBoundarySection(), buildProactiveEmotionFromPsyche(runtime))
 	}
 	filtered := parts[:0]
 	for _, part := range parts {
@@ -64,7 +65,7 @@ func ownedExpressionPrompt(ctx context.Context, inference business.Inference, ro
 			filtered = append(filtered, part)
 		}
 	}
-	return filtered
+	return filtered, dynamic
 }
 
 func ownedExpressionBlocked(ctx context.Context, inference business.Inference) (bool, error) {

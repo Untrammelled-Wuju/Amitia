@@ -22,6 +22,7 @@ import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
 import { getDesktopAuthHeaders } from "./backend-session-client";
 import { getCoreEndpoint } from "./core-endpoint";
+import { validCaptionColors } from "./window-chrome";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
 import { getMeshCloudAuth, getMeshIdentity, getMeshStatus, publishLocalVoiceASRFinal } from "./device-mesh/local-agent-client";
 import {
@@ -50,6 +51,19 @@ export function registerIpcHandlers(
   onDeploymentConfigSaved?: (config: DeploymentModeConfig) => void | Promise<void>,
   getMainWindow?: () => BrowserWindow | null,
 ): void {
+  ipcMain.handle(IPC_CHANNELS.getWindowState, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return { fullscreen: win?.isFullScreen() ?? false, maximized: win?.isMaximized() ?? false };
+  });
+  ipcMain.handle(IPC_CHANNELS.toggleFullscreen, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) win.setFullScreen(!win.isFullScreen());
+  });
+  ipcMain.handle(IPC_CHANNELS.syncCaptionColors, (event, colors: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (process.platform !== "win32" || win !== getMainWindow?.() || !validCaptionColors(colors)) return;
+    win?.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor, height: 34 });
+  });
   ipcMain.handle(IPC_CHANNELS.getEnvironment, () => ({
     platform: process.platform,
     arch: process.arch,

@@ -82,11 +82,12 @@ func (a *OpenAIChatAdapter) Stream(ctx context.Context, cfg ProviderConfig, req 
 	messages := a.buildMessages(req)
 
 	requestBody := map[string]interface{}{
-		"model":       cfg.ModelName,
-		"messages":    messages,
-		"temperature": cfg.Temperature,
-		"max_tokens":  cfg.MaxOutputTokens,
-		"stream":      true,
+		"model":          cfg.ModelName,
+		"messages":       messages,
+		"temperature":    cfg.Temperature,
+		"max_tokens":     cfg.MaxOutputTokens,
+		"stream":         true,
+		"stream_options": map[string]bool{"include_usage": true},
 	}
 
 	if cfg.TopP > 0 && cfg.TopP < 1 {
@@ -301,11 +302,7 @@ func (a *OpenAIChatAdapter) parseResponse(respBytes []byte) (*ModelResult, error
 			} `json:"message"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
-		} `json:"usage"`
+		Usage openAIChatUsage `json:"usage"`
 	}
 
 	if err := json.Unmarshal(respBytes, &result); err != nil {
@@ -320,11 +317,7 @@ func (a *OpenAIChatAdapter) parseResponse(respBytes []byte) (*ModelResult, error
 	res := &ModelResult{
 		Text:         choice.Message.Content,
 		FinishReason: choice.FinishReason,
-		Usage: ModelUsage{
-			InputTokens:  result.Usage.PromptTokens,
-			OutputTokens: result.Usage.CompletionTokens,
-			TotalTokens:  result.Usage.TotalTokens,
-		},
+		Usage:        result.Usage.modelUsage(),
 	}
 
 	for _, tc := range choice.Message.ToolCalls {
@@ -389,9 +382,12 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 
 	for {
 		n, err := body.Read(buf)
-		if n > 0 {
+		if n > 0 || err == io.EOF && buffer.Len() > 0 {
 			buffer.Write(buf[:n])
 			data := buffer.String()
+			if err == io.EOF && !strings.HasSuffix(data, "\n") {
+				data += "\n"
+			}
 
 			lines := strings.Split(data, "\n")
 			buffer.Reset()
@@ -423,6 +419,7 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 				}
 
 				var chunk struct {
+					Usage   *openAIChatUsage `json:"usage"`
 					Choices []struct {
 						Delta struct {
 							Content          string `json:"content"`
@@ -444,6 +441,13 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 					continue
 				}
 
+				if chunk.Usage != nil {
+					result.Usage = chunk.Usage.modelUsage()
+					usage := result.Usage
+					if err := sink.Emit(ctx, ModelEvent{Type: ModelEventUsage, Usage: &usage}); err != nil {
+						return result, err
+					}
+				}
 				if len(chunk.Choices) == 0 {
 					continue
 				}

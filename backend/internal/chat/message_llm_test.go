@@ -170,10 +170,10 @@ func TestMessagesToModelRequestPreservesSystemInstructions(t *testing.T) {
 		{"role": "assistant", "content": "执行完毕"},
 	}
 	request := messagesToModelRequest(cfg, messages, nil, false)
-	if len(request.Instructions) != 2 || request.Instructions[0] != "系统安全与工具执行规则" || request.Instructions[1] != "工作区运行时约束" {
+	if len(request.Instructions) != 1 || request.Instructions[0] != "系统安全与工具执行规则" {
 		t.Fatalf("model request discarded authoritative system instructions: %#v", request.Instructions)
 	}
-	if len(request.Messages) != 2 || request.Messages[0].Role != "user" || request.Messages[1].Role != "assistant" {
+	if len(request.Messages) != 3 || request.Messages[0].Role != "user" || request.Messages[1].Role != "system" || request.Messages[1].Parts[0].Text != "工作区运行时约束" || request.Messages[2].Role != "assistant" {
 		t.Fatalf("model conversation messages changed unexpectedly: %#v", request.Messages)
 	}
 }

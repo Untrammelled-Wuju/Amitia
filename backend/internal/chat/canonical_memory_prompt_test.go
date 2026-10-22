@@ -21,7 +21,16 @@ func TestOwnedPromptIgnoresLegacyMemoryCollections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	system := messages[0]["content"].(string)
+	var text strings.Builder
+	for _, message := range messages {
+		if content, ok := message["content"].(string); ok {
+			text.WriteString(content)
+		}
+	}
+	system := text.String()
+	if strings.Contains(messages[0]["content"].(string), "current-system-memory") {
+		t.Fatal("memory data was promoted into fixed system instructions")
+	}
 	if strings.Contains(system, "obsolete-memory-data") || !strings.Contains(system, "current-system-memory") {
 		t.Fatalf("memory prompt mixed versions: %s", system)
 	}

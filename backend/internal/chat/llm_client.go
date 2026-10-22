@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
@@ -328,49 +329,7 @@ func toolsToLocalModelTools(tools []tool.Tool) []localmodel.LocalModelTool {
 }
 
 func (s *service) callOpenAIMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
-	baseURL := strings.TrimRight(cfg.BaseURL, "/")
-	reqBody := map[string]interface{}{"model": cfg.ModelName, "messages": messages, "temperature": cfg.Temperature, "max_tokens": cfg.MaxTokens, "stream": false}
-	if jsonOnly {
-		reqBody["response_format"] = map[string]string{"type": "json_object"}
-	}
-	if cfg.TopP > 0 && cfg.TopP < 1 {
-		reqBody["top_p"] = cfg.TopP
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	url := baseURL + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", 0, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	client := timeoutpolicy.Client(&http.Client{Timeout: 180 * time.Second})
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", 0, fmt.Errorf("请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-	respBytes, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", 0, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(respBytes))
-	}
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			TotalTokens int `json:"total_tokens"`
-		} `json:"usage"`
-	}
-	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return "", 0, fmt.Errorf("解析响应失败: %w", err)
-	}
-	if len(result.Choices) == 0 {
-		return "", 0, fmt.Errorf("API 未返回有效回复")
-	}
-	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
+	return s.callLLMWithAdapter(ctx, cfg, messages, jsonOnly)
 }
 
 func openAICompatibleTools(tools []tool.Tool) []tool.Tool {
@@ -449,7 +408,11 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 		switch role {
 		case "system":
 			if content, ok := m["content"].(string); ok {
-				instructions = append(instructions, content)
+				if resolveProtocol(cfg) == ProtocolOpenAIChat && len(msgs) > 0 {
+					msgs = append(msgs, ModelMessage{Role: "system", Parts: extractContentParts(m)})
+				} else {
+					instructions = append(instructions, content)
+				}
 			}
 		case "user":
 			parts := extractContentParts(m)
@@ -620,6 +583,7 @@ func (s *service) callLLMWithAdapterMode(ctx context.Context, cfg *ModelConfig, 
 	req.DisableThinking = disableThinking
 	pcfg := cfgToProviderConfig(cfg)
 	result, err := adapter.Generate(ctx, pcfg, req)
+	recordModelCacheUsage(result)
 	if err != nil {
 		return "", 0, err
 	}
@@ -679,7 +643,17 @@ func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, me
 	if sink == nil {
 		sink = noopEventSink{}
 	}
-	return adapter.Stream(ctx, pcfg, req, sink)
+	result, err := adapter.Stream(ctx, pcfg, req, sink)
+	recordModelCacheUsage(result)
+	return result, err
+}
+
+func recordModelCacheUsage(result *ModelResult) {
+	usage := ModelUsage{}
+	if result != nil {
+		usage = result.Usage
+	}
+	mindruntime.DefaultMetricsCollector.RecordModelUsage(usage.InputTokens, usage.CachedInputTokens, usage.CacheUsageReported)
 }
 
 func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {

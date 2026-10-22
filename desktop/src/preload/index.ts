@@ -278,6 +278,15 @@ const api = {
 contextBridge.exposeInMainWorld("amitiaDesktop", api);
 
 contextBridge.exposeInMainWorld("electronWindowApi", {
+  platform: process.platform,
+  getWindowState: () => ipcRenderer.invoke(IPC_CHANNELS.getWindowState),
+  toggleFullscreen: () => ipcRenderer.invoke(IPC_CHANNELS.toggleFullscreen),
+  syncCaptionColors: (colors: { color: string; symbolColor: string }) => ipcRenderer.invoke(IPC_CHANNELS.syncCaptionColors, colors),
+  onWindowStateChanged: (callback: (state: { fullscreen: boolean; maximized: boolean }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: { fullscreen: boolean; maximized: boolean }) => callback(state);
+    ipcRenderer.on(IPC_CHANNELS.windowStateChanged, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.windowStateChanged, listener);
+  },
   minimize: (windowType: string = "main") => {
     if (windowType === "main") {
       return ipcRenderer.invoke("window-minimize", "main");

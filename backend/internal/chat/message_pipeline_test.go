@@ -50,7 +50,7 @@ func TestOwnedProcessPersistsReasoningDurationAndMetadata(t *testing.T) {
 	}
 }
 
-func TestOwnedProcessKeepsOneSystemAndHistoryBeforeCurrentUser(t *testing.T) {
+func TestOwnedProcessKeepsFixedSystemAndHistoryBeforeRuntime(t *testing.T) {
 	f := newOwnedExecutionFixture(t)
 	var captured []map[string]interface{}
 	f.model.llmWithTools = func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
@@ -71,7 +71,9 @@ func TestOwnedProcessKeepsOneSystemAndHistoryBeforeCurrentUser(t *testing.T) {
 	var previousReply bool
 	for index, message := range captured {
 		if index > 0 && message["role"] == "system" {
-			t.Fatal("history injected another system role")
+			if !previousReply || !strings.HasPrefix(message["content"].(string), "【本轮运行约束】") {
+				t.Fatal("history changed authority or runtime constraints preceded stable history")
+			}
 		}
 		previousReply = previousReply || message["role"] == "assistant" && message["content"] == "上一轮回复"
 	}

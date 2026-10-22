@@ -149,3 +149,25 @@ func TestOpenAIChatBuildMessagesNeverSerializesNullContent(t *testing.T) {
 		t.Fatalf("messages contain null content: %s", encoded)
 	}
 }
+
+func TestOpenAIChatBuildMessagesPreservesLateSystemRole(t *testing.T) {
+	request := ModelRequest{Instructions: []string{"fixed"}, Messages: []ModelMessage{
+		{Role: "user", Parts: []ModelContentPart{{Type: ContentTypeText, Text: "history"}}},
+		{Role: "assistant", Parts: []ModelContentPart{{Type: ContentTypeText, Text: "previous"}}},
+		{Role: "system", Parts: []ModelContentPart{{Type: ContentTypeText, Text: "runtime-constraint"}}},
+		{Role: "user", Parts: []ModelContentPart{{Type: ContentTypeText, Text: "current"}}},
+	}}
+	messages := (&OpenAIChatAdapter{}).buildMessages(request)
+	wantRoles := []string{"system", "user", "assistant", "system", "user"}
+	if len(messages) != len(wantRoles) {
+		t.Fatalf("lost ordered messages: %+v", messages)
+	}
+	for index, role := range wantRoles {
+		if messages[index]["role"] != role {
+			t.Fatalf("message %d changed authority or position: %+v", index, messages)
+		}
+	}
+	if messages[3]["content"] != "runtime-constraint" {
+		t.Fatal("late system constraints were lost")
+	}
+}

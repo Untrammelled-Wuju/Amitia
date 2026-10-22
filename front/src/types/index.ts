@@ -378,7 +378,7 @@ export interface RuntimeDebugSnapshot {
     queueBackpressureRate: number;
     reconciliationOpenIssues: number;
     totalModelCalls: number;
-    cacheHitRate: number;
+    cacheHitRate: number | null;
     collectedAt: string;
     version: string;
   };
@@ -424,7 +424,7 @@ export interface RuntimeMetrics {
   queueBackpressureRate: number;
   reconciliationOpenIssues: number;
   totalModelCalls: number;
-  cacheHitRate: number;
+  cacheHitRate: number | null;
   collectedAt: string;
   version: string;
   traces?: Array<{
@@ -451,7 +451,7 @@ export interface RuntimeMetrics {
     queueBackpressureRate: number;
     reconciliationOpenIssues: number;
     totalModelCalls: number;
-    cacheHitRate: number;
+    cacheHitRate: number | null;
     collectedAt: string;
     version: string;
   };

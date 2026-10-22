@@ -5,6 +5,8 @@ import { getInitialBrandImage } from "./branding";
 import { isDevMode } from "./path-manager";
 import { get as httpGet } from "node:http";
 import { APP_PROTOCOL_ORIGIN } from "./app-protocol";
+import { windowChromeOptions } from "./window-chrome";
+import { IPC_CHANNELS } from "../shared/ipc";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const MAIN_RENDERER_LOAD_TIMEOUT_MS = 15000;
@@ -72,7 +74,7 @@ export function createMainWindow(): BrowserWindow {
       nativeTheme.shouldUseDarkColors ? "dark" : "light",
       "icon",
     ),
-    frame: false,
+    ...windowChromeOptions(process.platform, nativeTheme.shouldUseDarkColors),
     show: false,
     webPreferences: {
       preload: preloadPath,
@@ -82,6 +84,20 @@ export function createMainWindow(): BrowserWindow {
       webSecurity: true,
     },
   });
+
+  const sendWindowState = () => {
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send(IPC_CHANNELS.windowStateChanged, {
+        fullscreen: win.isFullScreen(),
+        maximized: win.isMaximized(),
+      });
+    }
+  };
+  win.on("enter-full-screen", sendWindowState);
+  win.on("leave-full-screen", sendWindowState);
+  win.on("maximize", sendWindowState);
+  win.on("unmaximize", sendWindowState);
+  win.webContents.on("did-finish-load", sendWindowState);
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (

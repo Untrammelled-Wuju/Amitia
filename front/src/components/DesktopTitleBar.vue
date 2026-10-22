@@ -7,6 +7,40 @@ import { ElMessageBox } from "element-plus";
 const props = defineProps<{ transparent?: boolean }>();
 const appStore = useAppStore();
 const router = useRouter();
+const windowApi = window.electronWindowApi;
+const platform = windowApi?.platform ?? "";
+const usesNativeControls = platform === "darwin" || platform === "win32";
+document.documentElement.dataset.desktopPlatform = platform;
+document.documentElement.style.setProperty("--desktop-titlebar-height", "34px");
+let stopWindowState: (() => void) | undefined;
+let appearanceObserver: MutationObserver | undefined;
+let appearanceProbe: HTMLSpanElement | undefined;
+let previousCaptionColors = "";
+
+function applyWindowState(state: { fullscreen: boolean; maximized: boolean }) {
+  isFullscreen.value = state.fullscreen;
+  isMaximized.value = state.maximized;
+}
+
+function syncCaptionColors() {
+  if (!appearanceProbe || !windowApi) return;
+  const style = getComputedStyle(appearanceProbe);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 1;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const hex = (color: string) => {
+    context.clearRect(0, 0, 1, 1);
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+    return "#" + Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3), value => value.toString(16).padStart(2, "0")).join("");
+  };
+  const colors = { color: hex(style.backgroundColor), symbolColor: hex(style.color) };
+  const key = JSON.stringify(colors);
+  if (key === previousCaptionColors) return;
+  previousCaptionColors = key;
+  void windowApi.syncCaptionColors(colors);
+}
 
 const isMaximized = ref(false);
 const hasOnboardingWorld = ref(false);
@@ -131,13 +165,7 @@ async function syncZoomLevel() {
 }
 
 async function handleFullscreen() {
-  if (!document.fullscreenElement) {
-    await document.documentElement.requestFullscreen();
-    isFullscreen.value = true;
-  } else {
-    await document.exitFullscreen();
-    isFullscreen.value = false;
-  }
+  await windowApi?.toggleFullscreen();
   viewMenuOpen.value = false;
 }
 
@@ -200,10 +228,6 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 
-function handleFullscreenChange() {
-  isFullscreen.value = !!document.fullscreenElement;
-}
-
 function syncOnboardingWorld() {
   hasOnboardingWorld.value =
     document.querySelector(".onboarding-world, .login-world") !== null;
@@ -214,9 +238,20 @@ onMounted(async () => {
   syncOnboardingWorld();
   documentObserver = new MutationObserver(syncOnboardingWorld);
   documentObserver.observe(document.body, { childList: true, subtree: true });
-  isMaximized.value = await window.electronWindowApi!.isMaximized();
+  stopWindowState = windowApi?.onWindowStateChanged(applyWindowState);
+  if (windowApi) applyWindowState(await windowApi.getWindowState());
+  if (platform === "win32") {
+    appearanceProbe = document.createElement("span");
+    appearanceProbe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;background:var(--workbench-sidebar-bg);color:var(--ac-color-text)";
+    document.body.append(appearanceProbe);
+    appearanceObserver = new MutationObserver(syncCaptionColors);
+    appearanceObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+    appearanceObserver.observe(document.body, { attributes: true, attributeFilter: ["class", "style"] });
+    appearanceObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
+    document.head.addEventListener("load", syncCaptionColors, true);
+    syncCaptionColors();
+  }
   document.addEventListener('click', handleClickOutside);
-  document.addEventListener('fullscreenchange', handleFullscreenChange);
   try {
     appVersion.value = await window.amitiaDesktop?.getVersion() ?? '';
   } catch {}
@@ -237,8 +272,11 @@ onMounted(async () => {
 onUnmounted(() => {
   documentObserver?.disconnect();
   documentObserver = null;
+  stopWindowState?.();
+  appearanceObserver?.disconnect();
+  appearanceProbe?.remove();
+  document.head.removeEventListener("load", syncCaptionColors, true);
   document.removeEventListener('click', handleClickOutside);
-  document.removeEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 async function handleMinimize() {
@@ -272,7 +310,7 @@ async function handleClose() {
   <div
     id="WindowControlButtons"
     class="drag"
-    :class="{ 'is-onboarding': props.transparent || hasOnboardingWorld }"
+    :class="{ 'is-onboarding': props.transparent || hasOnboardingWorld, 'is-macos': platform === 'darwin', 'is-windows': platform === 'win32', 'is-fullscreen': isFullscreen }"
   >
     <div class="titlebar-left">
       <button
@@ -534,7 +572,7 @@ async function handleClose() {
         </div>
       </div>
     </div>
-    <div class="window-actions">
+    <div v-if="!usesNativeControls" class="window-actions">
       <div
         class="icon no-drag"
         title="最小化"
@@ -596,7 +634,7 @@ async function handleClose() {
   left: 0;
   right: 0;
   z-index: 10000;
-  height: 34px;
+  height: var(--desktop-titlebar-height, 34px);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -631,6 +669,12 @@ async function handleClose() {
   align-items: center;
   padding-left: 8px;
   -webkit-app-region: no-drag;
+}
+#WindowControlButtons.is-macos:not(.is-fullscreen) .titlebar-left {
+  padding-left: 88px;
+}
+#WindowControlButtons.is-windows:not(.is-fullscreen) {
+  padding-right: max(144px, calc(100vw - env(titlebar-area-width, 100vw)));
 }
 .sidebar-toggle-btn {
   display: grid;

@@ -3,16 +3,15 @@ package chat
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
-func (s *service) prepareOwnedToolPrompt(ctx context.Context, inference business.Inference, messages []map[string]interface{}) (func(), error) {
+func (s *service) prepareOwnedToolPrompt(ctx context.Context, inference business.Inference, messages []map[string]interface{}) ([]map[string]interface{}, func(), error) {
 	lifecycle, ok := s.ownedToolRuntime.(OwnedToolLifecycleRuntime)
 	if !ok || inference.ScheduledMessage {
-		return func() {}, nil
+		return messages, func() {}, nil
 	}
 	prompt, finish, err := lifecycle.PrepareOwnedPrompt(ctx, inference)
 	if finish == nil {
@@ -20,12 +19,12 @@ func (s *service) prepareOwnedToolPrompt(ctx context.Context, inference business
 	}
 	if err != nil {
 		finish()
-		return func() {}, err
+		return messages, func() {}, err
 	}
 	if len(messages) > 0 && prompt != "" {
-		messages[0]["content"] = fmt.Sprint(messages[0]["content"]) + "\n\n" + prompt
+		messages = append(messages[:len(messages)-1:len(messages)-1], map[string]interface{}{"role": "system", "content": prompt}, messages[len(messages)-1])
 	}
-	return finish, coordination.ValidateCurrent(ctx)
+	return messages, finish, coordination.ValidateCurrent(ctx)
 }
 
 func (s *service) finishOwnedOutputs(ctx context.Context, inference business.Inference, generation business.Generation, toolOutputs []MessageOutput) (business.Generation, error) {

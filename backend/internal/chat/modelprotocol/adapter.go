@@ -108,11 +108,12 @@ type ModelRequest struct {
 }
 
 type ModelUsage struct {
-	InputTokens       int `json:"inputTokens"`
-	OutputTokens      int `json:"outputTokens"`
-	ReasoningTokens   int `json:"reasoningTokens"`
-	CachedInputTokens int `json:"cachedInputTokens"`
-	TotalTokens       int `json:"totalTokens"`
+	InputTokens        int  `json:"inputTokens"`
+	OutputTokens       int  `json:"outputTokens"`
+	ReasoningTokens    int  `json:"reasoningTokens"`
+	CachedInputTokens  int  `json:"cachedInputTokens"`
+	CacheUsageReported bool `json:"cacheUsageReported"`
+	TotalTokens        int  `json:"totalTokens"`
 }
 
 type ModelError struct {

@@ -249,37 +249,37 @@ details {
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 html.amitia-desktop-shell body {
-  padding-top: 34px;
+  padding-top: var(--desktop-titlebar-height, 34px);
   box-sizing: border-box;
   overflow: hidden;
 }
 html.amitia-desktop-shell #app {
-  height: calc(100vh - 34px);
+  height: calc(100vh - var(--desktop-titlebar-height, 34px));
 }
 html.amitia-desktop-shell .app-shell {
   height: 100%;
 }
 
 html.amitia-desktop-shell .el-overlay {
-  top: 34px !important;
+  top: var(--desktop-titlebar-height, 34px) !important;
 }
 
 html.amitia-desktop-shell .el-message {
-  top: 54px !important;
+  top: calc(var(--desktop-titlebar-height, 34px) + 20px) !important;
 }
 html.amitia-desktop-shell .el-notification {
-  top: 54px !important;
+  top: calc(var(--desktop-titlebar-height, 34px) + 20px) !important;
 }
 
 html.amitia-desktop-shell .el-drawer.ltr,
 html.amitia-desktop-shell .el-drawer.rtl,
 html.amitia-desktop-shell .el-drawer.ttb,
 html.amitia-desktop-shell .el-drawer.btt {
-  height: calc(100% - 34px) !important;
+  height: calc(100% - var(--desktop-titlebar-height, 34px)) !important;
 }
 
 html.amitia-desktop-shell .search-overlay {
-  top: 34px !important;
+  top: var(--desktop-titlebar-height, 34px) !important;
 }
 
 html.amitia-desktop-shell.amitia-desktop-onboarding body {

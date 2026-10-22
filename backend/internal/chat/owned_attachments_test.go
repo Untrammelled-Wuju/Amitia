@@ -30,12 +30,24 @@ func TestOwnedPromptUsesValidatedImageAndKeepsHistoricalBinaryOutOfSystemPrompt(
 	if strings.Contains(messages[0]["content"].(string), encoded) {
 		t.Fatal("historical image copied into system prompt")
 	}
-	if len(messages) != 3 {
+	imageMessages := 0
+	for _, message := range messages {
+		if _, ok := message["content"].([]map[string]any); ok {
+			imageMessages++
+		}
+	}
+	if imageMessages != 2 {
 		t.Fatalf("messages=%d", len(messages))
 	}
 	for _, message := range messages[1:] {
 		parts, ok := message["content"].([]map[string]any)
-		if !ok || len(parts) != 2 || parts[1]["type"] != "image_url" || parts[1]["image_url"].(map[string]string)["url"] != "data:image/png;base64,"+encoded {
+		if !ok {
+			if text, _ := message["content"].(string); strings.Contains(text, encoded) {
+				t.Fatal("historical binary leaked into prompt context")
+			}
+			continue
+		}
+		if len(parts) != 2 || parts[1]["type"] != "image_url" || parts[1]["image_url"].(map[string]string)["url"] != "data:image/png;base64,"+encoded {
 			t.Fatalf("invalid multimodal message: %+v", message)
 		}
 	}

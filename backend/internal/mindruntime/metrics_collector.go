@@ -24,24 +24,35 @@ type RuntimeMetricsCollector struct {
 		success int64
 		total   int64
 	}
+	modelInputTokens         int64
+	cacheReportedInputTokens int64
+	cachedInputTokens        int64
+	cacheUsageSamples        int64
+	unknownCacheUsageCalls   int64
 }
 
 type RuntimeMetricsSnapshot struct {
-	TotalInteractions        int64   `json:"totalInteractions"`
-	ActiveInteractions       int64   `json:"activeInteractions"`
-	AvgLatencyMs             float64 `json:"avgLatencyMs"`
-	P95LatencyMs             float64 `json:"p95LatencyMs"`
-	CancelRate               float64 `json:"cancelRate"`
-	SupersedeRate            float64 `json:"supersedeRate"`
-	DeliverySuccessRate      float64 `json:"deliverySuccessRate"`
-	ToolUnknownRate          float64 `json:"toolUnknownRate"`
-	CircuitBreakerRate       float64 `json:"circuitBreakerRate"`
-	QueueBackpressureRate    float64 `json:"queueBackpressureRate"`
-	ReconciliationOpenIssues int64   `json:"reconciliationOpenIssues"`
-	TotalModelCalls          int64   `json:"totalModelCalls"`
-	CacheHitRate             float64 `json:"cacheHitRate"`
-	CollectedAt              string  `json:"collectedAt"`
-	Version                  string  `json:"version"`
+	TotalInteractions        int64    `json:"totalInteractions"`
+	ActiveInteractions       int64    `json:"activeInteractions"`
+	AvgLatencyMs             float64  `json:"avgLatencyMs"`
+	P95LatencyMs             float64  `json:"p95LatencyMs"`
+	CancelRate               float64  `json:"cancelRate"`
+	SupersedeRate            float64  `json:"supersedeRate"`
+	DeliverySuccessRate      float64  `json:"deliverySuccessRate"`
+	ToolUnknownRate          float64  `json:"toolUnknownRate"`
+	CircuitBreakerRate       float64  `json:"circuitBreakerRate"`
+	QueueBackpressureRate    float64  `json:"queueBackpressureRate"`
+	ReconciliationOpenIssues int64    `json:"reconciliationOpenIssues"`
+	TotalModelCalls          int64    `json:"totalModelCalls"`
+	CacheHitRate             *float64 `json:"cacheHitRate"`
+	ModelInputTokens         int64    `json:"modelInputTokens"`
+	CacheReportedInputTokens int64    `json:"cacheReportedInputTokens"`
+	CachedInputTokens        int64    `json:"cachedInputTokens"`
+	UncachedInputTokens      int64    `json:"uncachedInputTokens"`
+	CacheUsageSamples        int64    `json:"cacheUsageSamples"`
+	UnknownCacheUsageCalls   int64    `json:"unknownCacheUsageCalls"`
+	CollectedAt              string   `json:"collectedAt"`
+	Version                  string   `json:"version"`
 }
 
 var DefaultMetricsCollector = NewRuntimeMetricsCollector()
@@ -147,8 +158,6 @@ func (c *RuntimeMetricsCollector) Snapshot() RuntimeMetricsSnapshot {
 	var totalToolUnknown int64
 	var totalCircuitOpen int64
 	var totalBackpressure int64
-	var totalCacheHit int64
-	var totalCacheTotal int64
 
 	for key, entry := range c.rates {
 		switch key.Name {
@@ -165,9 +174,6 @@ func (c *RuntimeMetricsCollector) Snapshot() RuntimeMetricsSnapshot {
 			totalCircuitOpen += entry.total
 		case "backpressure":
 			totalBackpressure += entry.total
-		case "cache":
-			totalCacheTotal += entry.total
-			totalCacheHit += entry.success
 		}
 	}
 
@@ -177,7 +183,16 @@ func (c *RuntimeMetricsCollector) Snapshot() RuntimeMetricsSnapshot {
 	s.ToolUnknownRate = computeRate(totalToolUnknown, totalDeliveries)
 	s.CircuitBreakerRate = computeRate(totalCircuitOpen, totalDeliveries)
 	s.QueueBackpressureRate = computeRate(totalBackpressure, totalDeliveries)
-	s.CacheHitRate = computeRate(totalCacheHit, totalCacheTotal)
+	s.ModelInputTokens = c.modelInputTokens
+	s.CacheReportedInputTokens = c.cacheReportedInputTokens
+	s.CachedInputTokens = c.cachedInputTokens
+	s.UncachedInputTokens = c.cacheReportedInputTokens - c.cachedInputTokens
+	s.CacheUsageSamples = c.cacheUsageSamples
+	s.UnknownCacheUsageCalls = c.unknownCacheUsageCalls
+	if c.cacheReportedInputTokens > 0 {
+		rate := float64(c.cachedInputTokens) / float64(c.cacheReportedInputTokens)
+		s.CacheHitRate = &rate
+	}
 
 	return s
 }
@@ -188,10 +203,31 @@ func (c *RuntimeMetricsCollector) Reset() {
 	c.counters = make(map[MetricKey]int64)
 	c.gauges = make(map[MetricKey]float64)
 	c.latency = make(map[MetricKey][]float64)
+	c.modelInputTokens = 0
+	c.cacheReportedInputTokens = 0
+	c.cachedInputTokens = 0
+	c.cacheUsageSamples = 0
+	c.unknownCacheUsageCalls = 0
 	c.rates = make(map[MetricKey]struct {
 		success int64
 		total   int64
 	})
+}
+
+func (c *RuntimeMetricsCollector) RecordModelUsage(inputTokens, cachedTokens int, reported bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.counters[MetricKey{Scope: "model", Name: "total_model_calls"}]++
+	if inputTokens > 0 {
+		c.modelInputTokens += int64(inputTokens)
+	}
+	if !reported || inputTokens <= 0 || cachedTokens < 0 || cachedTokens > inputTokens {
+		c.unknownCacheUsageCalls++
+		return
+	}
+	c.cacheReportedInputTokens += int64(inputTokens)
+	c.cachedInputTokens += int64(cachedTokens)
+	c.cacheUsageSamples++
 }
 
 func computeRate(numerator, denominator int64) float64 {
