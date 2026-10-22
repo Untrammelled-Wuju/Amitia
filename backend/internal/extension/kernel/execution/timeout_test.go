@@ -110,15 +110,18 @@ func TestResolveBudget_ExpiredInvocation(t *testing.T) {
 
 func TestResolveBudget_NegativeSourceDeterminism(t *testing.T) {
 	ctrl := NewTimeoutController(30 * time.Second)
-	acceptedAt := time.Now()
-	inv := capability.ToolInvocationContext{
-		InvocationID: "inv-1",
-		ExpiresAt:    acceptedAt.Add(5 * time.Second),
-	}
-	tool := capability.ToolDefinition{ID: "t1"}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected caller deadline")
+	}
+	acceptedAt := deadline.Add(-5 * time.Second)
+	inv := capability.ToolInvocationContext{
+		InvocationID: "inv-1",
+		ExpiresAt:    deadline,
+	}
+	tool := capability.ToolDefinition{ID: "t1"}
 
 	budget, err := ctrl.ResolveBudget(ctx, acceptedAt, inv, tool)
 	if err != nil {
