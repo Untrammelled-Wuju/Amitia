@@ -375,28 +375,24 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 		}
 	}
 
-	c := NewDataLifecycleCoordinator(db)
-	c.SetOutboxCleanupExecutor(NewDefaultOutboxCleanupExecutor(db, nil))
-	if err := c.InitSchema(); err != nil {
-		t.Fatalf("init lifecycle schema: %v", err)
+	executor := NewDefaultOutboxCleanupExecutor(db, nil)
+	for _, storage := range []string{"primary", "sqlite", "cache", "summaries"} {
+		if err := executor.CleanupOutboxItem(OutboxCleanupItem{Storage: storage, TargetKind: "memory", TargetID: "target-memory"}); err == nil {
+			t.Fatalf("legacy memory cleanup must be rejected for %s", storage)
+		}
 	}
-	c.RequestDeletion(DeletionRequest{
-		TargetID:   "target-memory",
-		TargetType: "memory",
-		Scope:      DeletionScopeAll,
-		Reason:     "test",
-	})
-
-	results, err := c.ExecuteOutboxCleanup()
-	if err != nil {
-		t.Fatalf("default cleanup should succeed: %v", err)
-	}
-	if len(results) != 8 {
-		t.Fatalf("expected 6 cleanup results, got %d", len(results))
-	}
-	for _, item := range results {
-		if item.Status != "completed" {
-			t.Fatalf("expected completed cleanup item, got %s for %s", item.Status, item.Storage)
+	for _, item := range []OutboxCleanupItem{
+		{Storage: "primary", TargetKind: "message", TargetID: "message-target"},
+		{Storage: "sqlite", TargetKind: "message", TargetID: "message-target"},
+		{Storage: "cache", TargetKind: "character", TargetID: "target-memory"},
+		{Storage: "summaries", TargetKind: "conversation", TargetID: "target-memory"},
+		{Storage: "reflections", TargetKind: "character", TargetID: "target-memory"},
+		{Storage: "traces", TargetKind: "character", TargetID: "target-memory"},
+		{Storage: "qdrant", TargetKind: "memory", TargetID: "target-memory"},
+		{Storage: "surrealdb", TargetKind: "memory", TargetID: "target-memory"},
+	} {
+		if err := executor.CleanupOutboxItem(item); err != nil {
+			t.Fatalf("cleanup %s/%s should succeed: %v", item.Storage, item.TargetKind, err)
 		}
 	}
 
@@ -409,35 +405,35 @@ func TestDefaultOutboxCleanupExecutorDeletesKnownStores(t *testing.T) {
 			t.Fatalf("expected %s count %d, got %d", table, expected, count)
 		}
 	}
-	assertCount("memories", "id = ?", 0, "target-memory")
+	assertCount("memories", "id = ?", 1, "target-memory")
 	assertCount("memories", "id = ?", 1, "kept-memory")
-	assertCount("memory_events", "memory_id = ?", 0, "target-memory")
+	assertCount("memory_events", "memory_id = ?", 1, "target-memory")
 	assertCount("memory_events", "memory_id = ?", 1, "kept-memory")
 	assertCount("memory_candidates", "character_id = ?", 1, "target-memory")
 	assertCount("memory_candidates", "character_id = ?", 1, "kept")
-	assertCount("memory_embeddings", "memory_id = ?", 0, "target-memory")
+	assertCount("memory_embeddings", "memory_id = ?", 1, "target-memory")
 	assertCount("memory_embeddings", "memory_id = ?", 1, "kept-memory")
 	assertCount("retrieval_logs", "request_id = ?", 1, "target-memory")
 	assertCount("retrieval_logs", "request_id = ?", 1, "kept")
-	assertCount("conversation_summaries", "conversation_id = ?", 1, "target-memory")
+	assertCount("conversation_summaries", "conversation_id = ?", 0, "target-memory")
 	assertCount("conversation_summaries", "conversation_id = ?", 1, "kept")
-	assertCount("messages", "id = ?", 1, "message-target")
+	assertCount("messages", "id = ?", 0, "message-target")
 	assertCount("messages", "id = ?", 1, "message-kept")
-	assertCount("memory_summaries", "target_id = ?", 0, "target-memory")
+	assertCount("memory_summaries", "target_id = ?", 1, "target-memory")
 	assertCount("memory_summaries", "target_id = ?", 1, "kept")
-	assertCount("reflection_candidates", "target_id = ?", 1, "target-memory")
+	assertCount("reflection_candidates", "target_id = ?", 0, "target-memory")
 	assertCount("reflection_candidates", "target_id = ?", 1, "kept")
-	assertCount("reflection_runs", "target_id = ?", 1, "target-memory")
+	assertCount("reflection_runs", "target_id = ?", 0, "target-memory")
 	assertCount("reflection_runs", "target_id = ?", 1, "kept")
 	assertCount("supervisor_decisions", "target_id = ?", 1, "target-memory")
 	assertCount("supervisor_decisions", "target_id = ?", 1, "kept")
 	assertCount("version_history", "target_id = ?", 1, "target-memory")
 	assertCount("version_history", "target_id = ?", 1, "kept")
-	assertCount("runtime_trace_events", "request_id = ?", 1, "target-memory")
+	assertCount("runtime_trace_events", "request_id = ?", 0, "target-memory")
 	assertCount("runtime_trace_events", "request_id = ?", 1, "kept")
 	assertCount("runtime_replay_records", "target_id = ?", 1, "target-memory")
 	assertCount("runtime_replay_records", "target_id = ?", 1, "kept")
-	assertCount("pipeline_checkpoints", "last_message_id = ?", 1, "target-memory")
+	assertCount("pipeline_checkpoints", "last_message_id = ?", 0, "target-memory")
 	assertCount("pipeline_checkpoints", "last_message_id = ?", 1, "kept")
 }
 
