@@ -217,10 +217,27 @@ describe("extension navigation registry", () => {
     expect(router.currentRoute.value.name).not.toBe("catchAll");
   });
 
-  it("redirects the desktop character proactive alias to the provider route", () => {
+  it("keeps provider routes when a transient snapshot refresh has no authoritative result", () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [] });
+    syncProviderRoutes(router, store([
+      routeRegistry("minecraft", "routes.minecraft", "/games/minecraft", "page.minecraft", 10, false),
+      pageProvider("minecraft", "page.minecraft"),
+    ]));
+    const transientStore = { ...store([]), snapshot: null } as any;
+    syncProviderRoutes(router, transientStore);
+    expect(router.hasRoute("ui-provider:minecraft:routes.minecraft:main")).toBe(true);
+  });
+
+  it("serves active task as a built-in route and redirects both legacy aliases", () => {
+    const activeTask = builtinBusinessRoutes.find((item) => item.path === "/characters/:id/active-task");
+    expect(activeTask?.name).toBe("characterActiveTask");
+    expect(activeTask?.props).toBeTypeOf("function");
     const route = builtinBusinessRoutes.find((item) => item.path === "/character/:id/proactive");
     expect(route?.redirect).toBeTypeOf("function");
     expect((route?.redirect as (value: { params: { id: string } }) => string)({ params: { id: "role-1" } }))
-      .toBe("/characters/role-1/proactive");
+      .toBe("/characters/role-1/active-task");
+    const providerAlias = builtinBusinessRoutes.find((item) => item.path === "/characters/:id/proactive");
+    expect((providerAlias?.redirect as (value: { params: { id: string } }) => string)({ params: { id: "role-1" } }))
+      .toBe("/characters/role-1/active-task");
   });
 });

@@ -163,8 +163,8 @@ func TestUIActionToolInputDropsUndeclaredRendererMeta(t *testing.T) {
 	ctx := context.Background()
 	registry := capability.NewToolRegistry()
 	if err := registry.Register(ctx, capability.ToolDefinition{
-		ID:          "com.amitia/proactive/command",
-		ExtensionID: "com.amitia/proactive",
+		ID:          "com.amitia.builtin.active-task/command",
+		ExtensionID: "com.amitia.builtin.active-task",
 		Name:        "Proactive Command",
 		Enabled:     true,
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"payload":{"type":"object"}},"additionalProperties":false}`),
@@ -175,7 +175,7 @@ func TestUIActionToolInputDropsUndeclaredRendererMeta(t *testing.T) {
 
 	got, err := executor.normalizeToolInput(
 		ctx,
-		"com.amitia/proactive/command",
+		"com.amitia.builtin.active-task/command",
 		json.RawMessage(`{"action":"ui.dashboard","node_id":"lifecycle:command","form_state":{"enabled":true}}`),
 		nil,
 	)

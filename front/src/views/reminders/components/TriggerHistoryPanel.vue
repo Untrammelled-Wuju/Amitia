@@ -110,6 +110,10 @@ defineEmits<{
   refresh: [];
 }>();
 
+const props = withDefaults(defineProps<{ kind?: "user_reminder" | "proactive_task" }>(), {
+  kind: "user_reminder",
+});
+
 const items = ref<TriggerHistory[]>([]);
 const loading = ref(false);
 const filterState = ref("");
@@ -120,7 +124,7 @@ const pageSize = 20;
 async function fetchItems() {
   loading.value = true;
   try {
-    const params: any = { page: page.value, pageSize, kind: "user_reminder" };
+    const params: any = { page: page.value, pageSize, kind: props.kind };
     if (filterState.value) params.state = filterState.value;
     const res: any = await request.get("/api/reminders/trigger-history", { params });
     if (

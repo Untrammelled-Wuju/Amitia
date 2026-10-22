@@ -17,6 +17,9 @@ func TestHostRuntimeAllowlist(t *testing.T) {
 	if !HostRuntimeAllowed(HostRuntimeCharacterPsyche) {
 		t.Fatal("psyche host runtime must be allowed")
 	}
+	if !HostRuntimeAllowed(HostRuntimeCharacterActiveTask) {
+		t.Fatal("active task host runtime must be allowed")
+	}
 	if HostRuntimeAllowed("host.character.unknown") {
 		t.Fatal("unknown host runtime must be rejected")
 	}

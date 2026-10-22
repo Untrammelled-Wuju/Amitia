@@ -76,11 +76,37 @@ func TestLooksLikeErrorUsesStructuredLevels(t *testing.T) {
 		{`level=warn service=com.amitia/channel-wechat msg=slow`, true},
 		{`panic: runtime error`, true},
 		{`failed: connection refused`, true},
+		{`TypeError: Cannot read properties`, true},
+		{`UnhandledPromiseRejection: renderer failed`, true},
+		{`FlutterError: widget build failed`, true},
 	}
 	for _, item := range cases {
 		if got := looksLikeError(item.line); got != item.want {
 			t.Fatalf("looksLikeError(%q) = %v, want %v", item.line, got, item.want)
 		}
+	}
+}
+
+func TestCollectLogsDeduplicatesRepeatedRuntimeErrors(t *testing.T) {
+	coreDir := t.TempDir()
+	repeated := `[2026-10-22T22:23:47.945Z] [LOG] [AmitiaCore] {"time":"2026-10-22T22:23:47.945+08:00","level":"ERROR","msg":"read tcp failed"}`
+	lines := make([]string, 0, 40)
+	for index := 0; index < 30; index++ {
+		lines = append(lines, repeated)
+	}
+	lines = append(lines,
+		`[2026-10-22T22:23:47.947Z] [ERROR] [AmitiaCore] panic: repeated read on failed websocket connection`,
+		`FlutterError: widget build failed`,
+	)
+	if err := os.WriteFile(filepath.Join(coreDir, "electron.log"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	_, errors, _, _ := collectLogs([]logRoot{{Path: coreDir, MaxDepth: 2}}, true)
+	if len(errors) != 3 {
+		t.Fatalf("expected three distinct error lines, got %d: %+v", len(errors), errors)
+	}
+	if !strings.Contains(strings.Join([]string{errors[0].Line, errors[1].Line, errors[2].Line}, "\n"), "FlutterError") {
+		t.Fatal("Flutter error line was not classified")
 	}
 }
 

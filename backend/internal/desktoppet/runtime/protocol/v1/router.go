@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -199,6 +200,11 @@ type runtimeWSHandler struct {
 }
 
 func (h *runtimeWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Error("[runtime-v1-ws] recovered transport panic: ", recovered, "\n", string(debug.Stack()))
+		}
+	}()
 	if h.facade == nil || !h.facade.IsStarted() {
 		http.Error(w, "runtime v1 not started", http.StatusServiceUnavailable)
 		return

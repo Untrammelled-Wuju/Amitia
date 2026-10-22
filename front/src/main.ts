@@ -21,6 +21,9 @@ import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index";
 import { useExtensionUIStore } from "./stores/extensionUI";
 import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
 import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
+import { installSecureRandomUUID } from "./runtime/secure-random";
+
+installSecureRandomUUID();
 
 async function bootstrap() {
   await getRuntimeConnection();

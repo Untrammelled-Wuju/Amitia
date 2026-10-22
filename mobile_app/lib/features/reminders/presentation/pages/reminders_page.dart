@@ -14,7 +14,9 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 class RemindersPage extends ConsumerStatefulWidget {
-  const RemindersPage({super.key});
+  const RemindersPage({super.key, this.initialCharacterId = ''});
+
+  final String initialCharacterId;
 
   @override
   ConsumerState<RemindersPage> createState() => _RemindersPageState();
@@ -24,10 +26,12 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   List<ReminderDto> _reminders = const [];
   Map<String, dynamic> _status = const {};
   int _selectedSegment = 0;
+  String _taskKind = 'user_reminder';
   bool _loading = true;
   String? _error;
   Timer? _refreshTimer;
   bool _refreshing = false;
+  bool get _isProactiveTask => _taskKind == 'proactive_task';
 
   @override
   void initState() {
@@ -55,8 +59,8 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     try {
       final service = ref.read(reminderServiceProvider);
       final values = await Future.wait<dynamic>([
-        service.list(),
-        service.status(),
+        service.list(kind: _taskKind),
+        service.status(kind: _taskKind),
       ]);
       if (!mounted) return;
       setState(() {
@@ -78,18 +82,36 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   }
 
   List<ReminderDto> get _visible {
+    final filtered = widget.initialCharacterId.isEmpty
+        ? _reminders
+        : _reminders
+              .where(
+                (item) => item.characterId == widget.initialCharacterId,
+              )
+              .toList(growable: false);
     switch (_selectedSegment) {
       case 1:
-        return _reminders
+        return filtered
             .where((item) => item.isEnabled)
             .toList(growable: false);
       case 2:
-        return _reminders
+        return filtered
             .where((item) => !item.isEnabled)
             .toList(growable: false);
       default:
-        return _reminders;
+        return filtered;
     }
+  }
+
+  Future<void> _setTaskKind(String kind) async {
+    if (_taskKind == kind) return;
+    setState(() {
+      _taskKind = kind;
+      _selectedSegment = 0;
+      _reminders = const [];
+      _loading = true;
+    });
+    await _load();
   }
 
   @override
@@ -111,6 +133,20 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         child: Column(
           children: [
             _buildSchedulerStatus(),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+              ),
+              child: AmitiaSegmentedControl(
+                segments: const ['定时任务', '主动消息'],
+                selectedIndex: _taskKind == 'user_reminder' ? 0 : 1,
+                onChanged: (index) =>
+                    _setTaskKind(index == 0 ? 'user_reminder' : 'proactive_task'),
+              ),
+            ),
             Padding(
               padding: EdgeInsets.fromLTRB(
                 AppSpacing.pagePadding,
@@ -333,6 +369,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     'monthly': '每月',
     'weekdays': '指定星期',
     'interval': '自定义间隔',
+    'cron': 'Cron 计划',
   };
 
   Future<void> _openEditor(ReminderDto? existing) async {
@@ -359,6 +396,36 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     final intervalController = TextEditingController(
       text: (existing?.recurrence['intervalSeconds'] ?? 3600).toString(),
     );
+    final cronController = TextEditingController(
+      text: (existing?.recurrence['cron'] ?? '0 9 * * *').toString(),
+    );
+    final minIntervalController = TextEditingController(
+      text: (existing?.policy['minInterval'] ?? 60).toString(),
+    );
+    final maxPerDayController = TextEditingController(
+      text: (existing?.policy['maxPerDay'] ?? 6).toString(),
+    );
+    final maxDailyCallsController = TextEditingController(
+      text: (existing?.policy['maxDailyCalls'] ?? 10).toString(),
+    );
+    final ruleMaxPerDayController = TextEditingController(
+      text: (existing?.policy['ruleMaxPerDay'] ?? 1).toString(),
+    );
+    final randomMinutesController = TextEditingController(
+      text: (existing?.policy['randomMinutes'] ?? 0).toString(),
+    );
+    final activeLevelController = TextEditingController(
+      text: (existing?.policy['activeLevel'] ?? 40).toString(),
+    );
+    final quietStartController = TextEditingController(
+      text: (existing?.policy['quietStart'] ?? '23:00').toString(),
+    );
+    final quietEndController = TextEditingController(
+      text: (existing?.policy['quietEnd'] ?? '07:00').toString(),
+    );
+    final ruleTypeController = TextEditingController(
+      text: (existing?.policy['ruleType'] ?? 'custom').toString(),
+    );
     final endController = TextEditingController(text: existing?.endAt ?? '');
     final countController = TextEditingController(
       text: (existing?.maxOccurrences ?? 0).toString(),
@@ -380,7 +447,8 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         );
     }
     final selectedChannels = peers.keys.toSet();
-    var repeatRule = existing?.repeatRule ?? 'none';
+    var repeatRule =
+        existing?.repeatRule ?? (_isProactiveTask ? 'cron' : 'none');
     var remindAt =
         DateTime.tryParse(existing?.localAnchorAt ?? '') ??
         DateTime.now().add(const Duration(minutes: 10));
@@ -516,6 +584,64 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                         setSheetState(() => repeatRule = value);
                     },
                   ),
+                  if (_isProactiveTask) ...[
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: cronController,
+                      hintText: 'Cron 表达式，例如 0 9 * * *',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: ruleTypeController,
+                      hintText: '规则类型，例如 custom / daily_greeting',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: activeLevelController,
+                      keyboardType: TextInputType.number,
+                      hintText: '主动频率 0-100',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: quietStartController,
+                      hintText: '安静时段开始，例如 23:00',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: quietEndController,
+                      hintText: '安静时段结束，例如 07:00',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: minIntervalController,
+                      keyboardType: TextInputType.number,
+                      hintText: '最小间隔（分钟）',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: maxPerDayController,
+                      keyboardType: TextInputType.number,
+                      hintText: '每日总上限',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: maxDailyCallsController,
+                      keyboardType: TextInputType.number,
+                      hintText: '每日模型调用上限',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: ruleMaxPerDayController,
+                      keyboardType: TextInputType.number,
+                      hintText: '单条规则每日上限',
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    AmitiaTextField(
+                      controller: randomMinutesController,
+                      keyboardType: TextInputType.number,
+                      hintText: '随机延迟（分钟）',
+                    ),
+                  ],
                   SizedBox(height: AppSpacing.md),
                   const Text('默认发送至角色对话，可附加已接入渠道'),
                   ...{
@@ -675,6 +801,13 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                         );
                         return;
                       }
+                      if (_isProactiveTask &&
+                          cronController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          const SnackBar(content: Text('请输入 Cron 表达式')),
+                        );
+                        return;
+                      }
                       try {
                         await owned.refresh();
                       } catch (error) {
@@ -703,6 +836,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                         return;
                       }
                       final data = <String, dynamic>{
+                        'kind': _taskKind,
                         'title': titleController.text.trim(),
                         'content': contentController.text.trim(),
                         'channel': channel,
@@ -726,6 +860,8 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                           if (repeatRule == 'interval')
                             'intervalSeconds':
                                 int.tryParse(intervalController.text) ?? 0,
+                          if (repeatRule == 'cron')
+                            'cron': cronController.text.trim(),
                         },
                         'endAt': endController.text.trim(),
                         'maxOccurrences':
@@ -739,6 +875,33 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                               },
                             )
                             .toList(),
+                        if (_isProactiveTask)
+                          'policy': {
+                            'enabled': true,
+                            'activeLevel':
+                                int.tryParse(activeLevelController.text) ?? 40,
+                            'quietStart': quietStartController.text.trim(),
+                            'quietEnd': quietEndController.text.trim(),
+                            'minInterval':
+                                int.tryParse(minIntervalController.text) ?? 60,
+                            'maxPerDay':
+                                int.tryParse(maxPerDayController.text) ?? 6,
+                            'maxDailyCalls':
+                                int.tryParse(maxDailyCallsController.text) ?? 10,
+                            'unrepliedSlowdownEnabled': true,
+                            'unrepliedSlowdownAfter': 2,
+                            'unrepliedCooldownMultiplier': 2,
+                            'unrepliedRecoveryOnReply': true,
+                            'ruleMaxPerDay':
+                                int.tryParse(ruleMaxPerDayController.text) ?? 1,
+                            'ruleType': ruleTypeController.text.trim().isEmpty
+                                ? 'custom'
+                                : ruleTypeController.text.trim(),
+                            'randomMinutes':
+                                int.tryParse(randomMinutesController.text) ?? 0,
+                            'ruleQuietStart': '',
+                            'ruleQuietEnd': '',
+                          },
                       };
                       try {
                         final service = ref.read(reminderServiceProvider);
@@ -769,6 +932,16 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     contentController.dispose();
     timezoneController.dispose();
     intervalController.dispose();
+    cronController.dispose();
+    minIntervalController.dispose();
+    maxPerDayController.dispose();
+    maxDailyCallsController.dispose();
+    ruleMaxPerDayController.dispose();
+    randomMinutesController.dispose();
+    activeLevelController.dispose();
+    quietStartController.dispose();
+    quietEndController.dispose();
+    ruleTypeController.dispose();
     endController.dispose();
     countController.dispose();
     for (final peer in peers.values) {
@@ -911,11 +1084,11 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
     Map<String, dynamic> history = const {};
     try {
       final values = await Future.wait<dynamic>([
-        service.status(),
-        service.queueSummary(),
+        service.status(kind: _taskKind),
+        service.queueSummary(kind: _taskKind),
         service.cleanupConfig(),
-        service.prospective(),
-        service.triggerHistory(pageSize: 10),
+        service.prospective(kind: _taskKind),
+        service.triggerHistory(pageSize: 10, kind: _taskKind),
       ]);
       status = values[0] as Map<String, dynamic>;
       queue = values[1] as Map<String, dynamic>;
@@ -987,7 +1160,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 isSecondary: true,
                 onPressed: () async {
                   try {
-                    await service.clearBackpressure();
+                    await service.clearBackpressure(kind: _taskKind);
                     if (sheetContext.mounted)
                       ScaffoldMessenger.of(sheetContext).showSnackBar(
                         const SnackBar(content: Text('已重置熔断，请检查阻断及结果未知的任务')),
@@ -1093,6 +1266,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               final result = await service.triggerHistory(
                 page: page,
                 state: state,
+                kind: _taskKind,
               );
               if (!sheetContext.mounted) return;
               update(() {

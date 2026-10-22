@@ -10,27 +10,19 @@ files:
 extraResources:
   - from: release-notes.md
     to: release-notes.md
-  - from: resources/core
-    to: core
+  - from: resources/release-runtime
+    to: .
     filter:
-      - "AmitiaCore.exe"
-      - "node/node.exe.zip"
-      - "node/node.zip"
+      - "**/*"
+      - "!.release-runtime-assets.json"
   - from: resources/bridge
     to: bridge
   - from: resources/migrations
     to: migrations
   - from: resources/config-template
     to: config-template
-  - from: resources/qdrant
-    to: qdrant
-    filter:
-      - "qdrant.zip"
-      - "config/config.yaml"
-  - from: resources/surrealdb
-    to: surrealdb
-    filter:
-      - "surreal.zip"
+  - from: resources/qdrant/config
+    to: qdrant/config
   - from: ../runtime/plugin-host/dist
     to: runtime/plugin-host/dist
   - from: ../runtime/task-host/dist
@@ -60,7 +52,7 @@ nsis:
   deleteAppDataOnUninstall: false
 
 releaseInfo:
-  releaseName: Amitia 26.2.0-beta.12
+  releaseName: Amitia 26.2.0-beta.13
   releaseNotesFile: release-notes.md
 
 publish:

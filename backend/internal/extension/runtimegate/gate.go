@@ -6,8 +6,10 @@ import (
 )
 
 const (
-	EmotionExtensionID         = "com.amitia.builtin.emotion"
-	HostRuntimeCharacterPsyche = "host.character.psyche"
+	EmotionExtensionID             = "com.amitia.builtin.emotion"
+	ActiveTaskExtensionID          = "com.amitia.builtin.active-task"
+	HostRuntimeCharacterPsyche     = "host.character.psyche"
+	HostRuntimeCharacterActiveTask = "host.character.active-task"
 )
 
 var (
@@ -20,7 +22,8 @@ var defaultEnabled = map[string]bool{
 }
 
 var hostRuntimeAllowlist = map[string]struct{}{
-	HostRuntimeCharacterPsyche: {},
+	HostRuntimeCharacterPsyche:     {},
+	HostRuntimeCharacterActiveTask: {},
 }
 
 func Set(extensionID string, enabled bool) {

@@ -30,6 +30,8 @@ export const IPC_CHANNELS = {
   uiNavigate: "amitia:ui:navigate",
   uiStyleCommand: "amitia:ui-style:command",
   getBackendAuthHeaders: "amitia:backend-auth:get-headers",
+  getClientDiagnostics: "amitia:client-diagnostics:get",
+  clearClientDiagnostics: "amitia:client-diagnostics:clear",
   publishLocalVoiceASRFinal: "amitia:workflow:voice-asr-final",
   meshGetStatus: "amitia:mesh:status:get",
   meshProvision: "amitia:mesh:provision",

@@ -31,6 +31,7 @@ import { registerPetIpcHandlers } from "./pet-ipc";
 import { ClipboardBridge } from "./clipboard-bridge";
 import { DesktopDeploymentLifecycle } from "./deployment-lifecycle";
 import { registerRealtimeMediaHandlers } from "./realtime-media";
+import { installDesktopClientDiagnostics } from "./client-diagnostics";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -185,6 +186,8 @@ async function startDesktop(): Promise<void> {
 if (process.platform === "win32") {
   app.setAppUserModelId("cn.amitia.desktop");
 }
+
+installDesktopClientDiagnostics();
 
 const lock = app.requestSingleInstanceLock();
 if (!lock) {

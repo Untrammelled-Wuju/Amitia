@@ -36,11 +36,14 @@ class SchemaUIBridgeController {
         const <String, SchemaUIHostAction>{},
   }) async {
     if (_disposed) throw StateError('Schema UI bridge controller is disposed');
+    final scopedInput = _scopedActionInput(
+      invocation.input,
+      characterId: characterId,
+      conversationId: conversationId,
+    );
     final local = localActions[invocation.actionId];
     if (local != null) {
-      return Future.sync(
-        () => local(invocation.input ?? const <String, dynamic>{}),
-      );
+      return Future.sync(() => local(scopedInput));
     }
 
     final sourceContributionId = contributionId.trim();
@@ -67,7 +70,7 @@ class SchemaUIBridgeController {
       generation: _sessionGeneration,
       nonce: _nextNonce(),
       actionId: invocation.actionId,
-      input: invocation.input ?? const <String, dynamic>{},
+      input: scopedInput,
     );
   }
 
@@ -81,16 +84,24 @@ class SchemaUIBridgeController {
   }) async {
     if (_disposed) throw StateError('Schema UI bridge controller is disposed');
     final normalizedKey = key.trim();
-    if (normalizedKey.isEmpty) throw StateError('Schema UI data source key is empty');
+    if (normalizedKey.isEmpty) {
+      throw StateError('Schema UI data source key is empty');
+    }
     final sourceContributionId = contributionId.trim();
-    if (sourceContributionId.isEmpty) throw StateError('Schema UI data source does not reference a contribution');
+    if (sourceContributionId.isEmpty) {
+      throw StateError(
+        'Schema UI data source does not reference a contribution',
+      );
+    }
     await _ensureSession(
       contributionId: sourceContributionId,
       contractVersion: contractVersion,
       characterId: characterId.trim(),
       conversationId: conversationId.trim(),
     );
-    if (_disposed || _sessionId.isEmpty) throw StateError('UI session unavailable');
+    if (_disposed || _sessionId.isEmpty) {
+      throw StateError('UI session unavailable');
+    }
     return _service.invokeSchemaUIBridgeMessage(
       _sessionId,
       contributionId: sourceContributionId,
@@ -111,14 +122,17 @@ class SchemaUIBridgeController {
     required String conversationId,
   }) async {
     if (_disposed) throw StateError('Schema UI bridge controller is disposed');
-    final identity = '$contributionId\u0000$contractVersion\u0000$characterId\u0000$conversationId';
+    final identity =
+        '$contributionId\u0000$contractVersion\u0000$characterId\u0000$conversationId';
     if (_sessionId.isNotEmpty && _sessionIdentity == identity) return;
 
     final pending = _creatingSession;
     if (pending != null) {
       await pending;
       if (_sessionId.isNotEmpty && _sessionIdentity == identity) return;
-      if (_disposed) throw StateError('Schema UI bridge controller is disposed');
+      if (_disposed) {
+        throw StateError('Schema UI bridge controller is disposed');
+      }
     }
 
     if (_sessionIdentity.isNotEmpty && _sessionIdentity != identity) {
@@ -154,8 +168,7 @@ class SchemaUIBridgeController {
           (response['contract_version'] as num?)?.toInt() ??
           contractVersion;
       _sessionToken = (response['token'] ?? '').toString().trim();
-      _sessionGeneration =
-          (response['generation'] as num?)?.toInt() ?? 0;
+      _sessionGeneration = (response['generation'] as num?)?.toInt() ?? 0;
       if (_sessionToken.isEmpty) {
         _sessionId = '';
         _sessionOrigin = '';
@@ -205,4 +218,38 @@ class SchemaUIBridgeController {
     _disposed = true;
     await reset();
   }
+}
+
+Map<String, dynamic> _scopedActionInput(
+  Map<String, dynamic>? input, {
+  required String characterId,
+  required String conversationId,
+}) {
+  final result = Map<String, dynamic>.from(input ?? const <String, dynamic>{});
+  final payload = result['payload'] is Map
+      ? Map<String, dynamic>.from(result['payload'] as Map)
+      : <String, dynamic>{};
+  final scope = payload['scope'] is Map
+      ? Map<String, dynamic>.from(payload['scope'] as Map)
+      : <String, dynamic>{};
+  final normalizedCharacterId =
+      (payload['characterId'] ?? scope['characterId'] ?? characterId)
+          .toString()
+          .trim();
+  final normalizedConversationId = (scope['conversationId'] ?? conversationId)
+      .toString()
+      .trim();
+  if (normalizedCharacterId.isEmpty && normalizedConversationId.isEmpty) {
+    return result;
+  }
+  if (normalizedCharacterId.isNotEmpty) {
+    payload['characterId'] = normalizedCharacterId;
+    scope['characterId'] = normalizedCharacterId;
+  }
+  if (normalizedConversationId.isNotEmpty) {
+    scope['conversationId'] = normalizedConversationId;
+  }
+  payload['scope'] = scope;
+  result['payload'] = payload;
+  return result;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HOST_RUNTIME_CHARACTER_ACTIVE_TASK,
   HOST_RUNTIME_CHARACTER_PSYCHE,
   resolveHostRuntimeComponent,
 } from "@/components/extension/hostRuntimeRegistry";
@@ -7,6 +8,7 @@ import {
 describe("host runtime registry", () => {
   it("resolves registered host runtimes without binding an extension id", () => {
     expect(resolveHostRuntimeComponent(HOST_RUNTIME_CHARACTER_PSYCHE)).not.toBeNull();
+    expect(resolveHostRuntimeComponent(HOST_RUNTIME_CHARACTER_ACTIVE_TASK)).not.toBeNull();
   });
 
   it("rejects unknown host runtimes", () => {

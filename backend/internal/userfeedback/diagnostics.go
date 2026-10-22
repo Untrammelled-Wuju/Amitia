@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -29,7 +30,9 @@ var (
 	emailPattern      = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 	phonePattern      = regexp.MustCompile(`\b1[3-9]\d{9}\b`)
 	textErrorPattern  = regexp.MustCompile(`(?i)(?:^|\s)(?:\[(?:warn|warning|error|fatal|panic)\]|(?:warn|warning|error|fatal|panic)(?::|\s|$)|failed(?::|\s|$))`)
+	errorNamePattern  = regexp.MustCompile(`(?i)(?:^|\s)(?:typeerror|rangeerror|referenceerror|syntaxerror|assertionerror|fluttererror|unhandledpromiserejection|uncaughtexception|exception|error)(?::|\s|$)`)
 	valueErrorPattern = regexp.MustCompile(`(?i)\blevel\s*[:=]\s*(?:warn|warning|error|fatal|panic|dpanic|critical)\b`)
+	timePrefixPattern = regexp.MustCompile(`^\s*\[?(?:\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\]?\s*`)
 )
 
 func redactText(value string, limit int) (string, int) {
@@ -236,7 +239,46 @@ func looksLikeError(line string) bool {
 	if level, ok := structuredLogLevel(line); ok {
 		return errorLogLevel(level)
 	}
-	return valueErrorPattern.MatchString(line) || textErrorPattern.MatchString(line)
+	return valueErrorPattern.MatchString(line) || textErrorPattern.MatchString(line) || errorNamePattern.MatchString(line)
+}
+
+func errorSignature(line string) string {
+	candidate := strings.TrimSpace(line)
+	if index := strings.Index(candidate, "{"); index >= 0 {
+		candidate = candidate[index:]
+	}
+	if strings.HasPrefix(candidate, "{") {
+		var payload map[string]any
+		if json.Unmarshal([]byte(candidate), &payload) == nil {
+			level := strings.ToLower(strings.TrimSpace(stringValue(payload["@level"])))
+			if level == "" {
+				level = strings.ToLower(strings.TrimSpace(stringValue(payload["level"])))
+			}
+			message := firstNonEmpty(
+				stringValue(payload["@message"]),
+				stringValue(payload["msg"]),
+				stringValue(payload["message"]),
+			)
+			if message != "" {
+				return level + "\x00" + message
+			}
+		}
+	}
+	normalized := strings.ToLower(timePrefixPattern.ReplaceAllString(strings.TrimSpace(line), ""))
+	return strings.Join(strings.Fields(normalized), " ")
+}
+
+func stringValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case json.Number:
+		return typed.String()
+	case nil:
+		return ""
+	default:
+		return fmt.Sprint(typed)
+	}
 }
 
 func structuredLogLevel(line string) (string, bool) {
@@ -309,6 +351,7 @@ func collectLogs(roots []logRoot, includeLogs bool) (files []string, errorLines 
 			Recent: make([]LogLine, 0, defaultLogLineLimit),
 			Errors: make([]LogLine, 0, defaultErrorLineLimit),
 		}
+		seenErrors := map[string]struct{}{}
 		for position := len(lines) - 1; position >= 0; position-- {
 			line := strings.TrimSpace(lines[position])
 			if line == "" {
@@ -320,7 +363,13 @@ func collectLogs(roots []logRoot, includeLogs bool) (files []string, errorLines 
 				entry.Recent = append(entry.Recent, LogLine{File: info.Label, Line: cleaned})
 			}
 			if len(entry.Errors) < defaultErrorLineLimit && looksLikeError(line) {
-				entry.Errors = append(entry.Errors, LogLine{File: info.Label, Line: cleaned})
+				signature := errorSignature(line)
+				if signature != "" {
+					if _, duplicate := seenErrors[signature]; !duplicate {
+						seenErrors[signature] = struct{}{}
+						entry.Errors = append(entry.Errors, LogLine{File: info.Label, Line: cleaned})
+					}
+				}
 			}
 			if len(entry.Recent) >= defaultLogLineLimit && len(entry.Errors) >= defaultErrorLineLimit {
 				break

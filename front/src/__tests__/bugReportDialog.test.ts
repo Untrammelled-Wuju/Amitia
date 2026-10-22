@@ -52,6 +52,7 @@ describe("404 报错信息弹窗", () => {
     requests.get.mockReset();
     requests.post.mockReset();
     document.body.innerHTML = "";
+    delete (window as any).amitiaDesktop;
     requests.get.mockImplementation(async (url: string) => {
       if (url === "/api/user-feedback/settings") {
         return {
@@ -102,6 +103,41 @@ describe("404 报错信息弹窗", () => {
         uploadUrl: "https://amitia.example.com/api/v1/feedbacks",
       }),
     );
+    wrapper.unmount();
+  });
+
+  it("提交时合并 Electron 主进程诊断", async () => {
+    const clearClientDiagnostics = vi.fn(async () => undefined);
+    (window as any).amitiaDesktop = {
+      getClientDiagnostics: vi.fn(async () => [{
+        message: "renderer crashed",
+        stack: "Error: renderer crashed",
+        source: "electron:render-process-gone",
+        at: "2026-10-22T22:00:00+08:00",
+      }]),
+      clearClientDiagnostics,
+    };
+    requests.post.mockResolvedValue({});
+    const wrapper = mountDialog();
+    await flushPromises();
+    const title = document.querySelector(".report-form input") as HTMLInputElement;
+    const description = document.querySelector(".report-form textarea") as HTMLTextAreaElement;
+    title.value = "主动消息页面异常";
+    title.dispatchEvent(new Event("input"));
+    description.value = "打开主动消息页面时崩溃";
+    description.dispatchEvent(new Event("input"));
+    await flushPromises();
+    buttonByText("提交报错信息")?.click();
+    await flushPromises();
+    expect(requests.post).toHaveBeenCalledWith(
+      "/api/user-feedback/tickets",
+      expect.objectContaining({
+        clientErrors: expect.arrayContaining([
+          expect.objectContaining({ source: "electron:render-process-gone" }),
+        ]),
+      }),
+    );
+    expect(clearClientDiagnostics).toHaveBeenCalled();
     wrapper.unmount();
   });
 

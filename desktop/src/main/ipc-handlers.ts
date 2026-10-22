@@ -32,6 +32,7 @@ import {
   getPairingStatus as cloudGetPairingStatus,
   createPairingOffer as cloudCreatePairingOffer,
 } from "./device-mesh/remote-bootstrap-client";
+import { clearDesktopClientErrors, getDesktopClientErrors } from "./client-diagnostics";
 
 const EXTENSION_PACKAGE_MAX_BYTES = 512 * 1024 * 1024;
 
@@ -554,6 +555,11 @@ export function registerIpcHandlers(
       }
       throw error;
     }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getClientDiagnostics, () => getDesktopClientErrors());
+  ipcMain.handle(IPC_CHANNELS.clearClientDiagnostics, () => {
+    clearDesktopClientErrors();
   });
 
   ipcMain.handle(IPC_CHANNELS.publishLocalVoiceASRFinal, async (_event, payload) => {

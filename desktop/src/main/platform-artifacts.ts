@@ -10,30 +10,30 @@ type ArchiveTable = Record<DatabaseKind, Record<RuntimePlatform, Record<RuntimeA
 const DATABASE_ARCHIVES: ArchiveTable = {
   qdrant: {
     windows: {
-      x64: ["qdrant.zip", "qdrant.exe.zip", "qdrant-windows-amd64.zip"],
-      arm64: ["qdrant.zip", "qdrant-windows-arm64.zip"],
+      x64: ["qdrant-windows-amd64.zip", "qdrant.exe.zip", "qdrant.zip"],
+      arm64: ["qdrant-windows-arm64.zip", "qdrant.zip"],
     },
     macos: {
-      x64: ["qdrant.zip", "qdrant-darwin-amd64.zip", "qdrant-macos-amd64.zip"],
-      arm64: ["qdrant.zip", "qdrant-darwin-arm64.zip", "qdrant-macos-arm64.zip"],
+      x64: ["qdrant-macos-amd64.zip", "qdrant-darwin-amd64.zip", "qdrant.zip"],
+      arm64: ["qdrant-macos-arm64.zip", "qdrant-darwin-arm64.zip", "qdrant.zip"],
     },
     linux: {
-      x64: ["qdrant.zip", "qdrant-linux-x64.zip", "qdrant-x86_64-unknown-linux-gnu.zip"],
-      arm64: ["qdrant.zip", "qdrant-linux-arm64.zip", "qdrant-aarch64-unknown-linux-gnu.zip"],
+      x64: ["qdrant-linux-x64.zip", "qdrant-x86_64-unknown-linux-gnu.zip", "qdrant.zip"],
+      arm64: ["qdrant-linux-arm64.zip", "qdrant-aarch64-unknown-linux-gnu.zip", "qdrant.zip"],
     },
   },
   surrealdb: {
     windows: {
-      x64: ["surreal.zip", "surreal.exe.zip", "surreal-windows-amd64.zip"],
-      arm64: ["surreal.zip", "surreal-windows-arm64.zip"],
+      x64: ["surreal-windows-amd64.zip", "surreal.exe.zip", "surreal.zip"],
+      arm64: ["surreal-windows-arm64.zip", "surreal.zip"],
     },
     macos: {
-      x64: ["surreal.zip", "surreal-darwin-amd64.zip"],
-      arm64: ["surreal.zip", "surreal-darwin-arm64.zip"],
+      x64: ["surreal-macos-amd64.zip", "surreal-darwin-amd64.zip", "surreal.zip"],
+      arm64: ["surreal-macos-arm64.zip", "surreal-darwin-arm64.zip", "surreal.zip"],
     },
     linux: {
-      x64: ["surreal.zip", "surreal-linux-x64.zip"],
-      arm64: ["surreal.zip", "surreal-linux-arm64.zip"],
+      x64: ["surreal-linux-x64.zip", "surreal.zip"],
+      arm64: ["surreal-linux-arm64.zip", "surreal.zip"],
     },
   },
 };

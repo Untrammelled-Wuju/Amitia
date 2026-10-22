@@ -1,6 +1,7 @@
 import path from "path";
 import fs from "fs";
 import { getAmitiaDataDir } from "./path-manager";
+import { recordDesktopClientError } from "./client-diagnostics";
 
 let logStream: fs.WriteStream | null = null;
 
@@ -49,6 +50,11 @@ export function initLogger(): void {
         logStream.write(msg);
       } catch (_) {}
     }
+    recordDesktopClientError({
+      message: args.map((value) => value instanceof Error ? value.message : String(value)).join(" "),
+      stack: args.map((value) => value instanceof Error ? value.stack ?? "" : "").filter(Boolean).join("\n"),
+      source: "electron:main:console.error",
+    });
   };
 }
 

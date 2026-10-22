@@ -127,4 +127,23 @@ describe("主动任务工作台", () => {
     await flushPromises();
     expect(api.post).not.toHaveBeenCalled();
   });
+
+  it("主动消息规则合并到主动任务工作台", async () => {
+    await openWorkspace();
+    const proactive = wrapper
+      .findAll(".el-radio-button")
+      .find((item) => item.text().includes("主动消息"));
+    expect(proactive).toBeTruthy();
+    await proactive!.trigger("click");
+    await flushPromises();
+    expect(api.get).toHaveBeenCalledWith("/api/reminders", {
+      params: { kind: "proactive_task" },
+    });
+    const create = wrapper.findAll("button").find((button) => button.text() === "新建任务");
+    await create!.trigger("click");
+    await flushPromises();
+    const dialog = document.querySelector(".task-editor")!;
+    expect(dialog.textContent).toContain("Cron 表达式");
+    expect(dialog.textContent).toContain("未回复时自动降频");
+  });
 });

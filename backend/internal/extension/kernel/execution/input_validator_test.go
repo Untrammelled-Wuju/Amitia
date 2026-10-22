@@ -156,8 +156,8 @@ func TestInputValidatorReportsSchemaDetailWithoutValues(t *testing.T) {
 	}`)
 
 	tool := capability.ToolDefinition{
-		ID:          "com.amitia/proactive/command",
-		ModelName:   "proactive_command",
+		ID:          "com.amitia.builtin.active-task/command",
+		ModelName:   "active_task_command",
 		InputSchema: schema,
 		Source:      capability.ToolSourcePlugin,
 	}

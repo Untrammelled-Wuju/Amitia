@@ -160,6 +160,9 @@ const mergedContext = computed<Record<string, unknown>>(() => ({
   formState: formState,
 }));
 
+const contextCharacterId = computed(() => String(mergedContext.value.characterId || "").trim());
+const contextConversationId = computed(() => String(mergedContext.value.conversationId || "").trim());
+
 const rootNode = computed<SchemaUINodeType | null>(() => schema.value?.root ?? null);
 const rootList = computed<SchemaUINodeType[]>(() => schema.value?.children ?? []);
 const hasRoot = computed(() => rootNode.value !== null || rootList.value.length > 0);
@@ -330,8 +333,8 @@ async function createSession(expectedToken: number): Promise<string | null> {
   }>("/api/extensions/ui/sessions", {
     contributionId: props.contribution.contributionId,
     surface: String(surfaceData.role ?? "main"),
-    characterId: (props.context?.characterId as string) || "",
-    conversationId: (props.context?.conversationId as string) || "",
+    characterId: contextCharacterId.value,
+    conversationId: contextConversationId.value,
     host: env.host,
     platform: env.platform,
     os: env.os,
@@ -506,6 +509,21 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   if (nodeId) busyNodeIds.add(nodeId);
   try {
     const resolvedInput = asRecord(resolveActionInput(action.input ?? {}, formState, mergedContext.value, item));
+    const actionPayload = asRecord(resolvedInput.payload);
+    const actionScope = asRecord(actionPayload.scope);
+    const characterId = String(actionPayload.characterId || actionScope.characterId || contextCharacterId.value || "").trim();
+    const conversationId = String(actionScope.conversationId || contextConversationId.value || "").trim();
+    if (characterId || conversationId) {
+      resolvedInput.payload = {
+        ...actionPayload,
+        ...(characterId ? { characterId } : {}),
+        scope: {
+          ...actionScope,
+          ...(characterId ? { characterId } : {}),
+          ...(conversationId ? { conversationId } : {}),
+        },
+      };
+    }
     const renderMeta = {
       node_id: node.id,
       form_state: { ...formState },

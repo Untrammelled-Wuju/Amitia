@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
-import { collectClientErrors } from "./client-error-tracker";
+import { collectAllClientErrors } from "./client-error-tracker";
 import { isDesktopShell } from "./runtime-capabilities";
 import { getDeploymentConfig } from "./runtime-adapter";
 
@@ -42,13 +42,14 @@ export async function buildUserFeedbackPayload(
   } catch {
     deviceId = "";
   }
+  const clientErrors = await collectAllClientErrors();
   return {
     category: draft.category,
     title: draft.title.trim(),
     description: draft.description.trim(),
     contact: draft.contact.trim(),
     includeLogs: draft.includeLogs,
-    clientErrors: collectClientErrors(),
+    clientErrors,
     platform: isDesktopShell() ? "desktop" : "web",
     clientType: isDesktopShell() ? "desktop" : "web",
     appVersion: context.appVersion,

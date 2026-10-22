@@ -93,7 +93,7 @@ func TestConversationMessageRouteSendsWithResolvedScope(t *testing.T) {
 	}
 	result := gateway.Call(context.Background(), host_api.CallRequest{
 		CallID:          "call-message",
-		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: domain.ExtensionID("com.amitia/proactive"), ModuleID: "proactive-runtime"},
+		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: domain.ExtensionID("com.amitia.builtin.active-task"), ModuleID: "active-task-runtime"},
 		Method:          host_api.MethodConversationMessageSend,
 		Version:         1,
 		Input:           json.RawMessage(`{"channel":"web","content":"  你好  ","requestId":"req-1"}`),
@@ -141,7 +141,7 @@ func TestConversationMessageRouteRejectsScopeMismatch(t *testing.T) {
 	}
 	result := gateway.Call(context.Background(), host_api.CallRequest{
 		CallID:          "call-message-mismatch",
-		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: domain.ExtensionID("com.amitia/proactive"), ModuleID: "proactive-runtime"},
+		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: domain.ExtensionID("com.amitia.builtin.active-task"), ModuleID: "active-task-runtime"},
 		Method:          host_api.MethodConversationMessageSend,
 		Version:         1,
 		Input:           json.RawMessage(`{"conversationId":"conv-other","content":"你好"}`),
@@ -165,7 +165,7 @@ func TestLegacyProactiveDispatchMethodIsNotRegistered(t *testing.T) {
 	}
 	result := gateway.Call(context.Background(), host_api.CallRequest{
 		CallID:          "call-legacy",
-		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: domain.ExtensionID("com.amitia/proactive"), ModuleID: "proactive-runtime"},
+		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: domain.ExtensionID("com.amitia.builtin.active-task"), ModuleID: "active-task-runtime"},
 		Method:          host_api.Method("host.proactive.dispatch"),
 		Version:         1,
 		Input:           json.RawMessage(`{}`),

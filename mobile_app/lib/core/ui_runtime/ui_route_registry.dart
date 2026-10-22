@@ -227,12 +227,23 @@ List<RouteBase> buildProviderRoutes(UIProviderSnapshot? snapshot) {
               'pathParameters': state.pathParameters,
               'queryParameters': state.uri.queryParameters,
               'routeRegistryProviderId': spec.registry.providerId,
+              ..._routeIdentity(state.pathParameters),
             },
             fallback: ProviderRouteUnavailable(providerId: spec.providerId),
           ),
         );
       })
       .toList(growable: false);
+}
+
+Map<String, String> _routeIdentity(Map<String, String> pathParameters) {
+  final characterId =
+      (pathParameters['characterId'] ?? pathParameters['id'] ?? '').trim();
+  final conversationId = (pathParameters['conversationId'] ?? '').trim();
+  return <String, String>{
+    if (characterId.isNotEmpty) 'characterId': characterId,
+    if (conversationId.isNotEmpty) 'conversationId': conversationId,
+  };
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

@@ -7,7 +7,7 @@ import { computeFreezeSourceGateHash } from "../../scripts/lib/freeze-scope.mjs"
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = resolve(__dirname, "..");
 const repositoryRoot = resolve(desktopRoot, "..");
-const manifestPath = resolve(desktopRoot, "resources/core/.release-runtime-assets.json");
+const manifestPath = resolve(desktopRoot, "resources/release-runtime/.release-runtime-assets.json");
 
 function sha256File(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
@@ -18,7 +18,7 @@ function loadManifest() {
     throw new Error("release runtime manifest missing; run prepare-release-runtime-assets.mjs before packaging");
   }
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.entries) || manifest.entries.length === 0) {
+  if (manifest.schemaVersion !== 2 || !Array.isArray(manifest.entries) || manifest.entries.length === 0) {
     throw new Error("release runtime manifest is invalid");
   }
   return manifest;

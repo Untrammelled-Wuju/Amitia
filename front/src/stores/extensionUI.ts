@@ -139,6 +139,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
   const errors = ref<SlotError[]>([]);
   const sessions = ref<Map<string, SlotSession>>(new Map());
   const layoutPrefs = ref<Record<string, LayoutPreference>>({});
+  let refreshTask: Promise<void> | null = null;
 
   const slotsById = computed(() => {
     const map = new Map<string, SlotSnapshot>();
@@ -323,49 +324,54 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
   }
 
   async function refreshSnapshot(force = false): Promise<void> {
-    if (loading.value) return;
+    if (loading.value) return refreshTask ?? undefined;
     if (!force && snapshot.value && Date.now() - lastFetchAt.value < 30_000) return;
     loading.value = true;
-    const platform = resolveHostEnvironment().platform;
-    const deviceId = await resolveUIHostDeviceId();
-    const backendNamespace = await getRuntimeConnection().then((connection) => connection.apiBaseURL).catch(() => window.location.origin);
-    const cacheNamespace = `${backendNamespace}|device=${deviceId || "browser"}`;
-    try {
-      const next = await fetchUISnapshot(platform, deviceId);
-      snapshot.value = next;
-      lastFetchAt.value = Date.now();
-      usingLastKnownGood.value = false;
-      saveLastKnownGoodSnapshot(platform, deviceId, next, cacheNamespace);
-    } catch (e) {
-      const cached = loadLastKnownGoodSnapshot(platform, deviceId, cacheNamespace);
-      if (cached) {
-        const client = await resolveUIClientInfo();
-        snapshot.value = {
-          ...cached,
-          providerContext: {
-            ...(cached.providerContext ?? { platform }),
-            platform,
-            deviceId,
-            architecture: client.architecture,
-            appVersion: client.appVersion,
-            deviceOnline: false,
-            runtimeVersion: undefined,
-            deviceCapabilities: [],
-          },
-        };
+    const task = (async () => {
+      const platform = resolveHostEnvironment().platform;
+      const deviceId = await resolveUIHostDeviceId();
+      const backendNamespace = await getRuntimeConnection().then((connection) => connection.apiBaseURL).catch(() => window.location.origin);
+      const cacheNamespace = `${backendNamespace}|device=${deviceId || "browser"}`;
+      try {
+        const next = await fetchUISnapshot(platform, deviceId);
+        snapshot.value = next;
         lastFetchAt.value = Date.now();
-        usingLastKnownGood.value = true;
+        usingLastKnownGood.value = false;
+        saveLastKnownGoodSnapshot(platform, deviceId, next, cacheNamespace);
+      } catch (e) {
+        const cached = loadLastKnownGoodSnapshot(platform, deviceId, cacheNamespace);
+        if (cached) {
+          const client = await resolveUIClientInfo();
+          snapshot.value = {
+            ...cached,
+            providerContext: {
+              ...(cached.providerContext ?? { platform }),
+              platform,
+              deviceId,
+              architecture: client.architecture,
+              appVersion: client.appVersion,
+              deviceOnline: false,
+              runtimeVersion: undefined,
+              deviceCapabilities: [],
+            },
+          };
+          lastFetchAt.value = Date.now();
+          usingLastKnownGood.value = true;
+        }
+        recordError({
+          contributionId: "",
+          slotId: "",
+          message: e instanceof Error ? e.message : String(e),
+          timestamp: Date.now(),
+          recoverable: true,
+        });
+      } finally {
+        loading.value = false;
+        refreshTask = null;
       }
-      recordError({
-        contributionId: "",
-        slotId: "",
-        message: e instanceof Error ? e.message : String(e),
-        timestamp: Date.now(),
-        recoverable: true,
-      });
-    } finally {
-      loading.value = false;
-    }
+    })();
+    refreshTask = task;
+    return task;
   }
 
   async function loadProfileScope(scope: UIProfileScopeKind = profileScope.value): Promise<void> {

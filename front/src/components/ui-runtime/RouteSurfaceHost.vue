@@ -6,6 +6,7 @@ import type { UIProviderCapability } from "@/ui-runtime/types";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolvePageProvider } from "@/ui-runtime/pageProviderRegistry";
 import { canonicalUISurfaceId, uiRouteAliases } from "@/ui-runtime/uiSurfaceCatalog";
+import { buildProviderRouteContext } from "@/ui-runtime/routeContext";
 
 const props = defineProps<{ fallback: Component }>();
 const route = useRoute();
@@ -38,6 +39,16 @@ const providerId = computed(() => {
   return selected?.providerId;
 });
 
+const providerContext = computed(() => buildProviderRouteContext(
+  route.fullPath,
+  route.params,
+  route.query,
+  {
+    surfaceId: canonicalUISurfaceId(route.path),
+    routeAliases: uiRouteAliases(route.path),
+  },
+));
+
 onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
 </script>
 
@@ -47,7 +58,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     :capability="capability"
     :provider-id="providerId"
     :fallback="fallback"
-    :context="{ route: route.fullPath, routeParams: route.params, routeQuery: route.query, surfaceId: canonicalUISurfaceId(route.path), routeAliases: uiRouteAliases(route.path) }"
+    :context="providerContext"
   />
   <component :is="fallback" v-else />
 </template>

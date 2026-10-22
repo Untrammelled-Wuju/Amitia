@@ -8,10 +8,11 @@ files:
   - resources/tray*.png
   - package.json
 extraResources:
-  - from: resources/core
-    to: core
+  - from: resources/release-runtime
+    to: .
     filter:
-      - "AmitiaCore.exe"
+      - "**/*"
+      - "!.release-runtime-assets.json"
   - from: ../runtime/plugin-host/dist
     to: runtime/plugin-host/dist
   - from: ../runtime/task-host/dist

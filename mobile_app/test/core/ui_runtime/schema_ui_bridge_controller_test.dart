@@ -17,6 +17,7 @@ class _FakeExtensionService extends ExtensionService {
   final List<String> revoked = <String>[];
   final List<String> conversations = <String>[];
   final List<String> invokedActions = <String>[];
+  final List<Map<String, dynamic>> inputs = <Map<String, dynamic>>[];
 
   @override
   Future<Map<String, dynamic>> createSchemaUISession({
@@ -31,6 +32,8 @@ class _FakeExtensionService extends ExtensionService {
       'sessionId': 'session-$createCount',
       'origin': 'amitia://schema-ui',
       'contractVersion': 3,
+      'token': 'token-$createCount',
+      'generation': 1,
     };
   }
 
@@ -41,10 +44,14 @@ class _FakeExtensionService extends ExtensionService {
     required String origin,
     required int contractVersion,
     required String actionId,
+    required int generation,
+    required String nonce,
+    required String token,
     Map<String, dynamic> input = const <String, dynamic>{},
   }) async {
     invokeCount++;
     invokedActions.add('$sessionId:$actionId:$contractVersion');
+    inputs.add(Map<String, dynamic>.from(input));
     return <String, dynamic>{'ok': true, 'message': 'done'};
   }
 
@@ -55,13 +62,13 @@ class _FakeExtensionService extends ExtensionService {
 }
 
 ActionInvocation _invocation(String id) => ActionInvocation(
-      actionId: id,
-      target: 'invoke_capability',
-      input: const <String, dynamic>{'value': 1},
-      extensionId: 'ext.test',
-      contributionId: 'contribution.test',
-      ownerIdentity: const <String, dynamic>{},
-    );
+  actionId: id,
+  target: 'invoke_capability',
+  input: const <String, dynamic>{'value': 1},
+  extensionId: 'ext.test',
+  contributionId: 'contribution.test',
+  ownerIdentity: const <String, dynamic>{},
+);
 
 void main() {
   test('local host action bypasses extension bridge', () async {
@@ -114,26 +121,29 @@ void main() {
     expect(service.revoked, contains('session-1'));
   });
 
-  test('scope change revokes the old session before creating another', () async {
-    final service = _FakeExtensionService();
-    final controller = SchemaUIBridgeController(service);
+  test(
+    'scope change revokes the old session before creating another',
+    () async {
+      final service = _FakeExtensionService();
+      final controller = SchemaUIBridgeController(service);
 
-    await controller.dispatch(
-      _invocation('remote.one'),
-      contributionId: 'contribution.test',
-      conversationId: 'conversation-a',
-    );
-    await controller.dispatch(
-      _invocation('remote.two'),
-      contributionId: 'contribution.test',
-      conversationId: 'conversation-b',
-    );
+      await controller.dispatch(
+        _invocation('remote.one'),
+        contributionId: 'contribution.test',
+        conversationId: 'conversation-a',
+      );
+      await controller.dispatch(
+        _invocation('remote.two'),
+        contributionId: 'contribution.test',
+        conversationId: 'conversation-b',
+      );
 
-    expect(service.createCount, 2);
-    expect(service.conversations, ['conversation-a', 'conversation-b']);
-    expect(service.revoked, contains('session-1'));
-    await controller.dispose();
-  });
+      expect(service.createCount, 2);
+      expect(service.conversations, ['conversation-a', 'conversation-b']);
+      expect(service.revoked, contains('session-1'));
+      await controller.dispose();
+    },
+  );
   test('contract version change starts a fresh bridge session', () async {
     final service = _FakeExtensionService();
     final controller = SchemaUIBridgeController(service);
@@ -156,4 +166,24 @@ void main() {
     await controller.dispose();
   });
 
+  test('action input carries the route character identity', () async {
+    final service = _FakeExtensionService();
+    final controller = SchemaUIBridgeController(service);
+
+    await controller.dispatch(
+      _invocation('remote.scope'),
+      contributionId: 'contribution.test',
+      characterId: 'role-1',
+      conversationId: 'conversation-a',
+    );
+
+    expect(service.inputs.single, {
+      'value': 1,
+      'payload': {
+        'scope': {'characterId': 'role-1', 'conversationId': 'conversation-a'},
+        'characterId': 'role-1',
+      },
+    });
+    await controller.dispose();
+  });
 }

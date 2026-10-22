@@ -8,7 +8,8 @@ const rendererDir = resolve(projectRoot, "dist/renderer");
 const unpacked = process.argv[2]
   ? resolve(projectRoot, process.argv[2])
   : resolve(projectRoot, "release-ci", "win-unpacked");
-const appAsar = resolve(unpacked, "resources", "app.asar");
+const resourcesDir = resolve(unpacked, "resources");
+const appAsar = resolve(resourcesDir, "app.asar");
 const errors = [];
 
 function requireFile(path, label) {
@@ -58,7 +59,15 @@ function collectRendererBundleFiles(entryPath) {
   return [...result];
 }
 
-requireFile(resolve(unpacked, "Amitia.exe"), "packaged Amitia.exe");
+const executableCandidates = [
+  resolve(unpacked, "Amitia.exe"),
+  resolve(unpacked, "Amitia"),
+  resolve(unpacked, "amitia"),
+  resolve(unpacked, "MacOS", "Amitia"),
+];
+if (!executableCandidates.some((candidate) => existsSync(candidate))) {
+  errors.push(`MISSING: packaged Amitia executable (${executableCandidates.join(", ")})`);
+}
 if (requireFile(appAsar, "packaged resources/app.asar")) {
   const asar = readFileSync(appAsar);
   const requiredNames = new Set([

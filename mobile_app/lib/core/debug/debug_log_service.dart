@@ -48,7 +48,9 @@ final debugLogServiceProvider = Provider<DebugLogService>((ref) {
   return service;
 });
 
-final debugLogEntriesProvider = StreamProvider<List<DebugLogEntry>>((ref) async* {
+final debugLogEntriesProvider = StreamProvider<List<DebugLogEntry>>((
+  ref,
+) async* {
   final service = ref.watch(debugLogServiceProvider);
   yield service.entries;
   yield* service.stream;
@@ -56,7 +58,9 @@ final debugLogEntriesProvider = StreamProvider<List<DebugLogEntry>>((ref) async*
 
 class DebugLogService {
   static const int _maxEntries = 500;
+  static const int _maxErrorEntries = 50;
   final List<DebugLogEntry> _entries = [];
+  final List<DebugLogEntry> _errorEntries = [];
   final StreamController<List<DebugLogEntry>> _controller =
       StreamController<List<DebugLogEntry>>.broadcast();
   bool _initialized = false;
@@ -67,6 +71,7 @@ class DebugLogService {
   Stream<List<DebugLogEntry>> get stream => _controller.stream;
 
   List<DebugLogEntry> get entries => List.unmodifiable(_entries);
+  List<DebugLogEntry> get errorEntries => List.unmodifiable(_errorEntries);
 
   void init() {
     if (_initialized) return;
@@ -79,30 +84,30 @@ class DebugLogService {
         final level = msg.contains('Error') || msg.contains('Exception')
             ? DebugLogLevel.error
             : DebugLogLevel.debug;
-        _addEntry(
-          level: level,
-          source: 'flutter',
-          message: msg,
-        );
+        _addEntry(level: level, source: 'flutter', message: msg);
       }
     };
 
     FlutterError.onError = (details) {
-      _addEntry(
+      final entry = DebugLogEntry(
+        time: DateTime.now(),
         level: DebugLogLevel.error,
         source: 'flutter.error',
         message: '${details.exception}',
         stackTrace: details.stack?.toString(),
       );
+      _addPreparedEntry(entry);
     };
 
     PlatformDispatcher.instance.onError = (error, stack) {
-      _addEntry(
+      final entry = DebugLogEntry(
+        time: DateTime.now(),
         level: DebugLogLevel.error,
         source: 'unhandled',
         message: '$error',
         stackTrace: stack.toString(),
       );
+      _addPreparedEntry(entry);
       return false;
     };
   }
@@ -123,24 +128,37 @@ class DebugLogService {
     _addEntry(level: level, source: source, message: message);
   }
 
-  void addRuntimeLog(String message, [DebugLogLevel level = DebugLogLevel.info]) {
+  void addRuntimeLog(
+    String message, [
+    DebugLogLevel level = DebugLogLevel.info,
+  ]) {
     _addEntry(level: level, source: 'runtime', message: message);
   }
 
-  void addBackendLog(String message, [DebugLogLevel level = DebugLogLevel.info]) {
+  void addBackendLog(
+    String message, [
+    DebugLogLevel level = DebugLogLevel.info,
+  ]) {
     _addEntry(level: level, source: 'backend', message: message);
   }
 
-  void addSidecarLog(String message, [DebugLogLevel level = DebugLogLevel.info]) {
+  void addSidecarLog(
+    String message, [
+    DebugLogLevel level = DebugLogLevel.info,
+  ]) {
     _addEntry(level: level, source: 'sidecar', message: message);
   }
 
-  void addProotLog(String message, [DebugLogLevel level = DebugLogLevel.debug]) {
+  void addProotLog(
+    String message, [
+    DebugLogLevel level = DebugLogLevel.debug,
+  ]) {
     _addEntry(level: level, source: 'proot', message: message);
   }
 
   void clear() {
     _entries.clear();
+    _errorEntries.clear();
     _safeAdd();
   }
 
@@ -154,16 +172,27 @@ class DebugLogService {
     required String message,
     String? stackTrace,
   }) {
-    final entry = DebugLogEntry(
-      time: DateTime.now(),
-      level: level,
-      source: source,
-      message: message,
-      stackTrace: stackTrace,
+    _addPreparedEntry(
+      DebugLogEntry(
+        time: DateTime.now(),
+        level: level,
+        source: source,
+        message: message,
+        stackTrace: stackTrace,
+      ),
     );
+  }
+
+  void _addPreparedEntry(DebugLogEntry entry) {
     _entries.add(entry);
     if (_entries.length > _maxEntries) {
       _entries.removeRange(0, _entries.length - _maxEntries);
+    }
+    if (entry.level == DebugLogLevel.error) {
+      _errorEntries.add(entry);
+      if (_errorEntries.length > _maxErrorEntries) {
+        _errorEntries.removeRange(0, _errorEntries.length - _maxErrorEntries);
+      }
     }
     _safeAdd();
   }

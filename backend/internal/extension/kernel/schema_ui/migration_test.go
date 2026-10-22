@@ -17,8 +17,7 @@ func TestMigratedPluginSchemasValidate(t *testing.T) {
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	files := []string{
-		"plugins/channels/wechat-ipad860/ui/schema/desktop.json",
-		"plugins/channels/wechat-ipad860/ui/schema/mobile.json",
+		"plugins/channels/qq/ui/mobile/schema.json",
 		"plugins/emote/ui/schema/desktop-index.json",
 		"plugins/emote/ui/schema/mobile-index.json",
 		"plugins/emote/ui/schema/desktop-composer.json",
@@ -27,8 +26,6 @@ func TestMigratedPluginSchemasValidate(t *testing.T) {
 		"plugins/emote/ui/schema/mobile-message.json",
 		"plugins/lifestyle/ui/schema/desktop.json",
 		"plugins/lifestyle/ui/schema/mobile.json",
-		"plugins/proactive/ui/schema/desktop.json",
-		"plugins/proactive/ui/schema/mobile.json",
 	}
 	validator := NewValidator()
 	for _, relative := range files {

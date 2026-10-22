@@ -8,7 +8,18 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div>
         <p class="eyebrow">陪伴，按时发生</p>
         <h1 id="task-page-title">主动任务</h1>
-        <p class="page-description">安排角色在合适的时间发来消息，让每一件约定都有回应。</p>
+        <p class="page-description">统一管理定时任务、主动消息规则、执行状态和投递历史。</p>
+        <div class="task-kind-switch" role="group" aria-label="主动任务类型">
+          <el-radio-group v-model="taskKind" @change="switchTaskKind">
+            <el-radio-button value="user_reminder">定时任务</el-radio-button>
+            <el-radio-button value="proactive_task">主动消息</el-radio-button>
+          </el-radio-group>
+          <span>{{
+            taskKind === "user_reminder"
+              ? "按指定时间执行的一次性或重复任务"
+              : "由角色按规则、频率和安静时段主动发起消息"
+          }}</span>
+        </div>
       </div>
       <div class="header-actions">
         <el-button :icon="Refresh" :loading="refreshing" @click="refreshWorkspace">刷新</el-button
@@ -220,6 +231,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-tab-pane label="待执行" name="upcoming"
           ><ProspectivePanel
             ref="prospectivePanel"
+            :kind="taskKind"
             @refresh="fetchAll"
             @clear-backpressure="clearBackpressure"
         /></el-tab-pane>
@@ -234,7 +246,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 :value="String(days)"
             /></el-select>
           </div>
-          <TriggerHistoryPanel ref="historyPanel" @refresh="fetchAll"
+          <TriggerHistoryPanel ref="historyPanel" :kind="taskKind" @refresh="fetchAll"
         /></el-tab-pane>
       </el-tabs>
     </section>
@@ -321,7 +333,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-drawer>
     <el-dialog
       v-model="dialogVisible"
-      :title="isEditing ? '编辑任务' : '新建主动任务'"
+      :title="isEditing ? (isProactiveTask ? '编辑主动消息规则' : '编辑任务') : (isProactiveTask ? '新建主动消息规则' : '新建主动任务')"
       width="min(720px, calc(100vw - 40px))"
       destroy-on-close
       :close-on-click-modal="false"
@@ -367,6 +379,94 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-form-item label="执行时区" required
             ><el-input v-model="form.timezone" placeholder="例如：Asia/Shanghai" />
             <p class="field-hint">按此时区执行，更换设备时区不会改变已保存的任务。</p></el-form-item
+          ><template v-if="isProactiveTask">
+            <div class="form-grid">
+              <el-form-item label="规则类型"
+                ><el-select v-model="form.ruleType"
+                  ><el-option label="自定义" value="custom" /><el-option
+                    label="早安问候"
+                    value="daily_greeting" /><el-option
+                    label="工作间歇"
+                    value="work_break" /><el-option
+                    label="睡前提醒"
+                    value="sleep_reminder" /></el-select
+                ></el-form-item
+              ><el-form-item label="Cron 表达式" required
+                ><el-input v-model="form.cron" placeholder="例如：0 9 * * *" />
+                <p class="field-hint">主动消息按 Cron 计划执行。</p></el-form-item
+              >
+            </div>
+            <div class="form-grid">
+              <el-form-item label="主动频率"
+                ><el-slider
+                  v-model="form.policy.activeLevel"
+                  :min="0"
+                  :max="100"
+                  show-input /><p class="field-hint">数值越高，角色发起主动消息的概率越高。</p></el-form-item
+              ><el-form-item label="规则每日上限"
+                ><el-input-number
+                  v-model="form.policy.ruleMaxPerDay"
+                  :min="1"
+                  :max="100"
+                /></el-form-item
+              >
+            </div>
+            <div class="form-grid">
+              <el-form-item label="安静时段开始"
+                ><el-time-picker
+                  v-model="form.policy.quietStart"
+                  format="HH:mm"
+                  value-format="HH:mm"
+                  placeholder="23:00" /></el-form-item
+              ><el-form-item label="安静时段结束"
+                ><el-time-picker
+                  v-model="form.policy.quietEnd"
+                  format="HH:mm"
+                  value-format="HH:mm"
+                  placeholder="07:00" /></el-form-item
+              >
+            </div>
+            <div class="form-grid">
+              <el-form-item label="最小间隔（分钟）"
+                ><el-input-number
+                  v-model="form.policy.minInterval"
+                  :min="0"
+                  :max="525600"
+                /></el-form-item
+              ><el-form-item label="每日总上限"
+                ><el-input-number
+                  v-model="form.policy.maxPerDay"
+                  :min="1"
+                  :max="100"
+                /></el-form-item
+              >
+            </div>
+            <div class="form-grid">
+              <el-form-item label="每日模型调用上限"
+                ><el-input-number
+                  v-model="form.policy.maxDailyCalls"
+                  :min="1"
+                  :max="100"
+                /></el-form-item
+              ><el-form-item label="随机延迟（分钟）"
+                ><el-input-number
+                  v-model="form.policy.randomMinutes"
+                  :min="0"
+                  :max="120"
+                /></el-form-item
+              >
+            </div>
+            <div class="toggle-setting">
+              <div>
+                <strong>未回复时自动降频</strong>
+                <p>连续未回复后逐步扩大间隔，用户回复后自动恢复</p>
+              </div>
+              <el-switch
+                v-model="form.policy.unrepliedSlowdownEnabled"
+                aria-label="未回复时自动降频"
+              />
+            </div>
+          </template>
           ><el-form-item v-if="form.repeatRule === 'weekdays'" label="指定星期"
             ><el-checkbox-group v-model="form.weekdays"
               ><el-checkbox-button
@@ -505,7 +605,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   </main>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Plus,
@@ -520,9 +620,14 @@ import {
 import { request } from "../../composables/request";
 import { useDeviceOwnedConversation } from "../../composables/useDeviceOwnedConversation";
 import type { ReminderGroup } from "../../types";
+import { randomUUID } from "../../runtime/secure-random";
 import ProspectivePanel from "./components/ProspectivePanel.vue";
 import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue";
 import { requireSavedTask, currentOwnerConversations, validateChannelTargets } from "./contract";
+
+const props = withDefaults(defineProps<{ initialCharacterId?: string }>(), {
+  initialCharacterId: "",
+});
 
 interface Reminder {
   id: string;
@@ -538,7 +643,7 @@ interface Reminder {
   maxOccurrences: number;
   systemNotification: boolean;
   paused: boolean;
-  recurrence: { type: string; weekdays?: number[]; intervalSeconds?: number };
+  recurrence: { type: string; weekdays?: number[]; intervalSeconds?: number; cron?: string };
   channelTargets: Array<{ channelId: string; peerId: string }>;
   title: string;
   content: string;
@@ -553,7 +658,26 @@ interface Reminder {
   lastTriggeredAt: string | null;
   createdAt: string;
   updatedAt: string;
+  policy?: {
+    randomMinutes: number;
+    ruleQuietStart: string;
+    ruleQuietEnd: string;
+    enabled: boolean;
+    activeLevel: number;
+    quietStart: string;
+    quietEnd: string;
+    minInterval: number;
+    maxPerDay: number;
+    maxDailyCalls: number;
+    unrepliedSlowdownEnabled: boolean;
+    unrepliedSlowdownAfter: number;
+    unrepliedCooldownMultiplier: number;
+    unrepliedRecoveryOnReply: boolean;
+    ruleMaxPerDay: number;
+    ruleType: string;
+  };
 }
+type TaskKind = "user_reminder" | "proactive_task";
 const owned = useDeviceOwnedConversation();
 const channelOptions = ref<string[]>([]);
 const prospectivePanel = ref<InstanceType<typeof ProspectivePanel>>();
@@ -563,6 +687,8 @@ function saved(value: any): Reminder {
   return requireSavedTask(value);
 }
 const reminders = ref<Reminder[]>([]);
+const taskKind = ref<TaskKind>("user_reminder");
+const isProactiveTask = computed(() => taskKind.value === "proactive_task");
 const loading = ref(false);
 const activeView = ref("tasks");
 const searchText = ref("");
@@ -670,7 +796,7 @@ const loadingConvs = ref(false);
 const loadingChars = ref(false);
 const cleanupDays = ref("0");
 const activeGroup = ref<ReminderGroup | "">("");
-const filterCharacterId = ref("");
+const filterCharacterId = ref(props.initialCharacterId);
 
 const repeatLabels: Record<string, string> = {
   none: "不重复",
@@ -679,6 +805,7 @@ const repeatLabels: Record<string, string> = {
   monthly: "每月",
   weekdays: "指定星期",
   interval: "自定义间隔",
+  cron: "Cron 计划",
 };
 function repeatLabel(r: string): string {
   return repeatLabels[r] || r;
@@ -735,7 +862,7 @@ const form = ref({
   repeatRule: "none",
   enabled: true,
   generation: 0,
-  requestId: crypto.randomUUID(),
+  requestId: randomUUID(),
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   weekdays: [] as number[],
   intervalSeconds: 3600,
@@ -743,6 +870,9 @@ const form = ref({
   maxOccurrences: 0,
   systemNotification: true,
   channelTargets: [] as Array<{ channelId: string; peerId: string }>,
+  cron: "0 9 * * *",
+  ruleType: "custom",
+  policy: defaultProactivePolicy(),
 });
 function resetForm() {
   form.value = {
@@ -755,7 +885,7 @@ function resetForm() {
     repeatRule: "none",
     enabled: true,
     generation: 0,
-    requestId: crypto.randomUUID(),
+    requestId: randomUUID(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     weekdays: [] as number[],
     intervalSeconds: 3600,
@@ -763,23 +893,58 @@ function resetForm() {
     maxOccurrences: 0,
     systemNotification: true,
     channelTargets: [] as Array<{ channelId: string; peerId: string }>,
+    cron: "0 9 * * *",
+    ruleType: "custom",
+    policy: defaultProactivePolicy(),
   };
 }
 
+function defaultProactivePolicy() {
+  return {
+    randomMinutes: 0,
+    ruleQuietStart: "",
+    ruleQuietEnd: "",
+    enabled: true,
+    activeLevel: 40,
+    quietStart: "23:00",
+    quietEnd: "07:00",
+    minInterval: 60,
+    maxPerDay: 6,
+    maxDailyCalls: 10,
+    unrepliedSlowdownEnabled: true,
+    unrepliedSlowdownAfter: 2,
+    unrepliedCooldownMultiplier: 2,
+    unrepliedRecoveryOnReply: true,
+    ruleMaxPerDay: 1,
+    ruleType: "custom",
+  };
+}
+
+async function switchTaskKind(value: string | number | boolean) {
+  taskKind.value = value === "proactive_task" ? "proactive_task" : "user_reminder";
+  activeView.value = "tasks";
+  detailVisible.value = false;
+  selectedId.value = "";
+  resetForm();
+  await fetchAll();
+}
+
 async function fetchAll() {
-  await Promise.all([
-    fetchReminders(),
-    fetchStatus(),
-    prospectivePanel.value?.refresh(),
-    historyPanel.value?.refresh(),
-  ]);
+  const refreshes: Promise<unknown>[] = [fetchReminders(), fetchStatus()];
+  if (typeof prospectivePanel.value?.refresh === "function") {
+    refreshes.push(prospectivePanel.value.refresh());
+  }
+  if (typeof historyPanel.value?.refresh === "function") {
+    refreshes.push(historyPanel.value.refresh());
+  }
+  await Promise.all(refreshes);
 }
 
 async function fetchReminders() {
   loading.value = reminders.value.length === 0;
   listError.value = "";
   try {
-    const res: any = await request.get("/api/reminders", { params: { kind: "user_reminder" } });
+    const res: any = await request.get("/api/reminders", { params: { kind: taskKind.value } });
     if (!Array.isArray(res)) throw new Error("服务未返回任务列表");
     const raw = res;
     reminders.value = raw.map(saved);
@@ -793,7 +958,7 @@ async function fetchReminders() {
 async function fetchStatus() {
   try {
     const res: any = await request.get("/api/reminders/status", {
-      params: { kind: "user_reminder" },
+      params: { kind: taskKind.value },
     });
     if (!res || typeof res.schedulerRunning !== "boolean") throw new Error("调度状态响应无效");
     const d = res;
@@ -851,6 +1016,7 @@ async function openCreate() {
   isEditing.value = false;
   editingId.value = null;
   resetForm();
+  if (isProactiveTask.value) form.value.repeatRule = "cron";
   advancedSections.value = [];
   openingEditor.value = true;
   try {
@@ -876,7 +1042,7 @@ async function openEdit(row: Reminder) {
     repeatRule: row.repeatRule,
     enabled: !!row.enabled,
     generation: row.generation,
-    requestId: crypto.randomUUID(),
+    requestId: randomUUID(),
     timezone: row.timezone,
     weekdays: row.recurrence.weekdays || [],
     intervalSeconds: row.recurrence.intervalSeconds || 3600,
@@ -884,6 +1050,9 @@ async function openEdit(row: Reminder) {
     maxOccurrences: row.maxOccurrences || 0,
     systemNotification: row.systemNotification,
     channelTargets: (row.channelTargets || []).map((target) => ({ ...target })),
+    cron: row.recurrence.cron || "0 9 * * *",
+    ruleType: row.policy?.ruleType || "custom",
+    policy: { ...defaultProactivePolicy(), ...(row.policy || {}) },
   };
   advancedSections.value = row.endAt || row.maxOccurrences ? ["limits"] : [];
   openingEditor.value = true;
@@ -929,6 +1098,10 @@ async function saveReminder() {
     ElMessage.warning("请选择所属角色");
     return;
   }
+  if (isProactiveTask.value && !form.value.cron.trim()) {
+    ElMessage.warning("请输入 Cron 表达式");
+    return;
+  }
   saving.value = true;
   try {
     await owned.refresh();
@@ -936,6 +1109,7 @@ async function saveReminder() {
       throw new Error("执行核心已变化，请重新打开编辑页面");
     validateChannelTargets(form.value.channelTargets, channelOptions.value);
     const payload = {
+      kind: taskKind.value,
       title: form.value.title.trim(),
       content: form.value.content,
       channel: form.value.channel,
@@ -951,11 +1125,19 @@ async function saveReminder() {
         type: form.value.repeatRule,
         weekdays: form.value.weekdays,
         intervalSeconds: form.value.intervalSeconds,
+        cron: form.value.cron.trim(),
       },
       endAt: form.value.endAt || "",
       maxOccurrences: form.value.maxOccurrences,
       systemNotification: form.value.systemNotification,
       channelTargets: form.value.channelTargets,
+      policy: isProactiveTask.value
+        ? {
+            ...form.value.policy,
+            ruleType: form.value.ruleType,
+            ruleMaxPerDay: form.value.policy.ruleMaxPerDay,
+          }
+        : undefined,
     };
     if (isEditing.value && editingId.value) {
       saved(await request.put(`/api/reminders/${editingId.value}`, payload));
@@ -1055,7 +1237,7 @@ async function triggerNow(row: Reminder) {
 
 async function clearBackpressure() {
   try {
-    const result: any = await request.post("/api/reminders/clear-backpressure?kind=user_reminder");
+    const result: any = await request.post(`/api/reminders/clear-backpressure?kind=${taskKind.value}`);
     if (!Number.isInteger(result?.clearedCount)) throw new Error("服务未确认熔断清理结果");
     ElMessage.success("背压标记已清除");
   } catch (err: any) {
@@ -1082,6 +1264,15 @@ onMounted(async () => {
   await fetchCleanupConfig();
   await fetchCharacterOptions();
 });
+
+watch(
+  () => props.initialCharacterId,
+  (characterId) => {
+    if ((filterCharacterId.value || "") === (characterId || "")) return;
+    filterCharacterId.value = characterId || "";
+    void fetchReminders();
+  },
+);
 
 onUnmounted(() => {
   if (reminderRefreshTimer) clearInterval(reminderRefreshTimer);
@@ -1120,6 +1311,17 @@ h1 {
   color: var(--tp-text-secondary);
   line-height: 1.6;
   font-size: 14px;
+}
+.task-kind-switch {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+.task-kind-switch > span {
+  color: var(--tp-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 .header-actions,
 .row-actions,
@@ -1479,6 +1681,10 @@ h1 {
     align-items: flex-start;
     flex-direction: column;
     gap: 16px;
+  }
+  .task-kind-switch {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .overview {
     gap: 16px;

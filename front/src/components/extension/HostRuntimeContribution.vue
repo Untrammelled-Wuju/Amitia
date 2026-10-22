@@ -15,5 +15,5 @@ const runtimeComponent = computed(() => {
 </script>
 
 <template>
-  <component :is="runtimeComponent" v-if="runtimeComponent" />
+  <component :is="runtimeComponent" v-if="runtimeComponent" :context="context" />
 </template>

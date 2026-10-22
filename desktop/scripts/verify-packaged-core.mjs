@@ -34,13 +34,14 @@ async function main() {
     throw new Error("frozen source changed after AmitiaCore was built");
   }
 
+  const coreName = stamp.CORE_GOOS === "windows" ? "AmitiaCore.exe" : "AmitiaCore";
   const candidatePaths = [
-    resolve(unpackedDir, "resources/core/AmitiaCore.exe"),
-    resolve(unpackedDir, "app.asar.unpacked/resources/core/AmitiaCore.exe"),
+    resolve(unpackedDir, "resources/core", coreName),
+    resolve(unpackedDir, "app.asar.unpacked/resources/core", coreName),
   ];
   const corePath = candidatePaths.find((candidate) => existsSync(candidate));
   if (!corePath) {
-    throw new Error(`AmitiaCore.exe not found in package. Searched:\n${candidatePaths.map((p) => `  ${p}`).join("\n")}`);
+    throw new Error(`${coreName} not found in package. Searched:\n${candidatePaths.map((p) => `  ${p}`).join("\n")}`);
   }
 
   const actualSha = sha256File(corePath);

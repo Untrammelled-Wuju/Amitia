@@ -49,15 +49,17 @@ function refreshStatus() {
 
 async function loadTimingOverview() {
   try {
-    const { data } = await apiClient.post(
-      "/api/extension/action/proactive-character-tab/command",
-      {
-        context: {},
-        input: { action: "status", payload: {} },
-      },
-    );
-    const value = data?.result ?? data?.data?.result ?? data;
-    if (value) timingOverview.value = value;
+    const { data } = await apiClient.get("/api/reminders/status", {
+      params: { kind: "proactive_task" },
+    });
+    const value = data?.data ?? data;
+    if (value) {
+      timingOverview.value = {
+        schedulerRunning: value.schedulerRunning === true,
+        enabledRuleCount: value.enabled ?? 0,
+        totalRuleCount: value.total ?? 0,
+      };
+    }
   } catch {}
 }
 

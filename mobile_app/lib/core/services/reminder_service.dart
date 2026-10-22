@@ -35,10 +35,10 @@ class ReminderService {
         ),
       );
 
-  Future<List<ReminderDto>> list() async {
+  Future<List<ReminderDto>> list({String kind = 'user_reminder'}) async {
     final resp = await _api.get<List<dynamic>>(
       '/api/reminders',
-      queryParameters: {'kind': 'user_reminder'},
+      queryParameters: {'kind': kind},
     );
     if (resp == null) throw StateError('服务未返回任务列表');
     if (resp.any((item) => item is! Map)) throw StateError('任务列表包含无效记录');
@@ -109,11 +109,11 @@ class ReminderService {
     return result;
   }
 
-  Future<Map<String, dynamic>> status() async {
+  Future<Map<String, dynamic>> status({String kind = 'user_reminder'}) async {
     final result = _required(
       await _api.get<Map<String, dynamic>>(
         '/api/reminders/status',
-        queryParameters: {'kind': 'user_reminder'},
+        queryParameters: {'kind': kind},
       ),
     );
     if (result['schedulerRunning'] is! bool || result['total'] is! num)
@@ -141,11 +141,12 @@ class ReminderService {
 
   Future<List<Map<String, dynamic>>> prospective({
     String characterId = '',
+    String kind = 'user_reminder',
   }) async {
     final resp = await _api.get<List<dynamic>>(
       '/api/reminders/prospective',
       queryParameters: {
-        'kind': 'user_reminder',
+        'kind': kind,
         if (characterId.isNotEmpty) 'characterId': characterId,
       },
     );
@@ -156,11 +157,13 @@ class ReminderService {
         .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> queueSummary() async {
+  Future<Map<String, dynamic>> queueSummary({
+    String kind = 'user_reminder',
+  }) async {
     return _required(
       await _api.get<Map<String, dynamic>>(
         '/api/reminders/queue-summary',
-        queryParameters: {'kind': 'user_reminder'},
+        queryParameters: {'kind': kind},
       ),
     );
   }
@@ -169,12 +172,13 @@ class ReminderService {
     int page = 1,
     int pageSize = 20,
     String state = '',
+    String kind = 'user_reminder',
   }) async {
     final result = _required(
       await _api.get<Map<String, dynamic>>(
         '/api/reminders/trigger-history',
         queryParameters: {
-          'kind': 'user_reminder',
+          'kind': kind,
           'page': page,
           'pageSize': pageSize,
           if (state.isNotEmpty) 'state': state,
@@ -188,11 +192,11 @@ class ReminderService {
     return result;
   }
 
-  Future<bool> clearBackpressure() async {
+  Future<bool> clearBackpressure({String kind = 'user_reminder'}) async {
     final result = _required(
       await _api.post<Map<String, dynamic>>(
         '/api/reminders/clear-backpressure',
-        queryParameters: {'kind': 'user_reminder'},
+        queryParameters: {'kind': kind},
       ),
     );
     if (result['clearedCount'] is! num) throw StateError('服务未确认背压清理结果');

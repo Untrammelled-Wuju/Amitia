@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readdirSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -44,15 +44,44 @@ function runPnpm(args) {
 
 function parseTarget() {
   const args = new Set(process.argv.slice(2));
-  if (args.has("--linux") || args.has("--mac")) {
-    throw new Error(
-      "this release pipeline is Windows-only because bundled Node/Qdrant/SurrealDB assets are Windows artifacts; Linux/macOS release targets are intentionally not exposed",
-    );
+  const selected = [
+    ["--win", "win"],
+    ["--mac", "mac"],
+    ["--linux", "linux"],
+  ].filter(([flag]) => args.has(flag));
+  if (selected.length !== 1) {
+    throw new Error("select exactly one release platform: --win, --mac, or --linux");
   }
-  if (args.has("--arm64") || process.env.ELECTRON_BUILDER_ARCH === "arm64") {
-    throw new Error("Windows arm64 packaging is not frozen yet; supported final target is win-x64");
+  const platform = selected[0][1];
+  const arch = args.has("--arm64") || process.env.ELECTRON_BUILDER_ARCH === "arm64" ? "arm64" : "x64";
+  return {
+    dirOnly: args.has("--dir"),
+    platform,
+    arch,
+    runtimePlatform: platform === "win" ? "windows" : platform === "mac" ? "macos" : "linux",
+    goos: platform === "win" ? "windows" : platform === "mac" ? "darwin" : "linux",
+    goarch: arch === "arm64" ? "arm64" : "amd64",
+  };
+}
+
+function resolvePackagedContents(platform, arch) {
+  if (platform === "win") return resolve(releaseDir, "win-unpacked");
+  if (platform === "linux") {
+    const candidates = [
+      resolve(releaseDir, `linux${arch === "arm64" ? "-arm64" : ""}-unpacked`),
+      resolve(releaseDir, "linux-unpacked"),
+    ];
+    const found = candidates.find((candidate) => existsSync(candidate));
+    if (!found) throw new Error(`packaged Linux output missing: ${candidates.join(", ")}`);
+    return found;
   }
-  return { dirOnly: args.has("--dir"), platform: "win", arch: "x64" };
+  const macRoot = resolve(releaseDir, `mac${arch === "arm64" ? "-arm64" : ""}`);
+  if (!existsSync(macRoot)) throw new Error(`packaged macOS output missing: ${macRoot}`);
+  const appName = readdirSync(macRoot).find((name) => name.endsWith(".app"));
+  if (!appName) throw new Error(`packaged macOS app missing under ${macRoot}`);
+  const contents = resolve(macRoot, appName, "Contents");
+  if (!statSync(contents).isDirectory()) throw new Error(`packaged macOS Contents missing: ${contents}`);
+  return contents;
 }
 
 function ensureLatestUpdateMetadata() {
@@ -80,17 +109,28 @@ async function main() {
 
   console.log("[build-release] building AmitiaCore from the frozen source...");
   run(process.execPath, [buildAmitiaCorePath], {
-    env: { ...process.env, ELECTRON_BUILDER_ARCH: target.arch },
+    env: {
+      ...process.env,
+      ELECTRON_BUILDER_ARCH: target.arch,
+      AMITIA_CORE_GOOS: target.goos,
+      AMITIA_CORE_GOARCH: target.goarch,
+    },
   });
 
   // Recheck after the Core build. Any source mutation during build invalidates release.
   await verifyPreBuildGates();
 
   console.log("[build-release] verifying external runtime assets...");
-  run(process.execPath, [prepareRuntimeAssetsPath]);
+  run(process.execPath, [prepareRuntimeAssetsPath], {
+    env: {
+      ...process.env,
+      AMITIA_RELEASE_PLATFORM: target.runtimePlatform,
+      AMITIA_RELEASE_ARCH: target.arch,
+    },
+  });
   await verifyPreBuildGates();
 
-  const builderArgs = [cliPath, "--win", "--x64", "--publish", "never"];
+  const builderArgs = [cliPath, `--${target.platform}`, `--${target.arch}`, "--publish", "never"];
   if (target.dirOnly) builderArgs.push("--dir");
   builderArgs.push(`--config.directories.output=${releaseDir}`);
 
@@ -99,9 +139,9 @@ async function main() {
     env: { ...process.env, ELECTRON_BUILDER_COMPRESSION_LEVEL: compressionLevel },
   });
 
-  ensureLatestUpdateMetadata();
+  if (!target.dirOnly) ensureLatestUpdateMetadata();
 
-  const unpacked = resolve(releaseDir, "win-unpacked");
+  const unpacked = resolvePackagedContents(target.platform, target.arch);
   run(process.execPath, [verifyPackagedPath, unpacked]);
   run(process.execPath, [verifyPackagedCorePath, unpacked]);
   run(process.execPath, [verifyPackagedRuntimeAssetsPath, unpacked]);
@@ -110,7 +150,7 @@ async function main() {
   await verifyPreBuildGates();
 
   if (target.dirOnly) {
-    console.log("[build-release] PASS: unpacked win-x64 package verified");
+    console.log(`[build-release] PASS: unpacked ${target.platform}-${target.arch} package verified`);
     return;
   }
 

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type {
   AgentSkillDirectorySelection,
+  DesktopClientError,
   DeploymentModeConfig,
   DesktopEnvironment,
   ExtensionPackageSelection,
@@ -131,6 +132,12 @@ const api = {
       }
       throw error;
     }
+  },
+  getClientDiagnostics(): Promise<DesktopClientError[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getClientDiagnostics);
+  },
+  clearClientDiagnostics(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.clearClientDiagnostics);
   },
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }> {
     return ipcRenderer.invoke(IPC_CHANNELS.publishLocalVoiceASRFinal, event);

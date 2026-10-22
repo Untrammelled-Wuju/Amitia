@@ -11,8 +11,12 @@ import '../ui_runtime/ui_device_identity.dart';
 
 Future<String> _resolveAppVersion(WidgetRef ref) async {
   try {
-    final installed = await ref.read(appUpdateServiceProvider).getInstalledInfo();
-    if (installed.versionName.trim().isNotEmpty) return installed.versionName.trim();
+    final installed = await ref
+        .read(appUpdateServiceProvider)
+        .getInstalledInfo();
+    if (installed.versionName.trim().isNotEmpty) {
+      return installed.versionName.trim();
+    }
   } catch (_) {}
   return currentUIClientInfo().appVersion;
 }
@@ -37,10 +41,11 @@ Future<String> _resolveDeviceId() async {
 List<Map<String, dynamic>> collectUserFeedbackClientErrors(WidgetRef ref) {
   final entries = ref
       .read(debugLogServiceProvider)
-      .entries
-      .where((entry) => entry.level == DebugLogLevel.error)
+      .errorEntries
       .toList(growable: false);
-  final recent = entries.length > 15 ? entries.sublist(entries.length - 15) : entries;
+  final recent = entries.length > 15
+      ? entries.sublist(entries.length - 15)
+      : entries;
   return recent
       .map(
         (entry) => <String, dynamic>{
@@ -90,7 +95,11 @@ Future<Map<String, dynamic>> buildUserFeedbackPayload({
     'contact': contact,
     'includeLogs': includeLogs,
     'clientErrors': collectUserFeedbackClientErrors(ref),
-    'platform': Platform.isAndroid ? 'android' : Platform.isIOS ? 'ios' : Platform.operatingSystem,
+    'platform': Platform.isAndroid
+        ? 'android'
+        : Platform.isIOS
+        ? 'ios'
+        : Platform.operatingSystem,
     'clientType': 'mobile',
     'appVersion': appVersion,
     'runtimeMode': runtimeMode,

@@ -7,6 +7,7 @@ import {
   corePathCandidates,
   databaseArchiveNames,
   databaseSourceCandidates,
+  firstExisting,
   resolveCorePath,
   runtimeTarget,
 } from "./platform-artifacts";
@@ -69,7 +70,7 @@ describe("platform-artifacts", () => {
     fs.mkdirSync(targetDir, { recursive: true });
     fs.writeFileSync(path.join(targetDir, "qdrant.zip"), "darwin", "utf8");
     const candidates = databaseSourceCandidates(sandbox, "qdrant", "darwin", "arm64");
-    expect(candidates[0]).toBe(path.join(targetDir, "qdrant.zip"));
+    expect(firstExisting(candidates)).toBe(path.join(targetDir, "qdrant.zip"));
   });
 
   it("数据库资源支持额外根目录回退", () => {

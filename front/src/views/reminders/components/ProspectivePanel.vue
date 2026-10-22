@@ -74,6 +74,10 @@ defineEmits<{
   clearBackpressure: [];
 }>();
 
+const props = withDefaults(defineProps<{ kind?: "user_reminder" | "proactive_task" }>(), {
+  kind: "user_reminder",
+});
+
 const items = ref<
   Array<{
     id: string;
@@ -92,7 +96,7 @@ async function fetchItems() {
   loading.value = true;
   try {
     const res: any = await request.get("/api/reminders/prospective", {
-      params: { kind: "user_reminder" },
+      params: { kind: props.kind },
     });
     if (!Array.isArray(res)) throw new Error("待执行任务响应无效");
     items.value = res;
@@ -107,7 +111,7 @@ async function fetchItems() {
 async function fetchQueueSummary() {
   try {
     const res: any = await request.get("/api/reminders/queue-summary", {
-      params: { kind: "user_reminder" },
+      params: { kind: props.kind },
     });
     if (!res || typeof res.backpressure !== "boolean" || !Number.isFinite(res.depth))
       throw new Error("队列状态响应无效");

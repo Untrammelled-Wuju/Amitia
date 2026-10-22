@@ -175,6 +175,7 @@ function routeName(route: ProviderRouteDefinition): string {
 }
 
 export function syncProviderRoutes(router: Router, store: ExtensionUIStore): void {
+  if (!store.snapshot) return;
   const desired = new Map<string, ProviderRouteDefinition>();
   for (const route of collectEffectiveProviderRoutes(store)) desired.set(routeName(route), route);
 

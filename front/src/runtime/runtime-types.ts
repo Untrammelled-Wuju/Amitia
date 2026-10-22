@@ -36,6 +36,13 @@ export interface DesktopEnvironment {
   isPackaged: boolean;
 }
 
+export interface DesktopClientError {
+  message: string;
+  stack: string;
+  source: string;
+  at: string;
+}
+
 export interface AgentSkillDirectorySelection {
   rootName: string;
   files: Array<{ path: string; name: string; base64: string }>;
@@ -169,6 +176,8 @@ export interface AmitiaDesktopAPI {
   ): () => void;
   onUpdateError(callback: (event: unknown, data: unknown) => void): () => void;
   getBackendAuthHeaders(target?: "local" | "business"): Promise<Record<string, string>>;
+  getClientDiagnostics?(): Promise<DesktopClientError[]>;
+  clearClientDiagnostics?(): Promise<void>;
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }>;
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null>;
   getMeshStatus(): Promise<{ state: string; cloudBaseUrl: string; deviceId: string; runtimeId: string; runtimeSessionId: string; fingerprint?: string; coreId?: string; providerChangePending?: boolean; successorCoreId?: string; previousCoreId?: string; providerChangeId?: string } | null>;

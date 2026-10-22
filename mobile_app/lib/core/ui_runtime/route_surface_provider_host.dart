@@ -11,12 +11,15 @@ String? capabilityForBuiltinRoute(String route) {
   if (route == '/chat') return null; // Conversation runtime has its own host.
   if (route == '/characters') return UICapability.characterShell;
   if (route.startsWith('/characters/') &&
-      (route.endsWith('/life-rules') || route.endsWith('/proactive'))) {
+      (route.endsWith('/life-rules') ||
+          route.endsWith('/active-task') ||
+          route.endsWith('/proactive'))) {
     return UICapability.pageProvider;
   }
   if (route.startsWith('/characters/')) return UICapability.characterDetail;
-  if (route == '/memory' || route == '/memory/manager')
+  if (route == '/memory' || route == '/memory/manager') {
     return UICapability.memoryShell;
+  }
   if (route.startsWith('/memory/')) return UICapability.memoryDetail;
   if (route == '/settings/ui-providers') return null;
   if (route == '/settings') return UICapability.settingsShell;
@@ -57,11 +60,32 @@ class RouteSurfaceProviderHost extends ConsumerWidget {
       providerId: selected?.providerId,
       context: <String, dynamic>{
         'route': route,
+        'pathParameters': providerRoutePathParameters(route),
         'surface': capability,
         'surfaceId': canonicalUISurfaceId(route),
         'routeAliases': uiRouteAliases(route).toList(growable: false),
+        ...providerRouteIdentity(route),
       },
       fallback: child,
     );
   }
+}
+
+Map<String, String> providerRoutePathParameters(String route) {
+  final segments = Uri.tryParse(route)?.pathSegments ?? const <String>[];
+  if (segments.length >= 3 && segments.first == 'characters') {
+    return <String, String>{'id': segments[1]};
+  }
+  return const <String, String>{};
+}
+
+Map<String, String> providerRouteIdentity(String route) {
+  final parameters = providerRoutePathParameters(route);
+  final characterId = (parameters['characterId'] ?? parameters['id'] ?? '')
+      .trim();
+  final conversationId = (parameters['conversationId'] ?? '').trim();
+  return <String, String>{
+    if (characterId.isNotEmpty) 'characterId': characterId,
+    if (conversationId.isNotEmpty) 'conversationId': conversationId,
+  };
 }

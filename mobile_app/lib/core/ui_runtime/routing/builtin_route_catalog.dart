@@ -230,16 +230,19 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     ),
   ),
   GoRoute(
-    path: '/characters/:id/proactive',
+    path: '/characters/:id/active-task',
     pageBuilder: (context, state) => slideFadePage(
       context: context,
       state: state,
-      child: const PluginUnavailablePage(
-        title: '主动任务',
-        description: '请安装并启用主动任务插件后配置规则、调度和运行历史。',
-        fallbackRoute: AppRoutes.characters,
+      child: RemindersPage(
+        initialCharacterId: state.pathParameters['id'] ?? '',
       ),
     ),
+  ),
+  GoRoute(
+    path: '/characters/:id/proactive',
+    redirect: (context, state) =>
+        '/characters/${state.pathParameters['id']}/active-task',
   ),
   GoRoute(
     path: '/characters/:id/psyche',

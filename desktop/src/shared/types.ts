@@ -56,6 +56,13 @@ export interface DesktopEnvironment {
   isPackaged: boolean;
 }
 
+export interface DesktopClientError {
+  message: string;
+  stack: string;
+  source: string;
+  at: string;
+}
+
 export interface ManagedProcessDefinition {
   id: string;
   executable: string;

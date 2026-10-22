@@ -38,6 +38,31 @@ export function collectClientErrors(): TrackedClientError[] {
 
 export function clearClientErrors(): void {
   tracked.length = 0;
+  if (typeof window !== "undefined") {
+    void window.amitiaDesktop?.clearClientDiagnostics?.().catch(() => undefined);
+  }
+}
+
+export async function collectAllClientErrors(): Promise<TrackedClientError[]> {
+  const rendererErrors = collectClientErrors();
+  const desktopErrors = typeof window !== "undefined"
+    ? await window.amitiaDesktop?.getClientDiagnostics?.().catch(() => []) ?? []
+    : [];
+  const merged = [...desktopErrors, ...rendererErrors];
+  const seen = new Set<string>();
+  const timestamp = (value: string): number => {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  return merged
+    .filter((item) => {
+      const key = `${item.at}\u0000${item.source}\u0000${item.message}\u0000${item.stack}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => timestamp(left.at) - timestamp(right.at))
+    .slice(-20);
 }
 
 function describeReason(reason: unknown): { message: string; stack: string } {

@@ -20,7 +20,7 @@ export const repositoryRoot = resolve(desktopRoot, "..");
 export const releaseDir = resolve(desktopRoot, process.env.AMITIA_RELEASE_DIR?.trim() || "release");
 export const releaseGateStampPath = resolve(releaseDir, ".desktop-pet-release-gate.json");
 const coreBuildStampPath = resolve(desktopRoot, "resources/core/.amitiacore-build.json");
-const runtimeAssetsManifestPath = resolve(desktopRoot, "resources/core/.release-runtime-assets.json");
+const runtimeAssetsManifestPath = resolve(desktopRoot, "resources/release-runtime/.release-runtime-assets.json");
 
 export function sha256Buffer(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
@@ -83,7 +83,7 @@ function readRuntimeAssetsManifest() {
     throw new Error("release runtime assets manifest missing; stage and verify runtime assets before packaging");
   }
   const manifest = JSON.parse(readFileSync(runtimeAssetsManifestPath, "utf8"));
-  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.entries) || manifest.entries.length === 0) {
+  if (manifest.schemaVersion !== 2 || !Array.isArray(manifest.entries) || manifest.entries.length === 0) {
     throw new Error("release runtime assets manifest is invalid");
   }
   for (const entry of manifest.entries) {
@@ -124,6 +124,9 @@ export async function writeReleaseGateStamp() {
       sourceGateSha256: coreBuild.CORE_SOURCE_GATE_SHA256,
     },
     runtimeAssets: {
+      platform: runtimeAssets.platform,
+      arch: runtimeAssets.arch,
+      target: runtimeAssets.target,
       sourceGateSha256: runtimeAssets.sourceGateSha256,
       entries: runtimeAssets.entries,
     },

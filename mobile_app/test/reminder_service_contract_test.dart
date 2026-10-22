@@ -44,10 +44,14 @@ void main() {
         'ownerId': 'core',
         'saved': true,
         'enabled': 1,
+        'policy': {'activeLevel': 40},
       },
     ];
     expect((await ReminderService(api).list()).single.id, 'task');
     expect(api.query?['kind'], 'user_reminder');
+    final proactive = await ReminderService(api).list(kind: 'proactive_task');
+    expect(api.query?['kind'], 'proactive_task');
+    expect(proactive.single.policy['activeLevel'], 40);
   });
   test('创建必须返回持久化确认与执行核心版本', () async {
     final api = _Api()..response = {'id': 'task'};
@@ -74,6 +78,9 @@ void main() {
     await expectLater(ReminderService(api).channels(), throwsStateError);
     api.response = {'items': [], 'total': 0};
     expect((await ReminderService(api).triggerHistory())['total'], 0);
+    expect(api.query?['kind'], 'user_reminder');
+    await ReminderService(api).triggerHistory(kind: 'proactive_task');
+    expect(api.query?['kind'], 'proactive_task');
     api.response = <String, dynamic>{};
     await expectLater(ReminderService(api).triggerHistory(), throwsStateError);
   });

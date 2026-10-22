@@ -1,6 +1,6 @@
 {
   "name": "@amitia/desktop",
-  "version": "26.2.0-beta.12",
+  "version": "26.2.0-beta.13",
   "desktopPetRuntimeVersion": "1.0.0",
   "desktopPetRuntimeContractVersion": "1.0.0",
   "private": true,
@@ -11,6 +11,8 @@
     "build": "tsc -p tsconfig.json && vite build && node scripts/copy-static-assets.mjs && node scripts/verify-renderer-build.mjs && node scripts/verify-desktop-pet-package.mjs",
     "dist:win": "node scripts/build-release.mjs --win --x64",
     "dist:win:dir": "node scripts/build-release.mjs --win --x64 --dir",
+    "dist:mac:dir": "node scripts/build-release.mjs --mac --arm64 --dir",
+    "dist:linux:dir": "node scripts/build-release.mjs --linux --x64 --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "package": "node scripts/build-release.mjs --win --x64",

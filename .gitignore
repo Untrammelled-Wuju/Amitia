@@ -104,6 +104,8 @@ backend/testdata/extensions/**/dist-candidate-*/
 
 # Desktop packaging inputs and local publishing credentials
 /desktop/resources/core/
+/desktop/resources/release-runtime/
+/desktop/resources/databases/
 /desktop/scripts/.publish-config.json
 /config/admin-mysql.local.json
 

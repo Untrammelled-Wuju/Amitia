@@ -8,6 +8,7 @@ import { useExtensionUIStore } from "@/stores/extensionUI";
 import { isProviderCompatible, selectProviderEntry, trustedWebModule } from "@/ui-runtime/providerRuntime";
 import type { UIProviderCapability, UIProviderDefinition, UIProviderRenderContext } from "@/ui-runtime/types";
 import { providerSlotId } from "@/ui-runtime/providerSlotAdapter";
+import { resolveRouteIdentity } from "@/ui-runtime/routeContext";
 
 defineOptions({ inheritAttrs: false });
 
@@ -66,17 +67,40 @@ const sourceContribution = computed(() => {
 });
 const hasExternalRenderer = computed(() => !!provider.value && !provider.value.builtin && !!entry.value && (!!trustedComponent.value || !!sourceContribution.value));
 const mode = computed(() => provider.value?.mode ?? "replace");
-const mergedContext = computed<Record<string, unknown>>(() => ({
-  route: route.fullPath,
-  platform: env.platform,
-  host: env.host,
-  os: env.os,
-  locale: navigator.language,
-  capability: props.capability,
-  providerId: provider.value?.providerId,
-  providerMode: provider.value?.mode,
-  ...(props.context ?? {}),
-}));
+const mergedContext = computed<Record<string, unknown>>(() => {
+  const identity = resolveRouteIdentity(
+    (props.context?.routeParams as Record<string, unknown> | undefined) ?? route.params,
+  );
+  return {
+    route: route.fullPath,
+    platform: env.platform,
+    host: env.host,
+    os: env.os,
+    locale: navigator.language,
+    capability: props.capability,
+    providerId: provider.value?.providerId,
+    providerMode: provider.value?.mode,
+    ...identity,
+    ...(props.context ?? {}),
+    characterId: String(props.context?.characterId || identity.characterId || ""),
+    conversationId: String(props.context?.conversationId || identity.conversationId || ""),
+    scope: {
+      ...(props.context?.scope as Record<string, unknown> | undefined),
+      characterId: String(
+        props.context?.characterId
+        || (props.context?.scope as Record<string, unknown> | undefined)?.characterId
+        || identity.characterId
+        || "",
+      ),
+      conversationId: String(
+        props.context?.conversationId
+        || (props.context?.scope as Record<string, unknown> | undefined)?.conversationId
+        || identity.conversationId
+        || "",
+      ),
+    },
+  };
+});
 
 const surfaceSlotId = computed(() => providerSlotId(props.capability));
 const rootEl = computed(() => activeRef.value?.rootEl ?? activeRef.value?.$el ?? slotBoundaryRef.value?.rootEl ?? slotBoundaryRef.value?.$el ?? null);

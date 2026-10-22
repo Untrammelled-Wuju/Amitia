@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('plugin character subroutes resolve through page providers', () {
     expect(
-      capabilityForBuiltinRoute('/characters/c1/proactive'),
+      capabilityForBuiltinRoute('/characters/c1/active-task'),
       UICapability.pageProvider,
     );
     expect(
@@ -15,6 +15,13 @@ void main() {
     expect(
       capabilityForBuiltinRoute('/characters/c1'),
       UICapability.characterDetail,
+    );
+  });
+
+  test('character route identity is available to plugin providers', () {
+    expect(
+      providerRouteIdentity('/characters/c1/active-task'),
+      <String, String>{'characterId': 'c1'},
     );
   });
 }
