@@ -1,33 +1,33 @@
 # AMITIA Release Gate Report
 
-Generated: 2026-10-23T03:27:51.043Z
+Generated: 2026-10-23T15:15:13.167Z
 
 Status: **PASS**
 
 | Gate | Result |
 |---|---|
-| Canonical freeze verification | PASS (11068 files) |
-| Source Gate SHA256 | `98386ed6a460e5c56e03d4e451ab8f611ae0a0832163bebd5dac804ba9557e9f` |
+| Canonical freeze verification | PASS (11107 files) |
+| Source Gate SHA256 | `64f0d5f42ac0d3607e7b2d8367a9e3ebafa2fe4d58706be331afd760508fe6c7` |
 | AmitiaCore provenance | PASS |
 | Runtime asset provenance | PASS (4 files) |
 | Packaged artifact integrity | PASS |
 
 ## Core provenance
 
-- Core SHA256: `8c440cc514f2132ddb824176364a14e2efc579fec2c0ad162d92d9783abcede3`
-- Core SourceGate SHA256: `98386ed6a460e5c56e03d4e451ab8f611ae0a0832163bebd5dac804ba9557e9f`
+- Core SHA256: `e34e40f4112ea8d651166172e7195c1880f5f7c8a80c5b2e8102f005501dd41d`
+- Core SourceGate SHA256: `64f0d5f42ac0d3607e7b2d8367a9e3ebafa2fe4d58706be331afd760508fe6c7`
 - Go: go version go1.26.1 darwin/arm64
-- Commit: 8a87e06
+- Commit: affb5ac
 
 ## Runtime assets
 
-- Runtime asset SourceGate SHA256: `98386ed6a460e5c56e03d4e451ab8f611ae0a0832163bebd5dac804ba9557e9f`
+- Runtime asset SourceGate SHA256: `64f0d5f42ac0d3607e7b2d8367a9e3ebafa2fe4d58706be331afd760508fe6c7`
 - Verified packaged runtime files: 4
 
 ## Release artifacts
 
 | Artifact | Bytes | SHA256 |
 |---|---:|---|
-| AmitiaSetup-26.2.0-beta.14-x64.exe | 275919914 | `5ace97b1cb10ee558507fcca76648a5e7c83ed0d1cbfa13793b6071aa51006dd` |
-| AmitiaSetup-26.2.0-beta.14-x64.exe.blockmap | 287084 | `2fabb6a47fc934f4b094d76710067c313082df07bf9a59f4219ac239cd45a3d2` |
-| latest.yml | 1976 | `56b36f94d7a121864f83cfe8a106f87d746f95a8b9939e427276bd851f77b89b` |
+| AmitiaSetup-26.2.0-beta.15-x64.exe | 276080686 | `5d9fe50d734ef23891cb54a2016e1ad6682461d1ad8d5d1ffea0180993e3731b` |
+| AmitiaSetup-26.2.0-beta.15-x64.exe.blockmap | 287378 | `ec2ce2c8c336deb0c30c4ca62102e39067d027b7489d83f17d9ae5b398e2db87` |
+| latest.yml | 7725 | `f6b1f836a9de79758728f598ed3d4ef3241bf1ce083ee7617e9b81235cd6965b` |
