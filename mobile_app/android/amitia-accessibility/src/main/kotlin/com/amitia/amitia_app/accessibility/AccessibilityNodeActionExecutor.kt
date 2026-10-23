@@ -130,24 +130,40 @@ object AccessibilityNodeActionExecutor {
                 )
                 "accessibility_focus" -> node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
                 "clear_accessibility_focus" -> node.performAction(AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS)
-                "show_tooltip" -> node.performAction(
-                    AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_TOOLTIP.id,
-                )
-                "hide_tooltip" -> node.performAction(
-                    AccessibilityNodeInfo.AccessibilityAction.ACTION_HIDE_TOOLTIP.id,
-                )
-                "ime_enter" -> node.performAction(
-                    AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id,
-                )
-                "press_and_hold" -> node.performAction(
-                    AccessibilityNodeInfo.AccessibilityAction.ACTION_PRESS_AND_HOLD.id,
-                    Bundle().apply {
-                        putInt(
-                            AccessibilityNodeInfo.ACTION_ARGUMENT_PRESS_AND_HOLD_DURATION_MILLIS_INT,
-                            intArg(args, "durationMs", 600),
-                        )
-                    },
-                )
+                "show_tooltip" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    node.performAction(
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_TOOLTIP.id,
+                    )
+                } else {
+                    false
+                }
+                "hide_tooltip" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    node.performAction(
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_HIDE_TOOLTIP.id,
+                    )
+                } else {
+                    false
+                }
+                "ime_enter" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    node.performAction(
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id,
+                    )
+                } else {
+                    false
+                }
+                "press_and_hold" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    node.performAction(
+                        AccessibilityNodeInfo.AccessibilityAction.ACTION_PRESS_AND_HOLD.id,
+                        Bundle().apply {
+                            putInt(
+                                AccessibilityNodeInfo.ACTION_ARGUMENT_PRESS_AND_HOLD_DURATION_MILLIS_INT,
+                                intArg(args, "durationMs", 600),
+                            )
+                        },
+                    )
+                } else {
+                    false
+                }
                 "next_at_movement_granularity" -> node.performAction(
                     AccessibilityNodeInfo.ACTION_NEXT_AT_MOVEMENT_GRANULARITY,
                     movementBundle(args),
@@ -223,7 +239,7 @@ object AccessibilityNodeActionExecutor {
         AccessibilityNodeInfo.ACTION_PREVIOUS_HTML_ELEMENT -> "previous_html_element"
         AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id -> "set_progress"
         else -> when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
                 action == AccessibilityNodeInfo.AccessibilityAction.ACTION_PRESS_AND_HOLD.id -> "press_and_hold"
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
                 action == AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_TOOLTIP.id -> "show_tooltip"
