@@ -275,16 +275,24 @@ func (s *Server) saveArtifact(actor adminActor, releaseID uint, kind, originalNa
 		SHA512:       sha512Value,
 		SHA512Base64: sha512Base64,
 	}
-	err = s.db.Transaction(func(tx *gorm.DB) error {
+	if err := s.persistArtifactRecord(actor, &release, &artifact); err != nil {
+		return nil, err
+	}
+	s.writeAudit(actor, "release.artifact.upload", &release, "success", fmt.Sprintf("%s %s", kind, originalName))
+	return &artifact, nil
+}
+
+func (s *Server) persistArtifactRecord(actor adminActor, release *UpdateRelease, artifact *UpdateReleaseArtifact) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var existing UpdateReleaseArtifact
-		if err := tx.Where("release_id = ? AND kind = ?", release.ID, kind).First(&existing).Error; err == nil {
+		if err := tx.Where("release_id = ? AND kind = ?", release.ID, artifact.Kind).First(&existing).Error; err == nil {
 			artifact.ID = existing.ID
 			artifact.CreatedAt = existing.CreatedAt
-			if err := tx.Save(&artifact).Error; err != nil {
+			if err := tx.Save(artifact).Error; err != nil {
 				return err
 			}
 		} else if errors.Is(err, gorm.ErrRecordNotFound) {
-			if err := tx.Create(&artifact).Error; err != nil {
+			if err := tx.Create(artifact).Error; err != nil {
 				return err
 			}
 		} else {
@@ -296,10 +304,9 @@ func (s *Server) saveArtifact(actor adminActor, releaseID uint, kind, originalNa
 		}).Error
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	s.writeAudit(actor, "release.artifact.upload", &release, "success", fmt.Sprintf("%s %s", kind, originalName))
-	return &artifact, nil
+	return nil
 }
 
 func validateArtifactName(product, kind, name string) error {

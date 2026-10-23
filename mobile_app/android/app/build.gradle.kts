@@ -456,6 +456,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging:25.1.3")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    testImplementation("junit:junit:4.13.2")
 }
 
 val accessibilityProviderProject = project(":amitia-accessibility")

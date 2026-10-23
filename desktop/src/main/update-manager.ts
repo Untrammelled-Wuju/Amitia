@@ -8,6 +8,7 @@ import {
   desktopUpdateChannel,
   resolveAllowBetaChannel,
 } from "./update-channel";
+import { installSegmentedFullDownload } from "./segmented-updater";
 
 let mainWindow: BrowserWindow | null = null;
 let startupResolve: (() => void) | null = null;
@@ -72,6 +73,7 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
   autoUpdater.logger = log;
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  installSegmentedFullDownload(autoUpdater);
   allowBetaChannel = loadAllowBetaChannel();
   applyChannelPreference();
 

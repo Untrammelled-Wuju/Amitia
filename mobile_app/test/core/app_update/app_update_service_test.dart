@@ -68,6 +68,14 @@ void main() {
       (downloadCall.arguments as Map<Object?, Object?>)['url'],
       'https://example.com/app.apk',
     );
+    expect(
+      (downloadCall.arguments as Map<Object?, Object?>)['expectedSize'],
+      1234,
+    );
+    expect(
+      (downloadCall.arguments as Map<Object?, Object?>)['expectedSha256'],
+      'a' * 64,
+    );
     final installCall = calls.firstWhere((call) => call.method == 'install');
     expect((installCall.arguments as Map<Object?, Object?>)['downloadId'], 42);
     service.dispose();

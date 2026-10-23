@@ -84,6 +84,20 @@ AMITIA_ADMIN_COOKIE_SECURE=true
 
 上传顺序固定为 APK、签名文件、通道清单。手机端客户端不会接受低于已安装 `versionCode` 的清单。
 
+## 并发上传与下载
+
+管理端大文件上传使用 8 MiB 分片和 4 路并发：
+
+- `POST /api/v1/admin/releases/:id/upload-sessions` 创建上传会话。
+- `GET /api/v1/admin/releases/:id/upload-sessions/:uploadId` 查询已上传分片。
+- `PUT /api/v1/admin/releases/:id/upload-sessions/:uploadId/parts/:index` 上传单个分片，`X-Chunk-SHA256` 为分片摘要。
+- `POST /api/v1/admin/releases/:id/upload-sessions/:uploadId/complete` 校验全部分片、合并并计算最终 SHA-256 和 SHA-512。
+- `DELETE /api/v1/admin/releases/:id/upload-sessions/:uploadId` 取消会话。
+
+上传会话临时文件和元数据保存在管理数据目录的 `artifact-uploads`，默认 24 小时清理。前端会记录未完成会话，页面刷新后只补传缺失分片。
+
+桌面端继续优先使用 electron-updater 差分下载，只有完整安装包下载才切换为 8 路 Range 下载。Android 使用前台 `dataSync` 服务进行自适应并发下载，Wi-Fi 默认 4 路、蜂窝网络默认 2 路；服务器不支持 Range 时自动回退单线程。两端都会校验清单中的文件大小和哈希，失败时保留可恢复分片或在完整校验失败后清理。
+
 ## 服务器部署
 
 服务器端管理库使用 `deploy/mysql/amitia-admin-seed.sql` 初始化，可在管理服务首次启动前后执行，重复执行不会产生重复账号：

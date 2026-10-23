@@ -1,13 +1,11 @@
 package com.amitia.amitia_app.update
 
-import android.app.DownloadManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -22,6 +20,7 @@ import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadLocalRandom
 
 class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     companion object {
@@ -119,9 +118,12 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         try {
             val url = call.argument<String>("url").orEmpty()
             val fileNameRaw = call.argument<String>("fileName").orEmpty()
+            val expectedSize = call.argument<Number>("expectedSize")?.toLong() ?: -1L
+            val expectedSha256 = call.argument<String>("expectedSha256").orEmpty().lowercase()
             val fileName = fileNameRaw.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            if (url.isEmpty() || fileName.isEmpty()) {
-                result.error("DOWNLOAD_INVALID_REQUEST", "download url and file name are required", null)
+            if (url.isEmpty() || fileName.isEmpty() || expectedSize <= 0L ||
+                !expectedSha256.matches(Regex("[a-f0-9]{64}"))) {
+                result.error("DOWNLOAD_INVALID_REQUEST", "download url, file name, size and hash are required", null)
                 return
             }
             val uri = Uri.parse(url)
@@ -129,21 +131,29 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.error("DOWNLOAD_INSECURE_URL", "update downloads require https", null)
                 return
             }
-            appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                ?.let { directory -> File(directory, fileName).delete() }
-            val manager = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val request = DownloadManager.Request(uri)
-                .setTitle(fileName)
-                .setMimeType("application/vnd.android.package-archive")
-                .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(false)
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalFilesDir(
-                    appContext,
-                    Environment.DIRECTORY_DOWNLOADS,
-                    fileName,
-                )
-            result.success(manager.enqueue(request))
+            val downloadId = System.currentTimeMillis() * 1000 +
+                ThreadLocalRandom.current().nextLong(0, 1000)
+            val directory = appContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+                ?: File(appContext.filesDir, "downloads")
+            directory.mkdirs()
+            AppUpdateDownloadStore.initialize(
+                appContext,
+                downloadId,
+                url,
+                fileName,
+                expectedSize,
+                expectedSha256,
+                File(directory, fileName).absolutePath,
+            )
+            SegmentedApkDownloadService.start(
+                appContext,
+                downloadId,
+                url,
+                fileName,
+                expectedSize,
+                expectedSha256,
+            )
+            result.success(downloadId)
         } catch (error: Throwable) {
             result.error("DOWNLOAD_START_FAILED", error.message ?: "download could not be started", null)
         }
@@ -156,37 +166,7 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.error("DOWNLOAD_INVALID_REQUEST", "downloadId is required", null)
                 return
             }
-            val manager = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            manager.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
-                if (!cursor.moveToFirst()) {
-                    result.success(mapOf("statusCode" to -1, "status" to "missing"))
-                    return
-                }
-                val status = cursor.getInt(
-                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS),
-                )
-                val downloaded = cursor.getLong(
-                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR),
-                )
-                val total = cursor.getLong(
-                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES),
-                )
-                val reason = cursor.getInt(
-                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON),
-                )
-                val localUriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
-                val localUri = if (localUriIndex >= 0) cursor.getString(localUriIndex) else null
-                result.success(
-                    mapOf(
-                        "statusCode" to status,
-                        "status" to statusName(status),
-                        "downloadedBytes" to downloaded,
-                        "totalBytes" to total,
-                        "reasonCode" to reason,
-                        "localUri" to localUri,
-                    ),
-                )
-            }
+            result.success(AppUpdateDownloadStore.status(appContext, downloadId))
         } catch (error: Throwable) {
             result.error("DOWNLOAD_STATUS_FAILED", error.message ?: "download status is unavailable", null)
         }
@@ -250,6 +230,7 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     PendingIntent.FLAG_UPDATE_CURRENT or pendingIntentMutabilityFlag(),
                 )
                 session.commit(pendingIntent.intentSender)
+                AppUpdateDownloadStore.localFile(appContext, downloadId)?.delete()
             } catch (error: Throwable) {
                 runCatching { session.abandon() }
                 throw error
@@ -261,16 +242,14 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun downloadedUri(downloadId: Long): Uri? {
-        val manager = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        manager.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
-            if (!cursor.moveToFirst()) return null
-            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-            if (status != DownloadManager.STATUS_SUCCESSFUL) {
-                throw IllegalStateException("update download is not complete")
-            }
-            val index = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI)
-            return cursor.getString(index)?.let(Uri::parse)
+        val status = AppUpdateDownloadStore.status(appContext, downloadId)
+        if ((status["statusCode"] as? Int) != 8) {
+            throw IllegalStateException("update download is not complete")
         }
+        val file = AppUpdateDownloadStore.localFile(appContext, downloadId)
+            ?: throw IllegalStateException("downloaded update file is unavailable")
+        if (!file.isFile) throw FileNotFoundException("downloaded update file is unavailable")
+        return Uri.fromFile(file)
     }
 
     private fun openInstallPermissionSettings(result: MethodChannel.Result) {
@@ -332,15 +311,6 @@ class AppUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
         }
-    }
-
-    private fun statusName(status: Int): String = when (status) {
-        DownloadManager.STATUS_PENDING -> "pending"
-        DownloadManager.STATUS_RUNNING -> "running"
-        DownloadManager.STATUS_PAUSED -> "paused"
-        DownloadManager.STATUS_SUCCESSFUL -> "successful"
-        DownloadManager.STATUS_FAILED -> "failed"
-        else -> "unknown"
     }
 
     private fun pendingIntentMutabilityFlag(): Int {

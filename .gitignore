@@ -11,7 +11,9 @@
 # Runtime data and local databases
 /AmitiaData/
 /admin-data/
-/admin-system/
+/admin-system/node_modules/
+/admin-system/dist/
+/admin-system/.vite/
 /data/
 /surrealdb/
 /qdrant/

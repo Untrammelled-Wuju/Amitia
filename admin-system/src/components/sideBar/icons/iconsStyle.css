@@ -1,0 +1,8 @@
+svg{
+  margin-right: 12px;
+  --wh: 20px;
+  width: var(--wh);
+  height: var(--wh);
+  fill: #444;
+  *{fill: #444;}
+}

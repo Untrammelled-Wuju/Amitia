@@ -93,6 +93,11 @@ func (s *Server) buildRouter() *gin.Engine {
 	protected.GET("/releases/:id", s.handleGetRelease)
 	protected.DELETE("/releases/:id", requirePublisher, s.handleDeleteRelease)
 	protected.POST("/releases/:id/artifacts", requirePublisher, s.handleUploadArtifact)
+	protected.POST("/releases/:id/upload-sessions", requirePublisher, s.handleCreateArtifactUpload)
+	protected.GET("/releases/:id/upload-sessions/:uploadId", requirePublisher, s.handleGetArtifactUpload)
+	protected.PUT("/releases/:id/upload-sessions/:uploadId/parts/:index", requirePublisher, s.handleUploadArtifactPart)
+	protected.POST("/releases/:id/upload-sessions/:uploadId/complete", requirePublisher, s.handleCompleteArtifactUpload)
+	protected.DELETE("/releases/:id/upload-sessions/:uploadId", requirePublisher, s.handleAbortArtifactUpload)
 	protected.POST("/releases/:id/validate", requirePublisher, s.handleValidateRelease)
 	protected.POST("/releases/:id/publish", requirePublisher, s.handlePublishRelease)
 	protected.POST("/releases/:id/rollout", requirePublisher, s.handlePauseRelease)
@@ -118,8 +123,8 @@ func (s *Server) corsMiddleware() gin.HandlerFunc {
 		if origin != "" && allowed[origin] {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token")
-			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token, X-Chunk-SHA256")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			c.Header("Vary", "Origin")
 		}
 		if c.Request.Method == http.MethodOptions {
