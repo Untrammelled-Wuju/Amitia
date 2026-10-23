@@ -11,9 +11,10 @@
 # Runtime data and local databases
 /AmitiaData/
 /admin-data/
-/admin-system/node_modules/
-/admin-system/dist/
-/admin-system/.vite/
+/admin-system/
+/backend/internal/adminrelease/
+/backend/cmd/admin-server/
+/deploy/mysql/amitia-admin-seed.sql
 /data/
 /surrealdb/
 /qdrant/
