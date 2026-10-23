@@ -37,6 +37,8 @@ let runningCoreProfile: BundledCoreProfile | null = null;
 let coreGeneration = 0;
 let coreSpawnedAt = 0;
 let coreChildPid = 0;
+const CORE_SHUTDOWN_TIMEOUT_MS = 30000;
+const CORE_SHUTDOWN_PROCESS_WAIT_MS = 35000;
 
 process.on("exit", () => {
   const pid = coreProcess?.pid;
@@ -553,7 +555,7 @@ export async function stopCore(): Promise<void> {
       console.error("[CoreManager] 优雅关闭异常，强制终止:", err);
       await forceStopRunner();
     }
-    await waitForChildExit(coreProcess, 5000);
+    await waitForChildExit(coreProcess, CORE_SHUTDOWN_PROCESS_WAIT_MS);
     if (currentGeneration === coreGeneration) {
       removeCoreEndpoint(dataDir, endpointPid || undefined);
       coreChildPid = 0;
@@ -649,7 +651,7 @@ async function gracefulShutdown(pid: number, baseURL: string): Promise<boolean> 
     return false;
   }
 
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + CORE_SHUTDOWN_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (coreProcess === null || coreProcess.killed || coreProcess.exitCode !== null) {
       console.log("[CoreManager] 核心进程已优雅退出");
@@ -658,12 +660,6 @@ async function gracefulShutdown(pid: number, baseURL: string): Promise<boolean> 
     const stillAlive = await httpHealthCheck(healthUrl, 1000);
     if (!stillAlive) {
       console.log("[CoreManager] 核心服务已停止响应，等待进程退出");
-      await new Promise((r) => setTimeout(r, 500));
-      if (coreProcess === null || coreProcess.killed || coreProcess.exitCode !== null) {
-        console.log("[CoreManager] 核心进程已优雅退出");
-        return true;
-      }
-      return false;
     }
     await new Promise((r) => setTimeout(r, 500));
   }

@@ -93,7 +93,7 @@ async function shutdownRuntime(): Promise<void> {
           console.error("[AmitiaDesktop] 强制停止核心失败:", stopError);
         });
       }),
-      new Promise<void>((resolve) => setTimeout(resolve, 15000)),
+      new Promise<void>((resolve) => setTimeout(resolve, 35000)),
     ]);
   } catch (error) {
     console.error("[AmitiaDesktop] 关闭运行时异常:", error);
