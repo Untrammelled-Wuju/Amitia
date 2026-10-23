@@ -584,6 +584,9 @@ func (s *defaultProcessSupervisor) scheduleRestart(id ProcessID, generation uint
 			return
 		case <-timer.C:
 		}
+		if !s.scheduledRestartAllowed(id, expectedGeneration) {
+			return
+		}
 		if err := s.Start(context.Background(), id); err != nil {
 			// Start records/emits the launch failure and increments the generation.
 			// Continue the bounded restart policy from that new generation without
@@ -608,6 +611,21 @@ func (s *defaultProcessSupervisor) scheduleRestart(id ProcessID, generation uint
 		s.emit(EventRestarted, id, snap.PID, restartCount, "")
 	}(generation, count)
 	return true
+}
+
+func (s *defaultProcessSupervisor) scheduledRestartAllowed(id ProcessID, generation uint64) bool {
+	s.mu.RLock()
+	mp, ok := s.processes[id]
+	stopped := s.stopped
+	s.mu.RUnlock()
+	if !ok || stopped {
+		return false
+	}
+	mp.mu.Lock()
+	defer mp.mu.Unlock()
+	return mp.generation == generation &&
+		!mp.stopRequested &&
+		mp.state == StateRestartBackoff
 }
 
 func restartDelay(policy RestartPolicy, restartCount int) time.Duration {
