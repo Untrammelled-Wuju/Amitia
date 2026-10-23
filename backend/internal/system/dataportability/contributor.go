@@ -12,6 +12,21 @@ type BackupRequest struct {
 	IncludeSecrets     bool
 	IncludeModelAssets bool
 	Purpose            BackupPurpose
+	Passphrase         string
+}
+
+func (r BackupRequest) EffectiveScope() BackupScope {
+	if r.Scope == "" {
+		return ScopeAll
+	}
+	return r.Scope
+}
+
+func (r BackupRequest) EffectiveProfile() BackupProfile {
+	if r.Profile == "" {
+		return ProfileFull
+	}
+	return r.Profile
 }
 
 type BackupComponentPlan struct {
@@ -32,19 +47,19 @@ type ImportPreviewRequest struct {
 }
 
 type ImportComponentPreview struct {
-	ComponentID string
-	Kind        ComponentKind
-	LogicalName string
-	ItemCount   int64
-	Collisions  []ComponentCollision
-	Warnings    []string
+	ComponentID string               `json:"componentId"`
+	Kind        ComponentKind        `json:"kind"`
+	LogicalName string               `json:"logicalName"`
+	ItemCount   int64                `json:"itemCount"`
+	Collisions  []ComponentCollision `json:"collisions"`
+	Warnings    []string             `json:"warnings"`
 }
 
 type ComponentCollision struct {
-	SourceID   string
-	TargetID   string
-	EntityType string
-	Policy     CollisionPolicy
+	SourceID   string          `json:"sourceId"`
+	TargetID   string          `json:"targetId"`
+	EntityType string          `json:"entityType"`
+	Policy     CollisionPolicy `json:"policy"`
 }
 
 type CollisionPolicy string
@@ -59,6 +74,7 @@ type ImportRequest struct {
 	OperationID        string
 	StagingPath        string
 	Manifest           *BackupManifest
+	CollisionPolicy    CollisionPolicy
 	CharacterPolicy    CollisionPolicy
 	DefaultCharacterID string
 	ActivateImported   bool
@@ -93,6 +109,7 @@ type BackupContributor interface {
 	ID() string
 	Name() string
 	Dependencies() []string
+	ComponentIDs() []string
 	Plan(ctx context.Context, req BackupRequest) ([]BackupComponentPlan, error)
 	Export(ctx context.Context, req BackupRequest, out BackupWriter) error
 	PreviewImport(ctx context.Context, req ImportPreviewRequest, in BackupReader) ([]ImportComponentPreview, error)

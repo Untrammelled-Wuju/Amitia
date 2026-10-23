@@ -11,6 +11,8 @@ import (
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/devicemesh/agent"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/spaceidentity"
 	"github.com/u-ai/backend/internal/tts"
@@ -49,6 +51,17 @@ func newMeshLocalDataPort(services *AppServices, dataDir, ownerID string) (*mesh
 	space, err := spaceidentity.Open(dataDir)
 	if err != nil {
 		return nil, err
+	}
+	if services.RelTimeCoordinator != nil {
+		identity, err := agent.NewIdentityStore(dataDir).Load()
+		if err != nil {
+			return nil, err
+		}
+		if identity.DeviceID.String() == ownerID {
+			if err := services.RelTimeCoordinator.MigrateOwner(context.Background(), space.SpaceID(), ownerID); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return &meshLocalDataPort{services: services, ownerID: ownerID, legacySpaceID: space.SpaceID(), roles: character.NewRepository(app.NewAppContext(services.DB, nil)), store: coordination.NewOwnershipStore(services.KernelContainer.DeviceRegistry.Database(), ownerID)}, nil
 }
@@ -177,7 +190,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	}
 	snapshot := coordination.DataSnapshot{OwnerID: p.ownerID, Role: role, Resources: make([]coordination.Resource, 0), NextCursors: make(map[string]string)}
 	usableMemories := make(map[string]bool)
-	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "project", "tool-result", "worldbook", coordination.RuntimeStateKindPsyche, coordination.RuntimeStateKindRelationship, coordination.RuntimeStateKindNeeds} {
+	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", business.EmotionSnapshotKind, "checkpoint", "project", "tool-result", "worldbook", coordination.RuntimeStateKindPsyche, coordination.RuntimeStateKindRelationship, coordination.RuntimeStateKindNeeds} {
 		if kind == "tool-result" && !query.RuntimeTurns {
 			continue
 		}
@@ -353,6 +366,8 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	if query.Management || query.ResourceKind == "continuity" || (query.Cursor != "" && query.LegacyCursor == "") {
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 	}
+	var legacyConversations, legacyMessages []json.RawMessage
+	var legacySummary json.RawMessage
 	var legacyCursor meshLegacyCursor
 	if query.LegacyCursor != "" {
 		encoded, err := base64.RawURLEncoding.DecodeString(query.LegacyCursor)
@@ -382,7 +397,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			snapshot.NextCursors["legacyConversation"] = encodeMeshLegacyCursor(meshLegacyCursor{Owner: p.ownerID, Role: scope.RoleID, Kind: "conversation", ID: last.ID, UpdatedAt: last.UpdatedAt, SearchHash: searchHash})
 			conversations = conversations[:limit]
 		}
-		snapshot.LegacyConversations, err = appendMeshJSON(conversations)
+		legacyConversations, err = appendMeshJSON(conversations)
 		if err != nil {
 			return snapshot, err
 		}
@@ -410,7 +425,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
 				messages[i], messages[j] = messages[j], messages[i]
 			}
-			snapshot.LegacyMessages, err = appendMeshJSON(messages)
+			legacyMessages, err = appendMeshJSON(messages)
 			if err != nil {
 				return snapshot, err
 			}
@@ -425,7 +440,7 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 					return snapshot, err
 				}
 				if err == nil {
-					snapshot.LegacySummary, err = json.Marshal(summary)
+					legacySummary, err = json.Marshal(summary)
 					if err != nil {
 						return snapshot, err
 					}
@@ -434,6 +449,9 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		}
 	}
 	if query.ResourceKind == "message" || query.ResourceKind == "conversation" {
+		if err := p.mergeLegacyChatSnapshot(ctx, &snapshot, scope, query, legacyConversations, legacyMessages, legacySummary); err != nil {
+			return snapshot, err
+		}
 		return snapshot, coordination.ValidateSnapshot(scope, snapshot)
 	}
 	if !query.Management && query.ResourceKind == "" {
@@ -442,7 +460,128 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			return snapshot, err
 		}
 	}
+	if err := p.mergeLegacyChatSnapshot(ctx, &snapshot, scope, query, legacyConversations, legacyMessages, legacySummary); err != nil {
+		return snapshot, err
+	}
 	return snapshot, coordination.ValidateSnapshot(scope, snapshot)
+}
+
+func (p *meshLocalDataPort) mergeLegacyChatSnapshot(ctx context.Context, snapshot *coordination.DataSnapshot, scope coordination.ExecutionScope, query coordination.DataQuery, legacyConversations, legacyMessages []json.RawMessage, legacySummary json.RawMessage) error {
+	if snapshot == nil || snapshot.OwnerID != p.ownerID {
+		return coordination.ErrWrongOwner
+	}
+	appendLegacy := func(kind, id, updatedAt string, raw json.RawMessage) error {
+		if id == "" || len(id) > 512 || !json.Valid(raw) {
+			return coordination.ErrWrongOwner
+		}
+		existing, err := p.store.Get(ctx, kind, id)
+		if err != nil {
+			return err
+		}
+		if existing != nil && existing.RoleID == scope.RoleID {
+			return nil
+		}
+		var document map[string]any
+		if err := json.Unmarshal(raw, &document); err != nil {
+			return err
+		}
+		document["id"] = id
+		document["ownerId"] = p.ownerID
+		document["roleId"] = scope.RoleID
+		document["origin"] = "legacy"
+		document["readOnly"] = true
+		if kind == "message" || kind == "conversation" {
+			document["characterId"] = scope.RoleID
+		}
+		encoded, err := json.Marshal(document)
+		if err != nil {
+			return err
+		}
+		snapshot.Resources = append(snapshot.Resources, coordination.Resource{
+			OwnerID:   p.ownerID,
+			Kind:      kind,
+			ID:        id,
+			RoleID:    scope.RoleID,
+			SourceID:  "legacy",
+			Revision:  0,
+			UpdatedAt: updatedAt,
+			Origin:    "legacy",
+			ReadOnly:  true,
+			Body:      encoded,
+		})
+		return nil
+	}
+	for _, raw := range legacyConversations {
+		var row struct {
+			ID        string `json:"id"`
+			UpdatedAt string `json:"updatedAt"`
+		}
+		if err := json.Unmarshal(raw, &row); err != nil {
+			return err
+		}
+		if err := appendLegacy("conversation", row.ID, row.UpdatedAt, raw); err != nil {
+			return err
+		}
+	}
+	for _, raw := range legacyMessages {
+		var row struct {
+			ID        string `json:"id"`
+			UpdatedAt string `json:"updatedAt"`
+		}
+		if err := json.Unmarshal(raw, &row); err != nil {
+			return err
+		}
+		if err := appendLegacy("message", row.ID, row.UpdatedAt, raw); err != nil {
+			return err
+		}
+	}
+	if len(legacySummary) > 0 && query.ConversationID != "" {
+		var document map[string]any
+		if err := json.Unmarshal(legacySummary, &document); err != nil {
+			return err
+		}
+		summaryID := query.ConversationID + "/summary"
+		existing, err := p.store.Get(ctx, "summary", summaryID)
+		if err != nil {
+			return err
+		}
+		if existing == nil || existing.RoleID != scope.RoleID {
+			summaryText := ""
+			for _, key := range []string{"summaryText", "summary_text", "text"} {
+				if value, ok := document[key].(string); ok && strings.TrimSpace(value) != "" {
+					summaryText = strings.TrimSpace(value)
+					break
+				}
+			}
+			body := map[string]any{
+				"id":              summaryID,
+				"conversationId":  query.ConversationID,
+				"ownerId":         p.ownerID,
+				"roleId":          scope.RoleID,
+				"origin":          "legacy",
+				"readOnly":        true,
+				"content":         map[string]any{"summary": summaryText},
+				"summaryText":     summaryText,
+				"legacySummaryId": document["id"],
+			}
+			encoded, err := json.Marshal(body)
+			if err != nil {
+				return err
+			}
+			snapshot.Resources = append(snapshot.Resources, coordination.Resource{
+				OwnerID:  p.ownerID,
+				Kind:     "summary",
+				ID:       summaryID,
+				RoleID:   scope.RoleID,
+				SourceID: "legacy",
+				Revision: 0,
+				Origin:   "legacy",
+				ReadOnly: true,
+				Body:     encoded,
+			})
+		}
+	}
+	return nil
 }
 
 func (p *meshLocalDataPort) listAllWorldbookResources(ctx context.Context, partition string, query coordination.DataQuery) ([]coordination.Resource, error) {
@@ -481,7 +620,7 @@ func (p *meshLocalDataPort) HistoricalConversations(ctx context.Context, scope c
 	result := []json.RawMessage{}
 	seen := map[string]bool{}
 	for rows.Next() {
-		var raw json.RawMessage
+		var raw []byte
 		if err := rows.Scan(&raw); err != nil {
 			_ = rows.Close()
 			return nil, err

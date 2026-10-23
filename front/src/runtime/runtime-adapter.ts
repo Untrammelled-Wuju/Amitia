@@ -55,6 +55,7 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/workbench/browser",
   "/api/workbench/terminal",
   "/api/storage",
+  "/api/imports",
   "/media",
   "/api/artifacts/v1/previews",
   "/internal/device-mesh",
@@ -66,6 +67,9 @@ export const DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES = DEVICE_LOCAL_ROUTE_PREFIX
 
 export function isDeviceLocalApiPath(path: string): boolean {
   const normalized = String(path || "").split("?", 1)[0];
+  if (normalized === "/api/data-portability" || normalized.startsWith("/api/data-portability/")) {
+    return normalized.startsWith("/api/data-portability/backups") || normalized.startsWith("/api/data-portability/restores");
+  }
   return DEVICE_LOCAL_ROUTE_PREFIXES.some(
     (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
   );

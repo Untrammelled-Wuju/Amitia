@@ -31,7 +31,6 @@ const (
 	ErrCodeProcessingExcludedDefault    = "PROCESSING_EXCLUDED_DEFAULT_IDLE"
 	ErrCodeProcessingPackageFailed      = "PROCESSING_PACKAGE_FAILED"
 	ErrCodeProcessingTaskNotOwned       = "PROCESSING_TASK_NOT_OWNED"
-	ErrCodePackageNotOwned              = "PACKAGE_NOT_OWNED"
 )
 
 type ProcessingError struct {
@@ -63,18 +62,12 @@ type Service interface {
 	GetProcessingTask(id string) (*GetProcessingTaskResponse, error)
 	CancelProcessingTask(id string) error
 	RetryProcessingAction(processingTaskID, actionKey string) error
-	CreatePackage(req *CreatePackageRequest) (*CreatePackageResponse, error)
 	BuildReleasePackageSource(req *CreatePackageRequest) (*ReleasePackageSourceResponse, error)
 	SwitchAttempt(processingTaskID, actionKey string, attemptNumber int) error
 	ExcludeAction(processingTaskID, actionKey string) error
 	GetProcessedFrameImage(processingTaskID, actionKey string, frameIndex int) (fullPath, mimeType string, err error)
 	GetSourceFrameImage(processingTaskID, actionKey string, frameIndex int) (fullPath, mimeType string, err error)
 	GetActionPreview(processingTaskID, actionKey string) (fullPath, mimeType string, err error)
-	ListPackages(spaceID string, page, pageSize int) ([]Package, int64, error)
-	ListPackagesByGenerationTask(spaceID, generationTaskID string) ([]Package, error)
-	GetPackage(id string) (*Package, error)
-	CheckPackageOwnership(packageID, spaceID string) error
-	DownloadPackage(id string) (packageDir string, pkg *Package, err error)
 }
 
 type service struct {
@@ -96,7 +89,7 @@ func NewService(repo Repository, db *gorm.DB, ctx *app.AppContext, dataDir strin
 		ctx:         ctx,
 		dataDir:     dataDir,
 		validator:   NewValidator(repo, dataDir),
-		packager:    NewPackager(repo, dataDir),
+		packager:    NewPackager(dataDir, repo),
 		cleanup:     NewCleanupManager(dataDir),
 		stateEngine: taskstate.NewEngine(stateStore),
 	}
@@ -149,12 +142,6 @@ type CreatePackageRequest struct {
 	UserDefaultAction string
 }
 
-type CreatePackageResponse struct {
-	PackageID   string `json:"packageId"`
-	PackageHash string `json:"packageHash"`
-	Status      string `json:"status"`
-}
-
 // ReleasePackageSourceResponse is an ephemeral conversion artifact for Release V2.
 // It never creates a desktop_pet_packages row; PackageDir must be deleted by the caller.
 type ReleasePackageSourceResponse struct {
@@ -186,17 +173,6 @@ func (s *service) CheckProcessingTaskOwnership(processingTaskID, spaceID string)
 	}
 	if genTask.SpaceID != spaceID {
 		return NewProcessingError(ErrCodeProcessingTaskNotOwned, "处理任务不属于当前用户")
-	}
-	return nil
-}
-
-func (s *service) CheckPackageOwnership(packageID, spaceID string) error {
-	pkg, err := s.repo.GetPackage(packageID)
-	if err != nil {
-		return NewProcessingErrorWithErr("PACKAGE_NOT_FOUND", "资源包不存在", err)
-	}
-	if pkg.SpaceID != spaceID {
-		return NewProcessingError(ErrCodePackageNotOwned, "资源包不属于当前用户")
 	}
 	return nil
 }
@@ -683,22 +659,6 @@ func (s *service) preparePackageBuildRequest(req *CreatePackageRequest) (*Packag
 	return buildReq, nil
 }
 
-func (s *service) CreatePackage(req *CreatePackageRequest) (*CreatePackageResponse, error) {
-	buildReq, err := s.preparePackageBuildRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	result, err := s.packager.BuildPackage(buildReq)
-	if err != nil {
-		return nil, err
-	}
-	return &CreatePackageResponse{
-		PackageID:   result.Package.ID,
-		PackageHash: result.PackageHash,
-		Status:      "ready",
-	}, nil
-}
-
 func (s *service) BuildReleasePackageSource(req *CreatePackageRequest) (*ReleasePackageSourceResponse, error) {
 	buildReq, err := s.preparePackageBuildRequest(req)
 	if err != nil {
@@ -709,7 +669,7 @@ func (s *service) BuildReleasePackageSource(req *CreatePackageRequest) (*Release
 		return nil, err
 	}
 	return &ReleasePackageSourceResponse{
-		PackageID:    result.Package.ID,
+		PackageID:    result.PackageID,
 		PackageHash:  result.PackageHash,
 		PackageDir:   result.PackageDir,
 		ManifestData: result.ManifestData,
@@ -1078,39 +1038,4 @@ func (s *service) GetActionPreview(processingTaskID, actionKey string) (fullPath
 		return "", "", NewProcessingError(ErrCodeProcessingPreviewNotReady, "动作预览尚未生成")
 	}
 	return fullPath, "image/png", nil
-}
-
-func (s *service) ListPackages(spaceID string, page, pageSize int) ([]Package, int64, error) {
-	return s.repo.ListPackagesBySpace(spaceID, page, pageSize)
-}
-
-func (s *service) ListPackagesByGenerationTask(spaceID, generationTaskID string) ([]Package, error) {
-	return s.repo.ListPackagesByGenerationTask(generationTaskID)
-}
-
-func (s *service) GetPackage(id string) (*Package, error) {
-	pkg, err := s.repo.GetPackage(id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, NewProcessingError("PACKAGE_NOT_FOUND", "包不存在")
-		}
-		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询包失败", err)
-	}
-	return pkg, nil
-}
-
-func (s *service) DownloadPackage(id string) (packageDir string, pkg *Package, err error) {
-	pkg, err = s.repo.GetPackage(id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", nil, NewProcessingError("PACKAGE_NOT_FOUND", "包不存在")
-		}
-		return "", nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询包失败", err)
-	}
-
-	packageDir = filepath.Join(s.dataDir, "desktop-pets", "generation-tasks", pkg.GenerationTaskID, "packages", pkg.ID)
-	if _, statErr := os.Stat(packageDir); statErr != nil {
-		return "", nil, NewProcessingError("PACKAGE_NOT_FOUND", "包目录不存在")
-	}
-	return packageDir, pkg, nil
 }

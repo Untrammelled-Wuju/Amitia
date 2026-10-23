@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/agent"
@@ -30,6 +31,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 			CancelledCallIDs         []string                                 `json:"cancelledCallIds"`
 			FencedDeviceID           string                                   `json:"fencedDeviceId"`
 			ClosedPermissionRevision int64                                    `json:"closedPermissionRevision"`
+			UsageSince               string                                   `json:"usageSince"`
 			Operation                string                                   `json:"operation"`
 			Scope                    coordination.ExecutionScope              `json:"scope"`
 			TaskRead                 coordination.TaskReadProof               `json:"taskRead"`
@@ -41,6 +43,7 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 			Query                    coordination.DataQuery                   `json:"query"`
 			ChatManagement           coordination.ChatManagementRequest       `json:"chatManagement"`
 			ChannelDelivery          coordination.ChannelDeliveryRequest      `json:"channelDelivery"`
+			RelationshipTime         coordination.RelationshipTimeRequest     `json:"relationshipTime"`
 			ChatEffects              coordination.OwnedChatEffectsRequest     `json:"chatEffects"`
 			Interrupted              coordination.InterruptedReply            `json:"interrupted"`
 		}
@@ -73,10 +76,10 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 			scope = req.Interrupted.Scope
 		}
 		if cred == nil || cred.ExpiresAt.Before(time.Now()) || invocation.SpaceID != cred.SpaceID || invocation.DeviceID != identity.DeviceID || invocation.RuntimeID != identity.RuntimeID || scope.SpaceID != cred.SpaceID.String() || scope.CoreID != cred.SpaceID.String() || scope.TargetDeviceID != identity.DeviceID.String() {
-			return nil, coordination.ErrWrongOwner
+			return nil, fmt.Errorf("设备凭据与调用范围不匹配: %w", coordination.ErrWrongOwner)
 		}
 		if req.Operation != "channel-delivery" && req.Operation != "chat-management" && req.Operation != "task-definition" && req.Operation != "task-catalog-entry" && req.Operation != "task-permissions" && req.Operation != "task-catalog" && req.Operation != "task-history-resource" && req.Operation != "history" && req.Operation != "history-list" && req.Operation != "history-list-page" && req.Operation != "history-roles" && (scope.ResourceOwnerID != identity.DeviceID.String() || scope.RoleOwnerID != identity.DeviceID.String()) {
-			return nil, coordination.ErrWrongOwner
+			return nil, fmt.Errorf("数据持有方与目标设备不匹配: %w", coordination.ErrWrongOwner)
 		}
 		var result any
 		dispatch := func(ctx context.Context) error {
@@ -103,6 +106,22 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				}
 			}
 			switch req.Operation {
+			case "usage":
+				guarded := coordination.WithAdditionalGuard(coordination.WithScope(ctx, scope), func(current context.Context) error {
+					if err := coordination.ValidateSourceCall(current, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
+						return err
+					}
+					return coordination.ValidateSourceAuthority(current, services.KernelContainer.DeviceRegistry.Database(), scope)
+				})
+				result, err = port.BusinessUsage(guarded, scope, req.UsageSince)
+			case "relationship-time":
+				guarded := coordination.WithAdditionalGuard(coordination.WithScope(ctx, scope), func(current context.Context) error {
+					if err := coordination.ValidateSourceCall(current, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
+						return err
+					}
+					return coordination.ValidateSourceAuthority(current, services.KernelContainer.DeviceRegistry.Database(), scope)
+				})
+				result, err = port.RelationshipTime(guarded, scope, req.RelationshipTime)
 			case "chat-effects":
 				source := context.WithValue(ctx, chatEffectsSourceCallKey{}, invocation.InvocationID)
 				guarded := coordination.WithAdditionalGuard(coordination.WithScope(source, scope), func(current context.Context) error {
@@ -228,14 +247,22 @@ func newDeviceOwnedDataHandler(services *AppServices, dataDir string) (agent.Can
 				result, err = port.ListOwnedRoleCatalog(ctx, scope, req.Query.IncludeDisabled)
 			case "projection-status", "projection-rebuild":
 				result, err = port.ProjectionState(ctx, scope, req.Operation == "projection-rebuild")
-			case "memory-deletion-status":
-				var complete bool
-				complete, err = port.MemoryDeletionComplete(ctx, scope, req.Query.ResourceID)
-				result = map[string]interface{}{"ownerId": scope.ResourceOwnerID, "roleId": coordination.StorageRole(scope, "memory"), "complete": complete}
-			case "memory-deletion-cleanup":
-				var count int
-				count, err = port.CleanupMemoryDeletions(ctx, scope)
-				result = map[string]interface{}{"ownerId": scope.ResourceOwnerID, "cleaned": count}
+			case "memory-deletion-status", "memory-deletion-cleanup":
+				guarded := coordination.WithAdditionalGuard(coordination.WithScope(ctx, scope), func(current context.Context) error {
+					if err := coordination.ValidateSourceCall(current, services.KernelContainer.DeviceRegistry.Database(), scope.SpaceID, invocation.InvocationID); err != nil {
+						return err
+					}
+					return coordination.ValidateSourceAuthority(current, services.KernelContainer.DeviceRegistry.Database(), scope)
+				})
+				if req.Operation == "memory-deletion-status" {
+					var complete bool
+					complete, err = port.MemoryDeletionComplete(guarded, scope, req.Query.ResourceID)
+					result = map[string]interface{}{"ownerId": scope.ResourceOwnerID, "roleId": coordination.StorageRole(scope, "memory"), "complete": complete}
+				} else {
+					var count int
+					count, err = port.CleanupMemoryDeletions(guarded, scope)
+					result = map[string]interface{}{"ownerId": scope.ResourceOwnerID, "cleaned": count}
+				}
 			case "snapshot":
 				result, err = port.Snapshot(ctx, scope, req.Query)
 			case "resource":

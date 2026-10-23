@@ -46,7 +46,10 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 		}
 	}
 	parts = append(parts, ownedContextDataPolicy)
-	contextData := map[string]any{"summary": inference.Snapshot.LegacySummary}
+	contextData := map[string]any{}
+	if summaries := ownedSummaryContext(inference); len(summaries) > 0 {
+		contextData["summary"] = summaries
+	}
 	if runtime, ok := interaction.RuntimeFromContext(ctx); ok {
 		decisionPrompt, err := ownedRuntimeDecisionPrompt(runtime)
 		if err != nil {
@@ -56,6 +59,9 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 		contextData["runtimeContext"] = ownedRuntimeContextData(runtime)
 		if runtime.Context.Temporal.Status == interaction.LoadStatusReady {
 			contextData["temporalContext"] = temporal.RenderSnapshot(runtime.Context.Temporal.Value)
+			if value := runtime.Context.Temporal.Value.RelationshipTime; value != nil && value.Policy != nil {
+				contextData["relationshipTimeContext"] = temporal.RenderRelationshipTime(*value, *value.Policy)
+			}
 		}
 		if runtime.Context.Continuity.Status == interaction.LoadStatusReady {
 			contextData["continuityContext"] = continuity.RenderContext(runtime.Context.Continuity.Value)
@@ -92,7 +98,6 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 	}
 	if inference.HistoricalSnapshot != nil {
 		historical := *inference.HistoricalSnapshot
-		historical.LegacyMessages = nil
 		historical.Resources = make([]coordination.Resource, 0, len(inference.HistoricalSnapshot.Resources))
 		for _, resource := range inference.HistoricalSnapshot.Resources {
 			if resource.Kind != "vector" && resource.Kind != "message" {
@@ -130,22 +135,12 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 		return nil
 	}
 	if historical := inference.HistoricalSnapshot; historical != nil {
-		for _, raw := range historical.LegacyMessages {
-			if err := appendHistory(raw); err != nil {
-				return nil, err
-			}
-		}
 		for _, row := range historical.Resources {
 			if row.Kind == "message" {
 				if err := appendHistory(row.Body); err != nil {
 					return nil, err
 				}
 			}
-		}
-	}
-	for _, raw := range inference.Snapshot.LegacyMessages {
-		if err := appendHistory(raw); err != nil {
-			return nil, err
 		}
 	}
 	for _, row := range inference.Snapshot.Resources {
@@ -345,9 +340,31 @@ func (s *service) generateOwnedReply(ctx context.Context, inference business.Inf
 		if sink.text.Len() > 0 {
 			text = sink.text.String()
 		}
-		return business.Generation{Text: text, Reasoning: sink.reasoning.String(), Tokens: tokens}, nil
+		return s.applyOwnedSafety(ctx, business.Generation{Text: text, Reasoning: sink.reasoning.String(), Tokens: tokens})
 	}
-	return s.generateOwnedWithTools(ctx, inference, cfg, messages, sink)
+	generation, err := s.generateOwnedWithTools(ctx, inference, cfg, messages, sink)
+	if err != nil {
+		return generation, err
+	}
+	return s.applyOwnedSafety(ctx, generation)
+}
+
+func (s *service) applyOwnedSafety(ctx context.Context, generation business.Generation) (business.Generation, error) {
+	runtime, ok := interaction.RuntimeFromContext(ctx)
+	if !ok || runtime == nil || strings.TrimSpace(generation.Text) == "" {
+		return generation, nil
+	}
+	result, err := runtime.EvaluateGeneratedText(ctx, generation.Text)
+	if err != nil {
+		return business.Generation{}, err
+	}
+	if result.Cleaned != "" {
+		generation.Text = result.Cleaned
+	}
+	if result.Replacement {
+		generation.ForceVoice = false
+	}
+	return generation, nil
 }
 
 type ownedReplySink struct {
@@ -356,6 +373,7 @@ type ownedReplySink struct {
 	reasoning        strings.Builder
 	reasoningStarted time.Time
 	reasoningElapsed time.Duration
+	safetyBlocked    bool
 }
 
 func (s *ownedReplySink) reasoningDurationMS() int64 {
@@ -380,7 +398,11 @@ func (s *ownedReplySink) Emit(ctx context.Context, event ModelEvent) error {
 			s.reasoningStarted = time.Time{}
 		}
 		s.text.WriteString(event.TextDelta)
-		if s.inference.Emit != nil {
+		if runtime, ok := interaction.RuntimeFromContext(ctx); ok {
+			result := runtime.CheckGeneratedText(s.text.String())
+			s.safetyBlocked = result.Replacement
+		}
+		if s.inference.Emit != nil && !s.safetyBlocked {
 			return s.inference.Emit(business.Event{Type: "delta", Text: event.TextDelta})
 		}
 	case ModelEventReasoningSummaryDelta:
@@ -492,9 +514,6 @@ func ownedSummaryContext(inference business.Inference) []json.RawMessage {
 		summaries = append(summaries, encoded)
 	}
 	appendSnapshot := func(snapshot coordination.DataSnapshot) {
-		if len(snapshot.LegacySummary) > 0 && string(snapshot.LegacySummary) != "null" {
-			summaries = append(summaries, snapshot.LegacySummary)
-		}
 		for _, resource := range snapshot.Resources {
 			if resource.Kind != "summary" || resource.Deleted || resource.OwnerID != snapshot.OwnerID || !coordination.ResourceUsable(resource.Body, time.Now()) {
 				continue

@@ -325,9 +325,12 @@ class SafetyService {
     return SafetyConfigDto.fromJson(resp);
   }
 
-  Future<bool> updateConfig(Map<String, dynamic> data) async {
-    await _api.put('/api/safety/config', data: data);
-    return true;
+  Future<SafetyConfigDto?> updateConfig(Map<String, dynamic> data) async {
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/safety/config',
+      data: data,
+    );
+    return resp == null ? null : SafetyConfigDto.fromJson(resp);
   }
 
   Future<Map<String, dynamic>?> bdiConfig() async {
@@ -335,9 +338,11 @@ class SafetyService {
     return resp;
   }
 
-  Future<bool> updateBdiConfig(Map<String, dynamic> data) async {
-    await _api.put('/api/safety/bdi-config', data: data);
-    return true;
+  Future<Map<String, dynamic>?> updateBdiConfig(Map<String, dynamic> data) async {
+    return _api.put<Map<String, dynamic>>(
+      '/api/safety/bdi-config',
+      data: data,
+    );
   }
 
   Future<Map<String, dynamic>> safetyEvents({
@@ -355,25 +360,21 @@ class SafetyService {
     await _api.delete('/api/safety/events');
   }
 
+  Future<Map<String, dynamic>> handleSafetyEvent(
+    String id,
+    int expectedRevision,
+  ) async {
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/safety/events/${Uri.encodeComponent(id)}/handle',
+      data: {'expectedRevision': expectedRevision},
+    );
+    return resp ?? <String, dynamic>{};
+  }
+
   Future<List<Map<String, dynamic>>> auditLogs() async {
     final resp = await _api.get<List<dynamic>>('/api/safety/audit-logs');
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
-  Future<bool> checkInput(String text) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/safety/check-input',
-      data: {'text': text},
-    );
-    return resp?['safe'] == true;
-  }
-
-  Future<bool> checkOutput(String text) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/safety/check-output',
-      data: {'text': text},
-    );
-    return resp?['safe'] == true;
-  }
 }

@@ -10,6 +10,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../data/pet_release_service.dart';
 
 class PetProcessingPage extends ConsumerStatefulWidget {
   final String taskId;
@@ -35,10 +36,15 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final api = ref.read(backendServiceProvider);
     try {
-      final response = await api.get<dynamic>('/api/desktop-pets/processing-tasks/${widget.taskId}');
+      final response = await api.get<dynamic>(
+        '/api/desktop-pets/processing-tasks/${widget.taskId}',
+      );
       if (response is Map) {
         final map = Map<String, dynamic>.from(response);
         final task = map['processingTask'];
@@ -47,8 +53,15 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         setState(() {
           _isProcessingTask = true;
           _task = task is Map ? Map<String, dynamic>.from(task) : map;
-          _actions = actions is List ? actions.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : const [];
-          _qualitySummary = map['qualitySummary'] is Map ? Map<String, dynamic>.from(map['qualitySummary'] as Map) : const {};
+          _actions = actions is List
+              ? actions
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList()
+              : const [];
+          _qualitySummary = map['qualitySummary'] is Map
+              ? Map<String, dynamic>.from(map['qualitySummary'] as Map)
+              : const {};
           _loading = false;
         });
         return;
@@ -58,7 +71,9 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     }
 
     try {
-      final response = await api.get<dynamic>('/api/desktop-pets/generation-tasks/${widget.taskId}');
+      final response = await api.get<dynamic>(
+        '/api/desktop-pets/generation-tasks/${widget.taskId}',
+      );
       if (!mounted) return;
       if (response is! Map) throw StateError('未找到桌宠任务');
       final map = Map<String, dynamic>.from(response);
@@ -66,12 +81,21 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       setState(() {
         _isProcessingTask = false;
         _task = map;
-        _actions = actions is List ? actions.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : const [];
+        _actions = actions is List
+            ? actions
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+            : const [];
         _qualitySummary = const {};
         _loading = false;
       });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
     }
   }
 
@@ -82,7 +106,13 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         title: _isProcessingTask ? '桌宠处理任务' : '桌宠生成详情',
         showBackButton: true,
         fallbackRoute: AppRoutes.workshopPetTasks,
-        actions: [AmitiaIconButton(icon: Icons.refresh, onPressed: _load, color: context.textSecondary)],
+        actions: [
+          AmitiaIconButton(
+            icon: Icons.refresh,
+            onPressed: _load,
+            color: context.textSecondary,
+          ),
+        ],
       ),
       body: SafeArea(top: false, child: _buildBody(context)),
     );
@@ -90,7 +120,8 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
 
   Widget _buildBody(BuildContext context) {
     if (_loading) return const AmitiaLoadingState();
-    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    if (_error != null)
+      return AmitiaErrorState(message: _error!, onRetry: _load);
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -103,7 +134,10 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             SizedBox(height: AppSpacing.sm),
             ..._actions.map((action) => _buildActionCard(context, action)),
           ] else
-            const SizedBox(height: 180, child: AmitiaEmptyState(icon: Icons.animation, title: '暂无动作数据')),
+            const SizedBox(
+              height: 180,
+              child: AmitiaEmptyState(icon: Icons.animation, title: '暂无动作数据'),
+            ),
           SizedBox(height: AppSpacing.lg),
           _buildTaskActions(context),
           SizedBox(height: AppSpacing.xxl),
@@ -118,47 +152,70 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     final stage = (_task['currentStage'] ?? '').toString();
     final name = (_task['name'] ?? _task['id'] ?? widget.taskId).toString();
     return AmitiaCard(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
-          AmitiaStatusBadge(label: _statusText(status), type: _statusType(status)),
-        ]),
-        if (stage.isNotEmpty) ...[
-          SizedBox(height: AppSpacing.xs),
-          Text(stage, style: AppTypography.caption(context)),
-        ],
-        SizedBox(height: AppSpacing.md),
-        AmitiaProgressBar(progress: (progress / 100).clamp(0.0, 1.0)),
-        SizedBox(height: AppSpacing.xs),
-        Text('$progress%', style: AppTypography.caption(context)),
-        if (_isProcessingTask && _qualitySummary.isNotEmpty) ...[
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(name, style: AppTypography.cardTitle(context)),
+              ),
+              AmitiaStatusBadge(
+                label: _statusText(status),
+                type: _statusType(status),
+              ),
+            ],
+          ),
+          if (stage.isNotEmpty) ...[
+            SizedBox(height: AppSpacing.xs),
+            Text(stage, style: AppTypography.caption(context)),
+          ],
           SizedBox(height: AppSpacing.md),
-          Wrap(spacing: 8, runSpacing: 6, children: [
-            _metric(context, '总动作', _qualitySummary['totalActions']),
-            _metric(context, '成功', _qualitySummary['succeededActions']),
-            _metric(context, '失败', _qualitySummary['failedActions']),
-            _metric(context, '警告', _qualitySummary['warningActions']),
-          ]),
+          AmitiaProgressBar(progress: (progress / 100).clamp(0.0, 1.0)),
+          SizedBox(height: AppSpacing.xs),
+          Text('$progress%', style: AppTypography.caption(context)),
+          if (_isProcessingTask && _qualitySummary.isNotEmpty) ...[
+            SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _metric(context, '总动作', _qualitySummary['totalActions']),
+                _metric(context, '成功', _qualitySummary['succeededActions']),
+                _metric(context, '失败', _qualitySummary['failedActions']),
+                _metric(context, '警告', _qualitySummary['warningActions']),
+              ],
+            ),
+          ],
+          if ((_task['errorMessage'] ?? '').toString().isNotEmpty) ...[
+            SizedBox(height: AppSpacing.sm),
+            Text(
+              _task['errorMessage'].toString(),
+              style: AppTypography.caption(
+                context,
+              ).copyWith(color: context.error),
+            ),
+          ],
         ],
-        if ((_task['errorMessage'] ?? '').toString().isNotEmpty) ...[
-          SizedBox(height: AppSpacing.sm),
-          Text(_task['errorMessage'].toString(), style: AppTypography.caption(context).copyWith(color: context.error)),
-        ],
-      ]),
+      ),
     );
   }
 
   Widget _metric(BuildContext context, String label, dynamic value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(
+        color: context.surfaceSecondary,
+        borderRadius: BorderRadius.circular(6),
+      ),
       child: Text('$label ${value ?? 0}', style: AppTypography.label(context)),
     );
   }
 
   Widget _buildActionCard(BuildContext context, Map<String, dynamic> action) {
     final key = (action['actionKey'] ?? action['id'] ?? '').toString();
-    final name = (action['actionName'] ?? action['actionNameSnapshot'] ?? key).toString();
+    final name = (action['actionName'] ?? action['actionNameSnapshot'] ?? key)
+        .toString();
     final status = (action['status'] ?? 'unknown').toString();
     final progress = (action['progress'] as num?)?.toInt() ?? 0;
     final excluded = action['excluded'] == true || action['excluded'] == 1;
@@ -166,40 +223,60 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text(name, style: AppTypography.body(context))),
-            if (excluded)
-              const AmitiaStatusBadge(label: '已排除', type: BadgeType.neutral)
-            else
-              AmitiaStatusBadge(label: _statusText(status), type: _statusType(status)),
-          ]),
-          SizedBox(height: AppSpacing.xs),
-          Text(key, style: AppTypography.label(context).copyWith(color: context.textSecondary)),
-          if (quality.isNotEmpty) Text('质量：$quality', style: AppTypography.caption(context)),
-          SizedBox(height: AppSpacing.sm),
-          AmitiaProgressBar(progress: (progress / 100).clamp(0.0, 1.0)),
-          if (_isProcessingTask && !excluded) ...[
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(name, style: AppTypography.body(context))),
+                if (excluded)
+                  const AmitiaStatusBadge(label: '已排除', type: BadgeType.neutral)
+                else
+                  AmitiaStatusBadge(
+                    label: _statusText(status),
+                    type: _statusType(status),
+                  ),
+              ],
+            ),
+            SizedBox(height: AppSpacing.xs),
+            Text(
+              key,
+              style: AppTypography.label(
+                context,
+              ).copyWith(color: context.textSecondary),
+            ),
+            if (quality.isNotEmpty)
+              Text('质量：$quality', style: AppTypography.caption(context)),
             SizedBox(height: AppSpacing.sm),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(
-                onPressed: () => context.push(AppRoutes.petActionEditor(widget.taskId, key)),
-                icon: const Icon(Icons.edit_outlined, size: 16),
-                label: const Text('编辑'),
+            AmitiaProgressBar(progress: (progress / 100).clamp(0.0, 1.0)),
+            if (_isProcessingTask && !excluded) ...[
+              SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => context.push(
+                      AppRoutes.petActionEditor(widget.taskId, key),
+                    ),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('编辑'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _retryAction(key),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('重处理'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _excludeAction(key),
+                    icon: const Icon(Icons.block, size: 16),
+                    label: const Text('排除'),
+                  ),
+                ],
               ),
-              OutlinedButton.icon(
-                onPressed: () => _retryAction(key),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('重处理'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _excludeAction(key),
-                icon: const Icon(Icons.block, size: 16),
-                label: const Text('排除'),
-              ),
-            ]),
+            ],
           ],
-        ]),
+        ),
       ),
     );
   }
@@ -217,31 +294,33 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
     }
     final status = (_task['status'] ?? '').toString();
     final done = status == 'completed' || status == 'succeeded';
-    return Column(children: [
-      AmitiaButton(
-        label: '生成可安装资源包',
-        icon: Icons.archive_outlined,
-        isFullWidth: true,
-        onPressed: done ? _createPackage : null,
-      ),
-      SizedBox(height: AppSpacing.sm),
-      AmitiaButton(
-        label: '查看已安装桌宠',
-        isSecondary: true,
-        icon: Icons.install_desktop,
-        isFullWidth: true,
-        onPressed: () => context.push(AppRoutes.workshopPetInstallations),
-      ),
-      if (!done && !{'failed', 'cancelled'}.contains(status)) ...[
+    return Column(
+      children: [
+        AmitiaButton(
+          label: '生成桌宠发布',
+          icon: Icons.archive_outlined,
+          isFullWidth: true,
+          onPressed: done ? _buildRelease : null,
+        ),
         SizedBox(height: AppSpacing.sm),
         AmitiaButton(
-          label: '取消处理任务',
+          label: '查看已安装桌宠',
           isSecondary: true,
+          icon: Icons.install_desktop,
           isFullWidth: true,
-          onPressed: _cancelProcessing,
+          onPressed: () => context.push(AppRoutes.workshopPetInstallations),
         ),
+        if (!done && !{'failed', 'cancelled'}.contains(status)) ...[
+          SizedBox(height: AppSpacing.sm),
+          AmitiaButton(
+            label: '取消处理任务',
+            isSecondary: true,
+            isFullWidth: true,
+            onPressed: _cancelProcessing,
+          ),
+        ],
       ],
-    ]);
+    );
   }
 
   Future<void> _createProcessingTask() async {
@@ -255,47 +334,73 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         'outputFormat': 'png',
         'defaultFps': '12',
       });
-      final response = await ref.read(backendServiceProvider).post<dynamic>(
-        '/api/desktop-pets/generation-tasks/${widget.taskId}/process',
-        data: form,
-      );
+      final response = await ref
+          .read(backendServiceProvider)
+          .post<dynamic>(
+            '/api/desktop-pets/generation-tasks/${widget.taskId}/process',
+            data: form,
+          );
       final id = response is Map ? (response['id'] ?? '').toString() : '';
       if (!mounted) return;
       if (id.isNotEmpty) context.replace(AppRoutes.petProcessing(id));
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('创建处理任务失败：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建处理任务失败：$e')));
     }
   }
 
   Future<void> _retryAction(String key) async {
     try {
-      await ref.read(backendServiceProvider).post<dynamic>('/api/desktop-pets/processing-tasks/${widget.taskId}/actions/$key/retry');
+      await ref
+          .read(backendServiceProvider)
+          .post<dynamic>(
+            '/api/desktop-pets/processing-tasks/${widget.taskId}/actions/$key/retry',
+          );
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('重处理失败：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('重处理失败：$e')));
     }
   }
 
   Future<void> _excludeAction(String key) async {
     try {
-      await ref.read(backendServiceProvider).post<dynamic>('/api/desktop-pets/processing-tasks/${widget.taskId}/actions/$key/exclude');
+      await ref
+          .read(backendServiceProvider)
+          .post<dynamic>(
+            '/api/desktop-pets/processing-tasks/${widget.taskId}/actions/$key/exclude',
+          );
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('排除失败：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('排除失败：$e')));
     }
   }
 
   Future<void> _cancelProcessing() async {
     try {
-      await ref.read(backendServiceProvider).post<dynamic>('/api/desktop-pets/processing-tasks/${widget.taskId}/cancel');
+      await ref
+          .read(backendServiceProvider)
+          .post<dynamic>(
+            '/api/desktop-pets/processing-tasks/${widget.taskId}/cancel',
+          );
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('取消失败：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('取消失败：$e')));
     }
   }
 
-  Future<void> _createPackage() async {
+  Future<void> _buildRelease() async {
     final included = _actions
         .where((a) => !(a['excluded'] == true || a['excluded'] == 1))
         .map((a) => (a['actionKey'] ?? '').toString())
@@ -303,41 +408,54 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         .toList();
     if (included.isEmpty) return;
     try {
-      final response = await ref.read(backendServiceProvider).post<dynamic>(
-        '/api/desktop-pets/processing-tasks/${widget.taskId}/package',
-        data: {
-          'defaultAction': included.first,
-          'includedActions': included,
-          'userDefaultAction': included.first,
-        },
-      );
-      final packageId = response is Map ? (response['packageId'] ?? '').toString() : '';
+      final release = await PetReleaseService(ref.read(backendServiceProvider))
+          .buildRelease(
+            processingTaskId: widget.taskId,
+            defaultAction: included.first,
+            includedActions: included,
+          );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(packageId.isEmpty ? '资源包已生成' : '资源包已生成：$packageId')));
-      context.push(AppRoutes.workshopPetInstallations);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('桌宠发布 v${release.version} 已生成')));
+      context.push(
+        '${AppRoutes.workshopPetInstallations}?releaseId=${Uri.encodeQueryComponent(release.id)}',
+      );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('打包失败：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('发布失败：$e')));
     }
   }
 
   String _statusText(String status) {
     switch (status) {
-      case 'pending': return '待处理';
-      case 'queued': return '排队中';
+      case 'pending':
+        return '待处理';
+      case 'queued':
+        return '排队中';
       case 'processing':
-      case 'running': return '处理中';
+      case 'running':
+        return '处理中';
       case 'completed':
-      case 'succeeded': return '已完成';
-      case 'failed': return '失败';
-      case 'cancelled': return '已取消';
-      default: return status;
+      case 'succeeded':
+        return '已完成';
+      case 'failed':
+        return '失败';
+      case 'cancelled':
+        return '已取消';
+      default:
+        return status;
     }
   }
 
   BadgeType _statusType(String status) {
-    if (status == 'completed' || status == 'succeeded') return BadgeType.success;
+    if (status == 'completed' || status == 'succeeded')
+      return BadgeType.success;
     if (status == 'failed' || status == 'cancelled') return BadgeType.error;
-    if (status == 'processing' || status == 'running' || status == 'queued') return BadgeType.accent;
+    if (status == 'processing' || status == 'running' || status == 'queued')
+      return BadgeType.accent;
     return BadgeType.neutral;
   }
 }

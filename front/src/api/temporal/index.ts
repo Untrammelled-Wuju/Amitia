@@ -110,47 +110,51 @@ export async function rejectTemporalTimezoneSuggestion() {
     )
   ).data;
 }
+interface RelationshipTimeView {
+  ownerId: string;
+  roleId: string;
+  executionScope: Record<string, unknown>;
+  settings: RelationshipTimeSettings;
+  state: RelationshipTimeContext;
+  episodes: ReunionEpisode[];
+  episode?: ReunionEpisode;
+}
+
+const relationshipAuthority = Symbol("relationshipTimeAuthority");
+
+async function relationshipView(characterId: string, episodeId = "") {
+  const result = (await apiClient.get<RelationshipTimeView>("/api/device-mesh/v1/business/relationship-time", { params: { characterId, ...(episodeId ? { episodeId } : {}) } })).data;
+  if (!result?.ownerId || result.roleId !== characterId || result.executionScope?.resourceOwnerId !== result.ownerId || result.executionScope?.roleId !== characterId) throw new Error("关系时间数据归属无法确认");
+  return result;
+}
+
 export async function getRelationshipTimeSettings(characterId: string) {
-  return (
-    await apiClient.get<RelationshipTimeSettings>(
-      `/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/settings`,
-    )
-  ).data;
+  const result = await relationshipView(characterId);
+  Object.assign(result.settings, { [relationshipAuthority]: result.executionScope });
+  return result.settings;
 }
-export async function updateRelationshipTimeSettings(
-  characterId: string,
-  settings: RelationshipTimeSettings,
-) {
-  return (
-    await apiClient.put<RelationshipTimeSettings>(
-      `/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/settings`,
-      settings,
-    )
-  ).data;
+
+export async function updateRelationshipTimeSettings(characterId: string, settings: RelationshipTimeSettings) {
+  const expectedExecutionScope = (settings as RelationshipTimeSettings & { [relationshipAuthority]?: Record<string, unknown> })[relationshipAuthority];
+  if (!expectedExecutionScope) throw new Error("请重新加载关系时间设置");
+  const result = (await apiClient.put<RelationshipTimeView>("/api/device-mesh/v1/business/relationship-time", { settings, expectedExecutionScope }, { params: { characterId } })).data;
+  if (result?.roleId !== characterId || result.ownerId !== expectedExecutionScope.resourceOwnerId) throw new Error("关系时间保存归属无法确认");
+  Object.assign(result.settings, { [relationshipAuthority]: result.executionScope });
+  return result.settings;
 }
+
 export async function getRelationshipTimeState(characterId: string) {
-  return (
-    await apiClient.get<RelationshipTimeContext>(
-      `/api/temporal/characters/${encodeURIComponent(characterId)}/relationship-time/state`,
-    )
-  ).data;
+  return (await relationshipView(characterId)).state;
 }
+
 export async function listReunionEpisodes(characterId: string) {
-  return (
-    await apiClient.get<ReunionEpisode[] | { items: ReunionEpisode[] }>(
-      `/api/temporal/characters/${encodeURIComponent(characterId)}/reunion-episodes`,
-    )
-  ).data;
+  return (await relationshipView(characterId)).episodes;
 }
-export async function getReunionEpisode(
-  characterId: string,
-  episodeId: string,
-) {
-  return (
-    await apiClient.get<ReunionEpisode>(
-      `/api/temporal/characters/${encodeURIComponent(characterId)}/reunion-episodes/${encodeURIComponent(episodeId)}`,
-    )
-  ).data;
+
+export async function getReunionEpisode(characterId: string, episodeId: string) {
+  const episode = (await relationshipView(characterId, episodeId)).episode;
+  if (!episode) throw new Error("重逢记录不存在或不属于当前所有者");
+  return episode;
 }
 
 export type * from "./types";

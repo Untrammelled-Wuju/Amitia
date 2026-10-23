@@ -3,12 +3,10 @@
 package processing
 
 import (
-	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"io"
 	"os"
@@ -34,12 +32,6 @@ type Handler struct {
 
 func NewHandler(svc Service, repo Repository, responder *security.SafeArtifactResponder, guard security.OwnershipGuard) *Handler {
 	return &Handler{service: svc, repo: repo, safeResponder: responder, ownershipGuard: guard}
-}
-
-type createPackagePayload struct {
-	DefaultAction     string   `json:"defaultAction"`
-	IncludedActions   []string `json:"includedActions"`
-	UserDefaultAction string   `json:"userDefaultAction"`
 }
 
 type switchAttemptPayload struct {
@@ -185,57 +177,6 @@ func (h *Handler) RetryProcessingAction(c *gin.Context) {
 	})
 
 	util.SuccessMsgResponse(c, "动作已重新加入处理队列", nil)
-}
-
-func (h *Handler) CreatePackage(c *gin.Context) {
-	c.Header("Deprecation", "true")
-	c.Header("Sunset", "2026-12-31")
-	c.Header("Link", `</api/desktop-pets/releases/build>; rel="successor-version"`)
-	processingTaskID := c.Param("processingTaskId")
-	if processingTaskID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "处理任务 ID 为空", gin.H{"errorCode": ErrCodeProcessingTaskNotFound})
-		return
-	}
-
-	var payload createPackagePayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeProcessingPackageFailed})
-		return
-	}
-
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-
-	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
-		writeProcessingOwnershipError(c, err)
-		return
-	}
-
-	req := &CreatePackageRequest{
-		ProcessingTaskID:  processingTaskID,
-		SpaceID:           string(actor.SpaceID),
-		DefaultAction:     payload.DefaultAction,
-		IncludedActions:   payload.IncludedActions,
-		UserDefaultAction: payload.UserDefaultAction,
-	}
-
-	resp, err := h.service.CreatePackage(req)
-	if err != nil {
-		writeProcessingError(c, err)
-		return
-	}
-
-	desktoppet.PublishTaskEvent(processingTaskID, "processing.package.created", map[string]interface{}{
-		"processingTaskId": processingTaskID,
-		"packageId":        resp.PackageID,
-		"packageHash":      resp.PackageHash,
-		"status":           resp.Status,
-	})
-
-	util.SuccessMsgResponse(c, "资源包已生成", resp)
 }
 
 func (h *Handler) SwitchAttempt(c *gin.Context) {
@@ -483,8 +424,6 @@ func writeProcessingOwnershipError(c *gin.Context, err error) {
 
 func mapProcessingErrorCode(code string) int {
 	switch code {
-	case "PACKAGE_NOT_FOUND":
-		return response.NotFound
 	case ErrCodeProcessingTaskAlreadyRunning,
 		ErrCodeProcessingTaskStateConflict,
 		ErrCodeProcessingActionNotRetryable,
@@ -506,8 +445,7 @@ func mapProcessingErrorCode(code string) int {
 		ErrCodeProcessingActionNotFound,
 		ErrCodeProcessingPreviewNotReady:
 		return response.NotFound
-	case ErrCodeProcessingTaskNotOwned,
-		ErrCodePackageNotOwned:
+	case ErrCodeProcessingTaskNotOwned:
 		return response.Forbidden
 	case ErrCodeProcessingStorageFailed:
 		return response.InternalError
@@ -529,99 +467,6 @@ func mapProcessingErrorCode(code string) int {
 		return response.BusinessError
 	default:
 		return response.InternalError
-	}
-}
-
-func (h *Handler) ListPackages(c *gin.Context) {
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	spaceID := actorID
-	generationTaskID := c.Query("generationTaskId")
-	if generationTaskID != "" {
-		packages, err := h.service.ListPackagesByGenerationTask(spaceID, generationTaskID)
-		if err != nil {
-			util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
-			return
-		}
-		util.SuccessResponse(c, gin.H{"items": packages, "total": len(packages)})
-		return
-	}
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-
-	packages, total, err := h.service.ListPackages(spaceID, page, pageSize)
-	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
-		return
-	}
-	util.SuccessResponse(c, gin.H{"items": packages, "total": total, "page": page, "pageSize": pageSize})
-}
-
-func (h *Handler) DownloadPackage(c *gin.Context) {
-	packageID := c.Param("packageId")
-	if packageID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "包 ID 为空", nil)
-		return
-	}
-
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	spaceID := actorID
-	if err := h.service.CheckPackageOwnership(packageID, spaceID); err != nil {
-		writeProcessingError(c, err)
-		return
-	}
-
-	packageDir, pkg, err := h.service.DownloadPackage(packageID)
-	if err != nil {
-		writeProcessingError(c, err)
-		return
-	}
-
-	fileName := fmt.Sprintf("%s.zip", pkg.Name)
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
-
-	zipWriter := zip.NewWriter(c.Writer)
-	defer zipWriter.Close()
-
-	err = filepath.Walk(packageDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		relPath, _ := filepath.Rel(packageDir, path)
-		zipEntry, zerr := zipWriter.Create(filepath.ToSlash(relPath))
-		if zerr != nil {
-			return zerr
-		}
-		f, ferr := os.Open(path)
-		if ferr != nil {
-			return ferr
-		}
-		defer f.Close()
-		_, cperr := io.Copy(zipEntry, f)
-		return cperr
-	})
-	if err != nil {
-		_ = err
 	}
 }
 

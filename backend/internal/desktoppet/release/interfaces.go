@@ -192,15 +192,6 @@ type ReleaseRepository interface {
 	UpdatePublishJournal(journal *ReleasePublishJournal) error
 	ListPendingPublishJournals() ([]*ReleasePublishJournal, error)
 
-	CreateLegacyPackageMapping(mapping *LegacyPackageMapping) error
-	GetLegacyPackageMapping(legacyPackageID string) (*LegacyPackageMapping, error)
-	UpdateLegacyPackageMapping(mapping *LegacyPackageMapping) error
-	ListPendingLegacyMappings() ([]*LegacyPackageMapping, error)
-
-	CreateLegacyMigrationOperation(op *LegacyPackageMigrationOperation) error
-	GetLegacyMigrationOperation(id string) (*LegacyPackageMigrationOperation, error)
-	UpdateLegacyMigrationOperation(op *LegacyPackageMigrationOperation) error
-
 	GetPetIdentity(petID string) (*PetIdentityData, error)
 	CreatePetIdentity(identity *PetIdentityData) error
 	CreatePetIdentityTx(tx *gorm.DB, identity *PetIdentityData) error

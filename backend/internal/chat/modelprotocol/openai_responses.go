@@ -281,6 +281,7 @@ func (a *OpenAIResponsesAdapter) parseResponse(respBytes []byte) (*ModelResult, 
 	}
 	res.ProviderResponseID = result.ID
 
+	res.Usage.Reported = UsageReported(respBytes, "usage")
 	return res, nil
 }
 

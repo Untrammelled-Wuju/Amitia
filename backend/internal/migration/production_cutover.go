@@ -167,6 +167,8 @@ type CanaryResult struct {
 	ProjectionRevision int64  `json:"projectionRevision"`
 	DesiredRevision    int64  `json:"desiredRevision"`
 	Success            bool   `json:"success"`
+	Skipped            bool   `json:"skipped"`
+	SkipReason         string `json:"skipReason,omitempty"`
 }
 
 type CutoverWorkerCutoffPort interface {

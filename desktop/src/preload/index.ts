@@ -14,9 +14,6 @@ import type {
 } from "../shared/types";
 
 const api = {
-  showReplyNotification(options?: { notify: boolean; sound: boolean }): Promise<boolean> {
-    return ipcRenderer.invoke(IPC_CHANNELS.showReplyNotification, options);
-  },
   getEnvironment(): Promise<DesktopEnvironment> {
     return ipcRenderer.invoke(IPC_CHANNELS.getEnvironment);
   },

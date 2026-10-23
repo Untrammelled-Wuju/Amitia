@@ -1,7 +1,9 @@
-import { Notification, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type { BusinessCoreClient } from "./business-core-client";
 import { getMeshIdentity } from "./device-mesh/local-agent-client";
+import { createDesktopNotification, desktopNotificationMetadata } from "./desktop-notification";
+import { getBackendSessionClient } from "./backend-session-client";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -11,6 +13,18 @@ interface SSEEventEnvelope {
   payload: Record<string, unknown>;
   expiresAt?: string;
   timestamp: string;
+}
+
+interface BusinessCoreEnvelope<T> {
+  code?: number;
+  msg?: string;
+  data?: T;
+}
+
+interface RegisteredNotificationDevice {
+  id?: string;
+  deviceId?: string;
+  platform?: string;
 }
 
 export interface UIHostSSEOptions {
@@ -71,22 +85,21 @@ export class UIHostSSE {
     try {
       const identity = await getMeshIdentity();
       if (identity?.deviceId) {
-        const response = await this.businessCore.fetch('/api/notifications/devices');
-        if (!response.ok) throw new Error('桌面通知配置读取失败');
-        const body = await response.json() as { data?: Array<{ deviceId: string; platform: string }> };
-        if (!Array.isArray(body.data)) throw new Error('桌面通知配置响应无效');
-        if (!body.data.some(endpoint => endpoint.deviceId === identity.deviceId && endpoint.platform === 'desktop')) {
-          const preference = await this.businessCore.fetch('/api/browser-notifications/status?deviceId=' + encodeURIComponent(identity.deviceId));
-          if (!preference.ok) throw new Error('桌面通知偏好读取失败');
-          const preferenceBody = await preference.json() as { data?: { enabled?: boolean } };
-          if (typeof preferenceBody.data?.enabled !== 'boolean') throw new Error('桌面通知偏好响应无效');
-          const registration = await this.businessCore.fetch('/api/notifications/devices/register', { method: 'POST', body: JSON.stringify({ deviceId: identity.deviceId, platform: 'desktop', preferredProvider: 'desktop-sse', systemNotificationsEnabled: preferenceBody.data.enabled }) });
-          if (!registration.ok) throw new Error('桌面通知通道注册失败');
-          const receipt = await registration.json() as { data?: { id?: string; deviceId?: string; platform?: string } };
-          if (!receipt.data?.id || receipt.data.deviceId !== identity.deviceId || receipt.data.platform !== 'desktop') throw new Error('桌面通知通道保存未确认');
-        }
+        const metadata = desktopNotificationMetadata();
+        const registered = await this.requestJSON<RegisteredNotificationDevice>('/api/notifications/devices/register', { method: 'POST', body: JSON.stringify({
+          deviceId: identity.deviceId,
+          platform: 'desktop',
+          preferredProvider: 'desktop-sse',
+          deviceName: metadata.deviceName,
+          osVersion: metadata.osVersion,
+          appVersion: app.getVersion(),
+          locale: app.getLocale(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          appearance: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
+        }) });
+        if (!registered.id || registered.deviceId !== identity.deviceId || registered.platform !== 'desktop') throw new Error('桌面通知通道保存未确认');
       }
-      const response = await this.businessCore.fetch(path, {
+      const response = await this.openEventStream(path, {
         method: "GET",
         headers: {
           Accept: "text/event-stream",
@@ -123,11 +136,52 @@ export class UIHostSSE {
       if (!this.stopped) {
         this.scheduleReconnect();
       }
-    } catch {
-      if (!this.stopped) {
-        this.scheduleReconnect();
-      }
+    } catch (error) {
+      if (this.stopped || this.abortController?.signal.aborted) return;
+      console.warn("[UIHostSSE] 连接或通知通道初始化失败:", error);
+      this.scheduleReconnect();
     }
+  }
+
+  private async requestJSON<T>(path: string, init: RequestInit): Promise<T> {
+    let lastMessage = "桌面通知接口不可用";
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await this.businessCore.fetch(path, init);
+      let body: BusinessCoreEnvelope<T> | null = null;
+      try {
+        body = await response.json() as BusinessCoreEnvelope<T>;
+      } catch {}
+      if (response.ok && body?.code === 200 && body.data !== undefined) return body.data;
+      lastMessage = body?.msg || `桌面通知接口返回 ${response.status}`;
+      if (body?.code === 401 && attempt === 0) {
+        getBackendSessionClient().invalidateSession();
+        continue;
+      }
+      throw new Error(lastMessage);
+    }
+    throw new Error(lastMessage);
+  }
+
+  private async openEventStream(path: string, init: RequestInit): Promise<Response> {
+    let lastMessage = "桌面通知事件流不可用";
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await this.businessCore.fetch(path, init);
+      const contentType = response.headers.get("content-type")?.toLowerCase() || "";
+      if (response.ok && response.body && !contentType.includes("application/json")) return response;
+      let body: BusinessCoreEnvelope<unknown> | null = null;
+      if (contentType.includes("application/json")) {
+        try {
+          body = await response.json() as BusinessCoreEnvelope<unknown>;
+        } catch {}
+      }
+      lastMessage = body?.msg || `桌面通知事件流返回 ${response.status}`;
+      if (body?.code === 401 && attempt === 0) {
+        getBackendSessionClient().invalidateSession();
+        continue;
+      }
+      throw new Error(lastMessage);
+    }
+    throw new Error(lastMessage);
   }
 
   private parseAndDispatch(raw: string): void {
@@ -190,8 +244,19 @@ export class UIHostSSE {
     if (!envelope.payload) return;
     const title = (envelope.payload.title as string) || "通知";
     const body = (envelope.payload.body as string) || "";
-    const notif = new Notification({ title, body });
-    notif.show();
+    const notification = createDesktopNotification({
+      requestId: envelope.requestId,
+      type: String(envelope.payload.type || ""),
+      title,
+      body,
+      conversationId: String(envelope.payload.conversationId || ""),
+      sound: envelope.payload.sound !== false,
+    });
+    if (!notification) {
+      console.warn("[UIHostSSE] 当前桌面环境不支持系统通知");
+      return;
+    }
+    notification.show();
   }
 
   private handleScheduledNotification(envelope: SSEEventEnvelope): void {
@@ -200,10 +265,24 @@ export class UIHostSSE {
     const acknowledge = (state: string) => {
       void this.businessCore.fetch('/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack', { method: 'POST', body: JSON.stringify({ state }) }).catch(() => {});
     };
-    if (!Notification.isSupported()) { acknowledge('display_failed'); return; }
-    const notification = new Notification({ title: String(payload.title || 'Amitia'), body: String(payload.body || ''), silent: payload.sound === false });
+    const notification = createDesktopNotification({
+      requestId: envelope.requestId,
+      type: String(payload.type || ""),
+      title: String(payload.title || 'Amitia'),
+      body: String(payload.body || ''),
+      conversationId: String(payload.conversationId || ''),
+      groupTitle: String(payload.characterName || payload.groupTitle || ''),
+      sound: payload.sound !== false,
+    });
+    if (!notification) {
+      acknowledge('display_failed');
+      return;
+    }
     notification.on('show', () => acknowledge('displayed'));
-    notification.on('failed', () => acknowledge('display_failed'));
+    notification.on('failed', (_event, error) => {
+      console.warn("[UIHostSSE] 系统通知展示失败:", error);
+      acknowledge('display_failed');
+    });
     notification.on('click', () => {
       acknowledge('clicked');
       const win = this.mainWindow();

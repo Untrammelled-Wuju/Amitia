@@ -21,6 +21,7 @@ type OwnedContinuity struct {
 	PausedReason       string                       `json:"pausedReason,omitempty"`
 	Scope              coordination.ExecutionScope  `json:"executionScope"`
 	Thread             continuity.Thread            `json:"thread"`
+	Bindings           []continuity.ThreadBinding   `json:"bindings,omitempty"`
 	Waits              []continuity.Wait            `json:"waits"`
 	Events             []continuity.ThreadEvent     `json:"events"`
 	CoreID             string                       `json:"coreId"`
@@ -62,6 +63,29 @@ type ContinuityMutation struct {
 	Outcome              string                       `json:"outcome,omitempty"`
 	SignalHash           string                       `json:"signalHash,omitempty"`
 	UpdateNextAction     bool                         `json:"updateNextAction,omitempty"`
+	Summary              string                       `json:"summary,omitempty"`
+	CurrentState         string                       `json:"currentState,omitempty"`
+	UpdateSummary        bool                         `json:"updateSummary,omitempty"`
+	UpdateCurrentState   bool                         `json:"updateCurrentState,omitempty"`
+	Binding              *continuity.ThreadBinding    `json:"binding,omitempty"`
+	Observation          *continuity.ObservePayload   `json:"observation,omitempty"`
+	ThreadPatch          *continuity.ThreadPatch      `json:"threadPatch,omitempty"`
+	RuntimeEvent         *ContinuityRuntimeEvent      `json:"runtimeEvent,omitempty"`
+}
+
+type ContinuityRuntimeEvent struct {
+	Bindings       []continuity.BindingLookup `json:"-"`
+	EventType      string                     `json:"eventType"`
+	SourceType     string                     `json:"sourceType,omitempty"`
+	SourceID       string                     `json:"sourceId,omitempty"`
+	ConversationID string                     `json:"conversationId,omitempty"`
+	ExecutionID    string                     `json:"executionId,omitempty"`
+	PayloadJSON    string                     `json:"payloadJson,omitempty"`
+	ThreadStatus   continuity.ThreadStatus    `json:"threadStatus,omitempty"`
+	CurrentState   string                     `json:"currentState,omitempty"`
+	NextAction     string                     `json:"nextAction,omitempty"`
+	Wait           *continuity.Wait           `json:"wait,omitempty"`
+	Signal         *continuity.Signal         `json:"signal,omitempty"`
 }
 
 func (e *Engine) continuityAuthority(ctx context.Context, request Request) (context.Context, coordination.ExecutionScope, func(), error) {
@@ -233,7 +257,7 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 		if len(mutation.NextAction) > 8192 {
 			return document, coordination.Acknowledgement{}, errors.New("下一步内容超过上限")
 		}
-		document = OwnedContinuity{Thread: continuity.Thread{ID: mutation.ID, SpaceID: scope.SpaceID, CharacterID: scope.RoleID, Title: mutation.Title, Goal: mutation.Goal, NextAction: mutation.NextAction, Status: continuity.ThreadStatusActive, Confidence: 1, CreatedAt: now, LastActiveAt: now}, Waits: []continuity.Wait{}, Events: []continuity.ThreadEvent{}}
+		document = OwnedContinuity{Thread: continuity.Thread{ID: mutation.ID, SpaceID: scope.SpaceID, CharacterID: scope.RoleID, Title: mutation.Title, Goal: mutation.Goal, NextAction: mutation.NextAction, Status: continuity.ThreadStatusActive, Confidence: 1, CreatedAt: now, LastActiveAt: now}, Bindings: []continuity.ThreadBinding{}, Waits: []continuity.Wait{}, Events: []continuity.ThreadEvent{}}
 	case "update":
 		if document.Thread.Status.IsTerminal() {
 			return document, coordination.Acknowledgement{}, errors.New("已结束的事项不能修改")
@@ -256,6 +280,37 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 			}
 			document.Thread.NextAction = mutation.NextAction
 		}
+		if mutation.UpdateSummary {
+			if len(mutation.Summary) > 128<<10 {
+				return document, coordination.Acknowledgement{}, errors.New("事项摘要超过上限")
+			}
+			document.Thread.Summary = mutation.Summary
+		}
+		if mutation.UpdateCurrentState {
+			if len(mutation.CurrentState) > 128<<10 {
+				return document, coordination.Acknowledgement{}, errors.New("当前状态超过上限")
+			}
+			document.Thread.CurrentState = mutation.CurrentState
+		}
+	case "bind":
+		if document.Thread.Status.IsTerminal() || mutation.Binding == nil || mutation.Binding.BindingType == "" || mutation.Binding.BindingID == "" {
+			return document, coordination.Acknowledgement{}, errors.New("持续事项绑定参数无效")
+		}
+		binding := *mutation.Binding
+		binding.ThreadID = document.Thread.ID
+		document.Bindings = continuity.MergeThreadBinding(document.Bindings, binding)
+	case "observe":
+		if mutation.Observation == nil || document.Thread.Status.IsTerminal() {
+			return document, coordination.Acknowledgement{}, errors.New("持续事项观察参数无效或事项已结束")
+		}
+		if err := applyContinuityObservation(&document, *mutation.Observation, mutation.ThreadPatch, request.RequestID, now); err != nil {
+			return document, coordination.Acknowledgement{}, err
+		}
+	case "runtime_event":
+		if mutation.RuntimeEvent == nil || document.Thread.Status.IsTerminal() {
+			return document, coordination.Acknowledgement{}, errors.New("持续事项运行时事件参数无效或事项已结束")
+		}
+		applyContinuityRuntimeEvent(&document, *mutation.RuntimeEvent, request.RequestID, now)
 	case "confirm_execution":
 		if document.Lease == nil || document.Lease.ID != mutation.LeaseID || !(document.Lease.State == "unknown" || document.Lease.State == "running" && !document.Lease.ExpiresAt.After(now)) {
 			return document, coordination.Acknowledgement{}, ErrUncertainExecution
@@ -429,7 +484,9 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 	document.Thread.Revision = mutation.ExpectedRevision + 1
 	document.Thread.UpdatedAt = now
 	document.Thread.LastActiveAt = now
-	document.Events = append(document.Events, continuity.ThreadEvent{ID: "event/" + request.RequestID, ThreadID: document.Thread.ID, EventType: mutation.Action, RequestID: request.RequestID, PayloadJSON: "{}", OccurredAt: now})
+	if mutation.Action != "observe" && mutation.Action != "runtime_event" {
+		document.Events = append(document.Events, continuity.ThreadEvent{ID: "event/" + request.RequestID, ThreadID: document.Thread.ID, EventType: mutation.Action, RequestID: request.RequestID, PayloadJSON: "{}", IdempotencyKey: "event|" + request.RequestID, OccurredAt: now})
+	}
 	if len(document.Events) > 256 {
 		document.Events = document.Events[len(document.Events)-256:]
 	}
@@ -440,6 +497,199 @@ func (e *Engine) Continuity(ctx context.Context, request Request, mutation Conti
 	}
 	ack, err := e.commit(ctx, coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "continuity", ID: document.Thread.ID, RoleID: coordination.StorageRole(scope, "continuity"), ExpectedRevision: mutation.ExpectedRevision, Body: body(document)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: proof}}})
 	return document, ack, err
+}
+
+func applyContinuityObservation(document *OwnedContinuity, observation continuity.ObservePayload, patch *continuity.ThreadPatch, requestID string, now time.Time) error {
+	if document == nil {
+		return errors.New("持续事项不存在")
+	}
+	if observation.ThreadID != "" && observation.ThreadID != document.Thread.ID {
+		return coordination.ErrWrongOwner
+	}
+	observation.ThreadID = document.Thread.ID
+	if patch == nil {
+		heuristic := continuity.BuildHeuristicThreadPatch(&document.Thread, observation)
+		patch = &heuristic
+	}
+	if len(observation.UserMessage) > 128<<10 || len(observation.AssistantReply) > 128<<10 {
+		return errors.New("持续事项观察内容超过上限")
+	}
+	if userMessage := strings.TrimSpace(observation.UserMessage); userMessage != "" {
+		for index := range document.Waits {
+			wait := &document.Waits[index]
+			if wait.WaitType != continuity.WaitTypeUser || wait.Status != continuity.WaitStatusWaiting {
+				continue
+			}
+			resolved := now
+			wait.Status = continuity.WaitStatusResolved
+			wait.ResolvedAt = &resolved
+			wait.ResolvedBy = "user_message"
+			wait.UpdatedAt = now
+		}
+	}
+	continuity.ApplyThreadPatch(&document.Thread, *patch, now)
+	for _, waitPatch := range patch.Waits {
+		switch waitPatch.Action {
+		case "create":
+			wait, ok := continuity.WaitFromPatch(document.Thread.ID, waitPatch, observation.ExecutionID, now)
+			if !ok {
+				continue
+			}
+			duplicate := false
+			for _, existing := range document.Waits {
+				if existing.Status != continuity.WaitStatusWaiting || existing.WaitType != wait.WaitType || existing.Description != wait.Description || existing.ConditionJSON != wait.ConditionJSON {
+					continue
+				}
+				duplicate = true
+				break
+			}
+			if !duplicate && len(document.Waits) < 256 {
+				document.Waits = append(document.Waits, wait)
+			}
+		case "resolve", "cancel":
+			for index := range document.Waits {
+				wait := &document.Waits[index]
+				if wait.Status != continuity.WaitStatusWaiting {
+					continue
+				}
+				if waitPatch.WaitID != "" {
+					if wait.ID != waitPatch.WaitID {
+						continue
+					}
+				} else if waitPatch.Type == "" || wait.WaitType != waitPatch.Type {
+					continue
+				}
+				resolved := now
+				wait.Status = continuity.WaitStatusResolved
+				if waitPatch.Action == "cancel" {
+					wait.Status = continuity.WaitStatusCancelled
+				}
+				wait.ResolvedAt = &resolved
+				wait.ResolvedBy = "continuity_intelligence"
+				wait.UpdatedAt = now
+				if waitPatch.Action == "resolve" && wait.AutoResume {
+					wait.WakeState = continuity.WakeStatePending
+					wait.WakeRequestID = "continuity-wake/" + requestID
+					wait.NextWakeAt = &resolved
+				}
+				break
+			}
+		}
+	}
+	if strings.TrimSpace(observation.ConversationID) != "" {
+		document.Bindings = continuity.MergeThreadBinding(document.Bindings, continuity.NewThreadBinding(document.Thread.ID, "conversation", observation.ConversationID, "context", "observer", 1))
+	}
+	open := false
+	for _, wait := range document.Waits {
+		if wait.Status == continuity.WaitStatusWaiting {
+			open = true
+			break
+		}
+	}
+	if open && document.Thread.Status == continuity.ThreadStatusActive {
+		document.Thread.Status = continuity.ThreadStatusWaiting
+	}
+	if !open && document.Thread.Status == continuity.ThreadStatusWaiting {
+		document.Thread.Status = continuity.ThreadStatusActive
+	}
+	if patch.EventSummary != "" {
+		payload, _ := json.Marshal(map[string]any{"summary": patch.EventSummary, "confidence": patch.Confidence})
+		eventType := patch.EventType
+		if eventType == "" {
+			eventType = "turn.heuristic"
+		}
+		document.Events = append(document.Events, continuity.ThreadEvent{ID: "event/" + requestID + "/observed", ThreadID: document.Thread.ID, EventType: eventType, SourceType: observation.Source, ConversationID: observation.ConversationID, RequestID: requestID, ExecutionID: observation.ExecutionID, PayloadJSON: string(payload), IdempotencyKey: requestID + "|continuity.observe", OccurredAt: now})
+	}
+	if len(document.Events) > 256 {
+		document.Events = document.Events[len(document.Events)-256:]
+	}
+	return nil
+}
+
+func applyContinuityRuntimeEvent(document *OwnedContinuity, event ContinuityRuntimeEvent, requestID string, now time.Time) {
+	if document == nil {
+		return
+	}
+	if event.Wait != nil && continuity.ValidWaitType(event.Wait.WaitType) && len(document.Waits) < 256 {
+		wait := *event.Wait
+		wait.ThreadID = document.Thread.ID
+		wait.Status = continuity.WaitStatusWaiting
+		wait.CreatedAt = now
+		wait.UpdatedAt = now
+		if wait.ID == "" {
+			wait.ID = "wait/runtime/" + requestID
+		}
+		duplicate := false
+		for _, existing := range document.Waits {
+			if existing.Status == continuity.WaitStatusWaiting && existing.WaitType == wait.WaitType && existing.ConditionJSON == wait.ConditionJSON {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			document.Waits = append(document.Waits, wait)
+		}
+	}
+	if event.Signal != nil && continuity.ValidWaitType(event.Signal.WaitType) {
+		signal := *event.Signal
+		if signal.OccurredAt.IsZero() {
+			signal.OccurredAt = now
+		}
+		for index := range document.Waits {
+			wait := &document.Waits[index]
+			if wait.Status != continuity.WaitStatusWaiting || !continuity.WaitMatchesSignal(*wait, signal) {
+				continue
+			}
+			resolved := now
+			wait.Status = continuity.WaitStatusResolved
+			wait.ResolvedAt = &resolved
+			wait.ResolvedBy = strings.TrimSpace(signal.Source)
+			if wait.ResolvedBy == "" {
+				wait.ResolvedBy = signal.WaitType
+			}
+			wait.ResolutionJSON = event.PayloadJSON
+			wait.UpdatedAt = now
+			if wait.AutoResume {
+				wait.WakeState = continuity.WakeStatePending
+				wait.WakeRequestID = "continuity-wake/" + requestID + "/" + wait.ID
+				wait.NextWakeAt = &resolved
+			}
+		}
+	}
+	if event.ThreadStatus != "" && continuity.ValidThreadStatus(event.ThreadStatus) {
+		document.Thread.Status = event.ThreadStatus
+		if event.ThreadStatus.IsTerminal() {
+			completed := now
+			document.Thread.CompletedAt = &completed
+		}
+	}
+	if event.CurrentState != "" {
+		document.Thread.CurrentState = event.CurrentState
+	}
+	if event.NextAction != "" || event.ThreadStatus.IsTerminal() {
+		document.Thread.NextAction = event.NextAction
+	}
+	payload := event.PayloadJSON
+	if payload == "" {
+		payload = "{}"
+	}
+	document.Events = append(document.Events, continuity.ThreadEvent{ID: "event/" + requestID + "/runtime", ThreadID: document.Thread.ID, EventType: event.EventType, SourceType: event.SourceType, SourceID: event.SourceID, ConversationID: event.ConversationID, RequestID: requestID, ExecutionID: event.ExecutionID, PayloadJSON: payload, IdempotencyKey: "runtime|" + requestID, OccurredAt: now})
+	if len(document.Events) > 256 {
+		document.Events = document.Events[len(document.Events)-256:]
+	}
+	open := false
+	for _, wait := range document.Waits {
+		if wait.Status == continuity.WaitStatusWaiting {
+			open = true
+			break
+		}
+	}
+	if open && document.Thread.Status == continuity.ThreadStatusActive {
+		document.Thread.Status = continuity.ThreadStatusWaiting
+	}
+	if !open && document.Thread.Status == continuity.ThreadStatusWaiting {
+		document.Thread.Status = continuity.ThreadStatusActive
+	}
 }
 
 func PresentContinuity(document OwnedContinuity, scope coordination.ExecutionScope, now time.Time) OwnedContinuity {

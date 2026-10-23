@@ -77,8 +77,8 @@ func (r *Runtime) AcknowledgeScheduled(ctx context.Context, spaceID, deviceID, i
 	if err := json.Unmarshal([]byte(row.EnvelopeJSON), &envelope); err != nil {
 		return err
 	}
-	if envelope.Type != "reminder.triggered" && envelope.Type != "proactive.message" {
-		return errors.New("通知不属于日程任务")
+	if envelope.Type != "reminder.triggered" && envelope.Type != "proactive.message" && envelope.Type != "system.test" {
+		return errors.New("通知类型不支持展示回执")
 	}
 	query := r.db.WithContext(ctx).Model(&NotificationOutbox{}).Where("id = ?", row.ID)
 	if state != "clicked" {

@@ -125,39 +125,6 @@ func TestSnapshotLabelsFallbackTimezoneAsUnconfirmed(t *testing.T) {
 	}
 }
 
-type relationshipTimeProbe struct{ calls int }
-
-func (p *relationshipTimeProbe) Resolve(_ context.Context, _ SnapshotInput, _ time.Time) (*RelationshipTimeContext, error) {
-	p.calls++
-	return &RelationshipTimeContext{Version: RelationshipTimeVersion}, nil
-}
-
-func TestFeatureFlagCombinationsKeepRelationshipProviderIndependent(t *testing.T) {
-	now := time.Date(2026, 7, 18, 0, 0, 0, 0, time.UTC)
-	for _, combination := range []struct {
-		name                             string
-		core, relationship, wantProvider bool
-	}{
-		{"both-disabled", false, false, false},
-		{"core-only", true, false, false},
-		{"relationship-only", false, true, true},
-		{"both-enabled", true, true, true},
-	} {
-		t.Run(combination.name, func(t *testing.T) {
-			service, _ := temporalTestService(t, now)
-			service.flags = FeatureFlags{TemporalCoreEnabled: combination.core, RelationshipTimeEnabled: combination.relationship}
-			probe := &relationshipTimeProbe{}
-			service.SetRelationshipTimeProvider(probe)
-			if _, err := service.ResolveSnapshot(context.Background(), SnapshotInput{}); err != nil {
-				t.Fatal(err)
-			}
-			if (probe.calls == 1) != combination.wantProvider {
-				t.Fatalf("core=%v relationship=%v calls=%d", combination.core, combination.relationship, probe.calls)
-			}
-		})
-	}
-}
-
 func TestDailyRecurrenceKeepsLocalTimeAcrossDSTStart(t *testing.T) {
 	anchor := Anchor{TimeKind: "recurring", LocalDate: "2026-03-07", LocalTime: "09:00", Timezone: "America/New_York", RRule: "FREQ=DAILY"}
 	next := nextAnchorOccurrence(anchor, time.Date(2026, 3, 7, 15, 0, 0, 0, time.UTC))

@@ -38,10 +38,10 @@ func newRuntimeModulesTestRouter(t *testing.T) *gin.Engine {
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set("actorContext", &auth.ActorContext{
-			PrincipalType: auth.PrincipalLocalUI,
-			SpaceID:       runtimeidentity.SpaceID(requestidentity.CanonicalSpaceID()),
+			PrincipalType:  auth.PrincipalLocalUI,
+			SpaceID:        runtimeidentity.SpaceID(requestidentity.CanonicalSpaceID()),
 			IsLocalTrusted: true,
-			Permissions:   auth.OwnerDevicePermissions(),
+			Permissions:    auth.OwnerDevicePermissions(),
 		})
 		c.Next()
 	})

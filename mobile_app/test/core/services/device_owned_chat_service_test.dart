@@ -107,7 +107,8 @@ class _OwnedApi implements BackendServiceApi {
     editRequest = Map<String, dynamic>.from(data as Map);
     postPath = path;
     if (path.contains('/chat-management/') || path.contains('/chat-runtime/')) {
-      return (managementResponse ?? {'executionScope': scope(), 'items': []}) as T;
+      return (managementResponse ?? {'executionScope': scope(), 'items': []})
+          as T;
     }
     if (summaryMode && path.endsWith('/summary/generate')) {
       final requestId = editRequest!['requestId'];
@@ -198,13 +199,26 @@ void main() {
     await service.management('stats');
     expect(api.postPath, endsWith('/chat-management/stats'));
     expect(api.editRequest!['expectedExecutionScope'], scope());
-    await service.runtime('retry', body: {'conversationId': 'meshconv1:a:chat', 'turnId': 'turn'});
+    await service.runtime(
+      'retry',
+      body: {'conversationId': 'meshconv1:a:chat', 'turnId': 'turn'},
+    );
     expect(api.postPath, endsWith('/chat-runtime/retry'));
     expect(api.editRequest!['conversationId'], 'chat');
     expect(api.editRequest!['conversationOwnerId'], 'a');
-    api.managementResponse = {'executionScope': {...scope(), 'resourceOwnerId': 'other'}};
+    api.managementResponse = {
+      'executionScope': {...scope(), 'resourceOwnerId': 'other'},
+    };
     await expectLater(service.management('stats'), throwsStateError);
-    await expectLater(service.management('cleanup/confirm', body: {'expectedExecutionScope': {...scope(), 'providerEpoch': 2}}), throwsStateError);
+    await expectLater(
+      service.management(
+        'cleanup/confirm',
+        body: {
+          'expectedExecutionScope': {...scope(), 'providerEpoch': 2},
+        },
+      ),
+      throwsStateError,
+    );
   });
 
   test('手机从所有者原附件恢复文件和视频，不生成本地镜像文件', () {
@@ -325,11 +339,7 @@ void main() {
     );
     await service.refresh();
     api.streamEvents = [
-      {
-        'type': 'started',
-        'executionScope': scope(),
-        'conversationId': 'chat',
-      },
+      {'type': 'started', 'executionScope': scope(), 'conversationId': 'chat'},
       {
         'type': 'completed',
         'data': {
@@ -611,16 +621,25 @@ void main() {
         },
         'historicalSnapshot': {
           'ownerId': 'old-device',
-          'legacyMessages': [
+          'resources': [
             {
+              'kind': 'message',
               'id': 'same',
+              'ownerId': 'old-device',
+              'roleId': 'role-a',
+              'revision': 0,
+              'origin': 'legacy',
+              'readOnly': true,
               'conversationId': 'chat',
-              'role': 'user',
-              'content': 'old',
-              'createdAt': '2026-10-03T00:00:00Z',
+              'body': {
+                'id': 'same',
+                'conversationId': 'chat',
+                'role': 'user',
+                'content': 'old',
+                'createdAt': '2026-10-03T00:00:00Z',
+              },
             },
           ],
-          'resources': [],
         },
       },
       {
@@ -889,12 +908,21 @@ void main() {
       'executionScope': originalScope,
       'historicalSnapshot': {
         'ownerId': 'old-device',
-        'legacyMessages': [
+        'resources': [
           {
+            'kind': 'message',
             'id': 'legacy',
-            'role': 'user',
-            'content': '历史',
-            'createdAt': '2026-10-01T00:00:00Z',
+            'ownerId': 'old-device',
+            'roleId': 'role-a',
+            'revision': 0,
+            'origin': 'legacy',
+            'readOnly': true,
+            'body': {
+              'id': 'legacy',
+              'role': 'user',
+              'content': '历史',
+              'createdAt': '2026-10-01T00:00:00Z',
+            },
           },
         ],
       },
@@ -1314,26 +1342,71 @@ void main() {
   });
 
   test('任务事件不结束聊天且必须匹配当前归属和真实会话', () async {
-    final task = {'type': 'task', 'executionScope': scope(), 'conversationId': 'conversation', 'task': {'coordinationId': 'task-a', 'status': 'running'}};
-    final events = await decodeOwnedChatStream(bytes([
-      {'type': 'started', 'executionScope': scope(), 'conversationId': 'conversation'},
-      task,
-      {'type': 'delta', 'executionScope': scope(), 'text': '回复'},
-      {'type': 'completed', 'data': {'saved': true, 'requestId': 'request', 'executionScope': scope(), 'reply': '回复'}},
-    ]), 'request').toList();
-    expect(events.map((event) => event['type']), ['started', 'task', 'delta', 'completed']);
+    final task = {
+      'type': 'task',
+      'executionScope': scope(),
+      'conversationId': 'conversation',
+      'task': {'coordinationId': 'task-a', 'status': 'running'},
+    };
+    final events = await decodeOwnedChatStream(
+      bytes([
+        {
+          'type': 'started',
+          'executionScope': scope(),
+          'conversationId': 'conversation',
+        },
+        task,
+        {'type': 'delta', 'executionScope': scope(), 'text': '回复'},
+        {
+          'type': 'completed',
+          'data': {
+            'saved': true,
+            'requestId': 'request',
+            'executionScope': scope(),
+            'reply': '回复',
+          },
+        },
+      ]),
+      'request',
+    ).toList();
+    expect(events.map((event) => event['type']), [
+      'started',
+      'task',
+      'delta',
+      'completed',
+    ]);
     for (final change in [
       {'conversationId': 'other'},
-      {'executionScope': {...scope(), 'coreId': 'other'}},
-      {'executionScope': {...scope(), 'resourceOwnerId': 'other'}},
-      {'executionScope': {...scope(), 'roleId': 'other'}},
-      {'task': {'coordinationId': 'task-a', 'status': 'invented'}},
-      {'task': {'status': 'running'}},
+      {
+        'executionScope': {...scope(), 'coreId': 'other'},
+      },
+      {
+        'executionScope': {...scope(), 'resourceOwnerId': 'other'},
+      },
+      {
+        'executionScope': {...scope(), 'roleId': 'other'},
+      },
+      {
+        'task': {'coordinationId': 'task-a', 'status': 'invented'},
+      },
+      {
+        'task': {'status': 'running'},
+      },
     ]) {
-      await expectLater(decodeOwnedChatStream(bytes([
-        {'type': 'started', 'executionScope': scope(), 'conversationId': 'conversation'},
-        {...task, ...change},
-      ]), 'request').toList(), throwsStateError);
+      await expectLater(
+        decodeOwnedChatStream(
+          bytes([
+            {
+              'type': 'started',
+              'executionScope': scope(),
+              'conversationId': 'conversation',
+            },
+            {...task, ...change},
+          ]),
+          'request',
+        ).toList(),
+        throwsStateError,
+      );
     }
   });
 

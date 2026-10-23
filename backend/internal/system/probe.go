@@ -13,10 +13,10 @@ type RemoteCoreProbe interface {
 }
 
 type ProbeResult struct {
-	Healthy    bool                   `json:"healthy"`
-	LatencyMS  int64                  `json:"latencyMs"`
-	Checks     map[string]ProbeCheck `json:"checks"`
-	ProbeTime  time.Time              `json:"probeTime"`
+	Healthy   bool                  `json:"healthy"`
+	LatencyMS int64                 `json:"latencyMs"`
+	Checks    map[string]ProbeCheck `json:"checks"`
+	ProbeTime time.Time             `json:"probeTime"`
 }
 
 type ProbeCheck struct {

@@ -415,10 +415,12 @@ func operationRequestHash(op *operation.InstallationOperation, extra map[string]
 		"operationType":   op.OperationType,
 		"spaceID":         op.SpaceID,
 		"deviceID":        op.DeviceID,
-		"installationID":  op.InstallationID,
 		"petID":           op.PetID,
 		"sourceReleaseID": op.SourceReleaseID,
 		"targetReleaseID": op.TargetReleaseID,
+	}
+	if op.OperationType != operation.TypeInstall {
+		fields["installationID"] = op.InstallationID
 	}
 	for key, value := range extra {
 		fields[key] = value

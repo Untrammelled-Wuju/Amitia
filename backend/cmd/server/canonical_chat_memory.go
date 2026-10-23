@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat"
@@ -105,21 +104,64 @@ func (p *ownedMemoryConsumers) DeleteRelatedMemories(ctx context.Context, target
 	return p.runtime.engine.DeleteRelatedOwnedMemories(ctx, request, entries, targetType, targetID)
 }
 
-func (p *ownedMemoryConsumers) DeleteMemory(ctx context.Context, id, selection string) (business.MemoryDeletionStatus, error) {
+func (p *ownedMemoryConsumers) PreviewMemoryDeletion(ctx context.Context, id string) ([]coordination.PrivacyDeletionTarget, error) {
+	entries, err := p.Read(ctx, "", "memory", true)
+	if err != nil {
+		return nil, err
+	}
+	targets := []coordination.PrivacyDeletionTarget{}
+	for _, entry := range entries {
+		if entry.ID == id {
+			targets = append(targets, coordination.PrivacyDeletionTarget{ID: id, Kind: "memory", OwnerID: entry.OwnerID, RoleID: entry.RoleID, Revision: entry.Revision, Fingerprint: privacyMemoryFingerprint(entry.Body), ExecutionScope: entry.Scope})
+		}
+	}
+	return targets, nil
+}
+
+func (p *ownedMemoryConsumers) DeleteMemoryIntent(ctx context.Context, id, selection string, target coordination.PrivacyDeletionTarget, requestID string) (business.MemoryDeletionStatus, error) {
+	if target.Kind != "memory" || target.ID != id {
+		return business.MemoryDeletionStatus{}, coordination.ErrWrongOwner
+	}
+	replayCtx, request, finish, err := p.authority(ctx, target.ExecutionScope.RoleID)
+	if err != nil {
+		return business.MemoryDeletionStatus{}, err
+	}
+	defer finish()
+	previous, previousErr := p.runtime.engine.MemoryDeletionState(replayCtx, request, business.MemoryDeletionAddress{OwnerID: target.OwnerID, RoleID: target.ExecutionScope.RoleID, Partition: target.RoleID, OperationID: requestID})
+	if previousErr == nil {
+		if previous.TargetID != id || previous.Scope != selection {
+			return business.MemoryDeletionStatus{}, coordination.ErrRequestConflict
+		}
+		return previous, nil
+	}
+	if !errors.Is(previousErr, coordination.ErrResourceVersion) {
+		return business.MemoryDeletionStatus{}, previousErr
+	}
 	entries, err := p.Read(ctx, "", "memory", true)
 	if err != nil {
 		return business.MemoryDeletionStatus{}, err
 	}
 	for _, entry := range entries {
-		if entry.ID == id {
-			ctx, request, finish, err := p.authority(ctx, entry.Scope.RoleID)
-			if err != nil {
-				return business.MemoryDeletionStatus{}, err
-			}
-			defer finish()
-			request.RequestID = "privacy-memory-delete/" + memorySubmissionFingerprint(entry.OwnerID, entry.ID, fmt.Sprint(entry.Revision))[:48]
-			return p.runtime.engine.DeleteOwnedMemory(ctx, request, entry, selection)
+		if entry.ID != id || entry.OwnerID != target.OwnerID || entry.RoleID != target.RoleID || entry.Revision != target.Revision || privacyMemoryFingerprint(entry.Body) != target.Fingerprint {
+			continue
 		}
+		current, original := entry.Scope, target.ExecutionScope
+		current.RequestID, current.ExecutionID, current.TurnID = original.RequestID, original.ExecutionID, original.TurnID
+		if current != original {
+			return business.MemoryDeletionStatus{}, coordination.ErrScopeExpired
+		}
+		ctx, request, finish, err := p.authority(ctx, entry.Scope.RoleID)
+		if err != nil {
+			return business.MemoryDeletionStatus{}, err
+		}
+		defer finish()
+		entry.Scope = target.ExecutionScope
+		request.RequestID = requestID
+		request.MemoryView = "role:" + target.RoleID
+		if target.RoleID == coordination.GlobalMemoryRole {
+			request.MemoryView = "global"
+		}
+		return p.runtime.engine.DeleteOwnedMemory(ctx, request, entry, selection)
 	}
 	return business.MemoryDeletionStatus{}, coordination.ErrResourceVersion
 }
@@ -274,6 +316,10 @@ func (p *ownedMemoryConsumers) Read(ctx context.Context, role, kind string, all 
 	}
 	defer finish()
 	if all {
+		request, err = p.runtime.engine.PrivacyRequestRole(ctx, request)
+		if err != nil {
+			return nil, err
+		}
 		request.MemoryView = "all"
 	}
 	entries := []business.MemoryConsumerEntry{}
@@ -325,4 +371,43 @@ func (p *ownedMemoryConsumers) Change(ctx context.Context, entry business.Memory
 	defer finish()
 	request.RequestID, request.ExpectedScope = requestID, &entry.Scope
 	return p.runtime.engine.Edit(ctx, request, business.EditRequest{ExpectedScope: &entry.Scope, ExpectedRevision: entry.Revision, RequestID: requestID, Kind: entry.Kind, ID: entry.ID, RoleID: entry.Scope.RoleID, TargetDeviceID: entry.Scope.TargetDeviceID, Changes: changes, Deleted: deleted})
+}
+
+func (p *ownedMemoryConsumers) PrivacyMessages(ctx context.Context) ([]coordination.PrivacyMessage, error) {
+	ctx, request, finish, err := p.authority(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	defer finish()
+	return p.runtime.engine.PrivacyMessages(ctx, request)
+}
+
+func (p *ownedMemoryConsumers) MaskPrivacyMessage(ctx context.Context, item coordination.PrivacyMessage, id string) error {
+	ctx, request, finish, err := p.authority(ctx, "")
+	if err != nil {
+		return err
+	}
+	defer finish()
+	return p.runtime.engine.MaskPrivacyMessage(ctx, request, item, id)
+}
+
+func (p *ownedMemoryConsumers) PrivacyDeletion(ctx context.Context, operation string, input coordination.PrivacyDeletionRequest, id string) (map[string]any, error) {
+	ctx, request, finish, err := p.authority(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	defer finish()
+	return p.runtime.engine.ManagePrivacyDeletion(ctx, request, operation, input, id)
+}
+
+func privacyMemoryFingerprint(raw json.RawMessage) string {
+	var document map[string]json.RawMessage
+	if json.Unmarshal(raw, &document) != nil {
+		return ""
+	}
+	for _, key := range []string{"effectiveStrength", "effectiveRetentionLevel", "effectiveDecayState"} {
+		delete(document, key)
+	}
+	encoded, _ := json.Marshal(document)
+	return memorySubmissionFingerprint(string(encoded))
 }

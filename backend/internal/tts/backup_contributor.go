@@ -22,6 +22,10 @@ type VoiceBackupContributor struct {
 	DB *gorm.DB
 }
 
+func (c *VoiceBackupContributor) ComponentIDs() []string {
+	return []string{"voice.tts.v1", "voice.asr.v1", "voice.clones.v1"}
+}
+
 func NewVoiceBackupContributor(db *gorm.DB) *VoiceBackupContributor {
 	return &VoiceBackupContributor{DB: db}
 }
@@ -81,6 +85,9 @@ type clonedVoiceExportRecord struct {
 }
 
 func (c *VoiceBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil, nil
+	}
 	var ttsCount, asrCount, clonedVoiceCount int64
 	c.DB.WithContext(ctx).Table("tts_configs").Count(&ttsCount)
 	c.DB.WithContext(ctx).Table("asr_configs").Count(&asrCount)
@@ -124,6 +131,9 @@ func (c *VoiceBackupContributor) Plan(ctx context.Context, req dataportability.B
 }
 
 func (c *VoiceBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil
+	}
 	ttsW, err := out.CreateComponent("voice.tts.v1", "voice.tts.v1", dataportability.KindDataset)
 	if err != nil {
 		return err
@@ -664,5 +674,3 @@ func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportabil
 	}
 	return configwrite.Transaction(c.DB.WithContext(ctx), func(tx *gorm.DB) error { return (&VoiceBackupContributor{DB: tx}).restoreASR(ctx, rc, opts) })
 }
-
-var _ dataportability.VoiceRestorePort = (*VoiceBackupContributor)(nil)

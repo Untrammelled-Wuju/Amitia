@@ -80,6 +80,95 @@ class CharacterDetailService {
     return _projectOwnedRuntimeState(state);
   }
 
+  Future<List<Map<String, dynamic>>> emotionHistory(String characterId) async {
+    final id = characterId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError.value(characterId, 'characterId', 'characterId 不能为空');
+    }
+    final response = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/data',
+      queryParameters: {'kind': 'emotion', 'characterId': id},
+    );
+    final snapshot = _map(response?['snapshot']);
+    final scope = _map(response?['executionScope']);
+    final ownerId = (scope['resourceOwnerId'] ?? '').toString();
+    if (scope['roleId'] != id ||
+        ownerId.isEmpty ||
+        snapshot['ownerId'] != ownerId) {
+      throw StateError('情绪历史的数据归属已变化');
+    }
+    final resources = snapshot['resources'];
+    if (resources is! List) return const [];
+    final items = resources
+        .whereType<Map>()
+        .where(
+          (resource) =>
+              resource['kind'] == 'emotion' &&
+              resource['ownerId'] == ownerId &&
+              resource['roleId'] == id &&
+              resource['body'] is Map,
+        )
+        .map((resource) => Map<String, dynamic>.from(resource['body'] as Map))
+        .where(
+          (item) =>
+              (item['id'] ?? '').toString().isNotEmpty &&
+              (item['createdAt'] ?? '').toString().isNotEmpty,
+        )
+        .toList(growable: false);
+    items.sort(
+      (left, right) =>
+          right['createdAt'].toString().compareTo(left['createdAt'].toString()),
+    );
+    return items.take(24).toList(growable: false);
+  }
+
+  Future<void> deleteEmotionHistory(
+    String characterId,
+    String emotionId,
+  ) async {
+    final id = characterId.trim();
+    final itemId = emotionId.trim();
+    if (id.isEmpty || itemId.isEmpty) {
+      throw ArgumentError('角色和情绪历史编号不能为空');
+    }
+    final current = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/resources',
+      queryParameters: {'kind': 'emotion', 'id': itemId, 'characterId': id},
+    );
+    final resource = _map(current?['resource']);
+    final scope = _map(current?['executionScope']);
+    final ownerId = (scope['resourceOwnerId'] ?? '').toString();
+    final revision = resource['revision'];
+    if (resource['kind'] != 'emotion' ||
+        resource['id'] != itemId ||
+        resource['roleId'] != id ||
+        resource['ownerId'] != ownerId ||
+        ownerId.isEmpty ||
+        revision is! num) {
+      throw StateError('情绪历史的数据归属已变化');
+    }
+    final requestId =
+        'emotion-delete-${DateTime.now().microsecondsSinceEpoch}-${itemId.hashCode.toUnsigned(32).toRadixString(16)}';
+    final acknowledgement = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/resources/edit',
+      data: {
+        'requestId': requestId,
+        'kind': 'emotion',
+        'id': itemId,
+        'characterId': id,
+        'expectedRevision': revision.toInt(),
+        'expectedExecutionScope': scope,
+        'changes': <String, dynamic>{},
+        'deleted': true,
+      },
+    );
+    final versions = _map(acknowledgement?['versions']);
+    if (acknowledgement?['ownerId'] != ownerId ||
+        versions['emotion/$itemId'] != revision.toInt() + 1) {
+      throw StateError('情绪历史所有者尚未确认删除结果');
+    }
+  }
+
   Future<bool> updateRoleProfile(
     Map<String, dynamic> data, {
     String? characterId,

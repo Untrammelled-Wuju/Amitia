@@ -106,8 +106,19 @@ SPDX-License-Identifier: AGPL-3.0-only
             </div>
             <div class="meta">
               <div class="meta-row">
-                <span class="meta-label">默认动作</span>
-                <span class="meta-value">{{ item.defaultActionKey || "—" }}</span>
+                <span class="meta-label">期望动作</span>
+                <span class="meta-value">{{ item.runtime?.desiredActionKey || item.defaultActionKey || "—" }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">实际动作</span>
+                <span class="meta-value">{{ item.runtime?.actualActionKey || "尚未应用" }}</span>
+              </div>
+              <div v-if="item.runtime" class="meta-row">
+                <span class="meta-label">运行同步</span>
+                <span class="meta-value">
+                  {{ item.runtime.runtimeSyncState || item.runtime.actualHealth || "未知" }}
+                  · {{ item.runtime.appliedDesiredRevision }}/{{ item.runtime.desiredRevision }}
+                </span>
               </div>
               <div class="meta-row">
                 <span class="meta-label">画布尺寸</span>
@@ -136,6 +147,14 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-alert
               title="资源校验失败，桌宠已自动停用"
               type="error"
+              :closable="false"
+              show-icon
+            />
+          </div>
+          <div v-else-if="item.runtime?.pending" class="invalid-banner">
+            <el-alert
+              title="变更已保存，正在等待桌宠运行端确认"
+              type="warning"
               :closable="false"
               show-icon
             />
@@ -414,7 +433,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             @change="onInstallPackageChange"
           >
             <el-option
-              v-for="pkg in availablePackages"
+              v-for="pkg in availableReleases"
               :key="pkg.id"
               :label="`Release v${pkg.version}`"
               :value="pkg.id"
@@ -452,7 +471,7 @@ import {
 } from "../../composables/useDesktopPetInstallations";
 import { useAssetUrl } from "../../composables/useAssetUrl";
 
-interface PackageOption {
+interface ReleaseOption {
   id: string;
   petId: string;
   version: string;
@@ -515,7 +534,7 @@ const defaultActionForm = reactive({
 
 const installDialogVisible = ref(false);
 const installSubmitting = ref(false);
-const availablePackages = ref<PackageOption[]>([]);
+const availableReleases = ref<ReleaseOption[]>([]);
 const installForm = reactive({ petId: "", releaseId: "" });
 
 const upgradeDialogVisible = ref(false);
@@ -568,6 +587,12 @@ function runtimeStatusOf(
   if (item.integrityStatus === "recovery_required") {
     return "recovery_required";
   }
+  if (item.runtime?.actualHealth === "failed") return "recovery_required";
+  if (item.runtime?.actualHealth === "offline") return "offline";
+  if (item.runtime?.pending) return "pending_runtime";
+  if (item.runtime?.actualHealth === "healthy" && item.runtime.actualVisible)
+    return "running";
+  if (item.runtime?.actualHealth === "healthy") return "enabled";
   if (item.lifecycleState === "running") {
     return "running";
   }
@@ -710,7 +735,7 @@ const defaultIdleCandidates = computed(() =>
 );
 
 const upgradeCandidates = computed(() =>
-  availablePackages.value.filter(
+  availableReleases.value.filter(
     (pkg) => pkg.id !== upgradeForm.currentReleaseId,
   ),
 );
@@ -1049,7 +1074,7 @@ async function onReinstall(item: DesktopPetInstallation) {
     }
     let petId = "";
     try {
-      const data = await get<{ items: PackageOption[]; total: number }>(
+      const data = await get<{ items: ReleaseOption[]; total: number }>(
         "/api/desktop-pets/releases",
       );
       const rel = (data?.items || []).find((r) => r.id === releaseId);
@@ -1111,15 +1136,15 @@ async function openInstallDialog() {
 
 async function loadAvailablePackages() {
   try {
-    const data = await get<{ items: PackageOption[]; total: number }>("/api/desktop-pets/releases");
-    availablePackages.value = data?.items || [];
+    const data = await get<{ items: ReleaseOption[]; total: number }>("/api/desktop-pets/releases");
+    availableReleases.value = data?.items || [];
   } catch {
-    availablePackages.value = [];
+    availableReleases.value = [];
   }
 }
 
 function onInstallPackageChange() {
-  const pkg = availablePackages.value.find((p) => p.id === installForm.releaseId);
+  const pkg = availableReleases.value.find((p) => p.id === installForm.releaseId);
   if (pkg) {
     installForm.petId = pkg.petId;
   }

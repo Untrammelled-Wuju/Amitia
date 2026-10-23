@@ -520,7 +520,9 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     pageBuilder: (context, state) => slideFadePage(
       context: context,
       state: state,
-      child: const PetInstallationsPage(),
+      child: PetInstallationsPage(
+        initialReleaseId: state.uri.queryParameters['releaseId'] ?? '',
+      ),
     ),
   ),
   GoRoute(

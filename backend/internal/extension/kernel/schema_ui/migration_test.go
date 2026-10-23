@@ -17,15 +17,15 @@ func TestMigratedPluginSchemasValidate(t *testing.T) {
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..", ".."))
 	files := []string{
-		"plugins/channels/qq/ui/mobile/schema.json",
-		"plugins/emote/ui/schema/desktop-index.json",
-		"plugins/emote/ui/schema/mobile-index.json",
-		"plugins/emote/ui/schema/desktop-composer.json",
-		"plugins/emote/ui/schema/mobile-composer.json",
-		"plugins/emote/ui/schema/desktop-message.json",
-		"plugins/emote/ui/schema/mobile-message.json",
-		"plugins/lifestyle/ui/schema/desktop.json",
-		"plugins/lifestyle/ui/schema/mobile.json",
+		"plugins-code/channels/qq/ui/mobile/schema.json",
+		"plugins-code/emote/ui/schema/desktop-index.json",
+		"plugins-code/emote/ui/schema/mobile-index.json",
+		"plugins-code/emote/ui/schema/desktop-composer.json",
+		"plugins-code/emote/ui/schema/mobile-composer.json",
+		"plugins-code/emote/ui/schema/desktop-message.json",
+		"plugins-code/emote/ui/schema/mobile-message.json",
+		"plugins-code/lifestyle/ui/schema/desktop.json",
+		"plugins-code/lifestyle/ui/schema/mobile.json",
 	}
 	validator := NewValidator()
 	for _, relative := range files {

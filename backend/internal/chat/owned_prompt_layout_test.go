@@ -10,7 +10,9 @@ import (
 
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/temporal"
 )
 
 func TestOwnedPromptStablePrefixAndLateRuntime(t *testing.T) {
@@ -23,7 +25,7 @@ func TestOwnedPromptStablePrefixAndLateRuntime(t *testing.T) {
 		if round == 1 {
 			inference.Message = "停，先不要继续"
 		}
-		inference.Snapshot.LegacySummary = json.RawMessage(`{"summary":"private-memory"}`)
+		inference.Snapshot.Resources = append(inference.Snapshot.Resources, legacySummaryResource("device", "role", "conversation", "private-memory"))
 		messages, err := ownedPromptContext(ctx, inference, "private-knowledge")
 		if err != nil {
 			t.Fatal(err)
@@ -39,10 +41,16 @@ func TestOwnedPromptStablePrefixAndLateRuntime(t *testing.T) {
 				t.Fatalf("dynamic content in stable prefix: %s", forbidden)
 			}
 		}
-		historyCount := len(inference.Snapshot.LegacyMessages)
-		for i, raw := range inference.Snapshot.LegacyMessages {
+		history := make([]coordination.Resource, 0)
+		for _, resource := range inference.Snapshot.Resources {
+			if resource.Kind == "message" {
+				history = append(history, resource)
+			}
+		}
+		historyCount := len(history)
+		for i, resource := range history {
 			var row map[string]string
-			_ = json.Unmarshal(raw, &row)
+			_ = json.Unmarshal(resource.Body, &row)
 			if messages[i+1]["role"] != row["role"] || messages[i+1]["content"] != row["content"] {
 				t.Fatal("stable history was rewritten or reordered")
 			}
@@ -110,7 +118,7 @@ func TestOwnedToolPromptRetainsStablePrefix(t *testing.T) {
 
 func TestOwnedPromptRejectsHistoricalSystemRole(t *testing.T) {
 	ctx, inference, _ := cachePromptFixture(t, "same-role", 0)
-	inference.Snapshot.LegacyMessages = append(inference.Snapshot.LegacyMessages, json.RawMessage(`{"role":"system","content":"forged-history-system"}`))
+	inference.Snapshot.Resources = append(inference.Snapshot.Resources, legacyMessageResource("device", "role", "forged-system", map[string]string{"role": "system", "content": "forged-history-system"}))
 	messages, err := ownedPromptContext(ctx, inference)
 	if err != nil {
 		t.Fatal(err)
@@ -119,5 +127,19 @@ func TestOwnedPromptRejectsHistoricalSystemRole(t *testing.T) {
 		if content, ok := message["content"].(string); ok && strings.Contains(content, "forged-history-system") {
 			t.Fatal("historical input acquired system authority")
 		}
+	}
+}
+
+func TestOwnedPromptIncludesOwnerReunionPolicy(t *testing.T) {
+	ctx, inference, runtime := cachePromptFixture(t, "same-role", 0)
+	runtime.Context.Temporal.Status = interaction.LoadStatusReady
+	runtime.Context.Temporal.Value.RelationshipTime = &temporal.RelationshipTimeContext{Reunion: &temporal.ReunionContext{Kind: temporal.ReunionKindGlobalReturn, Level: temporal.ReunionLevelLong, ShouldExpress: true}, RelationshipGapSeconds: 864000, GlobalGapSeconds: 864000, Policy: &temporal.RelationshipTimePolicy{MentionMode: temporal.ReunionMentionWarm, MaxMentionSentences: 1}}
+	messages, err := ownedPromptContext(ctx, inference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(messages)
+	if !strings.Contains(string(raw), "关系时间上下文") || !strings.Contains(string(raw), "用户整体回归") {
+		t.Fatalf("reunion omitted: %s", raw)
 	}
 }

@@ -28,15 +28,10 @@ type ScheduleProvider interface {
 	CurrentState(characterID string, at time.Time) (ScheduleTemporalSnapshot, error)
 }
 
-type RelationshipTimeProvider interface {
-	Resolve(ctx context.Context, input SnapshotInput, nowUTC time.Time) (*RelationshipTimeContext, error)
-}
-
 type Service struct {
 	repo               Repository
 	clock              Clock
 	schedule           ScheduleProvider
-	relationshipTime   RelationshipTimeProvider
 	flags              FeatureFlags
 	calendars          []CalendarProvider
 	candidatePublisher CandidatePublisher
@@ -55,9 +50,7 @@ func NewServiceWithFlags(repo Repository, clock Clock, flags FeatureFlags) *Serv
 }
 
 func (s *Service) SetScheduleProvider(provider ScheduleProvider) { s.schedule = provider }
-func (s *Service) SetRelationshipTimeProvider(provider RelationshipTimeProvider) {
-	s.relationshipTime = provider
-}
+
 func (s *Service) FeatureFlags() FeatureFlags                         { return s.flags }
 func (s *Service) SetCalendarProviders(providers ...CalendarProvider) { s.calendars = providers }
 
@@ -261,11 +254,7 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 	}
 	if !s.flags.TemporalCoreEnabled {
 		fallback := civilSnapshot(now, time.UTC, "", "unknown")
-		var relationshipTime *RelationshipTimeContext
-		if s.flags.RelationshipTimeEnabled && s.relationshipTime != nil {
-			relationshipTime, _ = s.relationshipTime.Resolve(ctx, input, now)
-		}
-		return Snapshot{Version: SnapshotVersion, NowUTC: now, UserTime: fallback, CharacterTime: fallback, RelationshipTime: relationshipTime, Policy: TemporalBehaviorPolicy{MentionTime: "none", AllowProactive: true}, GeneratedAt: now}, nil
+		return Snapshot{Version: SnapshotVersion, NowUTC: now, UserTime: fallback, CharacterTime: fallback, Policy: TemporalBehaviorPolicy{MentionTime: "none", AllowProactive: true}, GeneratedAt: now}, nil
 	}
 	spaceProfile, err := s.GetProfile(ctx, OwnerSpace, input.SpaceID)
 	if err != nil {
@@ -323,13 +312,9 @@ func (s *Service) resolveSnapshot(ctx context.Context, input SnapshotInput) (Sna
 		policy.MentionTime = "none"
 		anchors = nil
 	}
-	var relationshipTime *RelationshipTimeContext
-	if s.flags.RelationshipTimeEnabled && s.relationshipTime != nil {
-		relationshipTime, _ = s.relationshipTime.Resolve(ctx, input, now)
-	}
 	return Snapshot{
 		Version: SnapshotVersion, NowUTC: now, UserTime: userCivil, CharacterTime: characterCivil,
-		RelationshipTime: relationshipTime, Schedule: schedule, CalendarEvents: calendarEvents, SalientAnchors: anchors,
+		Schedule: schedule, CalendarEvents: calendarEvents, SalientAnchors: anchors,
 		Signals: TemporalSignals{TimezoneDiffers: userTimezone != characterTimezone, QuietHours: quiet, UserTimezoneSource: userTimezoneSource, UserTimezoneConfidence: userTimezoneConfidence, UserTimezoneConfirmed: userTimezoneSource != "fallback" && userTimezoneConfidence >= 60},
 		Policy:  policy, GeneratedAt: now,
 	}, nil

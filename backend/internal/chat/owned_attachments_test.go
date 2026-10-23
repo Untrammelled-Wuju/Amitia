@@ -21,8 +21,7 @@ func TestOwnedPromptUsesValidatedImageAndKeepsHistoricalBinaryOutOfSystemPrompt(
 	digest := sha256.Sum256(data)
 	image := business.Attachment{Kind: "image", Name: "image.png", MIME: "image/png", Data: encoded, Hash: hex.EncodeToString(digest[:])}
 	role := coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"Core role"}`)}
-	raw, _ := json.Marshal(map[string]any{"role": "user", "content": "previous image", "attachments": []business.Attachment{image}})
-	inference := business.Inference{Scope: coordination.ExecutionScope{RoleID: "role", RoleRevision: 1, ResourceOwnerID: "core", RoleOwnerID: "core"}, Message: "current image", Attachments: []business.Attachment{image}, Snapshot: coordination.DataSnapshot{OwnerID: "core", Role: role}, HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "device", LegacyMessages: []json.RawMessage{raw}}}
+	inference := business.Inference{Scope: coordination.ExecutionScope{RoleID: "role", RoleRevision: 1, ResourceOwnerID: "core", RoleOwnerID: "core"}, Message: "current image", Attachments: []business.Attachment{image}, Snapshot: coordination.DataSnapshot{OwnerID: "core", Role: role}, HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "device", Resources: []coordination.Resource{legacyMessageResource("device", "role", "previous", map[string]any{"role": "user", "content": "previous image", "attachments": []business.Attachment{image}})}}}
 	messages, err := ownedPrompt(inference)
 	if err != nil {
 		t.Fatal(err)

@@ -2,12 +2,13 @@ package safety
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"gorm.io/gorm"
 )
 
-func RegisterSafetyRouter(r *gin.RouterGroup, db *gorm.DB) {
-	h := NewHandler(db)
+func RegisterSafetyRouter(r *gin.RouterGroup, db *gorm.DB, coordinator ...*coordination.Service) {
+	h := NewHandler(db, coordinator...)
 	r.GET("/safety/bdi-config", security.SharedCoreAdminOnly(), h.GetBdiConfig)
 	r.PUT("/safety/bdi-config", security.SharedCoreAdminOnly(), h.PutBdiConfig)
 	r.GET("/safety/audit-logs", security.SharedCoreAdminOnly(), h.GetAuditLogs)

@@ -3,41 +3,59 @@
 package installation
 
 type Installation struct {
-	ID                     string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	SpaceID                string `gorm:"column:space_id;type:text" json:"spaceId"`
-	DeviceID               string `gorm:"column:device_id;type:text;default:''" json:"deviceId"`
-	PackageID              string `gorm:"column:package_id;type:text" json:"packageId"`
-	PackageVersion         string `gorm:"column:package_version;type:text" json:"packageVersion"`
-	Name                   string `gorm:"column:name;type:text" json:"name"`
-	Status                 string `gorm:"column:status;type:text" json:"status"`
-	IsActive               int    `gorm:"column:is_active;type:integer" json:"isActive"`
-	InstallPath            string `gorm:"column:install_path;type:text" json:"installPath"`
-	ManifestPath           string `gorm:"column:manifest_path;type:text" json:"manifestPath"`
-	PreviewPath            string `gorm:"column:preview_path;type:text" json:"previewPath"`
-	PreviewArtifactPath    string `gorm:"column:preview_artifact_path;type:text;default:''" json:"previewArtifactPath"`
-	DefaultActionKey       string `gorm:"column:default_action_key;type:text" json:"defaultActionKey"`
-	DefaultActionReleaseID string `gorm:"column:default_action_release_id;type:text;default:''" json:"defaultActionReleaseId"`
-	CanvasWidth            int    `gorm:"column:canvas_width;type:integer" json:"canvasWidth"`
-	CanvasHeight           int    `gorm:"column:canvas_height;type:integer" json:"canvasHeight"`
-	PackageHash            string `gorm:"column:package_hash;type:text" json:"packageHash"`
-	InstalledContentHash   string `gorm:"column:installed_content_hash;type:text;default:''" json:"installedContentHash"`
-	InstalledAt            string `gorm:"column:installed_at;type:text" json:"installedAt"`
-	LastEnabledAt          string `gorm:"column:last_enabled_at;type:text" json:"lastEnabledAt"`
-	LastDisabledAt         string `gorm:"column:last_disabled_at;type:text" json:"lastDisabledAt"`
-	CreatedAt              string `gorm:"column:created_at;type:text" json:"createdAt"`
-	UpdatedAt              string `gorm:"column:updated_at;type:text" json:"updatedAt"`
-	PetID                  string `gorm:"column:pet_id;type:text;default:''" json:"petId"`
-	CurrentReleaseID       string `gorm:"column:current_release_id;type:text;default:''" json:"currentReleaseId"`
-	LifecycleState         string `gorm:"column:lifecycle_state;type:text;default:'installed'" json:"lifecycleState"`
-	IntegrityStatus        string `gorm:"column:integrity_status;type:text;default:'verified'" json:"integrityStatus"`
-	DesiredState           string `gorm:"column:desired_state;type:text;default:'disabled'" json:"desiredState"`
-	RuntimeSyncState       string `gorm:"column:runtime_sync_state;type:text;default:'pending'" json:"runtimeSyncState"`
-	StateRevision          int    `gorm:"column:state_revision;type:integer;default:0" json:"stateRevision"`
-	InstallStorageKey      string `gorm:"column:install_storage_key;type:text;default:''" json:"installStorageKey"`
-	IntegrityRoot          string `gorm:"column:integrity_root;type:text;default:''" json:"integrityRoot"`
-	LastErrorCode          string `gorm:"column:last_error_code;type:text;default:''" json:"lastErrorCode"`
-	LastErrorMessage       string `gorm:"column:last_error_message;type:text;default:''" json:"lastErrorMessage"`
-	LegacyPackageID        string `gorm:"column:legacy_package_id;type:text;default:''" json:"legacyPackageId"`
+	ID                     string                   `gorm:"column:id;primaryKey;type:text" json:"id"`
+	SpaceID                string                   `gorm:"column:space_id;type:text" json:"spaceId"`
+	DeviceID               string                   `gorm:"column:device_id;type:text;default:''" json:"deviceId"`
+	PackageID              string                   `gorm:"column:package_id;type:text" json:"packageId"`
+	PackageVersion         string                   `gorm:"column:package_version;type:text" json:"packageVersion"`
+	Name                   string                   `gorm:"column:name;type:text" json:"name"`
+	Status                 string                   `gorm:"column:status;type:text" json:"status"`
+	IsActive               int                      `gorm:"column:is_active;type:integer" json:"isActive"`
+	InstallPath            string                   `gorm:"column:install_path;type:text" json:"installPath"`
+	ManifestPath           string                   `gorm:"column:manifest_path;type:text" json:"manifestPath"`
+	PreviewPath            string                   `gorm:"column:preview_path;type:text" json:"previewPath"`
+	PreviewArtifactPath    string                   `gorm:"column:preview_artifact_path;type:text;default:''" json:"previewArtifactPath"`
+	DefaultActionKey       string                   `gorm:"column:default_action_key;type:text" json:"defaultActionKey"`
+	DefaultActionReleaseID string                   `gorm:"column:default_action_release_id;type:text;default:''" json:"defaultActionReleaseId"`
+	CanvasWidth            int                      `gorm:"column:canvas_width;type:integer" json:"canvasWidth"`
+	CanvasHeight           int                      `gorm:"column:canvas_height;type:integer" json:"canvasHeight"`
+	PackageHash            string                   `gorm:"column:package_hash;type:text" json:"packageHash"`
+	InstalledContentHash   string                   `gorm:"column:installed_content_hash;type:text;default:''" json:"installedContentHash"`
+	InstalledAt            string                   `gorm:"column:installed_at;type:text" json:"installedAt"`
+	LastEnabledAt          string                   `gorm:"column:last_enabled_at;type:text" json:"lastEnabledAt"`
+	LastDisabledAt         string                   `gorm:"column:last_disabled_at;type:text" json:"lastDisabledAt"`
+	CreatedAt              string                   `gorm:"column:created_at;type:text" json:"createdAt"`
+	UpdatedAt              string                   `gorm:"column:updated_at;type:text" json:"updatedAt"`
+	PetID                  string                   `gorm:"column:pet_id;type:text;default:''" json:"petId"`
+	CurrentReleaseID       string                   `gorm:"column:current_release_id;type:text;default:''" json:"currentReleaseId"`
+	LifecycleState         string                   `gorm:"column:lifecycle_state;type:text;default:'installed'" json:"lifecycleState"`
+	IntegrityStatus        string                   `gorm:"column:integrity_status;type:text;default:'verified'" json:"integrityStatus"`
+	DesiredState           string                   `gorm:"column:desired_state;type:text;default:'disabled'" json:"desiredState"`
+	RuntimeSyncState       string                   `gorm:"column:runtime_sync_state;type:text;default:'pending'" json:"runtimeSyncState"`
+	StateRevision          int                      `gorm:"column:state_revision;type:integer;default:0" json:"stateRevision"`
+	InstallStorageKey      string                   `gorm:"column:install_storage_key;type:text;default:''" json:"installStorageKey"`
+	IntegrityRoot          string                   `gorm:"column:integrity_root;type:text;default:''" json:"integrityRoot"`
+	LastErrorCode          string                   `gorm:"column:last_error_code;type:text;default:''" json:"lastErrorCode"`
+	LastErrorMessage       string                   `gorm:"column:last_error_message;type:text;default:''" json:"lastErrorMessage"`
+	LegacyPackageID        string                   `gorm:"column:legacy_package_id;type:text;default:''" json:"legacyPackageId"`
+	Runtime                *InstallationRuntimeView `gorm:"-" json:"runtime,omitempty"`
+}
+
+type InstallationRuntimeView struct {
+	DesiredRevision         int64  `json:"desiredRevision"`
+	AppliedDesiredRevision  int64  `json:"appliedDesiredRevision"`
+	DesiredEnabled          bool   `json:"desiredEnabled"`
+	DesiredVisible          bool   `json:"desiredVisible"`
+	DesiredActionKey        string `json:"desiredActionKey"`
+	AppliedSettingsRevision int64  `json:"appliedSettingsRevision"`
+	ActualReleaseID         string `json:"actualReleaseId"`
+	ActualVisible           bool   `json:"actualVisible"`
+	ActualActionKey         string `json:"actualActionKey"`
+	ActualHealth            string `json:"actualHealth"`
+	RuntimeSyncState        string `json:"runtimeSyncState"`
+	Pending                 bool   `json:"pending"`
+	LastHeartbeatAt         string `json:"lastHeartbeatAt"`
+	UpdatedAt               string `json:"updatedAt"`
 }
 
 func (Installation) TableName() string { return "desktop_pet_installations" }

@@ -175,7 +175,6 @@ import { ElMessage } from "element-plus";
 import {
   getRelationshipTimeSettings,
   getRelationshipTimeState,
-  getTemporalDiagnostics,
   updateRelationshipTimeSettings,
   type RelationshipTimeContext,
   type RelationshipTimeSettings,
@@ -211,23 +210,13 @@ async function load() {
   loading.value = true;
   loadError.value = "";
   availability.value = "checking";
-  const [settingsResult, diagnosticsResult] = await Promise.allSettled([
-    getRelationshipTimeSettings(props.characterId),
-    getTemporalDiagnostics(props.characterId),
-  ]);
-  const flagEnabled =
-    diagnosticsResult.status === "fulfilled"
-      ? diagnosticsResult.value.core.featureFlags.relationshipTimeEnabled
-      : undefined;
-  if (settingsResult.status === "fulfilled") {
-    Object.assign(settings, settingsResult.value);
+  try {
+    Object.assign(settings, await getRelationshipTimeSettings(props.characterId));
     settings.characterId = props.characterId;
-    availability.value = flagEnabled === false ? "unavailable" : "available";
-  } else if (flagEnabled === false) {
-    availability.value = "unavailable";
-  } else {
+    availability.value = "available";
+  } catch {
     availability.value = "error";
-    loadError.value = "无法读取关系时间设置";
+    loadError.value = "无法读取当前所有者的关系时间设置";
   }
   loading.value = false;
   if (availability.value === "available") await loadState();

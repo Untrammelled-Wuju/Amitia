@@ -123,7 +123,7 @@ func (r *Repository) GetDeviceForPlatform(ctx context.Context, spaceID, deviceID
 
 func (r *Repository) UpdatePreferences(ctx context.Context, spaceID, deviceID string, values map[string]any) error {
 	allowed := map[string]struct{}{
-		"push_enabled": {}, "message_push_enabled": {}, "execution_activity_enabled": {}, "call_push_enabled": {},
+		"push_enabled": {}, "system_notifications_enabled": {}, "message_push_enabled": {}, "execution_activity_enabled": {}, "call_push_enabled": {},
 		"reminder_push_enabled": {}, "preview_mode": {}, "sound_enabled": {},
 	}
 	update := map[string]any{"updated_at": time.Now().UTC()}

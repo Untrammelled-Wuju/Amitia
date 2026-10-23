@@ -1,7 +1,6 @@
 package safety
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 
@@ -16,39 +15,18 @@ import (
 )
 
 func (h *Handler) GetBdiConfig(c *gin.Context) {
-	value, err := h.settingValue(c, "safety_bdi_config")
+	scope, err := ScopeFromContextWithCoordinator(c.Request.Context(), h.coordination)
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	policy, err := NewRepository(h.db).Policy(c.Request.Context(), scope)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "读取配置失败", nil)
 		return
 	}
-	if value == "" || value == "{}" {
-		util.SuccessResponse(c, &BdiConfig{
-			HardConstraints: []HardConstraint{},
-			SoftPreferences: []SoftPreference{},
-			CopingStrategy: &CopingStrategy{
-				Selected:     "active",
-				Alternatives: []string{},
-			},
-			EmotionExpression: &EmotionExpression{
-				DisplayMode:       "show",
-				InternalIntensity: 5,
-				DisplayIntensity:  5,
-			},
-		})
-		return
-	}
-	var cfg BdiConfig
-	if err := json.Unmarshal([]byte(value), &cfg); err != nil {
-		util.ErrorResponse(c, response.InternalError, "配置解析失败", nil)
-		return
-	}
-	if cfg.HardConstraints == nil {
-		cfg.HardConstraints = []HardConstraint{}
-	}
-	if cfg.SoftPreferences == nil {
-		cfg.SoftPreferences = []SoftPreference{}
-	}
-	util.SuccessResponse(c, &cfg)
+	policy.BDI.Revision = policy.Revision
+	util.SuccessResponse(c, &policy.BDI)
 }
 
 func (h *Handler) PutBdiConfig(c *gin.Context) {
@@ -57,16 +35,22 @@ func (h *Handler) PutBdiConfig(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	data, err := json.Marshal(body)
+	scope, err := ScopeFromContextWithCoordinator(c.Request.Context(), h.coordination)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "序列化失败", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	if err := h.saveSetting(c, "safety_bdi_config", string(data)); err != nil {
+	policy, err := NewRepository(h.db).SaveBDI(c.Request.Context(), scope, body)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(409, gin.H{"code": 409, "msg": "BDI 安全策略已被其他操作更新，请重新加载"})
+		return
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "保存配置失败", nil)
 		return
 	}
-	util.SuccessMsgResponse(c, "BDI 配置已保存", nil)
+	policy.BDI.Revision = policy.Revision
+	util.SuccessResponse(c, &policy.BDI)
 }
 
 func (h *Handler) GetAuditLogs(c *gin.Context) {
@@ -115,21 +99,18 @@ func defaultSafetyConfig() *SafetyConfig {
 }
 
 func (h *Handler) GetConfig(c *gin.Context) {
-	value, err := h.settingValue(c, "safety_config")
+	scope, err := ScopeFromContextWithCoordinator(c.Request.Context(), h.coordination)
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	policy, err := NewRepository(h.db).Policy(c.Request.Context(), scope)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "读取配置失败", nil)
 		return
 	}
-	if value == "" || value == "{}" {
-		util.SuccessResponse(c, defaultSafetyConfig())
-		return
-	}
-	var cfg SafetyConfig
-	if err := json.Unmarshal([]byte(value), &cfg); err != nil {
-		util.ErrorResponse(c, response.InternalError, "配置解析失败", nil)
-		return
-	}
-	util.SuccessResponse(c, &cfg)
+	policy.Config.Revision = policy.Revision
+	util.SuccessResponse(c, &policy.Config)
 }
 
 func (h *Handler) PutConfig(c *gin.Context) {
@@ -138,35 +119,20 @@ func (h *Handler) PutConfig(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	data, err := json.Marshal(body)
+	scope, err := ScopeFromContextWithCoordinator(c.Request.Context(), h.coordination)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "序列化失败", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	if err := h.saveSetting(c, "safety_config", string(data)); err != nil {
+	policy, err := NewRepository(h.db).SaveConfig(c.Request.Context(), scope, body)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(409, gin.H{"code": 409, "msg": "安全配置已被其他操作更新，请重新加载"})
+		return
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "保存配置失败", nil)
 		return
 	}
-	util.SuccessMsgResponse(c, "安全配置已保存", nil)
-}
-
-func (h *Handler) settingValue(c *gin.Context, key string) (string, error) {
-	var value string
-	err := configwrite.Transaction(h.db.WithContext(c.Request.Context()), func(tx *gorm.DB) error {
-		var err error
-		var row struct{ Value string }
-		err = tx.Table("app_settings").Select("value").Where("key = ? AND deleted_at IS NULL", key).Take(&row).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			err = nil
-		}
-		value = row.Value
-		return err
-	})
-	return value, err
-}
-
-func (h *Handler) saveSetting(c *gin.Context, key, value string) error {
-	return configwrite.Transaction(h.db.WithContext(c.Request.Context()), func(tx *gorm.DB) error {
-		return tx.Exec("INSERT INTO app_settings (key, value, revision, updated_at) VALUES (?, ?, 1, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, revision = app_settings.revision + 1, deleted_at = NULL, updated_at = excluded.updated_at", key, value).Error
-	})
+	policy.Config.Revision = policy.Revision
+	util.SuccessResponse(c, &policy.Config)
 }

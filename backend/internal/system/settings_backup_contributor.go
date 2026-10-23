@@ -28,6 +28,9 @@ func NewSettingsBackupContributor(db *gorm.DB) *SettingsBackupContributor {
 
 func (c *SettingsBackupContributor) ID() string   { return "settings" }
 func (c *SettingsBackupContributor) Name() string { return "Settings" }
+func (c *SettingsBackupContributor) ComponentIDs() []string {
+	return []string{ComponentIDSettings}
+}
 
 func (c *SettingsBackupContributor) Dependencies() []string {
 	return nil
@@ -49,6 +52,9 @@ func isSettingsKeyPortable(key string) bool {
 }
 
 func (c *SettingsBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil, nil
+	}
 	var count int64
 	c.DB.WithContext(ctx).Table("app_settings").Count(&count)
 
@@ -70,6 +76,9 @@ func (c *SettingsBackupContributor) Plan(ctx context.Context, req dataportabilit
 }
 
 func (c *SettingsBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil
+	}
 	compW, err := out.CreateComponent(ComponentIDSettings, "settings.records.v1", dataportability.KindNDJSON)
 	if err != nil {
 		return err

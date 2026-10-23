@@ -10,7 +10,7 @@ import (
 func TestOwnedImportCopiesAllMessagesAndReplaysWithoutDuplicates(t *testing.T) {
 	engine, db, _, _ := engineHarness(t)
 	scope := coordination.ExecutionScope{SpaceID: "core", CoreID: "core", TargetDeviceID: "a", ResourceOwnerID: "a", RoleOwnerID: "a", RoleID: "role", RoleRevision: 1, RequestID: "owned-import"}
-	request := coordination.ChatManagementRequest{ConversationOwnerID: "a", ConversationID: "legacy-import", RequestID: "import-request"}
+	request := coordination.ChatManagementRequest{ConversationOwnerID: "a", ImportBatchID: "legacy-import", RequestID: "import-request"}
 	messages := []map[string]any{}
 	for i := 0; i < 301; i++ {
 		messages = append(messages, map[string]any{"id": fmt.Sprintf("legacy-%d", i), "conversationId": "legacy-import", "characterId": "old-role", "role": "user", "content": fmt.Sprint(i)})
@@ -20,6 +20,7 @@ func TestOwnedImportCopiesAllMessagesAndReplaysWithoutDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	request.RequestID = "different-request"
 	second, err := engine.commitImportedChat(t.Context(), scope, request, archive)
 	if err != nil || first["conversationId"] != second["conversationId"] {
 		t.Fatalf("replay=%v err=%v", second, err)

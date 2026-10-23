@@ -1,8 +1,13 @@
 package interaction
 
-import "strings"
+import (
+	"context"
+	"encoding/json"
+	"strings"
 
-import "github.com/u-ai/backend/internal/safety"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/safety"
+)
 
 func attachmentCount(req *ProcessRequest) int {
 	count := 0
@@ -28,16 +33,59 @@ func isEmotionalMessage(message string) bool {
 	return false
 }
 
-func (p *RuntimePipeline) buildSafetyDecision(snapshot ContextSnapshot, scope InteractionScope) RuntimeSafetyDecision {
-	if p.safetyGovernor == nil {
-		return runtimeSafety(snapshot)
+func runtimeRequestID(ctx context.Context, scope InteractionScope, req *ProcessRequest) string {
+	if execution, ok := coordination.FromContext(ctx); ok {
+		if requestID := strings.TrimSpace(execution.RequestID); requestID != "" {
+			return requestID
+		}
 	}
-	result := p.safetyGovernor.CheckPreGen(safety.PreGenInput{CharacterID: scope.CharacterID, SpaceID: scope.SpaceID, Scope: scope.Channel, Context: map[string]string{"request_id": scope.RequestID}})
+	if req != nil {
+		if requestID := strings.TrimSpace(req.RequestID); requestID != "" {
+			return requestID
+		}
+	}
+	return strings.TrimSpace(scope.RequestID)
+}
+
+func (p *RuntimePipeline) buildSafetyDecision(ctx context.Context, snapshot ContextSnapshot, scope InteractionScope, req *ProcessRequest) (RuntimeSafetyDecision, safety.RuntimePolicy, *safety.Governor) {
+	policy := safety.DefaultPolicy()
+	governor := p.safetyGovernor
+	requestID := runtimeRequestID(ctx, scope, req)
+	if p.safetyPolicyReader != nil {
+		ownerID := scope.SpaceID
+		if execution, ok := coordination.FromContext(ctx); ok && execution.ResourceOwnerID != "" {
+			ownerID = execution.ResourceOwnerID
+		}
+		loaded, err := p.safetyPolicyReader.RuntimePolicy(ctx, scope.SpaceID, ownerID)
+		if err != nil {
+			return RuntimeSafetyDecision{Level: "blocked", Blocked: true, Reasons: []string{"policy_unavailable"}}, policy, nil
+		}
+		policy = loaded
+		governor = safety.NewPolicyGovernor(loaded)
+	}
+	if governor == nil {
+		decision := runtimeSafety(snapshot)
+		decision.PolicyRevision = policy.Revision
+		return decision, policy, nil
+	}
+	result := governor.CheckPreGen(safety.PreGenInput{CharacterID: scope.CharacterID, SpaceID: scope.SpaceID, Scope: scope.Channel, Text: req.Message, Context: map[string]string{"request_id": requestID}})
 	level := "normal"
 	if !result.Allowed {
 		level = "blocked"
+		if p.safetyRecorder != nil {
+			ownerID := scope.SpaceID
+			coreID := scope.SpaceID
+			if execution, ok := coordination.FromContext(ctx); ok {
+				ownerID, coreID = execution.ResourceOwnerID, execution.CoreID
+			}
+			details, _ := json.Marshal(map[string]any{"reasons": result.Reasons, "action": policy.Config.ViolationAction})
+			if err := p.safetyRecorder.RecordIncident(ctx, safety.Incident{SpaceID: scope.SpaceID, OwnerID: ownerID, CoreID: coreID, RoleID: scope.CharacterID, ConversationID: scope.ConversationID, RequestID: requestID, EventType: "policy.violation", Severity: "high", Description: strings.Join(result.Reasons, ","), Status: "open", PolicyRevision: policy.Revision, Revision: 1, DetailsJSON: string(details)}); err != nil {
+				level = "blocked"
+				result.Reasons = append(result.Reasons, "safety_incident_store_unavailable")
+			}
+		}
 	}
-	return RuntimeSafetyDecision{Level: level, Blocked: !result.Allowed, Reasons: result.Reasons}
+	return RuntimeSafetyDecision{Level: level, Blocked: !result.Allowed, Reasons: result.Reasons, PolicyRevision: policy.Revision, Action: policy.Config.ViolationAction}, policy, governor
 }
 
 func findTransactionDefinition(name TransactionBoundary) TransactionDefinition {

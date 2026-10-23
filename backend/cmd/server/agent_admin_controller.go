@@ -17,8 +17,8 @@ import (
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/extension/mcpruntime"
+	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/tts"
 	"gorm.io/gorm"
 )

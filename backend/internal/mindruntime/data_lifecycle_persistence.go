@@ -191,6 +191,7 @@ func (c *DataLifecycleCoordinator) persistRecalculationTasksLocked(tasks []Recal
 }
 
 type DeletionTombstoneModel struct {
+	MigratedTo       string     `gorm:"column:migrated_to" json:"migratedTo,omitempty"`
 	ID               string     `gorm:"primaryKey;column:id" json:"id"`
 	TargetID         string     `gorm:"column:target_id;index" json:"targetId"`
 	TargetType       string     `gorm:"column:target_type" json:"targetType"`

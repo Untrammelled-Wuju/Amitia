@@ -335,6 +335,7 @@ func (a *OpenAIChatAdapter) parseResponse(respBytes []byte) (*ModelResult, error
 		}
 	}
 
+	res.Usage.Reported = UsageReported(respBytes, "usage")
 	return res, nil
 }
 
@@ -443,6 +444,7 @@ func (a *OpenAIChatAdapter) parseStream(ctx context.Context, body io.Reader, sin
 
 				if chunk.Usage != nil {
 					result.Usage = chunk.Usage.modelUsage()
+					result.Usage.Reported = UsageReported([]byte(content), "usage")
 					usage := result.Usage
 					if err := sink.Emit(ctx, ModelEvent{Type: ModelEventUsage, Usage: &usage}); err != nil {
 						return result, err

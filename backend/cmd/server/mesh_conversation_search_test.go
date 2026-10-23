@@ -52,15 +52,27 @@ func TestMeshConversationSearchHTTPUsesMessageContent(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || response.Code != 200 {
 		t.Fatalf("query status=%d err=%v body=%s", response.Code, err, response.Body.String())
 	}
-	if len(result.Data.Snapshot.LegacyConversations) != 1 {
-		t.Fatalf("message search returned %d conversations", len(result.Data.Snapshot.LegacyConversations))
-	}
+	conversations := 0
 	var row chat.Conversation
-	if err := json.Unmarshal(result.Data.Snapshot.LegacyConversations[0], &row); err != nil || row.ID != "matched" {
-		t.Fatalf("unexpected match: %+v err=%v", row, err)
+	for _, resource := range result.Data.Snapshot.Resources {
+		if resource.Kind != "conversation" {
+			continue
+		}
+		conversations++
+		if err := json.Unmarshal(resource.Body, &row); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if len(result.Data.Snapshot.LegacyMessages) != 0 {
-		t.Fatal("search returned private message bodies")
+	if conversations != 1 {
+		t.Fatalf("message search returned %d conversations", conversations)
+	}
+	if row.ID != "matched" {
+		t.Fatalf("unexpected match: %+v", row)
+	}
+	for _, resource := range result.Data.Snapshot.Resources {
+		if resource.Kind == "message" {
+			t.Fatal("search returned private message bodies")
+		}
 	}
 }
 

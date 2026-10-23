@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/timeoutpolicy"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,6 +148,18 @@ func synthesizeVolcengine(ctx context.Context, cfg *TtsConfig, text string) ([]b
 	if resourceId == "" {
 		resourceId = "seed-tts-2.0"
 	}
+	endpoint := strings.TrimSpace(cfg.BaseURL)
+	if endpoint == "" {
+		endpoint = volcanoSSEUri
+	} else {
+		parsed, err := url.Parse(endpoint)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("TTS 服务地址无效")
+		}
+		if parsed.Path == "" || parsed.Path == "/" {
+			endpoint = strings.TrimRight(endpoint, "/") + "/api/v3/tts/unidirectional/sse"
+		}
+	}
 
 	reqBody := v3SSEReq{
 		User:  v3User{UID: "u-ai-user"},
@@ -163,7 +176,7 @@ func synthesizeVolcengine(ctx context.Context, cfg *TtsConfig, text string) ([]b
 	}
 	jsonBody, _ := json.Marshal(reqBody)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", volcanoSSEUri, bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
 	}

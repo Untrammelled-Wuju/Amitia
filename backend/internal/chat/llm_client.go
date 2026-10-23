@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat/localmodel"
@@ -118,7 +119,7 @@ func (s localModelEventSink) OnToolCallDelta(callID string, name string, argumen
 }
 
 func (s localModelEventSink) OnUsage(usage localmodel.LocalModelUsage) error {
-	return s.sink.Emit(s.ctx, ModelEvent{Type: ModelEventUsage, Usage: &ModelUsage{InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens}})
+	return s.sink.Emit(s.ctx, ModelEvent{Type: ModelEventUsage, Usage: &ModelUsage{InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens, Reported: usage.Reported}})
 }
 
 func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, sink ModelEventSink) (string, string, []map[string]interface{}, int, error) {
@@ -161,7 +162,20 @@ func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *Mode
 		req := messagesToModelRequest(cfg, messages, tools, false)
 		localReq := toLocalModelRequest(req, messages)
 		localReq.Tools = toolsToLocalModelTools(tools)
-		result, err := backend.Generate(ctx, localReq, localModelEventSink{ctx: ctx, sink: sink})
+		finishUsage, usageErr := s.meterModel(ctx, cfg)
+		if usageErr != nil {
+			return "", "", nil, 0, usageErr
+		}
+		usageSink := &meteringEventSink{next: sink}
+		result, err := backend.Generate(ctx, localReq, localModelEventSink{ctx: ctx, sink: usageSink})
+		measured := &ModelResult{}
+		if err == nil {
+			measured.Usage = ModelUsage{InputTokens: result.Usage.PromptTokens, OutputTokens: result.Usage.CompletionTokens, TotalTokens: result.Usage.TotalTokens, Reported: result.Usage.Reported}
+		} else if usageSink.usage != nil {
+			measured.Usage = *usageSink.usage
+		}
+		recordModelCacheUsage(measured)
+		err = errors.Join(err, finishUsage(measured, err))
 		if err != nil {
 			return "", "", nil, 0, err
 		}
@@ -180,7 +194,14 @@ func (s *service) invokeProcessLLMWithToolsStream(ctx context.Context, cfg *Mode
 	return text, reasoning, calls, tokens, nil
 }
 
-func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (retText string, retTokens int, retErr error) {
+
+	finishUsage, usageErr := s.meterModel(ctx, cfg)
+	if usageErr != nil {
+		return "", 0, usageErr
+	}
+	measured := &ModelResult{}
+	defer func() { recordModelCacheUsage(measured); retErr = errors.Join(retErr, finishUsage(measured, retErr)) }()
 	backend, err := s.getLocalModelBackend(ctx, cfg)
 	if err != nil {
 		return "", 0, err
@@ -193,10 +214,18 @@ func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []
 	if err != nil {
 		return "", 0, err
 	}
+	measured.Usage = ModelUsage{InputTokens: result.Usage.PromptTokens, OutputTokens: result.Usage.CompletionTokens, TotalTokens: result.Usage.TotalTokens, Reported: result.Usage.Reported}
 	return result.Text, result.Usage.TotalTokens, nil
 }
 
-func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (retText string, retTokens int, retErr error) {
+
+	finishUsage, usageErr := s.meterModel(ctx, cfg)
+	if usageErr != nil {
+		return "", 0, usageErr
+	}
+	measured := &ModelResult{}
+	defer func() { recordModelCacheUsage(measured); retErr = errors.Join(retErr, finishUsage(measured, retErr)) }()
 	backend, err := s.getLocalModelBackend(ctx, cfg)
 	if err != nil {
 		return "", 0, err
@@ -209,6 +238,7 @@ func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messag
 	if err != nil {
 		return "", 0, err
 	}
+	measured.Usage = ModelUsage{InputTokens: result.Usage.PromptTokens, OutputTokens: result.Usage.CompletionTokens, TotalTokens: result.Usage.TotalTokens, Reported: result.Usage.Reported}
 	return result.Text, result.Usage.TotalTokens, nil
 }
 
@@ -353,7 +383,14 @@ func openAICompatibleTools(tools []tool.Tool) []tool.Tool {
 	return result
 }
 
-func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (retText string, retTokens int, retErr error) {
+
+	finishUsage, usageErr := s.meterModel(ctx, cfg)
+	if usageErr != nil {
+		return "", 0, usageErr
+	}
+	measured := &ModelResult{}
+	defer func() { recordModelCacheUsage(measured); retErr = errors.Join(retErr, finishUsage(measured, retErr)) }()
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	reqBody := map[string]interface{}{
 		"model":    cfg.ModelName,
@@ -393,6 +430,7 @@ func (s *service) callOllamaMode(ctx context.Context, cfg *ModelConfig, messages
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		return "", 0, fmt.Errorf("解析响应失败: %w", err)
 	}
+	measured.Usage = ModelUsage{InputTokens: result.PromptEvalCount, OutputTokens: result.EvalCount, TotalTokens: result.EvalCount + result.PromptEvalCount, Reported: modelprotocol.UsageReported(respBytes, "eval_count", "prompt_eval_count")}
 	total := result.EvalCount + result.PromptEvalCount
 	return result.Message.Content, total, nil
 }
@@ -582,7 +620,12 @@ func (s *service) callLLMWithAdapterMode(ctx context.Context, cfg *ModelConfig, 
 	req := messagesToModelRequest(cfg, messages, nil, jsonOnly)
 	req.DisableThinking = disableThinking
 	pcfg := cfgToProviderConfig(cfg)
+	finishUsage, usageErr := s.meterModel(ctx, cfg)
+	if usageErr != nil {
+		return "", 0, usageErr
+	}
 	result, err := adapter.Generate(ctx, pcfg, req)
+	err = errors.Join(err, finishUsage(result, err))
 	recordModelCacheUsage(result)
 	if err != nil {
 		return "", 0, err
@@ -643,7 +686,17 @@ func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, me
 	if sink == nil {
 		sink = noopEventSink{}
 	}
-	result, err := adapter.Stream(ctx, pcfg, req, sink)
+	finishUsage, usageErr := s.meterModel(ctx, cfg)
+	if usageErr != nil {
+		return nil, usageErr
+	}
+	usageSink := &meteringEventSink{next: sink}
+	result, err := adapter.Stream(ctx, pcfg, req, usageSink)
+	measured := result
+	if usageSink.usage != nil && (measured == nil || measured.Usage.TotalTokens == 0) {
+		measured = &ModelResult{Usage: *usageSink.usage}
+	}
+	err = errors.Join(err, finishUsage(measured, err))
 	recordModelCacheUsage(result)
 	return result, err
 }
@@ -656,7 +709,14 @@ func recordModelCacheUsage(result *ModelResult) {
 	mindruntime.DefaultMetricsCollector.RecordModelUsage(usage.InputTokens, usage.CachedInputTokens, usage.CacheUsageReported)
 }
 
-func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (retText string, retTokens int, retErr error) {
+
+	finishUsage, usageErr := s.meterModel(ctx, cfg)
+	if usageErr != nil {
+		return "", 0, usageErr
+	}
+	measured := &ModelResult{}
+	defer func() { recordModelCacheUsage(measured); retErr = errors.Join(retErr, finishUsage(measured, retErr)) }()
 	systemPrompt, chatMessages := extractSystemMessage(messages)
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	reqBody := map[string]interface{}{
@@ -712,10 +772,18 @@ func (s *service) callAnthropicMode(ctx context.Context, cfg *ModelConfig, messa
 			content += block.Text
 		}
 	}
+	measured.Usage = ModelUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens, TotalTokens: result.Usage.InputTokens + result.Usage.OutputTokens, Reported: modelprotocol.UsageReported(respBytes, "usage")}
 	return content, result.Usage.InputTokens + result.Usage.OutputTokens, nil
 }
 
-func (s *service) callGeminiMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
+func (s *service) callGeminiMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (retText string, retTokens int, retErr error) {
+
+	finishUsage, usageErr := s.meterModel(ctx, cfg)
+	if usageErr != nil {
+		return "", 0, usageErr
+	}
+	measured := &ModelResult{}
+	defer func() { recordModelCacheUsage(measured); retErr = errors.Join(retErr, finishUsage(measured, retErr)) }()
 	systemPrompt, chatMessages := extractSystemMessage(messages)
 	base := strings.TrimRight(cfg.BaseURL, "/")
 	var contents []map[string]interface{}
@@ -798,6 +866,7 @@ func (s *service) callGeminiMode(ctx context.Context, cfg *ModelConfig, messages
 	for _, part := range result.Candidates[0].Content.Parts {
 		content += part.Text
 	}
+	measured.Usage = ModelUsage{InputTokens: result.UsageMetadata.PromptTokenCount, OutputTokens: result.UsageMetadata.CandidatesTokenCount, TotalTokens: result.UsageMetadata.TotalTokenCount, Reported: modelprotocol.UsageReported(respBytes, "usageMetadata")}
 	return content, result.UsageMetadata.TotalTokenCount, nil
 }
 

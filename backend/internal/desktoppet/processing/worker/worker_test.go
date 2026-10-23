@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -184,39 +183,6 @@ func createProcessingTask(t *testing.T, repo processing.Repository, db *gorm.DB,
 	t.Helper()
 	if err := repo.CreateProcessingTask(db, task); err != nil {
 		t.Fatalf("create processing task %s: %v", task.ID, err)
-	}
-}
-
-func seedMockPackage(t *testing.T, db *gorm.DB, processingTaskID, generationTaskID, dataDir string, includedActions []string) {
-	t.Helper()
-	pkgDir := filepath.Join(dataDir, "mock-package")
-	if err := os.MkdirAll(pkgDir, 0755); err != nil {
-		t.Fatalf("mkdir mock package: %v", err)
-	}
-	manifestFile := filepath.Join(dataDir, "mock-manifest.json")
-	if err := os.WriteFile(manifestFile, []byte("{}"), 0644); err != nil {
-		t.Fatalf("write mock manifest: %v", err)
-	}
-	includedJSON, _ := json.Marshal(includedActions)
-	pkg := &processing.Package{
-		ID:               "pkg-mock-" + processingTaskID,
-		GenerationTaskID: generationTaskID,
-		ProcessingTaskID: processingTaskID,
-		Name:             "mock-package",
-		Version:          1,
-		Status:           "ready",
-		PackagePath:      "mock-package/",
-		ManifestPath:     "mock-manifest.json",
-		PackageHash:      "mock-hash-1234567890abcdef",
-		IncludedActions:  string(includedJSON),
-		ActionCount:      len(includedActions),
-		CanvasWidth:      512,
-		CanvasHeight:     512,
-		CreatedAt:        workerNowStr(),
-		UpdatedAt:        workerNowStr(),
-	}
-	if err := db.Create(pkg).Error; err != nil {
-		t.Fatalf("create mock package: %v", err)
 	}
 }
 
@@ -550,16 +516,6 @@ func TestFinalizeTaskStatus(t *testing.T) {
 				if err := repo.CreateProcessingActions(db, []processing.ProcessingAction{pa}); err != nil {
 					t.Fatalf("create action %d: %v", i, err)
 				}
-			}
-
-			if tt.wantStatus == "succeeded" || (tt.wantStatus == "partially_succeeded" && !tt.cancelled) {
-				var included []string
-				for i, status := range tt.actions {
-					if status == "succeeded" {
-						included = append(included, fmt.Sprintf("action_%d", i))
-					}
-				}
-				seedMockPackage(t, db, pt.ID, pt.GenerationTaskID, dataDir, included)
 			}
 
 			w.finalizeTask(pt.ID, tt.processErr, "exec-test")

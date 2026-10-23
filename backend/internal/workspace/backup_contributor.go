@@ -18,6 +18,10 @@ type WorkspaceBackupContributor struct {
 	DB *gorm.DB
 }
 
+func (c *WorkspaceBackupContributor) ComponentIDs() []string {
+	return []string{ComponentIDWorkspaces}
+}
+
 func NewWorkspaceBackupContributor(db *gorm.DB) *WorkspaceBackupContributor {
 	return &WorkspaceBackupContributor{DB: db}
 }
@@ -41,6 +45,9 @@ type workspaceExportRecord struct {
 }
 
 func (c *WorkspaceBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil, nil
+	}
 	var count int64
 	c.DB.WithContext(ctx).Table("workspace_mounts").Count(&count)
 	return []dataportability.BackupComponentPlan{
@@ -59,6 +66,9 @@ func (c *WorkspaceBackupContributor) Plan(ctx context.Context, req dataportabili
 }
 
 func (c *WorkspaceBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil
+	}
 	compW, err := out.CreateComponent(ComponentIDWorkspaces, "workspace.records.v1", dataportability.KindNDJSON)
 	if err != nil {
 		return err
@@ -222,5 +232,3 @@ func (c *WorkspaceBackupContributor) RestoreWorkspaces(ctx context.Context, in d
 
 	return scanner.Err()
 }
-
-var _ dataportability.WorkspaceRestorePort = (*WorkspaceBackupContributor)(nil)

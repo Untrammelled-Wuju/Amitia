@@ -35,19 +35,13 @@ export function getBatchSummary(batchId: string) {
   return apiGet(`/api/imports/batches/${batchId}/summary`);
 }
 
-export function extractMemoryCandidates(batchId: string) {
-  return apiPost(`/api/imports/batches/${batchId}/extract-memory-candidates`);
-}
-
-export function confirmMemories(batchId: string, selectedIds: string[]) {
-  return apiPost(`/api/imports/batches/${batchId}/confirm-memories`, {
-    selectedIds,
-  });
-}
-
-export async function createConversationFromImport(conversationId: string) {
-  const result = await ownedManagementRequest("from-import", { conversationId }, "post");
-  return { ...result, conversationId: conversationReference({ ownerId: result.executionScope.resourceOwnerId, id: result.conversationId }) };
+export async function createConversationFromImport(importBatchId: string, roleId = "") {
+  const result = await ownedManagementRequest("from-import", { importBatchId }, "post", roleId);
+  return {
+    ...result,
+    ownerConversationId: result.conversationId,
+    conversationId: conversationReference({ ownerId: result.executionScope.resourceOwnerId, id: result.conversationId }),
+  };
 }
 
 export function fetchBatchesApi(params?: { page?: number; pageSize?: number }) {

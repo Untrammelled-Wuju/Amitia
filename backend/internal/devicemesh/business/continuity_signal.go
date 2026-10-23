@@ -16,6 +16,23 @@ func (e *Engine) SignalContinuity(ctx context.Context, request Request, signal c
 	if !continuity.ValidWaitType(signal.WaitType) || signal.WaitType == continuity.WaitTypeUser || signal.OccurredAt.IsZero() || len(body(signal)) > 64<<10 {
 		return nil, errors.New("持续事项事件参数无效")
 	}
+	if request.RoleID == "" {
+		roles, err := e.continuityRoleIDs(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		resolved := []string{}
+		for _, role := range roles {
+			scoped := request
+			scoped.RoleID = role
+			items, err := e.SignalContinuity(ctx, scoped, signal)
+			resolved = append(resolved, items...)
+			if err != nil {
+				return resolved, err
+			}
+		}
+		return resolved, nil
+	}
 	ctx, scope, finish, err := e.continuityAuthority(ctx, request)
 	if err != nil {
 		return nil, err

@@ -113,7 +113,7 @@ func TestRecentEmptyConversationIsReused(t *testing.T) {
 	}
 }
 
-func TestBackupPlanExcludesProjectConversations(t *testing.T) {
+func TestBackupPlanIncludesProjectConversations(t *testing.T) {
 	svc := newProjectTestService(t)
 	project, err := svc.CreateProjectForSpace(&CreateProjectRequest{
 		Name:        "Amitia",
@@ -144,11 +144,11 @@ func TestBackupPlanExcludesProjectConversations(t *testing.T) {
 	for _, plan := range plans {
 		counts[plan.ID] = plan.ItemCount
 	}
-	if counts[ComponentIDChatConversations] != 1 {
-		t.Fatalf("conversation backup count = %d, want 1", counts[ComponentIDChatConversations])
+	if counts[ComponentIDChatConversations] != 2 {
+		t.Fatalf("conversation backup count = %d, want 2", counts[ComponentIDChatConversations])
 	}
-	if counts[ComponentIDChatMessages] != 1 {
-		t.Fatalf("message backup count = %d, want 1", counts[ComponentIDChatMessages])
+	if counts[ComponentIDChatMessages] != 2 {
+		t.Fatalf("message backup count = %d, want 2", counts[ComponentIDChatMessages])
 	}
 }
 

@@ -10,7 +10,6 @@ func RegisterRoutes(r *gin.RouterGroup, coord coordinator.InstallationCoordinato
 	handler := NewCoordinatorHandler(coord, repo, guard)
 	g := r.Group("/desktop-pets")
 	{
-		g.POST("/packages/:packageId/install", handler.InstallPackage)
 		g.POST("/pets/:petId/releases/:releaseId/install", handler.InstallRelease)
 		g.GET("/installations", handler.ListInstallations)
 		g.GET("/installations/:installationId", handler.GetInstallation)

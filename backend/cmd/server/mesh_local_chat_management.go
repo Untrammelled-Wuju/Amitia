@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,17 +15,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/chat/importbatch"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"gorm.io/gorm"
 )
 
 type ownedChatManagementRecord struct {
-	ID       string
-	Kind     string
-	RoleID   string
-	Legacy   bool
-	Revision int64
-	Body     map[string]any
+	SourceID        string
+	ID              string
+	Kind            string
+	RoleID          string
+	Legacy          bool
+	Revision        int64
+	HasLegacyMirror bool
+	LegacyRevision  int64
+	Body            map[string]any
 }
 
 type ownedChatCleanupPlan struct {
@@ -110,7 +115,37 @@ func (p *meshLocalDataPort) chatManagementRecords(ctx context.Context, role stri
 			}
 		}
 	}
-	return records, nil
+	return canonicalChatManagementRecords(records), nil
+}
+
+func canonicalChatManagementRecords(records []ownedChatManagementRecord) []ownedChatManagementRecord {
+	result := make([]ownedChatManagementRecord, 0, len(records))
+	indexes := make(map[string]int)
+	for _, row := range records {
+		key := row.Kind + "\x00" + row.ID
+		if row.Kind == "summary" {
+			key = row.Kind + "\x00" + chatManagementString(row.Body, "conversationId")
+		}
+		index, exists := indexes[key]
+		if !exists {
+			indexes[key] = len(result)
+			result = append(result, row)
+			continue
+		}
+		current := result[index]
+		if row.Legacy && !current.Legacy {
+			current.HasLegacyMirror = true
+			current.LegacyRevision = row.Revision
+			result[index] = current
+			continue
+		}
+		if !row.Legacy && current.Legacy {
+			row.HasLegacyMirror = true
+			row.LegacyRevision = current.Revision
+			result[index] = row
+		}
+	}
+	return result
 }
 
 func chatManagementFingerprint(records []ownedChatManagementRecord) string {
@@ -251,6 +286,24 @@ func (p *meshLocalDataPort) ManageChat(ctx context.Context, scope coordination.E
 }
 
 func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordination.ExecutionScope, role string, request coordination.ChatManagementRequest) (map[string]any, error) {
+	if request.Operation == "from-import" {
+		return p.manageImportBatch(ctx, scope, role, request)
+	}
+	if request.Operation == "import-promoted" {
+		if strings.TrimSpace(request.ImportBatchID) == "" || strings.TrimSpace(request.ConversationID) == "" {
+			return nil, errors.New("导入批次和正式会话不能为空")
+		}
+		if err := importbatch.NewRepository(p.services.DB).MarkPromoted(ctx, p.legacySpaceID, request.ImportBatchID, role, request.ConversationID, scope.ResourceOwnerID, scope.CoreID); err != nil {
+			return nil, err
+		}
+		return map[string]any{"promoted": true, "conversationId": request.ConversationID}, nil
+	}
+	if strings.HasPrefix(request.Operation, "privacy/deletion-") {
+		return p.managedPrivacyDeletion(ctx, scope, role, request)
+	}
+	if request.Operation == "privacy/messages" || request.Operation == "privacy/mask" {
+		return p.managedPrivacyMessages(ctx, scope, role, request)
+	}
 	records, err := p.chatManagementRecords(ctx, role)
 	if err != nil {
 		return nil, err
@@ -273,40 +326,6 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 		return p.managedChatFeedback(ctx, scope, request, records)
 	case "conversations", "conversation/create", "conversation/read", "conversation/rename", "conversation/delete":
 		return p.managedConversationAction(ctx, scope, role, request, records, selected)
-	case "from-import":
-		if request.ConversationID == "" || request.RequestID == "" {
-			return nil, errors.New("导入会话和请求编号不能为空")
-		}
-		messages := []map[string]any{}
-		var conversation map[string]any
-		for _, row := range selected {
-			if row.Kind == "conversation" && row.ID == request.ConversationID && row.Legacy && chatManagementString(row.Body, "source") == "import" {
-				conversation = row.Body
-			}
-			if row.Kind == "message" && row.Legacy {
-				messages = append(messages, row.Body)
-			}
-		}
-		if conversation == nil {
-			return nil, errors.New("未找到属于当前角色的导入会话")
-		}
-		sort.Slice(messages, func(i, j int) bool {
-			a, _ := messages[i]["sequence"].(float64)
-			b, _ := messages[j]["sequence"].(float64)
-			if a == b {
-				return chatManagementString(messages[i], "id") < chatManagementString(messages[j], "id")
-			}
-			return a < b
-		})
-		result := map[string]any{"conversation": conversation, "messages": messages, "sourceOwnerId": p.ownerID, "sourceRoleId": role}
-		raw, err := json.Marshal(result)
-		if err != nil {
-			return nil, err
-		}
-		if len(raw) > 3<<20 {
-			return nil, coordination.ErrPendingLimit
-		}
-		return result, nil
 	case "stats":
 		counts := chatManagementCounts(records, true)
 		today := 0
@@ -488,6 +507,54 @@ func (p *meshLocalDataPort) manageChatForRole(ctx context.Context, scope coordin
 	}
 }
 
+func (p *meshLocalDataPort) manageImportBatch(ctx context.Context, scope coordination.ExecutionScope, role string, request coordination.ChatManagementRequest) (map[string]any, error) {
+	batchID := strings.TrimSpace(request.ImportBatchID)
+	if batchID == "" {
+		batchID = strings.TrimSpace(request.ConversationID)
+	}
+	if batchID == "" || request.RequestID == "" {
+		return nil, errors.New("导入会话和请求编号不能为空")
+	}
+	batch, items, err := importbatch.NewRepository(p.services.DB).Get(ctx, p.legacySpaceID, batchID)
+	if err != nil {
+		return nil, err
+	}
+	if batch.RoleID == "" || batch.RoleID != role {
+		return nil, importbatch.ErrRoleMismatch
+	}
+	repo := importbatch.NewRepository(p.services.DB)
+	if batch.Status == importbatch.StatusPromoted && batch.PromotedConversationID != "" {
+		return map[string]any{"promotedConversationId": batch.PromotedConversationID}, nil
+	}
+	if batch.LegacyConversationID != "" {
+		var promotedConversationID string
+		err = p.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(
+			ctx,
+			`SELECT resource_id FROM kernel_device_owned_resources WHERE owner_id = ? AND kind = 'conversation' AND deleted = 0 AND json_extract(body, '$.importOrigin.conversationId') = ? LIMIT 1`,
+			p.ownerID,
+			batch.LegacyConversationID,
+		).Scan(&promotedConversationID)
+		if err == nil && promotedConversationID != "" {
+			if err := repo.MarkPromoted(ctx, scope.SpaceID, batch.ID, role, promotedConversationID, scope.ResourceOwnerID, scope.CoreID); err != nil {
+				return nil, err
+			}
+			return map[string]any{"promotedConversationId": promotedConversationID}, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+	archive := importbatch.PromotionArchive(batch, items, p.ownerID)
+	raw, err := json.Marshal(archive)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > 3<<20 {
+		return nil, coordination.ErrPendingLimit
+	}
+	return archive, nil
+}
+
 func sameChatManagementAuthority(a, b coordination.ExecutionScope) bool {
 	a.RequestID, a.TurnID, a.ExecutionID = "", "", ""
 	b.RequestID, b.TurnID, b.ExecutionID = "", "", ""
@@ -610,23 +677,27 @@ func (p *meshLocalDataPort) deleteManagedChat(ctx context.Context, scope coordin
 			}
 		}
 		selection := chat.ManagedHistorySelection{ConversationRevisions: map[string]int64{}, MessageRevisions: map[string]int64{}}
-		feedbackKeys := []string{}
+		feedbackMessageIDs := []string{}
 		for _, row := range plan.Records {
-			if !row.Legacy {
-				if row.Kind == "message" {
-					feedbackKeys = append(feedbackKeys, ownedFeedbackMessageKey(p.ownerID, role, row.ID))
-				}
+			if row.Kind == "message" {
+				feedbackMessageIDs = append(feedbackMessageIDs, row.ID)
+			}
+			if !row.Legacy && !row.HasLegacyMirror {
 				continue
 			}
+			revision := row.LegacyRevision
+			if row.Legacy {
+				revision = row.Revision
+			}
 			if row.Kind == "conversation" {
-				selection.ConversationRevisions[row.ID] = row.Revision
+				selection.ConversationRevisions[row.ID] = revision
 			}
 			if row.Kind == "message" {
-				selection.MessageRevisions[row.ID] = row.Revision
+				selection.MessageRevisions[row.ID] = revision
 			}
 		}
-		if len(feedbackKeys) > 0 {
-			if err := p.services.DB.WithContext(ctx).Exec("DELETE FROM message_feedback WHERE message_id IN ?", feedbackKeys).Error; err != nil {
+		if len(feedbackMessageIDs) > 0 {
+			if err := p.services.DB.WithContext(ctx).Exec("DELETE FROM message_feedback WHERE space_id=? AND owner_id=? AND core_id=? AND role_id=? AND message_id IN ?", p.legacySpaceID, p.ownerID, scope.CoreID, role, feedbackMessageIDs).Error; err != nil {
 				return err
 			}
 		}

@@ -48,6 +48,7 @@ type RoleCatalogPort interface {
 }
 
 type OwnedChatRuntimeQuery struct {
+	Message        string `json:"message,omitempty"`
 	Source         string `json:"source,omitempty"`
 	Channel        string `json:"channel,omitempty"`
 	PeerID         string `json:"peerId,omitempty"`
@@ -65,14 +66,11 @@ func NormalizeConversationSearch(value string) (string, error) {
 const OwnedConversationSearchPredicate = ` AND (instr(lower(COALESCE(json_extract(CAST(body AS TEXT),'$.title'),'')),?)>0 OR EXISTS (SELECT 1 FROM kernel_device_owned_resources AS matched WHERE matched.owner_id=kernel_device_owned_resources.owner_id AND matched.role_id=kernel_device_owned_resources.role_id AND matched.kind='message' AND matched.deleted=0 AND json_extract(CAST(matched.body AS TEXT),'$.conversationId')=kernel_device_owned_resources.resource_id AND instr(lower(COALESCE(json_extract(CAST(matched.body AS TEXT),'$.content'),'')),?)>0))`
 
 type DataSnapshot struct {
-	RuntimeContext      map[string]json.RawMessage `json:"runtimeContext,omitempty"`
-	NextCursors         map[string]string          `json:"nextCursors,omitempty"`
-	OwnerID             string                     `json:"ownerId"`
-	Role                Role                       `json:"role"`
-	Resources           []Resource                 `json:"resources"`
-	LegacyMessages      []json.RawMessage          `json:"legacyMessages,omitempty"`
-	LegacySummary       json.RawMessage            `json:"legacySummary,omitempty"`
-	LegacyConversations []json.RawMessage          `json:"legacyConversations,omitempty"`
+	RuntimeContext map[string]json.RawMessage `json:"runtimeContext,omitempty"`
+	NextCursors    map[string]string          `json:"nextCursors,omitempty"`
+	OwnerID        string                     `json:"ownerId"`
+	Role           Role                       `json:"role"`
+	Resources      []Resource                 `json:"resources"`
 }
 
 type DataPort interface {
@@ -135,7 +133,7 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	if snapshot.OwnerID != scope.ResourceOwnerID || snapshot.Role.ID != scope.RoleID || snapshot.Role.Revision != scope.RoleRevision || !json.Valid(snapshot.Role.Profile) {
 		return ErrWrongOwner
 	}
-	if len(snapshot.Resources) > 4096 || len(snapshot.LegacyMessages) > 256 || len(snapshot.LegacyConversations) > 256 {
+	if len(snapshot.Resources) > 4096 {
 		return ErrPendingLimit
 	}
 	if len(snapshot.RuntimeContext) > 10 {
@@ -163,7 +161,8 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	for _, resource := range snapshot.Resources {
 		key := resource.Kind + "/" + resource.ID
 		validWorldbookRole := resource.Kind == "worldbook" && (resource.RoleID == scope.RoleID || resource.RoleID == GlobalWorldbookRole)
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 || !json.Valid(resource.Body) || seen[key] {
+		legacyReadOnly := resource.Origin == "legacy" && resource.ReadOnly && resource.Revision == 0
+		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 && !legacyReadOnly || !json.Valid(resource.Body) || seen[key] {
 			return fmt.Errorf("%w: 无效上下文记录", ErrWrongOwner)
 		}
 		seen[key] = true

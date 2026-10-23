@@ -9,7 +9,7 @@ const frontRoot = resolve(repositoryRoot, "front");
 const frontNodeModules = resolve(frontRoot, "node_modules");
 
 async function buildChannel(channel) {
-  const root = resolve(repositoryRoot, "plugins", "channels", channel, "ui");
+  const root = resolve(repositoryRoot, "plugins-code", "channels", channel, "ui");
   for (const platform of ["desktop", "mobile"]) {
     await build({
       root,

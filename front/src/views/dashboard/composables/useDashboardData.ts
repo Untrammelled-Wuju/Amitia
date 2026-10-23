@@ -2,6 +2,7 @@ import { ownedManagementRequest } from "@/runtime/owned-chat-management";
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { usageNumber, usageScopeLabel } from "@/runtime/usage-view";
 import { useApi } from "../../../composables/useApi";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import {
@@ -24,12 +25,17 @@ export function useDashboardData() {
   const totalConvs = ref(0);
   const totalMemories = ref(0);
   const totalChars = ref(0);
-  const todayCalls = ref(0);
-  const todayTokens = ref(0);
+  const todayCalls = ref<number | null>(null);
+  const todayTokens = ref<number | null>(null);
+  const usageOverviewNotice = ref("");
+  const usageDailyNotice = ref("");
+  const usageBusinessReady = ref(false);
+  const usageNotice = computed(() => [usageOverviewNotice.value, usageDailyNotice.value].filter(Boolean).join("；"));
   const recentErrors = ref<any[]>([]);
   const recentImports = ref<any[]>([]);
   const feedbackTotal = ref(0);
   const feedbackByType = ref<Record<string, number>>({});
+  const feedbackRecent = ref<any[]>([]);
   const psycheState = ref<import("../../../types").PsycheStateSnapshot | null>(
     null,
   );
@@ -71,7 +77,7 @@ export function useDashboardData() {
       totalConvs.value,
       totalMemories.value,
       totalChars.value,
-      todayCalls.value,
+      todayCalls.value ?? 0,
     ];
     return Math.max(...vals, 1);
   });
@@ -102,7 +108,8 @@ export function useDashboardData() {
     return ((val / maxTodayStat.value) * 100).toFixed(1) + "%";
   }
 
-  function formatTokens(n: number): string {
+  function formatTokens(n: number | null): string {
+    if (n === null) return "未知";
     if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
     if (n >= 1000) return (n / 1000).toFixed(1) + "K";
     return String(n);
@@ -304,21 +311,31 @@ export function useDashboardData() {
   async function fetchUsageOverview() {
     try {
       const data = await get<any>("/api/usage/overview");
-      if (data) {
-        todayCalls.value = data.todayCalls || 0;
-        todayTokens.value = data.todayTokens || 0;
-      }
-    } catch {}
+      if (!data || !data.scope) throw new Error("使用统计响应无效");
+      todayCalls.value = usageNumber(data.todayCalls);
+      todayTokens.value = usageNumber(data.todayTokens);
+      usageOverviewNotice.value = `${usageScopeLabel(data)}的文本模型实际调用，按 UTC 统计；自 ${data.meteringSince} 开始计量，之前的用量未知`;
+      if (data.todayUnknownUsageCalls > 0) usageOverviewNotice.value += `；${data.todayUnknownUsageCalls} 次调用未返回 Token，已知 ${data.todayKnownTokens} Token`;
+      if (data.businessStatus === "unavailable") usageOverviewNotice.value += "；Owner 业务统计暂不可用";
+    } catch {
+      todayCalls.value = null;
+      todayTokens.value = null;
+      usageOverviewNotice.value = "使用统计读取失败，请刷新重试";
+    }
   }
 
   async function fetchUsageDaily() {
     try {
       const periodic = await get<any>("/api/usage/periodic");
-      if (periodic) {
-        const d = periodic.daily;
-        if (Array.isArray(d) && d.length > 0) dailyData.value = d;
-      }
-    } catch {}
+      if (!periodic || !Array.isArray(periodic.daily)) throw new Error("使用趋势响应无效");
+      dailyData.value = periodic.daily;
+      usageBusinessReady.value = periodic.businessStatus === "ready";
+      usageDailyNotice.value = usageBusinessReady.value ? "" : "Owner 业务统计不可用，趋势中的业务数量暂缺";
+    } catch {
+      dailyData.value = [];
+      usageBusinessReady.value = false;
+      usageDailyNotice.value = "使用趋势读取失败，请刷新重试";
+    }
   }
 
   async function fetchRecentImports() {
@@ -365,6 +382,7 @@ export function useDashboardData() {
       const data = res?.data || res;
       feedbackTotal.value = data?.total || 0;
       feedbackByType.value = data?.byType || {};
+      feedbackRecent.value = Array.isArray(data?.recent) ? data.recent : [];
     } catch {}
   }
 
@@ -412,10 +430,13 @@ export function useDashboardData() {
     totalChars,
     todayCalls,
     todayTokens,
+    usageNotice,
+    usageBusinessReady,
     recentErrors,
     recentImports,
     feedbackTotal,
     feedbackByType,
+    feedbackRecent,
     dailyData,
     deployLabel,
     deployClass,

@@ -231,9 +231,8 @@ export function useCharacterVoice() {
   async function previewClone(speakerId: string) {
     previewCloneId.value = speakerId;
     try {
-      const ownedUrl = await speech.synthesizeIfBound("测试", injectedCharacterId.value || undefined);
-      const res: any = ownedUrl ? { data: { audioUrl: ownedUrl } } : await apiClient.post("/api/tts/synthesize", {
-        speakerId,
+      const ownedUrl = await speech.synthesizeIfBound("测试", injectedCharacterId.value || undefined, speakerId);
+      const res: any = ownedUrl ? { data: { audioUrl: ownedUrl } } : await apiClient.post(`/api/tts/voice-clones/${encodeURIComponent(speakerId)}/preview`, {
         text: "测试",
       });
       const data = res.data?.data || res.data;
@@ -277,8 +276,10 @@ export function useCharacterVoice() {
     previewAudio.value = "";
     try {
       const ownedUrl = await speech.synthesizeIfBound(previewText.value, injectedCharacterId.value || undefined);
-      const res = ownedUrl ? { data: { audioUrl: ownedUrl } } : await apiClient.post("/api/tts/synthesize", {
-        characterId: injectedCharacterId.value,
+      const previewPath = injectedCharacterId.value
+        ? `/api/tts/characters/${encodeURIComponent(injectedCharacterId.value)}/preview`
+        : "/api/tts/preview";
+      const res = ownedUrl ? { data: { audioUrl: ownedUrl } } : await apiClient.post(previewPath, {
         text: previewText.value,
       });
       const data = res.data?.data || res.data;

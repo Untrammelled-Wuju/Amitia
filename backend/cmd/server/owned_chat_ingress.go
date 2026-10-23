@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
@@ -67,6 +68,12 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 	if err != nil {
 		return nil, err
 	}
+	if r.services.ContinuityOwner != nil && req.ThreadID == "" && !req.IsInternal && !req.SuppressReplyPersistence {
+		req.ThreadID, err = r.services.ContinuityOwner.Resolve(ctx, owner, req.CharacterID, req.ConversationID, req.WorkspaceID, req.Message, continuityOwnerRequestID(req.RequestID+"|continuity-resolve"))
+		if err != nil {
+			return nil, err
+		}
+	}
 	attachments, err := ownedIngressAttachments(ctx, req)
 	if err != nil {
 		return nil, err
@@ -116,6 +123,11 @@ func (r *ownedChatIngress) ExecuteEntry(ctx context.Context, req *interaction.Un
 		result.Response.MessageIDs = nil
 		result.Response.ForceVoice = false
 		return result, nil
+	}
+	if r.services.ContinuityOwner != nil && req.ThreadID != "" {
+		if err := r.services.ContinuityOwner.Observe(ctx, owner, response.Scope.RoleID, req.ThreadID, continuity.ObservePayload{Version: "v1", ThreadID: req.ThreadID, SpaceID: owner.SpaceID, CharacterID: response.Scope.RoleID, ConversationID: response.ConversationID, RequestID: response.RequestID, ExecutionID: response.ExecutionID, UserMessage: req.Message, AssistantReply: response.Text, Source: req.Source}); err != nil {
+			return result, fmt.Errorf("回复已保存，持续事项同步失败: %w", err)
+		}
 	}
 	if err := ownedIngressResponseOutputs(result.Response, response.Outputs); err != nil {
 		return nil, err

@@ -39,13 +39,5 @@ func (r *ownedChatIngress) reviewReplyReference(ctx context.Context, request bus
 			return create(row.Body, row.Revision)
 		}
 	}
-	for _, raw := range view.Snapshot.LegacyMessages {
-		var document struct {
-			ID string `json:"id"`
-		}
-		if json.Unmarshal(raw, &document) == nil && document.ID == id {
-			return create(raw, 0)
-		}
-	}
 	return nil, errors.New("引用消息不存在或不属于当前授权对话")
 }

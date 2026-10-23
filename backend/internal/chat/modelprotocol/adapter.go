@@ -108,6 +108,7 @@ type ModelRequest struct {
 }
 
 type ModelUsage struct {
+	Reported           bool `json:"reported"`
 	InputTokens        int  `json:"inputTokens"`
 	OutputTokens       int  `json:"outputTokens"`
 	ReasoningTokens    int  `json:"reasoningTokens"`

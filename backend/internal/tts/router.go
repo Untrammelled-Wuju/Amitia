@@ -4,7 +4,6 @@ package tts
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 )
@@ -25,25 +24,15 @@ func RegisterTtsRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 		ttsGroup.DELETE("/configs/:id", security.SharedCoreAdminOnly(), handler.Delete)
 		ttsGroup.POST("/configs/:id/activate", security.SharedCoreAdminOnly(), handler.Activate)
 		ttsGroup.POST("/configs/:id/test", security.SharedCoreAdminOnly(), handler.Test)
+		ttsGroup.POST("/configs/:id/preview", security.SharedCoreAdminOnly(), handler.PreviewConfig)
 		ttsGroup.GET("/voices", handler.GetVoices)
 		ttsGroup.GET("/emotions", handler.GetEmotions)
-		ttsGroup.POST("/synthesize", ownedSpeechRequired(), handler.Synthesize)
-		ttsGroup.POST("/preview", ownedSpeechRequired(), handler.Preview)
+		ttsGroup.POST("/preview", security.SharedCoreAdminOnly(), handler.Preview)
+		ttsGroup.POST("/characters/:characterId/preview", security.SharedCoreAdminOnly(), handler.PreviewCharacter)
 		ttsGroup.POST("/test-connection", security.SharedCoreAdminOnly(), handler.TestConnectionStandalone)
 		ttsGroup.GET("/voice-clones", handler.ListClonedVoices)
 		ttsGroup.POST("/voice-clone", security.SharedCoreAdminOnly(), handler.CloneVoice)
 		ttsGroup.DELETE("/voice-clone", security.SharedCoreAdminOnly(), handler.DeleteClonedVoice)
-		ttsGroup.GET("/play/:messageId", ownedSpeechRequired(), func(c *gin.Context) { HandlePlayMessage(c, ctx.DB) })
-	}
-}
-
-func ownedSpeechRequired() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		actor := security.GetActor(c)
-		if actor != nil && actor.PrincipalType == auth.PrincipalTrustedDevice {
-			c.AbortWithStatusJSON(409, gin.H{"code": "mesh.speech_scope_required", "message": "绑定设备朗读需要当前角色和数据归属版本，请使用统筹语音入口"})
-			return
-		}
-		c.Next()
+		ttsGroup.POST("/voice-clones/:speakerId/preview", security.SharedCoreAdminOnly(), handler.PreviewClonedVoice)
 	}
 }

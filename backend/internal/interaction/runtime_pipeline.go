@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/belief"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/safety"
@@ -18,9 +19,11 @@ import (
 )
 
 type RuntimeSafetyDecision struct {
-	Level   string   `json:"level"`
-	Blocked bool     `json:"blocked"`
-	Reasons []string `json:"reasons,omitempty"`
+	Level          string   `json:"level"`
+	Blocked        bool     `json:"blocked"`
+	Reasons        []string `json:"reasons,omitempty"`
+	PolicyRevision int64    `json:"policyRevision"`
+	Action         string   `json:"action,omitempty"`
 }
 
 type RuntimeDeliveryIntent struct {
@@ -48,7 +51,11 @@ type RuntimeAssembly struct {
 	Goals             RuntimeGoalContext               `json:"goals"`
 	Continuation      *decision.ContinuationDecision   `json:"continuation,omitempty"`
 	DecisionIteration int                              `json:"decisionIteration,omitempty"`
+	SafetyPolicy      safety.RuntimePolicy             `json:"safetyPolicy"`
 	ExecContext       *coreexec.ExecutionContext       `json:"-"`
+	safetyGovernor    *safety.Governor                 `json:"-"`
+	safetyRecorder    safety.IncidentRecorder          `json:"-"`
+	safetyIncident    safety.Incident                  `json:"-"`
 }
 
 type RuntimePipeline struct {
@@ -59,6 +66,8 @@ type RuntimePipeline struct {
 	snapshotVersion     string
 	personalityCompiler *personality.Compiler
 	safetyGovernor      *safety.Governor
+	safetyPolicyReader  safety.RuntimePolicyReader
+	safetyRecorder      safety.IncidentRecorder
 	beliefResolver      BeliefResolverFunc
 	appraisalEngine     *appraisal.Engine
 	budgetController    *budget.BudgetController
@@ -92,6 +101,14 @@ func (p *RuntimePipeline) SetPersonalityCompiler(compiler *personality.Compiler)
 
 func (p *RuntimePipeline) SetSafetyGovernor(governor *safety.Governor) {
 	p.safetyGovernor = governor
+}
+
+func (p *RuntimePipeline) SetSafetyPolicyReader(reader safety.RuntimePolicyReader) {
+	p.safetyPolicyReader = reader
+}
+
+func (p *RuntimePipeline) SetSafetyIncidentRecorder(recorder safety.IncidentRecorder) {
+	p.safetyRecorder = recorder
 }
 
 type BeliefResolverFunc func(input belief.ResolveInput) belief.ResolveResult
@@ -177,7 +194,12 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 	now := time.Now().UTC()
 	goalContext := p.buildGoalContext(scope, req, appraisalResult, now)
 
-	safetyDecision := p.buildSafetyDecision(snapshot, scope)
+	safetyDecision, safetyPolicy, safetyGovernor := p.buildSafetyDecision(ctx, snapshot, scope, req)
+	ownerID, coreID := scope.SpaceID, scope.SpaceID
+	if execution, ok := coordination.FromContext(ctx); ok {
+		ownerID, coreID = execution.ResourceOwnerID, execution.CoreID
+	}
+	requestID := runtimeRequestID(ctx, scope, req)
 
 	var behaviorPlan *decision.BehaviorPlan
 	var expressionPlan *decision.ExpressionPlan
@@ -205,6 +227,22 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 		BehaviorPlan:   behaviorPlan,
 		ExpressionPlan: expressionPlan,
 		Goals:          goalContext,
+		SafetyPolicy:   safetyPolicy,
 		ExecContext:    req.ExecContext,
+		safetyGovernor: safetyGovernor,
+		safetyRecorder: p.safetyRecorder,
+		safetyIncident: safety.Incident{
+			SpaceID:        scope.SpaceID,
+			OwnerID:        ownerID,
+			CoreID:         coreID,
+			RoleID:         scope.CharacterID,
+			ConversationID: scope.ConversationID,
+			RequestID:      requestID,
+			EventType:      "policy.violation",
+			Severity:       "high",
+			Status:         "open",
+			PolicyRevision: safetyPolicy.Revision,
+			Revision:       1,
+		},
 	}
 }

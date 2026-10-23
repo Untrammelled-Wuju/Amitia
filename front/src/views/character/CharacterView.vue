@@ -773,14 +773,15 @@ async function testVoice() {
   testingVoice.value = true;
   testAudioUrl.value = "";
   try {
-    const ownedUrl = await ownedSpeech.synthesizeIfBound("你好，我是你的AI伙伴", editingId.value || selectedId.value || undefined);
+    const characterId = editingId.value || selectedId.value || undefined;
+    const ownedUrl = await ownedSpeech.synthesizeIfBound("你好，我是你的AI伙伴", characterId, form.voiceMode === "clone" ? form.customVoiceId : undefined);
     if (ownedUrl) {
       testAudioUrl.value = ownedUrl;
       ElMessage.info("当前试听使用已保存角色的音色设置，修改后请先保存角色");
       return;
     }
     const payload = form.voiceMode === "clone"
-      ? { speakerId: form.customVoiceId, text: "你好，我是你的AI伙伴" }
+      ? { text: "你好，我是你的AI伙伴" }
       : {
           voiceConfigId: form.voiceConfigId || "",
           voiceType: form.voiceType,
@@ -797,7 +798,9 @@ async function testVoice() {
       return;
     }
     const res = await apiClient.post(
-      form.voiceMode === "clone" ? "/api/tts/synthesize" : "/api/tts/preview",
+      form.voiceMode === "clone"
+        ? `/api/tts/voice-clones/${encodeURIComponent(form.customVoiceId)}/preview`
+        : "/api/tts/preview",
       payload,
     );
     const json: any = res.data;

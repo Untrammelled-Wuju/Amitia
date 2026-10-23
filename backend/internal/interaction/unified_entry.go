@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/auth"
-	"github.com/u-ai/backend/internal/continuity"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/temporal"
 )
@@ -151,7 +150,6 @@ type UnifiedEntry struct {
 	runtimeContext *RuntimeContextService
 	resolver       ScopeResolver
 	execService    *coreexec.ExecutionService
-	continuity     *continuity.Resolver
 	bpCfg          BackpressureConfig
 	bpState        *BackpressureState
 	mu             sync.Mutex
@@ -185,12 +183,6 @@ func (e *UnifiedEntry) SetExecutionService(svc *coreexec.ExecutionService) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.execService = svc
-}
-
-func (e *UnifiedEntry) SetContinuityResolver(resolver *continuity.Resolver) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.continuity = resolver
 }
 
 func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {

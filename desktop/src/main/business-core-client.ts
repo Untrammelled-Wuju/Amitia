@@ -36,7 +36,7 @@ export class BusinessCoreClient {
     }
     try {
       const identity = await getMeshIdentity();
-      return { ...getDesktopAuthHeaders(), ...(identity?.deviceId ? { 'X-Amitia-Device-ID': identity.deviceId } : {}) };
+      return { ...(await getDesktopAuthHeaders()), ...(identity?.deviceId ? { 'X-Amitia-Device-ID': identity.deviceId } : {}) };
     } catch {
       return {};
     }

@@ -60,15 +60,6 @@ type CreateTtsConfigRequest struct {
 	IsActive            int     `json:"isActive"`
 }
 
-type SynthesizeRequest struct {
-	SpeakerID      string `json:"speakerId"`
-	Text           string `json:"text"`
-	VoiceID        int    `json:"voiceId"`
-	CharacterID    string `json:"characterId"`
-	ConversationID string `json:"conversationId"`
-	RequestID      string `json:"requestId"`
-}
-
 type SynthesizeResponse struct {
 	AudioURL string  `json:"audioUrl"`
 	Duration float64 `json:"duration"`

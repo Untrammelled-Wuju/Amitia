@@ -436,13 +436,24 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	quoteRequest := request
 	request.ConversationID = conversationRoute.CurrentID
 	dataQuery := coordination.DataQuery{RequestID: request.RequestID, ConversationID: request.ConversationID, Query: request.Message, Limit: 128}
-	dataQuery.ChatRuntime = &coordination.OwnedChatRuntimeQuery{Source: "manual", Channel: "web"}
+	dataQuery.ChatRuntime = &coordination.OwnedChatRuntimeQuery{Source: "manual", Channel: "web", Message: request.Message}
 	if ingress, ok := IngressFromContext(ctx); ok {
-		dataQuery.ChatRuntime = &coordination.OwnedChatRuntimeQuery{Source: ingress.Source, Channel: ingress.Channel, PeerID: ingress.PeerID, IsInternal: ingress.IsInternal, DeviceTimezone: ingress.DeviceTimezone}
+		dataQuery.ChatRuntime = &coordination.OwnedChatRuntimeQuery{Source: ingress.Source, Channel: ingress.Channel, PeerID: ingress.PeerID, IsInternal: ingress.IsInternal, DeviceTimezone: ingress.DeviceTimezone, Message: request.Message}
 	}
 	if _, ok := ctx.Value(workerContextKey{}).(workerContext); ok {
 		dataQuery.ChatRuntime.IsInternal = true
 	}
+	defer func() {
+		port, ok := e.data.(coordination.OwnerPostCommitPort)
+		if !ok {
+			return
+		}
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := port.CommitOwnedChatEffects(cleanup, scope, coordination.OwnedChatEffectsRequest{ConversationID: request.ConversationID, RequestID: scope.RequestID, Abort: true}); err != nil && finalErr == nil {
+			finalErr = err
+		}
+	}()
 	previousCheckpoint := false
 	if port, ok := e.data.(coordination.ResourcePort); ok {
 		resource, err := port.Resource(ctx, scope, "checkpoint", "turn/"+request.RequestID)
@@ -478,6 +489,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 			return Response{}, err
 		}
 	}
+	filterHistoricalContinuationMirrors(conversationRoute, snapshot, historicalSnapshot)
 	if err := rejectAmbiguousConversation(conversationRoute, snapshot, historicalSnapshot); err != nil {
 		return Response{}, err
 	}
@@ -645,7 +657,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 			return err
 		}
 		if event.Type == "tool-started" || event.Type == "tool-completed" || event.Type == "task" {
-			if err := e.persistOwnedRuntime(ctx, scope, request.ConversationID); err != nil {
+			if err := e.persistOwnedRuntime(ctx, scope, request.ConversationID, nil); err != nil {
 				return err
 			}
 		}
@@ -683,10 +695,22 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		if finalErr != nil {
 			payload["message"] = finalErr.Error()
 		}
-		_, _ = ownedRuntimeManager.Publish(context.WithoutCancel(ctx), conversationstream.AgentUIEvent{ConversationID: RuntimeKey(scope, request.ConversationID), RequestID: scope.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, Type: eventType, Status: status, Payload: payload}, false)
+		messageID := ""
+		if finalResponse.Saved && !inference.InternalWorker && !(inference.Ingress != nil && inference.Ingress.IsInternal) {
+			messageID = request.RequestID + "/assistant"
+			payload["spaceId"] = scope.SpaceID
+			payload["conversationId"] = request.ConversationID
+			payload["characterId"] = scope.RoleID
+			payload["characterName"] = role.Name
+			payload["content"] = finalResponse.Text
+			if inference.Ingress != nil {
+				payload["source"] = inference.Ingress.Source
+			}
+		}
+		_, _ = ownedRuntimeManager.Publish(context.WithoutCancel(ctx), conversationstream.AgentUIEvent{ConversationID: RuntimeKey(scope, request.ConversationID), RequestID: scope.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, MessageID: messageID, Type: eventType, Status: status, Payload: payload}, false)
 		saveContext, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer saveCancel()
-		if err := e.persistOwnedRuntime(saveContext, scope, request.ConversationID); err != nil {
+		if err := e.persistOwnedRuntime(saveContext, scope, request.ConversationID, finalErr); err != nil {
 			finalErr = errors.Join(finalErr, err)
 		}
 	}()

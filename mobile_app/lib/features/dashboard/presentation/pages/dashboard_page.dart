@@ -7,6 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/usage_view.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -30,11 +31,11 @@ final dashboardOverviewProvider = FutureProvider<Map<String, dynamic>>((
   final values = await Future.wait([
     _safeGet(ref, '/api/health'),
     _safeGet(ref, '/api/security/status'),
-    _safeGet(ref, '/api/usage/overview'),
+    readUsageView(ref.read(backendServiceProvider), '/api/usage/overview'),
     ref.read(systemServiceProvider).chatStats(),
     _safeGet(ref, '/api/logs/recent/errors', query: const {'limit': 20}),
     _safeGet(ref, '/api/imports/batches', query: const {'limit': 5}),
-    _safeGet(ref, '/api/usage/periodic'),
+    readUsageView(ref.read(backendServiceProvider), '/api/usage/periodic'),
     ref.read(feedbackServiceProvider).stats(),
   ]);
   return {
@@ -231,6 +232,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         : const [];
     final periodicMap = data['periodic'] as Map<String, dynamic>?;
     final feedback = data['feedback'] as Map<String, dynamic>? ?? const {};
+    final feedbackRecent = feedback['recent'] is List
+        ? (feedback['recent'] as List)
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(growable: false)
+        : const <Map<String, dynamic>>[];
     final daily = periodicMap?['daily'] is List
         ? (periodicMap!['daily'] as List)
               .whereType<Map>()
@@ -249,6 +256,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ),
         children: [
           AmitiaSectionHeader(title: '真实使用统计'),
+          Text(
+            usage['error'] != null
+                ? '使用统计读取失败，请刷新重试'
+                : '${usageScopeLabel(usage)}的文本模型实际调用，按 UTC 统计；自 ${usage['meteringSince'] ?? '未知时间'} 开始计量，此前用量及缺失 Token 显示未知，未计价费用不显示为零。',
+            style: AppTypography.caption(context),
+          ),
+          if (usage['businessStatus'] == 'unavailable' ||
+              periodicMap?['businessStatus'] == 'unavailable')
+            Text('Owner 业务统计暂不可用', style: AppTypography.caption(context)),
+          if (periodicMap?['error'] != null)
+            Text('使用趋势读取失败，请刷新重试', style: AppTypography.caption(context)),
           SizedBox(height: AppSpacing.md),
           GridView.count(
             shrinkWrap: true,
@@ -260,22 +278,22 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             children: [
               _StatCard(
                 label: '今日调用',
-                value: '${usage['todayCalls'] ?? 0}',
+                value: usageNumberLabel(usage['todayCalls']),
                 icon: Icons.bolt_outlined,
               ),
               _StatCard(
                 label: '今日 Token',
-                value: '${usage['todayTokens'] ?? 0}',
+                value: usageNumberLabel(usage['todayTokens'], missing: '未知'),
                 icon: Icons.token_outlined,
               ),
               _StatCard(
                 label: '总请求',
-                value: '${usage['totalRequests'] ?? 0}',
+                value: usageNumberLabel(usage['totalRequests']),
                 icon: Icons.query_stats_outlined,
               ),
               _StatCard(
                 label: '总 Token',
-                value: '${usage['totalTokens'] ?? 0}',
+                value: usageNumberLabel(usage['totalTokens'], missing: '未知'),
                 icon: Icons.data_usage_outlined,
               ),
               _StatCard(
@@ -300,6 +318,27 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           AmitiaSectionHeader(title: '最近 7 日趋势'),
           SizedBox(height: AppSpacing.sm),
           _UsageTrendCard(daily: daily),
+          SizedBox(height: AppSpacing.sectionGap),
+          AmitiaSectionHeader(title: '最近消息反馈'),
+          SizedBox(height: AppSpacing.sm),
+          AmitiaCard(
+            child: feedbackRecent.isEmpty
+                ? Text('暂无消息反馈', style: AppTypography.caption(context))
+                : Column(
+                    children: [
+                      for (
+                        var index = 0;
+                        index < feedbackRecent.length;
+                        index++
+                      )
+                        _dashboardFeedbackRow(
+                          context,
+                          feedbackRecent[index],
+                          index,
+                        ),
+                    ],
+                  ),
+          ),
           SizedBox(height: AppSpacing.sectionGap),
           AmitiaSectionHeader(title: '最近错误 (${errors.length})'),
           SizedBox(height: AppSpacing.sm),
@@ -352,6 +391,98 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ],
       ),
     );
+  }
+
+  Widget _dashboardFeedbackRow(
+    BuildContext context,
+    Map<String, dynamic> row,
+    int index,
+  ) {
+    final labels = <String, String>{
+      'good': '有帮助',
+      'too_long': '过长',
+      'too_cold': '过于冷淡',
+      'too_exaggerated': '过度夸张',
+      'not_understand': '未理解',
+      'unsafe': '不安全',
+      'other': '需改进',
+    };
+    final type = (row['feedbackType'] ?? '').toString();
+    return Padding(
+      padding: EdgeInsets.only(bottom: index == 9 ? 0 : AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            type == 'unsafe'
+                ? Icons.warning_amber_outlined
+                : Icons.feedback_outlined,
+            size: 18,
+            color: type == 'unsafe' ? context.warning : context.accentPrimary,
+          ),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${labels[type] ?? type} · ${row['messageId'] ?? ''}',
+                  style: AppTypography.bodySmall(context),
+                ),
+                if ((row['reason'] ?? '').toString().isNotEmpty)
+                  Text(
+                    row['reason'].toString(),
+                    style: AppTypography.caption(context),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: '删除反馈',
+            onPressed: () => _deleteDashboardFeedback(row),
+            icon: const Icon(Icons.delete_outline, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteDashboardFeedback(Map<String, dynamic> row) async {
+    final id = (row['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除消息反馈'),
+        content: const Text('确定删除这条消息反馈？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref
+          .read(feedbackServiceProvider)
+          .delete(id, characterId: (row['roleId'] ?? '').toString());
+      ref.invalidate(dashboardOverviewProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('消息反馈已删除')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除反馈失败：$error')));
+    }
   }
 
   Widget _buildDiagnosticsCard() {
@@ -452,18 +583,18 @@ class _UsageTrendCard extends StatelessWidget {
                     ),
                     Expanded(
                       child: Text(
-                        '消息 ${row['messages'] ?? 0}',
+                        '消息 ${row['messages'] ?? '不可用'}',
                         style: AppTypography.caption(context),
                       ),
                     ),
                     Expanded(
                       child: Text(
-                        '调用 ${row['modelCalls'] ?? 0}',
+                        '调用 ${row['modelCalls'] ?? '不可用'}',
                         style: AppTypography.caption(context),
                       ),
                     ),
                     Text(
-                      'Token ${row['tokens'] ?? 0}',
+                      'Token ${row['tokens'] ?? '未知'}',
                       style: AppTypography.caption(context),
                     ),
                   ],

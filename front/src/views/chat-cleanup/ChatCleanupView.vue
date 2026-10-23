@@ -17,7 +17,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <DataMigrationPanel />
 
-    <EncryptedBackupPanel @restore="openRestoreDialog" />
+    <DataPortabilityBackupPanel @restore="openRestoreDialog" />
 
     <RestoreBackupDialog
       :visible="restoreDialogVisible"
@@ -31,7 +31,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref } from "vue";
 import CleanupWorkflow from "./components/CleanupWorkflow.vue";
 import DataMigrationPanel from "./components/DataMigrationPanel.vue";
-import EncryptedBackupPanel from "./components/EncryptedBackupPanel.vue";
+import DataPortabilityBackupPanel from "./components/DataPortabilityBackupPanel.vue";
 import RestoreBackupDialog from "./components/RestoreBackupDialog.vue";
 import DatabaseHealthCard from "./components/DatabaseHealthCard.vue";
 

@@ -38,6 +38,9 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 
 	r.GET("/health/data-lifecycle", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 		stats := dataLifecycle.Stats()
+		stats["source"] = "legacy_archive"
+		stats["retired"] = true
+		stats["currentStatusEndpoint"] = "/api/privacy/deletion/stats"
 		util.SuccessResponse(c, stats)
 	})
 

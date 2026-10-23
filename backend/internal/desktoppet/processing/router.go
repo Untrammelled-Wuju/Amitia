@@ -24,13 +24,10 @@ func RegisterProcessingRouter(r *gin.RouterGroup, ctx *app.AppContext, registry 
 
 	g := r.Group("/desktop-pets")
 	{
-		g.GET("/packages", handler.ListPackages)
-		g.GET("/packages/:packageId/download", handler.DownloadPackage)
 		g.POST("/generation-tasks/:taskId/process", handler.CreateProcessingTask)
 		g.GET("/processing-tasks/:processingTaskId", handler.GetProcessingTask)
 		g.POST("/processing-tasks/:processingTaskId/cancel", handler.CancelProcessingTask)
 		g.POST("/processing-tasks/:processingTaskId/actions/:actionKey/retry", handler.RetryProcessingAction)
-		g.POST("/processing-tasks/:processingTaskId/package", handler.CreatePackage)
 		g.POST("/processing-tasks/:processingTaskId/actions/:actionKey/switch-attempt", handler.SwitchAttempt)
 		g.POST("/processing-tasks/:processingTaskId/actions/:actionKey/exclude", handler.ExcludeAction)
 		g.GET("/processing-tasks/:processingTaskId/events", handler.ProcessingEventsStream) // audit:ok: handler enforces actor authentication and task ownership

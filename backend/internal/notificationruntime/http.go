@@ -46,13 +46,14 @@ type RegisterDeviceRequest struct {
 }
 
 type UpdatePreferencesRequest struct {
-	PushEnabled              *bool   `json:"pushEnabled"`
-	MessagePushEnabled       *bool   `json:"messagePushEnabled"`
-	ExecutionActivityEnabled *bool   `json:"executionActivityEnabled"`
-	CallPushEnabled          *bool   `json:"callPushEnabled"`
-	ReminderPushEnabled      *bool   `json:"reminderPushEnabled"`
-	PreviewMode              *string `json:"previewMode"`
-	SoundEnabled             *bool   `json:"soundEnabled"`
+	PushEnabled                *bool   `json:"pushEnabled"`
+	SystemNotificationsEnabled *bool   `json:"systemNotificationsEnabled"`
+	MessagePushEnabled         *bool   `json:"messagePushEnabled"`
+	ExecutionActivityEnabled   *bool   `json:"executionActivityEnabled"`
+	CallPushEnabled            *bool   `json:"callPushEnabled"`
+	ReminderPushEnabled        *bool   `json:"reminderPushEnabled"`
+	PreviewMode                *string `json:"previewMode"`
+	SoundEnabled               *bool   `json:"soundEnabled"`
 }
 
 type PresenceRequest struct {
@@ -147,7 +148,12 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			}
 		}
 		now := time.Now().UTC()
-		mobileNotifications := request.Platform != "desktop" && request.Platform != "web"
+		systemNotificationsDefault := true
+		if existing == nil {
+			if enabled, found := runtime.migratedSystemNotificationEnabled(c.Request.Context(), spaceID, deviceID); found {
+				systemNotificationsDefault = enabled
+			}
+		}
 		endpoint := &DeviceEndpoint{
 			SpaceID:                      spaceID,
 			DeviceID:                     deviceID,
@@ -169,11 +175,11 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 			VivoToken:                    strings.TrimSpace(request.VivoToken),
 			HonorToken:                   strings.TrimSpace(request.HonorToken),
 			LiveActivityPushToStartToken: strings.TrimSpace(request.LiveActivityPushToStartToken),
-			PushEnabled:                  boolDefault(request.PushEnabled, true),
-			SystemNotificationsEnabled:   boolDefault(request.SystemNotificationsEnabled, true),
-			MessagePushEnabled:           boolDefault(request.MessagePushEnabled, mobileNotifications),
-			ExecutionActivityEnabled:     boolDefault(request.ExecutionActivityEnabled, mobileNotifications),
-			CallPushEnabled:              boolDefault(request.CallPushEnabled, mobileNotifications),
+			PushEnabled:                  boolDefault(request.PushEnabled, systemNotificationsDefault),
+			SystemNotificationsEnabled:   boolDefault(request.SystemNotificationsEnabled, systemNotificationsDefault),
+			MessagePushEnabled:           boolDefault(request.MessagePushEnabled, true),
+			ExecutionActivityEnabled:     boolDefault(request.ExecutionActivityEnabled, true),
+			CallPushEnabled:              boolDefault(request.CallPushEnabled, true),
 			ReminderPushEnabled:          boolDefault(request.ReminderPushEnabled, true),
 			PreviewMode:                  previewMode,
 			SoundEnabled:                 boolDefault(request.SoundEnabled, true),
@@ -307,6 +313,9 @@ func RegisterRoutes(router *gin.RouterGroup, runtime *Runtime) {
 		values := map[string]any{}
 		if request.PushEnabled != nil {
 			values["push_enabled"] = *request.PushEnabled
+		}
+		if request.SystemNotificationsEnabled != nil {
+			values["system_notifications_enabled"] = *request.SystemNotificationsEnabled
 		}
 		if request.MessagePushEnabled != nil {
 			values["message_push_enabled"] = *request.MessagePushEnabled

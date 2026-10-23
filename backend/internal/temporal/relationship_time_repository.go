@@ -13,8 +13,9 @@ import (
 )
 
 type RelationshipTimeRepository struct {
-	db    *gorm.DB
-	clock Clock
+	ownerID string
+	db      *gorm.DB
+	clock   Clock
 }
 
 func NewRelationshipTimeRepository(db *gorm.DB, clock Clock) *RelationshipTimeRepository {
@@ -25,7 +26,7 @@ func NewRelationshipTimeRepository(db *gorm.DB, clock Clock) *RelationshipTimeRe
 }
 
 func (r *RelationshipTimeRepository) WithDB(db *gorm.DB) *RelationshipTimeRepository {
-	return &RelationshipTimeRepository{db: db, clock: r.clock}
+	return &RelationshipTimeRepository{db: db, clock: r.clock, ownerID: r.ownerID}
 }
 
 func (r *RelationshipTimeRepository) WithTransaction(ctx context.Context, fn func(*RelationshipTimeRepository) error) error {
@@ -61,14 +62,18 @@ func (r *RelationshipTimeRepository) GetRelationshipPresence(ctx context.Context
 
 func (r *RelationshipTimeRepository) GetSettings(ctx context.Context, characterID string) (*RelationshipTimeSettings, error) {
 	var settings RelationshipTimeSettings
-	err := r.db.WithContext(ctx).Where("character_id = ?", characterID).First(&settings).Error
+	err := r.db.WithContext(ctx).Where("character_id = ?", r.settingsID(characterID)).First(&settings).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
+	settings.CharacterID = characterID
 	return &settings, err
 }
 
 func (r *RelationshipTimeRepository) SaveSettings(ctx context.Context, settings *RelationshipTimeSettings) error {
+	copy := *settings
+	copy.CharacterID = r.settingsID(settings.CharacterID)
+	settings = &copy
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "character_id"}}, UpdateAll: true}).Create(settings).Error
 }
 

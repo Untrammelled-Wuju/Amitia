@@ -27,7 +27,7 @@ func cachePromptFixture(t *testing.T, namespace string, round int) (context.Cont
 		user := fmt.Sprintf("资料段落%d：", i) + strings.Repeat("项目计划要求先核对接口契约，再检查资料归属、输入格式与验收结果。每个阶段由负责人员记录进度；遇到信息不足时先明确缺失条件。交付材料包括变更说明、验证结果和剩余事项。", 3)
 		for _, row := range []map[string]string{{"role": "user", "content": user}, {"role": "assistant", "content": fmt.Sprintf("已记录资料段落%d的约束与验收条件。", i)}} {
 			raw, _ := json.Marshal(row)
-			snapshot.LegacyMessages = append(snapshot.LegacyMessages, raw)
+			snapshot.Resources = append(snapshot.Resources, coordination.Resource{OwnerID: "device", Kind: "message", ID: fmt.Sprintf("message-%d-%s", i, row["role"]), RoleID: "role", Revision: 1, Body: raw})
 		}
 	}
 	inference := business.Inference{Scope: scope, Snapshot: snapshot, ConversationID: "conversation", Message: fmt.Sprintf("请检查第%d轮资料的一致性，本轮只回复收到。", round)}

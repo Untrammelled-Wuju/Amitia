@@ -176,33 +176,3 @@ type ProcessedFrame struct {
 }
 
 func (ProcessedFrame) TableName() string { return "desktop_pet_processed_frames" }
-
-type Package struct {
-	ID               string `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID          string `gorm:"column:space_id" json:"spaceId"`
-	GenerationTaskID string `gorm:"column:generation_task_id" json:"generationTaskId"`
-	ProcessingTaskID string `gorm:"column:processing_task_id" json:"processingTaskId"`
-	Name             string `gorm:"column:name" json:"name"`
-	Version          int    `gorm:"column:version" json:"version"`
-	Status           string `gorm:"column:status" json:"status"`
-	DefaultActionKey string `gorm:"column:default_action_key" json:"defaultActionKey"`
-	CanvasWidth      int    `gorm:"column:canvas_width" json:"canvasWidth"`
-	CanvasHeight     int    `gorm:"column:canvas_height" json:"canvasHeight"`
-	PackagePath      string `gorm:"column:package_path" json:"packagePath"`
-	ManifestPath     string `gorm:"column:manifest_path" json:"manifestPath"`
-	PreviewPath      string `gorm:"column:preview_path" json:"previewPath"`
-	ActionCount      int    `gorm:"column:action_count" json:"actionCount"`
-	PackageHash      string `gorm:"column:package_hash" json:"packageHash"`
-	IncludedActions  string `gorm:"column:included_actions" json:"includedActions"`
-	CreatedAt        string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt        string `gorm:"column:updated_at" json:"updatedAt"`
-	RowVersion       int64  `gorm:"column:row_version;default:0" json:"rowVersion"`
-	CurrentStage     string `gorm:"column:current_stage;default:'created'" json:"currentStage"`
-	StatusReason     string `gorm:"column:status_reason;default:''" json:"statusReason"`
-	FailureStage     string `gorm:"column:failure_stage;default:''" json:"failureStage"`
-	LastTransitionAt string `gorm:"column:last_transition_at;default:''" json:"lastTransitionAt"`
-	ErrorCode        string `gorm:"column:error_code;default:''" json:"errorCode"`
-	ErrorMessage     string `gorm:"column:error_message;default:''" json:"errorMessage"`
-}
-
-func (Package) TableName() string { return "desktop_pet_packages" }

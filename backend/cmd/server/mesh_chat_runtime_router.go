@@ -200,7 +200,12 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 				conversation = document
 			}
 		case "message":
-			document["sourceOwnerId"], document["sourceScope"], document["sourceRevision"] = resource.OwnerID, view.Scope, resource.Revision
+			document["sourceOwnerId"], document["sourceScope"], document["origin"], document["readOnly"] = resource.OwnerID, view.Scope, resource.Origin, resource.ReadOnly
+			if resource.Origin == "legacy" {
+				document["sourceRevision"] = nil
+			} else {
+				document["sourceRevision"] = resource.Revision
+			}
 			messages = append(messages, document)
 		case "checkpoint":
 			if !strings.HasPrefix(resource.ID, "turn/") {
@@ -224,12 +229,6 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 			_ = json.Unmarshal(raw, &runtime)
 			items := ownedRuntimeItems(runtime, view.ConversationID, status)
 			turns = append(turns, map[string]any{"id": scope.TurnID, "conversationId": view.ConversationID, "characterId": view.Scope.RoleID, "requestId": id, "executionId": scope.ExecutionID, "userMessageId": id + "/user", "status": status, "createdAt": resource.UpdatedAt, "items": items})
-		}
-	}
-	for _, raw := range view.Snapshot.LegacyMessages {
-		var item map[string]any
-		if json.Unmarshal(raw, &item) == nil {
-			messages = append(messages, item)
 		}
 	}
 	sort.SliceStable(messages, func(i, j int) bool {

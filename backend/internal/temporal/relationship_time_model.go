@@ -105,6 +105,7 @@ type ReunionContext struct {
 }
 
 type PrepareInboundInput struct {
+	Message        string
 	SpaceID        string
 	CharacterID    string
 	ConversationID string

@@ -14,12 +14,18 @@ const List<String> _deviceLocalApiPrefixes = <String>[
   '/api/workbench/browser',
   '/api/workbench/terminal',
   '/api/storage',
+  '/api/imports',
   '/api/native-bridge/backend-action',
   '/internal/device-mesh',
 ];
 
 bool isDeviceLocalApiPath(String path) {
   final normalized = path.split('?').first;
+  if (normalized == '/api/data-portability' ||
+      normalized.startsWith('/api/data-portability/')) {
+    return normalized.startsWith('/api/data-portability/backups') ||
+        normalized.startsWith('/api/data-portability/restores');
+  }
   return _deviceLocalApiPrefixes.any(
     (prefix) => normalized == prefix || normalized.startsWith('$prefix/'),
   );

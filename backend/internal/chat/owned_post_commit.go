@@ -19,18 +19,6 @@ func (s *service) PlanOwnedTitle(ctx context.Context, inference business.Inferen
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return "", err
 	}
-	for _, encoded := range inference.Snapshot.LegacyMessages {
-		var message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		}
-		if err := json.Unmarshal(encoded, &message); err != nil {
-			return "", err
-		}
-		if message.Role == "assistant" && strings.TrimSpace(message.Content) != "" {
-			return "", nil
-		}
-	}
 	for _, resource := range inference.Snapshot.Resources {
 		if resource.Deleted {
 			continue

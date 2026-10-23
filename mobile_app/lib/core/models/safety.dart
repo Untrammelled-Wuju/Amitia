@@ -10,6 +10,7 @@ class SafetyConfigDto {
   final int intimacyExpressionCap;
   final String violationAction;
   final int auditLogRetentionDays;
+  final int revision;
 
   const SafetyConfigDto({
     this.preventEmotionalBlackmail = true,
@@ -23,6 +24,7 @@ class SafetyConfigDto {
     this.intimacyExpressionCap = 7,
     this.violationAction = 'block',
     this.auditLogRetentionDays = 30,
+    this.revision = 0,
   });
 
   factory SafetyConfigDto.fromJson(Map<String, dynamic> json) {
@@ -56,6 +58,7 @@ class SafetyConfigDto {
       intimacyExpressionCap: intValue('intimacyExpressionCap', 7).clamp(0, 10).toInt(),
       violationAction: (json['violationAction'] ?? 'block').toString(),
       auditLogRetentionDays: intValue('auditLogRetentionDays', 30).clamp(1, 3650).toInt(),
+      revision: intValue('revision', 0),
     );
   }
 
@@ -71,5 +74,6 @@ class SafetyConfigDto {
         'intimacyExpressionCap': intimacyExpressionCap,
         'violationAction': violationAction,
         'auditLogRetentionDays': auditLogRetentionDays,
+        'expectedRevision': revision,
       };
 }

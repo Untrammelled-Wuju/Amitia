@@ -104,25 +104,6 @@ type RecalculationTask struct {
 	CompletedAt  *time.Time              `json:"completedAt,omitempty"`
 }
 
-type SecurityTestKind string
-
-const (
-	SecurityTestEmotionalHijacking  SecurityTestKind = "emotional_hijacking"
-	SecurityTestExclusiveDependency SecurityTestKind = "exclusive_dependency"
-	SecurityTestPromptInjection     SecurityTestKind = "prompt_injection"
-	SecurityTestDataLeakage         SecurityTestKind = "data_leakage"
-	SecurityTestPostDeletionRecall  SecurityTestKind = "post_deletion_recall"
-)
-
-type SecurityTestResult struct {
-	Kind     SecurityTestKind `json:"kind"`
-	Passed   bool             `json:"passed"`
-	Severity string           `json:"severity"`
-	Detail   string           `json:"detail"`
-	Evidence string           `json:"evidence,omitempty"`
-	TestedAt time.Time        `json:"testedAt"`
-}
-
 type DeletionRequest struct {
 	TargetID   string        `json:"targetId"`
 	TargetType string        `json:"targetType"`

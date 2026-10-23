@@ -139,7 +139,6 @@ async function loadGenerationConversations() {
       const history = result.historicalSnapshot;
       if (!history || history.ownerId !== scope.targetDeviceId || (history as typeof history & { role?: { id: string } }).role?.id !== source) throw new Error("旧设备会话来源无效");
       for (const resource of history.resources || []) { if (resource.kind !== "conversation" || resource.deleted) continue; if (resource.ownerId !== scope.targetDeviceId || resource.roleId !== source) throw new Error("旧设备会话归属无效"); rows.set(resource.id, { ...resource.body, id: resource.id, ownerId: resource.ownerId }); }
-      for (const row of history.legacyConversations || []) { if (!row.id) throw new Error("旧设备会话缺少编号"); rows.set(row.id, { ...row, ownerId: scope.targetDeviceId }); }
       cursor = history.nextCursors?.conversation || ""; legacyCursor = history.nextCursors?.legacyConversation || "";
       const key = JSON.stringify([cursor, legacyCursor]); if (rows.size > 4096 || (cursor || legacyCursor) && visited.has(key)) throw new Error("旧设备会话分页无效"); visited.add(key);
     } while (cursor || legacyCursor);

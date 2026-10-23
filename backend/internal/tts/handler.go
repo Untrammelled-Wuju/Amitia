@@ -13,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -185,25 +184,72 @@ func (h *Handler) Preview(c *gin.Context) {
 	util.SuccessResponse(c, result)
 }
 
-func (h *Handler) Synthesize(c *gin.Context) {
-	var req SynthesizeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+type previewTextRequest struct {
+	Text string `json:"text"`
+}
+
+func bindPreviewText(c *gin.Context) (string, bool) {
+	var request previewTextRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return "", false
+	}
+	request.Text = strings.TrimSpace(request.Text)
+	if request.Text == "" || len([]byte(request.Text)) > 8192 {
+		util.ErrorResponse(c, response.InvalidParams, "试听文本为空或超过8192字节上限", nil)
+		return "", false
+	}
+	return request.Text, true
+}
+
+func (h *Handler) PreviewConfig(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		util.ErrorResponse(c, response.InvalidParams, "voiceConfigId 无效", nil)
 		return
 	}
-	var result *SynthesizeResponse
-	var err error
-	if req.CharacterID != "" {
-		result, err = h.service.SynthesizeForCharacter(requestSpaceID(c), req.CharacterID, req.Text)
-	} else if req.VoiceID > 0 {
-		result, err = h.service.Synthesize(req.VoiceID, req.Text)
-	} else if req.SpeakerID != "" {
-		result, err = h.service.SynthesizeWithSpeaker(requestSpaceID(c), req.SpeakerID, req.Text)
-	} else {
-		result, err = h.service.SynthesizeWithActive(req.Text)
+	text, ok := bindPreviewText(c)
+	if !ok {
+		return
 	}
+	result, err := h.service.Synthesize(id, text)
 	if err != nil {
-		modelerror.Report(modelerror.Event{ModelType: "voice", ConversationID: req.ConversationID, RequestID: req.RequestID, Channel: "web", RawError: err.Error()})
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) PreviewCharacter(c *gin.Context) {
+	characterID := strings.TrimSpace(c.Param("characterId"))
+	if characterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "characterId 不能为空", nil)
+		return
+	}
+	text, ok := bindPreviewText(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.SynthesizeForCharacter(requestSpaceID(c), characterID, text)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) PreviewClonedVoice(c *gin.Context) {
+	speakerID := strings.TrimSpace(c.Param("speakerId"))
+	if speakerID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "speakerId 不能为空", nil)
+		return
+	}
+	text, ok := bindPreviewText(c)
+	if !ok {
+		return
+	}
+	result, err := h.service.SynthesizeWithSpeaker(requestSpaceID(c), speakerID, text)
+	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}

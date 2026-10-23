@@ -129,6 +129,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :batches="batches"
       @view="viewBatch"
       @delete="delBatch"
+      @promote="promoteBatch"
     />
 
     <el-dialog v-model="detailVisible" title="批次详情" width="600px">
@@ -181,6 +182,7 @@ const {
   fetchBatches,
   viewBatch,
   delBatch,
+  promoteBatch,
   router,
 } = useImportWizard();
 

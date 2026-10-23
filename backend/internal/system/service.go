@@ -3,9 +3,14 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
@@ -19,22 +24,20 @@ import (
 )
 
 type Service interface {
+	UsageContext(context.Context, mindruntime.UsageFilter, string) (map[string]any, error)
+	ClearUsageContext(context.Context, mindruntime.UsageFilter) (map[string]any, error)
 	UpdateTimeoutSettings(timeoutpolicy.Settings) error
 	AppConfig() map[string]interface{}
 	CheckDBIntegrity() map[string]interface{}
-	CheckSafety(text string) map[string]interface{}
 	CheckStorageMigrations() map[string]interface{}
 	CheckUpdate() map[string]interface{}
 	CleanupTemp() map[string]interface{}
-	ClearUsage() map[string]interface{}
 	ConfigExport() map[string]interface{}
 	ConfigImportPreviewService(body map[string]interface{}) map[string]interface{}
 	ConfigImportConfirmService(body map[string]interface{}) map[string]interface{}
 	ConfigSettings() map[string]interface{}
-	DeleteAllStorage() map[string]interface{}
 	DeleteLogs() map[string]interface{}
 	DeleteLogsModelErrors() map[string]interface{}
-	DeleteStorageBackup(name string) map[string]interface{}
 	Diagnostics() map[string]interface{}
 	ExportReleaseCheck() map[string]interface{}
 	GetAuditActions() []string
@@ -52,8 +55,6 @@ type Service interface {
 	GetLongRunningConfig() map[string]interface{}
 	GetLongRunningStatus() map[string]interface{}
 	GetMaintenanceStatus() map[string]interface{}
-	GetNotificationsSettings(spaceID, deviceID string) map[string]interface{}
-	GetNotificationsStatus(spaceID, deviceID string) map[string]interface{}
 	GetPrivacyScanResult(id string) map[string]interface{}
 	GetReleaseCheckHistory() map[string]interface{}
 	GetReleaseCheckLatest() map[string]interface{}
@@ -65,16 +66,11 @@ type Service interface {
 	GetSecurityAccessConfig() map[string]interface{}
 	GetSecurityAccessStatus() map[string]interface{}
 	GetSecurityStatus() map[string]interface{}
-	GetStorageBackups() map[string]interface{}
 	GetStorageInfo() map[string]interface{}
 	GetStorageMigrations() map[string]interface{}
 	GetTheme() map[string]interface{}
 	GetThemePresets() map[string]interface{}
 	GetUpdateConfig() map[string]interface{}
-	GetUsageDaily() map[string]interface{}
-	GetUsageModels() map[string]interface{}
-	GetUsageOverview() map[string]interface{}
-	GetUsageSources() map[string]interface{}
 	GetVersion() map[string]interface{}
 	Health() map[string]interface{}
 	MaintenanceDiagnose() map[string]interface{}
@@ -82,23 +78,17 @@ type Service interface {
 	MaintenanceReloadConfig() map[string]interface{}
 	MoodDetectionConfig() map[string]interface{}
 	UpdateMoodDetectionConfig(body map[string]interface{}) map[string]interface{}
-	NotificationsSubscribe(body map[string]interface{}, spaceID, deviceID string) map[string]interface{}
-	NotificationsTest(spaceID, deviceID string) map[string]interface{}
-	NotificationsUnsubscribe(spaceID, deviceID string) map[string]interface{}
 	OnboardingComplete() map[string]interface{}
 	OnboardingReset() map[string]interface{}
 	OnboardingStatus() map[string]interface{}
-	PrivacyMask() map[string]interface{}
-	PrivacyScan(scope []string) map[string]interface{}
 	PrivacyScanResults() map[string]interface{}
 	RotateLogs() map[string]interface{}
 	RunDiagnostics() map[string]interface{}
 	RunNow() map[string]interface{}
 	RunReleaseCheck() map[string]interface{}
-	SafetyEvents(page, pageSize int) map[string]interface{}
-	DeleteSafetyEvents() map[string]interface{}
-	HandleSafetyEvent(id string) map[string]interface{}
-	SafetyImportCheck(body map[string]interface{}) map[string]interface{}
+	SafetyEvents(context.Context, safety.PolicyScope, int, int, string) ([]safety.Incident, int64, error)
+	DeleteSafetyEvents(context.Context, safety.PolicyScope) (int64, error)
+	HandleSafetyEvent(context.Context, safety.PolicyScope, string, int64) (safety.Incident, error)
 	SecurityIdentityCheck() map[string]interface{}
 	SecurityExposureCheck() map[string]interface{}
 	SetupChecks() map[string]interface{}
@@ -106,16 +96,11 @@ type Service interface {
 	SetupReset() map[string]interface{}
 	SetupStatus() map[string]interface{}
 	SetupStep(step string) map[string]interface{}
-	CreatePhysicalSafetySnapshot() map[string]interface{}
-	RestorePhysicalSafetySnapshot(name string) map[string]interface{}
-	StorageExportAmitia(scope string, characterID string) map[string]interface{}
-	StorageImportUserData(body map[string]interface{}) map[string]interface{}
 	ToolRoute(body map[string]interface{}) map[string]interface{}
 	UpdateAppConfig(body map[string]interface{}) map[string]interface{}
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
 	UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{}
 	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
-	UpdateNotificationsSettings(body map[string]interface{}, spaceID, deviceID string) map[string]interface{}
 	UpdateRuntimeMode(body map[string]interface{}) map[string]interface{}
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}
 	UpdateTheme(body map[string]interface{}) map[string]interface{}
@@ -127,20 +112,28 @@ type Service interface {
 }
 
 type service struct {
-	memoryConsumer business.MemoryConsumerPort
-	db             *gorm.DB
-	startTime      time.Time
-	healthLog      []map[string]interface{}
-	dataDir        string
-	temporalSvc    *temporal.Service
-	coordinator    *dataportability.Coordinator
-	runtimeProfile runtimeprofile.Profile
-	privacyMu      sync.RWMutex
-	privacyScans   []map[string]interface{}
+	usageStore           *mindruntime.ModelUsageStore
+	memoryConsumer       business.MemoryConsumerPort
+	db                   *gorm.DB
+	startTime            time.Time
+	healthLog            []map[string]interface{}
+	dataDir              string
+	temporalSvc          *temporal.Service
+	coordinator          *dataportability.Coordinator
+	runtimeProfile       runtimeprofile.Profile
+	privacyMu            sync.RWMutex
+	privacyScans         []map[string]interface{}
+	privacyMessages      map[string]coordination.PrivacyMessage
+	privacyMemoryEntries map[string]business.MemoryConsumerEntry
+	safetyRepository     *safety.Repository
 }
 
 func NewService(ctx *app.AppContext, profile runtimeprofile.Profile) Service {
-	s := &service{db: ctx.DB, startTime: time.Now(), dataDir: "data", runtimeProfile: profile}
+	dataDir := "data"
+	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
+		dataDir = config.AppCfg.Storage.DataDir
+	}
+	s := &service{db: ctx.DB, startTime: time.Now(), dataDir: dataDir, runtimeProfile: profile, safetyRepository: safety.NewRepository(ctx.DB)}
 	s.loadTimeoutSettings()
 	return s
 }
@@ -151,6 +144,9 @@ func (s *service) AttachTemporalService(temporalSvc *temporal.Service) {
 
 func (s *service) SetDataPortabilityCoordinator(coord *dataportability.Coordinator) {
 	s.coordinator = coord
+	if coord != nil && coord.DataDir != "" {
+		s.dataDir = coord.DataDir
+	}
 }
 
 func (s *service) GetDataPortabilityCoordinator() (*dataportability.Coordinator, bool) {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -29,12 +30,15 @@ func GenerateBackupID() string {
 }
 
 func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPath string, runner SnapshotRunner) (*BackupResult, error) {
+	if err := ValidateBackupRequest(req); err != nil {
+		return nil, err
+	}
 	opID := GenerateBackupID()
 	op := &BackupOperation{
 		ID:        opID,
 		Status:    "planning",
-		Profile:   string(req.Profile),
-		Scope:     string(req.Scope),
+		Profile:   string(req.EffectiveProfile()),
+		Scope:     string(req.EffectiveScope()),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	c.mu.Lock()
@@ -59,49 +63,68 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 		CreatedAt:         time.Now().UTC().Format(time.RFC3339),
 		AppVersion:        c.AppVersion,
 		SchemaFingerprint: c.SchemaFinger,
-		Profile:           string(req.Profile),
-		Scope:             string(req.Scope),
+		Profile:           string(req.EffectiveProfile()),
+		Scope:             string(req.EffectiveScope()),
 		CharacterID:       req.CharacterID,
 		SourcePlatform:    c.Platform,
-		Encrypted:         false,
+		Encrypted:         req.Passphrase != "",
 	}
 
-	pkgPath := filepath.Join(backupDir, opID+".amitia-backup")
-	writer := NewArchiveWriter(pkgPath)
+	archivePath := filepath.Join(backupDir, opID+".amitia-backup")
+	writer := NewArchiveWriter(archivePath)
 	defer writer.Close()
 
+	componentIDs := make(map[string]bool)
 	for _, ct := range c.Contributors {
 		plans, err := ct.Plan(ctx, req)
 		if err != nil {
 			return nil, c.failBackup(opID, fmt.Errorf("contributor %s plan failed: %w", ct.ID(), err))
 		}
+		captures := make(map[string]*backupComponentCapture, len(plans))
+		ordered := make([]*backupComponentCapture, 0, len(plans))
 		for _, plan := range plans {
+			if componentIDs[plan.ID] {
+				return nil, c.failBackup(opID, fmt.Errorf("duplicate backup component: %s", plan.ID))
+			}
+			componentIDs[plan.ID] = true
 			compWriter, err := writer.CreateComponent(plan.ID, plan.LogicalName, plan.Kind)
 			if err != nil {
 				return nil, c.failBackup(opID, err)
 			}
 			hash := sha256.New()
 			counting := &countingWriter{w: io.MultiWriter(compWriter, hash)}
-			adapter := &componentWriterAdapter{w: counting, plan: plan, writer: writer}
-			if err := ct.Export(ctx, req, adapter); err != nil {
-				_ = compWriter.Close()
-				return nil, c.failBackup(opID, err)
+			capture := &backupComponentCapture{
+				plan:     plan,
+				writer:   compWriter,
+				counting: counting,
+				hash:     hash,
 			}
-			if err := compWriter.Close(); err != nil {
+			captures[plan.ID] = capture
+			ordered = append(ordered, capture)
+		}
+		adapter := &componentWriterAdapter{captures: captures}
+		if err := ct.Export(ctx, req, adapter); err != nil {
+			for _, capture := range ordered {
+				_ = capture.writer.Close()
+			}
+			return nil, c.failBackup(opID, err)
+		}
+		for _, capture := range ordered {
+			if err := capture.writer.Close(); err != nil {
 				return nil, c.failBackup(opID, err)
 			}
 			manifest.Components = append(manifest.Components, BackupComponentManifest{
-				ID:            plan.ID,
-				Kind:          string(plan.Kind),
-				LogicalName:   plan.LogicalName,
-				Path:          fmt.Sprintf("datasets/%s.ndjson", plan.ID),
-				SizeBytes:     counting.n,
-				ItemCount:     plan.ItemCount,
-				SHA256:        hex.EncodeToString(hash.Sum(nil)),
-				Required:      plan.Required,
-				SourceOfTruth: plan.SourceOfTruth,
-				Rebuildable:   plan.Rebuildable,
-				Sensitive:     plan.Sensitive,
+				ID:            capture.plan.ID,
+				Kind:          string(capture.plan.Kind),
+				LogicalName:   capture.plan.LogicalName,
+				Path:          fmt.Sprintf("datasets/%s.ndjson", capture.plan.ID),
+				SizeBytes:     capture.counting.n,
+				ItemCount:     capture.plan.ItemCount,
+				SHA256:        hex.EncodeToString(capture.hash.Sum(nil)),
+				Required:      capture.plan.Required,
+				SourceOfTruth: capture.plan.SourceOfTruth,
+				Rebuildable:   capture.plan.Rebuildable,
+				Sensitive:     capture.plan.Sensitive,
 			})
 		}
 	}
@@ -116,6 +139,20 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 
 	if err := writer.Finalize(); err != nil {
 		return nil, c.failBackup(opID, err)
+	}
+
+	pkgPath := archivePath
+	if req.Passphrase != "" {
+		encryptedPath := archivePath + ".enc"
+		if err := EncryptFile(archivePath, encryptedPath, req.Passphrase); err != nil {
+			_ = os.Remove(encryptedPath)
+			return nil, c.failBackup(opID, fmt.Errorf("%w: %v", ErrBackupEncryptionFailed, err))
+		}
+		if err := os.Remove(archivePath); err != nil {
+			_ = os.Remove(encryptedPath)
+			return nil, c.failBackup(opID, err)
+		}
+		pkgPath = encryptedPath
 	}
 
 	op.Status = "completed"
@@ -138,6 +175,29 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 		Checksum:  checksum,
 		Manifest:  manifest,
 	}, nil
+}
+
+func ValidateBackupRequest(req BackupRequest) error {
+	switch req.EffectiveProfile() {
+	case ProfileFull, ProfilePortable:
+	default:
+		return ErrBackupProfileInvalid
+	}
+	switch req.EffectiveScope() {
+	case ScopeAll, ScopeCharacter, ScopeSettings, ScopeMemory:
+	default:
+		return ErrBackupScopeInvalid
+	}
+	if req.EffectiveScope() == ScopeCharacter && req.CharacterID == "" {
+		return ErrBackupScopeInvalid
+	}
+	if req.EffectiveScope() == ScopeSettings && req.CharacterID != "" {
+		return ErrBackupScopeInvalid
+	}
+	if req.Passphrase != "" && len([]rune(req.Passphrase)) < 8 {
+		return ErrBackupPassphraseWeak
+	}
+	return nil
 }
 
 func (c *Coordinator) failBackup(opID string, err error) error {
@@ -163,23 +223,23 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 }
 
 type componentWriterAdapter struct {
-	w      io.Writer
-	plan   BackupComponentPlan
-	writer *ArchiveWriter
-	count  int64
+	captures map[string]*backupComponentCapture
 }
 
 func (a *componentWriterAdapter) CreateComponent(id, logicalName string, kind ComponentKind) (io.WriteCloser, error) {
-	return &nopWriteCloser{a.w}, nil
+	capture, ok := a.captures[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: undeclared component %s", ErrBackupComponentFailed, id)
+	}
+	return &nopWriteCloser{capture.counting}, nil
 }
 
 func (a *componentWriterAdapter) WriteJSON(id string, v interface{}) error {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return err
+	capture, ok := a.captures[id]
+	if !ok {
+		return fmt.Errorf("%w: undeclared component %s", ErrBackupComponentFailed, id)
 	}
-	_, err = a.w.Write(data)
-	return err
+	return json.NewEncoder(capture.counting).Encode(v)
 }
 
 type nopWriteCloser struct {
@@ -187,6 +247,13 @@ type nopWriteCloser struct {
 }
 
 func (nopWriteCloser) Close() error { return nil }
+
+type backupComponentCapture struct {
+	plan     BackupComponentPlan
+	writer   io.WriteCloser
+	counting *countingWriter
+	hash     hash.Hash
+}
 
 func fileSHA256(path string) (string, error) {
 	f, err := os.Open(path)

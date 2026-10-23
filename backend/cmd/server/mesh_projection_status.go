@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -19,19 +20,19 @@ func (p *meshLocalDataPort) MemoryDeletionComplete(ctx context.Context, scope co
 
 func (p *meshLocalDataPort) CleanupMemoryDeletions(ctx context.Context, scope coordination.ExecutionScope) (int, error) {
 	if scope.ResourceOwnerID != p.ownerID {
-		return 0, coordination.ErrWrongOwner
+		return 0, fmt.Errorf("清理目标Owner不匹配: %w", coordination.ErrWrongOwner)
 	}
 	if err := coordination.ValidateCurrent(ctx); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("清理授权校验失败: %w", err)
 	}
-	jobs, err := p.store.PendingProjections(ctx)
+	jobs, err := p.store.PendingDeletionProjections(ctx)
 	if err != nil {
 		return 0, err
 	}
 	writer := &meshProjectionWriter{port: p, collections: map[string]bool{}}
 	count := 0
 	for _, job := range jobs {
-		if job.Source != nil && !job.Source.Deleted {
+		if job.Source != nil && !job.Source.Deleted && !job.Resource.Deleted {
 			continue
 		}
 		if err := coordination.ValidateCurrent(ctx); err != nil {
@@ -45,10 +46,10 @@ func (p *meshLocalDataPort) CleanupMemoryDeletions(ctx context.Context, scope co
 		}
 		if err != nil {
 			_ = p.store.FinishProjection(ctx, job, location, false)
-			return count, err
+			return count, fmt.Errorf("清理%s索引失败: %w", job.Resource.Kind, err)
 		}
 		if err := p.store.FinishProjection(ctx, job, location, true); err != nil {
-			return count, err
+			return count, fmt.Errorf("索引清理回执保存失败: %w", err)
 		}
 		count++
 	}

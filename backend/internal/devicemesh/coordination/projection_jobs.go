@@ -63,7 +63,21 @@ type ProjectionJob struct {
 }
 
 func (s *OwnershipStore) PendingProjections(ctx context.Context) ([]ProjectionJob, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT v.kind,v.resource_id,v.role_id,v.source_id,v.revision,v.deleted,CAST(v.body AS BLOB),m.revision,m.deleted,CAST(m.body AS BLOB),COALESCE(p.location,''),COALESCE(p.attempts,0) FROM kernel_device_owned_resources v LEFT JOIN kernel_device_owned_resources m ON m.owner_id=v.owner_id AND m.kind='memory' AND m.resource_id=v.source_id AND m.role_id=v.role_id LEFT JOIN kernel_device_owned_projections p ON p.owner_id=v.owner_id AND p.kind=v.kind AND p.resource_id=v.resource_id WHERE v.owner_id=? AND v.kind IN ('vector','graph') AND (p.resource_id IS NULL OR p.observed_revision<>v.revision OR p.observed_source_revision<>COALESCE(m.revision,0) OR p.next_attempt_at<=?) ORDER BY COALESCE(p.next_attempt_at,0),v.kind,v.resource_id LIMIT 64`, s.ownerID, time.Now().Unix())
+	return s.pendingProjections(ctx, false)
+}
+
+func (s *OwnershipStore) PendingDeletionProjections(ctx context.Context) ([]ProjectionJob, error) {
+	return s.pendingProjections(ctx, true)
+}
+
+func (s *OwnershipStore) pendingProjections(ctx context.Context, deletionOnly bool) ([]ProjectionJob, error) {
+	condition := `(p.resource_id IS NULL OR p.observed_revision<>v.revision OR p.observed_source_revision<>COALESCE(m.revision,0) OR p.next_attempt_at<=?)`
+	arguments := []any{s.ownerID, time.Now().Unix()}
+	if deletionOnly {
+		condition = `(v.deleted=1 OR m.resource_id IS NULL OR m.deleted=1) AND (p.resource_id IS NULL OR p.projected_revision<>v.revision OR p.projected_source_revision<>COALESCE(m.revision,0))`
+		arguments = []any{s.ownerID}
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT v.kind,v.resource_id,v.role_id,v.source_id,v.revision,v.deleted,CAST(v.body AS BLOB),m.revision,m.deleted,CAST(m.body AS BLOB),COALESCE(p.location,''),COALESCE(p.attempts,0) FROM kernel_device_owned_resources v LEFT JOIN kernel_device_owned_resources m ON m.owner_id=v.owner_id AND m.kind='memory' AND m.resource_id=v.source_id AND m.role_id=v.role_id LEFT JOIN kernel_device_owned_projections p ON p.owner_id=v.owner_id AND p.kind=v.kind AND p.resource_id=v.resource_id WHERE v.owner_id=? AND v.kind IN ('vector','graph') AND `+condition+` ORDER BY COALESCE(p.next_attempt_at,0),v.kind,v.resource_id LIMIT 64`, arguments...)
 	if err != nil {
 		return nil, err
 	}

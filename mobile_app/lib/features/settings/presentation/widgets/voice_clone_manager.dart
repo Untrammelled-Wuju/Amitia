@@ -11,9 +11,11 @@ import '../../../../core/backend_transport/core_configuration_intent.dart';
 import '../../../../core/services/core_configuration_guard.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
+import '../../../../core/services/owned_speech_player.dart';
 import '../../../../core/services/voice_preview_player.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import 'voice_preview_role_picker.dart';
 
 class VoiceCloneManager extends ConsumerStatefulWidget {
   final CoreConfigurationIntent? configurationIntent;
@@ -91,8 +93,10 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
     );
     if (picked == null ||
         picked.files.isEmpty ||
-        picked.files.first.path == null)
+        picked.files.first.path == null) {
       return;
+    }
+    if (!mounted) return;
 
     final nameController = TextEditingController();
     final speakerIdController = TextEditingController();
@@ -134,7 +138,7 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
                 Text('语言', style: AppTypography.label(context)),
                 const SizedBox(height: 4),
                 DropdownButtonFormField<String>(
-                  value: language,
+                  initialValue: language,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
@@ -218,27 +222,46 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
   }
 
   Future<void> _preview(Map<String, dynamic> voice) async {
-    if (ref.read(mobileDeploymentConfigProvider).mode ==
-        MobileDeploymentMode.cloud) {
-      _toast('云端音色请先绑定到角色，再进入角色语音页面试听已保存的角色设置');
-      return;
-    }
-    final intent = _loadedIntent;
-    if (!await _ensureConfiguration(intent)) return;
     final speakerId = (voice['speakerId'] ?? '').toString().trim();
     if (speakerId.isEmpty) return;
     setState(() => _busySpeakerId = speakerId);
     try {
-      final result = await intent!.run(
-        () =>
-            ref.read(ttsServiceProvider).synthesizeWithSpeaker(speakerId, '测试'),
-      );
-      final url = (result?['audioUrl'] ?? '').toString();
-      await playBackendVoicePreview(
-        ref,
-        url,
-        requestIdPrefix: 'cloned-voice-preview',
-      );
+      if (ref.read(mobileDeploymentConfigProvider).mode ==
+          MobileDeploymentMode.cloud) {
+        final owned = ref.read(chatServiceProvider).owned;
+        await owned.refresh();
+        if (!mounted) return;
+        final preferredRoleId = (owned.policy?['selectedRole'] ?? '')
+            .toString();
+        final roleId = await pickVoicePreviewRole(
+          context,
+          owned.roles,
+          preferredRoleId: preferredRoleId,
+        );
+        if (roleId == null || !mounted) return;
+        await owned.refresh();
+        if (!owned.roles.any((role) => role['id'] == roleId)) {
+          throw StateError('试听角色已停用或变更，请重新选择角色');
+        }
+        final audio = await ref
+            .read(deviceOwnedSpeechServiceProvider)
+            .synthesize(roleId, '测试', speakerId: speakerId);
+        await ref.read(ownedSpeechPlayerProvider).play(audio);
+      } else {
+        final intent = _loadedIntent;
+        if (!await _ensureConfiguration(intent)) return;
+        final result = await intent!.run(
+          () => ref
+              .read(ttsServiceProvider)
+              .synthesizeWithSpeaker(speakerId, '测试'),
+        );
+        final url = (result?['audioUrl'] ?? '').toString();
+        await playBackendVoicePreview(
+          ref,
+          url,
+          requestIdPrefix: 'cloned-voice-preview',
+        );
+      }
       _toast('试听已开始播放');
     } catch (e) {
       _toast('试听失败：$e', error: true);
@@ -250,6 +273,7 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
   Future<void> _delete(Map<String, dynamic> voice) async {
     final intent = _loadedIntent;
     if (!await _ensureConfiguration(intent)) return;
+    if (!mounted) return;
     final speakerId = (voice['speakerId'] ?? '').toString().trim();
     if (speakerId.isEmpty) return;
     final name = (voice['name'] ?? speakerId).toString();

@@ -95,29 +95,14 @@ class TTSService {
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
-  Future<Map<String, dynamic>?> synthesize(
-    String text, {
-    String? voiceId,
-  }) async {
-    _requireLocalSpeech();
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/tts/synthesize',
-      data: {
-        'text': text,
-        if (voiceId != null) 'voiceId': int.tryParse(voiceId) ?? 0,
-      },
-    );
-    return resp;
-  }
-
   Future<Map<String, dynamic>?> synthesizeForCharacter(
     String characterId,
     String text,
   ) async {
     _requireLocalSpeech();
     return _api.post<Map<String, dynamic>>(
-      '/api/tts/synthesize',
-      data: {'characterId': characterId, 'text': text},
+      '/api/tts/characters/${Uri.encodeComponent(characterId)}/preview',
+      data: {'text': text},
     );
   }
 
@@ -167,8 +152,8 @@ class TTSService {
   ) {
     _requireLocalSpeech();
     return _api.post<Map<String, dynamic>>(
-      '/api/tts/synthesize',
-      data: <String, dynamic>{'speakerId': speakerId, 'text': text},
+      '/api/tts/voice-clones/${Uri.encodeComponent(speakerId)}/preview',
+      data: <String, dynamic>{'text': text},
     );
   }
 }

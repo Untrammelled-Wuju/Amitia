@@ -2,8 +2,8 @@ package dataportability
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -22,30 +22,66 @@ func NewCharacterContributor(db *gorm.DB) *CharacterContributor {
 func (c *CharacterContributor) ID() string             { return "character" }
 func (c *CharacterContributor) Name() string           { return "Character Records" }
 func (c *CharacterContributor) Dependencies() []string { return nil }
+func (c *CharacterContributor) ComponentIDs() []string { return []string{"character.records.v1"} }
 
 type characterExportRecord struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	Personality   string `json:"personality"`
-	SystemPrompt  string `json:"system_prompt"`
-	BasePrompt    string `json:"base_prompt"`
-	CharacterBase string `json:"character_base"`
-	Avatar        string `json:"avatar"`
-	Status        string `json:"status"`
-	IsActive      bool   `json:"is_active"`
-	CardDataJSON  string `json:"card_data_json"`
-	VoiceConfigID string `json:"voice_config_id"`
-	Gender        string `json:"gender"`
-	SortOrder     int    `json:"sort_order"`
+	ID                  string  `json:"id"`
+	SpaceID             string  `json:"spaceId"`
+	GlobalMemoryEnabled bool    `json:"globalMemoryEnabled"`
+	Name                string  `json:"name"`
+	Avatar              string  `json:"avatar"`
+	Identity            string  `json:"identity"`
+	Personality         string  `json:"personality"`
+	SpeakingStyle       string  `json:"speakingStyle"`
+	RelationshipStyle   string  `json:"relationshipStyle"`
+	CharacterBase       string  `json:"characterBase"`
+	BoundaryRules       string  `json:"boundaryRules"`
+	PersonalitySliders  string  `json:"personalitySliders"`
+	Description         string  `json:"description"`
+	BasePrompt          string  `json:"basePrompt"`
+	GeneratedPrompt     string  `json:"generatedPrompt"`
+	IsDefault           int     `json:"isDefault"`
+	Status              string  `json:"status"`
+	PersonalityConfig   string  `json:"personalityConfig"`
+	ChatStyleConfig     string  `json:"chatStyleConfig"`
+	SceneRules          string  `json:"sceneRules"`
+	IsActive            int     `json:"isActive"`
+	SortOrder           int     `json:"sortOrder"`
+	CreatedAt           string  `json:"createdAt"`
+	UpdatedAt           string  `json:"updatedAt"`
+	Gender              string  `json:"gender"`
+	GenderLabel         *string `json:"genderLabel"`
+	Pronoun             string  `json:"pronoun"`
+	SelfReference       string  `json:"selfReference"`
+	UserAddressingStyle *string `json:"userAddressingStyle"`
+	GenderExpression    int     `json:"genderExpression"`
+	LifeIdentity        string  `json:"lifeIdentity"`
+	VoiceConfigID       string  `json:"voiceConfigId"`
+	VoiceType           string  `json:"voiceType"`
+	VoiceSpeed          float64 `json:"voiceSpeed"`
+	VoicePitch          float64 `json:"voicePitch"`
+	VoiceVolume         float64 `json:"voiceVolume"`
+	CustomVoiceID       string  `json:"customVoiceId"`
+	VoiceMode           string  `json:"voiceMode"`
+	Emotion             string  `json:"emotion"`
+	EmotionScale        int     `json:"emotionScale"`
+	SilenceDuration     int     `json:"silenceDuration"`
+	CardDataJSON        string  `json:"cardData"`
+	Revision            int64   `json:"revision"`
 }
 
 func (c *CharacterContributor) Plan(ctx context.Context, req BackupRequest) ([]BackupComponentPlan, error) {
+	if req.EffectiveScope() == ScopeSettings || req.EffectiveScope() == ScopeMemory {
+		return nil, nil
+	}
 	var count int64
-	if req.Scope == ScopeCharacter && req.CharacterID != "" {
-		c.DB.WithContext(ctx).Model(&characterExportRecord{}).Where("id = ?", req.CharacterID).Count(&count)
+	if req.EffectiveScope() == ScopeCharacter && req.CharacterID != "" {
+		c.DB.WithContext(ctx).Table("characters").Where("id = ?", req.CharacterID).Where("deleted_at IS NULL").Count(&count)
 	} else {
-		c.DB.WithContext(ctx).Model(&characterExportRecord{}).Count(&count)
+		c.DB.WithContext(ctx).Table("characters").Where("deleted_at IS NULL").Count(&count)
+	}
+	if count == 0 {
+		return nil, ErrBackupNotFound
 	}
 
 	return []BackupComponentPlan{
@@ -62,16 +98,17 @@ func (c *CharacterContributor) Plan(ctx context.Context, req BackupRequest) ([]B
 }
 
 func (c *CharacterContributor) Export(ctx context.Context, req BackupRequest, out BackupWriter) error {
+	if req.EffectiveScope() == ScopeSettings || req.EffectiveScope() == ScopeMemory {
+		return nil
+	}
 	compW, err := out.CreateComponent("character.records.v1", "character.records", KindDataset)
 	if err != nil {
 		return err
 	}
 	defer compW.Close()
 
-	query := c.DB.WithContext(ctx).Table("characters").Select(
-		"id, name, description, personality, SUBSTR(base_prompt, 1, 10000) as system_prompt, base_prompt, character_base, avatar, status, is_active, card_data_json, voice_config_id, gender, sort_order",
-	)
-	if req.Scope == ScopeCharacter && req.CharacterID != "" {
+	query := c.DB.WithContext(ctx).Table("characters").Where("deleted_at IS NULL")
+	if req.EffectiveScope() == ScopeCharacter && req.CharacterID != "" {
 		query = query.Where("id = ?", req.CharacterID)
 	}
 
@@ -167,63 +204,105 @@ func (c *CharacterContributor) RestoreCharacters(ctx context.Context, in BackupR
 	if err != nil {
 		return err
 	}
+	if len(data) > 512<<20 {
+		return ErrImportPackageInvalid
+	}
 
 	idMap := opts.IdentityMap
 	lines := splitLines(data)
-	for _, line := range lines {
-		if len(line) == 0 {
-			continue
-		}
-		var rec characterExportRecord
-		if err := json.Unmarshal(line, &rec); err != nil {
-			continue
-		}
-
-		newID := rec.ID
-		var existing struct{ ID string }
-		c.DB.WithContext(ctx).Table("characters").Select("id").Where("id = ?", rec.ID).Scan(&existing)
-		if existing.ID != "" {
-			switch opts.CharacterPolicy {
-			case CollisionSkip:
-				if idMap != nil {
-					idMap.AddCharacter(rec.ID, existing.ID)
-				}
+	return c.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, line := range lines {
+			if len(line) == 0 {
 				continue
-			case CollisionReplace:
-				newID = rec.ID
-			default:
-				newID = uuid.New().String()
+			}
+			var rec characterExportRecord
+			if err := json.Unmarshal(line, &rec); err != nil {
+				return fmt.Errorf("%w: character record", ErrImportPackageInvalid)
+			}
+
+			newID := rec.ID
+			var existing struct{ ID string }
+			if err := tx.WithContext(ctx).Table("characters").Select("id").Where("id = ?", rec.ID).Scan(&existing).Error; err != nil {
+				return err
+			}
+			if existing.ID != "" {
+				switch opts.CharacterPolicy {
+				case CollisionSkip:
+					if idMap != nil {
+						idMap.AddCharacter(rec.ID, existing.ID)
+					}
+					continue
+				case CollisionReplace:
+					newID = rec.ID
+				case CollisionDuplicate:
+					newID = uuid.New().String()
+				default:
+					return ErrImportCollisionPolicyInvalid
+				}
+			}
+
+			updates := map[string]interface{}{
+				"space_id":              rec.SpaceID,
+				"global_memory_enabled": rec.GlobalMemoryEnabled,
+				"name":                  rec.Name,
+				"avatar":                rec.Avatar,
+				"identity":              rec.Identity,
+				"personality":           rec.Personality,
+				"speaking_style":        rec.SpeakingStyle,
+				"relationship_style":    rec.RelationshipStyle,
+				"character_base":        rec.CharacterBase,
+				"boundary_rules":        rec.BoundaryRules,
+				"personality_sliders":   rec.PersonalitySliders,
+				"description":           rec.Description,
+				"base_prompt":           rec.BasePrompt,
+				"generated_prompt":      rec.GeneratedPrompt,
+				"is_default":            rec.IsDefault,
+				"status":                rec.Status,
+				"personality_config":    rec.PersonalityConfig,
+				"chat_style_config":     rec.ChatStyleConfig,
+				"scene_rules":           rec.SceneRules,
+				"is_active":             false,
+				"sort_order":            rec.SortOrder,
+				"created_at":            rec.CreatedAt,
+				"updated_at":            rec.UpdatedAt,
+				"gender":                rec.Gender,
+				"gender_label":          rec.GenderLabel,
+				"pronoun":               rec.Pronoun,
+				"self_reference":        rec.SelfReference,
+				"user_addressing_style": rec.UserAddressingStyle,
+				"gender_expression":     rec.GenderExpression,
+				"life_identity":         rec.LifeIdentity,
+				"voice_config_id":       "",
+				"voice_type":            rec.VoiceType,
+				"voice_speed":           rec.VoiceSpeed,
+				"voice_pitch":           rec.VoicePitch,
+				"voice_volume":          rec.VoiceVolume,
+				"custom_voice_id":       rec.CustomVoiceID,
+				"voice_mode":            rec.VoiceMode,
+				"emotion":               rec.Emotion,
+				"emotion_scale":         rec.EmotionScale,
+				"silence_duration":      rec.SilenceDuration,
+				"card_data_json":        rec.CardDataJSON,
+				"revision":              rec.Revision,
+			}
+
+			var writeErr error
+			if newID == rec.ID && existing.ID != "" {
+				writeErr = tx.WithContext(ctx).Table("characters").Where("id = ?", rec.ID).Updates(updates).Error
+			} else {
+				updates["id"] = newID
+				writeErr = tx.WithContext(ctx).Table("characters").Create(updates).Error
+			}
+			if writeErr != nil {
+				return writeErr
+			}
+
+			if idMap != nil {
+				idMap.AddCharacter(rec.ID, newID)
 			}
 		}
-
-		updates := map[string]interface{}{
-			"name":            rec.Name,
-			"description":     rec.Description,
-			"personality":     rec.Personality,
-			"base_prompt":     rec.BasePrompt,
-			"character_base":  rec.CharacterBase,
-			"avatar":          rec.Avatar,
-			"status":          rec.Status,
-			"is_active":       false,
-			"card_data_json":  rec.CardDataJSON,
-			"voice_config_id": "",
-			"gender":          rec.Gender,
-			"sort_order":      rec.SortOrder,
-		}
-
-		if newID == rec.ID && existing.ID != "" {
-			c.DB.WithContext(ctx).Table("characters").Where("id = ?", rec.ID).Updates(updates)
-		} else {
-			updates["id"] = newID
-			c.DB.WithContext(ctx).Table("characters").Create(updates)
-		}
-
-		if idMap != nil && newID != rec.ID {
-			idMap.AddCharacter(rec.ID, newID)
-		}
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func readAllContrib(r io.Reader) ([]byte, error) {
@@ -239,7 +318,7 @@ func readAllContribImpl(r io.Reader) ([]byte, error) {
 			result = append(result, buf[:n]...)
 		}
 		if err != nil {
-			if err.Error() == "EOF" {
+			if errors.Is(err, io.EOF) {
 				return result, nil
 			}
 			return result, err
@@ -268,11 +347,4 @@ func splitLines(data []byte) [][]byte {
 
 func estimateRecordsSize(count int64, avgRecordSize int64) int64 {
 	return count * avgRecordSize
-}
-
-var _ CharacterRestorePort = (*CharacterContributor)(nil)
-
-func init() {
-	_ = hex.EncodeToString
-	_ = fmt.Sprintf
 }

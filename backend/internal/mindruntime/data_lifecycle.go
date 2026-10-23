@@ -24,8 +24,6 @@ type DataLifecycleCoordinator struct {
 	recalcLeaseDuration  time.Duration
 }
 
-var DefaultDataLifecycleCoordinator = NewDataLifecycleCoordinator(nil)
-
 func NewDataLifecycleCoordinator(db *gorm.DB) *DataLifecycleCoordinator {
 	return &DataLifecycleCoordinator{
 		db:                   db,

@@ -1,6 +1,5 @@
 import { type Ref, ref, shallowRef, watch } from "vue";
 import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
-import { notifyReplyCompleted } from "./useReplyNotifications";
 import { projectAutomationStatus, type AutomationStatus } from "@/conversation/runtime/automationStatus";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
@@ -311,9 +310,6 @@ export function useConversationRuntime(
 
     if (["turn.completed", "turn.failed", "turn.interrupted"].includes(event.type)) {
       sending.value = false;
-      if (event.type === "turn.completed" && !event.parentTurnId && !turn?.parentTurnId) {
-        void notifyReplyCompleted(event.conversationId, event.turnId || "");
-      }
       if (event.type === "turn.failed") {
         notifyDesktopPetChatState(
           "assistant_error",

@@ -338,7 +338,7 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 			}
 		}
 
-		packager := processing.NewPackager(repo, dataDir)
+		packager := processing.NewPackager(dataDir, repo)
 		if err := packager.VerifyPackageIntegrity(packageDir, 4); err != nil {
 			t.Fatalf("VerifyPackageIntegrity 失败: %v", err)
 		}

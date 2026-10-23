@@ -49,6 +49,15 @@ describe("Core 角色语音保存与播放", () => {
     expect(mocks.post.mock.calls[0][1]).not.toHaveProperty("voiceConfigId");
     expect(mocks.get).toHaveBeenCalledTimes(2);
   });
+  it("复刻音色试听把明确 speakerId 送入 Owner 语音请求", async () => {
+    const speech = open();
+    await speech.synthesizeIfBound("复刻音色试听", "source-role", "clone-a");
+    expect(mocks.post).toHaveBeenCalledWith("/api/device-mesh/v1/business/speech", expect.objectContaining({
+      characterId: "source-role",
+      speakerId: "clone-a",
+      text: "复刻音色试听",
+    }), expect.any(Object));
+  });
   it.each(["saved", "owner", "hash", "role", "realm", "checkpoint", "foreign-ack"])("缺失或错误 %s 不返回可播放音频", async (failure) => {
     resultChange = (value) => {
       if (failure === "saved") value.saved = false;

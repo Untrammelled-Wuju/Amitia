@@ -537,10 +537,15 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	manifest.Binding = packageformat.ManifestBinding{Policy: packageformat.BindingPolicyUnbound}
 	manifest.Canvas.CoordinateSystem = packageformat.CoordinateSystemTopLeft
 	manifest.Capabilities = packageformat.ManifestCapabilities{TransparentBackground: true, FrameSequence: true, PerFrameDuration: true, Audio: false}
-	manifest.Provenance.SourceType = "generated"
+	manifest.Provenance.SourceType = record.SourceType
 	manifest.Provenance.ProcessingTaskID = snapshot.ProcessingTaskID
 	manifest.Provenance.BuiltAt = time.Now().UTC().Format(time.RFC3339)
 	manifest.Provenance.Builder = "amitia-release-v1"
+	noticePath, err := ensureReleaseNotice(stagingDir)
+	if err != nil {
+		return nil, NewReleaseError("NOTICE_CREATE_FAILED", "创建桌宠包许可声明失败", s.cleanupStagingFailure(record.ID, err))
+	}
+	manifest.License.NoticePath = noticePath
 
 	for i := range manifest.Actions {
 		a := &manifest.Actions[i]
@@ -931,6 +936,23 @@ func (s *service) computeInputHash(req *BuildReleaseRequest, stableKey string) s
 
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])
+}
+
+func ensureReleaseNotice(stagingDir string) (string, error) {
+	for _, candidate := range []string{"NOTICE.txt", "NOTICE", "LICENSE.txt", "LICENSE", "COPYING"} {
+		info, err := os.Stat(filepath.Join(stagingDir, candidate))
+		if err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+			return candidate, nil
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+	}
+	content := "Amitia Desktop Pet Package\nSPDX-License-Identifier: AGPL-3.0-only\n\nThis package declares AGPL-3.0-only in its manifest.\nCopyright and attribution remain with the respective rights holders.\n"
+	if err := os.WriteFile(filepath.Join(stagingDir, "NOTICE.txt"), []byte(content), 0o644); err != nil {
+		return "", err
+	}
+	return "NOTICE.txt", nil
 }
 
 func (s *service) failOperation(op *ReleaseBuildOperation, code string, cause error) error {

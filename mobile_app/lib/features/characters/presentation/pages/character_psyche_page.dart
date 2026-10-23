@@ -10,13 +10,41 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
-class CharacterPsychePage extends ConsumerWidget {
+class CharacterPsychePage extends ConsumerStatefulWidget {
   final String characterId;
 
   const CharacterPsychePage({super.key, required this.characterId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CharacterPsychePage> createState() =>
+      _CharacterPsychePageState();
+}
+
+class _CharacterPsychePageState extends ConsumerState<CharacterPsychePage> {
+  late Future<Map<String, dynamic>?> _psycheFuture;
+  late Future<List<Map<String, dynamic>>> _historyFuture;
+  String? _deletingEmotionId;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  @override
+  void didUpdateWidget(covariant CharacterPsychePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.characterId != widget.characterId) _reload();
+  }
+
+  void _reload() {
+    final service = ref.read(characterDetailServiceProvider);
+    _psycheFuture = service.psycheSnapshot(widget.characterId);
+    _historyFuture = service.emotionHistory(widget.characterId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '心理状态',
@@ -26,9 +54,7 @@ class CharacterPsychePage extends ConsumerWidget {
       body: SafeArea(
         top: false,
         child: FutureBuilder<Map<String, dynamic>?>(
-          future: ref
-              .read(characterDetailServiceProvider)
-              .psycheSnapshot(characterId),
+          future: _psycheFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -43,14 +69,18 @@ class CharacterPsychePage extends ConsumerWidget {
                 title: '暂无心理状态数据',
               );
             }
-            return _buildContent(context, state);
+            return _buildContent(context, state, _historyFuture);
           },
         ),
       ),
     );
   }
 
-  Widget _buildContent(BuildContext context, Map<String, dynamic> state) {
+  Widget _buildContent(
+    BuildContext context,
+    Map<String, dynamic> state,
+    Future<List<Map<String, dynamic>>> historyFuture,
+  ) {
     final emotion = _asMap(state['emotion']);
     final mood = _asMap(state['mood']);
     final needs = _asMap(state['needs']);
@@ -134,6 +164,76 @@ class CharacterPsychePage extends ConsumerWidget {
           '心境张力': mood['tension'],
         }),
         SizedBox(height: AppSpacing.sectionGap),
+        AmitiaSectionHeader(title: '情绪历史'),
+        SizedBox(height: AppSpacing.sm),
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: historyFuture,
+          builder: (context, history) {
+            if (history.connectionState == ConnectionState.waiting) {
+              return AmitiaCard(
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: AppSpacing.sm),
+                    Text('正在读取设备情绪历史', style: AppTypography.caption(context)),
+                  ],
+                ),
+              );
+            }
+            if (history.hasError) {
+              return AmitiaCard(
+                child: Text(
+                  '情绪历史不可用：${history.error}',
+                  style: AppTypography.caption(context),
+                ),
+              );
+            }
+            final items = history.data ?? const <Map<String, dynamic>>[];
+            if (items.isEmpty) {
+              return AmitiaCard(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.history_toggle_off_outlined,
+                      color: context.textTertiary,
+                    ),
+                    SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        '暂无情绪历史。开启“情绪检测”且变化达到阈值后会记录。',
+                        style: AppTypography.caption(context),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return AmitiaCard(
+              child: Column(
+                children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _deletingEmotionId == null
+                          ? () => _clearEmotionHistory(context, items)
+                          : null,
+                      child: const Text('清空'),
+                    ),
+                  ),
+                  for (var index = 0; index < items.length; index++) ...[
+                    _emotionHistoryRow(context, items[index]),
+                    if (index != items.length - 1) const Divider(height: 1),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+        SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '需求状态'),
         SizedBox(height: AppSpacing.sm),
         if (needs.isEmpty)
@@ -159,6 +259,182 @@ class CharacterPsychePage extends ConsumerWidget {
         SizedBox(height: AppSpacing.xxl),
       ],
     );
+  }
+
+  Widget _emotionHistoryRow(BuildContext context, Map<String, dynamic> item) {
+    final createdAt = DateTime.tryParse(
+      (item['createdAt'] ?? '').toString(),
+    )?.toLocal();
+    final confidence = _toPercent(item['confidence']);
+    final emotion = _emotionLabel(
+      (item['emotionLabel'] ?? item['moodLabel'] ?? '').toString(),
+    );
+    final recovery = item['recoveryApplied'] == true
+        ? ' · 恢复 ${_emotionLabel((item['recoveredMood'] ?? '').toString())}'
+        : '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.auto_graph_outlined,
+            size: 18,
+            color: context.accentPrimary,
+          ),
+          SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${item['affectLabel'] ?? '未标注'} · $emotion$recovery',
+                  style: AppTypography.body(context),
+                ),
+                SizedBox(height: AppSpacing.xs),
+                Text(
+                  createdAt == null
+                      ? ''
+                      : '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} '
+                            '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}',
+                  style: AppTypography.caption(context),
+                ),
+              ],
+            ),
+          ),
+          Text('$confidence%', style: AppTypography.label(context)),
+          SizedBox(width: AppSpacing.xs),
+          IconButton(
+            tooltip: '删除',
+            onPressed: _deletingEmotionId == null
+                ? () => _deleteEmotionHistory(context, item)
+                : null,
+            icon: _deletingEmotionId == item['id'].toString()
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_outline, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteEmotionHistory(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
+    final id = (item['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除情绪历史'),
+        content: const Text('确定删除这条情绪历史？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deletingEmotionId = id);
+    try {
+      await ref
+          .read(characterDetailServiceProvider)
+          .deleteEmotionHistory(widget.characterId, id);
+      if (!mounted) return;
+      setState(() {
+        _deletingEmotionId = null;
+        _historyFuture = ref
+            .read(characterDetailServiceProvider)
+            .emotionHistory(widget.characterId);
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('情绪历史已删除')));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deletingEmotionId = null);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+    }
+  }
+
+  Future<void> _clearEmotionHistory(
+    BuildContext context,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('清空情绪历史'),
+        content: const Text('确定清空当前角色可管理的全部情绪历史？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _deletingEmotionId = 'all');
+    try {
+      final service = ref.read(characterDetailServiceProvider);
+      for (final item in items) {
+        final id = (item['id'] ?? '').toString();
+        if (id.isNotEmpty) {
+          await service.deleteEmotionHistory(widget.characterId, id);
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _deletingEmotionId = null;
+        _historyFuture = service.emotionHistory(widget.characterId);
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('情绪历史已清空')));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deletingEmotionId = null);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('清空失败：$error')));
+    }
+  }
+
+  String _emotionLabel(String value) {
+    return switch (value.trim().toLowerCase()) {
+      'happy' => '愉快',
+      'calm' => '平静',
+      'positive' => '积极',
+      'excited' => '兴奋',
+      'tense' => '紧张',
+      'angry' => '愤怒',
+      'low' => '低落',
+      'sad' => '悲伤',
+      'neutral' || '' => '中性',
+      _ => value,
+    };
   }
 
   Widget _metricCard(

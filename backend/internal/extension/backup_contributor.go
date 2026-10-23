@@ -22,6 +22,10 @@ type ExtensionBackupContributor struct {
 	Runtime  *kernel.Runtime
 }
 
+func (c *ExtensionBackupContributor) ComponentIDs() []string {
+	return []string{extensionComponentID}
+}
+
 func NewExtensionBackupContributor(kernelDB *sql.DB, runtime *kernel.Runtime) *ExtensionBackupContributor {
 	return &ExtensionBackupContributor{KernelDB: kernelDB, Runtime: runtime}
 }
@@ -49,11 +53,36 @@ const extensionComponentID = "extension.records.v1"
 const extensionLogicalName = "extension.records"
 
 func (c *ExtensionBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil, nil
+	}
 	if c.KernelDB == nil {
 		return nil, fmt.Errorf("extension kernel database unavailable")
 	}
 	var count int64
-	if err := c.KernelDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM extension_contributions WHERE contribution_type = 'agent_skill'`).Scan(&count); err != nil {
+	rows, err := c.KernelDB.QueryContext(ctx, `
+		SELECT COALESCE(installation_json, '')
+		FROM extension_contributions c
+		JOIN extension_installations i ON i.extension_id = c.extension_id
+		WHERE c.contribution_type = 'agent_skill'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var installation domain.ExtensionInstallation
+		if err := json.Unmarshal([]byte(raw), &installation); err != nil {
+			return nil, err
+		}
+		if extensionInScope(req, installation) {
+			count++
+		}
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return []dataportability.BackupComponentPlan{{
@@ -63,6 +92,9 @@ func (c *ExtensionBackupContributor) Plan(ctx context.Context, req dataportabili
 }
 
 func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil
+	}
 	if c.KernelDB == nil || c.Runtime == nil || c.Runtime.Container() == nil {
 		return fmt.Errorf("extension kernel runtime unavailable")
 	}
@@ -97,6 +129,9 @@ func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportabi
 		if err := json.Unmarshal([]byte(installationJSON), &installation); err != nil {
 			return err
 		}
+		if !extensionInScope(req, installation) {
+			continue
+		}
 		artifact, err := container.PackageRepository.GetArtifact(ctx, installation.PackageID)
 		if err != nil {
 			return err
@@ -124,6 +159,21 @@ func (c *ExtensionBackupContributor) Export(ctx context.Context, req dataportabi
 		}
 	}
 	return rows.Err()
+}
+
+func extensionInScope(req dataportability.BackupRequest, installation domain.ExtensionInstallation) bool {
+	scopeType := metadataText(installation.Metadata["scopeType"])
+	scopeID := metadataText(installation.Metadata["scopeId"])
+	switch req.EffectiveScope() {
+	case dataportability.ScopeAll:
+		return true
+	case dataportability.ScopeSettings:
+		return scopeType == "" || scopeType == "global"
+	case dataportability.ScopeCharacter:
+		return scopeType == "character" && scopeID == req.CharacterID
+	default:
+		return false
+	}
 }
 
 func (c *ExtensionBackupContributor) PreviewImport(ctx context.Context, req dataportability.ImportPreviewRequest, in dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
@@ -280,5 +330,3 @@ func metadataText(value any) string {
 	}
 	return fmt.Sprint(value)
 }
-
-var _ dataportability.ExtensionRestorePort = (*ExtensionBackupContributor)(nil)

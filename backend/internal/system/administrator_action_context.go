@@ -21,7 +21,7 @@ func (s *service) AdministratorActionContext(ctx context.Context, operation, id 
 		return nil, err
 	}
 	switch operation {
-	case "audit-clear", "safety-clear", "safety-handle", "usage-clear":
+	case "audit-clear":
 		var auditSpaceID string
 		if operation == "audit-clear" {
 			var err error
@@ -37,18 +37,6 @@ func (s *service) AdministratorActionContext(ctx context.Context, operation, id 
 			case "audit-clear":
 				write = tx.Where("space_id = ?", auditSpaceID).Delete(&securityaudit.AuditEvent{})
 				result = map[string]interface{}{"deleted": write.RowsAffected}
-			case "safety-clear":
-				write = tx.Exec("DELETE FROM safety_events")
-				result = map[string]interface{}{"deleted": true, "removedRecords": write.RowsAffected}
-			case "safety-handle":
-				write = tx.Table("safety_events").Where("id=?", id).Update("handled", 1)
-				result = map[string]interface{}{"handled": true, "id": id}
-				if write.Error == nil && write.RowsAffected == 0 {
-					return gorm.ErrRecordNotFound
-				}
-			case "usage-clear":
-				write = tx.Table("messages").Where("tokens>0").Update("tokens", 0)
-				result = map[string]interface{}{"cleared": true, "updatedRecords": write.RowsAffected}
 			}
 			return write.Error
 		})

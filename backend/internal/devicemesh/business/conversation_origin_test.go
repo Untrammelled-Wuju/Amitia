@@ -11,6 +11,17 @@ import (
 
 type originDataPort struct{ testDataPort }
 
+type continuationDataPort struct {
+	testDataPort
+	historical coordination.DataSnapshot
+}
+
+func (p continuationDataPort) HistoricalSnapshot(context.Context, coordination.ExecutionScope, coordination.DataQuery) (*coordination.DataSnapshot, error) {
+	snapshot := p.historical
+	snapshot.Resources = append([]coordination.Resource(nil), p.historical.Resources...)
+	return &snapshot, nil
+}
+
 func (p originDataPort) Snapshot(ctx context.Context, scope coordination.ExecutionScope, query coordination.DataQuery) (coordination.DataSnapshot, error) {
 	snapshot, err := p.testDataPort.Snapshot(ctx, scope, query)
 	if err != nil || query.ConversationID == "" {
@@ -147,7 +158,7 @@ func TestConversationOriginSeparatesDeviceHistoryFromCoreNamespace(t *testing.T)
 
 func TestConversationWithoutOriginRejectsAmbiguousOwners(t *testing.T) {
 	current := coordination.DataSnapshot{OwnerID: "core", Resources: []coordination.Resource{{Kind: "conversation", ID: "same-id"}}}
-	historical := coordination.DataSnapshot{OwnerID: "device", LegacyConversations: []json.RawMessage{json.RawMessage(`{"id":"same-id"}`)}}
+	historical := coordination.DataSnapshot{OwnerID: "device", Resources: []coordination.Resource{{Kind: "conversation", ID: "same-id", RoleID: "role", Origin: "legacy", ReadOnly: true}}}
 	route := conversationRoute{CurrentID: "same-id", HistoricalID: "same-id"}
 	if err := rejectAmbiguousConversation(route, current, &historical); !errors.Is(err, coordination.ErrRequestConflict) {
 		t.Fatal("same-id unrelated conversations were merged")
@@ -157,9 +168,85 @@ func TestConversationWithoutOriginRejectsAmbiguousOwners(t *testing.T) {
 		t.Fatal(err)
 	}
 	route.Origin = nil
-	historical.LegacyConversations = []json.RawMessage{json.RawMessage(`{"id":"other"}`)}
+	historical.Resources = []coordination.Resource{{Kind: "conversation", ID: "other", RoleID: "role", Origin: "legacy", ReadOnly: true}}
 	if err := rejectAmbiguousConversation(route, current, &historical); err != nil {
 		t.Fatal("unambiguous old conversation was rejected")
+	}
+}
+
+func TestHistoricalContinuationMirrorsKeepOriginOnlyRecords(t *testing.T) {
+	origin := &ConversationOrigin{OwnerID: "device", ID: "same-id"}
+	route := conversationRoute{CurrentID: "continuation/current", HistoricalID: "same-id", Origin: origin}
+	current := coordination.DataSnapshot{OwnerID: "core", Resources: []coordination.Resource{
+		{Kind: "conversation", ID: route.CurrentID, Body: body(map[string]any{"id": route.CurrentID, "conversationOrigin": origin})},
+		{Kind: "message", ID: "shared", Body: body(map[string]any{"id": "shared", "conversationId": route.CurrentID, "content": "current"})},
+		{Kind: "summary", ID: route.CurrentID + "/summary", Body: body(map[string]any{"conversationId": route.CurrentID, "content": map[string]string{"summary": "current summary"}})},
+	}}
+	historical := coordination.DataSnapshot{OwnerID: "device", Resources: []coordination.Resource{
+		{Kind: "conversation", ID: "same-id", Origin: "legacy", ReadOnly: true, Body: body(map[string]any{"id": "same-id", "title": "legacy"})},
+		{Kind: "message", ID: "shared", Origin: "legacy", ReadOnly: true, Body: body(map[string]any{"id": "shared", "conversationId": "same-id", "content": "legacy duplicate"})},
+		{Kind: "message", ID: "origin-only", Origin: "legacy", ReadOnly: true, Body: body(map[string]any{"id": "origin-only", "conversationId": "same-id", "content": "origin only"})},
+		{Kind: "summary", ID: "same-id/summary", Origin: "legacy", ReadOnly: true, Body: body(map[string]any{"conversationId": "same-id", "content": map[string]string{"summary": "legacy summary"}})},
+	}}
+	filterHistoricalContinuationMirrors(route, current, &historical)
+	if len(historical.Resources) != 1 || historical.Resources[0].ID != "origin-only" {
+		t.Fatalf("historical continuation mirrors were not filtered safely: %+v", historical.Resources)
+	}
+	withoutCurrent := coordination.DataSnapshot{OwnerID: "device", Resources: []coordination.Resource{
+		{Kind: "conversation", ID: "same-id", Origin: "legacy", ReadOnly: true, Body: body(map[string]any{"id": "same-id"})},
+	}}
+	filterHistoricalContinuationMirrors(route, coordination.DataSnapshot{OwnerID: "core"}, &withoutCurrent)
+	if len(withoutCurrent.Resources) != 1 {
+		t.Fatal("origin history was hidden before the continuation existed")
+	}
+	ambiguity := coordination.DataSnapshot{OwnerID: "device", Resources: []coordination.Resource{{Kind: "conversation", ID: "same-id", Origin: "legacy", ReadOnly: true, Body: body(map[string]any{"id": "same-id"})}}}
+	ambiguousCurrent := coordination.DataSnapshot{OwnerID: "core", Resources: []coordination.Resource{{Kind: "conversation", ID: "same-id", Body: body(map[string]any{"id": "same-id"})}}}
+	if err := rejectAmbiguousConversation(conversationRoute{CurrentID: "same-id", HistoricalID: "same-id"}, ambiguousCurrent, &ambiguity); !errors.Is(err, coordination.ErrRequestConflict) {
+		t.Fatal("unbound same-id history stopped requiring explicit lineage")
+	}
+}
+
+func TestOwnedConversationQueryFiltersOnlyContinuationHistoryMirrors(t *testing.T) {
+	engine, db, service, model := engineHarness(t)
+	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+		t.Fatal(err)
+	}
+	origin := &ConversationOrigin{OwnerID: "a", ID: "same-id"}
+	scope := coordination.ExecutionScope{CoreID: "core", TargetDeviceID: "a", ResourceOwnerID: "core", RoleID: "role", RoleRevision: 1, Coordinated: true}
+	route, err := resolveConversationRoute(scope, origin.ID, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coordination.NewOwnershipStore(db, "core").Apply(t.Context(), coordination.Commit{Scope: coordination.ExecutionScope{ResourceOwnerID: "core", RoleOwnerID: "core", RoleID: "role", RoleRevision: 1, RequestID: "seed-core"}, Mutations: []coordination.Mutation{
+		{Kind: "conversation", ID: route.CurrentID, RoleID: "role", Body: body(map[string]any{"id": route.CurrentID, "conversationOrigin": origin})},
+		{Kind: "message", ID: "shared", RoleID: "role", Body: body(map[string]any{"id": "shared", "conversationId": route.CurrentID, "role": "user", "content": "current"})},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	engine.data = continuationDataPort{
+		testDataPort: testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{}`)}},
+		historical: coordination.DataSnapshot{OwnerID: "a", Role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{}`)}, Resources: []coordination.Resource{
+			{OwnerID: "a", Kind: "conversation", ID: "same-id", RoleID: "role", Revision: 1, Origin: "legacy", ReadOnly: false, Body: body(map[string]any{"id": "same-id"})},
+			{OwnerID: "a", Kind: "message", ID: "shared", RoleID: "role", Revision: 1, Body: body(map[string]any{"id": "shared", "conversationId": "same-id", "role": "user", "content": "device duplicate"})},
+			{OwnerID: "a", Kind: "message", ID: "origin-only", RoleID: "role", Revision: 1, Body: body(map[string]any{"id": "origin-only", "conversationId": "same-id", "role": "assistant", "content": "device only"})},
+		}},
+	}
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: origin.ID, ConversationOrigin: origin, RequestID: "query-continuation", Message: "continue"}
+	result, err := engine.Query(t.Context(), request, coordination.DataQuery{ConversationID: origin.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ConversationID != route.CurrentID || result.HistoricalSnapshot == nil || len(result.HistoricalSnapshot.Resources) != 1 || result.HistoricalSnapshot.Resources[0].ID != "origin-only" {
+		t.Fatalf("query did not keep exactly the origin-only history: %+v", result)
+	}
+	model.generate = func(_ context.Context, inference Inference) (Generation, error) {
+		if inference.HistoricalSnapshot == nil || len(inference.HistoricalSnapshot.Resources) != 1 || inference.HistoricalSnapshot.Resources[0].ID != "origin-only" {
+			t.Fatalf("inference received duplicated continuation history: %+v", inference.HistoricalSnapshot)
+		}
+		return Generation{Text: "continued"}, nil
+	}
+	if _, err := engine.Run(t.Context(), request); err != nil {
+		t.Fatal(err)
 	}
 }
 

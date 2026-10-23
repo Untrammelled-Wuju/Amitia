@@ -1,5 +1,6 @@
 <template>
   <div>
+    <el-alert v-if="usageNotice" :title="usageNotice" type="info" :closable="false" />
     <div class="data-cards">
       <div class="data-card">
         <div class="dc-icon blue">
@@ -67,11 +68,36 @@
         </div>
       </div>
     </div>
+
+    <template v-if="feedbackRecent.length">
+      <div class="section-header" style="margin-top: 22px">最近消息反馈</div>
+      <div class="feedback-types">
+        <el-tag v-for="(count, type) in feedbackByType" :key="type" size="small" type="info">
+          {{ feedbackTypeLabel(type) }} {{ count }}
+        </el-tag>
+      </div>
+      <el-table :data="feedbackRecent" size="small" class="feedback-table">
+        <el-table-column label="时间" min-width="150">
+          <template #default="{ row }">{{ formatFeedbackTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">{{ feedbackTypeLabel(row.feedbackType) }}</template>
+        </el-table-column>
+        <el-table-column prop="messageId" label="消息" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="reason" label="原因" min-width="220" show-overflow-tooltip />
+        <el-table-column label="操作" width="80" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="danger" @click="removeFeedback(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   ChatDotRound,
   UserFilled,
@@ -86,9 +112,12 @@ import { CanvasRenderer } from "echarts/renderers";
 import { BarChart } from "echarts/charts";
 import { TooltipComponent, GridComponent } from "echarts/components";
 
+import { usageMetricSummary } from "@/runtime/usage-view";
+import { ownedManagementRequest } from "@/runtime/owned-chat-management";
+
 use([CanvasRenderer, BarChart, TooltipComponent, GridComponent]);
 
-const { totalConvs, totalChars, dailyData, refreshAll } = useDashboardData();
+const { totalConvs, totalChars, dailyData, usageNotice, usageBusinessReady, feedbackTotal, feedbackByType, feedbackRecent, refreshAll } = useDashboardData();
 const { resolvedMode } = useTheme();
 
 const chartRefs: Record<string, any> = {};
@@ -122,11 +151,37 @@ const statMetrics = [
   },
 ];
 
-function fmtNum(n: number | undefined): string {
-  if (n === undefined || n === null) return "0";
+function fmtNum(n: number | null | undefined): string {
+  if (n === undefined || n === null) return "不可用";
   if (n >= 10000) return (n / 10000).toFixed(1) + "w";
   if (n >= 1000) return (n / 1000).toFixed(1) + "k";
   return String(n);
+}
+
+function feedbackTypeLabel(value: string): string {
+  const labels: Record<string, string> = {
+    good: "有帮助",
+    too_long: "过长",
+    too_cold: "过于冷淡",
+    too_exaggerated: "过度夸张",
+    not_understand: "未理解",
+    unsafe: "不安全",
+    other: "需改进",
+  };
+  return labels[value] || value || "未知";
+}
+
+function formatFeedbackTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN");
+}
+
+async function removeFeedback(row: any) {
+  await ElMessageBox.confirm("确定删除这条消息反馈？", "删除反馈", { type: "warning" });
+  const result = await ownedManagementRequest<{ deleted?: boolean }>("feedback/delete", { feedbackId: row.id }, "post", row.roleId);
+  if (result.deleted !== true) throw new Error("反馈删除尚未确认");
+  ElMessage.success("反馈已删除");
+  await refreshAll();
 }
 
 function readCSSVar(name: string): string {
@@ -147,28 +202,16 @@ function safeArray(v: any): any[] {
 }
 
 const statTotals = computed(() => {
-  const result: Record<string, number> = {};
-  for (const s of statMetrics) {
-    const arr = safeArray(dailyData.value);
-    result[s.key] = arr.reduce((sum, d) => sum + (d[s.key] || 0), 0);
-  }
-  return result;
+  const totals = Object.fromEntries(statMetrics.map(s => [s.key,
+    usageMetricSummary(safeArray(dailyData.value), s.key, usageBusinessReady.value).total,
+  ]));
+  totals.feedback = feedbackTotal.value;
+  return totals;
 });
 
-const statAvgs = computed(() => {
-  const result: Record<string, number> = {};
-  for (const s of statMetrics) {
-    const arr = safeArray(dailyData.value);
-    if (!arr.length) {
-      result[s.key] = 0;
-      continue;
-    }
-    result[s.key] = Math.round(
-      arr.reduce((sum, d) => sum + (d[s.key] || 0), 0) / arr.length,
-    );
-  }
-  return result;
-});
+const statAvgs = computed(() => Object.fromEntries(statMetrics.map(s => [s.key,
+  usageMetricSummary(safeArray(dailyData.value), s.key, usageBusinessReady.value).average,
+])));
 
 const chartOptions = computed(() => {
   resolvedMode.value;
@@ -178,7 +221,7 @@ const chartOptions = computed(() => {
     const xData = arr.length
       ? arr.map((d: any) => (d.date || "").slice(5))
       : [];
-    const data = arr.map((d: any) => d[m.key] || 0);
+    const data = arr.map((d: any) => typeof d[m.key] === "number" ? d[m.key] : null);
     result[m.key] = {
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       grid: { left: 0, right: 8, top: 8, bottom: 20 },
@@ -303,6 +346,17 @@ onUnmounted(() => {
   font-weight: 700;
   color: var(--console-text);
   margin-bottom: 12px;
+}
+
+.feedback-table {
+  margin-top: 10px;
+}
+
+.feedback-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .section-header-row {

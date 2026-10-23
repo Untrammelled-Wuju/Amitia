@@ -146,7 +146,7 @@ describe("owned conversation history", () => {
     const owned = useDeviceOwnedConversation();
     const first = response({ message: "next" }, {});
     first.data.snapshot.resources = [{ kind: "message", id: "same", ownerId: "a", revision: 1, body: { id: "same", role: "user", content: "current", createdAt: "2026-10-04T00:00:00Z" } }] as any;
-    (first.data as any).historicalSnapshot.legacyMessages = [{ id: "same", role: "user", content: "old", createdAt: "2026-10-03T00:00:00Z" }];
+    (first.data as any).historicalSnapshot.resources = [{ kind: "message", id: "same", ownerId: "old-device", roleId: "role", revision: 0, deleted: false, origin: "legacy", readOnly: true, body: { id: "same", role: "user", content: "old", createdAt: "2026-10-03T00:00:00Z" } }];
     const second = response({});
     second.data.snapshot.resources = [{ kind: "message", id: "second", ownerId: "a", revision: 1, body: { id: "second", role: "assistant", content: "later", createdAt: "2026-10-04T00:00:01Z" } }] as any;
     mocks.get.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
@@ -175,7 +175,7 @@ describe("owned conversation history", () => {
 
   it("retains source revisions for owned messages and leaves legacy messages read-only", () => {
     const owned = useDeviceOwnedConversation();
-    const messages = owned.messages({ executionScope: scope, historicalSnapshot: { ownerId: "old-device", resources: [], legacyMessages: [{ id: "legacy", role: "user", content: "old" }] }, snapshot: { ownerId: "a", resources: [{ kind: "message", id: "current", revision: 7, body: { id: "current", role: "assistant", content: "current" } }] } } as any);
+    const messages = owned.messages({ executionScope: scope, historicalSnapshot: { ownerId: "old-device", resources: [{ kind: "message", id: "legacy", ownerId: "old-device", roleId: "role", revision: 0, deleted: false, origin: "legacy", readOnly: true, body: { id: "legacy", role: "user", content: "old" } }] }, snapshot: { ownerId: "a", resources: [{ kind: "message", id: "current", revision: 7, body: { id: "current", role: "assistant", content: "current" } }] } } as any);
     expect(messages[0].sourceRevision).toBeNull();
     expect(messages[0].ownerId).toBe("old-device");
     expect(messages[1].sourceRevision).toBe(7);

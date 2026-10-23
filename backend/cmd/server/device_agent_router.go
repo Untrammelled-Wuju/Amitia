@@ -165,7 +165,8 @@ func registerDeviceAgentDesktopPetRoutes(
 		security.AuthMethodDesktopSession,
 		security.AuthMethodLocalToken,
 	))
-	system.RegisterDeviceStorageRoutes(deviceStorage, ctx, services.DataPortability)
+	system.RegisterDeviceDataPortabilityRoutes(deviceStorage, ctx, services.DataPortability)
+	system.RegisterDeviceChatImportRoutes(deviceStorage, ctx, services.Chat)
 
 	bootstrapTicketRepo := desktoppetruntime.NewBootstrapTicketRepository(ctx.DB)
 

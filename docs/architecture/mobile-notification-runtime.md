@@ -1,6 +1,6 @@
-# Mobile Notification Runtime
+# Cross-Platform Notification Runtime
 
-This document describes the single mobile notification path for Android and iOS.
+This document describes the single notification path shared by Android, iOS, desktop Electron, and Web.
 
 ## Ownership
 
@@ -8,10 +8,10 @@ There is one notification state source: `backend/internal/notificationruntime`.
 
 - Local deployment: Core prefers the platform Native Bridge. No APNs/FCM/vendor server secret is required on the device.
 - Cloud deployment: Cloud Core owns remote delivery, durable outbox/retry and provider credentials.
-- Flutter owns device registration, preferences, foreground presence, deep links and reply routing.
+- Flutter, Electron, and Web own device registration, preferences, foreground presence, deep links and reply routing.
 - Android/iOS native code owns OS presentation.
 
-Do not reintroduce the legacy mobile `/api/notifications/settings|subscribe|unsubscribe|status|test` flow. Mobile code uses `/api/notifications/devices*`, `presence`, `live-activities/token` and `calls/*`. Browser-local notification preferences are isolated under `/api/browser-notifications/*`; they are not a mobile Push state source.
+All clients use `/api/notifications/devices*`, `presence`, `live-activities/token` and `calls/*`. Desktop and Web use the `desktop-sse` provider and persist the same message, execution, call, reminder, sound, and preview preferences as mobile devices. The retired `/api/browser-notifications/*` and desktop local reply-notification paths are migration sources only and are no longer runtime authorities.
 
 ## Cloud Core providers
 
@@ -99,6 +99,15 @@ Incoming calls:
 - incoming calls: CallStyle + answer/decline/full-screen intent;
 - execution: Android 16 ProgressStyle when available, compatible ongoing progress notification otherwise;
 - revision suppression prevents stale task updates from overwriting a newer state.
+
+## Desktop and Web presentation
+
+- Electron main process presents `scheduled_notification` through the operating-system notification API.
+- Web presents the same envelope through the browser Notification API.
+- Both acknowledge `displayed`, `display_failed`, and `clicked` against the canonical Notification Runtime.
+- Renderer route and focus changes update canonical presence, so the active conversation does not receive duplicate notifications while visible.
+- Owned chat publishes real conversation, character, content, and source metadata with runtime events; Notification Runtime does not depend on legacy `conversations` or `messages` tables for current chats.
+- Legacy browser preferences and desktop reply notification settings are migrated once into canonical device preferences.
 
 ## Device registration and privacy
 

@@ -65,6 +65,7 @@ type LocalModelToolCall struct {
 }
 
 type LocalModelUsage struct {
+	Reported         bool    `json:"reported"`
 	PromptTokens     int     `json:"promptTokens"`
 	CompletionTokens int     `json:"completionTokens"`
 	TotalTokens      int     `json:"totalTokens"`

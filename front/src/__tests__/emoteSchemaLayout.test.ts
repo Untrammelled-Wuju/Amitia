@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import SchemaUINode from "../components/extension/SchemaUINode.vue";
 import { validateDocument, type SchemaUIDocument } from "../components/extension/schema-ui-utils";
 
-const document = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins/emote/ui/schema/desktop-index.json"), "utf8")) as SchemaUIDocument;
+const document = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-code/emote/ui/schema/desktop-index.json"), "utf8")) as SchemaUIDocument;
 
 describe("表情包 Schema 页面交互", () => {
   it("空选中隐藏编辑操作，选中后可编辑并携带原表情触发操作", async () => {

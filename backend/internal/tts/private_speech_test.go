@@ -2,6 +2,7 @@ package tts
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -135,6 +136,41 @@ func TestPrivateSpeechUsesCoreActiveConfigAndSourceAcousticSnapshot(t *testing.T
 	profile = json.RawMessage(`{"voice":{"voiceType":"foreign-clone","voiceMode":"clone","customVoiceId":"foreign-clone"}}`)
 	if _, err := SynthesizePrivateRole(t.Context(), db, "core", profile, false, "设备复刻音色"); err == nil || calls.Load() != 1 {
 		t.Fatal("Source cloned voice borrowed Core provider slot")
+	}
+}
+
+func TestPrivateSpeechUsesExplicitOwnedCloneAndRejectsForeignClone(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var input struct {
+			ReqParams struct {
+				Speaker string `json:"speaker"`
+			} `json:"req_params"`
+		}
+		if r.URL.Path != "/api/v3/tts/unidirectional/sse" || json.NewDecoder(r.Body).Decode(&input) != nil || input.ReqParams.Speaker != "owned-clone" {
+			t.Error("explicit clone selection was not sent to the active TTS service")
+		}
+		payload, _ := json.Marshal(map[string]any{"code": 20000000, "data": base64.StdEncoding.EncodeToString([]byte("ID3owned-clone"))})
+		_, _ = w.Write([]byte("data: " + string(payload) + "\n\n"))
+	}))
+	defer server.Close()
+	db := privateSpeechTestDB(t, server.URL)
+	if err := db.Exec(`UPDATE tts_configs SET api_type='volcengine',base_url=? WHERE id=7`, server.URL).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO tts_cloned_voices(speaker_id,space_id,tts_config_id,name,status) VALUES('foreign-clone','other-core',7,'Other','ready')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SynthesizePrivateRole(t.Context(), db, "core", json.RawMessage(`{"voice":{"voiceMode":"preset"}}`), false, "复刻音色试听", PrivateSpeechOptions{SpeakerID: "foreign-clone"}); err == nil || calls.Load() != 0 {
+		t.Fatal("foreign clone reached provider")
+	}
+	if err := db.Exec(`INSERT INTO tts_cloned_voices(speaker_id,space_id,tts_config_id,name,status) VALUES('owned-clone','core',7,'Owned','ready')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	data, err := SynthesizePrivateRole(t.Context(), db, "core", json.RawMessage(`{"voice":{"voiceMode":"preset","voiceSpeed":2}}`), false, "复刻音色试听", PrivateSpeechOptions{SpeakerID: "owned-clone"})
+	if err != nil || string(data) != "ID3owned-clone" || calls.Load() != 1 {
+		t.Fatalf("owned clone preview failed: %v", err)
 	}
 }
 

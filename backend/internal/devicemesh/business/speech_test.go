@@ -200,6 +200,23 @@ func TestOwnedSpeechRequiresOwnerAcknowledgementAndDeduplicatesModelCalls(t *tes
 	}
 }
 
+func TestOwnedSpeechForwardsExplicitCloneSelection(t *testing.T) {
+	engine, _, _, base := engineHarness(t)
+	model := &testSpeechModel{testModel: base}
+	engine.model = model
+	request := speechTestRequest(t, engine, "clone-preview")
+	model.generateSpeech = func(_ context.Context, input SpeechInference) ([]byte, error) {
+		if input.SpeakerID != "clone-a" || input.VoiceType != "" || input.ResourceID != "" {
+			t.Fatalf("clone selection was not preserved: %+v", input)
+		}
+		return []byte("ID3clone-preview"), nil
+	}
+	response, err := engine.Speech(t.Context(), request, "复刻音色试听", SpeechOptions{SpeakerID: "clone-a"})
+	if err != nil || !response.Saved {
+		t.Fatalf("owned clone preview failed: %v %+v", err, response)
+	}
+}
+
 func TestOwnedSpeechDropsAudioOnOwnerRejectionAndDoesNotReplayUncertainCall(t *testing.T) {
 	engine, db, _, base := engineHarness(t)
 	model := &testSpeechModel{testModel: base}

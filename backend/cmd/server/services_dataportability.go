@@ -11,10 +11,12 @@ import (
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/reminder"
+	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/tts"
@@ -34,7 +36,7 @@ type dataPortabilityDeps struct {
 }
 
 func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability.Coordinator, error) {
-	schemaFinger := fmt.Sprintf("mig-%d-%s", len(migration.DefaultMigrations()), runtime.GOOS)
+	schemaFinger := fmt.Sprintf("migrations-v1-%d", len(migration.DefaultMigrations()))
 
 	staging := dataportability.NewStagingManager(deps.DataDir)
 	coord := dataportability.NewCoordinator(deps.DataDir, config.AppVersion(), runtime.GOOS, schemaFinger, staging)
@@ -60,6 +62,17 @@ func buildDataPortabilityCoordinator(deps dataPortabilityDeps) (*dataportability
 
 	log.Info("DataPortability Coordinator initialized", "contributors", len(contributors))
 	return coord, nil
+}
+
+func registerSafetyDataPortability(services *AppServices) error {
+	if services == nil || services.DB == nil || services.DataPortability == nil {
+		return nil
+	}
+	var coordinator *coordination.Service
+	if services.DeviceMesh != nil {
+		coordinator = services.DeviceMesh.Coordination
+	}
+	return services.DataPortability.RegisterContributors(safety.NewBackupContributor(services.DB, coordinator))
 }
 
 func registerReminderDataPortability(services *AppServices, dataDir string) error {

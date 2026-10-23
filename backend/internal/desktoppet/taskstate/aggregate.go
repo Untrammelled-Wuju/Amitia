@@ -33,12 +33,6 @@ type ProcessingSnapshot struct {
 	HasActiveChildren            bool
 	AllActionsSucceeded          bool
 	HasAtLeastOneActionSucceeded bool
-	PackageExists                bool
-	PackageReady                 bool
-	PackagePathValid             bool
-	ManifestValid                bool
-	HashValid                    bool
-	IncludedActionsMatch         bool
 	AllowPartialResult           bool
 	ActualProgress               int
 }
@@ -126,8 +120,7 @@ func AggregateProcessingTask(s ProcessingSnapshot) AggregateDecision {
 			Progress: s.ActualProgress,
 		}
 	}
-	if s.AllActionsSucceeded && s.PackageReady && s.PackagePathValid &&
-		s.ManifestValid && s.HashValid && s.IncludedActionsMatch {
+	if s.AllActionsSucceeded {
 		return AggregateDecision{
 			Status:   contracts.StatusSucceeded,
 			Stage:    contracts.StageCompleted,
@@ -135,9 +128,7 @@ func AggregateProcessingTask(s ProcessingSnapshot) AggregateDecision {
 			Reason:   contracts.ReasonProcessingTaskFinalizeSuccess,
 		}
 	}
-	if s.HasAtLeastOneActionSucceeded && s.PackageReady &&
-		s.PackagePathValid && s.ManifestValid && s.HashValid &&
-		s.AllowPartialResult {
+	if s.HasAtLeastOneActionSucceeded && s.AllowPartialResult {
 		return AggregateDecision{
 			Status:   contracts.StatusPartiallySucceeded,
 			Stage:    contracts.StageCompleted,
@@ -146,15 +137,13 @@ func AggregateProcessingTask(s ProcessingSnapshot) AggregateDecision {
 		}
 	}
 	d := AggregateDecision{
-		Status:   contracts.StatusFailed,
-		Stage:    contracts.StageFailed,
-		Progress: s.ActualProgress,
-		Reason:   contracts.ReasonProcessingTaskFinalizeFailure,
-	}
-	if !s.PackageReady || !s.PackagePathValid || !s.ManifestValid || !s.HashValid {
-		d.FailureStage = contracts.StagePackaging
-		d.ErrorCode = "desktop_pet_package_missing"
-		d.ErrorMessage = "package build failed or package artifacts invalid"
+		Status:       contracts.StatusFailed,
+		Stage:        contracts.StageFailed,
+		Progress:     s.ActualProgress,
+		Reason:       contracts.ReasonProcessingTaskFinalizeFailure,
+		FailureStage: contracts.StageProcessingFrames,
+		ErrorCode:    "desktop_pet_processing_incomplete",
+		ErrorMessage: "processing did not produce a complete usable action set",
 	}
 	return d
 }

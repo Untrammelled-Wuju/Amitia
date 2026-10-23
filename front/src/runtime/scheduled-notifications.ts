@@ -1,10 +1,11 @@
+import { clearLegacyReplyPreferences, legacyReplyPreferences, notificationRegistrationPayload } from "./device-notifications";
+
 export interface ScheduledBrowserEnvelope {
   requestId: string;
   payload: { title?: unknown; body?: unknown; conversationId?: unknown; characterId?: unknown; ownerId?: unknown; sound?: unknown };
 }
 
 export interface ScheduledBrowserDelivery {
-  allowed(): Promise<boolean>;
   acknowledge(state: 'displayed' | 'clicked' | 'display_failed'): Promise<void>;
   navigate(target: string): void;
 }
@@ -19,14 +20,19 @@ export async function registerScheduledDesktopEndpoint(deviceId: string, permitt
 
 async function registerScheduledEndpoint(platform: 'web' | 'desktop', deviceId: string, permitted: boolean, register: (input: Record<string, unknown>) => Promise<unknown>): Promise<void> {
   if (!deviceId) throw new Error('浏览器通知缺少设备身份');
-  let response = await register({ deviceId, platform, preferredProvider: 'desktop-sse', systemNotificationsEnabled: permitted });
+  const legacy = legacyReplyPreferences();
+  let response = await register(notificationRegistrationPayload(deviceId, platform, {
+    ...legacy,
+    ...(permitted ? {} : { pushEnabled: false, systemNotificationsEnabled: false }),
+  }));
   for (let index = 0; index < 2 && response && typeof response === 'object' && 'data' in response; index++) response = (response as { data: unknown }).data;
   const endpoint = response as { id?: string; deviceId?: string; platform?: string } | null;
   if (!endpoint?.id || endpoint.deviceId !== deviceId || endpoint.platform !== platform) throw new Error('通知通道未确认保存');
+  if (Object.keys(legacy).length > 0) clearLegacyReplyPreferences();
 }
 
 export async function deliverScheduledBrowserNotification(envelope: ScheduledBrowserEnvelope, delivery: ScheduledBrowserDelivery): Promise<void> {
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !await delivery.allowed()) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
     await delivery.acknowledge('display_failed');
     return;
   }

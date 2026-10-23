@@ -386,7 +386,6 @@ import {
 import { apiClient, useApi } from "../../composables/useApi";
 import type { TtsConfig, VoicePreset } from "@/types";
 import { useCoreConfigurationAccess, coreConfigurationRequestConfig } from "../../composables/useCoreConfigurationAccess";
-import { useOwnedSpeech } from "../../composables/useOwnedSpeech";
 
 const { get, post, put, del } = useApi();
 const access = useCoreConfigurationAccess();
@@ -406,7 +405,6 @@ const saving = ref(false);
 const testingId = ref<number | null>(null);
 const previewText = ref("测试");
 const previewAudio = ref("");
-const speech = useOwnedSpeech(() => { previewAudio.value = ""; });
 const previewLoading = ref(false);
 
 const emotions = [
@@ -585,11 +583,9 @@ async function doPreview(voiceId: number) {
   previewLoading.value = true;
   previewAudio.value = "";
   try {
-    const ownedUrl = await speech.synthesizeIfBound(previewText.value || "测试");
-    const res = ownedUrl ? { audioUrl: ownedUrl } : await post<any>("/api/tts/synthesize", {
-      voiceId,
+    const res = await post<any>(`/api/tts/configs/${voiceId}/preview`, {
       text: previewText.value || "测试",
-    });
+    }, coreConfigurationRequestConfig(collectionContext.value));
     previewAudio.value = (res as any)?.audioUrl || "";
     if (!previewAudio.value) ElMessage.warning("未能获取音频");
   } catch (err: any) {
@@ -670,11 +666,9 @@ async function submitClone() {
 async function previewClone(speakerId: string) {
   previewCloneId.value = speakerId;
   try {
-    const ownedUrl = await speech.synthesizeIfBound("测试");
-    const res = ownedUrl ? { audioUrl: ownedUrl } : await post<any>("/api/tts/synthesize", {
-      speakerId,
+    const res = await post<any>(`/api/tts/voice-clones/${encodeURIComponent(speakerId)}/preview`, {
       text: "测试",
-    });
+    }, coreConfigurationRequestConfig(collectionContext.value));
     previewAudio.value = (res as any)?.audioUrl || "";
     if (!previewAudio.value) ElMessage.warning("未能获取音频");
   } catch (err: any) {

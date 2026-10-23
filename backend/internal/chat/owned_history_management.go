@@ -12,6 +12,8 @@ import (
 )
 
 type ManagedHistorySelection struct {
+	EraseContent          bool
+	KeepConversations     bool
 	ConversationRevisions map[string]int64
 	MessageRevisions      map[string]int64
 }
@@ -42,6 +44,13 @@ func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Serv
 			if err := s.removeAttachmentReferences(tx, attachments); err != nil {
 				return err
 			}
+			if selection.EraseContent {
+				message.Content, message.ReasoningContent, message.AltText, message.AudioUrl, message.ImageUrl, message.VideoUrl, message.OriginalAsset, message.FallbackAsset, message.CitationSnapshotJSON = "", "", "", "", "", "", "", "", "[]"
+				message.ReplyToExcerpt = nil
+				if err := tx.Model(&Message{}).Where("id=? AND revision=? AND character_id=?", id, revision, roleID).Updates(map[string]any{"content": "", "reasoning_content": "", "alt_text": "", "audio_url": "", "image_url": "", "video_url": "", "original_asset_reference": "", "fallback_asset_reference": "", "citation_snapshot_json": "[]", "reply_to_excerpt": nil}).Error; err != nil {
+					return err
+				}
+			}
 			result := tx.Model(&Message{}).Where("id=? AND revision=? AND character_id=? AND deleted_at IS NULL", id, revision, roleID).Updates(map[string]any{"deleted_at": now, "updated_at": now, "revision": revision + 1})
 			if result.Error != nil {
 				return result.Error
@@ -67,7 +76,11 @@ func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Serv
 			}
 			changes := map[string]any{"message_count": remaining, "updated_at": now, "revision": revision + 1}
 			operation := syncapi.OpUpdate
-			if remaining == 0 {
+			if remaining == 0 && !selection.KeepConversations {
+				if selection.EraseContent {
+					changes["title"] = ""
+					changes["peer_id"] = ""
+				}
 				changes["deleted_at"] = now
 				operation = syncapi.OpDelete
 				if err := tx.Where("conversation_id=?", id).Delete(&ConversationSummary{}).Error; err != nil {
@@ -83,6 +96,11 @@ func DeleteOwnedManagedHistory(ctx context.Context, db *gorm.DB, configured Serv
 			}
 			if err := s.recordConversationChangeTx(tx, &conversation, operation, revision+1, legacySpaceID); err != nil {
 				return err
+			}
+			if selection.EraseContent {
+				if err := tx.Where("conversation_id=?", id).Delete(&ConversationSummary{}).Error; err != nil {
+					return err
+				}
 			}
 			if err := pipelinecheckpoint.New(tx).ResetConversation(id); err != nil {
 				return err

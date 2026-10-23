@@ -616,13 +616,19 @@ class DeviceOwnedChatService {
       }
     }
     if (captured != revision) throw StateError('服务状态已变化，请重新加载后再操作');
-    if (resource == null || resource['deleted'] == true)
+    if (resource == null || resource['deleted'] == true) {
       throw StateError('该记录不在当前数据来源中，请在原设备管理历史数据');
+    }
+    if (resource['readOnly'] == true || resource['origin'] == 'legacy') {
+      throw StateError('旧系统记录只读，请在当前数据所有者中创建新记录');
+    }
     final resourceId = resource['id'].toString();
-    if (expectedOwnerId != null && resource['ownerId'] != expectedOwnerId)
+    if (expectedOwnerId != null && resource['ownerId'] != expectedOwnerId) {
       throw StateError('记录所属设备已变化，请在原设备管理历史数据');
-    if (resource['executionScope'] is! Map)
+    }
+    if (resource['executionScope'] is! Map) {
       throw StateError('记录缺少数据来源版本，请重新加载');
+    }
     if (expectedScope != null &&
         _authorityStamp(expectedScope) !=
             _authorityStamp(resource['executionScope'] as Map)) {
@@ -999,19 +1005,14 @@ class DeviceOwnedChatService {
           ),
           'editable':
               name == 'snapshot' &&
-              row['ownerId'] == result['executionScope']['resourceOwnerId'],
+              row['ownerId'] == result['executionScope']['resourceOwnerId'] &&
+              row['origin'] != 'legacy' &&
+              row['readOnly'] != true,
         };
         _summaryViews[conversationId] = value;
         if (_summaryViews.length > 64)
           _summaryViews.remove(_summaryViews.keys.first);
         return Map<String, dynamic>.from(jsonDecode(jsonEncode(value)) as Map);
-      }
-      if (snapshot['legacySummary'] is Map) {
-        return {
-          ...Map<String, dynamic>.from(snapshot['legacySummary'] as Map),
-          'sourceOwnerId': snapshot['ownerId'],
-          'editable': false,
-        };
       }
     }
     return null;
@@ -1175,10 +1176,10 @@ class DeviceOwnedChatService {
             result?['executionScope']['resourceOwnerId'] ||
         result?['status']['roleId'] !=
             memoryStorageRole(result!['executionScope'] as Map, 'memory') ||
-        result?['status']['layers'] is! List) {
+        result['status']['layers'] is! List) {
       throw StateError('服务状态已变化，索引状态已丢弃');
     }
-    return result!;
+    return result;
   }
 
   List<MessageDto> messages(Map<String, dynamic> query) {
@@ -1189,21 +1190,21 @@ class DeviceOwnedChatService {
       query['snapshot'],
     ].whereType<Map>()) {
       final owner = (snapshot['ownerId'] ?? '').toString();
-      final rows = <Map>[
-        ...(snapshot['legacyMessages'] as List? ?? []).whereType<Map>().map(
-          (row) => {...row, 'sourceRevision': null},
-        ),
-        ...(snapshot['resources'] as List? ?? [])
-            .whereType<Map>()
-            .where((row) => row['kind'] == 'message')
-            .where((row) => row['body'] is Map)
-            .map(
-              (row) => {
-                ...row['body'] as Map,
-                'sourceRevision': row['revision'],
-              },
-            ),
-      ];
+      final rows = (snapshot['resources'] as List? ?? [])
+          .whereType<Map>()
+          .where((row) => row['kind'] == 'message')
+          .where((row) => row['body'] is Map)
+          .map(
+            (row) => {
+              ...row['body'] as Map,
+              'origin': row['origin'],
+              'readOnly': row['readOnly'] == true || row['origin'] == 'legacy',
+              'sourceRevision':
+                  row['readOnly'] == true || row['origin'] == 'legacy'
+                  ? null
+                  : row['revision'],
+            },
+          );
       for (final row in rows) {
         final file = ownedFileMetadata(row['attachments']);
         final id = (row['id'] ?? '').toString();
@@ -1355,14 +1356,11 @@ class DeviceOwnedChatService {
         result['historicalSnapshot'],
         result['snapshot'],
       ].whereType<Map>()) {
-        final values = <Map>[
-          ...(snapshot['legacyConversations'] as List? ?? []).whereType<Map>(),
-          ...(snapshot['resources'] as List? ?? [])
-              .whereType<Map>()
-              .where((row) => row['kind'] == 'conversation')
-              .map((row) => row['body'])
-              .whereType<Map>(),
-        ];
+        final values = (snapshot['resources'] as List? ?? [])
+            .whereType<Map>()
+            .where((row) => row['kind'] == 'conversation')
+            .map((row) => row['body'])
+            .whereType<Map>();
         for (final row in values) {
           final value = ConversationDto.fromJson(
             ownedConversationRow(row, snapshot['ownerId'].toString()),

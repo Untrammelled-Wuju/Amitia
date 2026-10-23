@@ -17,14 +17,14 @@ const (
 )
 
 type privacyMessageRow struct {
-	ID                 string `gorm:"column:id"`
-	ConversationID     string `gorm:"column:conversation_id"`
-	Role               string `gorm:"column:role"`
-	Content            string `gorm:"column:content"`
-	CreatedAt          string `gorm:"column:created_at"`
-	SafetyLevel        string `gorm:"column:safety_level"`
-	MessageSource      string `gorm:"column:message_source"`
-	ConversationSource string `gorm:"column:conversation_source"`
+	ID                 string
+	ConversationID     string
+	Role               string
+	Content            string
+	CreatedAt          string
+	SafetyLevel        string
+	MessageSource      string
+	ConversationSource string
 }
 
 type privacyMaskTarget struct {
@@ -45,16 +45,7 @@ var privacySensitivePatterns = []struct {
 	{Pattern: "secret", Severity: "high"},
 }
 
-func (s *service) PrivacyScan(scope []string) map[string]interface{} {
-	for _, item := range normalizePrivacyScopes(scope) {
-		if item == privacyScopeMemories {
-			return map[string]interface{}{"status": "failed", "error": "记忆隐私扫描必须通过统一记忆入口"}
-		}
-	}
-	return s.privacyScan(scope, business.MemoryPrivacySnapshot{})
-}
-
-func (s *service) privacyScan(scope []string, memories business.MemoryPrivacySnapshot) map[string]interface{} {
+func (s *service) privacyScan(scope []string, memories business.MemoryPrivacySnapshot, messages []privacyMessageRow) map[string]interface{} {
 	normalizedScope := normalizePrivacyScopes(scope)
 	scanID := fmt.Sprintf("scan_%d", time.Now().UnixNano())
 	findings := make([]interface{}, 0)
@@ -62,19 +53,14 @@ func (s *service) privacyScan(scope []string, memories business.MemoryPrivacySna
 
 	for _, item := range normalizedScope {
 		switch item {
-		case privacyScopeMessages:
-			rows := s.scanPrivacyMessages(false)
-			totalScanned += len(rows)
-			for _, row := range rows {
-				if finding := privacyMessageFinding(row, privacyScopeMessages); finding != nil {
-					findings = append(findings, finding)
+		case privacyScopeMessages, privacyScopeImportItems:
+			for _, row := range messages {
+				imported := row.MessageSource == "import" || row.ConversationSource == "import"
+				if (item == privacyScopeImportItems) != imported {
+					continue
 				}
-			}
-		case privacyScopeImportItems:
-			rows := s.scanPrivacyMessages(true)
-			totalScanned += len(rows)
-			for _, row := range rows {
-				if finding := privacyMessageFinding(row, privacyScopeImportItems); finding != nil {
+				totalScanned++
+				if finding := privacyMessageFinding(row, item); finding != nil {
 					findings = append(findings, finding)
 				}
 			}
@@ -100,6 +86,7 @@ func (s *service) privacyScan(scope []string, memories business.MemoryPrivacySna
 		"scanId":        scanID,
 		"id":            scanID,
 		"status":        "completed",
+		"complete":      true,
 		"createdAt":     createdAt,
 		"scan_time":     createdAt,
 		"scope":         normalizedScope,
@@ -119,20 +106,6 @@ func (s *service) privacyScan(scope []string, memories business.MemoryPrivacySna
 	}
 	s.privacyMu.Unlock()
 	return result
-}
-
-func (s *service) scanPrivacyMessages(imported bool) []privacyMessageRow {
-	var rows []privacyMessageRow
-	query := s.db.Table("messages AS m").
-		Select("m.id, m.conversation_id, m.role, m.content, m.created_at, m.safety_level, COALESCE(m.source, '') AS message_source, COALESCE(c.source, '') AS conversation_source").
-		Joins("LEFT JOIN conversations AS c ON c.id = m.conversation_id")
-	if imported {
-		query = query.Where("COALESCE(m.source, '') = ? OR COALESCE(c.source, '') = ?", "import", "import")
-	} else {
-		query = query.Where("COALESCE(m.source, '') <> ? AND COALESCE(c.source, '') <> ?", "import", "import")
-	}
-	query.Order("m.created_at DESC").Limit(1000).Scan(&rows)
-	return rows
 }
 
 func privacyMessageFinding(row privacyMessageRow, sourceTable string) map[string]interface{} {
@@ -235,18 +208,6 @@ func (s *service) PrivacyScanResults() map[string]interface{} {
 	}
 }
 
-func (s *service) PrivacyMask() map[string]interface{} {
-	var count int64
-	s.db.Table("messages").Where("safety_level = ?", "unsafe").Count(&count)
-	if count > 0 {
-		s.db.Table("messages").Where("safety_level = ?", "unsafe").Updates(map[string]interface{}{
-			"content":      "[已脱敏]",
-			"safety_level": "masked",
-		})
-	}
-	return map[string]interface{}{"masked": true, "maskedCount": count}
-}
-
 func (s *service) GetPrivacyScanResult(id string) map[string]interface{} {
 	s.privacyMu.RLock()
 	defer s.privacyMu.RUnlock()
@@ -318,6 +279,35 @@ func (s *service) markPrivacyFindingsMasked(targets []privacyMaskTarget) {
 				finding["snippet"] = "[已脱敏]"
 				finding["preview"] = "[已脱敏]"
 			}
+		}
+	}
+}
+
+func (s *service) finalizePrivacyScan(result map[string]interface{}) {
+	s.privacyMu.Lock()
+	defer s.privacyMu.Unlock()
+	keep := map[string]bool{}
+	for index, scan := range s.privacyScans {
+		if scan["scanId"] == result["scanId"] {
+			s.privacyScans[index] = clonePrivacyMap(result)
+			scan = s.privacyScans[index]
+		}
+		findings, _ := scan["findings"].([]interface{})
+		for _, raw := range findings {
+			if finding, ok := raw.(map[string]interface{}); ok {
+				id, _ := finding["id"].(string)
+				keep[id] = true
+			}
+		}
+	}
+	for id := range s.privacyMessages {
+		if !keep[id] {
+			delete(s.privacyMessages, id)
+		}
+	}
+	for id := range s.privacyMemoryEntries {
+		if !keep[id] {
+			delete(s.privacyMemoryEntries, id)
 		}
 	}
 }

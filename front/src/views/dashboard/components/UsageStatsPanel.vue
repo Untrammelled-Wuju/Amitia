@@ -48,7 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
         <div>
           <div class="stat-label">模型调用</div>
-          <div class="stat-value">{{ todayCalls }}</div>
+          <div class="stat-value">{{ todayCalls ?? "不可用" }}</div>
         </div>
       </div>
       <div class="stat-item green">
@@ -89,13 +89,13 @@ defineProps<{
   totalConvs: number;
   totalMemories: number;
   totalChars: number;
-  todayCalls: number;
-  todayTokens: number;
+  todayCalls: number | null;
+  todayTokens: number | null;
   maxTodayStat: number;
   feedbackTotal: number;
   feedbackByType: Record<string, number>;
   barPercent: (val: number) => string;
-  formatTokens: (n: number) => string;
+  formatTokens: (n: number | null) => string;
 }>();
 </script>
 

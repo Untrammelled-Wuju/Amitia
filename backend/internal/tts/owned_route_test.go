@@ -11,8 +11,8 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func TestBoundAdministratorCannotBypassOwnedSpeechThroughLegacyRoutes(t *testing.T) {
-	for _, path := range []string{"/api/tts/synthesize", "/api/tts/preview", "/api/tts/play/owned-message"} {
+func TestLegacyUnscopedSpeechRoutesAreRemoved(t *testing.T) {
+	for _, path := range []string{"/api/tts/synthesize", "/api/tts/play/owned-message"} {
 		router := gin.New()
 		group := router.Group("/api", func(c *gin.Context) {
 			c.Set("actorContext", &auth.ActorContext{PrincipalType: auth.PrincipalTrustedDevice, Permissions: auth.OwnerDevicePermissions()})
@@ -25,8 +25,8 @@ func TestBoundAdministratorCannotBypassOwnedSpeechThroughLegacyRoutes(t *testing
 		}
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, httptest.NewRequest(method, path, strings.NewReader(`{"text":"不应调用模型"}`)))
-		if recorder.Code != 409 || !strings.Contains(recorder.Body.String(), "mesh.speech_scope_required") {
-			t.Fatalf("legacy speech bypass accepted: %s %d", path, recorder.Code)
+		if recorder.Code != 404 {
+			t.Fatalf("legacy speech route state mismatch: %s %d", path, recorder.Code)
 		}
 	}
 }

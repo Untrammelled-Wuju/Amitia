@@ -63,13 +63,6 @@ type Repository interface {
 	RefreshProcessingLeaseOwned(taskID, executionID, leaseExpiresAt, now string) (bool, error)
 	RecoverExpiredProcessingTask(taskID, expectedExecutionID, expectedLeaseExpiresAt, now string) (bool, error)
 
-	CreatePackage(pkg *Package) error
-	GetPackage(id string) (*Package, error)
-	UpdatePackageStatus(id string, updates map[string]interface{}) error
-	ListPackagesBySpace(spaceID string, page, pageSize int) ([]Package, int64, error)
-	ListPackagesByGenerationTask(generationTaskID string) ([]Package, error)
-	GetPackageByProcessingTaskID(processingTaskID string) (*Package, error)
-
 	GetProcessingTaskRowVersion(taskID string) (int64, error)
 	ResetProcessingActionToPending(actionID string) error
 
@@ -589,64 +582,6 @@ func (r *repository) UpdateProcessedFrameNoTx(frameID string, updates map[string
 	return r.db.Model(&ProcessedFrame{}).Where("id = ?", frameID).Updates(updates).Error
 }
 
-func (r *repository) CreatePackage(pkg *Package) error {
-	if desktoppet.LegacyPackageWritesDisabled {
-		return fmt.Errorf("%s: 旧版 Package 写入已禁用，请使用新版 Release API", desktoppet.ErrCodeLegacyPackageWriteDisabled)
-	}
-	return r.db.Create(pkg).Error
-}
-
-func (r *repository) GetPackage(id string) (*Package, error) {
-	var pkg Package
-	err := r.db.Where("id = ?", id).First(&pkg).Error
-	if err != nil {
-		return nil, err
-	}
-	return &pkg, nil
-}
-
-func (r *repository) UpdatePackageStatus(id string, updates map[string]interface{}) error {
-	if desktoppet.LegacyPackageWritesDisabled {
-		return fmt.Errorf("%s: 旧版 Package 写入已禁用，请使用新版 Release API", desktoppet.ErrCodeLegacyPackageWriteDisabled)
-	}
-	return r.db.Model(&Package{}).Where("id = ?", id).Updates(updates).Error
-}
-
-func (r *repository) ListPackagesBySpace(spaceID string, page, pageSize int) ([]Package, int64, error) {
-	var packages []Package
-	var total int64
-	q := r.db.Model(&Package{}).Where("space_id = ?", spaceID)
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	offset := (page - 1) * pageSize
-	err := q.Order("created_at DESC").
-		Offset(offset).
-		Limit(pageSize).
-		Find(&packages).Error
-	if packages == nil {
-		packages = []Package{}
-	}
-	return packages, total, err
-}
-
-func (r *repository) ListPackagesByGenerationTask(generationTaskID string) ([]Package, error) {
-	var packages []Package
-	err := r.db.Where("generation_task_id = ?", generationTaskID).
-		Order("version DESC").
-		Find(&packages).Error
-	if packages == nil {
-		packages = []Package{}
-	}
-	return packages, err
-}
-
 func (r *repository) GetGenerationTask(generationTaskID string) (*desktoppet.GenerationTask, error) {
 	var task desktoppet.GenerationTask
 	err := r.db.Where("id = ?", generationTaskID).First(&task).Error
@@ -710,17 +645,6 @@ func (r *repository) ResetProcessingActionToPending(actionID string) error {
 			"updated_at":   now,
 			"row_version":  gorm.Expr("row_version + 1"),
 		}).Error
-}
-
-func (r *repository) GetPackageByProcessingTaskID(processingTaskID string) (*Package, error) {
-	var pkg Package
-	err := r.db.Where("processing_task_id = ?", processingTaskID).
-		Order("created_at DESC").
-		First(&pkg).Error
-	if err != nil {
-		return nil, err
-	}
-	return &pkg, nil
 }
 
 func (r *repository) CreateProcessingRevision(tx *gorm.DB, rev *ProcessingRevision) error {

@@ -123,46 +123,6 @@ func (r *SQLiteRepository) ListPendingPublishJournals() ([]*release.ReleasePubli
 	return journals, nil
 }
 
-func (r *SQLiteRepository) CreateLegacyPackageMapping(mapping *release.LegacyPackageMapping) error {
-	return r.db.Create(mapping).Error
-}
-
-func (r *SQLiteRepository) GetLegacyPackageMapping(legacyPackageID string) (*release.LegacyPackageMapping, error) {
-	var m release.LegacyPackageMapping
-	if err := r.db.First(&m, "legacy_package_id = ?", legacyPackageID).Error; err != nil {
-		return nil, err
-	}
-	return &m, nil
-}
-
-func (r *SQLiteRepository) UpdateLegacyPackageMapping(mapping *release.LegacyPackageMapping) error {
-	return r.db.Save(mapping).Error
-}
-
-func (r *SQLiteRepository) ListPendingLegacyMappings() ([]*release.LegacyPackageMapping, error) {
-	var mappings []*release.LegacyPackageMapping
-	if err := r.db.Where("migration_status = ?", release.LegacyMigrationStatusPending).Find(&mappings).Error; err != nil {
-		return nil, err
-	}
-	return mappings, nil
-}
-
-func (r *SQLiteRepository) CreateLegacyMigrationOperation(op *release.LegacyPackageMigrationOperation) error {
-	return r.db.Create(op).Error
-}
-
-func (r *SQLiteRepository) GetLegacyMigrationOperation(id string) (*release.LegacyPackageMigrationOperation, error) {
-	var op release.LegacyPackageMigrationOperation
-	if err := r.db.First(&op, "id = ?", id).Error; err != nil {
-		return nil, err
-	}
-	return &op, nil
-}
-
-func (r *SQLiteRepository) UpdateLegacyMigrationOperation(op *release.LegacyPackageMigrationOperation) error {
-	return r.db.Save(op).Error
-}
-
 func (r *SQLiteRepository) GetPetIdentity(petID string) (*release.PetIdentityData, error) {
 	var record petIdentityRecord
 	if err := r.db.First(&record, "id = ?", petID).Error; err != nil {

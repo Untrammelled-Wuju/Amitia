@@ -50,9 +50,20 @@ nsis:
   shortcutName: Amitia
   runAfterFinish: true
   deleteAppDataOnUninstall: false
+linux:
+  icon: ../Logo/amitia-character-light-black-1024.png
+  category: Utility
+  executableName: amitia
+  syncDesktopName: true
+  desktop:
+    entry:
+      Name: Amitia
+      Comment: Amitia desktop AI companion
+      StartupWMClass: Amitia
+      X-GNOME-UsesNotifications: "true"
 
 releaseInfo:
-  releaseName: Amitia 26.2.0-beta.14
+  releaseName: Amitia 26.2.0-beta.15
   releaseNotesFile: release-notes.md
 
 publish:

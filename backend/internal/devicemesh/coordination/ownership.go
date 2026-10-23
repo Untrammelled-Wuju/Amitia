@@ -43,6 +43,8 @@ type Resource struct {
 	Revision  int64           `json:"revision"`
 	Deleted   bool            `json:"deleted"`
 	UpdatedAt string          `json:"updatedAt,omitempty"`
+	Origin    string          `json:"origin,omitempty"`
+	ReadOnly  bool            `json:"readOnly,omitempty"`
 	Body      json.RawMessage `json:"body"`
 }
 
@@ -94,7 +96,7 @@ func payloadHash(payload []byte) string {
 
 func validKind(kind string) bool {
 	switch kind {
-	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "checkpoint", "tool-result", "project", "worldbook", RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:
+	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "emotion", "checkpoint", "tool-result", "project", "worldbook", RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:
 		return true
 	default:
 		return false
@@ -187,7 +189,10 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	}
 	ack := Acknowledgement{RequestID: scope.RequestID, OwnerID: s.ownerID, Versions: make(map[string]int64)}
 	changedMemories := []string{}
-	type changedMessage struct{ conversation, request string }
+	type changedMessage struct {
+		conversation, request, id string
+		deleted                   bool
+	}
 	changedMessages := []changedMessage{}
 	deletedConversations := []string{}
 	keepConversationMemories := map[string]bool{}
@@ -221,6 +226,15 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		}
 		if storedDeleted && !mutation.Deleted && (mutation.Kind == "memory" || mutation.Kind == "message" || mutation.Kind == "conversation" || mutation.Kind == "checkpoint") {
 			return Acknowledgement{}, ErrResourceVersion
+		}
+		if !mutation.Deleted && (mutation.Kind == "graph" || mutation.Kind == "vector") {
+			var purged int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_owned_resources journal, json_each(json_extract(CAST(journal.body AS TEXT),'$.references')) ref WHERE journal.owner_id=? AND journal.kind='checkpoint' AND journal.resource_id LIKE 'privacy-deletion/%' AND journal.deleted=0 AND json_extract(ref.value,'$.kind')=? AND json_extract(ref.value,'$.id')=? AND COALESCE(json_extract(ref.value,'$.legacy'),0)=0`, s.ownerID, mutation.Kind, mutation.ID).Scan(&purged); err != nil {
+				return Acknowledgement{}, err
+			}
+			if purged > 0 {
+				return Acknowledgement{}, ErrResourceVersion
+			}
 		}
 		if mutation.Kind == "conversation" && mutation.Deleted {
 			deletedConversations = append(deletedConversations, mutation.ID)
@@ -261,7 +275,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 				return Acknowledgement{}, ErrWrongOwner
 			}
 			if mutation.Deleted || previous.Content != next.Content {
-				changedMessages = append(changedMessages, changedMessage{previous.ConversationID, previous.RequestID})
+				changedMessages = append(changedMessages, changedMessage{previous.ConversationID, previous.RequestID, mutation.ID, mutation.Deleted})
 			}
 		}
 		if !mutation.Deleted && (mutation.Kind == "vector" || mutation.Kind == "graph" || mutation.SourceID != "") {
@@ -337,6 +351,19 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		}
 	}
 	for _, changed := range changedMessages {
+		if changed.deleted {
+			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET body=json_remove(CAST(body AS TEXT),'$.quote'),revision=revision+1 WHERE owner_id=? AND kind='message' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.quote.messageId')=?`, s.ownerID, changed.id); err != nil {
+				return Acknowledgement{}, err
+			}
+			if changed.request != "" {
+				if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind IN ('checkpoint','tool-result') AND deleted=0 AND (resource_id IN (?,?) OR json_extract(CAST(body AS TEXT),'$.executionScope.requestId')=?)`, s.ownerID, scope.RoleID, "turn/"+changed.request, "memory/"+changed.request, changed.request); err != nil {
+					return Acknowledgement{}, err
+				}
+				if _, err := tx.ExecContext(ctx, `DELETE FROM kernel_device_owned_outbox WHERE owner_id=? AND (request_id=? OR json_extract(CAST(payload AS TEXT),'$.scope.requestId') IN (?,?))`, s.ownerID, changed.request, changed.request, changed.request+"|memory"); err != nil {
+					return Acknowledgement{}, err
+				}
+			}
+		}
 		if changed.conversation == "" {
 			continue
 		}
@@ -414,9 +441,11 @@ func (s *OwnershipStore) List(ctx context.Context, kind, role string, includeDel
 	resources := make([]Resource, 0)
 	for rows.Next() {
 		resource := Resource{OwnerID: s.ownerID, Kind: kind, RoleID: role}
-		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body, &resource.UpdatedAt); err != nil {
+		var body []byte
+		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &body, &resource.UpdatedAt); err != nil {
 			return nil, err
 		}
+		resource.Body = json.RawMessage(body)
 		resources = append(resources, resource)
 	}
 	return resources, rows.Err()
@@ -509,6 +538,15 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			statement += ` AND resource_id=?`
 			arguments = append(arguments, query.ResourceID)
 		}
+	case "emotion":
+		if query.ConversationID != "" {
+			statement += ` AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`
+			arguments = append(arguments, query.ConversationID)
+		}
+		if query.ResourceID != "" {
+			statement += ` AND resource_id=?`
+			arguments = append(arguments, query.ResourceID)
+		}
 	case "conversation":
 		if search != "" {
 			statement += OwnedConversationSearchPredicate
@@ -561,9 +599,11 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 	for rows.Next() {
 		resource := Resource{OwnerID: s.ownerID, Kind: kind, RoleID: role}
 		var ordered string
-		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &resource.Body, &resource.RoleID, &ordered); err != nil {
+		var body []byte
+		if err := rows.Scan(&resource.ID, &resource.SourceID, &resource.Revision, &resource.Deleted, &body, &resource.RoleID, &ordered); err != nil {
 			return nil, "", err
 		}
+		resource.Body = json.RawMessage(body)
 		resource.UpdatedAt = ordered
 		if kind == "message" {
 			encoded, err := json.Marshal(resource)

@@ -27,6 +27,8 @@ type Runtime struct {
 	liveActivityStarts map[string]time.Time
 	catchUpAttempts    map[string]time.Time
 	cancelObserver     func()
+	managedManagers    []*conversationstream.Manager
+	managedCancels     []func()
 	ctx                context.Context
 	cancel             context.CancelFunc
 }
@@ -57,6 +59,8 @@ func NewRuntime(db *gorm.DB, bridge nativebridge.Bridge, preferNative bool) *Run
 		active:             map[string]*activeRun{},
 		liveActivityStarts: map[string]time.Time{},
 		catchUpAttempts:    map[string]time.Time{},
+		managedManagers:    []*conversationstream.Manager{},
+		managedCancels:     []func(){},
 	}
 }
 
@@ -83,6 +87,24 @@ func (r *Runtime) Capabilities() map[string]any {
 	}
 }
 
+func (r *Runtime) RegisterManager(manager *conversationstream.Manager) {
+	if r == nil || manager == nil {
+		return
+	}
+	r.mu.Lock()
+	for _, current := range r.managedManagers {
+		if current == manager {
+			r.mu.Unlock()
+			return
+		}
+	}
+	r.managedManagers = append(r.managedManagers, manager)
+	if r.ctx != nil {
+		r.managedCancels = append(r.managedCancels, manager.RegisterObserver("notification-runtime", r))
+	}
+	r.mu.Unlock()
+}
+
 func (r *Runtime) Start(parent context.Context) {
 	if r == nil {
 		return
@@ -94,6 +116,9 @@ func (r *Runtime) Start(parent context.Context) {
 	}
 	r.ctx, r.cancel = context.WithCancel(parent)
 	r.cancelObserver = conversationstream.DefaultManager().RegisterObserver("notification-runtime", r)
+	for _, manager := range r.managedManagers {
+		r.managedCancels = append(r.managedCancels, manager.RegisterObserver("notification-runtime", r))
+	}
 	ctx := r.ctx
 	r.mu.Unlock()
 	go r.worker(ctx)
@@ -112,9 +137,11 @@ func (r *Runtime) Stop() {
 	r.mu.Lock()
 	cancel := r.cancel
 	cancelObserver := r.cancelObserver
+	managedCancels := append([]func(){}, r.managedCancels...)
 	r.ctx = nil
 	r.cancel = nil
 	r.cancelObserver = nil
+	r.managedCancels = []func(){}
 	for _, run := range r.active {
 		if run.timer != nil {
 			run.timer.Stop()
@@ -126,6 +153,11 @@ func (r *Runtime) Stop() {
 	r.mu.Unlock()
 	if cancelObserver != nil {
 		cancelObserver()
+	}
+	for _, stop := range managedCancels {
+		if stop != nil {
+			stop()
+		}
 	}
 	if cancel != nil {
 		cancel()
@@ -363,7 +395,7 @@ func (r *Runtime) handleEvent(ctx context.Context, event conversationstream.Agen
 	if run == nil {
 		run = &activeRun{state: ExecutionState{
 			RunID:          runID,
-			ConversationID: event.ConversationID,
+			ConversationID: fallback(meta.conversationID, event.ConversationID),
 			CharacterID:    meta.characterID,
 			AgentID:        fallback(event.AgentID, "Amitia"),
 			Title:          fallback(meta.conversationTitle, "Amitia 正在执行"),
@@ -558,6 +590,7 @@ func updateExecutionState(state *ExecutionState, event conversationstream.AgentU
 
 type eventMetadata struct {
 	spaceID           string
+	conversationID    string
 	characterID       string
 	characterName     string
 	conversationTitle string
@@ -565,18 +598,46 @@ type eventMetadata struct {
 }
 
 func (r *Runtime) resolveMetadata(ctx context.Context, event conversationstream.AgentUIEvent) eventMetadata {
-	var meta eventMetadata
+	meta := eventMetadata{
+		spaceID:           payloadString(event.Payload, "spaceId"),
+		conversationID:    payloadString(event.Payload, "conversationId"),
+		characterID:       payloadString(event.Payload, "characterId"),
+		characterName:     payloadString(event.Payload, "characterName"),
+		conversationTitle: payloadString(event.Payload, "conversationTitle"),
+		messageContent:    payloadString(event.Payload, "content"),
+	}
+	if meta.conversationID == "" {
+		meta.conversationID = event.ConversationID
+	}
 	if r.db == nil {
 		return meta
 	}
-	_ = r.db.WithContext(ctx).Table("conversations").Select("space_id", "title").Where("id = ?", event.ConversationID).Row().Scan(&meta.spaceID, &meta.conversationTitle)
-	if event.MessageID != "" {
-		_ = r.db.WithContext(ctx).Table("messages").Select("character_id", "content").Where("id = ?", event.MessageID).Row().Scan(&meta.characterID, &meta.messageContent)
+	if meta.spaceID == "" || meta.conversationTitle == "" {
+		var storedSpaceID, storedTitle string
+		if err := r.db.WithContext(ctx).Table("conversations").Select("space_id", "title").Where("id = ?", meta.conversationID).Row().Scan(&storedSpaceID, &storedTitle); err == nil {
+			if meta.spaceID == "" {
+				meta.spaceID = storedSpaceID
+			}
+			if meta.conversationTitle == "" {
+				meta.conversationTitle = storedTitle
+			}
+		}
+	}
+	if event.MessageID != "" && (meta.characterID == "" || meta.messageContent == "") {
+		var storedCharacterID, storedContent string
+		if err := r.db.WithContext(ctx).Table("messages").Select("character_id", "content").Where("id = ?", event.MessageID).Row().Scan(&storedCharacterID, &storedContent); err == nil {
+			if meta.characterID == "" {
+				meta.characterID = storedCharacterID
+			}
+			if meta.messageContent == "" {
+				meta.messageContent = storedContent
+			}
+		}
 	}
 	if meta.characterID == "" && event.TurnID != "" {
 		_ = r.db.WithContext(ctx).Table("assistant_turns").Select("character_id").Where("id = ?", event.TurnID).Row().Scan(&meta.characterID)
 	}
-	if meta.characterID != "" {
+	if meta.characterID != "" && meta.characterName == "" {
 		_ = r.db.WithContext(ctx).Table("characters").Select("name").Where("id = ? AND space_id = ?", meta.characterID, meta.spaceID).Row().Scan(&meta.characterName)
 	}
 	return meta
@@ -611,7 +672,7 @@ func (r *Runtime) sendFinalMessage(ctx context.Context, event conversationstream
 		if !endpoint.SystemNotificationsEnabled {
 			continue
 		}
-		if suppressMessageForPresence(endpoint, event.ConversationID) {
+		if suppressMessageForPresence(endpoint, meta.conversationID) {
 			continue
 		}
 		if isReminder || isProactive {
@@ -626,14 +687,14 @@ func (r *Runtime) sendFinalMessage(ctx context.Context, event conversationstream
 			NotificationID: uuid.NewString(),
 			Type:           notificationType,
 			SpaceID:        meta.spaceID,
-			ConversationID: event.ConversationID,
+			ConversationID: meta.conversationID,
 			CharacterID:    meta.characterID,
 			MessageID:      event.MessageID,
 			RunID:          fallback(event.ExecutionID, event.TurnID),
 			Revision:       event.EventSequence,
 			Title:          title,
 			Body:           body,
-			DeepLink:       fmt.Sprintf("amitia://chat/%s?message=%s", event.ConversationID, event.MessageID),
+			DeepLink:       fmt.Sprintf("amitia://chat/%s?message=%s", meta.conversationID, event.MessageID),
 			Priority:       "high",
 			TTL:            24 * time.Hour,
 			Sound:          endpoint.SoundEnabled,
@@ -1370,7 +1431,40 @@ func (r *Runtime) TestDevicePush(ctx context.Context, spaceID, deviceID string) 
 		TTL:            5 * time.Minute,
 		Sound:          endpoint.SoundEnabled,
 	}
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	outbox := &NotificationOutbox{
+		ID:             envelope.NotificationID,
+		NotificationID: envelope.NotificationID,
+		SpaceID:        spaceID,
+		DeviceID:       deviceID,
+		Type:           envelope.Type,
+		EnvelopeJSON:   string(encoded),
+		Status:         "processing",
+		NextAttemptAt:  now,
+		ExpiresAt:      now.Add(envelope.TTL),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := r.repo.CreateOutbox(ctx, outbox); err != nil {
+		return nil, err
+	}
 	result := r.gateway.Send(ctx, *endpoint, envelope)
+	status := "failed"
+	if result.Accepted {
+		status = "accepted"
+	}
+	_ = r.repo.UpdateOutbox(ctx, outbox.ID, map[string]any{
+		"status":              status,
+		"provider":            result.Provider,
+		"provider_message_id": result.ProviderMessageID,
+		"last_error":          result.ErrorMessage,
+		"attempt_count":       1,
+		"updated_at":          time.Now().UTC(),
+	})
 	r.recordProviderResult(ctx, *endpoint, envelope, result, 0)
 	return map[string]any{
 		"accepted":          result.Accepted,

@@ -13,7 +13,7 @@ func ownedRuntimeDecisionPrompt(runtime *interaction.RuntimeAssembly) (string, e
 	if runtime == nil {
 		return "", nil
 	}
-	decision := map[string]any{"path": runtime.Path, "safety": runtime.Safety, "delivery": runtime.Delivery}
+	decision := map[string]any{"path": runtime.Path, "safety": runtime.Safety, "safetyPolicy": runtime.SafetyPolicy, "delivery": runtime.Delivery}
 	if runtime.BehaviorPlan != nil {
 		decision["behaviorPlan"] = runtime.BehaviorPlan
 	}

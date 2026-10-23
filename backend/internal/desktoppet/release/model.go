@@ -164,32 +164,6 @@ const (
 	LegacyMigrationStatusFailed       = "failed"
 )
 
-type LegacyPackageMigrationOperation struct {
-	ID              string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	LegacyPackageID string `gorm:"column:legacy_package_id;type:text" json:"legacyPackageId"`
-	SpaceID         string `gorm:"column:space_id;type:text" json:"spaceId"`
-	State           string `gorm:"column:state;type:text;default:'pending'" json:"state"`
-	StagingPath     string `gorm:"column:staging_path;type:text" json:"stagingPath"`
-	ErrorCode       string `gorm:"column:error_code;type:text" json:"errorCode"`
-	ErrorMessage    string `gorm:"column:error_message;type:text" json:"errorMessage"`
-	StartedAt       string `gorm:"column:started_at;type:text" json:"startedAt"`
-	UpdatedAt       string `gorm:"column:updated_at;type:text" json:"updatedAt"`
-	CompletedAt     string `gorm:"column:completed_at;type:text" json:"completedAt"`
-}
-
-func (LegacyPackageMigrationOperation) TableName() string {
-	return "desktop_pet_legacy_package_migration_operations"
-}
-
-const (
-	LegacyMigrationOpStatePending     = "pending"
-	LegacyMigrationOpStateValidating  = "validating"
-	LegacyMigrationOpStateRebuilding  = "rebuilding"
-	LegacyMigrationOpStateCompleted   = "completed"
-	LegacyMigrationOpStateFailedRetry = "failed_retryable"
-	LegacyMigrationOpStateFailedTerm  = "failed_terminal"
-)
-
 type ReleaseLifecycle string
 
 const (

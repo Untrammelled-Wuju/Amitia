@@ -122,6 +122,7 @@ func (c *componentWriteCloser) Close() error {
 type ArchiveReader struct {
 	reader *zip.Reader
 	files  map[string]*zip.File
+	file   *os.File
 }
 
 func NewArchiveReader(path string) (*ArchiveReader, error) {
@@ -143,7 +144,7 @@ func NewArchiveReader(path string) (*ArchiveReader, error) {
 	for _, zf := range zr.File {
 		files[zf.Name] = zf
 	}
-	return &ArchiveReader{reader: zr, files: files}, nil
+	return &ArchiveReader{reader: zr, files: files, file: f}, nil
 }
 
 func (r *ArchiveReader) ReadManifest() (*BackupManifest, error) {
@@ -184,6 +185,11 @@ func (r *ArchiveReader) SHA256() (string, error) {
 }
 
 func (r *ArchiveReader) Close() error {
+	if r.file != nil {
+		err := r.file.Close()
+		r.file = nil
+		return err
+	}
 	return nil
 }
 

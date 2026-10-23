@@ -139,7 +139,7 @@ export function useWebChatConversation(
     try {
       if (owned.enabled.value) {
         const result = await owned.conversationSummary(id, characterId.value);
-        return String(result?.summaryText || result?.summary_text || "").trim();
+        return String(result?.summaryText || "").trim();
       }
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } catch {

@@ -10,7 +10,7 @@ import (
 )
 
 func TestEmoteSourceManifestAcceptsStrictSchemaUIInputs(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "plugins", "emote", "amitia-extension.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "plugins-code", "emote", "amitia-extension.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

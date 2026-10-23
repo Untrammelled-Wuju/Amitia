@@ -10,7 +10,7 @@ import (
 )
 
 func TestOwnedMemorySummaryKeepsAuthorizedHistoryAndExcludesExpiredOrOtherOwnerData(t *testing.T) {
-	inference := business.Inference{ConversationID: "conversation", Context: &business.ForwardedContext{Summary: "forwarded"}, HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "device-a", LegacySummary: json.RawMessage(`{"summary":"legacy"}`)}, Snapshot: coordination.DataSnapshot{OwnerID: "core-c", Resources: []coordination.Resource{
+	inference := business.Inference{ConversationID: "conversation", Context: &business.ForwardedContext{Summary: "forwarded"}, HistoricalSnapshot: &coordination.DataSnapshot{OwnerID: "device-a", Resources: []coordination.Resource{legacySummaryResource("device-a", "role", "conversation", "legacy")}}, Snapshot: coordination.DataSnapshot{OwnerID: "core-c", Resources: []coordination.Resource{
 		{OwnerID: "core-c", Kind: "summary", Body: json.RawMessage(`{"conversationId":"conversation","content":{"summary":"current"}}`)},
 		{OwnerID: "core-c", Kind: "summary", Body: json.RawMessage(`{"conversationId":"other-conversation","content":{"summary":"other conversation"}}`)},
 		{OwnerID: "other-owner", Kind: "summary", Body: json.RawMessage(`{"conversationId":"conversation","content":{"summary":"other owner"}}`)},

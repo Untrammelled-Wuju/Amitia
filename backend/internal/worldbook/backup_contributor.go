@@ -18,6 +18,10 @@ type WorldbookBackupContributor struct {
 	KernelDB *sql.DB
 }
 
+func (w *WorldbookBackupContributor) ComponentIDs() []string {
+	return []string{ComponentIDWorldbookRecords}
+}
+
 func NewWorldbookBackupContributor(kernelDB *sql.DB) *WorldbookBackupContributor {
 	return &WorldbookBackupContributor{KernelDB: kernelDB}
 }
@@ -39,11 +43,20 @@ type ownedWorldbookRecordV1 struct {
 }
 
 func (w *WorldbookBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
+		return nil, nil
+	}
 	if w == nil || w.KernelDB == nil {
 		return nil, errors.New("世界书备份数据库不可用")
 	}
 	var count int64
-	if err := w.KernelDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE kind='worldbook' AND deleted=0`).Scan(&count); err != nil {
+	query := `SELECT COUNT(*) FROM kernel_device_owned_resources WHERE kind='worldbook' AND deleted=0`
+	args := make([]any, 0, 1)
+	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
+		query += ` AND role_id=?`
+		args = append(args, req.CharacterID)
+	}
+	if err := w.KernelDB.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
 		return nil, err
 	}
 	return []dataportability.BackupComponentPlan{{
@@ -58,12 +71,22 @@ func (w *WorldbookBackupContributor) Plan(ctx context.Context, req dataportabili
 }
 
 func (w *WorldbookBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
+		return nil
+	}
 	compW, err := out.CreateComponent(ComponentIDWorldbookRecords, "worldbook.owned.v1", dataportability.KindNDJSON)
 	if err != nil {
 		return err
 	}
 	defer compW.Close()
-	rows, err := w.KernelDB.QueryContext(ctx, `SELECT owner_id,role_id,resource_id,revision,body,updated_at FROM kernel_device_owned_resources WHERE kind='worldbook' AND deleted=0 ORDER BY owner_id,role_id,resource_id`)
+	query := `SELECT owner_id,role_id,resource_id,revision,body,updated_at FROM kernel_device_owned_resources WHERE kind='worldbook' AND deleted=0`
+	args := make([]any, 0, 1)
+	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
+		query += ` AND role_id=?`
+		args = append(args, req.CharacterID)
+	}
+	query += ` ORDER BY owner_id,role_id,resource_id`
+	rows, err := w.KernelDB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
@@ -166,5 +189,3 @@ func (w *WorldbookBackupContributor) RestoreWorldbook(ctx context.Context, in da
 	}
 	return tx.Commit()
 }
-
-var _ dataportability.WorldbookRestorePort = (*WorldbookBackupContributor)(nil)

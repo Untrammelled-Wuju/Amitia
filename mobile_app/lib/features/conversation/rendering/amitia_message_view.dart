@@ -1,9 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/models/models.dart';
+import '../../../core/models/feedback.dart';
+import '../../../core/services/providers.dart';
 import '../../../core/widgets/amitia_popup_menu.dart';
 import '../../../core/widgets/user_message_surface.dart';
 import '../../../core/widgets/character_avatar.dart';
@@ -19,7 +22,7 @@ import 'rich_blocks/amitia_citation_list.dart';
 import 'rich_blocks/amitia_rich_blocks.dart';
 import 'rich_blocks/renderer_registry.dart';
 
-class AmitiaMessageView extends StatefulWidget {
+class AmitiaMessageView extends ConsumerStatefulWidget {
   final ChatMessage message;
   final ChatMessageStyle messageStyle;
   final UserMessageMaterial userMessageMaterial;
@@ -62,11 +65,13 @@ class AmitiaMessageView extends StatefulWidget {
   });
 
   @override
-  State<AmitiaMessageView> createState() => _AmitiaMessageViewState();
+  ConsumerState<AmitiaMessageView> createState() => _AmitiaMessageViewState();
 }
 
-class _AmitiaMessageViewState extends State<AmitiaMessageView> {
+class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
   String _highlightCitation = '';
+  FeedbackDto? _feedback;
+  bool _feedbackBusy = false;
 
   @override
   void initState() {
@@ -75,6 +80,17 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
       'minecraft.server',
       (context, block) => _MinecraftServerBlock(block: block),
     );
+    Future.microtask(_loadFeedback);
+  }
+
+  @override
+  void didUpdateWidget(covariant AmitiaMessageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.message.id != widget.message.id ||
+        oldWidget.characterId != widget.characterId) {
+      _feedback = null;
+      Future.microtask(_loadFeedback);
+    }
   }
 
   @override
@@ -250,6 +266,14 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
                         onCopyMarkdown: () => _copy(context, message.markdown),
                         onReply: widget.onReply,
                         onRetry: widget.onRetry,
+                        feedbackType: _feedback?.feedbackType,
+                        feedbackBusy: _feedbackBusy,
+                        onHelpful: () => _submitFeedback('good'),
+                        onImprove: _submitImprovement,
+                        onUnsafe: _submitUnsafe,
+                        onDeleteFeedback: _feedback == null
+                            ? null
+                            : _deleteFeedback,
                       ),
                   ],
                 ),
@@ -267,6 +291,126 @@ class _AmitiaMessageViewState extends State<AmitiaMessageView> {
             states: <String>[streaming ? 'loading' : 'default'],
             child: assistant,
           );
+  }
+
+  Future<void> _loadFeedback() async {
+    final messageId = widget.message.id.trim();
+    if (widget.characterId.trim().isEmpty ||
+        messageId.isEmpty ||
+        widget.message.role != MessageRole.assistant) {
+      return;
+    }
+    try {
+      final feedback = await ref
+          .read(feedbackServiceProvider)
+          .getByMessage(messageId, characterId: widget.characterId);
+      if (mounted && widget.message.id == messageId) {
+        setState(() => _feedback = feedback);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _submitFeedback(String feedbackType, {String? reason}) async {
+    if (_feedbackBusy) return;
+    setState(() => _feedbackBusy = true);
+    try {
+      final feedback = await ref
+          .read(feedbackServiceProvider)
+          .submit(
+            widget.message.id,
+            feedbackType,
+            comment: reason,
+            characterId: widget.characterId,
+          );
+      if (!mounted) return;
+      setState(() => _feedback = feedback);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(feedbackType == 'unsafe' ? '安全报告已提交' : '消息反馈已记录'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('反馈提交失败：$error')));
+    } finally {
+      if (mounted) setState(() => _feedbackBusy = false);
+    }
+  }
+
+  Future<void> _submitImprovement() async {
+    final reason = await _promptFeedbackReason(
+      title: '回复质量反馈',
+      hint: '请说明这条回复需要改进的地方',
+    );
+    if (reason != null) await _submitFeedback('other', reason: reason);
+  }
+
+  Future<void> _submitUnsafe() async {
+    final reason = await _promptFeedbackReason(
+      title: '报告不安全内容',
+      hint: '请描述风险、违规或不适内容',
+    );
+    if (reason != null) await _submitFeedback('unsafe', reason: reason);
+  }
+
+  Future<String?> _promptFeedbackReason({
+    required String title,
+    required String hint,
+  }) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 6,
+          decoration: InputDecoration(hintText: hint),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.of(dialogContext).pop(value);
+            },
+            child: const Text('提交'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _deleteFeedback() async {
+    final feedback = _feedback;
+    if (_feedbackBusy || feedback == null) return;
+    setState(() => _feedbackBusy = true);
+    try {
+      await ref
+          .read(feedbackServiceProvider)
+          .delete(feedback.id, characterId: widget.characterId);
+      if (!mounted) return;
+      setState(() => _feedback = null);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('反馈已撤销')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('撤销反馈失败：$error')));
+    } finally {
+      if (mounted) setState(() => _feedbackBusy = false);
+    }
   }
 
   List<Widget> _renderBlocks(List<AmrpRichBlock> blocks, String messageId) {
@@ -723,6 +867,12 @@ class _MessageActions extends StatelessWidget {
   final VoidCallback onCopyMarkdown;
   final VoidCallback? onReply;
   final VoidCallback? onRetry;
+  final String? feedbackType;
+  final bool feedbackBusy;
+  final VoidCallback onHelpful;
+  final VoidCallback onImprove;
+  final VoidCallback onUnsafe;
+  final VoidCallback? onDeleteFeedback;
 
   const _MessageActions({
     required this.streaming,
@@ -730,6 +880,12 @@ class _MessageActions extends StatelessWidget {
     required this.onCopyMarkdown,
     this.onReply,
     this.onRetry,
+    required this.feedbackType,
+    required this.feedbackBusy,
+    required this.onHelpful,
+    required this.onImprove,
+    required this.onUnsafe,
+    this.onDeleteFeedback,
   });
 
   @override
@@ -789,6 +945,38 @@ class _MessageActions extends StatelessWidget {
               icon: Icons.refresh_rounded,
               color: tokens.muted,
             ),
+          if (!streaming) ...[
+            _CompactMessageAction(
+              tooltip: '有帮助',
+              onPressed: feedbackBusy ? null : onHelpful,
+              icon: Icons.thumb_up_alt_outlined,
+              color: feedbackType == 'good' ? tokens.accent : tokens.muted,
+            ),
+            _CompactMessageAction(
+              tooltip: '需要改进',
+              onPressed: feedbackBusy ? null : onImprove,
+              icon: Icons.thumb_down_alt_outlined,
+              color:
+                  feedbackType != null &&
+                      feedbackType != 'good' &&
+                      feedbackType != 'unsafe'
+                  ? tokens.accent
+                  : tokens.muted,
+            ),
+            _CompactMessageAction(
+              tooltip: '报告不安全内容',
+              onPressed: feedbackBusy ? null : onUnsafe,
+              icon: Icons.flag_outlined,
+              color: feedbackType == 'unsafe' ? tokens.accent : tokens.muted,
+            ),
+            if (onDeleteFeedback != null)
+              _CompactMessageAction(
+                tooltip: '撤销反馈',
+                onPressed: feedbackBusy ? null : onDeleteFeedback,
+                icon: Icons.delete_outline,
+                color: tokens.muted,
+              ),
+          ],
         ],
       ),
     );
@@ -1591,7 +1779,7 @@ class _TurnToolStreamState extends State<_TurnToolStream>
           ),
           SizeTransition(
             sizeFactor: _expansionAnimation,
-            axisAlignment: -1,
+            alignment: Alignment.topCenter,
             child: IgnorePointer(
               ignoring: !_expanded,
               child: ExcludeSemantics(

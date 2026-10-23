@@ -20,6 +20,7 @@ const [
   runtimeProfile,
   runtimeProfileResolve,
   serverRouter,
+  systemRouter,
   serverServices,
   gameBridge,
   meshRuntime,
@@ -29,7 +30,23 @@ const [
   devicePackageRoutes,
   frontendCapabilities,
   frontendApi,
+  frontendRuntimeAdapter,
   frontendRequestAuth,
+  mobileRoutedApi,
+  frontendContinuity,
+  mobileContinuity,
+  ownedContinuityRuntime,
+  ownedContinuityAdapters,
+  continuityMigration,
+  emotionOwner,
+  emotionSnapshot,
+  emotionMigration,
+  ownedChatEffects,
+  frontendPsyche,
+  mobilePsyche,
+  mobileFeedback,
+  desktopMoodSettings,
+  mobileMoodSettings,
   extensionApi,
   gameCenterView,
   runtimeCapabilityTests,
@@ -43,6 +60,7 @@ const [
   read("backend/internal/runtimeprofile/current.go"),
   read("backend/internal/runtimeprofile/resolve.go"),
   read("backend/cmd/server/router.go"),
+  read("backend/internal/system/router.go"),
   read("backend/cmd/server/services.go"),
   read("backend/cmd/server/game_center_cloud_bridge.go"),
   read("backend/internal/devicemesh/runtime.go"),
@@ -52,11 +70,68 @@ const [
   read("backend/internal/extension/device_execution_routes.go"),
   read("front/src/runtime/runtime-capabilities.ts"),
   read("front/src/composables/useApi.ts"),
+  read("front/src/runtime/runtime-adapter.ts"),
   read("front/src/runtime/request-auth.ts"),
+  read("mobile_app/lib/core/backend_transport/routed_backend_service_api.dart"),
+  read("front/src/views/continuity/api.ts"),
+  read("mobile_app/lib/core/services/continuity_service.dart"),
+  read("backend/cmd/server/owned_continuity_runtime.go"),
+  read("backend/cmd/server/owned_continuity_kernel_adapters.go"),
+  read("backend/cmd/server/continuity_migration.go"),
+  read("backend/internal/devicemesh/business/emotion.go"),
+  read("backend/cmd/server/owned_emotion_snapshot.go"),
+  read("backend/cmd/server/emotion_migration.go"),
+  read("backend/cmd/server/mesh_owned_chat_effects.go"),
+  read("front/src/views/character/CharacterPsycheView.vue"),
+  read("mobile_app/lib/core/services/character_detail_service.dart"),
+  read("mobile_app/lib/core/services/feedback_service.dart"),
+  read("front/src/views/settings/AdvancedSystemView.vue"),
+  read("mobile_app/lib/features/settings/presentation/pages/advanced_system_page.dart"),
   read("front/src/views/extensions/api.ts"),
   read("front/src/views/game-center/GameCenterView.vue"),
   read("backend/cmd/server/router_runtime_capabilities_test.go"),
 ]);
+
+assert(
+  systemRouter.includes("runtimeprofile.CurrentProcessProfile() != runtimeprofile.ProfileCloudCore") &&
+    deviceAgentRouter.includes("system.RegisterDeviceChatImportRoutes") &&
+    frontendRuntimeAdapter.includes('"/api/imports"') &&
+    mobileRoutedApi.includes("'/api/imports'"),
+  "chat import staging must remain device-local while Cloud Core provides only Owner coordination",
+);
+assert(
+  !systemRouter.includes("registerContinuityRoutes") &&
+    !frontendContinuity.includes("/api/continuity") &&
+    !mobileContinuity.includes("/api/continuity") &&
+    frontendContinuity.includes("/api/device-mesh/v1/business/continuity") &&
+    mobileContinuity.includes("/api/device-mesh/v1/business/continuity") &&
+    serverServices.includes("newOwnedContinuityRuntime") &&
+    serverServices.includes("migrateLegacyContinuity") &&
+    serverServices.includes("wireOwnedContinuityKernelObservers") &&
+    ownedContinuityRuntime.includes("func (r *ownedContinuityRuntime) Resolve") &&
+    ownedContinuityRuntime.includes("func (r *ownedContinuityRuntime) Observe") &&
+    ownedContinuityRuntime.includes("ApplyWorkflow") &&
+    ownedContinuityRuntime.includes("ApplyTask") &&
+    ownedContinuityRuntime.includes("ApplyApprovalRequested") &&
+    ownedContinuityAdapters.includes("AddRunLifecycleSink") &&
+    continuityMigration.includes("engine.ImportContinuity"),
+  "continuity must use the Owner ledger only, retain chat resolution/observation and runtime wake semantics, and migrate legacy rows",
+);
+assert(
+  emotionOwner.includes('EmotionSnapshotKind = "emotion"') &&
+    emotionSnapshot.includes("ownedMoodDetectionSettings") &&
+    ownedChatEffects.includes("business.EmotionSnapshotKind") &&
+    emotionMigration.includes("migrateLegacyEmotionHistory") &&
+    emotionMigration.includes("emotion_states") &&
+    emotionMigration.includes('HasColumn("messages", "mood")') &&
+    frontendPsyche.includes('mesh.data("emotion"') &&
+    mobilePsyche.includes("emotionHistory(") &&
+    desktopMoodSettings.includes("/api/config/mood-detection") &&
+    mobileMoodSettings.includes("/api/config/mood-detection") &&
+    !serverRouter.includes("mood.RegisterMoodRouter") &&
+    !mobileFeedback.includes("/api/moods"),
+  "emotion history must use Owner snapshots, honor detection settings, migrate legacy mood/emotion/affect data, and be connected to both clients",
+);
 
 // Desktop-pet generation: Cloud Core owns provider configuration and secrets.
 assert(

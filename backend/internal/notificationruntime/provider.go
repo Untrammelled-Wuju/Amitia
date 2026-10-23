@@ -104,7 +104,7 @@ func (g *PushGateway) Send(ctx context.Context, endpoint DeviceEndpoint, envelop
 	var result ProviderResult
 	switch strings.ToLower(endpoint.Platform) {
 	case "desktop", "web":
-		count := sse.Global.SendToDevice(endpoint.SpaceID, endpoint.DeviceID, "scheduled_notification", map[string]interface{}{"requestId": envelope.NotificationID, "payload": map[string]interface{}{"title": envelope.Title, "body": envelope.Body, "conversationId": envelope.ConversationID, "characterId": envelope.CharacterID, "messageId": envelope.MessageID, "sound": envelope.Sound, "ownerId": envelope.SpaceID}, "expiresAt": time.Now().Add(envelope.TTL).UTC().Format(time.RFC3339Nano)})
+		count := sse.Global.SendToDevice(endpoint.SpaceID, endpoint.DeviceID, "scheduled_notification", map[string]interface{}{"requestId": envelope.NotificationID, "payload": map[string]interface{}{"type": envelope.Type, "title": envelope.Title, "body": envelope.Body, "conversationId": envelope.ConversationID, "characterId": envelope.CharacterID, "characterName": envelope.Data["senderName"], "messageId": envelope.MessageID, "sound": envelope.Sound, "ownerId": envelope.SpaceID}, "expiresAt": time.Now().Add(envelope.TTL).UTC().Format(time.RFC3339Nano)})
 		if count == 0 {
 			return ProviderResult{Provider: "desktop-sse", ErrorCode: "device_offline", ErrorMessage: "桌面通知通道离线"}
 		}

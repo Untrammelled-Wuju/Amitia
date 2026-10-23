@@ -2,6 +2,32 @@ import '../backend_transport/backend_service_api.dart';
 
 class TemporalService {
   final BackendServiceApi _api;
+  final Expando<Map<String, dynamic>> _relationshipAuthorities = Expando();
+
+  Future<Map<String, dynamic>> _relationshipView(
+    String characterId, {
+    String episodeId = '',
+    int limit = 50,
+  }) async {
+    final result = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/relationship-time',
+      queryParameters: {
+        'characterId': characterId,
+        if (episodeId.isNotEmpty) 'episodeId': episodeId,
+        'limit': limit,
+      },
+    );
+    final scope = result?['executionScope'];
+    if (result == null ||
+        result['ownerId'] is! String ||
+        result['roleId'] != characterId ||
+        scope is! Map ||
+        scope['resourceOwnerId'] != result['ownerId'] ||
+        scope['roleId'] != characterId) {
+      throw StateError('关系时间数据归属无法确认');
+    }
+    return result;
+  }
 
   TemporalService(this._api);
 
@@ -63,27 +89,45 @@ class TemporalService {
     return true;
   }
 
-  Future<Map<String, dynamic>?> relationshipTimeSettings(String characterId) {
-    return _api.get<Map<String, dynamic>>(
-      '/api/temporal/characters/${Uri.encodeComponent(characterId)}/relationship-time/settings',
+  Future<Map<String, dynamic>?> relationshipTimeSettings(
+    String characterId,
+  ) async {
+    final result = await _relationshipView(characterId);
+    final settings = Map<String, dynamic>.from(result['settings'] as Map);
+    _relationshipAuthorities[settings] = Map<String, dynamic>.from(
+      result['executionScope'] as Map,
     );
+    return settings;
   }
 
   Future<bool> updateRelationshipTimeSettings(
     String characterId,
     Map<String, dynamic> data,
   ) async {
-    await _api.put(
-      '/api/temporal/characters/${Uri.encodeComponent(characterId)}/relationship-time/settings',
-      data: data,
+    final expected = _relationshipAuthorities[data];
+    if (expected == null) throw StateError('请重新加载关系时间设置');
+    final result = await _api.put<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/relationship-time',
+      queryParameters: {'characterId': characterId},
+      data: {'settings': data, 'expectedExecutionScope': expected},
     );
+    if (result == null ||
+        result['roleId'] != characterId ||
+        result['ownerId'] != expected['resourceOwnerId']) {
+      throw StateError('关系时间保存归属无法确认');
+    }
+    _relationshipAuthorities[data] = Map<String, dynamic>.from(
+      result['executionScope'] as Map,
+    );
+    data['updatedAt'] = (result['settings'] as Map)['updatedAt'];
     return true;
   }
 
-  Future<Map<String, dynamic>?> relationshipTimeState(String characterId) {
-    return _api.get<Map<String, dynamic>>(
-      '/api/temporal/characters/${Uri.encodeComponent(characterId)}/relationship-time/state',
-    );
+  Future<Map<String, dynamic>?> relationshipTimeState(
+    String characterId,
+  ) async {
+    final result = await _relationshipView(characterId);
+    return Map<String, dynamic>.from(result['state'] as Map);
   }
 
   Future<List<Map<String, dynamic>>> anchors({
@@ -149,34 +193,23 @@ class TemporalService {
     String characterId, {
     int limit = 50,
   }) async {
-    final resp = await _api.get<dynamic>(
-      '/api/temporal/characters/${Uri.encodeComponent(characterId)}/reunion-episodes',
-      queryParameters: {'limit': limit},
-    );
-    if (resp is List) {
-      return resp
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList(growable: false);
-    }
-    if (resp is Map) {
-      final items = resp['items'];
-      if (items is List) {
-        return items
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList(growable: false);
-      }
-    }
-    return const <Map<String, dynamic>>[];
+    final result = await _relationshipView(characterId, limit: limit);
+    return (result['episodes'] as List? ?? const [])
+        .whereType<Map>()
+        .take(limit.clamp(1, 200))
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>?> reunionEpisode(
     String characterId,
     String episodeId,
-  ) {
-    return _api.get<Map<String, dynamic>>(
-      '/api/temporal/characters/${Uri.encodeComponent(characterId)}/reunion-episodes/${Uri.encodeComponent(episodeId)}',
-    );
+  ) async {
+    final result = await _relationshipView(characterId, episodeId: episodeId);
+    final episode = result['episode'];
+    if (episode is! Map || episode['id'] != episodeId) {
+      throw StateError('重逢记录不存在或不属于当前所有者');
+    }
+    return Map<String, dynamic>.from(episode);
   }
 }

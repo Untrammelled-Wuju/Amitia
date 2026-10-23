@@ -181,6 +181,44 @@ void main() {
       );
     });
 
+    test('chat import staging routes to device agent', () async {
+      await proxy.post(
+        '/api/imports/confirm',
+        data: <String, dynamic>{'characterId': 'role'},
+      );
+      expect(deviceLocalApi.calls.length, 1);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.first.path, '/api/imports/confirm');
+      expect(deviceLocalApi.calls.first.headers?['Idempotency-Key'], isNotNull);
+    });
+
+    test(
+      'data portability migration routes to active data authority',
+      () async {
+        await proxy.post(
+          '/api/data-portability/imports/import-1/commit',
+          data: const {'policy': 'duplicate'},
+        );
+        expect(deviceLocalApi.calls.length, 0);
+        expect(businessApi.calls.length, 1);
+        expect(
+          businessApi.calls.first.path,
+          '/api/data-portability/imports/import-1/commit',
+        );
+      },
+    );
+
+    test('physical backup and restore routes to device agent', () async {
+      await proxy.get('/api/data-portability/backups');
+      await proxy.post(
+        '/api/data-portability/restores/restore-1',
+        data: const {},
+      );
+      expect(deviceLocalApi.calls.length, 2);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.last.headers?['Idempotency-Key'], isNotNull);
+    });
+
     test('desktop pet singular prefix routes to device agent', () async {
       await proxy.get('/api/desktop-pet/status');
       expect(deviceLocalApi.calls.length, 1);

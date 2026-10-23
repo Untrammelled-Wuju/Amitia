@@ -25,6 +25,10 @@ type EmbeddingBackupContributor struct {
 	DB *gorm.DB
 }
 
+func (c *EmbeddingBackupContributor) ComponentIDs() []string {
+	return []string{ComponentIDEmbeddingConfigs}
+}
+
 func NewEmbeddingBackupContributor(db *gorm.DB) *EmbeddingBackupContributor {
 	return &EmbeddingBackupContributor{DB: db}
 }
@@ -49,6 +53,9 @@ type embeddingConfigV1 struct {
 }
 
 func (c *EmbeddingBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil, nil
+	}
 	var count int64
 	c.DB.WithContext(ctx).Model(&EmbeddingConfig{}).Count(&count)
 
@@ -67,6 +74,9 @@ func (c *EmbeddingBackupContributor) Plan(ctx context.Context, req dataportabili
 }
 
 func (c *EmbeddingBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil
+	}
 	comp, err := out.CreateComponent(ComponentIDEmbeddingConfigs, "embedding.configs.v1", dataportability.KindNDJSON)
 	if err != nil {
 		return fmt.Errorf("export: create embedding.configs component: %w", err)
@@ -114,7 +124,7 @@ func (c *EmbeddingBackupContributor) PreviewImport(ctx context.Context, req data
 		Warnings:    make([]string, 0),
 	}
 
-	rc, err := in.ReadComponent(ComponentIDEmbeddingConfigs + ".v1")
+	rc, err := in.ReadComponent(ComponentIDEmbeddingConfigs)
 	if err != nil {
 		return []dataportability.ImportComponentPreview{preview}, nil
 	}
@@ -165,7 +175,7 @@ func (c *EmbeddingBackupContributor) RestoreEmbeddings(ctx context.Context, in d
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return err
 	}
-	rc, err := in.ReadComponent(ComponentIDEmbeddingConfigs + ".v1")
+	rc, err := in.ReadComponent(ComponentIDEmbeddingConfigs)
 	if err != nil {
 		return fmt.Errorf("restore: embedding.configs component missing: %w", err)
 	}
@@ -258,5 +268,3 @@ func (c *EmbeddingBackupContributor) restoreEmbeddingRecords(ctx context.Context
 
 	return scanner.Err()
 }
-
-var _ dataportability.EmbeddingRestorePort = (*EmbeddingBackupContributor)(nil)

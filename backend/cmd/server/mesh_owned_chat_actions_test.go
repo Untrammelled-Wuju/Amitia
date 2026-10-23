@@ -52,7 +52,7 @@ func TestOwnedChatFeedbackKeepsOwnerAndRolePartitions(t *testing.T) {
 	seedOwnedChatManagement(t, p, "message", "reply", "one", `{"conversationId":"visible","role":"assistant","content":"answer"}`)
 	seedOwnedChatManagement(t, p, "conversation", "private", "two", `{"id":"private","title":"Private"}`)
 	seedOwnedChatManagement(t, p, "message", "private-reply", "two", `{"conversationId":"private","role":"assistant","content":"private"}`)
-	request := coordination.ChatManagementRequest{Operation: "feedback/create", MessageID: "reply", FeedbackType: "good", Reason: "useful"}
+	request := coordination.ChatManagementRequest{Operation: "feedback/create", MessageID: "reply", RequestID: "feedback-create", FeedbackType: "good", Reason: "useful"}
 	request.ConversationOwnerID = p.ownerID
 	created, err := p.ManageChat(t.Context(), scope, request)
 	if err != nil {

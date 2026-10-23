@@ -23,7 +23,9 @@ function buildFacets(items: any[]) {
 
 export async function postScan(scope: string[]) {
   const res = await apiClient.post("/api/privacy/scan", { scope });
-  return unwrap(res);
+  const data = unwrap(res);
+  if (data.status !== "completed" || data.complete !== true) throw new Error("隐私扫描未完整完成，请重试");
+  return data;
 }
 
 export async function getScanResult(scanId: number | string) {
@@ -89,7 +91,9 @@ export async function postMask(items: PrivacyMaskItem[], confirmToken: string) {
     })),
     confirmToken,
   });
-  return unwrap(res);
+  const data = unwrap(res);
+  if (data.masked !== true || data.maskedCount !== new Set(items.map((item) => `${item.sourceTable}/${item.id}`)).size) throw new Error("数据持有方未确认全部脱敏，请重新扫描");
+  return data;
 }
 
 export async function getScanHistory(params: { page: number; pageSize: number }) {
@@ -151,14 +155,27 @@ export async function getDeletionStats() {
   return unwrap(res);
 }
 
-export async function requestDeletion(payload: {
+export interface DeletionIntent {
+  legacyDeletionId?: string;
   targetId: string;
   targetType: string;
   scope: string;
   reason?: string;
-}) {
+  target?: Record<string, any>;
+  requestId?: string;
+}
+
+export async function previewDeletion(payload: DeletionIntent): Promise<DeletionIntent[]> {
+  const data = unwrap(await apiClient.post("/api/privacy/deletion/preview", payload));
+  if (!Array.isArray(data.targets) || !data.targets.length) throw new Error("当前数据范围没有找到删除目标");
+  return data.targets.map((target: Record<string, any>) => ({ ...payload, target, requestId: crypto.randomUUID() }));
+}
+
+export async function requestDeletion(payload: DeletionIntent) {
   const res = await apiClient.post("/api/privacy/deletion/request", payload);
-  return unwrap(res);
+  const data = unwrap(res);
+  if (!data.id || !["pending", "cleaning", "completed", "failed"].includes(data.status)) throw new Error("数据持有方未返回有效删除回执");
+  return data;
 }
 
 export async function getDeletionStatus(id: string) {

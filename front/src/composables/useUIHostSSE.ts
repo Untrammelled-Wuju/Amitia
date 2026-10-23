@@ -1,4 +1,4 @@
-import { ref, onUnmounted, type Ref } from "vue";
+import { ref, onUnmounted, watch, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElNotification, ElMessageBox } from "element-plus";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
@@ -10,6 +10,7 @@ import { resolveUIHostDeviceId } from "../ui-runtime/deviceIdentity";
 import { executeStyleCommand } from "../ui-runtime/styleCommand";
 import { resolveHostEnvironment } from "./useHostEnvironment";
 import { deliverScheduledBrowserNotification, registerScheduledBrowserEndpoint, type ScheduledBrowserEnvelope } from '../runtime/scheduled-notifications';
+import { reportNotificationPresence } from "../runtime/device-notifications";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -49,8 +50,6 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   let hostHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let hostClientId = "";
   let hostSessionId = "";
-  let notificationSettingsCheckedAt = 0;
-  let notificationsAllowed = false;
 
   const disposeMainStyleCommand = window.amitiaDesktop?.onUIStyleCommand?.((data) => {
     void handleStyleCommand(new MessageEvent("ui_style_command", { data }));
@@ -500,27 +499,25 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     }, delay);
   }
 
-  async function notificationAllowedForThisDevice(): Promise<boolean> {
-    const now = Date.now();
-    if (now - notificationSettingsCheckedAt < 30000) return notificationsAllowed;
-    notificationSettingsCheckedAt = now;
+  function activeNotificationConversationId(): string {
+    if (router.currentRoute.value.path !== "/chat") return "";
+    const value = router.currentRoute.value.query.conversationId;
+    return typeof value === "string" ? value : "";
+  }
+
+  async function reportPresence(): Promise<void> {
     try {
       const deviceId = await resolveUIHostDeviceId();
-      const path = `/api/browser-notifications/status?deviceId=${encodeURIComponent(deviceId)}`;
-      const url = await resolveApiUrl(path);
-      const init = await createAuthenticatedFetchInit("/api/browser-notifications/status", { method: "GET" });
-      const response = await fetch(url, init);
-      if (!response.ok) throw new Error(`notification status HTTP ${response.status}`);
-      const rawStatus = await response.json() as Record<string, unknown>;
-      const nested = rawStatus.data;
-      const status = nested && typeof nested === "object"
-        ? nested as Record<string, unknown>
-        : rawStatus;
-      notificationsAllowed = status.enabled === true && status.subscribed === true;
-    } catch {
-      notificationsAllowed = false;
-    }
-    return notificationsAllowed;
+      const foreground = document.visibilityState === "visible" && document.hasFocus();
+      await reportNotificationPresence(deviceId, foreground, foreground ? activeNotificationConversationId() : "");
+    } catch {}
+  }
+
+  async function clearPresence(): Promise<void> {
+    try {
+      const deviceId = await resolveUIHostDeviceId();
+      await reportNotificationPresence(deviceId, false, "");
+    } catch {}
   }
 
   function dispatchEvent(eventName: string, data: string) {
@@ -531,7 +528,6 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         const envelope = parseEnvelope(event);
         if (!envelope || !envelope.payload || !shouldProcess(envelope)) break;
         void deliverScheduledBrowserNotification(envelope as ScheduledBrowserEnvelope, {
-          allowed: notificationAllowedForThisDevice,
           acknowledge: async (state) => {
             const path = '/api/notifications/scheduled/' + encodeURIComponent(envelope.requestId) + '/ack';
             const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }) }));
@@ -628,13 +624,14 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       if (!window.amitiaDesktop) {
         const deviceId = await resolveUIHostDeviceId();
         const path = '/api/notifications/devices/register';
-        const permitted = typeof Notification !== 'undefined' && Notification.permission === 'granted' && await notificationAllowedForThisDevice();
+        const permitted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
         await registerScheduledBrowserEndpoint(deviceId, permitted, async (input) => {
           const response = await fetch(await resolveApiUrl(path), await createAuthenticatedFetchInit(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }));
           if (!response.ok) throw new Error('浏览器通知通道未确认注册');
           return response.json();
         });
       }
+      await reportPresence();
       if (version !== connectionVersion || controller.signal.aborted) return;
       isConnected.value = true;
       reconnectAttempts = 0;
@@ -686,12 +683,29 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   onUnmounted(() => {
     disposeMainStyleCommand?.();
     void unregisterHostSession();
+    disposePresence();
+    void clearPresence();
     disconnect();
     if (dedupCleanupTimer) {
       clearInterval(dedupCleanupTimer);
       dedupCleanupTimer = null;
     }
   });
+
+  const stopPresenceRouteWatch = watch(
+    () => router.currentRoute.value.fullPath,
+    () => { void reportPresence(); },
+  );
+  window.addEventListener("focus", reportPresence);
+  window.addEventListener("blur", reportPresence);
+  document.addEventListener("visibilitychange", reportPresence);
+
+  function disposePresence() {
+    stopPresenceRouteWatch();
+    window.removeEventListener("focus", reportPresence);
+    window.removeEventListener("blur", reportPresence);
+    document.removeEventListener("visibilitychange", reportPresence);
+  }
 
   return {
     isConnected,

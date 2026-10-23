@@ -42,7 +42,15 @@
       </el-tab-pane>
 
       <el-tab-pane label="运行观测" name="observability">
-        <el-card shadow="never"><template #header>情绪检测</template><el-switch v-model="mood.enabled" @change="saveMood" /> <span class="muted">阈值 {{ mood.threshold ?? 0.5 }}</span></el-card>
+        <el-card shadow="never">
+          <template #header>情绪历史记录</template>
+          <el-space wrap>
+            <el-switch v-model="mood.enabled" @change="saveMood" />
+            <span>记录阈值</span>
+            <el-input-number v-model="mood.threshold" :min="0" :max="1" :step="0.05" :precision="2" @change="saveMood" />
+            <span class="muted">仅在情绪变化强度达到阈值时写入 Owner 情绪历史</span>
+          </el-space>
+        </el-card>
         <el-card shadow="never">
           <template #header><div class="card-head"><span>Shadow Mode</span><div><el-button size="small" type="primary" @click="shadowStart">启动</el-button><el-button size="small" @click="shadowAdvance">推进阶段</el-button><el-button size="small" type="danger" plain @click="shadowStop">停止</el-button></div></div></template>
           <pre class="json">{{ pretty(shadowStatus) }}</pre><h4>阈值</h4><pre class="json">{{ pretty(shadowThresholds) }}</pre><h4>回滚</h4><pre class="json">{{ pretty(shadowRollbacks) }}</pre><el-button size="small" @click="shadowLoadSim">运行短负载模拟</el-button>
@@ -107,9 +115,9 @@ async function loadAll() {
       safe(() => apiClient.get("/api/runtime/health-history").then(r => r.data), {}),
       safe(() => apiClient.get("/api/logs/model-errors").then(r => r.data), {}),
       safe(() => apiClient.get("/api/logs/files").then(r => r.data), {}),
-      safe(() => apiClient.get("/api/usage/daily").then(r => r.data), {}),
-      safe(() => apiClient.get("/api/usage/models").then(r => r.data), {}),
-      safe(() => apiClient.get("/api/usage/sources").then(r => r.data), {}),
+      safe(() => apiClient.get("/api/usage/daily").then(r => r.data), { error: "使用统计读取失败" }),
+      safe(() => apiClient.get("/api/usage/models").then(r => r.data), { error: "使用统计读取失败" }),
+      safe(() => apiClient.get("/api/usage/sources").then(r => r.data), { error: "使用统计读取失败" }),
       safe(() => apiClient.get("/api/shadow/status").then(r => r.data), {}),
       safe(() => apiClient.get("/api/shadow/thresholds").then(r => r.data), {}),
       safe(() => apiClient.get("/api/shadow/rollbacks").then(r => r.data), {}),
@@ -134,7 +142,9 @@ async function saveAuditSettings(){ await apiClient.put("/api/audit/settings", {
 async function clearAudit(){ await ElMessageBox.confirm("确定清空系统审计日志？", "确认"); await apiClient.delete("/api/audit/logs"); await loadAll(); }
 async function saveMood(){ await apiClient.put("/api/config/mood-detection", { enabled: mood.enabled, threshold: mood.threshold }); ElMessage.success("情绪检测设置已保存"); }
 async function clearModelErrors(){ await ElMessageBox.confirm("确定清空模型错误日志？", "确认"); await apiClient.delete("/api/logs/model-errors"); await loadAll(); }
-async function clearUsage(){ await ElMessageBox.confirm("确定清空 Usage 统计？该操作不可撤销。", "确认"); await apiClient.delete("/api/usage/clear"); await loadAll(); }
+async function clearUsage(){ await ElMessageBox.confirm("重置当前范围的统计起点？历史调用和聊天记录将保留。", "确认"); const scope = (usageDaily.value as any)?.scope;
+ if(!scope?.coreId) throw new Error("请先重新加载统计范围");
+ await apiClient.delete("/api/usage/clear", { params: { scope: scope.deviceId ? "device" : "core", expectedCoreId: scope.coreId, expectedDeviceId: scope.deviceId || "" } }); await loadAll(); }
 async function openLog(name: string){ const r = await apiClient.get(`/api/logs/files/${encodeURIComponent(name)}`); logName.value = name; logContent.value = typeof r.data === "string" ? r.data : pretty(r.data); logOpen.value = true; }
 async function saveAccess(){ await apiClient.put("/api/security/access-config", { ...accessConfig }); ElMessage.success("访问安全设置已保存"); await loadAll(); }
 async function shadowStart(){ await apiClient.post("/api/shadow/start", { phase: "interaction" }); ElMessage.success("Shadow Mode 已启动"); await loadAll(); }

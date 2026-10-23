@@ -101,18 +101,63 @@ func rejectAmbiguousConversation(route conversationRoute, current coordination.D
 				return true
 			}
 		}
-		for _, raw := range snapshot.LegacyConversations {
-			var document struct {
-				ID string `json:"id"`
-			}
-			if json.Unmarshal(raw, &document) == nil && document.ID == route.CurrentID {
-				return true
-			}
-		}
-		return len(snapshot.LegacyMessages) > 0
+		return false
 	}
 	if hasConversation(current) && hasConversation(*historical) {
 		return coordination.ErrRequestConflict
 	}
 	return nil
+}
+
+func filterHistoricalContinuationMirrors(route conversationRoute, current coordination.DataSnapshot, historical *coordination.DataSnapshot) {
+	if historical == nil || route.Origin == nil || route.HistoricalID == "" || route.Origin.ID != route.HistoricalID || route.Origin.OwnerID != historical.OwnerID {
+		return
+	}
+	currentKeys := make(map[string]bool, len(current.Resources))
+	hasCurrentConversation := false
+	hasCurrentSummary := false
+	for _, resource := range current.Resources {
+		currentKeys[resource.Kind+"/"+resource.ID] = true
+		hasCurrentConversation = hasCurrentConversation || resource.Kind == "conversation" && resource.ID == route.CurrentID
+		hasCurrentSummary = hasCurrentSummary || resource.Kind == "summary" && conversationResourceID(resource) == route.CurrentID
+	}
+	filtered := make([]coordination.Resource, 0, len(historical.Resources))
+	for _, resource := range historical.Resources {
+		if resource.Kind == "conversation" && resource.ID == route.HistoricalID && hasCurrentConversation {
+			continue
+		}
+		if conversationResourceID(resource) != route.HistoricalID {
+			filtered = append(filtered, resource)
+			continue
+		}
+		if (resource.Kind == "message" || resource.Kind == "working") && currentKeys[resource.Kind+"/"+resource.ID] {
+			continue
+		}
+		if resource.Kind == "summary" && hasCurrentSummary {
+			continue
+		}
+		filtered = append(filtered, resource)
+	}
+	historical.Resources = filtered
+}
+
+func conversationResourceID(resource coordination.Resource) string {
+	switch resource.Kind {
+	case "conversation":
+		var document struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(resource.Body, &document) == nil && document.ID != "" {
+			return document.ID
+		}
+		return resource.ID
+	case "message", "summary", "working":
+		var document struct {
+			ConversationID string `json:"conversationId"`
+		}
+		if json.Unmarshal(resource.Body, &document) == nil {
+			return document.ConversationID
+		}
+	}
+	return ""
 }

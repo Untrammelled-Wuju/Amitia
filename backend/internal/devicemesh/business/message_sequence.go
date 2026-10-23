@@ -30,8 +30,5 @@ func nextOwnedMessageSequence(snapshot coordination.DataSnapshot, conversation s
 			read(resource.Body, resource.Kind == "conversation")
 		}
 	}
-	for _, raw := range snapshot.LegacyMessages {
-		read(raw, false)
-	}
 	return latest + 1
 }

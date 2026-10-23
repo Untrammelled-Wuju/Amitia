@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -36,7 +35,14 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 		return result, errors.New("user id, character id and interaction id are required")
 	}
 	settings, settingsErr := c.repo.GetSettings(ctx, input.CharacterID)
-	if settingsErr == nil && settings != nil && !settings.Enabled {
+	if settingsErr != nil {
+		return result, settingsErr
+	}
+	if settings == nil {
+		defaults := DefaultRelationshipTimeSettings(input.CharacterID)
+		settings = &defaults
+	}
+	if !settings.Enabled {
 		return RelationshipTimeContext{Version: RelationshipTimeVersion, SpaceID: input.SpaceID, CharacterID: input.CharacterID}, nil
 	}
 	if input.RequestID == "" {
@@ -46,7 +52,23 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 		input.ObservedAt = c.clock.Now()
 	}
 	input.ObservedAt = input.ObservedAt.UTC()
-	err = c.repo.WithTransaction(ctx, func(repo *RelationshipTimeRepository) error {
+	err = c.repo.WithTransaction(ctx, func(repo *RelationshipTimeRepository) (txErr error) {
+		defer func() {
+			if txErr != nil {
+				return
+			}
+			policy := ResolveRelationshipTimePolicy(result, input.Message, false, settings)
+			result.Policy = &policy
+			if result.Reunion != nil && result.Reunion.ShouldExpress {
+				encoded, err := json.Marshal(policy)
+				if err != nil {
+					txErr = err
+					return
+				}
+				txErr = repo.db.WithContext(ctx).Model(&ReunionEpisode{}).Where("id=? AND claim_interaction_id=? AND status=?", result.Reunion.EpisodeID, result.Reunion.ClaimedByInteractionID, ReunionStateClaimed).Update("policy_json", string(encoded)).Error
+			}
+		}()
+
 		receipt := &InteractionReceipt{
 			ID:            uuid.NewString(),
 			RequestID:     input.RequestID,
@@ -68,6 +90,14 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 			existing, getErr := repo.GetReceipt(ctx, input.SpaceID, input.RequestID)
 			if getErr != nil {
 				return getErr
+			}
+			if existing.CharacterID != input.CharacterID {
+				return errors.New("relationship time request scope mismatch")
+			}
+			if existing.Status != InteractionReceiptCommitted && existing.ReunionEpisodeID != "" {
+				if _, _, err := repo.ClaimReunionEpisode(ctx, existing.ReunionEpisodeID, existing.InteractionID); err != nil {
+					return err
+				}
 			}
 			result, getErr = c.contextFromReceipt(ctx, repo, existing)
 			return getErr
@@ -173,13 +203,6 @@ func (c *RelationshipTimeCoordinator) PrepareInbound(ctx context.Context, input 
 	return result, err
 }
 
-func (c *RelationshipTimeCoordinator) ReleaseClaim(ctx context.Context, interactionID, reason string) error {
-	if c == nil || c.repo == nil {
-		return errors.New("relationship time repository is required")
-	}
-	return c.repo.ReleaseClaim(ctx, interactionID, reason)
-}
-
 func (c *RelationshipTimeCoordinator) Resolve(ctx context.Context, input SnapshotInput, nowUTC time.Time) (*RelationshipTimeContext, error) {
 	if c == nil || c.repo == nil || strings.TrimSpace(input.SpaceID) == "" || strings.TrimSpace(input.CharacterID) == "" {
 		return nil, nil
@@ -221,13 +244,6 @@ func (c *RelationshipTimeCoordinator) Resolve(ctx context.Context, input Snapsho
 		}
 	}
 	return &result, nil
-}
-
-func (c *RelationshipTimeCoordinator) FinalizeInteractionTx(ctx context.Context, tx *gorm.DB, input FinalizeInteractionInput) error {
-	if c == nil || c.repo == nil {
-		return errors.New("relationship time repository is required")
-	}
-	return c.repo.FinalizeInteractionTx(ctx, tx, input)
 }
 
 func (c *RelationshipTimeCoordinator) GetSettings(ctx context.Context, characterID string) (*RelationshipTimeSettings, error) {
@@ -273,21 +289,47 @@ func (c *RelationshipTimeCoordinator) GetState(ctx context.Context, spaceID, cha
 	return result, err
 }
 
-func (c *RelationshipTimeCoordinator) RecordAssistantContact(ctx context.Context, spaceID, characterID string, at time.Time) error {
+func (c *RelationshipTimeCoordinator) FinishRequest(ctx context.Context, spaceID, characterID, requestID, message string, abort, assistantInitiated bool) error {
 	if c == nil || c.repo == nil {
 		return errors.New("relationship time repository is required")
 	}
-	spaceID = requestidentity.NormalizeSpaceID(spaceID)
-	if strings.TrimSpace(characterID) == "" {
-		return errors.New("character id is required")
-	}
-	if at.IsZero() {
-		at = c.clock.Now()
-	}
-	return c.repo.RecordAssistantContact(ctx, spaceID, characterID, at.UTC())
+	return c.repo.WithTransaction(ctx, func(repo *RelationshipTimeRepository) error {
+		receipt, err := repo.GetReceipt(ctx, spaceID, requestID)
+		if err != nil || receipt == nil {
+			return err
+		}
+		if receipt.CharacterID != characterID {
+			return errors.New("relationship time request scope mismatch")
+		}
+		if receipt.Status == InteractionReceiptCommitted {
+			return nil
+		}
+		if abort {
+			if err := repo.ReleaseClaim(ctx, receipt.InteractionID, "reply_not_committed"); err != nil {
+				return err
+			}
+			receipt.Status = InteractionReceiptFailed
+			return repo.SaveReceipt(ctx, receipt)
+		}
+		value, err := c.contextFromReceipt(ctx, repo, receipt)
+		if err != nil {
+			return err
+		}
+		settings, err := repo.GetSettings(ctx, characterID)
+		if err != nil {
+			return err
+		}
+		if settings == nil {
+			defaults := DefaultRelationshipTimeSettings(characterID)
+			settings = &defaults
+		}
+		policy := ResolveRelationshipTimePolicy(value, message, false, settings)
+		coordinator := NewRelationshipTimeCoordinator(repo, c.clock)
+		return coordinator.finalizeCommittedTx(ctx, repo.db, spaceID, characterID, receipt.InteractionID, &value, policy.MentionMode == ReunionMentionNone, policy.SuppressionReason, assistantInitiated)
+	})
 }
 
-func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, tx *gorm.DB, spaceID, characterID, interactionID string, relationshipTime *RelationshipTimeContext, suppress bool, reason string, assistantInitiated bool) error {
+func (c *RelationshipTimeCoordinator) finalizeCommittedTx(ctx context.Context, tx *gorm.DB, spaceID, characterID, interactionID string, relationshipTime *RelationshipTimeContext, suppress bool, reason string, assistantInitiated bool) error {
 	if c == nil || c.repo == nil {
 		return errors.New("relationship time repository is required")
 	}
@@ -324,7 +366,7 @@ func (c *RelationshipTimeCoordinator) FinalizeCommittedTx(ctx context.Context, t
 	}
 	cadence := selectCadence(relationshipSamples, globalSamples)
 	input := FinalizeInteractionInput{SpaceID: spaceID, CharacterID: characterID, InteractionID: interactionID, CommittedAt: committedAt, ExpectedGapSeconds: cadence.ExpectedGap.Seconds(), GapMADSeconds: cadence.MAD.Seconds(), CadenceSample: relationshipSample, SuppressReunion: suppress, SuppressionReason: reason, AssistantInitiated: assistantInitiated}
-	if relationshipTime != nil && relationshipTime.Reunion != nil {
+	if relationshipTime != nil && relationshipTime.Reunion != nil && relationshipTime.Reunion.State == ReunionStateClaimed && relationshipTime.Reunion.ClaimedByInteractionID == receipt.InteractionID {
 		input.ReunionEpisodeID = relationshipTime.Reunion.EpisodeID
 		input.ReacclimationTurns = reacclimationTurns(relationshipTime.Reunion.Level)
 		if !relationshipTime.Reunion.ShouldExpress {
@@ -437,9 +479,6 @@ func applySettingsToPolicy(policy RelationshipTimePolicy, settings *Relationship
 	if !settings.AllowProactiveReference {
 		policy.RestorePreviousTopic = false
 	}
-	if settings.MaxMentionSentences > 0 && settings.MaxMentionSentences < policy.MaxMentionSentences {
-		policy.MaxMentionSentences = settings.MaxMentionSentences
-	}
 	switch settings.Sensitivity {
 	case "conservative":
 		if policy.MaxMentionSentences > 0 {
@@ -451,6 +490,12 @@ func applySettingsToPolicy(policy RelationshipTimePolicy, settings *Relationship
 		if policy.MentionMode != ReunionMentionNone && policy.MaxMentionSentences < 2 {
 			policy.MaxMentionSentences = 2
 		}
+	}
+	if settings.MaxMentionSentences >= 0 && settings.MaxMentionSentences < policy.MaxMentionSentences {
+		policy.MaxMentionSentences = settings.MaxMentionSentences
+	}
+	if policy.MaxMentionSentences == 0 {
+		policy.MentionMode = ReunionMentionNone
 	}
 	return policy
 }

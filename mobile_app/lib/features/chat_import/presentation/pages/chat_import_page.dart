@@ -3,15 +3,16 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/models/character.dart';
+import '../../../../core/services/owned_conversation_reference.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
@@ -33,14 +34,23 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
   String _selectedCharacterName = '';
   String _detectedFormat = '';
   String _summary = '';
+  String _batchId = '';
   String _conversationId = '';
+  Map<String, dynamic>? _executionScope;
   bool _busy = false;
 
-  final _steps = const ['选择来源', '输入内容', '解析预览', '编辑消息', '选择角色', '确认导入', '生成摘要', '提取记忆', '完成'];
-  final _sources = const [
-    ('Telegram', Icons.send),
-    ('手动输入', Icons.edit_note),
+  final _steps = const [
+    '选择来源',
+    '输入内容',
+    '解析预览',
+    '编辑消息',
+    '选择角色',
+    '确认导入',
+    '生成摘要',
+    '提取记忆',
+    '完成',
   ];
+  final _sources = const [('Telegram', Icons.send), ('手动输入', Icons.edit_note)];
 
   @override
   void dispose() {
@@ -52,7 +62,10 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
   void _show(String text, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), backgroundColor: error ? context.error : null),
+      SnackBar(
+        content: Text(text),
+        backgroundColor: error ? context.error : null,
+      ),
     );
   }
 
@@ -94,14 +107,14 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
       _show('请先输入或选择聊天记录', error: true);
       return false;
     }
-    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-          '/api/imports/parse-text',
-          data: {
-            'rawText': raw,
-            'format': 'auto',
-            'defaultRole': 'user',
-          },
-        ));
+    final result = await _run(
+      () => ref
+          .read(backendServiceProvider)
+          .post<Map<String, dynamic>>(
+            '/api/imports/parse-text',
+            data: {'rawText': raw, 'format': 'auto', 'defaultRole': 'user'},
+          ),
+    );
     if (result == null) return false;
     final rows = result['items'];
     if (rows is! List || rows.isEmpty) {
@@ -112,7 +125,9 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
       _detectedFormat = (result['detectedFormat'] ?? 'auto').toString();
       _parsedMessages
         ..clear()
-        ..addAll(rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
+        ..addAll(
+          rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+        );
     });
     return true;
   }
@@ -126,49 +141,111 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
       _show('没有可导入的消息', error: true);
       return false;
     }
-    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-          '/api/imports/confirm',
-          data: {
-            'characterId': _selectedCharacterId,
-            'title': _titleController.text.trim().isEmpty ? '已导入的聊天' : _titleController.text.trim(),
-            'items': _parsedMessages,
-            'defaultRole': 'user',
-          },
-        ));
-    if (result == null || result['confirmed'] != true) {
+    final result = await _run(
+      () => ref
+          .read(backendServiceProvider)
+          .post<Map<String, dynamic>>(
+            '/api/imports/confirm',
+            data: {
+              'characterId': _selectedCharacterId,
+              'title': _titleController.text.trim().isEmpty
+                  ? '已导入的聊天'
+                  : _titleController.text.trim(),
+              'items': _parsedMessages,
+              'defaultRole': 'user',
+              'detectedFormat': _detectedFormat,
+            },
+          ),
+    );
+    if (result == null || result['batchId'] is! String) {
       _show((result?['message'] ?? '导入未完成').toString(), error: true);
       return false;
     }
-    final conversationId = (result['conversationId'] ?? '').toString();
-    if (conversationId.isEmpty) {
-      _show('后端未返回导入会话 ID', error: true);
+    final batchId = (result['batchId'] as String).trim();
+    if (batchId.isEmpty) {
+      _show('后端未返回导入批次 ID', error: true);
       return false;
     }
-    setState(() => _conversationId = conversationId);
+    final promoted = await ref
+        .read(chatServiceProvider)
+        .owned
+        .management(
+          'from-import',
+          body: <String, dynamic>{'importBatchId': batchId},
+          characterId: _selectedCharacterId,
+        );
+    final conversationId = (promoted['conversationId'] ?? '').toString().trim();
+    final scope = promoted['executionScope'];
+    if (conversationId.isEmpty || scope is! Map) {
+      _show('设备聊天未确认导入会话', error: true);
+      return false;
+    }
+    setState(() {
+      _batchId = batchId;
+      _conversationId = conversationReference({
+        'ownerId': scope['resourceOwnerId'],
+        'id': conversationId,
+      });
+      _executionScope = Map<String, dynamic>.from(scope);
+    });
     ref.invalidate(conversationListProvider);
     return true;
   }
 
   Future<void> _generateSummary() async {
-    if (_conversationId.isEmpty) return;
-    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-          '/api/imports/batches/${Uri.encodeComponent(_conversationId)}/generate-summary',
-        ));
+    if (_batchId.isEmpty) return;
+    final result = await _run(
+      () => ref
+          .read(backendServiceProvider)
+          .post<Map<String, dynamic>>(
+            '/api/imports/batches/${Uri.encodeComponent(_batchId)}/generate-summary',
+          ),
+    );
     if (result == null) return;
     setState(() => _summary = (result['summary'] ?? '').toString());
   }
 
   Future<void> _extractMemories() async {
-    if (_conversationId.isEmpty) return;
-    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-          '/api/imports/batches/${Uri.encodeComponent(_conversationId)}/extract-memory-candidates',
-        ));
+    final scope = _executionScope;
+    final origin = parseConversationReference(_conversationId);
+    if (scope == null || origin == null) return;
+    final result = await _run(() async {
+      final service = ref.read(deviceOwnedMemoryServiceProvider);
+      final original = await service.query(
+        _selectedCharacterId,
+        candidates: true,
+      );
+      return service.manage(original, <String, dynamic>{
+        'action': 'generate',
+        'conversationId': origin['id'],
+        'conversationOrigin': origin,
+      }, candidates: true);
+    });
     if (result == null) return;
-    final rows = result['candidates'];
+    final rows = result['resources'];
     setState(() {
       _memoryCandidates
         ..clear()
-        ..addAll(rows is List ? rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)) : const []);
+        ..addAll(
+          rows is List
+              ? rows.whereType<Map>().map((row) {
+                  final body = row['body'] is Map
+                      ? Map<String, dynamic>.from(row['body'] as Map)
+                      : const <String, dynamic>{};
+                  final content = body['content'] is Map
+                      ? Map<String, dynamic>.from(body['content'] as Map)
+                      : const <String, dynamic>{};
+                  return <String, dynamic>{
+                    'id': row['id'],
+                    'revision': row['revision'],
+                    'key': body['key'] ?? '记忆',
+                    'value': content['value'] ?? content['text'] ?? '',
+                    'memoryType': content['memoryType'] ?? '',
+                    'importance': content['importance'] ?? 0,
+                  };
+                })
+              : const <Map<String, dynamic>>[],
+        );
     });
   }
 
@@ -193,7 +270,9 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Future<void> _editMessage(int index) async {
     final item = _parsedMessages[index];
-    final controller = TextEditingController(text: (item['content'] ?? '').toString());
+    final controller = TextEditingController(
+      text: (item['content'] ?? '').toString(),
+    );
     String role = (item['role'] ?? 'user').toString();
     final saved = await showDialog<bool>(
       context: context,
@@ -209,15 +288,22 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                   DropdownMenuItem(value: 'user', child: Text('用户')),
                   DropdownMenuItem(value: 'assistant', child: Text('AI')),
                 ],
-                onChanged: (value) => setDialogState(() => role = value ?? 'user'),
+                onChanged: (value) =>
+                    setDialogState(() => role = value ?? 'user'),
               ),
               const SizedBox(height: 12),
               TextField(controller: controller, minLines: 2, maxLines: 8),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('保存'),
+            ),
           ],
         ),
       ),
@@ -232,10 +318,19 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
   }
 
   Future<void> _showBatchList() async {
-    final result = await _run(() => ref.read(backendServiceProvider).get<Map<String, dynamic>>('/api/imports/batches'));
+    final result = await _run(
+      () => ref
+          .read(backendServiceProvider)
+          .get<Map<String, dynamic>>('/api/imports/batches'),
+    );
     if (!mounted || result == null) return;
     final rows = result['items'];
-    final batches = rows is List ? rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : <Map<String, dynamic>>[];
+    final batches = rows is List
+        ? rows
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+        : <Map<String, dynamic>>[];
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -243,7 +338,10 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
         content: SizedBox(
           width: 520,
           child: batches.isEmpty
-              ? const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('暂无导入记录')))
+              ? const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: Text('暂无导入记录')),
+                )
               : ListView.separated(
                   shrinkWrap: true,
                   itemCount: batches.length,
@@ -251,31 +349,111 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                   itemBuilder: (_, index) {
                     final batch = batches[index];
                     final id = (batch['id'] ?? '').toString();
-                    final count = batch['message_count'] ?? batch['totalItems'] ?? 0;
+                    final count =
+                        batch['message_count'] ?? batch['totalItems'] ?? 0;
                     final title = (batch['title'] ?? '已导入的聊天').toString();
-                    final createdAt = (batch['created_at'] ?? batch['createdAt'] ?? '').toString();
+                    final createdAt =
+                        (batch['created_at'] ?? batch['createdAt'] ?? '')
+                            .toString();
+                    final status = (batch['status'] ?? '').toString();
+                    final roleId = (batch['roleId'] ?? '').toString();
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(title),
-                      subtitle: Text('$count 条消息 · $createdAt'),
-                      trailing: IconButton(
-                        icon: Icon(Icons.delete_outline, color: context.error),
-                        onPressed: id.isEmpty
-                            ? null
-                            : () async {
-                                await ref.read(backendServiceProvider).delete('/api/imports/batches/${Uri.encodeComponent(id)}');
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                _show('导入批次已删除');
-                                ref.invalidate(conversationListProvider);
-                              },
+                      subtitle: Text(
+                        '$count 条消息 · $createdAt · ${_batchStatus(status)}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (status == 'ready_for_promotion')
+                            TextButton(
+                              onPressed: id.isEmpty || roleId.isEmpty
+                                  ? null
+                                  : () => _promoteBatch(ctx, id, roleId),
+                              child: const Text('加入聊天'),
+                            ),
+                          if (status != 'promoted')
+                            IconButton(
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: context.error,
+                              ),
+                              onPressed: id.isEmpty
+                                  ? null
+                                  : () async {
+                                      await ref
+                                          .read(backendServiceProvider)
+                                          .delete(
+                                            '/api/imports/batches/${Uri.encodeComponent(id)}',
+                                          );
+                                      if (ctx.mounted) Navigator.pop(ctx);
+                                      _show('导入批次已删除');
+                                      ref.invalidate(conversationListProvider);
+                                    },
+                            ),
+                        ],
                       ),
                     );
                   },
                 ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
+  }
+
+  Future<void> _promoteBatch(
+    BuildContext dialogContext,
+    String batchId,
+    String roleId,
+  ) async {
+    await _run(() async {
+      final promoted = await ref
+          .read(chatServiceProvider)
+          .owned
+          .management(
+            'from-import',
+            body: <String, dynamic>{'importBatchId': batchId},
+            characterId: roleId,
+          );
+      final conversationId = (promoted['conversationId'] ?? '')
+          .toString()
+          .trim();
+      final scope = promoted['executionScope'];
+      if (conversationId.isEmpty || scope is! Map) {
+        throw StateError('设备聊天未确认导入会话');
+      }
+      final reference = conversationReference({
+        'ownerId': scope['resourceOwnerId'],
+        'id': conversationId,
+      });
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+      ref.invalidate(conversationListProvider);
+      if (mounted) {
+        GoRouter.of(context).go(
+          Uri(
+            path: AppRoutes.chat,
+            queryParameters: {
+              'conversationId': reference,
+              'characterId': roleId,
+            },
+          ).toString(),
+        );
+      }
+    });
+  }
+
+  String _batchStatus(String status) {
+    if (status == 'ready_for_promotion') return '待加入';
+    if (status == 'promoted') return '已加入';
+    if (status == 'failed') return '失败';
+    return status.isEmpty ? '未知' : status;
   }
 
   @override
@@ -284,7 +462,13 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
       appBar: AmitiaAppBar(
         title: '导入聊天记录',
         navigation: AmitiaAppBarNavigation.back,
-        actions: [AmitiaIconButton(icon: Icons.history, tooltip: '导入批次', onPressed: _busy ? null : _showBatchList)],
+        actions: [
+          AmitiaIconButton(
+            icon: Icons.history,
+            tooltip: '导入批次',
+            onPressed: _busy ? null : _showBatchList,
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -300,7 +484,10 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
           ),
           if (_busy)
             Positioned.fill(
-              child: ColoredBox(color: Colors.black.withValues(alpha: 0.08), child: const Center(child: CircularProgressIndicator())),
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.08),
+                child: const Center(child: CircularProgressIndicator()),
+              ),
             ),
         ],
       ),
@@ -309,7 +496,10 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _stepIndicator(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.pagePadding,
+        vertical: AppSpacing.md,
+      ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -322,16 +512,33 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: current ? context.accentPrimary : completed ? context.success : context.surfaceSecondary,
+                    color: current
+                        ? context.accentPrimary
+                        : completed
+                        ? context.success
+                        : context.surfaceSecondary,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: completed
                         ? const Icon(Icons.check, size: 16, color: Colors.white)
-                        : Text('${index + 1}', style: TextStyle(fontSize: 12, color: current ? Colors.white : context.textTertiary)),
+                        : Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: current
+                                  ? Colors.white
+                                  : context.textTertiary,
+                            ),
+                          ),
                   ),
                 ),
-                if (index < _steps.length - 1) Container(width: 20, height: 2, color: completed ? context.success : context.borderPrimary),
+                if (index < _steps.length - 1)
+                  Container(
+                    width: 20,
+                    height: 2,
+                    color: completed ? context.success : context.borderPrimary,
+                  ),
               ],
             );
           }),
@@ -374,13 +581,29 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
             padding: EdgeInsets.only(bottom: AppSpacing.sm),
             child: AmitiaCard(
               onTap: () => setState(() => _selectedSource = source.$1),
-              border: Border.all(color: _selectedSource == source.$1 ? context.accentPrimary : context.borderPrimary),
+              border: Border.all(
+                color: _selectedSource == source.$1
+                    ? context.accentPrimary
+                    : context.borderPrimary,
+              ),
               child: Row(
                 children: [
                   Icon(source.$2, color: context.accentPrimary),
                   SizedBox(width: AppSpacing.md),
-                  Expanded(child: Text(source.$1, style: AppTypography.cardTitle(context))),
-                  Icon(_selectedSource == source.$1 ? Icons.check_circle : Icons.radio_button_unchecked, color: _selectedSource == source.$1 ? context.accentPrimary : context.textTertiary),
+                  Expanded(
+                    child: Text(
+                      source.$1,
+                      style: AppTypography.cardTitle(context),
+                    ),
+                  ),
+                  Icon(
+                    _selectedSource == source.$1
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    color: _selectedSource == source.$1
+                        ? context.accentPrimary
+                        : context.textTertiary,
+                  ),
                 ],
               ),
             ),
@@ -410,7 +633,8 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
             AmitiaButtonOutline(
               label: '使用示例',
               onPressed: () => setState(() {
-                _contentController.text = '[2026-07-30 09:00] 用户: 你好，今天天气怎么样？\n[2026-07-30 09:01] AI: 今天天气不错。';
+                _contentController.text =
+                    '[2026-07-30 09:00] 用户: 你好，今天天气怎么样？\n[2026-07-30 09:01] AI: 今天天气不错。';
               }),
             ),
           ],
@@ -419,7 +643,11 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     );
   }
 
-  Widget _messageList(BuildContext context, {required String title, required bool editable}) {
+  Widget _messageList(
+    BuildContext context, {
+    required String title,
+    required bool editable,
+  }) {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -427,7 +655,10 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
           children: [
             Text(title, style: AppTypography.sectionTitle(context)),
             const Spacer(),
-            Text('${_parsedMessages.length} 条 · $_detectedFormat', style: AppTypography.caption(context)),
+            Text(
+              '${_parsedMessages.length} 条 · $_detectedFormat',
+              style: AppTypography.caption(context),
+            ),
           ],
         ),
         SizedBox(height: AppSpacing.md),
@@ -439,23 +670,50 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: _parsedMessages[index]['role'] == 'assistant' ? context.info : context.accentPrimary,
-                    child: Text(_parsedMessages[index]['role'] == 'assistant' ? 'AI' : '我', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                    backgroundColor:
+                        _parsedMessages[index]['role'] == 'assistant'
+                        ? context.info
+                        : context.accentPrimary,
+                    child: Text(
+                      _parsedMessages[index]['role'] == 'assistant'
+                          ? 'AI'
+                          : '我',
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                    ),
                   ),
                   SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text((_parsedMessages[index]['content'] ?? '').toString(), style: AppTypography.bodySmall(context)),
-                        if ((_parsedMessages[index]['timestamp'] ?? '').toString().isNotEmpty)
-                          Text((_parsedMessages[index]['timestamp'] ?? '').toString(), style: AppTypography.label(context)),
+                        Text(
+                          (_parsedMessages[index]['content'] ?? '').toString(),
+                          style: AppTypography.bodySmall(context),
+                        ),
+                        if ((_parsedMessages[index]['timestamp'] ?? '')
+                            .toString()
+                            .isNotEmpty)
+                          Text(
+                            (_parsedMessages[index]['timestamp'] ?? '')
+                                .toString(),
+                            style: AppTypography.label(context),
+                          ),
                       ],
                     ),
                   ),
                   if (editable) ...[
-                    AmitiaIconButton(icon: Icons.edit_outlined, size: 17, onPressed: () => _editMessage(index)),
-                    AmitiaIconButton(icon: Icons.delete_outline, size: 17, color: context.error, onPressed: () => setState(() => _parsedMessages.removeAt(index))),
+                    AmitiaIconButton(
+                      icon: Icons.edit_outlined,
+                      size: 17,
+                      onPressed: () => _editMessage(index),
+                    ),
+                    AmitiaIconButton(
+                      icon: Icons.delete_outline,
+                      size: 17,
+                      color: context.error,
+                      onPressed: () =>
+                          setState(() => _parsedMessages.removeAt(index)),
+                    ),
                   ],
                 ],
               ),
@@ -484,13 +742,35 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                   _selectedCharacterId = character.id;
                   _selectedCharacterName = character.name;
                 }),
-                border: Border.all(color: _selectedCharacterId == character.id ? context.accentPrimary : context.borderPrimary),
+                border: Border.all(
+                  color: _selectedCharacterId == character.id
+                      ? context.accentPrimary
+                      : context.borderPrimary,
+                ),
                 child: Row(
                   children: [
-                    CircleAvatar(child: Text(character.name.isEmpty ? '?' : character.name.substring(0, 1))),
+                    CircleAvatar(
+                      child: Text(
+                        character.name.isEmpty
+                            ? '?'
+                            : character.name.substring(0, 1),
+                      ),
+                    ),
                     SizedBox(width: AppSpacing.md),
-                    Expanded(child: Text(character.name, style: AppTypography.cardTitle(context))),
-                    Icon(_selectedCharacterId == character.id ? Icons.check_circle : Icons.radio_button_unchecked, color: _selectedCharacterId == character.id ? context.accentPrimary : context.textTertiary),
+                    Expanded(
+                      child: Text(
+                        character.name,
+                        style: AppTypography.cardTitle(context),
+                      ),
+                    ),
+                    Icon(
+                      _selectedCharacterId == character.id
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                      color: _selectedCharacterId == character.id
+                          ? context.accentPrimary
+                          : context.textTertiary,
+                    ),
                   ],
                 ),
               ),
@@ -530,7 +810,10 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
         SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           backgroundColor: context.accentSoft,
-          child: Text(_summary.isEmpty ? '后端未生成摘要，可继续完成导入。' : _summary, style: AppTypography.bodySmall(context).copyWith(height: 1.6)),
+          child: Text(
+            _summary.isEmpty ? '后端未生成摘要，可继续完成导入。' : _summary,
+            style: AppTypography.bodySmall(context).copyWith(height: 1.6),
+          ),
         ),
       ],
     );
@@ -558,11 +841,20 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text((item['key'] ?? '记忆').toString(), style: AppTypography.cardTitle(context)),
+                        Text(
+                          (item['key'] ?? '记忆').toString(),
+                          style: AppTypography.cardTitle(context),
+                        ),
                         const SizedBox(height: 4),
-                        Text((item['value'] ?? '').toString(), style: AppTypography.bodySmall(context)),
+                        Text(
+                          (item['value'] ?? '').toString(),
+                          style: AppTypography.bodySmall(context),
+                        ),
                         const SizedBox(height: 4),
-                        Text('重要性：${item['importance'] ?? 0}/10', style: AppTypography.label(context)),
+                        Text(
+                          '重要性：${item['importance'] ?? 0}/10',
+                          style: AppTypography.label(context),
+                        ),
                       ],
                     ),
                   ),
@@ -585,7 +877,27 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
             SizedBox(height: AppSpacing.lg),
             Text('导入完成', style: AppTypography.pageTitle(context)),
             SizedBox(height: AppSpacing.sm),
-            Text('${_parsedMessages.length} 条消息已写入真实会话数据。', style: AppTypography.caption(context), textAlign: TextAlign.center),
+            Text(
+              '${_parsedMessages.length} 条消息已加入设备所属聊天。',
+              style: AppTypography.caption(context),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: AppSpacing.lg),
+            AmitiaButton(
+              label: '进入聊天',
+              isFullWidth: true,
+              onPressed: _conversationId.isEmpty
+                  ? null
+                  : () => GoRouter.of(context).go(
+                      Uri(
+                        path: AppRoutes.chat,
+                        queryParameters: {
+                          'conversationId': _conversationId,
+                          'characterId': _selectedCharacterId,
+                        },
+                      ).toString(),
+                    ),
+            ),
           ],
         ),
       ),
@@ -595,16 +907,32 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
   Widget _navigation(BuildContext context) {
     return Container(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: context.borderPrimary))),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.borderPrimary)),
+      ),
       child: Row(
         children: [
           if (_currentStep > 0 && _currentStep < _steps.length - 1)
-            Expanded(child: AmitiaButtonOutline(label: '上一步', onPressed: _busy ? null : () => setState(() => _currentStep--))),
-          if (_currentStep > 0 && _currentStep < _steps.length - 1) SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: AmitiaButtonOutline(
+                label: '上一步',
+                onPressed: _busy ? null : () => setState(() => _currentStep--),
+              ),
+            ),
+          if (_currentStep > 0 && _currentStep < _steps.length - 1)
+            SizedBox(width: AppSpacing.md),
           Expanded(
             child: AmitiaButton(
-              label: _currentStep == _steps.length - 1 ? '完成' : _currentStep == 5 ? '确认并导入' : '下一步',
-              onPressed: _busy ? null : _currentStep == _steps.length - 1 ? () => Navigator.maybePop(context) : _next,
+              label: _currentStep == _steps.length - 1
+                  ? '完成'
+                  : _currentStep == 5
+                  ? '确认并导入'
+                  : '下一步',
+              onPressed: _busy
+                  ? null
+                  : _currentStep == _steps.length - 1
+                  ? () => Navigator.maybePop(context)
+                  : _next,
             ),
           ),
         ],
@@ -617,7 +945,10 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
-          SizedBox(width: 88, child: Text(label, style: AppTypography.label(context))),
+          SizedBox(
+            width: 88,
+            child: Text(label, style: AppTypography.label(context)),
+          ),
           Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
         ],
       ),

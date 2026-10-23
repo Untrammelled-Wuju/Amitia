@@ -19,8 +19,8 @@ interface MeshRole { id: string; name: string; revision: number }
 export interface OwnedProjectWorkspace { id: string; deviceId: string; name: string; kind: string; rootUri: string; readOnly?: boolean }
 export interface OwnedProject { id: string; title: string; workspaces: OwnedProjectWorkspace[]; primaryWorkspaceId: string; hiddenAt?: string | null; revision: number; ownerId: string; roleId: string; readOnly: boolean; createdAt: string; updatedAt: string; pinnedAt?: string | null; executionScope: OwnedExecutionScope }
 interface MeshPolicy { coordinated: boolean; modeRevision: number; providerEpoch: number; permissionRevision: number; selectedRole: string }
-interface MeshResource { kind: string; id: string; roleId: string; ownerId: string; revision: number; deleted: boolean; body: any; executionScope?: OwnedExecutionScope }
-interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string>; legacyMessages?: any[]; legacyConversations?: any[]; legacySummary?: any }
+interface MeshResource { kind: string; id: string; roleId: string; ownerId: string; revision: number; deleted: boolean; origin?: string; readOnly?: boolean; body: any; executionScope?: OwnedExecutionScope }
+interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string> }
 interface MeshQueryResult { conversationReference?: string; conversationOrigin?: OwnedConversationOrigin; executionScope: OwnedExecutionScope; snapshot: MeshSnapshot; historicalSnapshot?: MeshSnapshot; historicalConversations?: any[]; nextHistoricalListCursor?: string; deliveryFailures?: Array<{ ownerId: string; requestId: string; conversationId?: string; errorCode: string; failedAt: string }> }
 
 const enabled = ref(false);
@@ -280,7 +280,7 @@ export function useDeviceOwnedConversation() {
     }
     if (conversationId) {
       const summary = result.snapshot.resources.find((resource) => resource.kind === "summary")?.body?.content;
-      const text = String(summary?.summary || summary?.text || (typeof summary === "string" ? summary : result.snapshot.legacySummary?.summaryText || result.snapshot.legacySummary?.summary_text || "")).slice(0, 16000);
+      const text = String(summary?.summary || summary?.text || (typeof summary === "string" ? summary : "")).slice(0, 16000);
       if (text) {
         summaries.set(`${result.executionScope.coreId}/${conversationId}`, text);
         if (summaries.size > 32) summaries.delete(summaries.keys().next().value!);
@@ -306,7 +306,7 @@ export function useDeviceOwnedConversation() {
       }
       for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
         if (!snapshot) continue;
-        for (const value of [...(snapshot.legacyConversations || []), ...snapshot.resources.filter((resource) => resource.kind === "conversation").map((resource) => resource.body)]) {
+        for (const value of snapshot.resources.filter((resource) => resource.kind === "conversation").map((resource) => resource.body)) {
           if (value?.id) {
             const row = ownedConversationRow(value, snapshot.ownerId);
             rows.set(row.id, row);
@@ -367,7 +367,7 @@ export function useDeviceOwnedConversation() {
     return createOwnedConversationExport(conversationId, rows, format);
   }
 
-  async function edit(kind: "conversation" | "message" | "memory" | "summary" | "project", id: string, changes: Record<string, unknown> = {}, options: { deleted?: boolean; clear?: boolean; characterId?: string; expectedExecutionScope?: OwnedExecutionScope; expectedOwnerId?: string; expectedRevision?: number } = {}) {
+  async function edit(kind: "conversation" | "message" | "memory" | "summary" | "project" | "emotion", id: string, changes: Record<string, unknown> = {}, options: { deleted?: boolean; clear?: boolean; characterId?: string; expectedExecutionScope?: OwnedExecutionScope; expectedOwnerId?: string; expectedRevision?: number } = {}) {
     if (!enabled.value) throw new Error("设备数据服务尚未就绪");
     const captured = revision;
     let resource = resourceCache.get(`${kind}/${id}`);
@@ -381,6 +381,7 @@ export function useDeviceOwnedConversation() {
     }
     if (captured !== revision) throw new Error("服务状态已变化，请重新加载后再操作");
     if (!resource || resource.deleted) throw new Error("该记录不在当前数据来源中，请在原设备管理历史数据");
+    if (resource.readOnly || resource.origin === "legacy") throw new Error("旧系统记录只读，请在当前数据所有者中创建新记录");
     id = resource.id;
     if (options.expectedOwnerId && resource.ownerId !== options.expectedOwnerId) throw new Error("记录所属设备已变化，请在原设备管理历史数据");
     if (!resource.executionScope) throw new Error("记录缺少数据来源版本，请重新加载");
@@ -404,12 +405,11 @@ export function useDeviceOwnedConversation() {
       const row = snapshot.resources.find((resource) => resource.kind === "summary" && !resource.deleted && resource.body);
       if (row) {
         const content = row.body.content;
-        const value = { summaryViewId: crypto.randomUUID(), summaryText: String(typeof content === "object" && content !== null ? content.summary || content.text || "" : content || ""), sourceOwnerId: snapshot.ownerId, sourceResourceId: row.id, sourceRevision: row.revision, sourceScope: { ...result.executionScope }, editable: snapshot === result.snapshot && row.ownerId === result.executionScope.resourceOwnerId };
+        const value = { summaryViewId: crypto.randomUUID(), summaryText: String(typeof content === "object" && content !== null ? content.summary || content.text || "" : content || ""), sourceOwnerId: snapshot.ownerId, sourceResourceId: row.id, sourceRevision: row.revision, sourceScope: { ...result.executionScope }, editable: snapshot === result.snapshot && row.ownerId === result.executionScope.resourceOwnerId && row.origin !== "legacy" && row.readOnly !== true };
         summaryViews.set(conversationId, value);
         if (summaryViews.size > 64) summaryViews.delete(summaryViews.keys().next().value!);
         return { ...value, sourceScope: { ...value.sourceScope } };
       }
-      if (snapshot.legacySummary) return { ...snapshot.legacySummary, sourceOwnerId: snapshot.ownerId, editable: false };
     }
     return null;
   }
@@ -470,7 +470,7 @@ export function useDeviceOwnedConversation() {
     const seen = new Set<string>();
     for (const snapshot of [result.historicalSnapshot, result.snapshot]) {
       if (!snapshot) continue;
-      const rows = [...(snapshot.legacyMessages || []).map((row: any) => ({ ...row, sourceRevision: null })), ...snapshot.resources.filter((resource) => resource.kind === "message").map((resource) => ({ ...resource.body, sourceRevision: resource.revision }))];
+      const rows = snapshot.resources.filter((resource) => resource.kind === "message").map((resource) => ({ ...resource.body, origin: resource.origin, readOnly: resource.readOnly || resource.origin === "legacy", sourceRevision: resource.origin === "legacy" || resource.readOnly ? null : resource.revision }));
       for (const row of rows) {
         if (!row?.id || !["user", "assistant"].includes(row.role)) continue;
         const key = `${snapshot.ownerId}:${row.id}`;

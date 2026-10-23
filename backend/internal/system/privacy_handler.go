@@ -6,32 +6,38 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/configwrite"
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/mindruntime"
-	"github.com/u-ai/backend/pkg/comment/response"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/util"
-	"gorm.io/gorm"
 )
 
 func (h *Handler) PrivacyScan(c *gin.Context) {
 	var req struct {
 		Scope []string `json:"scope"`
 	}
-	// An empty body remains valid for backwards compatibility and scans the
-	// historical default scope. Updated clients always send their selected scope.
-	_ = c.ShouldBindJSON(&req)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		privacyError(c, 400, "扫描参数无效", nil)
+		return
+	}
+	svc := h.privacyService(c)
 	memories := business.MemoryPrivacySnapshot{}
 	for _, item := range normalizePrivacyScopes(req.Scope) {
 		if item != privacyScopeMemories {
 			continue
 		}
 		if h.memoryConsumer == nil {
-			util.ErrorResponse(c, response.OperationFailed, "统一记忆服务尚未就绪", nil)
+			privacyError(c, 503, "统一记忆服务尚未就绪", nil)
 			return
 		}
 		entries, err := h.memoryConsumer.Read(c.Request.Context(), "", "memory", true)
@@ -39,23 +45,79 @@ func (h *Handler) PrivacyScan(c *gin.Context) {
 			memories, err = business.ScanMemoryPrivacy(entries, matchPrivacyPattern)
 		}
 		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "记忆隐私扫描失败", err.Error())
+			privacyError(c, 503, "记忆隐私扫描失败", err.Error())
 			return
 		}
-		h.privacyMemoryMu.Lock()
-		h.privacyMemoryEntries = map[string]business.MemoryConsumerEntry{}
-		for _, entry := range entries {
-			h.privacyMemoryEntries[entry.ID] = entry
+		svc.privacyMu.Lock()
+		if svc.privacyMemoryEntries == nil {
+			svc.privacyMemoryEntries = map[string]business.MemoryConsumerEntry{}
 		}
-		h.privacyMemoryMu.Unlock()
+		for _, entry := range entries {
+			svc.privacyMemoryEntries[entry.ID] = entry
+		}
+		svc.privacyMu.Unlock()
 	}
+	messages := []privacyMessageRow{}
+	receipts := map[string]coordination.PrivacyMessage{}
+	for _, selected := range normalizePrivacyScopes(req.Scope) {
+		if selected != privacyScopeMessages && selected != privacyScopeImportItems {
+			continue
+		}
+		port, ok := h.memoryConsumer.(business.ChatPrivacyPort)
+		if !ok {
+			privacyError(c, 503, "统一消息隐私入口不可用", nil)
+			return
+		}
+		entries, err := port.PrivacyMessages(c.Request.Context())
+		if err != nil {
+			privacyError(c, 503, "消息隐私扫描未完成", err.Error())
+			return
+		}
+		for _, entry := range entries {
+			var document map[string]interface{}
+			if json.Unmarshal(entry.Body, &document) != nil {
+				privacyError(c, 503, "消息隐私数据无效", nil)
+				return
+			}
+			raw, _ := json.Marshal([]interface{}{entry.OwnerID, entry.RoleID, entry.Legacy, entry.ID, entry.Scope})
+			digest := sha256.Sum256(raw)
+			id := "privacy-message/" + hex.EncodeToString(digest[:])
+			source := ""
+			if entry.Imported {
+				source = "import"
+			}
+			text, _ := document["content"].(string)
+			role, _ := document["role"].(string)
+			conversation, _ := document["conversationId"].(string)
+			stamp, _ := document["createdAt"].(string)
+			safety, _ := document["safetyLevel"].(string)
+			messages = append(messages, privacyMessageRow{ID: id, ConversationID: conversation, Role: role, Content: text, CreatedAt: stamp, SafetyLevel: safety, MessageSource: source})
+			receipts[id] = entry
+		}
+		break
+	}
+	svc.privacyMu.Lock()
+	if svc.privacyMessages == nil {
+		svc.privacyMessages = map[string]coordination.PrivacyMessage{}
+	}
+	for id, entry := range receipts {
+		svc.privacyMessages[id] = entry
+	}
+	svc.privacyMu.Unlock()
 	var result map[string]interface{}
 	if !h.commitAdministratorAction(c, func() error {
-		svc, ok := h.service.(*service)
-		if !ok {
-			return errors.New("统一隐私扫描服务尚未就绪")
+		result = svc.privacyScan(req.Scope, memories, messages)
+		for _, raw := range result["findings"].([]interface{}) {
+			finding, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			id, _ := finding["id"].(string)
+			if entry, exists := receipts[id]; exists {
+				finding["recordId"], finding["ownerId"], finding["characterId"], finding["revision"], finding["legacy"], finding["executionScope"] = entry.ID, entry.OwnerID, entry.RoleID, entry.Revision, entry.Legacy, entry.Scope
+			}
 		}
-		result = svc.privacyScan(req.Scope, memories)
+		svc.finalizePrivacyScan(result)
 		return nil
 	}) {
 		return
@@ -63,10 +125,11 @@ func (h *Handler) PrivacyScan(c *gin.Context) {
 	util.SuccessResponse(c, result)
 }
 
-func (h *Handler) scannedPrivacyMemory(id string) (business.MemoryConsumerEntry, error) {
-	h.privacyMemoryMu.RLock()
-	defer h.privacyMemoryMu.RUnlock()
-	entry, exists := h.privacyMemoryEntries[id]
+func (h *Handler) scannedPrivacyMemory(c *gin.Context, id string) (business.MemoryConsumerEntry, error) {
+	svc := h.privacyService(c)
+	svc.privacyMu.RLock()
+	defer svc.privacyMu.RUnlock()
+	entry, exists := svc.privacyMemoryEntries[id]
 	if !exists {
 		return business.MemoryConsumerEntry{}, errors.New("请重新扫描隐私后再进行记忆脱敏")
 	}
@@ -74,6 +137,8 @@ func (h *Handler) scannedPrivacyMemory(id string) (business.MemoryConsumerEntry,
 }
 
 func (h *Handler) PrivacyMask(c *gin.Context) {
+	svc := h.privacyService(c)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 320<<10)
 	var req struct {
 		IDs   []interface{} `json:"ids"`
 		Items []struct {
@@ -83,11 +148,11 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 		ConfirmToken string `json:"confirmToken"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.ConfirmToken != "确认脱敏" {
-		util.ErrorResponse(c, response.InvalidParams, "confirmToken must be 确认脱敏", nil)
+		privacyError(c, 400, "confirmToken must be 确认脱敏", nil)
 		return
 	}
 	if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
-		util.ErrorResponse(c, 409, err.Error(), nil)
+		privacyError(c, 409, err.Error(), nil)
 		return
 	}
 
@@ -120,10 +185,6 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 		return
 	}
 
-	// Memories have derived vector/graph state, so they must go through the
-	// canonical memory mutation service instead of a raw SQL update. Disabling
-	// context/proactive use makes the existing update path synchronously evict
-	// derived retrieval state while preserving the masked record for audit/UI.
 	maskedTargets := make([]privacyMaskTarget, 0, len(targets))
 	var updated int64
 	for _, target := range targets {
@@ -131,10 +192,10 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 			continue
 		}
 		if h.memoryConsumer == nil {
-			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", "memory service unavailable")
+			privacyError(c, 503, "privacy mask failed", "memory service unavailable")
 			return
 		}
-		entry, err := h.scannedPrivacyMemory(target.ID)
+		entry, err := h.scannedPrivacyMemory(c, target.ID)
 		if err == nil {
 			_, content, parseErr := business.MemoryContent(entry)
 			err = parseErr
@@ -146,44 +207,40 @@ func (h *Handler) PrivacyMask(c *gin.Context) {
 			}
 		}
 		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", err.Error())
+			privacyError(c, 503, "privacy mask failed", err.Error())
 			return
 		}
 		updated++
 		maskedTargets = append(maskedTargets, target)
+		svc.markPrivacyFindingsMasked([]privacyMaskTarget{target})
 	}
 
-	// Message/import records have no vector/graph derivative, so a single DB
-	// transaction is sufficient and keeps those source updates atomic.
-	messageTargets := make([]privacyMaskTarget, 0, len(targets))
 	for _, target := range targets {
-		if target.SourceTable == privacyScopeMessages || target.SourceTable == privacyScopeImportItems {
-			messageTargets = append(messageTargets, target)
+		if target.SourceTable == privacyScopeMemories {
+			continue
 		}
-	}
-	if len(messageTargets) > 0 {
-		if err := configwrite.Transaction(h.db.WithContext(c.Request.Context()), func(tx *gorm.DB) error {
-			for _, target := range messageTargets {
-				result := tx.Table("messages").Where("id = ?", target.ID).Updates(map[string]interface{}{
-					"content":      "[已脱敏]",
-					"safety_level": "masked",
-				})
-				if result.Error != nil {
-					return result.Error
-				}
-				if result.RowsAffected > 0 {
-					updated += result.RowsAffected
-					maskedTargets = append(maskedTargets, target)
-				}
-			}
-			return nil
-		}); err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", err.Error())
+		port, ok := h.memoryConsumer.(business.ChatPrivacyPort)
+		if !ok {
+			privacyError(c, 503, "统一消息脱敏入口不可用", nil)
 			return
 		}
+		svc.privacyMu.RLock()
+		entry, exists := svc.privacyMessages[target.ID]
+		svc.privacyMu.RUnlock()
+		if !exists || (target.SourceTable == privacyScopeImportItems) != entry.Imported {
+			privacyError(c, 409, "请重新扫描后再进行消息脱敏", nil)
+			return
+		}
+		if err := port.MaskPrivacyMessage(c.Request.Context(), entry, uuid.NewString()); err != nil {
+			privacyError(c, 409, "消息脱敏失败，请重新扫描", err.Error())
+			return
+		}
+		updated++
+		maskedTargets = append(maskedTargets, target)
+		svc.markPrivacyFindingsMasked([]privacyMaskTarget{target})
 	}
 
-	if svc, ok := h.service.(*service); ok {
+	if svc := h.privacyService(c); svc != nil {
 		if !h.commitAdministratorAction(c, func() error { svc.markPrivacyFindingsMasked(maskedTargets); return nil }) {
 			return
 		}
@@ -210,12 +267,11 @@ func normalizePrivacyMaskID(value interface{}) string {
 func (h *Handler) PrivacyScanResults(c *gin.Context) {
 	if c.Request.Method == "DELETE" {
 		if !h.commitAdministratorAction(c, func() error {
-			svc, ok := h.service.(*service)
-			if !ok {
-				return errors.New("隐私扫描服务不可用")
-			}
+			svc := h.privacyService(c)
 			svc.privacyMu.Lock()
 			svc.privacyScans = nil
+			svc.privacyMessages = nil
+			svc.privacyMemoryEntries = nil
 			svc.privacyMu.Unlock()
 			return nil
 		}) {
@@ -224,199 +280,56 @@ func (h *Handler) PrivacyScanResults(c *gin.Context) {
 		util.SuccessResponse(c, gin.H{"deleted": true})
 		return
 	}
-	util.SuccessResponse(c, h.service.PrivacyScanResults())
+	util.SuccessResponse(c, h.privacyService(c).PrivacyScanResults())
 }
 
 func (h *Handler) PrivacyScanResultsGet(c *gin.Context) {
-	util.SuccessResponse(c, h.service.PrivacyScanResults())
+	util.SuccessResponse(c, h.privacyService(c).PrivacyScanResults())
 }
 
 func (h *Handler) PrivacyScanResultByID(c *gin.Context) {
-	util.SuccessResponse(c, h.service.GetPrivacyScanResult(c.Param("id")))
+	util.SuccessResponse(c, h.privacyService(c).GetPrivacyScanResult(c.Param("id")))
 }
 
-func (h *Handler) PrivacyDeletionRequest(c *gin.Context) {
-	var req mindruntime.DeletionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
-		return
-	}
-	if strings.EqualFold(req.TargetType, "memory") {
-		if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
-			util.ErrorResponse(c, 409, err.Error(), nil)
+func (h *Handler) PrivacyAuthority() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.DeviceID == "" || h.canonicalMemory == nil {
+			c.AbortWithStatusJSON(503, gin.H{"message": "隐私数据归属入口尚未就绪"})
 			return
 		}
-		port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort)
-		if !ok {
-			util.ErrorResponse(c, 503, "统一记忆删除入口不可用", nil)
-			return
-		}
-		selection := string(req.Scope)
-		if selection == "" {
-			selection = "all"
-		}
-		result, err := port.DeleteMemory(c.Request.Context(), req.TargetID, selection)
-		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "记忆删除失败", err.Error())
-			return
-		}
-		util.SuccessResponse(c, result)
-		return
-	}
-	var memoryDeletions []business.MemoryDeletionStatus
-	targetType := strings.ToLower(strings.TrimSpace(req.TargetType))
-	if (targetType == "character" || targetType == "conversation") && (req.Scope == mindruntime.DeletionScopeMemory || req.Scope == mindruntime.DeletionScopeAll) {
-		if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
-			util.ErrorResponse(c, 409, err.Error(), nil)
-			return
-		}
-		port, ok := h.memoryConsumer.(business.MemoryRelatedDeletionPort)
-		if !ok {
-			util.ErrorResponse(c, 503, "关联记忆删除入口不可用", nil)
-			return
-		}
-		var err error
-		memoryDeletions, err = port.DeleteRelatedMemories(c.Request.Context(), targetType, req.TargetID)
-		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "关联记忆删除未全部完成", gin.H{"error": err.Error(), "memoryDeletions": memoryDeletions})
-			return
-		}
-		if req.Scope == mindruntime.DeletionScopeMemory {
-			util.SuccessResponse(c, gin.H{"memoryDeletions": memoryDeletions, "targetType": targetType, "targetId": req.TargetID})
-			return
-		}
-	}
-	var tombstone mindruntime.DeletionTombstone
-	if !h.commitAdministratorAction(c, func() error {
-		if h.dataLifecycle == nil {
-			return errors.New("数据生命周期服务不可用")
-		}
-		var err error
-		tombstone, err = h.dataLifecycle.RequestDeletion(req)
-		return err
-	}) {
-		return
-	}
-	if memoryDeletions != nil {
-		result := gin.H{}
-		encoded, _ := json.Marshal(tombstone)
-		_ = json.Unmarshal(encoded, &result)
-		result["memoryDeletions"] = memoryDeletions
-		util.SuccessResponse(c, result)
-		return
-	}
-	util.SuccessResponse(c, tombstone)
-}
-
-func (h *Handler) PrivacyDeletionStatus(c *gin.Context) {
-	id := c.Param("id")
-	if strings.HasPrefix(id, "owned-memory-delete.") {
-		port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort)
-		if !ok {
-			util.ErrorResponse(c, 503, "统一记忆删除入口不可用", nil)
-			return
-		}
-		result, err := port.DeletionStatus(c.Request.Context(), id)
-		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "读取记忆删除状态失败", err.Error())
-			return
-		}
-		util.SuccessResponse(c, result)
-		return
-	}
-	tombstone, ok := h.dataLifecycle.GetTombstone(id)
-	if !ok {
-		util.ErrorResponse(c, response.DataNotFound, "tombstone not found", nil)
-		return
-	}
-	util.SuccessResponse(c, tombstone)
-}
-
-func (h *Handler) PrivacyDeletionStats(c *gin.Context) {
-	stats := h.dataLifecycle.Stats()
-	if port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort); ok {
-		owned, err := port.DeletionStats(c.Request.Context())
-		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "读取记忆删除统计失败", err.Error())
-			return
-		}
-		for key, value := range owned {
-			stats[key] = value
-		}
-		if total, ok := owned["memoryDeletions"].(int64); ok {
-			count, _ := stats["tombstones"].(int)
-			stats["tombstones"] = int64(count) + total
-		}
-		if completed, ok := owned["memoryCompleted"].(int64); ok {
-			count, _ := stats["completed"].(int)
-			stats["completed"] = int64(count) + completed
-		}
-	}
-	util.SuccessResponse(c, stats)
-}
-
-func (h *Handler) PrivacyDeletionCleanup(c *gin.Context) {
-	ownedCount := 0
-	if port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort); ok {
-		if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
-			util.ErrorResponse(c, 409, err.Error(), nil)
-			return
-		}
-		var err error
-		ownedCount, err = port.CleanupDeletions(c.Request.Context())
-		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "记忆索引清理失败", err.Error())
-			return
-		}
-	}
-	var results []mindruntime.OutboxCleanupItem
-	if !h.commitAdministratorAction(c, func() error {
-		if h.dataLifecycle == nil {
-			return errors.New("数据生命周期服务不可用")
-		}
-		var err error
-		results, err = h.dataLifecycle.ExecuteOutboxCleanup()
-		return err
-	}) {
-		return
-	}
-	util.SuccessResponse(c, gin.H{"cleaned": len(results) + ownedCount, "memoryCleaned": ownedCount, "items": results})
-}
-
-func (h *Handler) PrivacyDeletionSecurityTests(c *gin.Context) {
-	var req struct {
-		TargetID   string `json:"targetId"`
-		TargetType string `json:"targetType"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
-		return
-	}
-	if strings.EqualFold(req.TargetType, "memory") {
-		port, ok := h.memoryConsumer.(business.MemoryPrivacyDeletionPort)
-		if !ok {
-			util.ErrorResponse(c, 503, "统一记忆删除核验入口不可用", nil)
-			return
-		}
-		checks, err := port.DeletionChecks(c.Request.Context(), req.TargetID)
-		if err != nil {
-			util.ErrorResponse(c, response.OperationFailed, "记忆删除核验失败", err.Error())
-			return
-		}
-		util.SuccessResponse(c, checks)
-		return
-	}
-	var results []mindruntime.SecurityTestResult
-	if !h.commitAdministratorAction(c, func() error {
-		if h.dataLifecycle == nil {
-			return errors.New("数据生命周期服务不可用")
-		}
-		results = h.dataLifecycle.RunAllSecurityTests(mindruntime.DeletionRequest{
-			TargetID: req.TargetID, TargetType: req.TargetType,
+		invoked := false
+		err := h.canonicalMemory.WithPrivacyAuthority(c.Request.Context(), business.Request{SpaceID: actor.SpaceID.String(), DeviceID: actor.DeviceID.String(), CoreID: h.memoryCoreID}, func(ctx context.Context) error {
+			c.Request = c.Request.WithContext(ctx)
+			invoked = true
+			c.Next()
+			return nil
 		})
-		return nil
-	}) {
-		return
+		if err != nil && !c.Writer.Written() {
+			c.AbortWithStatusJSON(409, gin.H{"message": err.Error()})
+			return
+		}
+		if !invoked {
+			c.Abort()
+		}
 	}
-	util.SuccessResponse(c, results)
+}
+
+func (h *Handler) privacyService(c *gin.Context) *service {
+	scope, _ := coordination.FromContext(c.Request.Context())
+	keyBytes, _ := json.Marshal([]interface{}{scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, scope.CoreID, scope.ProviderEpoch, scope.ModeRevision, scope.PermissionRevision})
+	key := string(keyBytes)
+	h.privacyServicesMu.Lock()
+	defer h.privacyServicesMu.Unlock()
+	if h.privacyServices == nil {
+		h.privacyServices = map[string]*service{}
+	}
+	if h.privacyServices[key] == nil {
+		h.privacyServices[key] = &service{}
+	}
+	return h.privacyServices[key]
+}
+
+func privacyError(c *gin.Context, code int, message string, data interface{}) {
+	c.JSON(code, gin.H{"code": code, "message": message, "msg": message, "data": data})
 }

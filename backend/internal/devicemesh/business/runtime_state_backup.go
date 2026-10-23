@@ -35,11 +35,17 @@ func NewRuntimeStateBackupContributor(db *sql.DB) *RuntimeStateBackupContributor
 
 func (*RuntimeStateBackupContributor) ID() string   { return "runtime-state" }
 func (*RuntimeStateBackupContributor) Name() string { return "Runtime State" }
+func (*RuntimeStateBackupContributor) ComponentIDs() []string {
+	return []string{runtimeStateBackupComponent}
+}
 func (*RuntimeStateBackupContributor) Dependencies() []string {
 	return []string{"character"}
 }
 
 func (c *RuntimeStateBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
+		return nil, nil
+	}
 	count, err := c.count(ctx, req)
 	if err != nil {
 		return nil, err
@@ -56,6 +62,9 @@ func (c *RuntimeStateBackupContributor) Plan(ctx context.Context, req dataportab
 }
 
 func (c *RuntimeStateBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
+		return nil
+	}
 	writer, err := out.CreateComponent(runtimeStateBackupComponent, "runtime_state.records.v1", dataportability.KindNDJSON)
 	if err != nil {
 		return err
@@ -70,9 +79,11 @@ func (c *RuntimeStateBackupContributor) Export(ctx context.Context, req dataport
 	buffer := bufio.NewWriter(writer)
 	for rows.Next() {
 		var record runtimeStateBackupRecord
-		if err := rows.Scan(&record.OwnerID, &record.Kind, &record.ID, &record.RoleID, &record.Revision, &record.UpdatedAt, &record.Body); err != nil {
+		var body string
+		if err := rows.Scan(&record.OwnerID, &record.Kind, &record.ID, &record.RoleID, &record.Revision, &record.UpdatedAt, &body); err != nil {
 			return err
 		}
+		record.Body = json.RawMessage(body)
 		encoded, err := json.Marshal(record)
 		if err != nil {
 			return err
@@ -151,7 +162,7 @@ func (c *RuntimeStateBackupContributor) count(ctx context.Context, req dataporta
 func (c *RuntimeStateBackupContributor) query(req dataportability.BackupRequest, selection string) (string, []any) {
 	query := fmt.Sprintf(`SELECT %s FROM kernel_device_owned_resources WHERE deleted=0 AND kind IN ('psyche','relationship','needs')`, selection)
 	args := make([]any, 0, 1)
-	if req.Scope == dataportability.ScopeCharacter && req.CharacterID != "" {
+	if req.EffectiveScope() == dataportability.ScopeCharacter && req.CharacterID != "" {
 		query += ` AND role_id=?`
 		args = append(args, req.CharacterID)
 	}

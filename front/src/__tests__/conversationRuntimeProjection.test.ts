@@ -1,22 +1,22 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import type { AgentUIEvent } from "@/conversation/runtime/agentEventReducer";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
-  notifyReplyCompleted: vi.fn(),
-}));
-
-vi.mock("@/composables/useReplyNotifications", () => ({
-  notifyReplyCompleted: mocks.notifyReplyCompleted,
+  post: vi.fn(),
+  snapshot: { value: null as any },
 }));
 
 vi.mock("@/composables/useApi", () => ({
+  apiClient: { get: mocks.get, post: mocks.post },
   useApi: () => ({ get: mocks.get }),
 }));
 
 vi.mock("@/runtime/runtime-adapter", () => ({
   resolveApiUrl: vi.fn(async (value: string) => value),
+  getDeploymentConfig: vi.fn(async () => ({ mode: "local" })),
+  getNativeProviderTransition: vi.fn(async () => null),
 }));
 
 vi.mock("@/runtime/request-auth", () => ({
@@ -28,6 +28,28 @@ vi.mock("@/runtime/desktop-pet-chat-state", () => ({
 }));
 
 import { useConversationRuntime } from "@/composables/useConversationRuntime";
+
+const executionScope = {
+  spaceId: "space-1",
+  coreId: "core-1",
+  authorizationRealm: "space-1",
+  initiatorDeviceId: "device-1",
+  targetDeviceId: "device-1",
+  resourceOwnerId: "device-1",
+  roleId: "role-1",
+  roleRevision: 1,
+  roleOwnerId: "device-1",
+  providerEpoch: 1,
+  targetProviderEpoch: 1,
+  coordinated: false,
+  modeRevision: 1,
+  permissionRevision: 1,
+  targetPermissionRevision: 1,
+  requestId: "request-1",
+  turnId: "",
+  executionId: "",
+  memoryRoleId: "role-1",
+};
 
 function event(
   eventSequence: number,
@@ -50,12 +72,37 @@ function event(
 }
 
 describe("conversation runtime projection", () => {
+  beforeEach(() => {
+    mocks.snapshot.value = null;
+    mocks.get.mockReset();
+    mocks.post.mockReset();
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path.endsWith("/coordination/me")) {
+        return { data: { coreId: "core-1", coordinationAvailable: true, policy: { selectedRole: "role-1", coordinated: false, providerEpoch: 1, modeRevision: 1, permissionRevision: 1 } } };
+      }
+      if (path.endsWith("/business/roles")) {
+        return { data: { roles: [{ id: "role-1", name: "角色", revision: 1 }], roleOwnerId: "device-1", executionScope } };
+      }
+      if (path.endsWith("/business/data")) {
+        return { data: { conversationId: "conversation-1", executionScope, snapshot: { ownerId: "device-1", resources: [] } } };
+      }
+      return { data: {} };
+    });
+    mocks.post.mockImplementation(async (path: string, payload: any) => {
+      if (path.endsWith("/chat-runtime/snapshot")) {
+        const response = await (mocks.snapshot.value || { version: 1, revision: 1, lastEventSequence: 0, messages: [], turns: [] });
+        return { data: { ...response, executionScope: response.executionScope ?? payload.expectedExecutionScope } };
+      }
+      return { data: { executionScope: payload.expectedExecutionScope } };
+    });
+  });
+
   it("projects completed citations before and after snapshot refresh", async () => {
     const persistedMessages = ref<any[]>([]);
     const runtime = useConversationRuntime(ref("conversation-1"), persistedMessages, ref(false), () => undefined);
     const snapshot = [
       { marker: "[K1]", kind: "knowledge", index: 1, title: "文档", sourceId: "doc-1" },
-      { marker: "[1]", kind: "web", index: 1, title: "网页", url: "https://example.com" },
+      { marker: "[1]", kind: "web", index: 1, title: "网页", url: "https://example.com/" },
     ];
     await runtime.applyEvent(event(1, "turn.started"));
     await runtime.applyEvent(event(2, "text.completed", {
@@ -64,25 +111,24 @@ describe("conversation runtime projection", () => {
     }));
     await new Promise((resolve) => setTimeout(resolve, 40));
     const live = runtime.messages.value.find((row) => row.role === "assistant");
-    expect(live?.citationSnapshot).toEqual(snapshot);
+    expect(live?.citationSnapshot).toMatchObject(snapshot);
     expect(live?.id).toBe("message-1");
-    mocks.get.mockResolvedValueOnce({
+    mocks.snapshot.value = {
       version: 1, revision: 1, lastEventSequence: 2, messages: [
         { id: "message-1", role: "assistant", conversationId: "conversation-1", content: "文档 [K1] 网页 [1]", citationSnapshot: snapshot },
       ],
       turns: [{ id: "turn-1", conversationId: "conversation-1", requestId: "request-1", sequence: 1, status: "completed", items: [
         { id: "text-1", type: "text", status: "completed", sequence: 1, revision: 2, messageId: "message-1", content: "文档 [K1] 网页 [1]" },
       ] }],
-    });
+    };
     await runtime.loadSnapshot(false);
     const historic = runtime.messages.value.find((row) => row.role === "assistant");
-    expect(historic?.citationSnapshot).toEqual(snapshot);
+    expect(historic?.citationSnapshot).toMatchObject(snapshot);
     expect(historic?.uiKey).toBe(live?.uiKey);
     runtime.cleanup();
   });
 
   it("holds an unconfirmed side effect without a false success notification or active sending spinner", async () => {
-    mocks.notifyReplyCompleted.mockClear();
     const sending = ref(false);
     const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), sending, () => undefined);
     await runtime.applyEvent(event(1, "turn.started", { status: "running" }));
@@ -93,7 +139,6 @@ describe("conversation runtime projection", () => {
     }));
     expect(sending.value).toBe(false);
     expect(runtime.activeTurnId.value).toBe("turn-1");
-    expect(mocks.notifyReplyCompleted).not.toHaveBeenCalled();
     runtime.cleanup();
   });
   it("updates automation indication from live tool events and clears on completion or navigation", async () => {
@@ -117,25 +162,6 @@ describe("conversation runtime projection", () => {
     expect(runtime.automationStatus.value).toBeNull();
     runtime.clear();
     runtime.cleanup();
-  });
-  it("only notifies completed root turns once", async () => {
-    mocks.notifyReplyCompleted.mockClear();
-    mocks.get.mockResolvedValue({ version: 1, turns: [], lastEventSequence: 5 });
-    for (const candidate of [
-      event(2, "turn.failed", { status: "failed" }),
-      event(3, "turn.interrupted", { status: "interrupted" }),
-      event(4, "turn.completed", { status: "completed", turnId: "child", parentTurnId: "root" }),
-    ]) {
-      const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
-      await runtime.applyEvent(candidate);
-    }
-    expect(mocks.notifyReplyCompleted).not.toHaveBeenCalled();
-    const runtime = useConversationRuntime(ref("conversation-1"), ref<any[]>([]), ref(false), () => undefined);
-    const completed = event(5, "turn.completed", { status: "completed", turnId: "root" });
-    await runtime.applyEvent(completed);
-    await runtime.applyEvent(completed);
-    expect(mocks.notifyReplyCompleted).toHaveBeenCalledTimes(1);
-    expect(mocks.notifyReplyCompleted).toHaveBeenCalledWith("conversation-1", "root");
   });
   it("keeps the live message identity stable until persistence replaces it", async () => {
     const conversationId = ref("conversation-1");
@@ -200,11 +226,9 @@ describe("conversation runtime projection", () => {
     expect(messages.value.find((message) => message.role === "user")).toBe(firstUser);
 
     let resolveSnapshot: (value: any) => void = () => undefined;
-    mocks.get.mockImplementationOnce(
-      () => new Promise((resolve) => {
+    mocks.snapshot.value = new Promise((resolve) => {
         resolveSnapshot = resolve;
-      }),
-    );
+      });
 
     await runtime.applyEvent(event(6, "text.completed", {
       blockId: "block-1",

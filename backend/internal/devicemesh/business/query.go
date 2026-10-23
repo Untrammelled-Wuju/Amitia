@@ -110,6 +110,7 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 			return QueryResult{}, err
 		}
 	}
+	filterHistoricalContinuationMirrors(conversationRoute, result.Snapshot, result.HistoricalSnapshot)
 	if err := rejectAmbiguousConversation(conversationRoute, result.Snapshot, result.HistoricalSnapshot); err != nil {
 		return QueryResult{}, err
 	}

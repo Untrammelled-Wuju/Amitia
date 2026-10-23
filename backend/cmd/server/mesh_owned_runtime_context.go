@@ -44,11 +44,11 @@ func (p *meshLocalDataPort) ownedRuntimeContext(ctx context.Context, scope coord
 		}
 		result[loader.Name()] = raw
 	}
-	if query.ChatRuntime != nil && !query.ChatRuntime.IsInternal && scope.TurnID != "" && p.services.RelTimeCoordinator != nil {
+	if query.ChatRuntime != nil && !query.ChatRuntime.IsInternal && scope.TurnID != "" && p.services.RelTimeCoordinator != nil && temporal.FeatureFlagsFromEnvironment().RelationshipTimeEnabled {
 		if err := coordination.ValidateCurrent(ctx); err != nil {
 			return nil, err
 		}
-		prepared, err := p.services.RelTimeCoordinator.PrepareInbound(ctx, temporal.PrepareInboundInput{SpaceID: p.legacySpaceID, CharacterID: scope.RoleID, ConversationID: query.ConversationID, Channel: legacyScope.Channel, PeerID: legacyScope.PeerID, Source: legacyScope.Source, RequestID: scope.RequestID, InteractionID: scope.TurnID, ObservedAt: time.Now().UTC()})
+		prepared, err := p.services.RelTimeCoordinator.ForOwner(p.ownerID).PrepareInbound(ctx, temporal.PrepareInboundInput{SpaceID: temporal.RelationshipOwnerSpace(p.legacySpaceID, p.ownerID), CharacterID: scope.RoleID, ConversationID: query.ConversationID, Channel: legacyScope.Channel, PeerID: legacyScope.PeerID, Source: legacyScope.Source, RequestID: scope.RequestID, InteractionID: scope.TurnID, ObservedAt: time.Now().UTC(), Message: query.ChatRuntime.Message})
 		if err != nil {
 			return nil, err
 		}

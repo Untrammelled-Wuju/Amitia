@@ -1,132 +1,109 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
 package system
 
 import (
+	"context"
+	"errors"
 	"sort"
 	"time"
+
+	"github.com/u-ai/backend/internal/mindruntime"
 )
 
-func (s *service) GetUsageOverview() map[string]interface{} {
-	var totalTokens, totalRequests int64
-	var todayTokens, todayCalls int64
-	today := time.Now().Format("2006-01-02")
-	s.db.Table("messages").Select("COALESCE(SUM(tokens), 0)").Row().Scan(&totalTokens)
-	s.db.Table("messages").Count(&totalRequests)
-	s.db.Table("messages").Where("date(created_at) = ?", today).Select("COALESCE(SUM(tokens), 0)").Row().Scan(&todayTokens)
-	s.db.Table("messages").Where("date(created_at) = ?", today).Count(&todayCalls)
-	return map[string]interface{}{"totalTokens": totalTokens, "totalCost": 0, "totalRequests": totalRequests, "todayCalls": todayCalls, "todayTokens": todayTokens}
+func usageValues(row mindruntime.UsageBucket) map[string]any {
+	var tokens any = row.Tokens
+	if row.Unknown > 0 {
+		tokens = nil
+	}
+	return map[string]any{"modelCalls": row.Calls, "count": row.Calls, "succeeded": row.Succeeded, "failed": row.Failed, "cancelled": row.Cancelled, "running": row.Running, "interrupted": row.Interrupted, "inputTokens": row.Input, "outputTokens": row.Output, "cachedInputTokens": row.Cached, "knownTokens": row.Tokens, "unknownUsageCalls": row.Unknown, "tokens": tokens, "totalTokens": tokens, "totalCost": nil, "costStatus": "unavailable"}
 }
 
-type dailyRow struct {
-	Date          string
-	Messages      int64
-	ModelCalls    int64
-	Tokens        int64
-	Conversations int64
-	Memories      int64
-	Feedback      int64
-}
-
-func (s *service) GetUsageDaily() map[string]interface{} {
-	rows, err := s.db.Raw(`
-		SELECT
-			d.date,
-			COALESCE(m.messages, 0)      AS messages,
-			COALESCE(m.model_calls, 0)   AS model_calls,
-			COALESCE(m.tokens, 0)        AS tokens,
-			COALESCE(c.conversations, 0) AS conversations,
-			0 AS memories,
-			COALESCE(fb.feedback, 0)     AS feedback
-		FROM (
-			SELECT date(created_at) AS date FROM messages
-			UNION
-			SELECT date(created_at) FROM conversations
-			UNION
-			SELECT date(created_at) FROM message_feedback
-		) d
-		LEFT JOIN (
-			SELECT date(created_at) AS date,
-				COUNT(*)                                             AS messages,
-				COALESCE(SUM(CASE WHEN role = 'assistant' THEN 1 ELSE 0 END), 0) AS model_calls,
-				COALESCE(SUM(tokens), 0)                            AS tokens
-			FROM messages GROUP BY date(created_at)
-		) m ON d.date = m.date
-		LEFT JOIN (
-			SELECT date(created_at) AS date, COUNT(*) AS conversations
-			FROM conversations GROUP BY date(created_at)
-		) c ON d.date = c.date
-		LEFT JOIN (
-			SELECT date(created_at) AS date, COUNT(*) AS feedback
-			FROM message_feedback GROUP BY date(created_at)
-		) fb ON d.date = fb.date
-		ORDER BY d.date DESC
-		LIMIT 30
-	`).Rows()
-
-	var daily []map[string]interface{}
-	if err == nil && rows != nil {
-		defer rows.Close()
-		for rows.Next() {
-			var r dailyRow
-			if scanErr := rows.Scan(&r.Date, &r.Messages, &r.ModelCalls, &r.Tokens, &r.Conversations, &r.Memories, &r.Feedback); scanErr == nil {
-				daily = append(daily, map[string]interface{}{
-					"date":          r.Date,
-					"messages":      r.Messages,
-					"modelCalls":    r.ModelCalls,
-					"tokens":        r.Tokens,
-					"conversations": r.Conversations,
-					"memories":      r.Memories,
-					"feedback":      r.Feedback,
-				})
+func (s *service) UsageContext(ctx context.Context, filter mindruntime.UsageFilter, group string) (map[string]any, error) {
+	if s.usageStore == nil {
+		return nil, errors.New("模型使用统计未就绪")
+	}
+	rows, baseline, err := s.usageStore.Aggregate(ctx, filter, group)
+	if err != nil {
+		return nil, err
+	}
+	started, err := s.usageStore.TrackingStartedAt(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := map[string]any{"scope": filter, "timezone": "UTC", "meteringScope": "language-model", "meteringSince": started, "baselineSequence": baseline.Sequence, "clearedAt": baseline.UpdatedAt, "historicalCalls": "unmetered"}
+	if group == "overview" {
+		total := mindruntime.UsageBucket{}
+		if len(rows) > 0 {
+			total = rows[0]
+		}
+		for key, value := range usageValues(total) {
+			result[key] = value
+		}
+		result["totalRequests"] = total.Calls
+		var todayTokens any = total.TodayTokens
+		if total.TodayUnknown > 0 {
+			todayTokens = nil
+		}
+		result["todayCalls"], result["todayTokens"], result["todayUnknownUsageCalls"] = total.TodayCalls, todayTokens, total.TodayUnknown
+		result["todayKnownTokens"] = total.TodayTokens
+		return result, nil
+	}
+	items := []map[string]any{}
+	daily := map[string]map[string]any{}
+	if group == "daily" {
+		start := time.Now().UTC().AddDate(0, 0, -29)
+		if reset, parseErr := time.Parse(time.RFC3339Nano, baseline.UpdatedAt); parseErr == nil && reset.After(start) {
+			start = reset
+		}
+		end := time.Now().UTC().Format("2006-01-02")
+		for day := start.Format("2006-01-02"); day <= end; {
+			item := usageValues(mindruntime.UsageBucket{})
+			item["date"] = day
+			if day < started[:10] {
+				for key := range item {
+					item[key] = nil
+				}
+				item["date"], item["meteringStatus"], item["costStatus"] = day, "unmetered", "unavailable"
+			} else {
+				item["meteringStatus"] = "tracked"
 			}
+			daily[day] = item
+			date, _ := time.Parse("2006-01-02", day)
+			day = date.AddDate(0, 0, 1).Format("2006-01-02")
 		}
 	}
-
-	if daily == nil {
-		daily = []map[string]interface{}{}
-	}
-	counts, memoryErr := s.ownedMemoryUsage()
-	if memoryErr != nil {
-		return map[string]interface{}{"daily": daily, "memoryError": memoryErr.Error()}
-	}
-	represented := map[string]bool{}
-	for _, item := range daily {
-		day, _ := item["date"].(string)
-		item["memories"] = counts[day]
-		represented[day] = true
-	}
-	for day, count := range counts {
-		if !represented[day] {
-			daily = append(daily, map[string]interface{}{"date": day, "messages": int64(0), "modelCalls": int64(0), "tokens": int64(0), "conversations": int64(0), "memories": count, "feedback": int64(0)})
+	for _, row := range rows {
+		item := usageValues(row)
+		switch group {
+		case "daily":
+			item["date"] = row.Day
+			item["meteringStatus"] = "tracked"
+			daily[row.Day] = item
+			continue
+		case "models":
+			item["name"], item["provider"] = row.Model, row.Provider
+		case "sources":
+			item["source"] = row.Source
 		}
+		items = append(items, item)
 	}
-	sort.Slice(daily, func(i, j int) bool { return daily[i]["date"].(string) > daily[j]["date"].(string) })
-	if len(daily) > 30 {
-		daily = daily[:30]
+	key := group
+	if group == "daily" {
+		for _, item := range daily {
+			items = append(items, item)
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i]["date"].(string) > items[j]["date"].(string) })
 	}
-	return map[string]interface{}{"daily": daily}
+	result[key] = items
+	return result, nil
 }
 
-func (s *service) GetUsageModels() map[string]interface{} {
-	var models []map[string]interface{}
-	s.db.Table("model_configs").Select("model_name as name, api_type as provider").Find(&models)
-	if models == nil {
-		models = []map[string]interface{}{}
+func (s *service) ClearUsageContext(ctx context.Context, filter mindruntime.UsageFilter) (map[string]any, error) {
+	if s.usageStore == nil {
+		return nil, errors.New("模型使用统计未就绪")
 	}
-	return map[string]interface{}{"models": models}
-}
-
-func (s *service) GetUsageSources() map[string]interface{} {
-	var sources []map[string]interface{}
-	s.db.Raw("SELECT source, COUNT(*) as count FROM messages GROUP BY source").Scan(&sources)
-	if sources == nil {
-		sources = []map[string]interface{}{}
+	sequence, err := s.usageStore.Clear(ctx, filter)
+	if err != nil {
+		return nil, err
 	}
-	return map[string]interface{}{"sources": sources}
-}
-
-func (s *service) ClearUsage() map[string]interface{} {
-	s.db.Table("messages").Where("tokens > 0").Update("tokens", 0)
-	return map[string]interface{}{"cleared": true}
+	return map[string]any{"cleared": true, "scope": filter, "baselineSequence": sequence, "method": "baseline", "recordsPreserved": true}, nil
 }

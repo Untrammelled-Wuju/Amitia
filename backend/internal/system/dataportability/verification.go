@@ -41,6 +41,19 @@ func VerifyArchive(archivePath string) (*VerificationResult, error) {
 	if err != nil {
 		return nil, ErrImportPackageInvalid
 	}
+	if len(zr.File) == 0 || len(zr.File) > MaxArchiveEntries {
+		return result, ErrImportPackageInvalid
+	}
+	seenEntries := make(map[string]bool, len(zr.File))
+	for _, entry := range zr.File {
+		if seenEntries[entry.Name] {
+			return result, ErrImportPackageInvalid
+		}
+		seenEntries[entry.Name] = true
+		if entry.UncompressedSize64 > MaxSingleResource {
+			return result, ErrBackupCompressionInvalid
+		}
+	}
 
 	manifestFile := findFile(zr, "manifest.json")
 	if manifestFile == nil {
@@ -94,6 +107,9 @@ func VerifyArchive(archivePath string) (*VerificationResult, error) {
 
 		totalCompressed += matched.CompressedSize64
 		totalUncompressed += matched.UncompressedSize64
+		if totalUncompressed > MaxTotalResources {
+			return result, ErrBackupCompressionInvalid
+		}
 
 		if comp.SHA256 != "" {
 			rc, err := matched.Open()

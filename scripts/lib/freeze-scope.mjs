@@ -87,6 +87,7 @@ const EXCLUDED_RELATIVE_FILES = new Set([
   "backend/surrealdb/surreal.zip",
   "backend/server_linux_amd64",
   "backend/server_linux_arm64",
+  "backend/admin-server",
   "backend/server",
 ]);
 
@@ -142,6 +143,7 @@ async function collectDirectoryFiles(repositoryRoot, spec, output) {
     const entries = await fs.readdir(directory, { withFileTypes: true });
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
+      if (entry.name === ".git") continue;
       if (entry.isDirectory() && EXCLUDED_DIRECTORY_NAMES.has(entry.name)) continue;
       const absolute = path.join(directory, entry.name);
       if (isExplicitlyExcluded(repositoryRoot, absolute, entry.isDirectory())) continue;

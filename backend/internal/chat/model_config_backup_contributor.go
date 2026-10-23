@@ -27,6 +27,9 @@ func NewModelConfigBackupContributor(db *gorm.DB) *ModelConfigBackupContributor 
 
 func (c *ModelConfigBackupContributor) ID() string   { return "model" }
 func (c *ModelConfigBackupContributor) Name() string { return "Model Config" }
+func (c *ModelConfigBackupContributor) ComponentIDs() []string {
+	return []string{ComponentIDModelConfigs}
+}
 
 func (c *ModelConfigBackupContributor) Dependencies() []string {
 	return nil
@@ -57,6 +60,9 @@ type modelConfigExportRecord struct {
 }
 
 func (c *ModelConfigBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil, nil
+	}
 	var count int64
 	c.DB.WithContext(ctx).Model(&ModelConfig{}).Count(&count)
 
@@ -74,6 +80,9 @@ func (c *ModelConfigBackupContributor) Plan(ctx context.Context, req dataportabi
 }
 
 func (c *ModelConfigBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeSettings {
+		return nil
+	}
 	compW, err := out.CreateComponent(ComponentIDModelConfigs, "model.configs.v1", dataportability.KindNDJSON)
 	if err != nil {
 		return err
@@ -284,5 +293,4 @@ func splitModelConfigLines(data []byte) [][]byte {
 	return lines
 }
 
-var _ dataportability.ModelConfigRestorePort = (*ModelConfigBackupContributor)(nil)
 var _ dataportability.BackupContributor = (*ModelConfigBackupContributor)(nil)

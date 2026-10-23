@@ -324,10 +324,6 @@ final userFeedbackServiceProvider = Provider<UserFeedbackService>(
   (ref) => UserFeedbackService(_getDynamicServiceApi(ref)),
 );
 
-final moodServiceProvider = Provider<MoodService>(
-  (ref) => MoodService(_getDynamicServiceApi(ref)),
-);
-
 final currentSpaceProfileProvider = FutureProvider.autoDispose<SpaceProfile?>((
   ref,
 ) async {

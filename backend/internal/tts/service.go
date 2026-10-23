@@ -25,7 +25,6 @@ type Service interface {
 	SynthesizePreview(req *SynthesizePreviewRequest) (*SynthesizeResponse, error)
 	SynthesizeForCharacter(spaceID, charID string, text string) (*SynthesizeResponse, error)
 	SynthesizeWithSpeaker(spaceID, speakerID, text string) (*SynthesizeResponse, error)
-	SynthesizeWithActive(text string) (*SynthesizeResponse, error)
 	ListProviders() []ProviderInfo
 	ListClonedVoices(spaceID string) ([]ClonedVoice, error)
 	GetClonedVoice(spaceID, speakerID string) (*ClonedVoice, error)
@@ -219,14 +218,6 @@ func (s *service) SynthesizeWithSpeaker(spaceID, speakerID, text string) (*Synth
 	cfg.ResourceId = "seed-icl-2.0"
 	return Synthesize(cfg, text)
 }
-func (s *service) SynthesizeWithActive(text string) (*SynthesizeResponse, error) {
-	cfg, err := s.repo.GetActive()
-	if err != nil {
-		return nil, fmt.Errorf("没有可用的音色配置")
-	}
-	return Synthesize(cfg, text)
-}
-
 func (s *service) SynthesizeForCharacter(spaceID, charID string, text string) (*SynthesizeResponse, error) {
 	cfg, err := s.repo.GetByCharacterID(spaceID, charID)
 	if err != nil {

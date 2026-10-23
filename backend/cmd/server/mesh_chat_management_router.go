@@ -11,7 +11,7 @@ import (
 )
 
 func registerMeshChatManagementRouter(mesh *gin.RouterGroup, services *AppServices, coreID string) {
-	for _, operation := range []string{"stats", "search", "export", "from-import", "compression-status", "context-preview", "feedback-stats", "feedback/list", "feedback/create", "feedback/delete", "cleanup/preview", "cleanup/confirm", "cleanup/vacuum"} {
+	for _, operation := range []string{"stats", "search", "export", "from-import", "import-promoted", "compression-status", "context-preview", "feedback-stats", "feedback/list", "feedback/create", "feedback/delete", "cleanup/preview", "cleanup/confirm", "cleanup/vacuum"} {
 		operation := operation
 		mesh.POST("/chat-management/"+operation, func(c *gin.Context) {
 			actor := security.GetActor(c)

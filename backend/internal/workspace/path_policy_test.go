@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,7 +92,7 @@ func TestSymlinkProtection(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for symlink traversal, got nil")
 	}
-	if err != ErrSymlinkNotAllowed {
+	if !errors.Is(err, ErrSymlinkNotAllowed) {
 		t.Errorf("expected ErrSymlinkNotAllowed, got %v", err)
 	}
 }
@@ -141,7 +142,7 @@ func TestLocalBackendSymlinkWriteProtection(t *testing.T) {
 	if err == nil {
 		t.Error("expected error writing through symlink, got nil")
 	}
-	if err != ErrSymlinkNotAllowed {
+	if !errors.Is(err, ErrSymlinkNotAllowed) {
 		t.Errorf("expected ErrSymlinkNotAllowed, got %v", err)
 	}
 }

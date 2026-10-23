@@ -9,15 +9,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       <el-table-column prop="title" label="名称" show-overflow-tooltip />
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
-          <el-tag
-            :type="row.status === 'completed' ? 'success' : 'info'"
-            size="small"
-          >
+          <el-tag :type="statusType(row.status)" size="small">
             {{ statusLabel(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="totalItems" label="条目数" width="60" />
+      <el-table-column prop="messageCount" label="条目数" width="60" />
       <el-table-column label="日期" width="140">
         <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
       </el-table-column>
@@ -25,6 +22,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         <template #default="{ row }">
           <el-button text size="small" @click="$emit('view', row.id)"
             >查看</el-button
+          >
+          <el-button
+            v-if="row.status === 'ready_for_promotion'"
+            text
+            size="small"
+            type="primary"
+            @click="$emit('promote', row)"
+            >加入聊天</el-button
           >
           <el-button
             text
@@ -50,13 +55,20 @@ defineProps<{
 defineEmits<{
   view: [id: string];
   delete: [id: string];
+  promote: [row: any];
 }>();
 
 function statusLabel(status: string) {
-  if (status === "completed") return "已完成";
-  if (status === "pending") return "处理中";
+  if (status === "promoted") return "已加入";
+  if (status === "ready_for_promotion") return "待加入";
   if (status === "failed") return "失败";
   return status || "未知";
+}
+
+function statusType(status: string) {
+  if (status === "promoted") return "success";
+  if (status === "failed") return "danger";
+  return "info";
 }
 </script>
 

@@ -10,23 +10,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
 	"github.com/u-ai/backend/internal/desktoppet/installation/device"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
-
-type Handler struct {
-	service        Service
-	ownershipGuard security.OwnershipGuard
-}
-
-func NewHandler(svc Service, guard security.OwnershipGuard) *Handler {
-	return &Handler{service: svc, ownershipGuard: guard}
-}
 
 func requireDeviceID(c *gin.Context) (string, bool) {
 	deviceID := strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
@@ -42,15 +35,7 @@ type installPackagePayload struct {
 }
 
 type updateDefaultActionPayload struct {
-	ActionKey       string `json:"actionKey"`
-	LegacyActionKey string `json:"action_key"`
-}
-
-func (p updateDefaultActionPayload) resolvedActionKey() string {
-	if strings.TrimSpace(p.ActionKey) != "" {
-		return strings.TrimSpace(p.ActionKey)
-	}
-	return strings.TrimSpace(p.LegacyActionKey)
+	ActionKey string `json:"actionKey"`
 }
 
 type switchReleasePayload struct {
@@ -64,282 +49,6 @@ type downgradePayload struct {
 
 type operationStatusResponse struct {
 	Operation *operation.InstallationOperation `json:"operation"`
-}
-
-func (h *Handler) InstallPackage(c *gin.Context) {
-	c.Header("Deprecation", "true")
-	c.Header("Sunset", "2026-12-31")
-	c.Header("Link", `</api/desktop-pets/releases>; rel="successor-version"`)
-	packageID := c.Param("packageId")
-	if packageID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "资源包 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
-	var payload installPackagePayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	spaceID := actorID
-	inst, err := h.service.InstallPackage(packageID, spaceID)
-	if err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "安装成功", inst)
-}
-
-func (h *Handler) ListInstallations(c *gin.Context) {
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	spaceID := actorID
-	items, err := h.service.ListInstallations(spaceID)
-	if err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	if items == nil {
-		items = []*Installation{}
-	}
-	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
-}
-
-func (h *Handler) GetInstallation(c *gin.Context) {
-	installationID := c.Param("installationId")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	inst, err := h.service.GetInstallation(installationID)
-	if err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessResponse(c, inst)
-}
-
-func (h *Handler) EnableInstallation(c *gin.Context) {
-	installationID := c.Param("installationId")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	if err := h.service.EnableInstallation(string(actor.SpaceID), installationID); err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "桌宠已启用", nil)
-}
-
-func (h *Handler) DisableInstallation(c *gin.Context) {
-	installationID := c.Param("installationId")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	if err := h.service.DisableInstallation(string(actor.SpaceID), installationID); err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "桌宠已停用", nil)
-}
-
-func (h *Handler) UpdateDefaultAction(c *gin.Context) {
-	installationID := c.Param("installationId")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	var payload updateDefaultActionPayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
-	actionKey := payload.resolvedActionKey()
-	if actionKey == "" {
-		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
-		return
-	}
-	if err := h.service.UpdateDefaultAction(installationID, actionKey); err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "默认动作已更新", nil)
-}
-
-func (h *Handler) UpdateRuntimeSettings(c *gin.Context) {
-	installationID := c.Param("installationId")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	var payload UpdateRuntimeSettingsRequest
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	settings, err := h.service.UpdateRuntimeSettings(string(actor.SpaceID), installationID, &payload)
-	if err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "运行配置已更新", settings)
-}
-
-func (h *Handler) Recenter(c *gin.Context) {
-	installationID := c.Param("installationId")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	if err := h.service.Recenter(string(actor.SpaceID), installationID); err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "桌宠已重置位置", nil)
-}
-
-func (h *Handler) PlayAction(c *gin.Context) {
-	installationID := c.Param("installationId")
-	actionKey := c.Param("actionKey")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	if actionKey == "" {
-		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	if err := h.service.PlayAction(string(actor.SpaceID), installationID, actionKey); err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "动作已触发", nil)
-}
-
-func (h *Handler) Uninstall(c *gin.Context) {
-	installationID := c.Param("installationId")
-	if installationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "安装 ID 为空", gin.H{"errorCode": ErrCodeInstallationNotFound})
-		return
-	}
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceID, ok := requireDeviceID(c)
-	if !ok {
-		return
-	}
-	if _, err := h.ownershipGuard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
-		writeInstallationOwnershipError(c, err)
-		return
-	}
-	if err := h.service.Uninstall(string(actor.SpaceID), installationID); err != nil {
-		writeInstallationError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "桌宠已卸载", nil)
 }
 
 func writeInstallationError(c *gin.Context, err error) {
@@ -409,42 +118,6 @@ func (h *CoordinatorHandler) buildDeviceCtx(c *gin.Context, actorID string) devi
 	}
 }
 
-func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
-	c.Header("Deprecation", "true")
-	c.Header("Sunset", "2026-12-31")
-	c.Header("Link", `</api/desktop-pets/releases>; rel="successor-version"`)
-	packageID := c.Param("packageId")
-	if packageID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "资源包 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
-	var payload installPackagePayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	deviceCtx := h.buildDeviceCtx(c, actorID)
-	if strings.TrimSpace(deviceCtx.DeviceID) == "" {
-		util.ErrorResponse(c, response.InvalidParams, "缺少设备ID", gin.H{"errorCode": "DEVICE_ID_REQUIRED"})
-		return
-	}
-	result, err := h.coordinator.Install(c.Request.Context(), coordinator.InstallRequest{
-		DeviceCtx:       deviceCtx,
-		TargetReleaseID: packageID,
-		IdempotencyKey:  firstNonEmpty(strings.TrimSpace(c.GetHeader("Idempotency-Key")), strings.TrimSpace(payload.IdempotencyKey)),
-	})
-	if err != nil {
-		writeCoordinatorError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "安装任务已创建", gin.H{"operationId": result.OperationID, "installationId": result.InstallationID, "status": result.Status, "stage": result.Stage})
-}
-
 func (h *CoordinatorHandler) InstallRelease(c *gin.Context) {
 	petID := strings.TrimSpace(c.Param("petId"))
 	releaseID := strings.TrimSpace(c.Param("releaseId"))
@@ -496,6 +169,14 @@ func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
 	if items == nil {
 		items = []*Installation{}
 	}
+	for _, item := range items {
+		runtimeView, err := h.loadRuntimeView(c.Request.Context(), actorID, deviceID, item.ID)
+		if err != nil {
+			writeInstallationError(c, err)
+			return
+		}
+		item.Runtime = runtimeView
+	}
 	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
 }
 
@@ -536,6 +217,12 @@ func (h *CoordinatorHandler) GetInstallation(c *gin.Context) {
 			return
 		}
 	}
+	runtimeView, err := h.loadRuntimeView(c.Request.Context(), string(actor.SpaceID), deviceID, inst.ID)
+	if err != nil {
+		writeInstallationError(c, err)
+		return
+	}
+	inst.Runtime = runtimeView
 	util.SuccessResponse(c, &installationDetailResponse{Installation: inst, Settings: settings, Manifest: manifest})
 }
 
@@ -654,7 +341,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeActionNotFound})
 		return
 	}
-	actionKey := payload.resolvedActionKey()
+	actionKey := strings.TrimSpace(payload.ActionKey)
 	if actionKey == "" {
 		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
 		return
@@ -998,6 +685,63 @@ type installationDetailResponse struct {
 	*Installation
 	Settings *RuntimeSettings        `json:"settings"`
 	Manifest *packageformat.Manifest `json:"manifest"`
+}
+
+func (h *CoordinatorHandler) loadRuntimeView(ctx context.Context, spaceID, deviceID, installationID string) (*InstallationRuntimeView, error) {
+	var desiredState *desired.RuntimeDesiredState
+	var runtimeProjection *projection.InstallationRuntimeProjection
+	err := h.repo.Transaction(ctx, func(tx RepositoryV2) error {
+		state, err := tx.GetRuntimeDesiredStateTx(tx.DB(), spaceID, deviceID)
+		if err != nil {
+			return err
+		}
+		desiredState = state
+		projected, err := tx.GetRuntimeProjectionTx(tx.DB(), spaceID, deviceID)
+		if errors.Is(err, ErrProjectionNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		runtimeProjection = projected
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if desiredState != nil && desiredState.InstallationID != installationID {
+		desiredState = nil
+	}
+	if runtimeProjection != nil && runtimeProjection.InstallationID != installationID {
+		runtimeProjection = nil
+	}
+	if desiredState == nil && runtimeProjection == nil {
+		return nil, nil
+	}
+	view := &InstallationRuntimeView{}
+	if desiredState != nil {
+		view.DesiredRevision = desiredState.DesiredRevision
+		view.DesiredEnabled = desiredState.DesiredEnabled
+		view.DesiredVisible = desiredState.DesiredVisible
+		view.DesiredActionKey = desiredState.DesiredActionKey
+		view.UpdatedAt = desiredState.UpdatedAt
+	}
+	if runtimeProjection != nil {
+		view.AppliedDesiredRevision = runtimeProjection.AppliedDesiredRevision
+		view.AppliedSettingsRevision = runtimeProjection.AppliedSettingsRevision
+		view.ActualReleaseID = runtimeProjection.ActualReleaseID
+		view.ActualVisible = runtimeProjection.ActualVisible != 0
+		view.ActualActionKey = runtimeProjection.ActualActionKey
+		view.ActualHealth = runtimeProjection.ActualHealth
+		view.RuntimeSyncState = runtimeProjection.RuntimeSyncState
+		view.LastHeartbeatAt = runtimeProjection.LastHeartbeatAt
+		if runtimeProjection.UpdatedAt != "" {
+			view.UpdatedAt = runtimeProjection.UpdatedAt
+		}
+	}
+	view.Pending = desiredState != nil &&
+		(runtimeProjection == nil || runtimeProjection.AppliedDesiredRevision < desiredState.DesiredRevision)
+	return view, nil
 }
 
 func (h *CoordinatorHandler) loadInstallationManifest(ctx context.Context, spaceID, releaseID string) (*packageformat.Manifest, error) {

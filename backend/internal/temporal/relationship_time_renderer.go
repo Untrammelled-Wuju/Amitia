@@ -114,6 +114,20 @@ func RenderRelationshipTime(value RelationshipTimeContext, policy RelationshipTi
 	}
 	if policy.MemoryRecallBudget > 0 {
 		lines = append(lines, fmt.Sprintf("共同记忆最多使用 %d 条，且必须与当前内容直接相关。", policy.MemoryRecallBudget))
+	} else {
+		lines = append(lines, "不要因为久别主动展开共同记忆。")
+	}
+	if value.ReacclimationTurnsLeft > 0 {
+		lines = append(lines, fmt.Sprintf("仍处于重新适应阶段，剩余 %d 回合；逐步恢复熟悉的表达，不默认旧亲密程度。", value.ReacclimationTurnsLeft))
+	}
+	if policy.UseRelationshipAge {
+		lines = append(lines, fmt.Sprintf("双方关系已持续 %d 天，仅在与当前话题相关时自然提及。", value.RelationshipAgeDays))
+	}
+	if policy.RestorePreviousTopic {
+		lines = append(lines, "可在确认仍然相关后接续旧话题。")
+	}
+	if policy.ApplyWarmthDelta > 0 || policy.ApplySocialArousal > 0 {
+		lines = append(lines, "本轮可以稍显温暖与关注；这只是短暂表达调整，不改变长期关系或心理状态。")
 	}
 	return strings.Join(lines, "\n")
 }

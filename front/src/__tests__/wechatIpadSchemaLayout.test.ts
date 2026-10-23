@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import SchemaUINode from "../components/extension/SchemaUINode.vue";
 import { validateDocument, type SchemaUIDocument } from "../components/extension/schema-ui-utils";
 
-const document = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins/channels/wechat-ipad860/ui/schema/desktop.json"), "utf8")) as SchemaUIDocument;
+const document = JSON.parse(readFileSync(resolve(__dirname, "../../../plugins-code/channels/wechat-ipad860/ui/schema/desktop.json"), "utf8")) as SchemaUIDocument;
 
 describe("个人微信 Schema 页面", () => {
   it("直接使用通道响应展示联系人和日志，并隐藏内部状态字段", async () => {

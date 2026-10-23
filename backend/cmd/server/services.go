@@ -22,7 +22,6 @@ import (
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -125,6 +124,7 @@ import (
 )
 
 type AppServices struct {
+	ModelUsage                   *mindruntime.ModelUsageStore
 	RuntimeProfile               runtimeprofile.Profile
 	RuntimePolicy                runtimeprofile.Policy
 	DB                           *gorm.DB
@@ -144,9 +144,7 @@ type AppServices struct {
 	UnifiedEntry                 *interaction.UnifiedEntry
 	ChatRuntime                  *interaction.RuntimeContextService
 	OwnedIngress                 *ownedChatIngress
-	Continuity                   *continuity.Repository
-	ContinuityCoordinator        *continuity.WaitCoordinator
-	ContinuityBridge             *continuity.RuntimeBridge
+	ContinuityOwner              *ownedContinuityRuntime
 	DataLifecycle                *mindruntime.DataLifecycleCoordinator
 	RuntimeQueue                 *queue.SQLiteRuntimeQueueStore
 	NewOutbox                    *newoutbox.SQLiteOutboxStore
@@ -276,7 +274,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	memoryConsumers := &ownedMemoryConsumers{}
 	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
 	relTimeCoordinator := temporal.NewRelationshipTimeCoordinator(relTimeRepo, temporal.SystemClock{})
-	temporalSvc.SetRelationshipTimeProvider(relTimeCoordinator)
 	knowledgeSvc := knowledge.NewService(ctx)
 	tool.SetKnowledgeService(knowledgeSvc)
 	visionRepo := vision.NewRepository(ctx.DB)
@@ -284,7 +281,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	compressor := chat.NewCompressor(ctx.DB)
 	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
 	syncService := syncpkg.NewService(ctx.DB, syncApplier)
+	usageStore, usageErr := mindruntime.NewModelUsageStore(ctx.DB, spaceidentity.DefaultSpaceID())
+	if usageErr != nil {
+		return nil, fmt.Errorf("initialize model usage: %w", usageErr)
+	}
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, compressor, visionSvc, graphSvc, syncService.ChangeLog)
+	chatSvc.SetUsageStore(usageStore)
 	if binder, ok := chatSvc.(interface{ SetKnowledgePort(chat.KnowledgePort) }); ok {
 		binder.SetKnowledgePort(knowledgeSvc)
 	}
@@ -652,16 +654,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init outbox store schema:", err)
 		panic("failed to init outbox store schema")
 	}
-	continuityRepo := continuity.NewRepository(ctx.DB)
-	if err := continuityRepo.InitSchema(); err != nil {
-		log.Error("failed to init continuity runtime schema:", err)
-		panic("failed to init continuity runtime schema")
-	}
-	continuityResolver := continuity.NewResolver(continuityRepo)
-	continuityResolver.SetSemanticMatcher(continuity.NewEmbeddingSemanticMatcher(embedding.NewService(ctx.DB)))
-	continuityResolver.SetDisambiguator(continuity.NewLLMThreadDisambiguator(chatSvc))
-	continuityCoordinator := continuity.NewWaitCoordinator(continuityRepo, nil, continuity.DefaultWaitCoordinatorConfig())
-	continuityBridge := continuity.NewRuntimeBridge(continuityRepo, continuityCoordinator)
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
 	if kernelContainer.ChannelResolver == nil {
@@ -691,13 +683,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	dispatchedPublisher.Register(interaction.ReflectionMemoryAbstractionEventType, reflectionPublisher)
 	orch := interaction.NewRuntimeContextService(tracker, parallelTurns)
 	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
-		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
 	}
 	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, extensionContextProvider, memoryConsumers.Beliefs, temporalSvc)
-	runtimeRegistry.Register(interaction.NewContinuityContextLoader(continuityRepo))
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
 	runtimePipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
-	runtimePipeline.SetSafetyGovernor(safety.NewGovernor(safety.DefaultGovernorConfig()))
+	safetyRepository := safety.NewRepository(ctx.DB)
+	runtimePipeline.SetSafetyPolicyReader(safetyRepository)
+	runtimePipeline.SetSafetyIncidentRecorder(safetyRepository)
 	runtimePipeline.SetBeliefResolver(belief.ResolveBelief)
 	runtimePipeline.SetAppraisalEngine(appraisal.NewEngine(appraisal.DefaultAppraisalConfig()))
 	runtimePipeline.SetBudgetController(budget.NewBudgetController(0.5))
@@ -723,11 +715,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init data lifecycle schema:", err)
 		panic("failed to init data lifecycle schema")
 	}
-	dataLifecycle.SetOutboxCleanupExecutor(mindruntime.NewDefaultOutboxCleanupExecutor(ctx.DB, graphSvc))
 	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
-	entry.SetContinuityResolver(continuityResolver)
-	continuityCoordinator.SetDispatcher(&continuityWakeDispatcher{entry: entry})
-	wireContinuityKernelObservers(kernelContainer, continuityBridge)
 	if kernelContainer != nil && kernelContainer.GameHost != nil {
 		kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry, defaultCharacterProvider: defaultCharProvider})
 	}
@@ -960,6 +948,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		newDesktopPetReleaseEventSink(kernelContainer.EventService),
 	)
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher, newGeneratedReleasePackageSource(processingService))
+	if migrationPort, ok := newReleaseService.(release.LegacyPackageBuildPort); ok {
+		if err := migrateLegacyDesktopPetPackages(ctx.Context, ctx.DB, migrationPort, config.AppCfg.Storage.DataDir); err != nil {
+			return nil, fmt.Errorf("migrate legacy desktop pet packages: %w", err)
+		}
+	}
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
 	if err := desktoppetsecurity.EnsureAllRequiredRoots(pathRegistry, config.AppCfg.Storage.DataDir); err != nil {
@@ -1116,7 +1109,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			}
 			canaryCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			if _, err := executeDesktopPetWriteCanary(canaryCtx, installationCoordinator, installationRepoV2, runtimeV1Facade); err != nil {
+			_, err := executeDesktopPetWriteCanary(canaryCtx, installationCoordinator, installationRepoV2, runtimeV1Facade)
+			if err != nil {
 				return err
 			}
 			return executeDesktopPetEditingWriteCanary(canaryCtx, editingSvc, ctx.DB)
@@ -1166,6 +1160,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if schemaErr := notificationRuntime.Repository().InitSchema(); schemaErr != nil {
 			return nil, fmt.Errorf("initialize notification runtime schema: %w", schemaErr)
 		}
+		notificationRuntime.RegisterManager(business.RuntimeManager())
 		notificationContext := context.Background()
 		if ctx != nil && ctx.Context != nil {
 			notificationContext = ctx.Context
@@ -1192,9 +1187,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Chat:                         chatSvc,
 		UnifiedEntry:                 entry,
 		ChatRuntime:                  orch,
-		Continuity:                   continuityRepo,
-		ContinuityCoordinator:        continuityCoordinator,
-		ContinuityBridge:             continuityBridge,
 		DataLifecycle:                dataLifecycle,
 		RuntimeQueue:                 runtimeQueue,
 		NewOutbox:                    newOutboxStore,
@@ -1230,6 +1222,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		KernelContainer:              kernelContainer,
 		Temporal:                     temporalSvc,
 		RelTimeCoordinator:           relTimeCoordinator,
+		ModelUsage:                   usageStore,
 		OwnershipGuard:               ownershipGuard,
 		PathRegistry:                 pathRegistry,
 		ImportStagingRepo:            importStagingRepo,
@@ -1355,11 +1348,30 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("Core 缺少设备归属计算端口")
 		}
 		services.OwnedBusiness = business.NewEngine(deviceMeshRuntime.Coordination, deviceMeshRuntime, ownedModel)
+		feedbackOwnerID := deviceMeshRuntime.LocalDeviceID
+		if policy, err := deviceMeshRuntime.Coordination.Get(context.Background(), localSpace.SpaceID(), physicalIdentity.DeviceID.String()); err != nil {
+			return nil, err
+		} else if policy.Coordinated {
+			feedbackOwnerID = localSpace.SpaceID()
+		}
+		if err := migrateLegacyMessageFeedback(context.Background(), services.DB, localSpace.SpaceID(), feedbackOwnerID, localSpace.SpaceID()); err != nil {
+			return nil, err
+		}
+		if err := migrateLegacySafetyGovernance(context.Background(), services.DB, localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID(), feedbackOwnerID); err != nil {
+			return nil, err
+		}
+		services.ContinuityOwner = newOwnedContinuityRuntime(services.OwnedBusiness, chatSvc, embedding.NewService(ctx.DB), localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID())
+		if err := migrateLegacyContinuity(context.Background(), services.DB, services.OwnedBusiness, localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID()); err != nil {
+			return nil, err
+		}
+		if err := migrateLegacyEmotionHistory(context.Background(), services.DB, services.OwnedBusiness, localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID()); err != nil {
+			return nil, err
+		}
+		wireOwnedContinuityKernelObservers(kernelContainer, services.ContinuityOwner)
 		agentAdminController.owned = services.OwnedBusiness
 		agentAdminController.ownedData = deviceMeshRuntime
 		services.OwnedIngress = newOwnedChatIngress(services, localSpace.SpaceID())
 		entry.SetEntryExecutor(services.OwnedIngress)
-		continuityCoordinator.SetDispatcher(&continuityWakeDispatcher{entry: entry, bindLocal: services.OwnedIngress.bindLocalSource})
 		if kernelContainer != nil && kernelContainer.GameHost != nil {
 			kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry, defaultCharacterProvider: defaultCharProvider, bindLocal: services.OwnedIngress.bindLocalSource, withOwner: services.OwnedBusiness.WithExecutionScope})
 		}
@@ -1434,9 +1446,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				services.Extension.StartWorkflowDeviceSync(spaceID.String(), deviceID.String())
 			})
 		}
-		if deviceMeshRuntime.Handler != nil && continuityBridge != nil {
+		if deviceMeshRuntime.Handler != nil && services.ContinuityOwner != nil {
 			deviceMeshRuntime.Handler.AddOnReady(func(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) {
-				continuityBridge.OnDeviceReady(context.Background(), spaceID.String(), deviceID.String())
+				_ = services.ContinuityOwner.ApplyDeviceReady(context.Background(), spaceID.String(), deviceID.String())
 			})
 		}
 		if behaviorMeshPublisher != nil {
@@ -1554,6 +1566,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	if err := registerReminderDataPortability(services, mcpDataDirectory(ctx)); err != nil {
 		return nil, fmt.Errorf("register unified reminder backup: %w", err)
+	}
+	if err := registerSafetyDataPortability(services); err != nil {
+		return nil, fmt.Errorf("register safety governance backup: %w", err)
 	}
 	return services, nil
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/middleware/security"
 )
 
@@ -28,6 +30,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	registerMeshMemoryManagementRouter(mesh, services, coreID)
 	registerMeshWorldbookRouter(mesh, services, coreID)
 	registerMeshRuntimeStateRouter(mesh, services, coreID)
+	registerMeshRelationshipTimeRouter(mesh, services, coreID)
 	registerMeshChatManagementRouter(mesh, services, coreID)
 	registerMeshChatRuntimeRouter(mesh, services, coreID)
 	registerMeshTaskOwnerRouter(mesh, services)
@@ -122,7 +125,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"message": "持续事项操作缺少服务提供者和数据归属版本，请刷新后重试"})
 			return
 		}
-		if payload.Action == "claim" || payload.Action == "heartbeat" || payload.Action == "finish" || payload.Action == "mark_unknown" || payload.Action == "read" {
+		if payload.Action == "claim" || payload.Action == "heartbeat" || payload.Action == "finish" || payload.Action == "mark_unknown" || payload.Action == "read" || payload.Action == "bind" || payload.Action == "observe" || payload.Action == "runtime_event" {
 			c.JSON(403, gin.H{"message": "执行租约只能由 Core 调度器管理"})
 			return
 		}
@@ -224,7 +227,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		kind := c.Query("kind")
 		switch kind {
-		case "memory", "working", "profile", "episodic", "fact", "vector", "graph", "summary", "continuity", "worldbook":
+		case "memory", "working", "profile", "episodic", "fact", "vector", "graph", "summary", "continuity", "worldbook", business.EmotionSnapshotKind:
 		default:
 			c.JSON(400, gin.H{"message": "记忆层类型无效"})
 			return
@@ -449,6 +452,20 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			c.JSON(400, gin.H{"code": "mesh.invalid_scope", "message": "跨设备调用缺少目标权限快照，请刷新角色后重试"})
 			return
 		}
+		if request.RequestID == "" {
+			request.RequestID = uuid.NewString()
+		}
+		owner := interaction.EntryOwner{SpaceID: request.SpaceID, DeviceID: request.DeviceID, TargetDeviceID: request.TargetDeviceID, CoreID: request.CoreID}
+		threadID := ""
+		if services.ContinuityOwner != nil {
+			var resolveErr error
+			threadID, resolveErr = services.ContinuityOwner.Resolve(c.Request.Context(), owner, request.RoleID, request.ConversationID, request.PrimaryWorkspaceID, request.Message, continuityOwnerRequestID(request.RequestID+"|continuity-resolve"))
+			if resolveErr != nil {
+				c.JSON(409, gin.H{"code": "mesh.continuity_unavailable", "message": resolveErr.Error()})
+				return
+			}
+		}
+		messageContext := business.WithIngress(c.Request.Context(), business.Ingress{Source: "owned", Channel: "web", ThreadID: threadID})
 		streaming := strings.Contains(c.GetHeader("Accept"), "text/event-stream")
 		var emit func(business.Event) error
 		if streaming {
@@ -463,7 +480,12 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				return nil
 			}
 		}
-		response, err := services.OwnedBusiness.RunEvents(c.Request.Context(), request, emit)
+		response, err := services.OwnedBusiness.RunEvents(messageContext, request, emit)
+		if err == nil && response.Saved && services.ContinuityOwner != nil && threadID != "" {
+			if observeErr := services.ContinuityOwner.Observe(c.Request.Context(), owner, response.Scope.RoleID, threadID, continuity.ObservePayload{Version: "v1", ThreadID: threadID, SpaceID: owner.SpaceID, CharacterID: response.Scope.RoleID, ConversationID: response.ConversationID, RequestID: response.RequestID, ExecutionID: response.ExecutionID, UserMessage: request.Message, AssistantReply: response.Text, Source: "owned"}); observeErr != nil {
+				err = fmt.Errorf("回复已保存，持续事项同步失败: %w", observeErr)
+			}
+		}
 		if err != nil {
 			if streaming && c.Writer.Written() {
 				eventType := "failed"

@@ -2,6 +2,7 @@ package business
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -55,6 +56,21 @@ func TestOwnedCompletionRunsAfterOwnerCommitAndPreservesFailure(t *testing.T) {
 			_, err := engine.Run(t.Context(), Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "conversation", RequestID: "completion", Message: "check commit"})
 			if called != 1 || (err == nil) != (scenario == "saved") {
 				t.Fatalf("completion=%d err=%v", called, err)
+			}
+			if scenario == "model-failed" {
+				row, getErr := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "checkpoint", "turn/completion")
+				if getErr != nil || row == nil {
+					t.Fatalf("failed checkpoint missing: %+v %v", row, getErr)
+				}
+				var checkpoint struct {
+					Status string `json:"status"`
+				}
+				if json.Unmarshal(row.Body, &checkpoint) != nil || checkpoint.Status != "failed" {
+					t.Fatalf("failed checkpoint status: %+v", checkpoint)
+				}
+				if errors.Is(err, coordination.ErrWrongOwner) {
+					t.Fatalf("model failure was replaced by authorization error: %v", err)
+				}
 			}
 		})
 	}

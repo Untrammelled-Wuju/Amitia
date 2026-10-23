@@ -3,6 +3,7 @@ package devicemesh
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
@@ -85,7 +86,7 @@ func (rt *Runtime) MemoryDeletionComplete(ctx context.Context, scope coordinatio
 
 func (rt *Runtime) CleanupMemoryDeletions(ctx context.Context, scope coordination.ExecutionScope) (int, error) {
 	if err := rt.validateDataRoute(ctx, scope); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("清理路由校验失败: %w", err)
 	}
 	var data coordination.DataPort
 	if scope.Coordinated {
@@ -102,7 +103,7 @@ func (rt *Runtime) CleanupMemoryDeletions(ctx context.Context, scope coordinatio
 		}
 		count, err := port.CleanupMemoryDeletions(ctx, scope)
 		if err != nil {
-			return count, err
+			return count, fmt.Errorf("本地清理失败: %w", err)
 		}
 		return count, rt.validateDataRoute(ctx, scope)
 	}
@@ -111,7 +112,7 @@ func (rt *Runtime) CleanupMemoryDeletions(ctx context.Context, scope coordinatio
 		Cleaned int    `json:"cleaned"`
 	}
 	if err := rt.callOwnedData(ctx, scope, "memory-deletion-cleanup", coordination.DataQuery{}, &result); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("远端清理失败: %w", err)
 	}
 	if result.OwnerID != scope.ResourceOwnerID || result.Cleaned < 0 {
 		return 0, coordination.ErrWrongOwner

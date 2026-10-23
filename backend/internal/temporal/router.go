@@ -5,8 +5,8 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 )
 
-func RegisterRouter(group *gin.RouterGroup, service *Service, coordinator *RelationshipTimeCoordinator) {
-	handler := NewHandlerWithRelationshipTime(service, coordinator)
+func RegisterRouter(group *gin.RouterGroup, service *Service) {
+	handler := NewHandler(service)
 	temporal := group.Group("/temporal")
 	{
 		temporal.GET("/profile", handler.GetUserProfile)
@@ -25,12 +25,5 @@ func RegisterRouter(group *gin.RouterGroup, service *Service, coordinator *Relat
 		temporal.POST("/timezone-suggestion", handler.SuggestTimezone)
 		temporal.POST("/timezone-suggestion/accept", handler.AcceptTimezoneSuggestion)
 		temporal.POST("/timezone-suggestion/reject", handler.RejectTimezoneSuggestion)
-	}
-	if service != nil && service.FeatureFlags().RelationshipTimeEnabled && coordinator != nil {
-		temporal.GET("/characters/:characterId/relationship-time/settings", handler.GetRelationshipTimeSettings)
-		temporal.PUT("/characters/:characterId/relationship-time/settings", handler.UpdateRelationshipTimeSettings)
-		temporal.GET("/characters/:characterId/relationship-time/state", handler.GetRelationshipTimeState)
-		temporal.GET("/characters/:characterId/reunion-episodes", handler.ListReunionEpisodes)
-		temporal.GET("/characters/:characterId/reunion-episodes/:episodeId", handler.GetReunionEpisode)
 	}
 }

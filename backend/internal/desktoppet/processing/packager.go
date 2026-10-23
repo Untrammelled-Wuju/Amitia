@@ -78,11 +78,14 @@ type PackageBuildRequest struct {
 }
 
 type PackageBuildResult struct {
-	Package      *Package
-	Manifest     *Manifest
-	PackageHash  string
-	PackageDir   string
-	ManifestData []byte
+	PackageID        string
+	Version          int
+	DefaultActionKey string
+	ActionCount      int
+	Manifest         *Manifest
+	PackageHash      string
+	PackageDir       string
+	ManifestData     []byte
 }
 
 type PackageMetadata struct {
@@ -103,7 +106,11 @@ type Packager struct {
 	manifestBuilder *ManifestBuilder
 }
 
-func NewPackager(repo Repository, dataDir string) *Packager {
+func NewPackager(dataDir string, repositories ...Repository) *Packager {
+	var repo Repository
+	if len(repositories) > 0 {
+		repo = repositories[0]
+	}
 	return &Packager{
 		repo:            repo,
 		dataDir:         dataDir,
@@ -111,18 +118,11 @@ func NewPackager(repo Repository, dataDir string) *Packager {
 	}
 }
 
-func (p *Packager) BuildPackage(req *PackageBuildRequest) (*PackageBuildResult, error) {
-	return p.buildPackage(req, true)
-}
-
-// BuildReleaseSource builds the same validated package artifact without creating a
-// legacy desktop_pet_packages record. The caller owns PackageDir and must remove it
-// after the V2 Release has copied/published the artifact.
 func (p *Packager) BuildReleaseSource(req *PackageBuildRequest) (*PackageBuildResult, error) {
-	return p.buildPackage(req, false)
+	return p.buildPackage(req)
 }
 
-func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bool) (*PackageBuildResult, error) {
+func (p *Packager) buildPackage(req *PackageBuildRequest) (*PackageBuildResult, error) {
 	if req == nil {
 		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "构建请求为空"}
 	}
@@ -137,13 +137,11 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "创建包目录失败", Err: err}
 	}
 	completed := false
-	if !persistLegacyRecord {
-		defer func() {
-			if !completed {
-				_ = os.RemoveAll(packageDir) // audit:ok: packageDir is UUID-derived under the packager-owned generation-task package root
-			}
-		}()
-	}
+	defer func() {
+		if !completed {
+			_ = os.RemoveAll(packageDir) // audit:ok: packageDir is UUID-derived under the packager-owned generation-task package root
+		}
+	}()
 
 	if err := p.copyActionFiles(req.GenerationTaskID, req.ProcessingTaskID, packageID, req.IncludedActions, req.ProcessingVersion); err != nil {
 		return nil, err
@@ -161,7 +159,7 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 		manifestActions,
 	)
 
-	manifestRelPath, err := p.manifestBuilder.WriteManifest(req.GenerationTaskID, packageID, manifest)
+	_, err := p.manifestBuilder.WriteManifest(req.GenerationTaskID, packageID, manifest)
 	if err != nil {
 		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "写入 manifest.json 失败", Err: err}
 	}
@@ -170,31 +168,12 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 		return nil, err
 	}
 
-	version, err := p.resolvePackageVersion(req.GenerationTaskID)
-	if err != nil {
-		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "解析包版本失败", Err: err}
+	version := req.ProcessingVersion
+	if version < 1 {
+		version = 1
 	}
 
-	pkg := &Package{
-		ID:               packageID,
-		SpaceID:          req.SpaceID,
-		GenerationTaskID: req.GenerationTaskID,
-		ProcessingTaskID: req.ProcessingTaskID,
-		Name:             req.PackageName,
-		Version:          version,
-		Status:           "pending",
-		DefaultActionKey: req.DefaultAction,
-		CanvasWidth:      req.CanvasWidth,
-		CanvasHeight:     req.CanvasHeight,
-		ManifestPath:     manifestRelPath,
-		PreviewPath:      p.packagePreviewRelPath(req.GenerationTaskID, packageID),
-		ActionCount:      len(req.IncludedActions),
-		IncludedActions:  encodeIncludedActions(req.IncludedActions),
-		CreatedAt:        time.Now().Format(desktopPetTimeFormat),
-		UpdatedAt:        time.Now().Format(desktopPetTimeFormat),
-	}
-
-	if err := p.generateMetadata(packageDir, pkg, req.ProcessingVersion); err != nil {
+	if err := p.generateMetadata(packageDir, packageID, version, req.ProcessingVersion); err != nil {
 		return nil, err
 	}
 
@@ -206,16 +185,6 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 	if err != nil {
 		return nil, &PackageError{Code: ErrCodePackageHashFailed, Message: "计算包哈希失败", Err: err}
 	}
-	pkg.PackageHash = hash
-	pkg.PackagePath = p.packageDirRelPath(req.GenerationTaskID, packageID)
-	pkg.Status = "ready"
-
-	if persistLegacyRecord {
-		if err := p.repo.CreatePackage(pkg); err != nil {
-			return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "写入包记录失败", Err: err}
-		}
-	}
-
 	manifestData, err := os.ReadFile(filepath.Join(packageDir, packageManifestFile))
 	if err != nil {
 		return nil, &PackageError{Code: ErrCodePackageFileMissing, Message: "读取 manifest.json 失败", Err: err}
@@ -223,11 +192,14 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 
 	completed = true
 	return &PackageBuildResult{
-		Package:      pkg,
-		Manifest:     manifest,
-		PackageHash:  hash,
-		PackageDir:   packageDir,
-		ManifestData: manifestData,
+		PackageID:        packageID,
+		Version:          version,
+		DefaultActionKey: req.DefaultAction,
+		ActionCount:      len(req.IncludedActions),
+		Manifest:         manifest,
+		PackageHash:      hash,
+		PackageDir:       packageDir,
+		ManifestData:     manifestData,
 	}, nil
 }
 
@@ -390,10 +362,10 @@ func (p *Packager) copyPackagePreview(taskID string, processingVersion int, pack
 	return nil
 }
 
-func (p *Packager) generateMetadata(packageDir string, pkg *Package, processingVersion int) error {
+func (p *Packager) generateMetadata(packageDir, packageID string, version, processingVersion int) error {
 	metadata := PackageMetadata{
-		PackageID: pkg.ID,
-		Version:   pkg.Version,
+		PackageID: packageID,
+		Version:   version,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		BuildInfo: PackageBuildInfo{
 			ProcessingVersion: processingVersion,
@@ -568,20 +540,6 @@ func (p *Packager) verifyActionIntegrity(packageDir string, action ManifestActio
 	}
 
 	return nil
-}
-
-func (p *Packager) resolvePackageVersion(generationTaskID string) (int, error) {
-	existing, err := p.repo.ListPackagesByGenerationTask(generationTaskID)
-	if err != nil {
-		return 0, err
-	}
-	maxVersion := 0
-	for _, pkg := range existing {
-		if pkg.Version > maxVersion {
-			maxVersion = pkg.Version
-		}
-	}
-	return maxVersion + 1, nil
 }
 
 func (p *Packager) packageDir(taskID, packageID string) string {

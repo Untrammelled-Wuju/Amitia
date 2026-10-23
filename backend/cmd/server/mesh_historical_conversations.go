@@ -96,7 +96,7 @@ func (p *meshLocalDataPort) HistoricalConversationPage(ctx context.Context, scop
 		count := 0
 		for rows.Next() {
 			var id, updated string
-			var raw json.RawMessage
+			var raw []byte
 			if err := rows.Scan(&id, &updated, &raw); err != nil {
 				_ = rows.Close()
 				return result, err

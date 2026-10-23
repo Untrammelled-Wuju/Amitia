@@ -349,11 +349,12 @@ func (f *threeCoreFixture) request(t *testing.T, caller *threeCoreFixture, metho
 	if response.StatusCode != expected {
 		var failure struct {
 			Message string `json:"message"`
+			Data    any    `json:"data"`
 			Code    string `json:"code"`
 		}
 		_ = json.Unmarshal(encoded, &failure)
 		skipUnsupportedDeviceIsolationBody(t, failure.Message)
-		t.Fatalf("%s %s: status=%d expected=%d code=%s message=%s", method, path, response.StatusCode, expected, failure.Code, failure.Message)
+		t.Fatalf("%s %s: status=%d expected=%d code=%s message=%s data=%v", method, path, response.StatusCode, expected, failure.Code, failure.Message, failure.Data)
 	}
 	return encoded
 }

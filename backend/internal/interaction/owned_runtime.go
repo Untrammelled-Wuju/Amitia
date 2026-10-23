@@ -2,11 +2,13 @@ package interaction
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -15,6 +17,36 @@ type ownedRuntimeContextKey struct{}
 func RuntimeFromContext(ctx context.Context) (*RuntimeAssembly, bool) {
 	runtime, ok := ctx.Value(ownedRuntimeContextKey{}).(*RuntimeAssembly)
 	return runtime, ok && runtime != nil
+}
+
+func (r *RuntimeAssembly) EvaluateGeneratedText(ctx context.Context, text string) (safety.PostGenOutput, error) {
+	result := r.CheckGeneratedText(text)
+	if !result.Audited {
+		return result, nil
+	}
+	if r.safetyRecorder == nil {
+		return safety.PostGenOutput{}, fmt.Errorf("%w: safety_incident_store_unavailable", ErrOrchestratorSafetyBlocked)
+	}
+	incident := r.safetyIncident
+	incident.Description = strings.Join(result.Reasons, ",")
+	incident.Status = "open"
+	incident.PolicyRevision = r.SafetyPolicy.Revision
+	details, err := json.Marshal(map[string]any{"action": result.Action, "reasons": result.Reasons, "replacement": result.Replacement})
+	if err != nil {
+		return safety.PostGenOutput{}, err
+	}
+	incident.DetailsJSON = string(details)
+	if err := r.safetyRecorder.RecordIncident(ctx, incident); err != nil {
+		return safety.PostGenOutput{}, err
+	}
+	return result, nil
+}
+
+func (r *RuntimeAssembly) CheckGeneratedText(text string) safety.PostGenOutput {
+	if r == nil || r.safetyGovernor == nil || strings.TrimSpace(text) == "" {
+		return safety.PostGenOutput{Allowed: true, Cleaned: text}
+	}
+	return r.safetyGovernor.CheckPostGen(safety.PostGenInput{GeneratedText: text})
 }
 
 func (o *RuntimeContextService) PrepareOwnedRuntime(ctx context.Context, record *InteractionRecord, req *ProcessRequest) (context.Context, *RuntimeAssembly, func(context.Context, bool) error, error) {

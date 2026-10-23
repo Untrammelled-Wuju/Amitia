@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/continuity"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
@@ -28,7 +28,13 @@ func WithApprovalBroker(broker *execution.ApprovalBroker) SystemRouterOption {
 	}
 }
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, continuityRepo *continuity.Repository, continuityCoordinator *continuity.WaitCoordinator, channelAccess ChannelAvailability, options ...SystemRouterOption) {
+func WithSafetyCoordination(coordinator *coordination.Service) SystemRouterOption {
+	return func(handler *Handler) {
+		handler.SetSafetyCoordination(coordinator)
+	}
+}
+
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, channelAccess ChannelAvailability, options ...SystemRouterOption) {
 	svc := NewService(ctx, runtimeprofile.Profile(""))
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memoryConsumer)
 	for _, option := range options {
@@ -37,7 +43,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 		}
 	}
 	handler.SetArtifactService(artifactSvc)
-	handler.SetContinuityRuntime(continuityRepo, continuityCoordinator)
 	handler.SetChannelAvailability(channelAccess)
 	svc.AttachTemporalService(temporalSvc)
 
@@ -61,8 +66,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/onboarding/reset", sharedCoreAdminOnly(), handler.OnboardingReset)
 	r.GET("/runtime/capabilities", handler.RuntimeCapabilities)
 
-	registerContinuityRoutes(r, handler)
-
 	r.GET("/config", sharedCoreAdminOnly(), handler.AppConfig)
 	r.PUT("/config", sharedCoreAdminOnly(), handler.UpdateConfig)
 	r.GET("/config/mood-detection", sharedCoreAdminOnly(), handler.MoodDetectionConfig)
@@ -76,9 +79,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.PUT("/theme", sharedCoreAdminOnly(), handler.UpdateTheme)
 	r.GET("/theme/presets", sharedCoreAdminOnly(), handler.ThemePresets)
 
-	r.POST("/safety/check-input", handler.CheckInputSafety)
-	r.POST("/safety/check-output", handler.CheckOutputSafety)
-	r.POST("/safety/check-import", handler.SafetyImportCheck)
 	r.GET("/safety/events", sharedCoreAdminOnly(), handler.SafetyEvents)
 	r.DELETE("/safety/events", sharedCoreAdminOnly(), handler.DeleteSafetyEvents)
 	r.PUT("/safety/events/:id/handle", sharedCoreAdminOnly(), handler.HandleSafetyEvent)
@@ -108,16 +108,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.PUT("/audit/settings", sharedCoreAdminOnly(), handler.UpdateAuditSettings)
 	r.GET("/audit/stats", sharedCoreAdminOnly(), handler.AuditStats)
 
-	// Browser-local notification preferences are intentionally isolated from
-	// /notifications, which is owned exclusively by Notification Runtime for
-	// Android/iOS device Push and native presentation.
-	r.GET("/browser-notifications/settings", handler.NotificationsSettings)
-	r.PUT("/browser-notifications/settings", handler.UpdateNotificationsSettings)
-	r.GET("/browser-notifications/status", handler.NotificationsStatus)
-	r.POST("/browser-notifications/subscribe", handler.NotificationsSubscribe)
-	r.POST("/browser-notifications/test", handler.NotificationsTest)
-	r.POST("/browser-notifications/unsubscribe", handler.NotificationsUnsubscribe)
-
 	r.GET("/search/credentials", sharedCoreAdminOnly(), handler.SearchCredentialList)
 	r.PUT("/search/credentials/:engineId", sharedCoreAdminOnly(), handler.SearchCredentialSave)
 	r.DELETE("/search/credentials/:engineId", sharedCoreAdminOnly(), handler.SearchCredentialDelete)
@@ -129,16 +119,17 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/security/exposure-check", sharedCoreAdminOnly(), handler.SecurityExposureCheck)
 	r.GET("/security/status", sharedCoreAdminOnly(), handler.SecurityStatus)
 
-	r.POST("/privacy/scan", sharedCoreAdminOnly(), handler.PrivacyScan)
-	r.POST("/privacy/mask", sharedCoreAdminOnly(), handler.PrivacyMask)
-	r.GET("/privacy/scan-results", sharedCoreAdminOnly(), handler.PrivacyScanResultsGet)
-	r.GET("/privacy/scan-results/:id", sharedCoreAdminOnly(), handler.PrivacyScanResultByID)
-	r.DELETE("/privacy/scan-results", sharedCoreAdminOnly(), handler.PrivacyScanResults)
-	r.POST("/privacy/deletion/request", sharedCoreAdminOnly(), handler.PrivacyDeletionRequest)
-	r.GET("/privacy/deletion/status/:id", sharedCoreAdminOnly(), handler.PrivacyDeletionStatus)
-	r.GET("/privacy/deletion/stats", sharedCoreAdminOnly(), handler.PrivacyDeletionStats)
-	r.POST("/privacy/deletion/cleanup", sharedCoreAdminOnly(), handler.PrivacyDeletionCleanup)
-	r.POST("/privacy/deletion/security-tests", sharedCoreAdminOnly(), handler.PrivacyDeletionSecurityTests)
+	r.POST("/privacy/scan", handler.PrivacyAuthority(), handler.PrivacyScan)
+	r.POST("/privacy/mask", handler.PrivacyAuthority(), handler.PrivacyMask)
+	r.GET("/privacy/scan-results", handler.PrivacyAuthority(), handler.PrivacyScanResultsGet)
+	r.GET("/privacy/scan-results/:id", handler.PrivacyAuthority(), handler.PrivacyScanResultByID)
+	r.DELETE("/privacy/scan-results", handler.PrivacyAuthority(), handler.PrivacyScanResults)
+	r.POST("/privacy/deletion/preview", handler.PrivacyAuthority(), handler.PrivacyDeletionPreview)
+	r.POST("/privacy/deletion/request", handler.PrivacyAuthority(), handler.PrivacyDeletionRequest)
+	r.GET("/privacy/deletion/status/:id", handler.PrivacyAuthority(), handler.PrivacyDeletionStatus)
+	r.GET("/privacy/deletion/stats", handler.PrivacyAuthority(), handler.PrivacyDeletionStats)
+	r.POST("/privacy/deletion/cleanup", handler.PrivacyAuthority(), handler.PrivacyDeletionCleanup)
+	r.POST("/privacy/deletion/security-tests", handler.PrivacyAuthority(), handler.PrivacyDeletionSecurityTests)
 
 	r.POST("/update/check", sharedCoreAdminOnly(), handler.UpdateCheck)
 	r.PUT("/update/config", sharedCoreAdminOnly(), handler.UpdateConfig_Update)
@@ -147,32 +138,22 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/version", handler.Version)
 	r.GET("/about", handler.About)
 
-	// Storage backup/restore operates on the physical local Runtime database and
-	// filesystem. Never expose it from a shared Cloud Core; cloud clients route
-	// /api/storage to their retained Device Agent instead.
+	registerDataPortabilityMigrationRoutes(r, handler)
 	if config.AppCfg != nil && config.AppCfg.Security.Mode == "local_single_user" {
-		registerStorageRoutes(r, handler)
+		registerStorageStatusRoutes(r, handler)
+		registerDataPortabilityBackupRoutes(r, handler)
 	}
 
-	r.GET("/imports/batches", handler.ImportsBatches)
-	r.GET("/imports/batches/:id", handler.ImportsBatchDetail)
-	r.GET("/imports/batches/:id/summary", handler.ImportsBatchSummary)
-	r.GET("/imports/batches/:id/memory-candidates", handler.ImportsBatchMemoryCandidates)
-	r.DELETE("/imports/batches/:id", handler.ImportsBatchDelete)
-	r.POST("/imports/batches/:id/generate-summary", handler.ImportsBatchGenerateSummary)
-	r.POST("/imports/batches/:id/confirm-memories", handler.ImportsBatchConfirmMemories)
-	r.POST("/imports/batches/:id/extract-memory-candidates", handler.ExtractImportsMemoryCandidates)
-	r.POST("/imports/upload", handler.ImportsUpload)
-	r.POST("/imports/parse-text", handler.ImportsParseText)
-	r.POST("/imports/confirm", handler.ImportsConfirm)
-	r.POST("/import", handler.ImportData)
+	if runtimeprofile.CurrentProcessProfile() != runtimeprofile.ProfileCloudCore {
+		registerChatImportRoutes(r, handler)
+	}
 
-	r.GET("/usage/overview", sharedCoreAdminOnly(), handler.UsageOverview)
-	r.GET("/usage/daily", sharedCoreAdminOnly(), handler.UsageDaily)
-	r.GET("/usage/periodic", sharedCoreAdminOnly(), handler.UsageDaily)
-	r.GET("/usage/models", sharedCoreAdminOnly(), handler.UsageModels)
-	r.GET("/usage/sources", sharedCoreAdminOnly(), handler.UsageSources)
-	r.DELETE("/usage/clear", sharedCoreAdminOnly(), handler.UsageClear)
+	r.GET("/usage/overview", usageAccess, handler.UsageOverview)
+	r.GET("/usage/daily", usageAccess, handler.UsageDaily)
+	r.GET("/usage/periodic", usageAccess, handler.UsageDaily)
+	r.GET("/usage/models", usageAccess, handler.UsageModels)
+	r.GET("/usage/sources", usageAccess, handler.UsageSources)
+	r.DELETE("/usage/clear", usageAccess, handler.UsageClear)
 
 	r.GET("/logs/recent", sharedCoreAdminOnly(), handler.LogsRecent)
 	r.GET("/logs/recent/errors", sharedCoreAdminOnly(), handler.LogsRecentErrors)

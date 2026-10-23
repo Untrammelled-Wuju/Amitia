@@ -19,7 +19,7 @@ func (e *Engine) PreviewReply(ctx context.Context, request Request) (Generation,
 	if err != nil {
 		return Generation{}, err
 	}
-	view.Snapshot.Resources, view.Snapshot.LegacyMessages, view.Snapshot.LegacySummary = nil, nil, nil
+	view.Snapshot.Resources = nil
 	var result Generation
 	err = e.WithExecutionScope(ctx, view.Scope, func(ctx context.Context) error {
 		snapshot, err := e.data.Snapshot(ctx, view.Scope, coordination.DataQuery{Limit: 128})

@@ -29,9 +29,7 @@ type Repository interface {
 
 	RepositoryV2
 
-	CreateInstallation(installation *Installation) error
 	GetInstallation(id string) (*Installation, error)
-	GetInstallationByPackageVersion(packageID, packageVersion string) (*Installation, error)
 	ListInstallationsBySpace(spaceID string) ([]*Installation, error)
 	ListInstallations(spaceID string) ([]*Installation, error)
 	UpdateInstallationStatus(id, status string) error
@@ -292,34 +290,9 @@ func (r *repository) RequireOwnedDevice(ctx context.Context, spaceID, deviceID s
 	return nil
 }
 
-func (r *repository) CreateInstallation(installation *Installation) error {
-	var existing Installation
-	err := r.db.Where("package_id = ? AND package_version = ?", installation.PackageID, installation.PackageVersion).
-		First(&existing).Error
-	if err == nil && existing.ID != installation.ID {
-		return ErrInstallationDuplicate
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-	return r.db.Create(installation).Error
-}
-
 func (r *repository) GetInstallation(id string) (*Installation, error) {
 	var inst Installation
 	err := r.db.Where("id = ?", id).First(&inst).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrInstallationNotFound
-		}
-		return nil, err
-	}
-	return &inst, nil
-}
-
-func (r *repository) GetInstallationByPackageVersion(packageID, packageVersion string) (*Installation, error) {
-	var inst Installation
-	err := r.db.Where("package_id = ? AND package_version = ?", packageID, packageVersion).First(&inst).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound

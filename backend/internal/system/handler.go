@@ -15,8 +15,9 @@ import (
 
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/continuity"
+	"github.com/u-ai/backend/internal/chat/importbatch"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/interaction"
@@ -38,26 +39,26 @@ const SystemFormatInstruction = `【回复格式 - 系统固定规则】
 不要用句号连接多个意思。`
 
 type Handler struct {
-	canonicalMemory       *business.Engine
-	memoryConsumer        business.MemoryConsumerPort
-	privacyMemoryMu       sync.RWMutex
-	privacyMemoryEntries  map[string]business.MemoryConsumerEntry
-	memoryCoreID          string
-	service               Service
-	db                    *gorm.DB
-	chatSvc               chat.Service
-	dataLifecycle         *mindruntime.DataLifecycleCoordinator
-	unifiedEntry          *interaction.UnifiedEntry
-	reconciliation        *mindruntime.ReconciliationEngine
-	versionInfo           atomic.Value
-	artifactSvc           *artifact.Service
-	channelAccess         ChannelAvailability
-	shadowMu              sync.RWMutex
-	shadowState           mindruntime.ShadowState
-	approvalBroker        *execution.ApprovalBroker
-	continuityRepo        *continuity.Repository
-	continuityCoordinator *continuity.WaitCoordinator
-	searchCredentials     *search.CredentialStore
+	canonicalMemory   *business.Engine
+	memoryConsumer    business.MemoryConsumerPort
+	privacyServicesMu sync.RWMutex
+	privacyServices   map[string]*service
+	memoryCoreID      string
+	service           Service
+	db                *gorm.DB
+	importRepo        *importbatch.Repository
+	chatSvc           chat.Service
+	dataLifecycle     *mindruntime.DataLifecycleCoordinator
+	unifiedEntry      *interaction.UnifiedEntry
+	reconciliation    *mindruntime.ReconciliationEngine
+	versionInfo       atomic.Value
+	artifactSvc       *artifact.Service
+	channelAccess     ChannelAvailability
+	shadowMu          sync.RWMutex
+	shadowState       mindruntime.ShadowState
+	approvalBroker    *execution.ApprovalBroker
+	searchCredentials *search.CredentialStore
+	coordination      *coordination.Service
 }
 
 type ChannelAvailability interface {
@@ -74,7 +75,7 @@ func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *m
 	if service, ok := srv.(*service); ok {
 		service.memoryConsumer = memoryConsumer
 	}
-	h := &Handler{service: srv, db: db, chatSvc: chatSvc, memoryConsumer: memoryConsumer, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
+	h := &Handler{service: srv, db: db, importRepo: importbatch.NewRepository(db), chatSvc: chatSvc, memoryConsumer: memoryConsumer, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
 	if db != nil {
 		if sqlDB, err := db.DB(); err == nil {
 			h.searchCredentials = search.NewCredentialStore(sqlDB)
@@ -96,6 +97,10 @@ func (h *Handler) SetApprovalBroker(broker *execution.ApprovalBroker) {
 	h.approvalBroker = broker
 }
 
+func (h *Handler) SetSafetyCoordination(coordinator *coordination.Service) {
+	h.coordination = coordinator
+}
+
 func (h *Handler) SetSearchCredentialSecretBroker(broker *secret.Broker) {
 	if h == nil || h.searchCredentials == nil || broker == nil {
 		return
@@ -109,11 +114,6 @@ func (h *Handler) SetSearchCredentialSecretBroker(broker *secret.Broker) {
 	if err := h.searchCredentials.MigrateLegacyCredentials(ctx); err != nil {
 		applog.Warn("system search credential migration to SecretBroker failed", "error", err)
 	}
-}
-
-func (h *Handler) SetContinuityRuntime(repo *continuity.Repository, coordinator *continuity.WaitCoordinator) {
-	h.continuityRepo = repo
-	h.continuityCoordinator = coordinator
 }
 
 func (h *Handler) getDBPath() string {

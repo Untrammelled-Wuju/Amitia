@@ -90,7 +90,6 @@ class _Api extends Fake implements BackendServiceApi {
     expect(path, '/api/device-mesh/v1/business/speech');
     writes++;
     submitted = Map<String, dynamic>.from(data as Map);
-    expect(submitted!.containsKey('speakerId'), false);
     expect(submitted!.containsKey('voiceConfigId'), false);
     final id = submitted!['requestId'] as String;
     final digest = sha256
@@ -176,10 +175,18 @@ void main() {
     expect(api.writes, 0);
   });
 
-  test('bound 三个旧 TTS 入口都在请求前拒绝', () async {
+  test('复刻音色试听把 speakerId 送入 Owner 语音请求', () async {
+    final api = _Api();
+    final audio = await service(
+      api,
+    ).synthesize('role-a', '测试', speakerId: 'clone-a');
+    expect(audio.bytes, [1, 2, 3, 4]);
+    expect(api.submitted!['speakerId'], 'clone-a');
+  });
+
+  test('bound 设备不能走配置预览入口', () async {
     final api = _Api();
     final tts = TTSService(api, isBound: () => true);
-    await expectLater(tts.synthesize('你好'), throwsStateError);
     await expectLater(
       tts.synthesizeForCharacter('role-a', '你好'),
       throwsStateError,

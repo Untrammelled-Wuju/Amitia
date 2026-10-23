@@ -3,6 +3,7 @@
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi, apiClient } from "./useApi";
+import { trackInstallationOperation } from "./installation-operation";
 
 export type InstallationStatus =
   | "installing"
@@ -54,6 +55,24 @@ export interface DesktopPetInstallation {
   installedContentHash?: string;
   runtimeSyncState?: string;
   stateRevision?: number;
+  runtime?: InstallationRuntimeView;
+}
+
+export interface InstallationRuntimeView {
+  desiredRevision: number;
+  appliedDesiredRevision: number;
+  desiredEnabled: boolean;
+  desiredVisible: boolean;
+  desiredActionKey: string;
+  appliedSettingsRevision: number;
+  actualReleaseId: string;
+  actualVisible: boolean;
+  actualActionKey: string;
+  actualHealth: string;
+  runtimeSyncState: string;
+  pending: boolean;
+  lastHeartbeatAt: string;
+  updatedAt: string;
 }
 
 export interface RuntimeSettings {
@@ -147,6 +166,8 @@ export interface InstallationOperationResult {
   installationId?: string;
   status: string;
   stage?: string;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 interface InstallationOperation {
@@ -183,31 +204,25 @@ export function useDesktopPetInstallations() {
   async function trackOperation(
     submission: InstallationOperationResult,
   ): Promise<InstallationOperationResult> {
-    let current = submission;
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      if (current?.status === "failed_terminal" || current?.status === "cancelled") {
-        throw new Error("桌宠操作失败");
-      }
-      if (!current?.operationId || !["created", "queued", "running", "failed_retryable", "cancel_requested"].includes(current.status)) {
-        break;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, 150));
+    const tracked = await trackInstallationOperation(submission, async (operationId) => {
       const data = await get<{ operation: InstallationOperation }>(
-        `/api/desktop-pets/operations/${encodeURIComponent(current.operationId)}`,
+        `/api/desktop-pets/operations/${encodeURIComponent(operationId)}`,
       );
       const op = data?.operation;
-      if (!op) break;
-      current = {
+      if (!op) return null;
+      return {
         operationId: op.id,
-        installationId: op.installationId || current.installationId,
+        installationId: op.installationId || submission.installationId,
         status: op.status,
         stage: op.stage,
+        errorCode: op.errorCode,
+        errorMessage: op.errorMessage,
       };
-      if (op.status === "failed_terminal" || op.status === "cancelled") {
-        throw new Error(op.errorMessage || op.errorCode || "桌宠操作失败");
-      }
-    }
-    return current;
+    });
+    return {
+      ...tracked,
+      operationId: tracked.operationId || submission.operationId,
+    };
   }
 
   async function submitOperation(

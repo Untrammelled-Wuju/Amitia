@@ -265,7 +265,7 @@ async function handleStartCall(mode: "voice" | "video" | "screen") {
     boundCallScope.value = JSON.parse(JSON.stringify(snapshot.executionScope));
     boundCallConversation.value = originalConversation;
     const historicalConversation = snapshot.historicalSnapshot?.resources.find((item) => item.kind === "conversation");
-    boundCallHistoricalRole.value = historicalConversation?.roleId || snapshot.historicalSnapshot?.legacyConversations?.[0]?.characterId || undefined;
+    boundCallHistoricalRole.value = historicalConversation?.roleId || undefined;
     callActive.value = true;
   } catch (error) {
     callActive.value = false;

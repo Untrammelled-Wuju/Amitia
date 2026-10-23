@@ -49,7 +49,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/mcpruntime/api"
-	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/management"
@@ -58,7 +57,6 @@ import (
 	"github.com/u-ai/backend/internal/knowledge"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
-	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/notificationruntime"
 	"github.com/u-ai/backend/internal/reminder"
@@ -183,7 +181,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		systemHandler.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
 		systemHandler.SetSearchCredentialSecretBroker(services.KernelContainer.SecretBroker)
 	}
-	systemHandler.SetContinuityRuntime(services.Continuity, services.ContinuityCoordinator)
 
 	spaceStore := spaceidentity.DefaultStore()
 	if spaceStore == nil {
@@ -568,7 +565,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			agentToolFacade = services.KernelContainer.ToolFacade
 		}
 		knowledge.RegisterKnowledgeRouter(apiGroup, services.Knowledge)
-		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		userfeedback.RegisterRouter(apiGroup, ctx)
 		reminderDeviceID := ""
 		if services.DeviceMesh != nil {
@@ -583,12 +579,15 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			return services.KernelContainer.ChannelResolver.Has(channelID)
 		})
 		var systemRouterOptions []system.SystemRouterOption
-		systemRouterOptions = append(systemRouterOptions, system.WithCanonicalMemory(services.OwnedBusiness, spaceID))
+		systemRouterOptions = append(systemRouterOptions, system.WithCanonicalMemory(services.OwnedBusiness, spaceID), system.WithModelUsage(services.ModelUsage))
 		systemRouterOptions = append(systemRouterOptions, system.WithMemoryConsumers(services.MemoryConsumers))
 		if services.KernelContainer != nil {
 			systemRouterOptions = append(systemRouterOptions, system.WithApprovalBroker(services.KernelContainer.ApprovalBroker))
 		}
-		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, services.Continuity, services.ContinuityCoordinator, channelAccess, systemRouterOptions...)
+		if services.DeviceMesh != nil {
+			systemRouterOptions = append(systemRouterOptions, system.WithSafetyCoordination(services.DeviceMesh.Coordination))
+		}
+		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, channelAccess, systemRouterOptions...)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		registerMeshRealtimePublicRoutes(r, services)
@@ -599,7 +598,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, services.Readiness)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
-		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
+		if services.DeviceMesh != nil {
+			safety.RegisterSafetyRouter(apiGroup, ctx.DB, services.DeviceMesh.Coordination)
+		} else {
+			safety.RegisterSafetyRouter(apiGroup, ctx.DB)
+		}
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
 		if services.Artifact != nil && services.Artifact.Handler != nil {
@@ -746,8 +749,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				}
 			}
 		}
-		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
-		mood.RegisterMoodRouter(apiGroup, ctx)
+		temporal.RegisterRouter(apiGroup, services.Temporal)
 		if services.Sync != nil {
 			if services.KernelContainer == nil || services.KernelContainer.DeviceRegistry == nil {
 				return nil, fmt.Errorf("sync: kernel device registry is required")

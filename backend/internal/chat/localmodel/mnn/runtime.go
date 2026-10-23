@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/chat/localmodel"
+	"github.com/u-ai/backend/internal/chat/modelprotocol"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/runtimehost"
 )
@@ -488,6 +489,7 @@ func parseMNNChatResponse(body []byte) (localmodel.LocalModelResult, error) {
 		Text:         choice.Message.Content,
 		FinishReason: choice.FinishReason,
 		Usage: localmodel.LocalModelUsage{
+			Reported:         modelprotocol.UsageReported(body, "usage"),
 			PromptTokens:     result.Usage.PromptTokens,
 			CompletionTokens: result.Usage.CompletionTokens,
 			TotalTokens:      result.Usage.TotalTokens,

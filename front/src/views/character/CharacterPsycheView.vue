@@ -156,6 +156,68 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
 
+      <div class="psyche-panel emotion-history-panel">
+        <div class="panel-header">
+          <div class="history-title">
+            <span class="panel-icon">🕘</span>
+            <span>情绪历史 ({{ emotionHistory.length }})</span>
+          </div>
+          <el-button
+            v-if="emotionHistory.length"
+            link
+            type="danger"
+            :loading="clearingHistory"
+            :disabled="Boolean(deletingHistoryId)"
+            @click="clearEmotionHistory"
+          >
+            清空
+          </el-button>
+        </div>
+        <div v-if="historyLoading" class="history-placeholder">
+          正在读取设备情绪历史...
+        </div>
+        <div v-else-if="historyError" class="history-placeholder error">
+          {{ historyError }}
+        </div>
+        <div v-else-if="emotionHistory.length === 0" class="history-placeholder">
+          暂无情绪历史。开启“情绪检测”且变化达到阈值后会记录。
+        </div>
+        <div v-else class="emotion-history-list">
+          <div
+            class="emotion-history-row"
+            v-for="item in emotionHistory"
+            :key="item.id"
+          >
+            <div class="history-time">{{ formatTime(item.createdAt) }}</div>
+            <div class="history-main">
+              <strong>{{ item.affectLabel || "未标注" }}</strong>
+              <span>{{ historyEmotionLabel(item) }}</span>
+            </div>
+            <div class="history-confidence">
+              {{ Math.round((item.confidence || 0) * 100) }}%
+            </div>
+            <el-tag
+              v-if="item.recoveryApplied"
+              size="small"
+              type="info"
+              effect="plain"
+            >
+              恢复 {{ item.recoveredMood }}
+            </el-tag>
+            <span class="history-source">{{ historySource(item.source) }}</span>
+            <el-button
+              link
+              type="danger"
+              :loading="deletingHistoryId === item.id"
+              :disabled="clearingHistory"
+              @click="deleteEmotion(item)"
+            >
+              删除
+            </el-button>
+          </div>
+        </div>
+      </div>
+
       <div class="psyche-panel needs-panel" v-if="needsEntries.length">
         <div class="panel-header">
           <span class="panel-icon">🎯</span>
@@ -258,18 +320,39 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, inject, watch, onMounted, computed, type Ref } from "vue";
 import { Loading, WarningFilled } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { apiClient } from "@/composables/useApi";
 import type { PsycheStateSnapshot } from "../../types";
 import {
   projectOwnedRuntimeState,
   type OwnedRuntimeStateEnvelope,
 } from "@/runtime/owned-runtime-state";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+
+interface EmotionHistoryItem {
+  id: string;
+  source: string;
+  createdAt: string;
+  confidence: number;
+  affectLabel: string;
+  emotionLabel: string;
+  moodLabel: string;
+  recoveryApplied?: boolean;
+  recoveredMood?: string;
+}
 
 const currentCharacterId = inject<Ref<string | null>>("currentCharacterId");
 
 const psycheLoading = ref(false);
 const psycheError = ref("");
 const psycheState = ref<PsycheStateSnapshot>(defaultPsycheState());
+const historyLoading = ref(false);
+const historyError = ref("");
+const emotionHistory = ref<EmotionHistoryItem[]>([]);
+const emotionOwnerId = ref("");
+const deletingHistoryId = ref("");
+const clearingHistory = ref(false);
+const mesh = useDeviceOwnedConversation();
 
 function defaultPsycheState(): PsycheStateSnapshot {
   return {
@@ -302,13 +385,116 @@ async function loadPsycheState() {
   }
 }
 
+async function loadEmotionHistory() {
+  const characterId = currentCharacterId?.value;
+  if (!characterId) {
+    emotionHistory.value = [];
+    return;
+  }
+  historyLoading.value = true;
+  historyError.value = "";
+  try {
+    if (!(await mesh.refresh())) throw new Error("设备对话服务尚未就绪");
+    const result = await mesh.data("emotion", characterId);
+    if (
+      result.executionScope.roleId !== characterId ||
+      result.executionScope.coreId !== mesh.coreId.value
+    ) {
+      throw new Error("情绪历史的数据归属已变化");
+    }
+    emotionOwnerId.value = result.executionScope.resourceOwnerId;
+    emotionHistory.value = result.snapshot.resources
+      .filter(
+        (resource) =>
+          resource.kind === "emotion" &&
+          resource.ownerId === result.executionScope.resourceOwnerId &&
+          resource.roleId === characterId,
+      )
+      .map((resource) => resource.body as EmotionHistoryItem)
+      .filter(
+        (item) =>
+          typeof item?.id === "string" &&
+          typeof item?.createdAt === "string",
+      )
+      .sort((left, right) =>
+        String(right.createdAt).localeCompare(String(left.createdAt)),
+      )
+      .slice(0, 24);
+  } catch (error: any) {
+    historyError.value = "情绪历史不可用: " + (error?.message || "网络错误");
+    emotionHistory.value = [];
+    emotionOwnerId.value = "";
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+async function deleteEmotion(item: EmotionHistoryItem) {
+  const characterId = currentCharacterId?.value;
+  if (!characterId || !emotionOwnerId.value) throw new Error("当前情绪历史来源不可用");
+  await ElMessageBox.confirm(`确定删除 ${formatTime(item.createdAt)} 的情绪记录？`, "删除情绪历史", {
+    type: "warning",
+  });
+  deletingHistoryId.value = item.id;
+  try {
+    await mesh.edit("emotion", item.id, {}, {
+      deleted: true,
+      characterId,
+      expectedOwnerId: emotionOwnerId.value,
+    });
+    await loadEmotionHistory();
+    ElMessage.success("情绪记录已删除");
+  } finally {
+    deletingHistoryId.value = "";
+  }
+}
+
+async function clearEmotionHistory() {
+  const characterId = currentCharacterId?.value;
+  if (!characterId || !emotionOwnerId.value) throw new Error("当前情绪历史来源不可用");
+  await ElMessageBox.confirm("确定清空当前角色可管理的全部情绪历史？", "清空情绪历史", {
+    type: "warning",
+  });
+  clearingHistory.value = true;
+  const items = [...emotionHistory.value];
+  try {
+    for (const item of items) {
+      await mesh.edit("emotion", item.id, {}, {
+        deleted: true,
+        characterId,
+        expectedOwnerId: emotionOwnerId.value,
+      });
+    }
+    await loadEmotionHistory();
+    ElMessage.success("情绪历史已清空");
+  } finally {
+    clearingHistory.value = false;
+  }
+}
+
 onMounted(() => {
   loadPsycheState();
+  loadEmotionHistory();
 });
 
 watch(currentCharacterId as Ref<string | null>, () => {
   loadPsycheState();
+  loadEmotionHistory();
 });
+
+function historyEmotionLabel(item: EmotionHistoryItem) {
+  return [item.emotionLabel, item.moodLabel].filter(Boolean).join(" / ");
+}
+
+function historySource(source: string) {
+  if (source === "legacy-mood") return "旧心情";
+  if (source === "legacy-message-mood") return "旧消息";
+  if (source === "legacy-emotion") return "旧情绪";
+  if (source === "legacy-affect") return "旧 Affect";
+  if (source === "chat") return "聊天";
+  if (source === "proactive") return "主动消息";
+  return source || "未知";
+}
 
 const needsEntries = computed(() => {
   return Object.entries(psycheState.value.needs).sort((a, b) => b[1] - a[1]);
@@ -728,8 +914,93 @@ function relColor(v: number): string {
 
 .needs-panel,
 .rel-panel,
-.beliefs-panel {
+.beliefs-panel,
+.emotion-history-panel {
   margin-bottom: 14px;
+}
+
+.history-placeholder {
+  padding: 14px 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.history-placeholder.error {
+  color: var(--el-color-danger);
+}
+
+.emotion-history-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.history-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.emotion-history-row {
+  display: grid;
+  grid-template-columns: 138px minmax(140px, 1fr) 48px auto 72px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 12px;
+}
+
+.emotion-history-row:last-child {
+  border-bottom: none;
+}
+
+.history-time,
+.history-source {
+  color: var(--el-text-color-secondary);
+}
+
+.history-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.history-main strong {
+  color: var(--el-text-color-primary);
+}
+
+.history-main span {
+  color: var(--el-text-color-secondary);
+}
+
+.history-confidence {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .emotion-history-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .history-main {
+    grid-column: 1;
+  }
+
+  .history-confidence {
+    grid-column: 2;
+  }
+
+  .history-time,
+  .history-source {
+    grid-column: 1 / -1;
+  }
+
+  .emotion-history-row > .el-button {
+    grid-column: 2;
+    justify-self: end;
+  }
 }
 
 .needs-grid {

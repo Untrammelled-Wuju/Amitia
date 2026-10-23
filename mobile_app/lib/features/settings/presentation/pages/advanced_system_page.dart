@@ -1,3 +1,4 @@
+import '../../../../core/services/usage_view.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -142,24 +143,9 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
               <String, dynamic>{},
           <String, dynamic>{},
         ),
-        _safe(
-          () async =>
-              await api.get<Map<String, dynamic>>('/api/usage/daily') ??
-              <String, dynamic>{},
-          <String, dynamic>{},
-        ),
-        _safe(
-          () async =>
-              await api.get<Map<String, dynamic>>('/api/usage/models') ??
-              <String, dynamic>{},
-          <String, dynamic>{},
-        ),
-        _safe(
-          () async =>
-              await api.get<Map<String, dynamic>>('/api/usage/sources') ??
-              <String, dynamic>{},
-          <String, dynamic>{},
-        ),
+        readUsageView(api, '/api/usage/daily'),
+        readUsageView(api, '/api/usage/models'),
+        readUsageView(api, '/api/usage/sources'),
         _safe(
           () async =>
               await api.get<Map<String, dynamic>>(
@@ -238,10 +224,11 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
       ).showSnackBar(SnackBar(content: Text(success)));
       await _load();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('操作失败：$e'), backgroundColor: context.error),
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -488,28 +475,78 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                         ListView(
                           padding: EdgeInsets.all(AppSpacing.md),
                           children: [
-                            _jsonCard(
-                              'Mood Detection',
-                              _mood,
-                              actions: [
-                                Switch(
-                                  value: _mood['enabled'] == true,
-                                  onChanged: _busy
-                                      ? null
-                                      : (v) => _run(() async {
-                                          await ref
-                                              .read(backendServiceProvider)
-                                              .put<Map<String, dynamic>>(
-                                                '/api/config/mood-detection',
-                                                data: {
-                                                  'enabled': v,
-                                                  'threshold':
-                                                      _mood['threshold'] ?? .5,
-                                                },
-                                              );
-                                        }, 'Mood Detection 已更新'),
+                            Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(AppSpacing.md),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Expanded(
+                                          child: Text('情绪历史记录'),
+                                        ),
+                                        Switch(
+                                          value: _mood['enabled'] == true,
+                                          onChanged: _busy
+                                              ? null
+                                              : (value) => _run(() async {
+                                                  await ref
+                                                      .read(
+                                                        backendServiceProvider,
+                                                      )
+                                                      .put<Map<String, dynamic>>(
+                                                        '/api/config/mood-detection',
+                                                        data: {
+                                                          'enabled': value,
+                                                          'threshold':
+                                                              _mood['threshold'] ??
+                                                              .5,
+                                                        },
+                                                      );
+                                                }, '情绪历史记录设置已更新'),
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      '记录阈值 ${(_mood['threshold'] ?? .5).toString()}',
+                                    ),
+                                    Slider(
+                                      value:
+                                          ((_mood['threshold'] as num?) ?? .5)
+                                              .toDouble()
+                                              .clamp(0.0, 1.0)
+                                              .toDouble(),
+                                      min: 0,
+                                      max: 1,
+                                      divisions: 20,
+                                      onChanged: _busy
+                                          ? null
+                                          : (value) => _run(() async {
+                                              await ref
+                                                  .read(
+                                                    backendServiceProvider,
+                                                  )
+                                                  .put<Map<String, dynamic>>(
+                                                    '/api/config/mood-detection',
+                                                    data: {
+                                                      'enabled':
+                                                          _mood['enabled'] ==
+                                                          true,
+                                                      'threshold': value,
+                                                    },
+                                                  );
+                                            }, '情绪记录阈值已更新'),
+                                    ),
+                                    Text(
+                                      '仅在情绪变化强度达到阈值时写入 Owner 情绪历史。',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                             _jsonCard(
                               'Shadow Mode',
@@ -587,9 +624,26 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                                       : () => _run(() async {
                                           await ref
                                               .read(backendServiceProvider)
-                                              .delete('/api/usage/clear');
-                                        }, 'Usage 统计已清空'),
-                                  child: const Text('清空统计'),
+                                              .delete(
+                                                '/api/usage/clear',
+                                                queryParameters: {
+                                                  'scope':
+                                                      (_usageDaily['scope']
+                                                              as Map?)?['deviceId'] ==
+                                                          null
+                                                      ? 'core'
+                                                      : 'device',
+                                                  'expectedCoreId':
+                                                      (_usageDaily['scope']
+                                                          as Map?)?['coreId'],
+                                                  'expectedDeviceId':
+                                                      (_usageDaily['scope']
+                                                          as Map?)?['deviceId'] ??
+                                                      '',
+                                                },
+                                              );
+                                        }, '统计起点已重置，历史记录保留'),
+                                  child: const Text('重置统计起点'),
                                 ),
                               ],
                             ),

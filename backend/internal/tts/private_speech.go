@@ -27,6 +27,7 @@ type OwnedVoiceSnapshot struct {
 }
 
 type PrivateSpeechOptions struct {
+	SpeakerID  string
 	VoiceType  string
 	ResourceID string
 }
@@ -49,9 +50,10 @@ func SynthesizePrivateRole(ctx context.Context, db *gorm.DB, space string, profi
 	if len(options) > 0 {
 		requested = options[0]
 	}
+	requested.SpeakerID = strings.TrimSpace(requested.SpeakerID)
 	requested.VoiceType = strings.TrimSpace(requested.VoiceType)
 	requested.ResourceID = strings.TrimSpace(requested.ResourceID)
-	if len(requested.VoiceType) > 256 || len(requested.ResourceID) > 256 {
+	if len(requested.SpeakerID) > 256 || len(requested.VoiceType) > 256 || len(requested.ResourceID) > 256 {
 		return nil, errors.New("请求音色或资源标识超过允许范围")
 	}
 	if voice.VoiceSpeed < 0 || voice.VoiceSpeed > 3 || voice.VoicePitch < 0 || voice.VoicePitch > 3 || voice.VoiceVolume < 0 || voice.VoiceVolume > 3 || voice.EmotionScale < 0 || voice.EmotionScale > 5 || voice.SilenceDuration < 0 || voice.SilenceDuration > 10000 || len(voice.VoiceType) > 256 || len(voice.Emotion) > 128 {
@@ -63,20 +65,34 @@ func SynthesizePrivateRole(ctx context.Context, db *gorm.DB, space string, profi
 		return nil, errors.New("当前 Core 没有可用的语音服务配置")
 	}
 	cfg := *active
+	if requested.SpeakerID != "" {
+		clone, cloneErr := repo.GetClonedVoice(space, requested.SpeakerID)
+		if cloneErr != nil || clone == nil {
+			return nil, errors.New("复刻音色不存在或不属于当前用户")
+		}
+		if clone.TtsConfigID > 0 && clone.TtsConfigID != active.ID {
+			return nil, errors.New("复刻音色不属于当前 Core 的活动语音服务")
+		}
+		if protocolForApiType(active.ApiType) != "volcengine" {
+			return nil, errors.New("当前 Core 服务不支持该复刻音色")
+		}
+		cfg.VoiceType = clone.SpeakerID
+		cfg.ResourceId = "seed-icl-2.0"
+	}
 	effectiveVoiceType := strings.TrimSpace(voice.VoiceType)
-	if requested.VoiceType != "" {
+	if requested.SpeakerID == "" && requested.VoiceType != "" {
 		effectiveVoiceType = requested.VoiceType
 	}
-	if !coreOwned && voice.VoiceMode != "clone" && voice.CustomVoiceID == "" && effectiveVoiceType != "" && !publicSourceVoice(active, effectiveVoiceType) {
+	if requested.SpeakerID == "" && !coreOwned && voice.VoiceMode != "clone" && voice.CustomVoiceID == "" && effectiveVoiceType != "" && !publicSourceVoice(active, effectiveVoiceType) {
 		return nil, errors.New("设备音色不是当前 Core 支持的公共预设，请选择兼容音色")
 	}
-	if effectiveVoiceType != "" {
+	if requested.SpeakerID == "" && effectiveVoiceType != "" {
 		cfg.VoiceType = effectiveVoiceType
 	}
 	if requested.ResourceID != "" {
 		cfg.ResourceId = requested.ResourceID
 	}
-	if !coreOwned {
+	if requested.SpeakerID == "" && !coreOwned {
 		if strings.TrimSpace(voice.VoiceType) == "" && (active.IsCustom != 0 || strings.TrimSpace(active.CustomVoiceID) != "") {
 			return nil, errors.New("设备角色未指定公共音色，禁止继承当前 Core 的复刻音色")
 		}
@@ -86,17 +102,19 @@ func SynthesizePrivateRole(ctx context.Context, db *gorm.DB, space string, profi
 			return nil, errors.New("当前 Core 暂时无法验证音色归属")
 		}
 	}
-	if voice.VoiceSpeed > 0 {
-		cfg.Speed = voice.VoiceSpeed
+	if requested.SpeakerID == "" {
+		if voice.VoiceSpeed > 0 {
+			cfg.Speed = voice.VoiceSpeed
+		}
+		if voice.VoicePitch > 0 {
+			cfg.Pitch = voice.VoicePitch
+		}
+		if voice.VoiceVolume > 0 {
+			cfg.Volume = voice.VoiceVolume
+		}
+		cfg.Emotion, cfg.EmotionScale, cfg.SilenceDuration = voice.Emotion, voice.EmotionScale, voice.SilenceDuration
 	}
-	if voice.VoicePitch > 0 {
-		cfg.Pitch = voice.VoicePitch
-	}
-	if voice.VoiceVolume > 0 {
-		cfg.Volume = voice.VoiceVolume
-	}
-	cfg.Emotion, cfg.EmotionScale, cfg.SilenceDuration = voice.Emotion, voice.EmotionScale, voice.SilenceDuration
-	if voice.VoiceMode == "clone" || strings.TrimSpace(voice.CustomVoiceID) != "" {
+	if requested.SpeakerID == "" && (voice.VoiceMode == "clone" || strings.TrimSpace(voice.CustomVoiceID) != "") {
 		if !coreOwned || strings.TrimSpace(voice.CustomVoiceID) == "" {
 			return nil, errors.New("设备复刻音色未获当前 Core 授权，无法调用")
 		}

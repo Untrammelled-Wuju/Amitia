@@ -15,12 +15,11 @@ import (
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/devicemesh/business"
-	"github.com/u-ai/backend/internal/emotionstate"
 	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mindruntime"
 	syncapi "github.com/u-ai/backend/internal/sync"
-	"github.com/u-ai/backend/internal/temporal"
 	visioncfg "github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -29,6 +28,7 @@ import (
 var ErrConversationScopeMismatch = errors.New("conversation scope mismatch")
 
 type Service interface {
+	SetUsageStore(*mindruntime.ModelUsageStore)
 	ListConversations(q ConversationQuery) (*ConversationListResponse, error)
 	GetConversation(id string) (*Conversation, error)
 	CreateConversation(req *CreateConversationRequest) (*Conversation, error)
@@ -63,7 +63,6 @@ type Service interface {
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
 	SetHookInvoker(HookInvoker)
-	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 	SetActionMaterializer(m *interaction.ActionMaterializer)
 	SetActionDispatcher(d interaction.ActionDispatcher)
 	SetObservationBuilder(b interaction.ObservationBuilder)
@@ -102,11 +101,11 @@ type WorkspaceAvailabilityResolver interface {
 }
 
 type service struct {
+	usageStore           *mindruntime.ModelUsageStore
 	repo                 Repository
 	charRepo             character.Repository
 	db                   *gorm.DB
 	changeRecorder       syncapi.ChangeRecorder
-	emotion              *emotionstate.Service
 	knowledgePort        KnowledgePort
 	investigationPlanner investigationPlannerFunc
 	visionPort           VisionPort
@@ -122,7 +121,6 @@ type service struct {
 	actionMaterializer   *interaction.ActionMaterializer
 	actionDispatcher     interaction.ActionDispatcher
 	observationBuilder   interaction.ObservationBuilder
-	relTimeCoordinator   *temporal.RelationshipTimeCoordinator
 	goalProgressService  interaction.GoalProgressService
 	continuationService  interaction.ContinuationService
 	replanner            interaction.Replanner
@@ -159,10 +157,6 @@ func (s *service) SetDeliveryStore(store DeliveryStore) {
 
 func (s *service) SetKnowledgePort(port KnowledgePort) {
 	s.knowledgePort = port
-}
-
-func (s *service) SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator) {
-	s.relTimeCoordinator = coordinator
 }
 
 func (s *service) SetActionMaterializer(m *interaction.ActionMaterializer) {
@@ -351,7 +345,7 @@ func NewService(repo Repository, ctx *app.AppContext, comp *Compressor, visionPo
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, emotion: emotionstate.NewService(ctx.DB), visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	svc := &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
 	if comp != nil {
 		comp.model = svc
 	}

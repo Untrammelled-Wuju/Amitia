@@ -262,6 +262,7 @@ func (a *GeminiAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 		TotalTokens:  result.UsageMetadata.TotalTokenCount,
 	}
 
+	res.Usage.Reported = UsageReported(respBytes, "usageMetadata")
 	return res, nil
 }
 

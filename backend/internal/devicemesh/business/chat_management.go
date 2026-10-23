@@ -21,7 +21,7 @@ func (e *Engine) ManageChat(ctx context.Context, request Request, operation coor
 	if len(operation.ConversationIDs) > 256 || len(operation.Keyword) > 256 || len(operation.PreviewID) > 128 || len(operation.BeforeDate) > 64 || operation.OlderThanDays < 0 || operation.OlderThanDays > 365000 || len(operation.Channels) > 32 || len(operation.Sources) > 32 || len(operation.Title) > 1024 || len(operation.MessageID) > 512 || len(operation.Reason) > 8192 || operation.StartSequence < 0 || operation.EndSequence < 0 || operation.EndSequence > 0 && operation.EndSequence < operation.StartSequence || operation.Page < 0 || operation.Page > 1000000 {
 		return nil, coordination.ErrPendingLimit
 	}
-	for _, value := range append(append([]string{operation.ConversationID, operation.HistoricalRoleID}, operation.ConversationIDs...), append(operation.Channels, operation.Sources...)...) {
+	for _, value := range append(append([]string{operation.ImportBatchID, operation.ConversationID, operation.HistoricalRoleID}, operation.ConversationIDs...), append(operation.Channels, operation.Sources...)...) {
 		if len(value) > 512 || strings.ContainsRune(value, 0) {
 			return nil, coordination.ErrWrongOwner
 		}
@@ -35,6 +35,12 @@ func (e *Engine) ManageChat(ctx context.Context, request Request, operation coor
 		var err error
 		result, err = port.ManageChat(ctx, *request.ExpectedScope, operation)
 		if err == nil && operation.Operation == "from-import" {
+			if promotedID, _ := result["promotedConversationId"].(string); promotedID != "" {
+				result["conversationId"] = promotedID
+				result["imported"] = true
+				result["executionScope"] = *request.ExpectedScope
+				return nil
+			}
 			result, err = e.commitImportedChat(ctx, *request.ExpectedScope, operation, result)
 		}
 		return err

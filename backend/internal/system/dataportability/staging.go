@@ -68,10 +68,13 @@ func SanitizeArchivePath(name string) error {
 type DataRestoreTicket struct {
 	OperationID                string `json:"operationId"`
 	BackupID                   string `json:"backupId"`
+	ArchivePath                string `json:"archivePath"`
 	StagingPath                string `json:"stagingPath"`
+	ArchiveSHA256              string `json:"archiveSha256"`
 	ManifestHash               string `json:"manifestHash"`
 	SourceSchemaFingerprint    string `json:"sourceSchemaFingerprint"`
 	ExpectedCurrentFingerprint string `json:"expectedCurrentFingerprint"`
+	PreRestoreBackupID         string `json:"preRestoreBackupId"`
 	CreatedAt                  string `json:"createdAt"`
 }
 

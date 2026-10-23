@@ -3,6 +3,7 @@ package coordination
 import "context"
 
 type OwnedChatEffectsRequest struct {
+	Abort          bool   `json:"abort,omitempty"`
 	ConversationID string `json:"conversationId"`
 	RequestID      string `json:"requestId"`
 	MessageID      string `json:"messageId"`

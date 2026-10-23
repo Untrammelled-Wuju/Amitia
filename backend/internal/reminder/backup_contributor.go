@@ -22,6 +22,11 @@ type TaskBackupContributor struct {
 	runtime TaskArchiveRuntime
 	signer  crypto.Signer
 }
+
+func (c *TaskBackupContributor) ComponentIDs() []string {
+	return []string{TaskBackupComponent}
+}
+
 type signedTaskArchive struct {
 	Archive   TaskArchive `json:"archive"`
 	Signature string      `json:"signature"`
@@ -52,7 +57,7 @@ func (c *TaskBackupContributor) current(ctx context.Context) (*Service, Caller, 
 	return service, caller, nil
 }
 func (c *TaskBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
-	if req.Scope == dataportability.ScopeSettings {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
 		return nil, nil
 	}
 	service, caller, err := c.current(ctx)
@@ -70,7 +75,7 @@ func taskArchiveSigningBytes(archive TaskArchive) ([]byte, error) {
 	return append([]byte(taskArchiveSignatureDomain), bytes...), err
 }
 func (c *TaskBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
-	if req.Scope == dataportability.ScopeSettings {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter {
 		return nil
 	}
 	service, caller, err := c.current(ctx)

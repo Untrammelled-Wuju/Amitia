@@ -17,11 +17,14 @@ type BackupOperation struct {
 }
 
 type RestoreOperation struct {
-	ID        string `json:"id"`
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	ID               string           `json:"id"`
+	BackupID         string           `json:"backupId"`
+	Status           string           `json:"status"`
+	Error            string           `json:"error,omitempty"`
+	PreRestoreBackup string           `json:"preRestoreBackupId,omitempty"`
+	Stats            map[string]int64 `json:"stats,omitempty"`
+	CreatedAt        string           `json:"createdAt"`
+	UpdatedAt        string           `json:"updatedAt"`
 }
 
 type ImportOperation struct {
@@ -40,7 +43,6 @@ type Coordinator struct {
 	Platform     string
 	SchemaFinger string
 	Contributors []BackupContributor
-	RestorePorts RestorePorts
 	Staging      *StagingManager
 	diskChecker  DiskSpaceChecker
 
@@ -109,83 +111,6 @@ func (c *Coordinator) GetImportOp(id string) *ImportOperation {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.importOps[id]
-}
-
-func (c *Coordinator) ExecuteFullRestore(ctx context.Context, archivePath string, opts RestoreOptions) error {
-	if !c.RestorePorts.HasAny() {
-		return ErrRestoreNoPorts
-	}
-
-	reader, err := NewArchiveReader(archivePath)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	manifest, err := reader.ReadManifest()
-	if err != nil {
-		return err
-	}
-	_ = manifest
-
-	br := &archiveBackupReader{r: reader}
-
-	if c.RestorePorts.Character != nil {
-		if err := c.RestorePorts.Character.RestoreCharacters(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore characters: %w", err)
-		}
-	}
-	if c.RestorePorts.Chat != nil {
-		if err := c.RestorePorts.Chat.RestoreChats(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore chats: %w", err)
-		}
-	}
-	if c.RestorePorts.Episodic != nil {
-		if err := c.RestorePorts.Episodic.RestoreEpisodic(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore episodic: %w", err)
-		}
-	}
-	if c.RestorePorts.Worldbook != nil {
-		if err := c.RestorePorts.Worldbook.RestoreWorldbook(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore worldbook: %w", err)
-		}
-	}
-	if c.RestorePorts.ModelConfig != nil {
-		if err := c.RestorePorts.ModelConfig.RestoreModelConfigs(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore model configs: %w", err)
-		}
-	}
-	if c.RestorePorts.Voice != nil {
-		if err := c.RestorePorts.Voice.RestoreVoices(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore voices: %w", err)
-		}
-	}
-	if c.RestorePorts.Embedding != nil {
-		if err := c.RestorePorts.Embedding.RestoreEmbeddings(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore embeddings: %w", err)
-		}
-	}
-	if c.RestorePorts.Resource != nil {
-		if err := c.RestorePorts.Resource.RestoreResources(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore resources: %w", err)
-		}
-	}
-	if c.RestorePorts.Extension != nil {
-		if err := c.RestorePorts.Extension.RestoreExtensions(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore extensions: %w", err)
-		}
-	}
-	if c.RestorePorts.Workspace != nil {
-		if err := c.RestorePorts.Workspace.RestoreWorkspaces(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore workspaces: %w", err)
-		}
-	}
-	if c.RestorePorts.Memory != nil {
-		if err := c.RestorePorts.Memory.RestoreMemories(ctx, br, opts); err != nil {
-			return fmt.Errorf("restore memories: %w", err)
-		}
-	}
-	return nil
 }
 
 func (c *Coordinator) EstimateDiskRequired(req BackupRequest) uint64 {

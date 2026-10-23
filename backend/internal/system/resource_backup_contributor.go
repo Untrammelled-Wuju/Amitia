@@ -22,6 +22,10 @@ type ResourceBackupContributor struct {
 	DataDir string
 }
 
+func (c *ResourceBackupContributor) ComponentIDs() []string {
+	return []string{ComponentIDResources}
+}
+
 func NewResourceBackupContributor(db *gorm.DB, dataDir string) *ResourceBackupContributor {
 	return &ResourceBackupContributor{DB: db, DataDir: dataDir}
 }
@@ -50,6 +54,9 @@ func (c *ResourceBackupContributor) tableExists(name string) bool {
 }
 
 func (c *ResourceBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
+	if req.EffectiveScope() != dataportability.ScopeAll {
+		return nil, nil
+	}
 	var count int64
 
 	if c.tableExists("resource_files") {
@@ -177,6 +184,9 @@ func (c *ResourceBackupContributor) walkResources(baseDir, currentDir string, wr
 }
 
 func (c *ResourceBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
+	if req.EffectiveScope() != dataportability.ScopeAll {
+		return nil
+	}
 	if c.tableExists("resource_files") {
 		return c.exportFromTable(ctx, "resource_files", out)
 	}

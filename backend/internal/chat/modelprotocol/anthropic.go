@@ -257,6 +257,7 @@ func (a *AnthropicAdapter) parseResponse(respBytes []byte) (*ModelResult, error)
 	}
 	res.ProviderResponseID = result.ID
 
+	res.Usage.Reported = UsageReported(respBytes, "usage")
 	return res, nil
 }
 

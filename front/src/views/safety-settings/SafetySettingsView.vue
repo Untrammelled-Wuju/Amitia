@@ -442,11 +442,17 @@ SPDX-License-Identifier: AGPL-3.0-only
           show-overflow-tooltip
         />
         <el-table-column prop="direction" label="方向" width="80" />
-        <el-table-column label="处理" width="70">
+        <el-table-column label="处理" width="96">
           <template #default="{ row }">
-            <el-tag :type="row.handled ? 'success' : 'danger'" size="small">{{
-              row.handled ? "已处理" : "未处理"
-            }}</el-tag>
+            <el-button
+              v-if="row.status !== 'resolved'"
+              link
+              type="primary"
+              size="small"
+              @click="handleEvent(row)"
+              >确认处理</el-button
+            >
+            <el-tag v-else type="success" size="small">已处理</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="时间" width="150">
@@ -490,6 +496,7 @@ const config = reactive({
   intimacyExpressionCap: 7,
   violationAction: "block",
   auditLogRetentionDays: 30,
+  revision: 0,
 });
 
 const auditLogs = ref<any[]>([]);
@@ -520,6 +527,7 @@ const emotionDisplayMode = ref<"show" | "suppress" | "reframe">("show");
 const emotionInternalIntensity = ref(5);
 const emotionDisplayIntensity = ref(5);
 const emotionOverrideReason = ref("");
+const bdiRevision = ref(0);
 
 function addHardConstraint() {
   hardConstraints.value.push({
@@ -556,6 +564,7 @@ async function fetchConfig() {
         intimacyExpressionCap: data.intimacyExpressionCap ?? 7,
         violationAction: data.violationAction ?? "block",
         auditLogRetentionDays: data.auditLogRetentionDays ?? 30,
+        revision: Number(data.revision || 0),
       });
     }
   } catch {}
@@ -564,7 +573,11 @@ async function fetchConfig() {
 async function saveConfig() {
   saving.value = true;
   try {
-    await put("/api/safety/config", { ...config });
+    const updated = await put<any>("/api/safety/config", {
+      ...config,
+      expectedRevision: config.revision,
+    });
+    config.revision = Number(updated?.revision || config.revision + 1);
     ElMessage.success("安全配置已保存");
   } catch (err: any) {
     ElMessage.error(err?.message || "保存失败");
@@ -599,12 +612,13 @@ async function fetchBdiConfig() {
       emotionDisplayIntensity.value = r.emotionExpression.displayIntensity ?? 5;
       emotionOverrideReason.value = r.emotionExpression.overrideReason || "";
     }
+    bdiRevision.value = Number(r?.revision || 0);
   } catch {}
 }
 
 async function saveBdiConfig() {
   try {
-    await put("/api/safety/bdi-config", {
+    const updated = await put<any>("/api/safety/bdi-config", {
       hardConstraints: hardConstraints.value,
       softPreferences: softPreferences.value.map((sp) => ({
         ...sp,
@@ -621,9 +635,13 @@ async function saveBdiConfig() {
         displayIntensity: Number(emotionDisplayIntensity.value),
         overrideReason: emotionOverrideReason.value,
       },
+      expectedRevision: bdiRevision.value,
     });
+    bdiRevision.value = Number(updated?.revision || bdiRevision.value + 1);
     ElMessage.success("BDI 配置已保存");
-  } catch {}
+  } catch (error: any) {
+    ElMessage.error(error?.message || "BDI 配置保存失败");
+  }
 }
 
 async function fetchEvents() {
@@ -635,6 +653,19 @@ async function fetchEvents() {
     events.value = r?.items || [];
     evTotal.value = r?.total || 0;
   } catch {}
+}
+
+async function handleEvent(event: any) {
+  if (!event?.id || !Number.isSafeInteger(event.revision)) return;
+  try {
+    await put(`/api/safety/events/${encodeURIComponent(event.id)}/handle`, {
+      expectedRevision: event.revision,
+    });
+    ElMessage.success("安全事件已确认处理");
+    await fetchEvents();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "安全事件处理失败");
+  }
 }
 
 async function clearEvents() {

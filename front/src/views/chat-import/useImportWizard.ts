@@ -4,13 +4,12 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { parseSpeakerNames } from "./utils";
+import { useOwnedMemoryManagement } from "@/composables/useOwnedMemoryManagement";
 import {
   parseText,
   confirmImport,
   generateSummary,
   getBatchSummary,
-  extractMemoryCandidates,
-  confirmMemories,
   createConversationFromImport,
   fetchCharactersApi,
   fetchBatchesApi,
@@ -20,6 +19,7 @@ import {
 
 export function useImportWizard() {
   const router = useRouter();
+  const ownedMemory = useOwnedMemoryManagement();
 
   const characters = ref<any[]>([]);
   const characterId = ref("");
@@ -41,6 +41,8 @@ export function useImportWizard() {
 
   const importedBatchId = ref("");
   const importedConvId = ref("");
+  const importedOwnerConversationId = ref("");
+  const importedExecutionScope = ref<any>(null);
   const genSummaryLoading = ref(false);
   const extractLoading = ref(false);
   const memCandidates = ref<any[]>([]);
@@ -84,6 +86,8 @@ export function useImportWizard() {
       );
       importedBatchId.value = "";
       importedConvId.value = "";
+      importedOwnerConversationId.value = "";
+      importedExecutionScope.value = null;
     } catch {
     } finally {
       parsing.value = false;
@@ -113,32 +117,44 @@ export function useImportWizard() {
         items: editableItems.value.map(
           ({ lineNo, _sensitive, ...item }) => item,
         ),
-        batchId: parseResult.value?.batchId,
         title: batchTitle.value || "已导入的聊天",
         characterId: characterId.value,
         defaultRole: defaultRole.value,
+        detectedFormat: parseResult.value?.detectedFormat,
       });
-      importedBatchId.value = result?.batchId || parseResult.value?.batchId;
-      importedConvId.value = result?.conversationId || "";
+      importedBatchId.value = result?.batchId || "";
+      if (!importedBatchId.value) throw new Error("后端未返回导入批次");
+      await promoteImportedBatch();
       ElMessage.success(
-        `成功导入 ${result?.messageCount || editableItems.value.length} 条消息`,
+        `已导入并加入设备聊天：${result?.messageCount || editableItems.value.length} 条消息`,
       );
       await fetchBatches();
 
       if (genSummary.value) await handleGenSummary();
       if (extractMemories.value) await handleExtractMemories();
-    } catch {
+    } catch (err: any) {
+      if (err !== "cancel") ElMessage.error(err?.message || err || "导入失败");
     } finally {
       confirming.value = false;
     }
   }
 
+  async function promoteImportedBatch() {
+    if (!importedBatchId.value) throw new Error("导入批次不存在");
+    if (importedConvId.value) return;
+    const result = await createConversationFromImport(importedBatchId.value);
+    if (!result?.conversationId || !result?.executionScope) throw new Error("设备聊天未返回正式会话");
+    importedConvId.value = result.conversationId;
+    importedOwnerConversationId.value = result.ownerConversationId;
+    importedExecutionScope.value = result.executionScope;
+  }
+
   async function handleGenSummary() {
-    if (!importedConvId.value) return;
+    if (!importedBatchId.value) return;
     genSummaryLoading.value = true;
     try {
-      await generateSummary(importedConvId.value);
-      await getBatchSummary(importedConvId.value);
+      await generateSummary(importedBatchId.value);
+      await getBatchSummary(importedBatchId.value);
       ElMessage.success("摘要生成成功");
     } catch (err: any) {
       ElMessage.error(err?.message || "摘要生成失败");
@@ -148,11 +164,30 @@ export function useImportWizard() {
   }
 
   async function handleExtractMemories() {
-    if (!importedConvId.value) return;
+    if (!importedExecutionScope.value || !importedOwnerConversationId.value) return;
     extractLoading.value = true;
     try {
-      const result = await extractMemoryCandidates(importedConvId.value);
-      memCandidates.value = result?.candidates || [];
+      const rows = await ownedMemory.write(
+        importedExecutionScope.value,
+        crypto.randomUUID(),
+        {
+          action: "generate",
+          conversationId: importedOwnerConversationId.value,
+          conversationOrigin: {
+            ownerId: importedExecutionScope.value.resourceOwnerId,
+            id: importedOwnerConversationId.value,
+          },
+        },
+        true,
+      );
+      memCandidates.value = rows.map((row: any) => ({
+        id: row.id,
+        revision: row.revision,
+        key: row.body?.key || "记忆",
+        value: row.body?.content?.value || row.body?.content?.text || "",
+        memoryType: row.body?.content?.memoryType || "",
+        importance: row.body?.content?.importance || 0,
+      }));
       ElMessage.success(`已提取 ${memCandidates.value.length} 条记忆候选`);
     } catch (err: any) {
       ElMessage.error(err?.message || "提取记忆候选失败");
@@ -162,13 +197,10 @@ export function useImportWizard() {
   }
 
   async function handleContinueChat() {
-    if (!importedConvId.value) return;
     try {
-      const result = await createConversationFromImport(importedConvId.value);
-      if (result?.conversationId) {
-        ElMessage.success("正在跳转聊天...");
-        router.push({ path: "/chat", query: { conversationId: result.conversationId, characterId: result.executionScope.roleId } });
-      }
+      await promoteImportedBatch();
+      ElMessage.success("正在跳转聊天...");
+      router.push({ path: "/chat", query: { conversationId: importedConvId.value, characterId: importedExecutionScope.value.roleId } });
     } catch (err: any) {
       ElMessage.error(err?.message || "创建会话失败");
     }
@@ -203,6 +235,23 @@ export function useImportWizard() {
       ElMessage.success("已删除");
       await fetchBatches();
     } catch {}
+  }
+
+  async function promoteBatch(batch: any) {
+    try {
+      const result = await createConversationFromImport(batch.id, batch.roleId || "");
+      await fetchBatches();
+      ElMessage.success("已加入设备聊天");
+      router.push({
+        path: "/chat",
+        query: {
+          conversationId: result.conversationId,
+          characterId: result.executionScope.roleId,
+        },
+      });
+    } catch (err: any) {
+      ElMessage.error(err?.message || "加入设备聊天失败");
+    }
   }
 
   return {
@@ -241,6 +290,7 @@ export function useImportWizard() {
     fetchBatches,
     viewBatch,
     delBatch,
+    promoteBatch,
     router,
   };
 }

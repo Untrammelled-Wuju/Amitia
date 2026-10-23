@@ -282,21 +282,7 @@ func healthCheckRelationship() []ComponentCheck {
 }
 
 func healthCheckDataLifecycle() []ComponentCheck {
-	stats := DefaultDataLifecycleCoordinator.Stats()
-	tombstones := stats["tombstones"].(int)
-	failed := stats["failed"].(int)
-	return []ComponentCheck{
-		{
-			Name:    "tombstone_integrity",
-			Passed:  failed == 0,
-			Message: "no failed tombstones, total: " + formatInt(tombstones),
-		},
-		{
-			Name:    "outbox_delivery",
-			Passed:  true,
-			Message: "outbox cleanup items queued and processing",
-		},
-	}
+	return []ComponentCheck{{Name: "owner_scope_required", Passed: false, Message: "旧删除协调器已退役；请通过 /api/privacy/deletion/stats 核验当前Owner的实际删除状态"}}
 }
 
 func formatInt(val int) string {

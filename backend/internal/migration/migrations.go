@@ -70,6 +70,7 @@ func DefaultMigrations() []Migration {
 		ExtensionScheduleSourceMigration(),
 		ExtensionScheduleOwnershipRepairMigration(),
 		MessagePlanMigration(),
+		MessageFeedbackScopeMigration(),
 		TemporalCoreMigration(),
 		TemporalRelationshipTimeMigration(),
 		CanonicalSingleUserMigration(),
@@ -251,6 +252,12 @@ func DefaultMigrations() []Migration {
 		WorldBookOrphanAuditLatestMigration(),
 		CharacterCardImportOperationsMigration(),
 		MCPOwnedBindingsMigration(),
+		DesktopPetInstallationOperationRuntimeMigration(),
+		DesktopPetInstallationOperationCoordinatorColumnsMigration(),
+		DesktopPetInstallationJournalColumnsMigration(),
+		DesktopPetInstallationDeviceScopeIndexMigration(),
+		ChatImportStagingMigration(),
+		SafetyGovernanceMigration(),
 	}
 }
 

@@ -78,3 +78,59 @@ func TestScheduledNotificationAcknowledgementIsScopedAndMonotonic(t *testing.T) 
 		t.Fatalf("late receipt regressed clicked state: %+v %v", actual, err)
 	}
 }
+
+func TestTestDevicePushPersistsDisplayReceipt(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewRepository(db)
+	if err := repo.InitSchema(); err != nil {
+		t.Fatal(err)
+	}
+	endpoint := &DeviceEndpoint{
+		SpaceID:                    "space",
+		DeviceID:                   "desktop",
+		Platform:                   "desktop",
+		PreferredProvider:          "desktop-sse",
+		PushEnabled:                true,
+		SystemNotificationsEnabled: true,
+		MessagePushEnabled:         true,
+		ExecutionActivityEnabled:   true,
+		CallPushEnabled:            true,
+		ReminderPushEnabled:        true,
+		PreviewMode:                "full",
+		SoundEnabled:               true,
+	}
+	if err := repo.UpsertDevice(t.Context(), endpoint); err != nil {
+		t.Fatal(err)
+	}
+	client := sse.Global.SubscribeDevice("test-device-receipt", endpoint.SpaceID, endpoint.DeviceID)
+	t.Cleanup(func() { sse.Global.UnsubscribeClient(client) })
+	runtime := &Runtime{db: db, repo: repo, gateway: &PushGateway{}}
+
+	result, err := runtime.TestDevicePush(t.Context(), endpoint.SpaceID, endpoint.DeviceID)
+	if err != nil || result["accepted"] != true {
+		t.Fatalf("test push failed: %+v %v", result, err)
+	}
+	notificationID, _ := result["providerMessageId"].(string)
+	if notificationID == "" {
+		t.Fatalf("missing provider message id: %+v", result)
+	}
+	select {
+	case event := <-client.Events:
+		payload, _ := event["data"].(map[string]interface{})
+		if event["event"] != "scheduled_notification" || payload["requestId"] != notificationID {
+			t.Fatalf("unexpected desktop event: %+v", event)
+		}
+	default:
+		t.Fatal("desktop did not receive the test notification")
+	}
+	if err := runtime.AcknowledgeScheduled(t.Context(), endpoint.SpaceID, endpoint.DeviceID, notificationID, "displayed"); err != nil {
+		t.Fatal(err)
+	}
+	state, err := runtime.ScheduledState(t.Context(), notificationID)
+	if err != nil || state.State != "displayed" {
+		t.Fatalf("test notification receipt was not persisted: %+v %v", state, err)
+	}
+}

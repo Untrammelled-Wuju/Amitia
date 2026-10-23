@@ -39,6 +39,12 @@ func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*I
 	if manifest.Format != FormatName {
 		return nil, ErrImportFormatUnsupported
 	}
+	if manifest.FormatVersion > FormatVersion {
+		return nil, ErrImportFormatUnsupported
+	}
+	if manifest.SchemaFingerprint != "" && !compatibleSchemaFingerprint(manifest.SchemaFingerprint, c.SchemaFinger) {
+		return nil, ErrRestoreSchemaUnsupported
+	}
 
 	req := ImportPreviewRequest{
 		StagingPath: staging,
@@ -48,6 +54,9 @@ func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*I
 	br := &archiveBackupReader{r: reader}
 	var previews []ImportComponentPreview
 	for _, ct := range c.Contributors {
+		if !manifestContainsContributor(manifest, ct) {
+			continue
+		}
 		p, err := ct.PreviewImport(ctx, req, br)
 		if err != nil {
 			return nil, fmt.Errorf("contributor %s preview failed: %w", ct.ID(), err)
@@ -66,26 +75,56 @@ func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*I
 }
 
 func (c *Coordinator) ExecuteImport(ctx context.Context, archivePath string, req ImportRequest) (*ImportIdentityMap, error) {
+	identityMap, _, err := c.executeImportWithOperation(ctx, archivePath, req)
+	return identityMap, err
+}
+
+func (c *Coordinator) executeImportWithOperation(ctx context.Context, archivePath string, req ImportRequest) (*ImportIdentityMap, *ImportOperation, error) {
+	verification, err := VerifyArchive(archivePath)
+	if err != nil {
+		return nil, nil, err
+	}
+	if verification == nil || !verification.PackageIntegrity || verification.ComponentsVerified == 0 || verification.ComponentsFailed != 0 {
+		return nil, nil, ErrBackupVerifyFailed
+	}
 	staging, err := c.Staging.CreateStaging()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer c.Staging.CleanupStaging(staging)
 
 	reader, err := NewArchiveReader(archivePath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer reader.Close()
 
 	manifest, err := reader.ReadManifest()
 	if err != nil {
-		return nil, ErrImportPackageInvalid
+		return nil, nil, ErrImportPackageInvalid
+	}
+	if manifest.Format != FormatName || manifest.FormatVersion > FormatVersion {
+		return nil, nil, ErrImportFormatUnsupported
+	}
+	if manifest.SchemaFingerprint != "" && !compatibleSchemaFingerprint(manifest.SchemaFingerprint, c.SchemaFinger) {
+		return nil, nil, ErrRestoreSchemaUnsupported
+	}
+	if err := c.validateManifestComponents(manifest); err != nil {
+		return nil, nil, err
+	}
+	policy := req.CollisionPolicy
+	if policy == "" {
+		policy = req.CharacterPolicy
+	}
+	if policy != CollisionDuplicate && policy != CollisionSkip && policy != CollisionReplace {
+		return nil, nil, ErrImportCollisionPolicyInvalid
 	}
 
 	req.Manifest = manifest
 	req.StagingPath = staging
 	req.OperationID = generateOpID()
+	req.CollisionPolicy = policy
+	req.CharacterPolicy = policy
 
 	op := &ImportOperation{
 		ID:        req.OperationID,
@@ -107,13 +146,14 @@ func (c *Coordinator) ExecuteImport(ctx context.Context, archivePath string, req
 
 	op.Status = "importing"
 	for _, ct := range sortedContributors {
+		if !manifestContainsContributor(manifest, ct) {
+			continue
+		}
 		if err := ct.Import(ctx, req, br); err != nil {
 			op.Status = "failed"
 			op.Error = err.Error()
-			return req.IdentityMap, ErrImportTransactionFailed
-		}
-		if count, ok := op.Stats[ct.ID()]; ok {
-			_ = count
+			op.UpdatedAt = nowRFC3339()
+			return req.IdentityMap, op, ErrImportTransactionFailed
 		}
 		op.Stats[ct.ID()]++
 	}
@@ -127,7 +167,35 @@ func (c *Coordinator) ExecuteImport(ctx context.Context, archivePath string, req
 	op.UpdatedAt = now
 	_ = now
 
-	return req.IdentityMap, nil
+	return req.IdentityMap, op, nil
+}
+
+func (c *Coordinator) validateManifestComponents(manifest *BackupManifest) error {
+	known := make(map[string]bool)
+	for _, ct := range c.Contributors {
+		for _, id := range ct.ComponentIDs() {
+			known[id] = true
+		}
+	}
+	for _, component := range manifest.Components {
+		if !known[component.ID] {
+			return fmt.Errorf("%w: %s", ErrImportDatasetUnsupported, component.ID)
+		}
+	}
+	return nil
+}
+
+func manifestContainsContributor(manifest *BackupManifest, contributor BackupContributor) bool {
+	present := make(map[string]bool)
+	for _, component := range manifest.Components {
+		present[component.ID] = true
+	}
+	for _, id := range contributor.ComponentIDs() {
+		if present[id] {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Coordinator) sortedContributorsForImport() []BackupContributor {

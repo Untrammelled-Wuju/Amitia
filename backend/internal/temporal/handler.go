@@ -12,15 +12,10 @@ import (
 )
 
 type Handler struct {
-	service            *Service
-	relTimeCoordinator *RelationshipTimeCoordinator
+	service *Service
 }
 
 func NewHandler(service *Service) *Handler { return &Handler{service: service} }
-func NewHandlerWithRelationshipTime(service *Service, coordinator *RelationshipTimeCoordinator) *Handler {
-	return &Handler{service: service, relTimeCoordinator: coordinator}
-}
-
 func (h *Handler) GetUserProfile(c *gin.Context) {
 	profile, err := h.service.GetProfile(c.Request.Context(), OwnerSpace, apiSpaceID(c))
 	h.respond(c, profile, err)
@@ -185,138 +180,6 @@ func (h *Handler) SuggestTimezone(c *gin.Context) {
 	}
 	profile, err := h.service.SuggestTimezone(c.Request.Context(), apiSpaceID(c), input.Timezone)
 	h.respond(c, profile, err)
-}
-
-func (h *Handler) GetRelationshipTimeSettings(c *gin.Context) {
-	characterID := strings.TrimSpace(c.Param("characterId"))
-	if !h.requireCharacterOwner(c, characterID) {
-		return
-	}
-	if h.relTimeCoordinator == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
-		return
-	}
-	settings, err := h.relTimeCoordinator.GetSettings(c.Request.Context(), characterID)
-	h.respond(c, settings, err)
-}
-
-func (h *Handler) UpdateRelationshipTimeSettings(c *gin.Context) {
-	characterID := strings.TrimSpace(c.Param("characterId"))
-	if !h.requireCharacterOwner(c, characterID) {
-		return
-	}
-	if h.relTimeCoordinator == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
-		return
-	}
-	var patch map[string]interface{}
-	if err := c.ShouldBindJSON(&patch); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "关系时间设置格式无效"})
-		return
-	}
-	if maxVal, ok := patch["maxMentionSentences"].(float64); ok {
-		if maxVal < 0 || maxVal > 2 {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "maxMentionSentences 必须在 0-2 之间"})
-			return
-		}
-	}
-	if sensVal, ok := patch["sensitivity"].(string); ok {
-		s := strings.TrimSpace(sensVal)
-		if s != "" && s != "conservative" && s != "balanced" && s != "expressive" {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "sensitivity 必须为 conservative/balanced/expressive 之一"})
-			return
-		}
-	}
-	settings, err := h.relTimeCoordinator.GetSettings(c.Request.Context(), characterID)
-	if err != nil {
-		h.respond(c, nil, err)
-		return
-	}
-	if settings == nil {
-		defaults := DefaultRelationshipTimeSettings(characterID)
-		settings = &defaults
-	}
-	if val, ok := patch["enabled"].(bool); ok {
-		settings.Enabled = val
-	}
-	if val, ok := patch["reunionEnabled"].(bool); ok {
-		settings.ReunionEnabled = val
-	}
-	if val, ok := patch["sensitivity"].(string); ok && strings.TrimSpace(val) != "" {
-		settings.Sensitivity = strings.TrimSpace(val)
-	}
-	if val, ok := patch["allowMemoryRecall"].(bool); ok {
-		settings.AllowMemoryRecall = val
-	}
-	if val, ok := patch["allowRelationshipAge"].(bool); ok {
-		settings.AllowRelationshipAge = val
-	}
-	if val, ok := patch["allowReunionMention"].(bool); ok {
-		settings.AllowReunionMention = val
-	}
-	if val, ok := patch["allowProactiveReference"].(bool); ok {
-		settings.AllowProactiveReference = val
-	}
-	if val, ok := patch["maxMentionSentences"].(float64); ok {
-		settings.MaxMentionSentences = int(val)
-	}
-	if err := h.relTimeCoordinator.SaveSettings(c.Request.Context(), settings); err != nil {
-		h.respond(c, nil, err)
-		return
-	}
-	h.respond(c, settings, nil)
-}
-
-func (h *Handler) GetRelationshipTimeState(c *gin.Context) {
-	spaceID := apiSpaceID(c)
-	characterID := strings.TrimSpace(c.Param("characterId"))
-	if !h.requireCharacterOwner(c, characterID) {
-		return
-	}
-	if h.relTimeCoordinator == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
-		return
-	}
-	state, err := h.relTimeCoordinator.GetState(c.Request.Context(), spaceID, characterID)
-	h.respond(c, state, err)
-}
-
-func (h *Handler) ListReunionEpisodes(c *gin.Context) {
-	spaceID := apiSpaceID(c)
-	characterID := strings.TrimSpace(c.Param("characterId"))
-	if !h.requireCharacterOwner(c, characterID) {
-		return
-	}
-	if h.relTimeCoordinator == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
-		return
-	}
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	episodes, err := h.relTimeCoordinator.ListReunionEpisodes(c.Request.Context(), spaceID, characterID, limit)
-	h.respond(c, episodes, err)
-}
-
-func (h *Handler) GetReunionEpisode(c *gin.Context) {
-	if h.relTimeCoordinator == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "关系时间服务未启用"})
-		return
-	}
-	spaceID := apiSpaceID(c)
-	characterID := strings.TrimSpace(c.Param("characterId"))
-	if !h.requireCharacterOwner(c, characterID) {
-		return
-	}
-	episodeID := c.Param("episodeId")
-	episode, err := h.relTimeCoordinator.GetReunionEpisode(c.Request.Context(), episodeID)
-	if err != nil {
-		h.respond(c, nil, err)
-		return
-	}
-	if episode == nil || episode.SpaceID != spaceID || episode.CharacterID != characterID {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "重聚记录不存在"})
-		return
-	}
-	h.respond(c, episode, nil)
 }
 
 func (h *Handler) requireCharacterOwner(c *gin.Context, characterID string) bool {

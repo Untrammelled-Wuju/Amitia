@@ -111,10 +111,10 @@ async function toggleVoice() {
     let url = props.audioUrl || "";
     if (!url && props.messageRole === "assistant") {
       const ownedUrl = await speech.synthesizeIfBound(props.messageContent || "", props.characterId);
-      const res = ownedUrl ? { audioUrl: ownedUrl } : await post<any>("/api/tts/synthesize", {
-        characterId: props.characterId || undefined,
-        conversationId: props.conversationId || undefined,
-        requestId: props.requestId || undefined,
+      const previewPath = props.characterId
+        ? `/api/tts/characters/${encodeURIComponent(props.characterId)}/preview`
+        : "/api/tts/preview";
+      const res = ownedUrl ? { audioUrl: ownedUrl } : await post<any>(previewPath, {
         text: props.messageContent || "",
       });
       url = res?.audioUrl;

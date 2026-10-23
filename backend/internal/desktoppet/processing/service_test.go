@@ -410,7 +410,7 @@ func TestServiceCreatePackage_DefaultActionMissing(t *testing.T) {
 		SpaceID:          "user-1",
 	}
 
-	_, err := svc.CreatePackage(req)
+	_, err := svc.BuildReleasePackageSource(req)
 	assertProcessingErrorCode(t, err, ErrCodeDefaultIdleActionUnavailable)
 }
 
@@ -452,7 +452,7 @@ func TestServiceCreatePackage_ExcludeDefaultIdleFailed(t *testing.T) {
 		SpaceID:          "user-1",
 	}
 
-	_, err := svc.CreatePackage(req)
+	_, err := svc.BuildReleasePackageSource(req)
 	assertProcessingErrorCode(t, err, ErrCodeDefaultIdleActionUnavailable)
 }
 

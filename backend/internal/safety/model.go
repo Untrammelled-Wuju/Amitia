@@ -1,6 +1,9 @@
 package safety
 
-import "gorm.io/gorm"
+import (
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"gorm.io/gorm"
+)
 
 type HardConstraint struct {
 	RuleID       string `json:"ruleId"`
@@ -34,6 +37,8 @@ type BdiConfig struct {
 	SoftPreferences   []SoftPreference   `json:"softPreferences"`
 	CopingStrategy    *CopingStrategy    `json:"copingStrategy"`
 	EmotionExpression *EmotionExpression `json:"emotionExpression"`
+	Revision          int64              `json:"revision"`
+	ExpectedRevision  int64              `json:"expectedRevision"`
 }
 
 type AuditLog struct {
@@ -55,12 +60,19 @@ type SafetyConfig struct {
 	IntimacyExpressionCap            int    `json:"intimacyExpressionCap"`
 	ViolationAction                  string `json:"violationAction"`
 	AuditLogRetentionDays            int    `json:"auditLogRetentionDays"`
+	Revision                         int64  `json:"revision"`
+	ExpectedRevision                 int64  `json:"expectedRevision"`
 }
 
 type Handler struct {
-	db *gorm.DB
+	db           *gorm.DB
+	coordination *coordination.Service
 }
 
-func NewHandler(db *gorm.DB) *Handler {
-	return &Handler{db: db}
+func NewHandler(db *gorm.DB, coordinator ...*coordination.Service) *Handler {
+	handler := &Handler{db: db}
+	if len(coordinator) > 0 {
+		handler.coordination = coordinator[0]
+	}
+	return handler
 }

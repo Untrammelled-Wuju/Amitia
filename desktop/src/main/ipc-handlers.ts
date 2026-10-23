@@ -395,26 +395,6 @@ export function registerIpcHandlers(
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
 
-  ipcMain.handle(IPC_CHANNELS.showReplyNotification, (event, options?: { notify: boolean; sound: boolean }) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || win.isDestroyed()) return false;
-    const focused = BrowserWindow.getFocusedWindow();
-    if (focused && focused.isVisible() && !focused.isMinimized()) return false;
-    const notify = options?.notify !== false;
-    const sound = options?.sound === true;
-    if (sound) shell.beep();
-    if (!notify || !Notification.isSupported()) return sound;
-    const notification = new Notification({ title: "Amitia · 回复完成", body: "AI 已完成回复，打开应用查看。", silent: true });
-    notification.once("click", () => {
-      if (win.isDestroyed()) return;
-      if (win.isMinimized()) win.restore();
-      win.show();
-      win.focus();
-    });
-    notification.show();
-    return true;
-  });
-
   ipcMain.handle(IPC_CHANNELS.toggleMaximizeWindow, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return false;

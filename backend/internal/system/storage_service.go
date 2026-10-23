@@ -5,15 +5,11 @@ package system
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
-	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/system/dataportability"
 )
 
 func (s *service) GetStorageInfo() map[string]interface{} {
@@ -107,20 +103,6 @@ func formatStorageBytes(size int64) string {
 	default:
 		return fmt.Sprintf("%d B", size)
 	}
-}
-
-func (s *service) GetStorageBackups() map[string]interface{} {
-	backupDir := filepath.Join(s.dataDir, "backups")
-	os.MkdirAll(backupDir, 0755)
-	entries, _ := os.ReadDir(backupDir)
-	var backups []interface{}
-	for _, e := range entries {
-		if !e.IsDir() {
-			info, _ := e.Info()
-			backups = append(backups, map[string]interface{}{"name": e.Name(), "size": info.Size(), "createdAt": info.ModTime().Format(time.DateTime)})
-		}
-	}
-	return map[string]interface{}{"backups": backups}
 }
 
 func (s *service) GetStorageMigrations() map[string]interface{} {
@@ -238,174 +220,4 @@ func boolToInt(v bool) int {
 		return 1
 	}
 	return 0
-}
-
-func (s *service) CreatePhysicalSafetySnapshot() map[string]interface{} {
-	return s.CreatePhysicalSafetySnapshotContext(context.Background())
-}
-
-func (s *service) CreatePhysicalSafetySnapshotContext(ctx context.Context) map[string]interface{} {
-	if s.coordinator == nil {
-		return map[string]interface{}{"ok": false, "error": "统一备份入口不可用"}
-	}
-	runner := dataportability.NewSQLiteAdapter(s.db, filepath.Join(s.dataDir, "backups"))
-	result, err := s.coordinator.CreateBackup(ctx, dataportability.BackupRequest{Scope: dataportability.ScopeAll, Profile: dataportability.ProfileFull, Purpose: dataportability.PurposeUser}, filepath.Join(s.dataDir, "app.db"), runner)
-	if err != nil {
-		return map[string]interface{}{"ok": false, "error": err.Error()}
-	}
-	name := filepath.Base(result.Path)
-	return map[string]interface{}{"ok": true, "name": name, "snapshotName": name, "size": result.SizeBytes, "sizeMB": result.SizeBytes / 1024 / 1024, "createdAt": time.Now().Format(time.DateTime)}
-}
-
-func (s *service) DeleteStorageBackup(name string) map[string]interface{} {
-	clean := filepath.Base(name)
-	if clean == "." || clean == "" || clean != name {
-		return map[string]interface{}{"deleted": false, "error": "invalid backup name"}
-	}
-	path := filepath.Join(s.dataDir, "backups", clean)
-	if err := os.Remove(path); err != nil {
-		return map[string]interface{}{"deleted": false, "error": err.Error()}
-	}
-	return map[string]interface{}{"deleted": true, "name": clean}
-}
-
-func (s *service) DeleteAllStorage() map[string]interface{} {
-	backupDir := filepath.Join(s.dataDir, "backups")
-	entries, _ := os.ReadDir(backupDir)
-	for _, e := range entries {
-		os.Remove(filepath.Join(backupDir, e.Name()))
-	}
-	return map[string]interface{}{"deleted": true}
-}
-
-func (s *service) RestorePhysicalSafetySnapshot(name string) map[string]interface{} {
-	return s.RestorePhysicalSafetySnapshotContext(context.Background(), name)
-}
-
-func (s *service) RestorePhysicalSafetySnapshotContext(ctx context.Context, name string) map[string]interface{} {
-	clean := filepath.Base(name)
-	if clean == "." || clean == "" || clean != name {
-		return map[string]interface{}{"ok": false, "error": "无效备份名称"}
-	}
-	if s.coordinator == nil {
-		return map[string]interface{}{"ok": false, "error": "统一备份入口不可用"}
-	}
-	_, err := s.coordinator.ExecuteImport(ctx, filepath.Join(s.dataDir, "backups", clean), dataportability.ImportRequest{CharacterPolicy: dataportability.CollisionReplace, Purpose: dataportability.PurposeUser})
-	if err != nil {
-		return map[string]interface{}{"ok": false, "error": err.Error()}
-	}
-	return map[string]interface{}{"ok": true, "restored": true, "name": clean}
-}
-
-func sanitizeName(s string) string {
-	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
-	return r.Replace(s)
-}
-
-func (s *service) StorageExportAmitia(scope string, characterID string) map[string]interface{} {
-	return s.StorageExportAmitiaContext(context.Background(), scope, characterID)
-}
-
-func (s *service) StorageExportAmitiaContext(ctx context.Context, scope string, characterID string) map[string]interface{} {
-	coord := s.coordinator
-	if coord == nil {
-		return map[string]interface{}{"exported": false, "error": "coordinator not initialized"}
-	}
-
-	var dbPath string
-	s.db.Raw("PRAGMA database_list").Row().Scan(nil, nil, &dbPath)
-	if dbPath == "" {
-		dbPath = filepath.Join(s.dataDir, "app.db")
-	}
-
-	bkpScope := dataportability.ScopeAll
-	if scope == "character" {
-		bkpScope = dataportability.ScopeCharacter
-	}
-
-	req := dataportability.BackupRequest{
-		Scope:       bkpScope,
-		Profile:     dataportability.ProfileFull,
-		CharacterID: characterID,
-		Purpose:     dataportability.PurposeUser,
-	}
-
-	runner := dataportability.NewSQLiteAdapter(s.db, filepath.Join(s.dataDir, "backups"))
-	result, err := coord.CreateBackup(ctx, req, dbPath, runner)
-	if err != nil {
-		return map[string]interface{}{"exported": false, "error": err.Error()}
-	}
-
-	fileName := filepath.Base(result.Path)
-	exportDir := filepath.Join(s.dataDir, "exports")
-	if err := os.MkdirAll(exportDir, 0755); err != nil {
-		return map[string]interface{}{"exported": false, "error": err.Error()}
-	}
-	source, err := os.Open(result.Path)
-	if err != nil {
-		return map[string]interface{}{"exported": false, "error": err.Error()}
-	}
-	defer source.Close()
-	destination, err := os.Create(filepath.Join(exportDir, fileName))
-	if err != nil {
-		return map[string]interface{}{"exported": false, "error": err.Error()}
-	}
-	if _, err := io.Copy(destination, source); err != nil {
-		destination.Close()
-		return map[string]interface{}{"exported": false, "error": err.Error()}
-	}
-	if err := destination.Close(); err != nil {
-		return map[string]interface{}{"exported": false, "error": err.Error()}
-	}
-
-	return map[string]interface{}{
-		"exported": true,
-		"file":     fileName,
-		"size":     result.SizeBytes,
-		"sizeKB":   result.SizeBytes / 1024,
-	}
-}
-
-func (s *service) StorageImportUserData(body map[string]interface{}) map[string]interface{} {
-	return s.StorageImportUserDataContext(context.Background(), body)
-}
-
-func (s *service) StorageImportUserDataContext(ctx context.Context, body map[string]interface{}) map[string]interface{} {
-	if err := coordination.ValidateCurrent(ctx); err != nil {
-		return map[string]interface{}{"imported": false, "error": "云端配置授权已变化，请重新加载后操作"}
-	}
-	coord := s.coordinator
-	if coord == nil {
-		return map[string]interface{}{"imported": false, "error": "coordinator not initialized"}
-	}
-
-	fileName, _ := body["fileName"].(string)
-	if fileName == "" || filepath.Base(fileName) != fileName || fileName == "." || fileName == ".." {
-		return map[string]interface{}{"imported": false, "error": "missing fileName"}
-	}
-
-	archivePath := filepath.Join(s.dataDir, "exports", fileName)
-
-	preview, err := coord.PreviewImport(ctx, archivePath)
-	if err != nil {
-		return map[string]interface{}{"imported": false, "error": err.Error()}
-	}
-
-	importReq := dataportability.ImportRequest{
-		CharacterPolicy: dataportability.CollisionReplace,
-	}
-
-	_, err = coord.ExecuteImport(ctx, archivePath, importReq)
-	if err != nil {
-		return map[string]interface{}{"imported": false, "error": err.Error()}
-	}
-
-	return map[string]interface{}{
-		"imported":       true,
-		"fileName":       fileName,
-		"backupId":       preview.Manifest.BackupID,
-		"appVersion":     preview.Manifest.AppVersion,
-		"schemaFinger":   preview.Manifest.SchemaFingerprint,
-		"componentCount": len(preview.Components),
-	}
 }

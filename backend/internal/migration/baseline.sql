@@ -224,6 +224,49 @@ CREATE TABLE IF NOT EXISTS messages (
     deleted_at DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS chat_import_batches (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    device_id TEXT NOT NULL DEFAULT '',
+    role_id TEXT NOT NULL DEFAULT '',
+    role_revision INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'ready_for_promotion',
+    detected_format TEXT NOT NULL DEFAULT '',
+    message_count INTEGER NOT NULL DEFAULT 0,
+    content_hash TEXT NOT NULL DEFAULT '',
+    idempotency_key TEXT NOT NULL DEFAULT '',
+    summary_text TEXT NOT NULL DEFAULT '',
+    promoted_conversation_id TEXT NOT NULL DEFAULT '',
+    promoted_conversation_owner_id TEXT NOT NULL DEFAULT '',
+    promoted_core_id TEXT NOT NULL DEFAULT '',
+    legacy_conversation_id TEXT NOT NULL DEFAULT '',
+    error_code TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    promoted_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_import_batches_space_status ON chat_import_batches(space_id, status, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_import_batches_idempotency ON chat_import_batches(space_id, device_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_chat_import_batches_promoted ON chat_import_batches(space_id, promoted_conversation_id);
+
+CREATE TABLE IF NOT EXISTS chat_import_items (
+    id TEXT PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    sequence INTEGER NOT NULL DEFAULT 0,
+    speaker TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'user',
+    content TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0,
+    timestamp TEXT NOT NULL DEFAULT '',
+    line_no INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_import_items_batch_sequence ON chat_import_items(batch_id, sequence);
+
 CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
     conversation_id TEXT NOT NULL,
     pipeline_type TEXT NOT NULL,
@@ -677,23 +720,66 @@ CREATE INDEX IF NOT EXISTS idx_conv_summaries_parent ON conversation_summaries(p
 
 CREATE TABLE IF NOT EXISTS message_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    space_id TEXT NOT NULL DEFAULT '',
+    owner_id TEXT NOT NULL DEFAULT '',
+    core_id TEXT NOT NULL DEFAULT '',
+    role_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
     message_id TEXT DEFAULT '',
+    request_id TEXT NOT NULL DEFAULT '',
     feedback_type TEXT NOT NULL DEFAULT '',
     reason TEXT DEFAULT '',
     rating INTEGER DEFAULT 0,
     comment TEXT DEFAULT '',
-    created_at TEXT DEFAULT ''
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
+    deleted_at DATETIME
 );
 
-CREATE TABLE IF NOT EXISTS safety_events (
-    id TEXT PRIMARY KEY,
-    conversation_id TEXT DEFAULT '',
-    event_type TEXT DEFAULT '',
-    description TEXT DEFAULT '',
-    direction TEXT DEFAULT '',
-    handled INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT ''
+CREATE TABLE IF NOT EXISTS safety_policies (
+    space_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    core_id TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    bdi_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY(space_id, owner_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_safety_policies_owner ON safety_policies(space_id, owner_id, core_id);
+
+CREATE TABLE IF NOT EXISTS safety_incidents (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    core_id TEXT NOT NULL,
+    role_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    message_id TEXT NOT NULL DEFAULT '',
+    feedback_id INTEGER,
+    request_id TEXT NOT NULL DEFAULT '',
+    event_type TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'medium',
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open',
+    policy_revision INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    legacy_event_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    resolved_at TEXT NOT NULL DEFAULT '',
+    resolved_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_safety_incidents_scope ON safety_incidents(space_id, owner_id, core_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_safety_incidents_conversation ON safety_incidents(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_safety_incidents_message ON safety_incidents(message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_safety_incidents_feedback ON safety_incidents(feedback_id) WHERE feedback_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_safety_incidents_legacy ON safety_incidents(legacy_event_id) WHERE legacy_event_id <> '';
 
 CREATE TABLE IF NOT EXISTS moods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

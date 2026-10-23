@@ -69,10 +69,13 @@ func (s *OwnershipStore) SemanticSearch(ctx context.Context, role string, query 
 	now := time.Now()
 	for rows.Next() {
 		hit := semanticHit{vector: Resource{OwnerID: s.ownerID, Kind: "vector", RoleID: role}, memory: Resource{OwnerID: s.ownerID, Kind: "memory", RoleID: role}}
-		if err := rows.Scan(&hit.vector.ID, &hit.vector.SourceID, &hit.vector.Revision, &hit.vector.Body, &hit.memory.Revision, &hit.memory.Body); err != nil {
+		var vectorBody, memoryBody []byte
+		if err := rows.Scan(&hit.vector.ID, &hit.vector.SourceID, &hit.vector.Revision, &vectorBody, &hit.memory.Revision, &memoryBody); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
+		hit.vector.Body = json.RawMessage(vectorBody)
+		hit.memory.Body = json.RawMessage(memoryBody)
 		hit.memory.ID = hit.vector.SourceID
 		if !ResourceUsable(hit.memory.Body, now) || !ResourceUsable(hit.vector.Body, now) {
 			continue

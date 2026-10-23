@@ -41,9 +41,12 @@ func TestMeshLegacyHistoryPagesAndCursorOwnership(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, raw := range snapshot.LegacyMessages {
+		for _, resource := range snapshot.Resources {
+			if resource.Kind != "message" {
+				continue
+			}
 			var message chat.Message
-			if err := json.Unmarshal(raw, &message); err != nil {
+			if err := json.Unmarshal(resource.Body, &message); err != nil {
 				t.Fatal(err)
 			}
 			if seen[message.ID] {
@@ -126,7 +129,13 @@ func TestMeshLocalSnapshotReadsOnlySelectedDeviceRoleAndLiveMemories(t *testing.
 		}
 	}
 	snapshot, err := p.Snapshot(t.Context(), scope, coordination.DataQuery{ConversationID: conversation.ID})
-	if err != nil || len(snapshot.LegacyMessages) != 1 {
+	messageCount := 0
+	for _, resource := range snapshot.Resources {
+		if resource.Kind == "message" {
+			messageCount++
+		}
+	}
+	if err != nil || messageCount != 1 {
 		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
 	}
 	scope.ResourceOwnerID = "device-b"
@@ -185,7 +194,15 @@ func TestMeshHistoricalReadKeepsDeviceRoleSeparateFromCoreRole(t *testing.T) {
 	}
 	scope := coordination.ExecutionScope{TargetDeviceID: "device-a", CoreID: "core", RoleOwnerID: "core", ResourceOwnerID: "core", RoleID: "core-role", RoleRevision: 9, Coordinated: true}
 	history, err := p.HistoricalSnapshot(t.Context(), scope, coordination.DataQuery{ConversationID: conversation.ID})
-	if err != nil || history == nil || history.OwnerID != "device-a" || history.Role.ID != "one" || string(history.Role.Profile) != `{}` || len(history.LegacyMessages) != 1 {
+	historyMessages := 0
+	if history != nil {
+		for _, resource := range history.Resources {
+			if resource.Kind == "message" {
+				historyMessages++
+			}
+		}
+	}
+	if err != nil || history == nil || history.OwnerID != "device-a" || history.Role.ID != "one" || string(history.Role.Profile) != `{}` || historyMessages != 1 {
 		t.Fatalf("history did not preserve owner or leaked device role configuration: %+v %v", history, err)
 	}
 	if scope.RoleID != "core-role" || scope.ResourceOwnerID != "core" {
@@ -195,7 +212,15 @@ func TestMeshHistoricalReadKeepsDeviceRoleSeparateFromCoreRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	history, err = p.HistoricalSnapshot(t.Context(), scope, coordination.DataQuery{ConversationID: conversation.ID})
-	if err != nil || history == nil || len(history.LegacyMessages) != 1 {
+	historyMessages = 0
+	if history != nil {
+		for _, resource := range history.Resources {
+			if resource.Kind == "message" {
+				historyMessages++
+			}
+		}
+	}
+	if err != nil || history == nil || historyMessages != 1 {
 		t.Fatal("disabled old role prevented history access", err)
 	}
 	conversations, err := p.HistoricalConversations(t.Context(), scope)
@@ -208,5 +233,61 @@ func TestMeshHistoricalReadKeepsDeviceRoleSeparateFromCoreRole(t *testing.T) {
 	missing, err := p.HistoricalSnapshot(t.Context(), scope, coordination.DataQuery{ConversationID: "new-core-chat"})
 	if err != nil || missing != nil {
 		t.Fatalf("new Core conversation requested nonexistent history: %+v %v", missing, err)
+	}
+}
+
+func TestMeshSnapshotDeduplicatesOwnedAndLegacyChatByAuthority(t *testing.T) {
+	p := setupMeshLocalDataPort(t)
+	scope := coordination.ExecutionScope{TargetDeviceID: p.ownerID, CoreID: "core", ResourceOwnerID: p.ownerID, RoleOwnerID: p.ownerID, RoleID: "one", RoleRevision: 3}
+	seedOwnedChatManagement(t, p, "conversation", "shared", "one", `{"id":"shared","title":"Current","characterId":"one","createdAt":"2026-02-01T00:00:00Z"}`)
+	seedOwnedChatManagement(t, p, "message", "shared-message", "one", `{"id":"shared-message","conversationId":"shared","role":"user","content":"current","createdAt":"2026-02-01T00:00:01Z"}`)
+	if err := p.services.DB.Create(&chat.Conversation{ID: "shared", SpaceID: p.legacySpaceID, Title: "Legacy"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range []chat.Message{
+		{ID: "shared-message", ConversationID: "shared", CharacterID: "one", Role: "user", Content: "legacy duplicate", Sequence: 1},
+		{ID: "legacy-only", ConversationID: "shared", CharacterID: "one", Role: "assistant", Content: "legacy only", Sequence: 2},
+	} {
+		if err := p.services.DB.Create(&message).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot, err := p.Snapshot(t.Context(), scope, coordination.DataQuery{ConversationID: "shared", Limit: 128})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversations, messages := 0, 0
+	for _, resource := range snapshot.Resources {
+		switch resource.Kind {
+		case "conversation":
+			conversations++
+		case "message":
+			messages++
+			var body map[string]any
+			if err := json.Unmarshal(resource.Body, &body); err != nil {
+				t.Fatal(err)
+			}
+			if resource.ID == "shared-message" && (body["content"] != "current" || resource.Origin == "legacy") {
+				t.Fatalf("legacy duplicate overrode owner message: %+v", resource)
+			}
+			if resource.ID == "legacy-only" && (resource.Origin != "legacy" || !resource.ReadOnly || resource.Revision != 0) {
+				t.Fatalf("legacy-only message missing read-only authority: %+v", resource)
+			}
+		}
+	}
+	if conversations != 1 || messages != 2 {
+		t.Fatalf("canonical snapshot conversations=%d messages=%d", conversations, messages)
+	}
+	if _, err := p.services.KernelContainer.DeviceRegistry.Database().Exec(`UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND kind='message' AND resource_id='shared-message'`, p.ownerID); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = p.Snapshot(t.Context(), scope, coordination.DataQuery{ConversationID: "shared", Limit: 128})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, resource := range snapshot.Resources {
+		if resource.Kind == "message" && resource.ID == "shared-message" {
+			t.Fatal("legacy message was resurrected after owner tombstone")
+		}
 	}
 }

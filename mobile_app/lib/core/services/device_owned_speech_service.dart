@@ -88,7 +88,11 @@ class DeviceOwnedSpeechService {
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 
-  Future<OwnedSpeechAudio> synthesize(String characterId, String text) async {
+  Future<OwnedSpeechAudio> synthesize(
+    String characterId,
+    String text, {
+    String speakerId = '',
+  }) async {
     if (characterId.trim().isEmpty ||
         text.trim().isEmpty ||
         utf8.encode(text).length > 8192) {
@@ -184,6 +188,7 @@ class DeviceOwnedSpeechService {
           'characterId': characterId,
           'text': text,
           'expectedExecutionScope': scope,
+          if (speakerId.trim().isNotEmpty) 'speakerId': speakerId.trim(),
         },
       ),
     );

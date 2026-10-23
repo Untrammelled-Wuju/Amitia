@@ -18,11 +18,13 @@ type SpeechInference struct {
 	Scope      coordination.ExecutionScope
 	Role       coordination.Role
 	Text       string
+	SpeakerID  string
 	VoiceType  string
 	ResourceID string
 }
 
 type SpeechOptions struct {
+	SpeakerID  string
 	VoiceType  string
 	ResourceID string
 }
@@ -106,9 +108,10 @@ func (e *Engine) Speech(ctx context.Context, request Request, text string, optio
 	if len(options) > 0 {
 		speechOptions = options[0]
 	}
+	speechOptions.SpeakerID = strings.TrimSpace(speechOptions.SpeakerID)
 	speechOptions.VoiceType = strings.TrimSpace(speechOptions.VoiceType)
 	speechOptions.ResourceID = strings.TrimSpace(speechOptions.ResourceID)
-	if len(speechOptions.VoiceType) > 256 || len(speechOptions.ResourceID) > 256 {
+	if len(speechOptions.SpeakerID) > 256 || len(speechOptions.VoiceType) > 256 || len(speechOptions.ResourceID) > 256 {
 		return SpeechResponse{}, errors.New("朗读音色或资源标识超过长度限制")
 	}
 	if len(request.RequestID) > 96 || request.RequestID == "" || request.ExpectedScope == nil || len(text) > 8192 || strings.TrimSpace(text) == "" {
@@ -147,9 +150,10 @@ func (e *Engine) Speech(ctx context.Context, request Request, text string, optio
 		Scope      coordination.ExecutionScope
 		Text       string
 		Profile    json.RawMessage
+		SpeakerID  string
 		VoiceType  string
 		ResourceID string
-	}{summaryAuthority(scope), text, role.Profile, speechOptions.VoiceType, speechOptions.ResourceID}))
+	}{summaryAuthority(scope), text, role.Profile, speechOptions.SpeakerID, speechOptions.VoiceType, speechOptions.ResourceID}))
 	fingerprint := hex.EncodeToString(digest[:])
 	if pending, proof, err := e.pendingMutation(ctx, scope, resourceID, fingerprint); err != nil {
 		return SpeechResponse{}, err
@@ -239,7 +243,7 @@ func (e *Engine) Speech(ctx context.Context, request Request, text string, optio
 			}
 		}
 	}()
-	data, err := model.GenerateOwnedSpeech(ctx, SpeechInference{Scope: scope, Role: role, Text: text, VoiceType: speechOptions.VoiceType, ResourceID: speechOptions.ResourceID})
+	data, err := model.GenerateOwnedSpeech(ctx, SpeechInference{Scope: scope, Role: role, Text: text, SpeakerID: speechOptions.SpeakerID, VoiceType: speechOptions.VoiceType, ResourceID: speechOptions.ResourceID})
 	if err != nil {
 		return SpeechResponse{}, err
 	}

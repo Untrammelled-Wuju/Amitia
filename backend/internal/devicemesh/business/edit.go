@@ -52,6 +52,10 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 		allowed = map[string]bool{"content": true, "archivedAt": true}
 	case "summary":
 		allowed = map[string]bool{"content": true}
+	case "emotion":
+		if !edit.Deleted || len(edit.Changes) != 0 {
+			return coordination.Acknowledgement{}, errors.New("情绪历史仅支持删除")
+		}
 	default:
 		return coordination.Acknowledgement{}, errors.New("该类型由系统管理，请修改其原始数据")
 	}

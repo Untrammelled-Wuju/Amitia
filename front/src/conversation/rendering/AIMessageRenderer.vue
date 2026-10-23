@@ -142,6 +142,18 @@
             <button type="button" title="回复" aria-label="回复" @click="emit('reply', message)">
               <el-icon><ChatLineSquare /></el-icon>
             </button>
+            <button type="button" title="有帮助" aria-label="有帮助" :class="{ 'is-active': messageFeedback?.feedbackType === 'good' }" @click="submitHelpfulFeedback">
+              <el-icon><CircleCheck /></el-icon>
+            </button>
+            <button type="button" title="需要改进" aria-label="需要改进" :class="{ 'is-active': ['other','too_long','too_cold','too_exaggerated','not_understand'].includes(messageFeedback?.feedbackType || '') }" @click="submitImprovementFeedback">
+              <el-icon><CircleClose /></el-icon>
+            </button>
+            <button type="button" title="报告不安全内容" aria-label="报告不安全内容" :class="{ 'is-active': messageFeedback?.feedbackType === 'unsafe' }" @click="submitUnsafeFeedback">
+              <el-icon><Warning /></el-icon>
+            </button>
+            <button v-if="messageFeedback" type="button" title="撤销反馈" aria-label="撤销反馈" @click="removeFeedback">
+              <el-icon><Delete /></el-icon>
+            </button>
           </template>
           <slot name="actions" :message="message" />
         </footer>
@@ -151,12 +163,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { computed, onMounted, ref, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   ChatLineSquare,
+  CircleCheck,
+  CircleClose,
   CopyDocument,
+  Delete,
   EditPen,
+  Warning,
 } from "@element-plus/icons-vue";
 import { useTheme } from "@/composables/useTheme";
 import { useChatAppearancePreference } from "@/composables/useChatAppearancePreference";
@@ -179,6 +195,7 @@ import AmitiaCitationList from "./blocks/AmitiaCitationList.vue";
 import RendererErrorBoundary from "./blocks/RendererErrorBoundary.vue";
 import MinecraftServerBlock from "./blocks/MinecraftServerBlock.vue";
 import { registerExtensionRenderer } from "./rendererRegistry";
+import { createMessageFeedback, deleteMessageFeedback, loadMessageFeedback, type MessageFeedback } from "@/runtime/message-feedback";
 
 registerExtensionRenderer({
   rendererId: "minecraft.server",
@@ -222,6 +239,7 @@ const { resolvedMode } = useTheme();
 const { messageStyle, userMessageGlass, userMessageWaterGlass, aiAvatarEnabled, aiNameEnabled, aiAvatarRadius } = useChatAppearancePreference();
 const activeCitationId = ref("");
 const copyMenuOpen = ref(false);
+const messageFeedback = ref<MessageFeedback | null>(null);
 const message = computed<AIMessageData>(() =>
   normalizeAIMessage(props.message, {
     id: props.characterId,
@@ -297,6 +315,77 @@ const hasReply = computed(() => Boolean(props.message.replyToMessageId));
 const replyId = computed(() => String(props.message.replyToMessageId ?? ""));
 const replySender = computed(() => String(props.message.replyToRole === "user" ? "你" : props.charName));
 const replyText = computed(() => String(props.message.replyToExcerpt ?? "").slice(0, 120));
+const isAssistant = computed(() => message.value.role === "assistant");
+
+async function refreshFeedback() {
+  messageFeedback.value = null;
+  if (!isAssistant.value || !props.message.id || !props.characterId) return;
+  try {
+    messageFeedback.value = await loadMessageFeedback(String(props.message.id), props.characterId);
+  } catch {}
+}
+
+async function saveFeedback(feedbackType: string, reason = "") {
+  if (!props.message.id || !props.characterId) throw new Error("当前消息缺少反馈归属");
+  messageFeedback.value = await createMessageFeedback(String(props.message.id), props.characterId, feedbackType, reason);
+}
+
+async function submitHelpfulFeedback() {
+  try {
+    await saveFeedback("good");
+    ElMessage.success("已记录：这条回复有帮助");
+  } catch (error: any) {
+    ElMessage.error(error?.message || "反馈提交失败");
+  }
+}
+
+async function submitImprovementFeedback() {
+  try {
+    const { value } = await ElMessageBox.prompt("请说明这条回复需要改进的地方", "回复质量反馈", {
+      inputType: "textarea",
+      inputPlaceholder: "例如：回答不准确、过长或没有理解问题",
+      confirmButtonText: "提交",
+      cancelButtonText: "取消",
+      inputValidator: (text) => String(text || "").trim() ? true : "请填写反馈原因",
+    });
+    await saveFeedback("other", String(value || "").trim());
+    ElMessage.success("改进意见已记录");
+  } catch (error: any) {
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(error?.message || "反馈提交失败");
+  }
+}
+
+async function submitUnsafeFeedback() {
+  try {
+    const { value } = await ElMessageBox.prompt("请说明需要安全复核的内容", "报告不安全内容", {
+      inputType: "textarea",
+      inputPlaceholder: "请描述风险、违规或不适内容",
+      confirmButtonText: "提交安全报告",
+      cancelButtonText: "取消",
+      inputValidator: (text) => String(text || "").trim() ? true : "请填写安全报告原因",
+    });
+    await saveFeedback("unsafe", String(value || "").trim());
+    ElMessage.success("安全报告已提交");
+  } catch (error: any) {
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(error?.message || "安全报告提交失败");
+  }
+}
+
+async function removeFeedback() {
+  if (!messageFeedback.value) return;
+  try {
+    await deleteMessageFeedback(messageFeedback.value.id, props.characterId);
+    messageFeedback.value = null;
+    ElMessage.success("反馈已撤销");
+  } catch (error: any) {
+    ElMessage.error(error?.message || "撤销反馈失败");
+  }
+}
+
+watch(() => [props.message.id, props.characterId, props.message.role], refreshFeedback);
+onMounted(refreshFeedback);
 
 const stateNotice = computed(() => {
   switch (message.value.state) {
@@ -580,6 +669,11 @@ async function handleCopy(mode: "plain" | "markdown") {
 .amrp-copy-action > button:hover {
   background: var(--amrp-soft);
   color: var(--amrp-text);
+}
+
+.amrp-actions > button.is-active {
+  color: var(--amrp-accent);
+  background: color-mix(in srgb, var(--amrp-accent) 16%, transparent);
 }
 
 .amrp-quote {

@@ -9,9 +9,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/u-ai/backend/internal/continuity"
+	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/temporal"
+	"strings"
 )
 
 type chatEffectsSourceCallKey struct{}
@@ -20,7 +22,7 @@ func (p *meshLocalDataPort) CommitOwnedChatEffects(ctx context.Context, scope co
 	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID {
 		return coordination.ErrWrongOwner
 	}
-	if request.ConversationID == "" || request.MessageID == "" || request.RequestID != scope.RequestID || len(request.ConversationID) > 512 || len(request.ThreadID) > 512 {
+	if request.ConversationID == "" || !request.Abort && request.MessageID == "" || request.RequestID != scope.RequestID || len(request.ConversationID) > 512 || len(request.ThreadID) > 512 {
 		return coordination.ErrRequestConflict
 	}
 	if err := coordination.ValidateCurrent(ctx); err != nil {
@@ -42,6 +44,28 @@ func (p *meshLocalDataPort) CommitOwnedChatEffects(ctx context.Context, scope co
 }
 
 func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, scope coordination.ExecutionScope, request coordination.OwnedChatEffectsRequest) error {
+	if request.Abort {
+		if p.services.RelTimeCoordinator == nil {
+			return nil
+		}
+		message, err := p.store.Get(ctx, "message", request.RequestID+"/assistant")
+		if err != nil {
+			return err
+		}
+		if message != nil && !message.Deleted && message.RoleID == scope.RoleID {
+			checkpoint, err := p.store.Get(ctx, "checkpoint", "turn/"+request.RequestID)
+			if err != nil {
+				return err
+			}
+			var state struct {
+				Status string `json:"status"`
+			}
+			if checkpoint != nil && json.Unmarshal(checkpoint.Body, &state) == nil && state.Status == "completed" {
+				return nil
+			}
+		}
+		return p.services.RelTimeCoordinator.ForOwner(p.ownerID).FinishRequest(ctx, temporal.RelationshipOwnerSpace(p.legacySpaceID, p.ownerID), scope.RoleID, request.RequestID, "", true, false)
+	}
 	requestBody, err := json.Marshal(request)
 	if err != nil {
 		return err
@@ -105,6 +129,12 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 	if err != nil {
 		return err
 	}
+	if !request.IsInternal && p.services.RelTimeCoordinator != nil {
+		proactive := strings.Contains(strings.ToLower(request.Source), "proactive") || strings.Contains(strings.ToLower(request.Source), "active_message")
+		if err := p.services.RelTimeCoordinator.ForOwner(p.ownerID).FinishRequest(ctx, temporal.RelationshipOwnerSpace(p.legacySpaceID, p.ownerID), scope.RoleID, request.RequestID, current.Content, false, proactive); err != nil {
+			return err
+		}
+	}
 	var previousBody []byte
 	err = p.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='message' AND deleted=0 AND json_extract(body,'$.conversationId')=? AND json_extract(body,'$.role')='user' AND json_extract(body,'$.createdAt')<? ORDER BY json_extract(body,'$.createdAt') DESC LIMIT 1`, p.ownerID, scope.RoleID, request.ConversationID, current.CreatedAt).Scan(&previousBody)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -135,12 +165,6 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 			return coordination.ErrRequestConflict
 		}
 	} else if p.services.Chat != nil {
-		recovery, ok := p.services.Chat.(interface {
-			RecoverOwnedMood(context.Context, coordination.ExecutionScope, time.Time, time.Time, string, interaction.PsycheState) error
-		})
-		if !ok {
-			return errors.New("Owner 情绪后处理端口未接通")
-		}
 		psycheResource, err := p.store.Get(ctx, coordination.RuntimeStateKindPsyche, "role")
 		if err != nil {
 			return err
@@ -152,7 +176,8 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		if err := json.Unmarshal(psycheResource.Body, &currentPsyche); err != nil {
 			return err
 		}
-		if err := recovery.RecoverOwnedMood(ctx, scope, previous, currentAt, request.Source, currentPsyche); err != nil {
+		enabled, threshold, err := ownedMoodDetectionSettings(ctx, p.services.DB)
+		if err != nil {
 			return err
 		}
 		encoded, err := json.Marshal(map[string]any{"hash": fingerprint})
@@ -161,22 +186,14 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		}
 		phaseScope := scope
 		phaseScope.RequestID += "|effects-mood"
-		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: phaseScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: receiptID + "/mood", RoleID: scope.RoleID, Body: encoded}}}); err != nil {
-			return err
+		mutations := []coordination.Mutation{{Kind: "checkpoint", ID: receiptID + "/mood", RoleID: scope.RoleID, Body: encoded}}
+		if enabled {
+			snapshot := buildOwnedEmotionSnapshot(scope, request, previous, currentAt, currentPsyche, threshold)
+			if snapshot.Confidence >= threshold {
+				mutations = append(mutations, coordination.Mutation{Kind: business.EmotionSnapshotKind, ID: snapshot.ID, RoleID: scope.RoleID, Body: ownedEmotionSnapshotBody(snapshot)})
+			}
 		}
-	}
-	if request.ThreadID != "" && p.services.Continuity != nil {
-		thread, err := p.services.Continuity.GetThread(request.ThreadID, p.legacySpaceID)
-		if err != nil {
-			return err
-		}
-		if thread == nil || thread.CharacterID != scope.RoleID {
-			return coordination.ErrWrongOwner
-		}
-		observer := continuity.NewObserver(p.services.Continuity)
-		observer.SetIntelligence(continuity.NewIntelligence(p.services.Chat))
-		observer.SetWaitCoordinator(p.services.ContinuityCoordinator)
-		if err := observer.Observe(ctx, continuity.ObservePayload{Version: "v1", ThreadID: thread.ID, SpaceID: p.legacySpaceID, CharacterID: scope.RoleID, ConversationID: request.ConversationID, RequestID: request.RequestID, ExecutionID: scope.ExecutionID, UserMessage: current.Content, AssistantReply: assistant.Content, Source: request.Source}); err != nil {
+		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: phaseScope, Mutations: mutations}); err != nil {
 			return err
 		}
 	}

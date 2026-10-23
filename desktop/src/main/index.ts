@@ -32,6 +32,7 @@ import { ClipboardBridge } from "./clipboard-bridge";
 import { DesktopDeploymentLifecycle } from "./deployment-lifecycle";
 import { registerRealtimeMediaHandlers } from "./realtime-media";
 import { installDesktopClientDiagnostics } from "./client-diagnostics";
+import { configureDesktopNotificationHost } from "./desktop-notification";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -183,9 +184,7 @@ async function startDesktop(): Promise<void> {
   clearStartupTimer();
 }
 
-if (process.platform === "win32") {
-  app.setAppUserModelId("cn.amitia.desktop");
-}
+configureDesktopNotificationHost();
 
 installDesktopClientDiagnostics();
 

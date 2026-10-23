@@ -250,6 +250,7 @@ func (a *OllamaAdapter) parseResponse(respBytes []byte) (*ModelResult, error) {
 		TotalTokens:  result.PromptEvalCount + result.EvalCount,
 	}
 
+	res.Usage.Reported = UsageReported(respBytes, "eval_count", "prompt_eval_count")
 	return res, nil
 }
 

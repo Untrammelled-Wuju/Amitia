@@ -27,7 +27,8 @@ type MemoryDeletionStatus struct {
 }
 
 type MemoryPrivacyDeletionPort interface {
-	DeleteMemory(context.Context, string, string) (MemoryDeletionStatus, error)
+	PreviewMemoryDeletion(context.Context, string) ([]coordination.PrivacyDeletionTarget, error)
+	DeleteMemoryIntent(context.Context, string, string, coordination.PrivacyDeletionTarget, string) (MemoryDeletionStatus, error)
 	DeletionStatus(context.Context, string) (MemoryDeletionStatus, error)
 	DeletionStats(context.Context) (map[string]interface{}, error)
 	CleanupDeletions(context.Context) (int, error)
@@ -80,6 +81,11 @@ type MemoryDeletionCheck struct {
 }
 
 func (e *Engine) CheckMemoryDeletion(ctx context.Context, request Request, id string) ([]MemoryDeletionCheck, error) {
+	var roleErr error
+	request, roleErr = e.PrivacyRequestRole(ctx, request)
+	if roleErr != nil {
+		return nil, roleErr
+	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return nil, err
@@ -137,6 +143,11 @@ type MemoryDeletionCleanupPort interface {
 }
 
 func (e *Engine) CleanupMemoryDeletions(ctx context.Context, request Request) (int, error) {
+	var roleErr error
+	request, roleErr = e.PrivacyRequestRole(ctx, request)
+	if roleErr != nil {
+		return 0, roleErr
+	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return 0, err
@@ -265,6 +276,11 @@ func (e *Engine) MemoryDeletionState(ctx context.Context, request Request, addre
 }
 
 func (e *Engine) MemoryDeletionStatistics(ctx context.Context, request Request) (map[string]interface{}, error) {
+	var roleErr error
+	request, roleErr = e.PrivacyRequestRole(ctx, request)
+	if roleErr != nil {
+		return nil, roleErr
+	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return nil, err

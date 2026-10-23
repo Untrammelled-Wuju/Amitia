@@ -50,7 +50,7 @@ func WithOwnedContext(ctx context.Context, scope coordination.ExecutionScope, da
 	}
 	conversation := ConversationState{ConversationID: conversationID, StateVersion: version}
 	memories, beliefs := []MemoryItem{}, []ResolvedBelief{}
-	conversation.MessageCount = len(data.LegacyMessages)
+	conversation.MessageCount = 0
 	for _, row := range data.Resources {
 		if row.Kind == "message" {
 			conversation.MessageCount++

@@ -14,6 +14,10 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
+	petdevice "github.com/u-ai/backend/internal/desktoppet/installation/device"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	migrationcore "github.com/u-ai/backend/internal/migration"
@@ -466,15 +470,28 @@ func executeDesktopPetWriteCanary(ctx context.Context, coord coordinator.Install
 	if coord == nil || repo == nil || repo.DB() == nil || runtimeFacade == nil || runtimeFacade.Commands() == nil {
 		return nil, errors.New("desktop pet write canary: production coordinator/repository/runtime wiring incomplete")
 	}
+	var installationCount int64
+	if err := repo.DB().WithContext(ctx).Table("desktop_pet_installations").Count(&installationCount).Error; err != nil {
+		return nil, fmt.Errorf("desktop pet write canary: count installations: %w", err)
+	}
+	if installationCount == 0 {
+		return &migrationcore.CanaryResult{
+			OperationID:       "write-canary-not-applicable-" + uuid.NewString(),
+			OperationTerminal: "not_applicable",
+			Success:           true,
+			Skipped:           true,
+			SkipReason:        "no desktop pet installations require migration",
+		}, nil
+	}
 	type candidateRow struct {
 		InstallationID string `gorm:"column:installation_id"`
 		SpaceID        string `gorm:"column:space_id"`
 		DeviceID       string `gorm:"column:device_id"`
 		RuntimeID      string `gorm:"column:runtime_id"`
-		Status         string `gorm:"column:status"`
+		DefaultAction  string `gorm:"column:default_action_key"`
 	}
 	var candidate candidateRow
-	err := repo.DB().WithContext(ctx).Raw(`SELECT i.id AS installation_id, i.space_id, i.device_id, s.runtime_id, i.status
+	err := repo.DB().WithContext(ctx).Raw(`SELECT i.id AS installation_id, i.space_id, i.device_id, s.runtime_id, i.default_action_key
 FROM desktop_pet_installations i
 JOIN kernel_device_runtime_sessions s ON s.space_id = i.space_id AND s.device_id = i.device_id
 WHERE i.status IN ('enabled','disabled') AND s.status = 'ready'
@@ -483,13 +500,116 @@ LIMIT 1`).Scan(&candidate).Error
 	if err != nil {
 		return nil, fmt.Errorf("desktop pet write canary: select ready runtime candidate: %w", err)
 	}
-	if candidate.InstallationID == "" || candidate.SpaceID == "" || candidate.DeviceID == "" || candidate.RuntimeID == "" {
+	if candidate.InstallationID == "" || candidate.SpaceID == "" || candidate.DeviceID == "" || candidate.RuntimeID == "" || candidate.DefaultAction == "" {
 		return nil, errors.New("desktop pet write canary: no enabled/disabled installation with a ready runtime")
 	}
+	submission, err := coord.ChangeDefaultAction(ctx, coordinator.DefaultActionRequest{
+		DeviceCtx:        installationDeviceContext(candidate.SpaceID, candidate.DeviceID, candidate.RuntimeID),
+		InstallationID:   candidate.InstallationID,
+		DesiredActionKey: candidate.DefaultAction,
+		IdempotencyKey:   "write-canary:" + uuid.NewString(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("desktop pet write canary: start coordinator operation: %w", err)
+	}
+	if submission == nil || submission.OperationID == "" {
+		return nil, errors.New("desktop pet write canary: coordinator returned no operation")
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	completed, err := waitForDesktopPetCanaryOperation(waitCtx, coord, candidate.SpaceID, candidate.DeviceID, submission.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	if completed.Status != operation.OpStatusCompleted || completed.DesiredRevision <= 0 {
+		return nil, fmt.Errorf("desktop pet write canary: operation did not complete: status=%s error=%s", completed.Status, completed.ErrorCode)
+	}
+	var desiredState *desired.RuntimeDesiredState
+	var runtimeProjection *projection.InstallationRuntimeProjection
+	err = repo.Transaction(waitCtx, func(tx installation.RepositoryV2) error {
+		state, err := tx.GetRuntimeDesiredStateTx(tx.DB(), candidate.SpaceID, candidate.DeviceID)
+		if err != nil {
+			return err
+		}
+		desiredState = state
+		projected, err := tx.GetRuntimeProjectionTx(tx.DB(), candidate.SpaceID, candidate.DeviceID)
+		if err != nil {
+			return err
+		}
+		runtimeProjection = projected
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("desktop pet write canary: read desired and actual state: %w", err)
+	}
+	if desiredState == nil || desiredState.InstallationID != candidate.InstallationID || desiredState.DesiredRevision != completed.DesiredRevision {
+		return nil, errors.New("desktop pet write canary: desired state does not match completed operation")
+	}
+	if runtimeProjection == nil || runtimeProjection.InstallationID != candidate.InstallationID || runtimeProjection.AppliedDesiredRevision < desiredState.DesiredRevision {
+		return nil, errors.New("desktop pet write canary: runtime projection has not applied the desired revision")
+	}
+	var command struct {
+		ID     string `gorm:"column:id"`
+		Status string `gorm:"column:status"`
+	}
+	if err := repo.DB().WithContext(waitCtx).Table("desktop_pet_runtime_commands_v2").
+		Select("id,status").
+		Where("space_id=? AND device_id=? AND installation_id=? AND desired_revision=?", candidate.SpaceID, candidate.DeviceID, candidate.InstallationID, desiredState.DesiredRevision).
+		Order("created_at DESC").Limit(1).Scan(&command).Error; err != nil {
+		return nil, fmt.Errorf("desktop pet write canary: load runtime command: %w", err)
+	}
+	if command.ID == "" {
+		return nil, errors.New("desktop pet write canary: runtime command was not persisted")
+	}
+	runtimeCommand, err := runtimeFacade.Commands().GetCommand(command.ID)
+	if err != nil {
+		return nil, fmt.Errorf("desktop pet write canary: verify runtime command: %w", err)
+	}
+	if runtimeCommand == nil || runtimeCommand.Status != string(runtimev1.CommandStatusCompleted) {
+		return nil, errors.New("desktop pet write canary: runtime command did not reach completed")
+	}
 	return &migrationcore.CanaryResult{
-		OperationID: "write-canary-skip-" + uuid.NewString(),
-		Success:     true,
+		OperationID:        completed.ID,
+		CommandID:          command.ID,
+		OperationTerminal:  completed.Status,
+		CommandTerminal:    string(runtimeCommand.Status),
+		ProjectionRevision: runtimeProjection.AppliedDesiredRevision,
+		DesiredRevision:    desiredState.DesiredRevision,
+		Success:            true,
 	}, nil
+}
+
+func installationDeviceContext(spaceID, deviceID, runtimeID string) petdevice.DeviceContext {
+	return petdevice.DeviceContext{
+		SpaceID:   spaceID,
+		DeviceID:  deviceID,
+		RuntimeID: runtimeID,
+	}
+}
+
+func waitForDesktopPetCanaryOperation(ctx context.Context, coord coordinator.InstallationCoordinator, spaceID, deviceID, operationID string) (*operation.InstallationOperation, error) {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		current, err := coord.GetOperationStatus(ctx, spaceID, deviceID, operationID)
+		if err != nil {
+			return nil, fmt.Errorf("desktop pet write canary: read operation: %w", err)
+		}
+		if current == nil {
+			return nil, errors.New("desktop pet write canary: operation disappeared")
+		}
+		if current.IsTerminal() {
+			if current.Status != operation.OpStatusCompleted {
+				return nil, fmt.Errorf("desktop pet write canary: operation failed: status=%s error=%s message=%s", current.Status, current.ErrorCode, current.ErrorMessage)
+			}
+			return current, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("desktop pet write canary: operation wait cancelled: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 func (p *appReadSwitchPort) VerifyProductionReaderNotLegacy(ctx context.Context) error {
@@ -557,135 +677,7 @@ func (p *appWriteLockoutPort) ExecuteCanaryOperation(ctx context.Context) (*migr
 	if p.services == nil {
 		return nil, fmt.Errorf("write lockout port: services not available")
 	}
-	if p.services.InstallationCoordinator == nil {
-		return nil, fmt.Errorf("write lockout port: installation coordinator not available for canary")
-	}
-	if p.services.InstallationRepo == nil {
-		return nil, fmt.Errorf("write lockout port: installation repository not available for canary")
-	}
-	if p.services.DesktopPetRuntimeV1 == nil {
-		return nil, fmt.Errorf("write lockout port: desktop pet runtime v1 not available for canary")
-	}
-	db := p.services.InstallationRepo.DB()
-	if db == nil {
-		return nil, fmt.Errorf("write lockout port: database not available for canary")
-	}
-	var installationCount int64
-	if err := db.WithContext(ctx).Table("desktop_pet_installations").Count(&installationCount).Error; err != nil {
-		return nil, fmt.Errorf("write lockout port: canary precheck failed: %w", err)
-	}
-	if installationCount == 0 {
-		return nil, fmt.Errorf("write lockout port: canary precheck failed: no installations found")
-	}
-	var firstInstallation struct {
-		ID        string `gorm:"column:id"`
-		SpaceID   string `gorm:"column:space_id"`
-		DeviceID  string `gorm:"column:device_id"`
-		PetID     string `gorm:"column:pet_id"`
-		ReleaseID string `gorm:"column:release_id"`
-	}
-	if err := db.WithContext(ctx).Table("desktop_pet_installations").Order("created_at ASC").Limit(1).Scan(&firstInstallation).Error; err != nil {
-		return nil, fmt.Errorf("write lockout port: canary precheck failed to find installation: %w", err)
-	}
-	if firstInstallation.ID == "" {
-		return nil, fmt.Errorf("write lockout port: canary precheck failed: no valid installation found")
-	}
-	canaryOpID := "canary-cutover-" + uuid.NewString()
-	cmdService := p.services.DesktopPetRuntimeV1.Commands()
-	if cmdService == nil {
-		return nil, fmt.Errorf("write lockout port: command service not available for canary")
-	}
-	var canaryConn *runtimev1.Connection
-	var canarySessionID string
-	for _, conn := range p.services.DesktopPetRuntimeV1.ListConnections(firstInstallation.SpaceID) {
-		if conn == nil || conn.GetState() != runtimev1.ConnStateConnected || string(conn.DeviceID) != firstInstallation.DeviceID {
-			continue
-		}
-		sessionID, generation := conn.SessionSnapshot()
-		if sessionID == "" || generation <= 0 {
-			continue
-		}
-		canaryConn = conn
-		canarySessionID = sessionID
-		break
-	}
-	if canaryConn == nil {
-		return nil, fmt.Errorf("write lockout port: canary precheck failed: no connected desktop-pet runtime for device %s", firstInstallation.DeviceID)
-	}
-	canaryCmdID := fmt.Sprintf("canary-recenter:%s", canaryOpID)
-	canaryPayload := fmt.Sprintf(`{"canary":true,"installationId":"%s","operationId":"%s"}`, firstInstallation.ID, canaryOpID)
-	cmd, err := cmdService.CreateEphemeralCommandForSession(
-		firstInstallation.SpaceID,
-		firstInstallation.DeviceID,
-		string(canaryConn.RuntimeID),
-		canarySessionID,
-		firstInstallation.ID,
-		string(runtimev1.CommandTypeRecenterOnce),
-		canaryCmdID,
-		[]byte(canaryPayload),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("write lockout port: canary command creation failed: %w", err)
-	}
-	canaryCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-
-	var completedCmd *runtimev1.RuntimeCommand
-	for {
-		current, getErr := cmdService.GetCommand(cmd.ID)
-		if getErr != nil {
-			return nil, fmt.Errorf("write lockout port: canary command verification failed: %w", getErr)
-		}
-		if current.IsTerminal() {
-			completedCmd = current
-			break
-		}
-		select {
-		case <-canaryCtx.Done():
-			return nil, fmt.Errorf("write lockout port: canary command was not completed by the runtime before timeout: %w", canaryCtx.Err())
-		case <-ticker.C:
-		}
-	}
-	terminalStatus := string(completedCmd.Status)
-	if completedCmd.Status != string(runtimev1.CommandStatusCompleted) {
-		return nil, fmt.Errorf("write lockout port: canary command reached non-success terminal state: %s", terminalStatus)
-	}
-
-	var desired struct {
-		RuntimeID       string `gorm:"column:runtime_id"`
-		InstallationID  string `gorm:"column:installation_id"`
-		DesiredRevision int64  `gorm:"column:desired_revision"`
-	}
-	if err := db.WithContext(canaryCtx).Table("desktop_pet_runtime_desired_states").
-		Where("space_id = ? AND device_id = ?", firstInstallation.SpaceID, firstInstallation.DeviceID).
-		Order("desired_revision DESC").Limit(1).Scan(&desired).Error; err != nil {
-		return nil, fmt.Errorf("write lockout port: canary desired-state lookup failed: %w", err)
-	}
-	if desired.RuntimeID == "" || desired.InstallationID == "" || desired.DesiredRevision <= 0 {
-		return nil, fmt.Errorf("write lockout port: canary desired-state projection is unavailable")
-	}
-	var actual struct {
-		AppliedDesiredRevision int64 `gorm:"column:applied_desired_revision"`
-	}
-	if err := db.WithContext(canaryCtx).Table("desktop_pet_runtime_actual_states_v2").
-		Where("space_id = ? AND device_id = ? AND runtime_id = ? AND installation_id = ?", firstInstallation.SpaceID, firstInstallation.DeviceID, desired.RuntimeID, desired.InstallationID).
-		Order("updated_at DESC").Limit(1).Scan(&actual).Error; err != nil {
-		return nil, fmt.Errorf("write lockout port: canary actual-state lookup failed: %w", err)
-	}
-	if actual.AppliedDesiredRevision <= 0 {
-		return nil, fmt.Errorf("write lockout port: canary actual-state projection is unavailable")
-	}
-	return &migrationcore.CanaryResult{
-		OperationID:        canaryOpID,
-		CommandID:          canaryCmdID,
-		OperationTerminal:  "completed",
-		CommandTerminal:    terminalStatus,
-		ProjectionRevision: actual.AppliedDesiredRevision,
-		DesiredRevision:    desired.DesiredRevision,
-		Success:            actual.AppliedDesiredRevision == desired.DesiredRevision,
-	}, nil
+	return executeDesktopPetWriteCanary(ctx, p.services.InstallationCoordinator, p.services.InstallationRepo, p.services.DesktopPetRuntimeV1)
 }
 
 func (p *appWriteLockoutPort) VerifyCanaryOperation(ctx context.Context, result *migrationcore.CanaryResult) error {
@@ -694,6 +686,19 @@ func (p *appWriteLockoutPort) VerifyCanaryOperation(ctx context.Context, result 
 	}
 	if !result.Success {
 		return fmt.Errorf("write lockout port: canary operation reported failure")
+	}
+	if result.Skipped {
+		if p.services == nil || p.services.InstallationRepo == nil || p.services.InstallationRepo.DB() == nil {
+			return errors.New("write lockout port: skipped canary cannot verify empty installation state")
+		}
+		var installationCount int64
+		if err := p.services.InstallationRepo.DB().WithContext(ctx).Table("desktop_pet_installations").Count(&installationCount).Error; err != nil {
+			return fmt.Errorf("write lockout port: verify skipped canary: %w", err)
+		}
+		if installationCount != 0 {
+			return errors.New("write lockout port: canary skipped while installations exist")
+		}
+		return nil
 	}
 	if result.OperationTerminal != "completed" {
 		return fmt.Errorf("write lockout port: canary operation not terminal completed, got: %s", result.OperationTerminal)
@@ -714,12 +719,12 @@ func (p *appWriteLockoutPort) VerifyCanaryOperation(ctx context.Context, result 
 	if cmdService == nil {
 		return fmt.Errorf("write lockout port: command service not available for canary verification")
 	}
-	verifiedCmd, err := cmdService.GetCommandByIdempotencyKey(result.CommandID)
+	verifiedCmd, err := cmdService.GetCommand(result.CommandID)
 	if err != nil {
-		return fmt.Errorf("write lockout port: failed to verify canary command by idempotency key: %w", err)
+		return fmt.Errorf("write lockout port: failed to verify canary command: %w", err)
 	}
 	if verifiedCmd == nil {
-		return fmt.Errorf("write lockout port: canary command not found by idempotency key: %s", result.CommandID)
+		return fmt.Errorf("write lockout port: canary command not found: %s", result.CommandID)
 	}
 	if !verifiedCmd.IsTerminal() || verifiedCmd.Status != string(runtimev1.CommandStatusCompleted) {
 		return fmt.Errorf("write lockout port: canary command verification failed: status=%s", verifiedCmd.Status)

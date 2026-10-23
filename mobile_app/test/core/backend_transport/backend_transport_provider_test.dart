@@ -1,33 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:amitia_app/core/backend_connection/backend_connection_availability.dart';
-import 'package:amitia_app/core/backend_connection/backend_connection_config.dart';
-import 'package:amitia_app/core/backend_connection/backend_connection_endpoint.dart';
-import 'package:amitia_app/core/backend_connection/backend_connection_credential.dart';
+import 'package:amitia_app/core/backend_connection/backend_connection_source.dart';
 import 'package:amitia_app/core/backend_connection/providers/backend_connection_providers.dart';
 import 'package:amitia_app/core/backend_transport/providers/backend_transport_providers.dart';
 import 'package:amitia_app/core/backend_transport/state/backend_transport_state.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_snapshot.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
-
-BackendConnectionConfig _makeConfig(int generation) {
-  return BackendConnectionConfig(
-    schemaVersion: 1,
-    generation: generation,
-    endpoint: BackendConnectionEndpoint(
-      host: '127.0.0.1',
-      port: 18899,
-      httpScheme: 'http',
-      webSocketScheme: 'ws',
-      livenessPath: '/livez',
-      readinessPath: '/readyz',
-    ),
-    authStrategy: BackendAuthStrategy.localToken,
-    credential: BackendConnectionCredential.tryCreate('a' * 32)!,
-  );
-}
+import 'package:amitia_app/core/runtime/runtime_bridge_provider.dart';
 
 void main() {
   group('TransportAvailable generation', () {
@@ -46,6 +26,7 @@ void main() {
 
   group('backendConnectionProvider watches runtimeSnapshotProvider', () {
     test('STOPPED does not resolve native connection', () async {
+      final source = _CountingSource();
       final container = ProviderContainer(
         overrides: [
           runtimeSnapshotProvider.overrideWith((ref) async* {
@@ -57,15 +38,22 @@ void main() {
               runtimeAvailable: true,
             );
           }),
+          backendConnectionSourceProvider.overrideWithValue(source),
         ],
       );
+      addTearDown(container.dispose);
 
-      final result = await container.read(backendConnectionProvider.future).catchError((_) => BackendConnectionUnavailable());
+      await container.read(runtimeSnapshotProvider.future);
+      final result = await container
+          .read(backendConnectionProvider.future)
+          .catchError((_) => const BackendConnectionUnavailable());
 
       expect(result, isA<BackendConnectionUnavailable>());
+      expect(source.resolveCallCount, 0);
     });
 
     test('STARTING does not resolve native connection', () async {
+      final source = _CountingSource();
       final container = ProviderContainer(
         overrides: [
           runtimeSnapshotProvider.overrideWith((ref) async* {
@@ -77,12 +65,18 @@ void main() {
               runtimeAvailable: true,
             );
           }),
+          backendConnectionSourceProvider.overrideWithValue(source),
         ],
       );
+      addTearDown(container.dispose);
 
-      final result = await container.read(backendConnectionProvider.future).catchError((_) => BackendConnectionUnavailable());
+      await container.read(runtimeSnapshotProvider.future);
+      final result = await container
+          .read(backendConnectionProvider.future)
+          .catchError((_) => const BackendConnectionUnavailable());
 
       expect(result, isA<BackendConnectionUnavailable>());
+      expect(source.resolveCallCount, 0);
     });
   });
 
@@ -108,4 +102,14 @@ void main() {
       expect(generation, 0);
     });
   });
+}
+
+class _CountingSource implements BackendConnectionSource {
+  int resolveCallCount = 0;
+
+  @override
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
+    resolveCallCount++;
+    return const BackendConnectionUnavailable();
+  }
 }

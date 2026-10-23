@@ -51,7 +51,7 @@ export function useOwnedSpeech(onInvalidated: () => void = () => {}) {
     invalidate();
   });
 
-  async function synthesizeIfBound(text: string, characterId?: string): Promise<string | null> {
+  async function synthesizeIfBound(text: string, characterId?: string, speakerId?: string): Promise<string | null> {
     const captured = generation;
     const deployment = await getDeploymentConfig();
     if (captured !== generation) throw new Error("服务已切换，旧语音请求已中断");
@@ -75,7 +75,7 @@ export function useOwnedSpeech(onInvalidated: () => void = () => {}) {
       const expected = snapshot?.executionScope as OwnedExecutionScope;
       if (!expected?.coreId || expected.roleId !== role || !expected.resourceOwnerId || authorityFields.some((key) => expected[key] === undefined)) throw new Error("角色语音归属无法确认，请重新加载角色");
       const requestId = crypto.randomUUID();
-      const result = unwrap(await apiClient.post("/api/device-mesh/v1/business/speech", { requestId, characterId: role, expectedExecutionScope: expected, text }, options));
+      const result = unwrap(await apiClient.post("/api/device-mesh/v1/business/speech", { requestId, characterId: role, expectedExecutionScope: expected, text, speakerId: speakerId?.trim() || undefined }, options));
       current();
       await validateOwnedSpeechResult(result, requestId, expected);
       const latest = unwrap(await query());

@@ -131,25 +131,25 @@ func (e *Engine) summaryHistory(ctx context.Context, request Request, authority 
 				rows[key] = message
 				return nil
 			}
-			for _, raw := range snapshot.LegacyMessages {
-				if err := appendMessage(raw, "", 0); err != nil {
-					return nil, nil, err
-				}
-			}
 			for _, resource := range snapshot.Resources {
 				if resource.Kind != "message" || resource.Deleted {
 					continue
 				}
-				if resource.OwnerID != snapshot.OwnerID || resource.RoleID != snapshot.Role.ID || resource.Revision < 1 {
+				legacyReadOnly := resource.Origin == "legacy" && resource.ReadOnly && resource.Revision == 0
+				if resource.OwnerID != snapshot.OwnerID || resource.RoleID != snapshot.Role.ID || resource.Revision < 1 && !legacyReadOnly {
 					return nil, nil, coordination.ErrWrongOwner
 				}
 				if !coordination.ResourceUsable(resource.Body, time.Now()) {
 					continue
 				}
-				if err := appendMessage(resource.Body, resource.ID, resource.Revision); err != nil {
+				revision := resource.Revision
+				if legacyReadOnly {
+					revision = 0
+				}
+				if err := appendMessage(resource.Body, resource.ID, revision); err != nil {
 					return nil, nil, err
 				}
-				if resource.OwnerID == authority.ResourceOwnerID {
+				if !legacyReadOnly && resource.OwnerID == authority.ResourceOwnerID {
 					dependencies["message/"+resource.ID] = coordination.ResourceVersion{Kind: "message", ID: resource.ID, Revision: resource.Revision}
 				}
 			}

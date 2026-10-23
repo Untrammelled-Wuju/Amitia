@@ -32,8 +32,9 @@ func NewMemoryBackupContributor(port MemoryArchivePort) *MemoryBackupContributor
 func (*MemoryBackupContributor) ID() string             { return "memory" }
 func (*MemoryBackupContributor) Name() string           { return "Memory" }
 func (*MemoryBackupContributor) Dependencies() []string { return []string{"character", "chat"} }
+func (*MemoryBackupContributor) ComponentIDs() []string { return []string{OwnedMemoryBackupComponent} }
 func (c *MemoryBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
-	if req.Scope == dataportability.ScopeSettings {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter && req.EffectiveScope() != dataportability.ScopeMemory {
 		return nil, nil
 	}
 	if c.port == nil {
@@ -42,13 +43,17 @@ func (c *MemoryBackupContributor) Plan(ctx context.Context, req dataportability.
 	return []dataportability.BackupComponentPlan{{ID: OwnedMemoryBackupComponent, LogicalName: "memory.owned.v1", Kind: dataportability.KindDataset, Required: true, SourceOfTruth: true, Sensitive: true}}, nil
 }
 func (c *MemoryBackupContributor) Export(ctx context.Context, req dataportability.BackupRequest, out dataportability.BackupWriter) error {
-	if req.Scope == dataportability.ScopeSettings {
+	if req.EffectiveScope() != dataportability.ScopeAll && req.EffectiveScope() != dataportability.ScopeCharacter && req.EffectiveScope() != dataportability.ScopeMemory {
 		return nil
 	}
 	if c.port == nil {
 		return errors.New("统一记忆备份入口不可用")
 	}
-	archive, err := c.port.Archive(ctx, req.CharacterID)
+	roleID := ""
+	if req.EffectiveScope() == dataportability.ScopeCharacter {
+		roleID = req.CharacterID
+	}
+	archive, err := c.port.Archive(ctx, roleID)
 	if err != nil {
 		return err
 	}

@@ -813,28 +813,6 @@ func (w *Worker) buildProcessingSnapshot(task *processing.ProcessingTask, action
 	allActionsSucceeded := total > 0 && succeeded == total
 	hasAtLeastOneSucceeded := succeeded > 0
 
-	pkg, pkgErr := w.repo.GetPackageByProcessingTaskID(task.ID)
-	packageExists := pkgErr == nil && pkg != nil
-	packageReady := false
-	packagePathValid := false
-	manifestValid := false
-	hashValid := false
-	includedActionsMatch := false
-
-	if packageExists {
-		packageReady = pkg.Status == "succeeded" || pkg.Status == "ready"
-		packagePathValid = pkg.PackagePath != "" && pathExists(filepath.Join(w.dataDir, pkg.PackagePath))
-		manifestValid = pkg.ManifestPath != "" && fileExists(filepath.Join(w.dataDir, pkg.ManifestPath))
-		hashValid = pkg.PackageHash != ""
-		includedActionsMatch = checkIncludedActionsMatch(pkg.IncludedActions, actions)
-	} else {
-		packageReady = true
-		packagePathValid = true
-		manifestValid = true
-		hashValid = true
-		includedActionsMatch = true
-	}
-
 	cancelRequested := task.CancelRequestedAt != ""
 	actualProgress := task.Progress
 	if actualProgress == 0 {
@@ -847,50 +825,9 @@ func (w *Worker) buildProcessingSnapshot(task *processing.ProcessingTask, action
 		HasActiveChildren:            hasActiveChildren,
 		AllActionsSucceeded:          allActionsSucceeded,
 		HasAtLeastOneActionSucceeded: hasAtLeastOneSucceeded,
-		PackageExists:                packageExists,
-		PackageReady:                 packageReady,
-		PackagePathValid:             packagePathValid,
-		ManifestValid:                manifestValid,
-		HashValid:                    hashValid,
-		IncludedActionsMatch:         includedActionsMatch,
 		AllowPartialResult:           true,
 		ActualProgress:               actualProgress,
 	}
-}
-
-func checkIncludedActionsMatch(includedActionsJSON string, actions []processing.ProcessingAction) bool {
-	var included []string
-	if err := json.Unmarshal([]byte(includedActionsJSON), &included); err != nil {
-		return false
-	}
-	if len(included) == 0 {
-		return false
-	}
-	includedSet := make(map[string]bool, len(included))
-	for _, key := range included {
-		includedSet[key] = true
-	}
-	for _, a := range actions {
-		if a.Excluded == 1 {
-			continue
-		}
-		if a.Status == "succeeded" {
-			if !includedSet[a.ActionKey] {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
-
-func pathExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }
 
 func (w *Worker) recoverStuckTasks(ctx context.Context) {

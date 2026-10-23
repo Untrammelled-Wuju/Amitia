@@ -88,6 +88,8 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
   late int _intimacyExpressionCap;
   late String _violationAction;
   late int _auditLogRetentionDays;
+  late int _revision;
+  int _bdiRevision = 0;
   bool _saving = false;
   bool _logsLoading = false;
 
@@ -106,6 +108,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
     _intimacyExpressionCap = config.intimacyExpressionCap;
     _violationAction = config.violationAction;
     _auditLogRetentionDays = config.auditLogRetentionDays;
+    _revision = config.revision;
   }
 
   SafetyConfigDto get _current => SafetyConfigDto(
@@ -120,12 +123,16 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
     intimacyExpressionCap: _intimacyExpressionCap,
     violationAction: _violationAction,
     auditLogRetentionDays: _auditLogRetentionDays,
+    revision: _revision,
   );
 
   Future<void> _saveConfig() async {
     setState(() => _saving = true);
     try {
-      await ref.read(safetyServiceProvider).updateConfig(_current.toJson());
+      final updated = await ref
+          .read(safetyServiceProvider)
+          .updateConfig(_current.toJson());
+      if (updated != null) _revision = updated.revision;
       if (!mounted) return;
       ref.invalidate(_safetyConfigProvider);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -238,6 +245,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
       final current =
           await ref.read(safetyServiceProvider).bdiConfig() ??
           <String, dynamic>{};
+      _bdiRevision = int.tryParse((current['revision'] ?? 0).toString()) ?? 0;
       if (!mounted) return;
       final controller = TextEditingController(
         text: const JsonEncoder.withIndent('  ').convert(current),
@@ -286,9 +294,14 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                   final decoded = jsonDecode(controller.text);
                   if (decoded is! Map)
                     throw const FormatException('根节点必须是 JSON 对象');
-                  await ref
+                  final payload = Map<String, dynamic>.from(decoded)
+                    ..['expectedRevision'] = _bdiRevision;
+                  final updated = await ref
                       .read(safetyServiceProvider)
-                      .updateBdiConfig(Map<String, dynamic>.from(decoded));
+                      .updateBdiConfig(payload);
+                  _bdiRevision =
+                      int.tryParse((updated?['revision'] ?? 0).toString()) ??
+                      _bdiRevision + 1;
                   if (dialogContext.mounted) Navigator.pop(dialogContext, true);
                 } catch (e) {
                   if (dialogContext.mounted) {
@@ -418,7 +431,15 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                             final createdAt = (item['createdAt'] ?? '')
                                 .toString();
                             final handled =
-                                item['handled'] == true || item['handled'] == 1;
+                                (item['status'] ?? '').toString() ==
+                                    'resolved' ||
+                                item['handled'] == true ||
+                                item['handled'] == 1;
+                            final revision =
+                                int.tryParse(
+                                  (item['revision'] ?? 1).toString(),
+                                ) ??
+                                1;
                             return ListTile(
                               leading: Icon(
                                 handled
@@ -441,6 +462,34 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
                                 style: AppTypography.caption(sheetContext),
                               ),
                               isThreeLine: description.isNotEmpty,
+                              trailing: handled
+                                  ? null
+                                  : TextButton(
+                                      onPressed: () async {
+                                        try {
+                                          await ref
+                                              .read(safetyServiceProvider)
+                                              .handleSafetyEvent(
+                                                (item['id'] ?? '').toString(),
+                                                revision,
+                                              );
+                                          if (sheetContext.mounted)
+                                            Navigator.pop(sheetContext);
+                                          if (mounted) {
+                                            await _showSafetyEvents();
+                                          }
+                                        } catch (e) {
+                                          if (sheetContext.mounted) {
+                                            ScaffoldMessenger.of(
+                                              sheetContext,
+                                            ).showSnackBar(
+                                              SnackBar(content: Text('处理失败：$e')),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      child: const Text('确认处理'),
+                                    ),
                             );
                           },
                         ),
@@ -534,7 +583,11 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
           _optionTile(
             title: '违规处理方式',
             value: _violationAction,
-            options: const {'block': '阻止', 'warn': '警告', 'audit': '仅记录'},
+            options: const {
+              'block': '阻止',
+              'rewrite': '改写',
+              'audit_only': '仅记录',
+            },
             onChanged: (v) => setState(() => _violationAction = v),
           ),
           _divider(),

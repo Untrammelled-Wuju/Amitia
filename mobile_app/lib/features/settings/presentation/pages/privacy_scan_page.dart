@@ -42,6 +42,7 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
   final TextEditingController _targetIdController = TextEditingController();
   final TextEditingController _reasonController = TextEditingController();
   String _targetType = 'memory';
+  String _legacyDeletionId = '';
   String _deletionScope = 'all';
 
   @override
@@ -61,9 +62,11 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
     if (mounted) setState(() => _loading = true);
     try {
       final service = ref.read(privacyServiceProvider);
-      final values = await Future.wait([service.results(), service.deletionStats()]);
-      final data = values[0];
-      final deletionStats = values[1];
+      final data = await service.results();
+      Map<String, dynamic> deletionStats = const {};
+      try {
+        deletionStats = await service.deletionStats();
+      } catch (_) {}
       final findings = _maps(data['items']);
       final history = _maps(data['history']);
       if (!mounted) return;
@@ -237,29 +240,32 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
       if (targetId.isEmpty) _snack('请输入要删除的数据 ID', error: true);
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('确认数据生命周期删除'),
-        content: Text('将阻止读取并清理 $_targetType/$targetId 相关数据。该操作不可撤销。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('提交删除')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
     setState(() => _deletionBusy = true);
     try {
-      final result = await ref.read(privacyServiceProvider).requestDeletion(
-            targetId: targetId,
-            targetType: _targetType,
-            scope: _deletionScope,
-            reason: _reasonController.text.trim(),
-          );
+      final service = ref.read(privacyServiceProvider);
+      final intents = await service.previewDeletion(targetId:targetId,targetType:_targetType,scope:_deletionScope,reason:_reasonController.text.trim(),legacyDeletionId:_legacyDeletionId);
+      if (!mounted) return;
+      Map<String,dynamic>? intent;
+      if (intents.length == 1) {
+        intent = intents.first;
+      } else {
+        intent = await showDialog<Map<String,dynamic>>(context:context,builder:(dialogContext) => SimpleDialog(title:const Text('请选择要删除的数据来源'),children:intents.map((item) { final target = item['target'] as Map;return SimpleDialogOption(onPressed:()=>Navigator.pop(dialogContext,item),child:Text('${target['ownerId']} / ${target['roleId']} / ${target['legacy'] == true ? '历史记录' : '当前记录'}')); }).toList(growable:false)));
+      }
+      if (!mounted || intent == null) return;
+      final target = intent['target'];
+      final source = target is Map ? target['ownerId'] : '当前记忆持有方';
+      final confirmed = await showDialog<bool>(context:context,builder:(dialogContext) => AlertDialog(title:const Text('确认数据生命周期删除'),content:Text('删除 ${intent!['targetType']}/$targetId；范围：${intent['scope']}；数据来源：$source。该操作不可撤销。'),actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext,false),child:const Text('取消')),FilledButton(onPressed:()=>Navigator.pop(dialogContext,true),child:const Text('提交删除'))]));
+      if (confirmed != true) return;
+      final result = await service.requestDeletion(intent:intent);
       if (!mounted) return;
       setState(() => _deletionStatus = result);
-      _snack('删除请求已创建，读取已被阻止');
+      if (result['status'] == 'completed') {
+        _snack('所选范围已完成并通过存储核验');
+      } else if (result['retrievalBlocked'] == true) {
+        _snack('所选范围已停止读取，派生数据仍在清理，请稍后核验');
+      } else {
+        _snack('删除尚未完成，请查看状态并重试清理',error:true);
+      }
       await _loadDeletionStats();
     } catch (error) {
       _snack('创建删除请求失败：${_message(error)}', error: true);
@@ -533,18 +539,27 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
 
   Widget _buildDeletionLifecycle(BuildContext context) {
     final status = (_deletionStatus?['status'] ?? '').toString();
-    final total = _deletionStats['total'] ?? _deletionStats['totalTombstones'] ?? 0;
-    final pending = _deletionStats['pending'] ?? _deletionStats['pendingCleanup'] ?? 0;
+    final total = _deletionStats['total'] ?? _deletionStats['totalTombstones'] ?? '—';
+    final pending = _deletionStats['pending'] ?? _deletionStats['pendingCleanup'] ?? '—';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('数据生命周期删除', style: AppTypography.sectionTitle(context)),
+        if ((_deletionStatus?['lastError'] ?? '').toString().isNotEmpty)
+          Text(_deletionStatus!['lastError'].toString(),style: AppTypography.bodySmall(context)),
         SizedBox(height: AppSpacing.sm),
-        Text('对指定记忆、消息、会话或角色执行跨存储删除。提交后会立即阻止相关数据再次被检索。', style: AppTypography.bodySmall(context)),
+        Text('按原始数据归属删除指定记忆、消息、会话或角色数据，以持有方回执确认读取阻断和清理结果。', style: AppTypography.bodySmall(context)),
         SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Column(
             children: [
+              if (_maps(_deletionStats['legacyRecords']).isNotEmpty)
+                DropdownButtonFormField<String>(
+                  initialValue: _legacyDeletionId,
+                  decoration: const InputDecoration(labelText: '选择需要确认归属的旧删除任务'),
+                  items: [const DropdownMenuItem(value:'',child:Text('不迁移旧任务')),..._maps(_deletionStats['legacyRecords']).map((item) => DropdownMenuItem(value:item['id'].toString(),child:Text('${item['targetType']} / ${item['targetId']}')))],
+                  onChanged:_deletionBusy ? null : (value) => setState(() { _legacyDeletionId=value ?? '';for (final item in _maps(_deletionStats['legacyRecords'])) { if (item['id']==value) { _targetType=item['targetType'].toString();_deletionScope=item['scope'].toString();_targetIdController.text=item['targetId'].toString(); } } }),
+                ),
               Row(
                 children: [
                   Expanded(

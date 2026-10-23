@@ -36,7 +36,7 @@ func (e *Engine) ownedCheckpointRevision(ctx context.Context, scope coordination
 	return row.Revision, nil
 }
 
-func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.ExecutionScope, conversation string) error {
+func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.ExecutionScope, conversation string, turnErr error) error {
 	unlock := e.lock("runtime-checkpoint\x00" + RuntimeKey(scope, conversation))
 	defer unlock()
 	port, ok := e.data.(coordination.ResourcePort)
@@ -59,11 +59,15 @@ func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.Exe
 	}
 	runtime := ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, conversation)).ActiveTurn
 	if runtime == nil || runtime.RequestID != scope.RequestID || runtime.TurnID != scope.TurnID || runtime.ExecutionID != scope.ExecutionID {
-		return coordination.ErrWrongOwner
-	}
-	saved.Runtime = runtime
-	if runtime.Status == "failed" || runtime.Status == "interrupted" {
-		saved.Status = runtime.Status
+		if turnErr == nil {
+			return coordination.ErrWrongOwner
+		}
+		saved.Status = "failed"
+	} else {
+		saved.Runtime = runtime
+		if runtime.Status == "failed" || runtime.Status == "interrupted" {
+			saved.Status = runtime.Status
+		}
 	}
 	commitScope := scope
 	commitScope.RequestID = fmt.Sprintf("runtime/%s/%d", scope.RequestID, row.Revision)
@@ -190,6 +194,12 @@ func publishRuntime(ctx context.Context, inference Inference, event Event) error
 	blockID := ""
 	if block != "" {
 		blockID = inference.Scope.TurnID + "/" + block
+	}
+	payload["spaceId"] = inference.Scope.SpaceID
+	payload["conversationId"] = inference.ConversationID
+	payload["characterId"] = inference.Scope.RoleID
+	if inference.Ingress != nil {
+		payload["source"] = inference.Ingress.Source
 	}
 	_, err := ownedRuntimeManager.Publish(ctx, conversationstream.AgentUIEvent{ConversationID: RuntimeKey(inference.Scope, inference.ConversationID), RequestID: inference.Scope.RequestID, TurnID: inference.Scope.TurnID, ExecutionID: inference.Scope.ExecutionID, BlockID: blockID, CallID: call, Type: typeName, Status: status, Payload: payload}, false)
 	return err

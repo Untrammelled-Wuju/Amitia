@@ -487,28 +487,12 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 		for _, source := range []coordination.DataPort{services.DeviceMesh.CoreDataPort, services.DeviceMesh.LocalDeviceDataPort} {
 			if port, ok := source.(*meshLocalDataPort); ok {
 				go runOwnedProjections(appCtx, port)
+				go runOwnedPrivacyDeletions(appCtx, port)
 			}
 		}
 	}
-	if services.ContinuityCoordinator != nil {
-		services.ContinuityCoordinator.Start(appCtx)
-	}
-
 	selfHeal := startSelfHealMonitor(appCtx, services.DB, r.Addr)
 	defer selfHeal.Stop()
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				services.DataLifecycle.ExecuteOutboxCleanup()
-				services.DataLifecycle.ExecuteRecalculationTasks()
-			case <-appCtx.Done():
-				return
-			}
-		}
-	}()
 
 	go services.Reconciliation.RunWorker(appCtx, 10*time.Minute, mindruntime.DefaultReconciliationWorkerTargets())
 	return nil
