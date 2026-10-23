@@ -22,6 +22,7 @@ export interface UpdateManagerHooks {
 }
 
 const RELEASES_URL = "https://amitia.untrammelled.top/amitia";
+const AUTO_UPDATE_SUPPORTED = process.platform === "win32";
 
 function updatePreferencePath(): string {
   return path.join(getAmitiaDataDir(), "update-preferences.json");
@@ -177,6 +178,10 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
   });
 
   ipcMain.handle("update:check-on-startup", async () => {
+    if (!AUTO_UPDATE_SUPPORTED) {
+      mainWindow?.webContents.send("update:not-available");
+      return null;
+    }
     try {
       const result = await autoUpdater.checkForUpdates();
       return result;
@@ -238,6 +243,10 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
   });
 
   ipcMain.handle("update:check-now", async () => {
+    if (!AUTO_UPDATE_SUPPORTED) {
+      mainWindow?.webContents.send("update:not-available");
+      return null;
+    }
     try {
       const result = await autoUpdater.checkForUpdates();
       return result;
@@ -269,6 +278,10 @@ export function registerUpdateManager(win: BrowserWindow, hooks: UpdateManagerHo
 export async function waitForStartupCheck(): Promise<void> {
   if (isDevMode()) {
     console.log("[UpdateManager] 开发模式, 跳过更新检查");
+    return;
+  }
+  if (!AUTO_UPDATE_SUPPORTED) {
+    console.log("[UpdateManager] 当前平台不使用桌面自动更新通道, 跳过更新检查");
     return;
   }
   try {
