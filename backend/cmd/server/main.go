@@ -425,10 +425,7 @@ func main() {
 		log.Info("SurrealDB: disabled by provider configuration")
 	}
 
-	srv := &http.Server{
-		Addr:    serverAddr,
-		Handler: nil,
-	}
+	srv := newHTTPServer(serverAddr, appCtx)
 	serverErr := make(chan error, 1)
 	listenPort := actualPort
 
@@ -568,6 +565,16 @@ func runCoreServer(appCtx context.Context, srv *http.Server, listener net.Listen
 		if err := <-serverErr; err != nil && err != http.ErrServerClosed {
 			log.Error("服务退出异常:", err)
 		}
+	}
+}
+
+func newHTTPServer(addr string, appCtx context.Context) *http.Server {
+	return &http.Server{
+		Addr:    addr,
+		Handler: nil,
+		BaseContext: func(net.Listener) context.Context {
+			return appCtx
+		},
 	}
 }
 
