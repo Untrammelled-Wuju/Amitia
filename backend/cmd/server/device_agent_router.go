@@ -38,7 +38,7 @@ var localMeshHandler *agent.LocalHandler
 
 func setupDeviceAgentRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
+	r := withRequestContextFallback(gin.New())
 	r.Use(gin.Recovery())
 	r.Use(middleware.TraceMiddleware())
 	r.Use(timeoutpolicy.Headers())

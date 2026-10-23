@@ -48,6 +48,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
+	"github.com/u-ai/backend/internal/extension/mcpruntime/api"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -55,7 +56,6 @@ import (
 	"github.com/u-ai/backend/internal/imagegen"
 	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/knowledge"
-	"github.com/u-ai/backend/internal/extension/mcpruntime/api"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
@@ -130,7 +130,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	r := gin.Default()
+	r := withRequestContextFallback(gin.Default())
 	r.Use(middleware.TraceMiddleware())
 	r.Use(timeoutpolicy.Headers())
 	r.Use(security.CorsMiddleware(security.CorsConfig{
