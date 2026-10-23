@@ -187,6 +187,10 @@ assisted 安装器的更新行为（已实现并验证）：
 SSH发布流程：
 
 - 服务器地址：8.156.72.48
+- 最高权限部署别名：`amitia-root`，对应用户 `root`，私钥 `/Users/untrammelled/.ssh/codex_ashareking_ed25519_20261023`，权限必须保持 `600`
+- 最高权限部署公钥：`ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILg1LKnxpOH7ZfuXZuHQRHRTC7CIXh+7eDzbygK5F8sJ codexdeploy@amitia-20261023`
+- 最高权限部署公钥指纹：`SHA256:ckQvF9h7VeUtfXDFLI5Q0brkpD5msthHLuJfHdimM9g`
+- 私钥、公钥和 `~/.ssh/config` 禁止上传项目或 Git；服务器首次信任时只能将上述公钥写入 `/root/.ssh/authorized_keys`，并使用目录 `700`、文件 `600`
 - 部署用户：codexdeploy
 - 专用私钥：C:\Users\Untrammelled\.ssh\codex_ashareking_ed25519_20260912
 - Windows OpenSSH 可能存在兼容问题，上传使用 Paramiko，连接时禁用 agent 和自动查找密钥
