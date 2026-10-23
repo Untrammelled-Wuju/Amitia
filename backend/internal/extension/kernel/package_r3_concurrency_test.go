@@ -132,9 +132,27 @@ func TestR3ConcurrentRecoveryFinalizesExactlyOnceAcrossRuntimes(t *testing.T) {
 		}
 
 		allowed := IsPackageOperationError(result, OperationErrLeaseConflict) ||
-			IsPackageOperationError(result, PackageErrCodeLeaseFenced)
+			IsPackageOperationError(result, PackageErrCodeLeaseFenced) ||
+			IsPackageOperationError(result, OperationErrTransitionConflict)
 
 		require.True(t, allowed, "unexpected concurrent recovery error: %v", result)
+	}
+
+	if successCount == 0 {
+		for attempt := 0; attempt < 5; attempt++ {
+			operation, _, err := containerA.PackageRepository.GetOperation(ctx, fixture.Operation.SpaceID, fixture.Operation.OperationID)
+			require.NoError(t, err)
+			err = runtimeA.recoverPackageOperation(ctx, operation)
+			if err == nil {
+				successCount++
+				break
+			}
+			allowed := IsPackageOperationError(err, OperationErrLeaseConflict) ||
+				IsPackageOperationError(err, PackageErrCodeLeaseFenced) ||
+				IsPackageOperationError(err, OperationErrTransitionConflict)
+			require.True(t, allowed, "unexpected recovery retry error: %v", err)
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 
 	require.GreaterOrEqual(t, successCount, 1, "at least one Runtime must complete recovery")

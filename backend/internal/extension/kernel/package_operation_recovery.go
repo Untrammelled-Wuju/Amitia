@@ -131,9 +131,21 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 		}
 	}()
 	ctx = sagaCtx
-	_, steps, err := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
+	authoritative, steps, err := r.container.PackageRepository.GetOperation(ctx, operation.SpaceID, operation.OperationID)
 	if err != nil {
 		return r.requirePackageRecovery(ctx, operation, "operation journal unavailable", err, guard)
+	}
+	operation = authoritative
+	switch PackageOperationStatus(operation.Status) {
+	case PackageOperationCompleted, PackageOperationFailed, PackageOperationCancelled:
+		if releaseErr := r.releasePackageExtensionLease(ctx, operation.ExtensionID, operation.OperationID, guard.FencingToken); releaseErr != nil {
+			return r.requirePackageRecovery(ctx, operation, "terminal operation lease release failed", releaseErr, guard)
+		}
+		leaseGuard.MarkLeaseReleased()
+		if operation.OperationType == "uninstall" && PackageOperationStatus(operation.Status) == PackageOperationCompleted {
+			return r.verifyUninstallFinalizedState(ctx, operation)
+		}
+		return nil
 	}
 	completed := completedPackageSteps(steps)
 	switch operation.OperationType {
