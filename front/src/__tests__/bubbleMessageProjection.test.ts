@@ -5,6 +5,13 @@ import { flowBubbleText, projectBubbleContent, splitBubbleText } from "../conver
 import type { AssistantTurnData } from "../conversation/rendering/types";
 
 describe("bubble message delivery", () => {
+  it("ends thinking independently and flushes text when output ends before saving", () => {
+    const raw = { id: "phase", role: "assistant", status: "streaming", content: "正文末段", reasoningContent: "思考内容", reasoningComplete: true };
+    const output = projectBubbleContent(normalizeAIMessage(raw));
+    expect(output.find(item => item.kind === "thinking")).toMatchObject({ complete: true, content: "思考内容" });
+    expect(projectBubbleContent(normalizeAIMessage({ ...raw, outputComplete: true })).find(item => item.kind === "text")).toMatchObject({ content: "正文末段" });
+    expect(normalizeAIMessage({ ...raw, reasoningComplete: false }).thinking?.state).toBe("streaming");
+  });
   beforeEach(() => { vi.resetModules(); localStorage.clear(); });
 
   it("delivers only delimited text and flushes the tail at completion", () => {

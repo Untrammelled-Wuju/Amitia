@@ -45,6 +45,8 @@ class ChatMessage {
   final MessageRole role;
   final MessageType type;
   final String content;
+  final bool reasoningComplete;
+  final bool outputComplete;
   final String reasoningContent;
   final int reasoningDurationMs;
   final DateTime time;
@@ -79,6 +81,8 @@ class ChatMessage {
     required this.role,
     required this.type,
     required this.content,
+    this.reasoningComplete = false,
+    this.outputComplete = false,
     this.reasoningContent = '',
     this.reasoningDurationMs = 0,
     required this.time,

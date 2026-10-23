@@ -88,9 +88,9 @@ export function projectBubbleContent(message: AIMessageData, turn?: AssistantTur
       }
     }
   } else {
-    const complete = message.role !== "assistant" || isBubbleContentComplete(message.state) || turnComplete;
+    const complete = message.role !== "assistant" || message.raw?.outputComplete === true || isBubbleContentComplete(message.state) || turnComplete;
     if (message.thinking) {
-      output.push({ key: `${message.id}:thinking`, kind: "thinking", content: complete ? message.thinking.content : "", complete, duration: message.thinking.duration });
+      output.push({ key: `${message.id}:thinking`, kind: "thinking", content: complete || message.thinking.state === "completed" ? message.thinking.content : "", complete: complete || message.thinking.state === "completed", duration: message.thinking.duration });
     }
     const content = message.blocks.length && /^\[(语音|图片|视频|文件)\]$/.test(message.markdown.trim()) ? "" : message.markdown;
     const texts = message.role === "user" ? (content.trim() ? [content] : []) : splitBubbleText(content, complete);

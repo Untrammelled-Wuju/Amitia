@@ -21,20 +21,28 @@ class ConversationMessageLedger {
     if (normalized.isEmpty) return null;
     ChatMessage? found;
     for (final message in _items.values) {
-      if (message.id != normalized || sourceOwnerId != null && message.sourceOwnerId != sourceOwnerId) continue;
+      if (message.id != normalized ||
+          sourceOwnerId != null && message.sourceOwnerId != sourceOwnerId)
+        continue;
       if (found != null) return null;
       found = message;
     }
     return found;
   }
 
-  ChatMessage? findByRenderId(String renderId, {MessageRole? role, String? sourceOwnerId}) {
+  ChatMessage? findByRenderId(
+    String renderId, {
+    MessageRole? role,
+    String? sourceOwnerId,
+  }) {
     final normalized = renderId.trim();
     if (normalized.isEmpty) return null;
     ChatMessage? found;
     for (final message in _items.values) {
       if (role != null && message.role != role) continue;
-      if (message.renderId != normalized || sourceOwnerId != null && message.sourceOwnerId != sourceOwnerId) continue;
+      if (message.renderId != normalized ||
+          sourceOwnerId != null && message.sourceOwnerId != sourceOwnerId)
+        continue;
       if (found != null) return null;
       found = message;
     }
@@ -88,7 +96,11 @@ class ConversationMessageLedger {
     }
     final renderId = message.renderId.trim();
     if (renderId.isNotEmpty) {
-      final byRenderId = findByRenderId(renderId, role: message.role, sourceOwnerId: message.sourceOwnerId);
+      final byRenderId = findByRenderId(
+        renderId,
+        role: message.role,
+        sourceOwnerId: message.sourceOwnerId,
+      );
       if (byRenderId != null) return _key(byRenderId);
     }
     return null;
@@ -124,6 +136,8 @@ class ConversationMessageLedger {
         a.type == b.type &&
         a.content == b.content &&
         a.reasoningContent == b.reasoningContent &&
+        a.reasoningComplete == b.reasoningComplete &&
+        a.outputComplete == b.outputComplete &&
         a.reasoningDurationMs == b.reasoningDurationMs &&
         a.time == b.time &&
         a.sequence == b.sequence &&

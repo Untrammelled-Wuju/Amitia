@@ -144,12 +144,14 @@ List<BubbleContentItem> projectBubbleContent({
         isBubbleContentComplete(message.state.name) ||
         turnComplete;
     if (message.thinking != null) {
+      final thinkingComplete =
+          complete || message.thinking!.state == AmrpMessageState.completed;
       output.add(
         BubbleThinking(
           '${message.id}:thinking',
           AmrpThinkingBlock(
-            content: complete ? message.thinking!.content : '',
-            state: complete
+            content: thinkingComplete ? message.thinking!.content : '',
+            state: thinkingComplete
                 ? AmrpMessageState.completed
                 : AmrpMessageState.streaming,
             duration: message.thinking!.duration,

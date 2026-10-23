@@ -37,7 +37,7 @@ func (p *meshLocalDataPort) managedChatFeedback(ctx context.Context, scope coord
 		return map[string]any{"deleted": true, "id": item.ID, "revision": item.Revision}, nil
 	}
 	if target == nil {
-		return nil, errors.New("只能操作当前Owner与角色的AI回复反馈")
+		return nil, errors.New("当前回复尚未保存、已删除或不属于当前Owner与角色，暂不可反馈")
 	}
 	if request.Operation == "feedback/list" {
 		items, err := repo.ListMessage(ctx, feedbackScope, target.ID)

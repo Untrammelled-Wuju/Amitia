@@ -156,6 +156,7 @@ export function useWebChatSend(
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
     });
+    beginPendingAssistant?.(requestEnvelope.requestId, originalRole);
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
@@ -196,7 +197,7 @@ export function useWebChatSend(
             const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
             if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope?.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId };
             if (event.conversationId && !convId.value) { convId.value = event.conversationId; activeConversation = event.conversationId; localStorage.setItem("webchat-conv-id", event.conversationId); }
-            messages.value.push({ id: assistantId, uiKey: `${event.executionScope?.resourceOwnerId}:${assistantId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", createdAt: new Date().toISOString(), characterId: event.executionScope?.roleId, conversationId: event.conversationId, executionScope: event.executionScope });
+            messages.value.push({ id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString(), characterId: event.executionScope?.roleId, conversationId: event.conversationId, executionScope: event.executionScope });
           }
 					if (event.type === "transcribed") {
 						const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === event.executionScope?.resourceOwnerId);
@@ -205,8 +206,10 @@ export function useWebChatSend(
           const index = messages.value.findIndex((message) => message.id === assistantId);
           if (index >= 0 && event.type === "delta") {
             const field = event.reasoning ? "reasoningContent" : "content";
-            messages.value[index] = { ...messages.value[index], [field]: (messages.value[index][field] || "") + (event.text || "") };
+            messages.value[index] = { ...messages.value[index], [field]: (messages.value[index][field] || "") + (event.text || ""), reasoningComplete: !event.reasoning, outputComplete: false };
           }
+          if (index >= 0 && event.type === "reasoning-completed") messages.value[index] = { ...messages.value[index], reasoningComplete: true };
+          if (index >= 0 && event.type === "output-completed") messages.value[index] = { ...messages.value[index], reasoningComplete: true, outputComplete: true };
           if (index >= 0 && (event.type === "interrupted" || event.type === "failed")) messages.value[index] = { ...messages.value[index], status: "interrupted", saved: event.data?.saved === true };
           scrollToBottom(true);
         });
@@ -214,14 +217,18 @@ export function useWebChatSend(
         const index = messages.value.findIndex((message) => message.id === assistantId);
 				const userIndex = messages.value.findIndex((message) => message.id === `${requestEnvelope.requestId}/user` && message.ownerId === response.executionScope.resourceOwnerId);
 				if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], content: response.transcription || messages.value[userIndex].content, sourceRevision: response.userRevision || 1, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId };
-        const assistant = { id: assistantId, uiKey: `${response.executionScope.resourceOwnerId}:${assistantId}`, ownerId: response.executionScope.resourceOwnerId, sourceRevision: response.saved ? 1 : undefined, requestId: response.requestId, role: "assistant", content: response.reply, reasoningContent: response.reasoning, citationSnapshot: response.citationSnapshot || [], status: "completed", conversationId: response.conversationId, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId, executionScope: response.executionScope, saved: response.saved, memoryStatus: response.memoryStatus, createdAt: new Date().toISOString() };
+        const assistant = { id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: response.executionScope.resourceOwnerId, sourceRevision: response.saved ? 1 : undefined, requestId: response.requestId, role: "assistant", content: response.reply, reasoningContent: response.reasoning, citationSnapshot: response.citationSnapshot || [], status: "completed", conversationId: response.conversationId, sourceConversationId: response.resourceConversationId || parseConversationReference(response.conversationId)?.id || response.conversationId, characterId: response.executionScope.roleId, executionScope: response.executionScope, saved: response.saved, memoryStatus: response.memoryStatus, createdAt: new Date().toISOString() };
         if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
         else messages.value.push(assistant);
         convId.value = response.conversationId;
         sending.value = false;
         notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
         if (replyTarget) replyTarget.value = null;
-        await onConversationCreated?.(response.conversationId);
+        try {
+          await onConversationCreated?.(response.conversationId);
+        } catch {
+          if (convId.value === response.conversationId && characterId.value === originalRole) ElMessage.warning("回复已保存，会话列表刷新失败，请稍后刷新");
+        }
         return;
       }
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");

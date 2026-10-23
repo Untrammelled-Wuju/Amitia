@@ -104,6 +104,18 @@ function turnFreshness(turn: AssistantTurnData): number {
   return Number(turn.sequence || 0) * 1_000_000 + (turn.items || []).reduce((sum, item) => sum + Number(item.revision || 0), 0);
 }
 
+function sameTurnExecution(current: AssistantTurnData, incoming: { conversationId: string; requestId?: string; executionId?: string }): boolean {
+  return Boolean(current.requestId && current.executionId && current.conversationId === incoming.conversationId && current.requestId === incoming.requestId && current.executionId === incoming.executionId);
+}
+
+function canReconcileCompleted(current: AssistantTurnData, incoming: AssistantTurnData): boolean {
+  if (current.status !== "interrupted" || incoming.status !== "completed" || !sameTurnExecution(current, incoming)) return false;
+  const currentTime = Date.parse(current.updatedAt || current.completedAt || current.createdAt || "");
+  const incomingTime = Date.parse(incoming.updatedAt || incoming.completedAt || incoming.createdAt || "");
+  if (Number.isFinite(currentTime) && Number.isFinite(incomingTime)) return incomingTime >= currentTime;
+  return turnFreshness(incoming) >= turnFreshness(current);
+}
+
 function cloneItem(item: AssistantTurnItem): AssistantTurnItem {
   return { ...item, citationSnapshot: item.citationSnapshot?.map((entry) => ({ ...entry })) };
 }
@@ -144,7 +156,10 @@ export class AgentEventReducer {
         this.byTurnId.set(incoming.id, incoming);
         continue;
       }
-      const incomingIsNewer = turnFreshness(incoming) >= turnFreshness(current);
+      if ((current.requestId && incoming.requestId && current.requestId !== incoming.requestId) ||
+          (current.executionId && incoming.executionId && current.executionId !== incoming.executionId) || current.conversationId !== incoming.conversationId) continue;
+      const reconciled = canReconcileCompleted(current, incoming);
+      const incomingIsNewer = reconciled || turnFreshness(incoming) >= turnFreshness(current);
       const merged = incomingIsNewer ? incoming : cloneTurn(current);
       const items = new Map(current.items.map((item) => [item.id, cloneItem(item)]));
       for (const item of incoming.items) {
@@ -157,10 +172,10 @@ export class AgentEventReducer {
         items.set(item.id, result);
       }
       merged.items = [...items.values()].sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
-      merged.status = isTerminalTurn(current.status) ? current.status
+      merged.status = reconciled ? "completed" : isTerminalTurn(current.status) ? current.status
         : isTerminalTurn(incoming.status) ? incoming.status
         : incomingIsNewer ? incoming.status : current.status;
-      merged.completedAt = current.completedAt || incoming.completedAt;
+      merged.completedAt = reconciled ? incoming.completedAt || incoming.updatedAt || current.completedAt : current.completedAt || incoming.completedAt;
       this.byTurnId.set(incoming.id, merged);
       if (this.activeTurnIdValue === incoming.id && isTerminalTurn(merged.status)) {
         this.activeTurnIdValue = "";
@@ -223,6 +238,9 @@ export class AgentEventReducer {
     if (!turnId) return "applied";
     let turn = this.byTurnId.get(turnId) || this.newTurn(event);
     const type = String(event.type || "").trim();
+    if (turn.conversationId !== event.conversationId ||
+        (turn.requestId && event.requestId && turn.requestId !== event.requestId) ||
+        (turn.executionId && event.executionId && turn.executionId !== event.executionId)) return "stale";
 
     if (["turn.queued", "turn.started", "turn.waiting", "turn.cancelling", "turn.steered", "approval.requested", "approval.approved", "approval.denied", "approval.expired"].includes(type)) {
       if (isTerminalTurn(turn.status)) return "stale";
@@ -250,7 +268,8 @@ export class AgentEventReducer {
     }
 
     if (["turn.completed", "turn.failed", "turn.interrupted"].includes(type)) {
-      if (isTerminalTurn(turn.status)) return "stale";
+      const reconciled = turn.status === "interrupted" && type === "turn.completed" && sequence > 0 && event.payload?.saved === true && Boolean(event.messageId) && sameTurnExecution(turn, event);
+      if (isTerminalTurn(turn.status) && !reconciled) return "stale";
       const terminalStatus = type === "turn.completed" ? "completed" : type === "turn.failed" ? "failed" : "interrupted";
       const items = (turn.items || []).map((item) => {
         const copy = cloneItem(item);

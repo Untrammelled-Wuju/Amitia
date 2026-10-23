@@ -361,6 +361,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             _cachedMessagesForContext![i].type != currentMessages[i].type ||
             _cachedMessagesForContext![i].content !=
                 currentMessages[i].content ||
+            _cachedMessagesForContext![i].reasoningContent !=
+                currentMessages[i].reasoningContent ||
+            _cachedMessagesForContext![i].reasoningComplete !=
+                currentMessages[i].reasoningComplete ||
+            _cachedMessagesForContext![i].outputComplete !=
+                currentMessages[i].outputComplete ||
             _cachedMessagesForContext![i].status != currentMessages[i].status) {
           same = false;
           break;
@@ -3114,7 +3120,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       conversationId: conversationId,
                       onExpand: () {
                         Navigator.of(sheetContext).pop();
-                        Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => WorkbenchPage(conversationId: conversationId, characterId: characterId)));
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => WorkbenchPage(
+                              conversationId: conversationId,
+                              characterId: characterId,
+                            ),
+                          ),
+                        );
                       },
                     ),
                   ),

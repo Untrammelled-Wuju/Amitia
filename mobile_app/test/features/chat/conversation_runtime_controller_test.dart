@@ -74,6 +74,10 @@ class _FakeOwnedService extends DeviceOwnedChatService {
     owner.submittedMessage = message;
     owner.submittedStyle = messageStyle ?? '';
     owner.submittedRequestId = requestId;
+    if (owner.streamed != null) {
+      yield* owner.streamed!.stream;
+      return;
+    }
     final id = conversationId?.isNotEmpty == true
         ? conversationId!
         : 'conversation-1';
@@ -90,6 +94,9 @@ class _FakeOwnedService extends DeviceOwnedChatService {
         'memoryStatus': 'completed',
       },
     };
+    if (owner.failAfterCompleted) {
+      throw StateError('connection closed after commit');
+    }
   }
 }
 
@@ -107,6 +114,9 @@ class _FakeChatService extends ChatService {
   int submitCount = 0;
   Completer<void>? mutation;
   List<MessageDto> Function(String)? snapshotMessages;
+  List<AssistantTurnDto> snapshotTurns = [];
+  bool failAfterCompleted = false;
+  StreamController<Map<String, dynamic>>? streamed;
   bool moreTurns = false;
   String turnCursor = '';
   String requestedTurnCursor = '';
@@ -176,7 +186,7 @@ class _FakeChatService extends ChatService {
       ),
       workspace: null,
       messages: snapshotMessages?.call(conversationId) ?? const <MessageDto>[],
-      turns: const <AssistantTurnDto>[],
+      turns: snapshotTurns,
       messageNextBefore: 0,
       hasMoreMessages: false,
       turnNextBefore: 0,
@@ -212,6 +222,110 @@ Map<String, dynamic> _event({
 }
 
 void main() {
+  test('发送立即显示占位，思考和正文分别结束且等待保存确认', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final phases = StreamController<Map<String, dynamic>>();
+    final service = _FakeChatService(events)..streamed = phases;
+    final controller = ConversationRuntimeController(service);
+    final sending = controller.sendText('你好');
+    await Future<void>.delayed(Duration.zero);
+    ChatMessage assistant() => controller.messages
+        .where((m) => m.role == MessageRole.assistant)
+        .single;
+    expect(assistant().status, MessageStatus.queued);
+    Future<void> emit(Map<String, dynamic> event) async {
+      phases.add(event);
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    await emit({
+      'type': 'started',
+      'conversationId': 'conversation-1',
+      'executionScope': (service.owned as _FakeOwnedService).scope(),
+    });
+    expect(assistant().status, MessageStatus.streaming);
+    await emit({'type': 'delta', 'reasoning': true, 'text': '思考内容'});
+    expect(assistant().reasoningComplete, isFalse);
+    await emit({'type': 'reasoning-completed'});
+    await emit({'type': 'delta', 'text': '正文'});
+    expect(assistant().reasoningComplete, isTrue);
+    await emit({'type': 'output-completed'});
+    expect(assistant().outputComplete, isTrue);
+    expect(assistant().sourceRevision, isNull);
+    expect(controller.sending, isTrue);
+    await emit({
+      'type': 'completed',
+      'data': {'reply': '正文', 'reasoning': '思考内容', 'saved': true},
+    });
+    await phases.close();
+    await sending;
+    expect(assistant().status, MessageStatus.delivered);
+    expect(controller.sending, isFalse);
+    controller.dispose();
+    await events.close();
+  });
+
+  test('保存成功后的连接异常不能把回复改回中断', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events)..failAfterCompleted = true;
+    final controller = ConversationRuntimeController(service);
+    await controller.sendText('你好');
+    expect(
+      controller.messages
+          .where((message) => message.role == MessageRole.assistant)
+          .single
+          .status,
+      MessageStatus.delivered,
+    );
+    expect(controller.lastError, isNull);
+    controller.dispose();
+    await events.close();
+  });
+
+  test('已保存消息恢复为完成执行时同步清除中断状态', () async {
+    SharedPreferences.setMockInitialValues({});
+    final events = StreamController<ChatStreamEvent>.broadcast();
+    final service = _FakeChatService(events);
+    service.snapshotMessages = (_) => [
+      MessageDto(
+        id: 'reply',
+        conversationId: 'conversation-1',
+        role: 'assistant',
+        content: '成功回复',
+        status: 'interrupted',
+        createdAt: '2026-10-24T00:00:00Z',
+      ),
+    ];
+    service.snapshotTurns = [
+      AssistantTurnDto(
+        id: 'turn-1',
+        conversationId: 'conversation-1',
+        requestId: 'request-1',
+        executionId: 'execution-1',
+        status: 'completed',
+        items: [
+          AssistantTurnItemDto(
+            id: 'text-1',
+            turnId: 'turn-1',
+            conversationId: 'conversation-1',
+            type: 'text',
+            status: 'completed',
+            messageId: 'reply',
+            content: '成功回复',
+          ),
+        ],
+      ),
+    ];
+    final controller = ConversationRuntimeController(service);
+    await controller.openConversation('conversation-1');
+    expect(controller.messages.single.status, MessageStatus.delivered);
+    expect(controller.messages.single.assistantTurn!.status, 'completed');
+    controller.dispose();
+    await events.close();
+  });
+
   test('执行历史分页使用服务端游标并在页面结束后停止', () async {
     SharedPreferences.setMockInitialValues({});
     final events = StreamController<ChatStreamEvent>.broadcast();

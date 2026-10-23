@@ -109,6 +109,8 @@ export function useConversationRuntime(
       message?.role,
       message?.content,
       message?.status,
+      message?.outputComplete,
+      message?.reasoningComplete,
       message?.createdAt,
       message?.updatedAt,
       message?.clientMessageId,
@@ -142,6 +144,7 @@ export function useConversationRuntime(
       turnId: turn.id,
       requestId: turn.requestId || "",
       content: markdown,
+      outputComplete: textItems.length > 0 && textItems.every(item => isTerminalTurn(item.status)),
       status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : "streaming",
       createdAt: turn.createdAt || new Date().toISOString(),
       assistantTurn: cloneTurn(turn),
@@ -193,6 +196,7 @@ export function useConversationRuntime(
     const renderedTurnIds = new Set<string>();
     const activeRequestIds = new Set<string>();
     const next = persistedMessages.value.map((message, index) => {
+      if (message.role === "assistant" && message.requestId) { activeRequestIds.add(message.requestId); pendingAssistantRequests.delete(message.requestId); }
       const turn = turnByMessageId.get(String(message?.id || "")) || (message?.role === "assistant" && message?.requestId ? turnList.find((item) => item.requestId === message.requestId) : undefined);
       const key = turn ? assistantRowKey(turn) : getMessageUIKey(message, index);
       const candidate = turn
@@ -207,6 +211,7 @@ export function useConversationRuntime(
               [...(turn.items || [])].reverse().find((item) => item.type === "text" && item.messageId === String(message.id)),
             ),
             status: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : message.status,
+            state: isTerminalTurn(turn.status) ? normalizedTurnStatus(turn.status) : message.state,
           }
         : message;
       const signature = `persisted:${messageSignature(candidate)}${turn ? `:${turnSignature(turn)}` : ""}`;

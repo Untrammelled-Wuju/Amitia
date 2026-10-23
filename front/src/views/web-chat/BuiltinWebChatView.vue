@@ -880,7 +880,9 @@ watch(
   convId,
   (conversationId) => {
     const id = conversationId || "";
-    loadConversationWorkspace(id, id ? "" : String(route.query.projectId || ""));
+    void loadConversationWorkspace(id, id ? "" : String(route.query.projectId || "")).catch((error) => {
+      if ((convId.value || "") === id) modelError.value = error instanceof Error ? error.message : "聊天数据加载失败，请重试";
+    });
     const requestedId = id;
     void fetchConvSummary(requestedId).then((summary) => {
       if ((convId.value || "") === requestedId) {

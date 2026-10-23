@@ -8,6 +8,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('正文结束后思考和输入光标不等待保存而继续动画', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AmitiaMessageView(
+            characterId: 'one',
+            message: ChatMessage(
+              id: 'reply',
+              role: MessageRole.assistant,
+              type: MessageType.text,
+              content: '正文',
+              reasoningContent: '思考内容',
+              reasoningComplete: true,
+              outputComplete: true,
+              status: MessageStatus.streaming,
+              time: DateTime(2026),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('思考中'), findsNothing);
+    expect(find.textContaining('思考完成'), findsOneWidget);
+    expect(find.text('正在确认保存…'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('user message actions open from long press menu', (tester) async {
     var edited = false;
     await tester.pumpWidget(

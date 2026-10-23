@@ -72,6 +72,28 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
   String _highlightCitation = '';
   FeedbackDto? _feedback;
   bool _feedbackBusy = false;
+  int _feedbackGeneration = 0;
+
+  bool get _feedbackReady =>
+      widget.message.role == MessageRole.assistant &&
+      widget.message.id.trim().isNotEmpty &&
+      widget.characterId.trim().isNotEmpty &&
+      (widget.message.sourceRevision ?? 0) > 0 &&
+      ![
+        MessageStatus.queued,
+        MessageStatus.sending,
+        MessageStatus.streaming,
+        MessageStatus.error,
+      ].contains(widget.message.status);
+
+  String _feedbackIdentity(AmitiaMessageView value) => jsonEncode([
+    value.message.id,
+    value.characterId,
+    value.message.sourceOwnerId,
+    value.message.sourceScope,
+    value.message.sourceRevision,
+    value.message.status.name,
+  ]);
 
   @override
   void initState() {
@@ -86,8 +108,9 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
   @override
   void didUpdateWidget(covariant AmitiaMessageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.message.id != widget.message.id ||
-        oldWidget.characterId != widget.characterId) {
+    if (_feedbackIdentity(oldWidget) != _feedbackIdentity(widget)) {
+      _feedbackGeneration++;
+      _feedbackBusy = false;
       _feedback = null;
       Future.microtask(_loadFeedback);
     }
@@ -105,8 +128,9 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
       ),
     );
     final streaming =
-        message.state == AmrpMessageState.streaming ||
-        message.state == AmrpMessageState.queued;
+        !widget.message.outputComplete &&
+        (message.state == AmrpMessageState.streaming ||
+            message.state == AmrpMessageState.queued);
     final citationSources = _mergeCitationSources(
       message.sources,
       widget.message.assistantTurn,
@@ -127,6 +151,7 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
     final showThinkingPlaceholder =
         message.role == AmrpMessageRole.assistant &&
         message.thinking == null &&
+        !widget.message.outputComplete &&
         ((isActiveAssistant && !hasVisibleContent) || widget.showThinking);
     if (message.role == AmrpMessageRole.system) {
       return _SystemNotice(message: message, tokens: tokens);
@@ -238,12 +263,16 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
                         citationIds,
                       )
                     else ...[
+                      if (widget.message.outputComplete &&
+                          widget.message.sourceRevision == null)
+                        const Text("正在确认保存…"),
                       if (message.thinking != null)
                         AmitiaThinkingBlock(block: message.thinking!),
                       if (message.markdown.isNotEmpty)
                         AmitiaMarkdownView(
                           source: flowBubbleText(message.markdown),
                           streaming:
+                              !widget.message.outputComplete &&
                               message.state == AmrpMessageState.streaming,
                           citationIds: citationIds,
                           onCitation: (id) =>
@@ -267,7 +296,7 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
                         onReply: widget.onReply,
                         onRetry: widget.onRetry,
                         feedbackType: _feedback?.feedbackType,
-                        feedbackBusy: _feedbackBusy,
+                        feedbackBusy: _feedbackBusy || !_feedbackReady,
                         onHelpful: () => _submitFeedback('good'),
                         onImprove: _submitImprovement,
                         onUnsafe: _submitUnsafe,
@@ -295,23 +324,31 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
 
   Future<void> _loadFeedback() async {
     final messageId = widget.message.id.trim();
-    if (widget.characterId.trim().isEmpty ||
-        messageId.isEmpty ||
-        widget.message.role != MessageRole.assistant) {
+    final identity = _feedbackIdentity(widget);
+    final generation = ++_feedbackGeneration;
+    if (!mounted || !_feedbackReady) {
       return;
     }
     try {
       final feedback = await ref
           .read(feedbackServiceProvider)
-          .getByMessage(messageId, characterId: widget.characterId);
-      if (mounted && widget.message.id == messageId) {
+          .getByMessage(
+            messageId,
+            characterId: widget.characterId,
+            expectedExecutionScope: widget.message.sourceScope,
+          );
+      if (mounted &&
+          generation == _feedbackGeneration &&
+          identity == _feedbackIdentity(widget)) {
         setState(() => _feedback = feedback);
       }
     } catch (_) {}
   }
 
   Future<void> _submitFeedback(String feedbackType, {String? reason}) async {
-    if (_feedbackBusy) return;
+    if (_feedbackBusy || !_feedbackReady) return;
+    final identity = _feedbackIdentity(widget);
+    final generation = ++_feedbackGeneration;
     setState(() => _feedbackBusy = true);
     try {
       final feedback = await ref
@@ -321,8 +358,13 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
             feedbackType,
             comment: reason,
             characterId: widget.characterId,
+            expectedExecutionScope: widget.message.sourceScope,
           );
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _feedbackGeneration ||
+          identity != _feedbackIdentity(widget)) {
+        return;
+      }
       setState(() => _feedback = feedback);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -330,29 +372,41 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
         ),
       );
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _feedbackGeneration ||
+          identity != _feedbackIdentity(widget)) {
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('反馈提交失败：$error')));
     } finally {
-      if (mounted) setState(() => _feedbackBusy = false);
+      if (mounted && generation == _feedbackGeneration) {
+        setState(() => _feedbackBusy = false);
+      }
     }
   }
 
   Future<void> _submitImprovement() async {
+    final identity = _feedbackIdentity(widget);
     final reason = await _promptFeedbackReason(
       title: '回复质量反馈',
       hint: '请说明这条回复需要改进的地方',
     );
-    if (reason != null) await _submitFeedback('other', reason: reason);
+    if (mounted && identity == _feedbackIdentity(widget) && reason != null) {
+      await _submitFeedback('other', reason: reason);
+    }
   }
 
   Future<void> _submitUnsafe() async {
+    final identity = _feedbackIdentity(widget);
     final reason = await _promptFeedbackReason(
       title: '报告不安全内容',
       hint: '请描述风险、违规或不适内容',
     );
-    if (reason != null) await _submitFeedback('unsafe', reason: reason);
+    if (mounted && identity == _feedbackIdentity(widget) && reason != null) {
+      await _submitFeedback('unsafe', reason: reason);
+    }
   }
 
   Future<String?> _promptFeedbackReason({
@@ -392,24 +446,40 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
 
   Future<void> _deleteFeedback() async {
     final feedback = _feedback;
-    if (_feedbackBusy || feedback == null) return;
+    if (_feedbackBusy || !_feedbackReady || feedback == null) return;
+    final identity = _feedbackIdentity(widget);
+    final generation = ++_feedbackGeneration;
     setState(() => _feedbackBusy = true);
     try {
       await ref
           .read(feedbackServiceProvider)
-          .delete(feedback.id, characterId: widget.characterId);
-      if (!mounted) return;
+          .delete(
+            feedback.id,
+            characterId: widget.characterId,
+            expectedExecutionScope: widget.message.sourceScope,
+          );
+      if (!mounted ||
+          generation != _feedbackGeneration ||
+          identity != _feedbackIdentity(widget)) {
+        return;
+      }
       setState(() => _feedback = null);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('反馈已撤销')));
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _feedbackGeneration ||
+          identity != _feedbackIdentity(widget)) {
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('撤销反馈失败：$error')));
     } finally {
-      if (mounted) setState(() => _feedbackBusy = false);
+      if (mounted && generation == _feedbackGeneration) {
+        setState(() => _feedbackBusy = false);
+      }
     }
   }
 

@@ -161,6 +161,10 @@ func publishRuntime(ctx context.Context, inference Inference, event Event) error
 	switch event.Type {
 	case "started":
 		typeName = "turn.started"
+	case "reasoning-completed":
+		typeName, block, status = "reasoning.completed", "reasoning", "completed"
+	case "output-completed":
+		typeName, block, status = "text.completed", "text", "completed"
 	case "delta":
 		typeName, block = "text.delta", "text"
 		if event.Reasoning {

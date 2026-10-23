@@ -51,6 +51,7 @@
           <slot name="badges" :message="message" />
         </header>
 
+        <div v-if="props.message.outputComplete && !props.message.saved && !props.message.sourceRevision && streaming" class="amrp-message-state" role="status">正在确认保存…</div>
         <div v-if="stateNotice" class="amrp-message-state" :class="message.state">
           <b>{{ stateNotice.title }}</b>
           <span>{{ stateNotice.detail }}</span>
@@ -103,7 +104,7 @@
             <MarkdownContent
               v-if="message.markdown"
               :source="flowBubbleText(message.markdown)"
-              :streaming="message.state === 'streaming'"
+              :streaming="message.state === 'streaming' && !props.message.outputComplete"
               :citation-ids="citationSources.map((source) => source.id)"
               @citation="activeCitationId = $event"
             />
@@ -142,13 +143,13 @@
             <button type="button" title="回复" aria-label="回复" @click="emit('reply', message)">
               <el-icon><ChatLineSquare /></el-icon>
             </button>
-            <button type="button" title="有帮助" aria-label="有帮助" :class="{ 'is-active': messageFeedback?.feedbackType === 'good' }" @click="submitHelpfulFeedback">
+            <button v-if="feedbackReady" type="button" title="有帮助" aria-label="有帮助" :class="{ 'is-active': messageFeedback?.feedbackType === 'good' }" @click="submitHelpfulFeedback">
               <el-icon><CircleCheck /></el-icon>
             </button>
-            <button type="button" title="需要改进" aria-label="需要改进" :class="{ 'is-active': ['other','too_long','too_cold','too_exaggerated','not_understand'].includes(messageFeedback?.feedbackType || '') }" @click="submitImprovementFeedback">
+            <button v-if="feedbackReady" type="button" title="需要改进" aria-label="需要改进" :class="{ 'is-active': ['other','too_long','too_cold','too_exaggerated','not_understand'].includes(messageFeedback?.feedbackType || '') }" @click="submitImprovementFeedback">
               <el-icon><CircleClose /></el-icon>
             </button>
-            <button type="button" title="报告不安全内容" aria-label="报告不安全内容" :class="{ 'is-active': messageFeedback?.feedbackType === 'unsafe' }" @click="submitUnsafeFeedback">
+            <button v-if="feedbackReady" type="button" title="报告不安全内容" aria-label="报告不安全内容" :class="{ 'is-active': messageFeedback?.feedbackType === 'unsafe' }" @click="submitUnsafeFeedback">
               <el-icon><Warning /></el-icon>
             </button>
             <button v-if="messageFeedback" type="button" title="撤销反馈" aria-label="撤销反馈" @click="removeFeedback">
@@ -163,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   ChatLineSquare,
@@ -303,7 +304,8 @@ function compareCitationSources(left: CitationSource, right: CitationSource): nu
 }
 const showPendingThinking = computed(() => {
   const turn = assistantTurn.value;
-  if (!turn || turn.items.length > 0) return false;
+  if (!turn) return !props.message.outputComplete && ["queued", "streaming"].includes(message.value.state) && !message.value.markdown && !message.value.thinking && !message.value.blocks.length;
+  if (turn.items.length > 0) return false;
   return ["queued", "running", "streaming", "waiting_approval", "waiting_tool", "cancelling"].includes(
     String(turn.status || "").toLowerCase(),
   );
@@ -316,18 +318,28 @@ const replyId = computed(() => String(props.message.replyToMessageId ?? ""));
 const replySender = computed(() => String(props.message.replyToRole === "user" ? "你" : props.charName));
 const replyText = computed(() => String(props.message.replyToExcerpt ?? "").slice(0, 120));
 const isAssistant = computed(() => message.value.role === "assistant");
+const feedbackReady = computed(() => !props.readOnly && isAssistant.value && !streaming.value && props.message.saved !== false && Number(props.message.sourceRevision) > 0 && Boolean(props.message.id && props.characterId));
+const feedbackIdentity = computed(() => JSON.stringify([props.message.id, props.characterId, props.message.ownerId, props.message.executionScope, feedbackReady.value]));
+let feedbackGeneration = 0;
 
 async function refreshFeedback() {
+  const generation = ++feedbackGeneration;
+  const identity = feedbackIdentity.value;
   messageFeedback.value = null;
-  if (!isAssistant.value || !props.message.id || !props.characterId) return;
+  if (!feedbackReady.value) return;
   try {
-    messageFeedback.value = await loadMessageFeedback(String(props.message.id), props.characterId);
+    const result = await loadMessageFeedback(String(props.message.id), props.characterId, props.message.executionScope);
+    if (generation === feedbackGeneration && identity === feedbackIdentity.value) messageFeedback.value = result;
   } catch {}
 }
 
 async function saveFeedback(feedbackType: string, reason = "") {
-  if (!props.message.id || !props.characterId) throw new Error("当前消息缺少反馈归属");
-  messageFeedback.value = await createMessageFeedback(String(props.message.id), props.characterId, feedbackType, reason);
+  if (!feedbackReady.value) throw new Error("当前回复尚未保存或不可反馈");
+  const identity = feedbackIdentity.value;
+  const generation = ++feedbackGeneration;
+  const result = await createMessageFeedback(String(props.message.id), props.characterId, feedbackType, reason, props.message.executionScope);
+  if (identity !== feedbackIdentity.value || generation !== feedbackGeneration) throw new Error("消息归属已变化，请重新操作");
+  messageFeedback.value = result;
 }
 
 async function submitHelpfulFeedback() {
@@ -340,6 +352,7 @@ async function submitHelpfulFeedback() {
 }
 
 async function submitImprovementFeedback() {
+  const identity = feedbackIdentity.value;
   try {
     const { value } = await ElMessageBox.prompt("请说明这条回复需要改进的地方", "回复质量反馈", {
       inputType: "textarea",
@@ -348,6 +361,7 @@ async function submitImprovementFeedback() {
       cancelButtonText: "取消",
       inputValidator: (text) => String(text || "").trim() ? true : "请填写反馈原因",
     });
+    if (identity !== feedbackIdentity.value) throw new Error("消息归属已变化，请重新操作");
     await saveFeedback("other", String(value || "").trim());
     ElMessage.success("改进意见已记录");
   } catch (error: any) {
@@ -357,6 +371,7 @@ async function submitImprovementFeedback() {
 }
 
 async function submitUnsafeFeedback() {
+  const identity = feedbackIdentity.value;
   try {
     const { value } = await ElMessageBox.prompt("请说明需要安全复核的内容", "报告不安全内容", {
       inputType: "textarea",
@@ -365,6 +380,7 @@ async function submitUnsafeFeedback() {
       cancelButtonText: "取消",
       inputValidator: (text) => String(text || "").trim() ? true : "请填写安全报告原因",
     });
+    if (identity !== feedbackIdentity.value) throw new Error("消息归属已变化，请重新操作");
     await saveFeedback("unsafe", String(value || "").trim());
     ElMessage.success("安全报告已提交");
   } catch (error: any) {
@@ -374,9 +390,12 @@ async function submitUnsafeFeedback() {
 }
 
 async function removeFeedback() {
-  if (!messageFeedback.value) return;
+  if (!feedbackReady.value || !messageFeedback.value) return;
+  const identity = feedbackIdentity.value;
+  const generation = ++feedbackGeneration;
   try {
-    await deleteMessageFeedback(messageFeedback.value.id, props.characterId);
+    await deleteMessageFeedback(messageFeedback.value.id, props.characterId, props.message.executionScope);
+    if (identity !== feedbackIdentity.value || generation !== feedbackGeneration) return;
     messageFeedback.value = null;
     ElMessage.success("反馈已撤销");
   } catch (error: any) {
@@ -384,8 +403,7 @@ async function removeFeedback() {
   }
 }
 
-watch(() => [props.message.id, props.characterId, props.message.role], refreshFeedback);
-onMounted(refreshFeedback);
+watch(feedbackIdentity, refreshFeedback, { immediate: true });
 
 const stateNotice = computed(() => {
   switch (message.value.state) {

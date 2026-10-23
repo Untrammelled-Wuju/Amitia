@@ -116,7 +116,10 @@ class AgentEventReducer {
     _activeTurnId = '';
     _activeExecutionId = '';
     if (activeTurn != null) {
-      final turn = _turnFromRuntime(activeTurn, _turns[(activeTurn['turnId'] ?? '').toString().trim()]);
+      final turn = _turnFromRuntime(
+        activeTurn,
+        _turns[(activeTurn['turnId'] ?? '').toString().trim()],
+      );
       if (turn != null) {
         final existing = _turns[turn.id];
         final next = existing != null && _isTerminal(existing.status)
@@ -139,6 +142,45 @@ class AgentEventReducer {
     }
   }
 
+  bool _sameTurnExecution(
+    AssistantTurnDto current,
+    String conversationId,
+    String requestId,
+    String executionId,
+  ) =>
+      current.requestId.isNotEmpty &&
+      current.executionId.isNotEmpty &&
+      current.conversationId == conversationId &&
+      current.requestId == requestId &&
+      current.executionId == executionId;
+
+  bool _canReconcileCompleted(
+    AssistantTurnDto current,
+    AssistantTurnDto incoming,
+  ) {
+    if (current.status != 'interrupted' ||
+        incoming.status != 'completed' ||
+        !_sameTurnExecution(
+          current,
+          incoming.conversationId,
+          incoming.requestId,
+          incoming.executionId,
+        )) {
+      return false;
+    }
+    String timestamp(AssistantTurnDto turn) => turn.updatedAt.isNotEmpty
+        ? turn.updatedAt
+        : turn.completedAt.isNotEmpty
+        ? turn.completedAt
+        : turn.createdAt;
+    final currentTime = DateTime.tryParse(timestamp(current));
+    final incomingTime = DateTime.tryParse(timestamp(incoming));
+    if (currentTime != null && incomingTime != null) {
+      return !incomingTime.isBefore(currentTime);
+    }
+    return _turnFreshness(incoming) >= _turnFreshness(current);
+  }
+
   void mergeTurns(Iterable<AssistantTurnDto> turns) {
     for (final incoming in turns) {
       final current = _turns[incoming.id];
@@ -146,7 +188,18 @@ class AgentEventReducer {
         _turns[incoming.id] = incoming;
         continue;
       }
-      final incomingIsNewer = _turnFreshness(incoming) >= _turnFreshness(current);
+      if ((current.requestId.isNotEmpty &&
+              incoming.requestId.isNotEmpty &&
+              current.requestId != incoming.requestId) ||
+          (current.executionId.isNotEmpty &&
+              incoming.executionId.isNotEmpty &&
+              current.executionId != incoming.executionId) ||
+          current.conversationId != incoming.conversationId) {
+        continue;
+      }
+      final reconciled = _canReconcileCompleted(current, incoming);
+      final incomingIsNewer =
+          reconciled || _turnFreshness(incoming) >= _turnFreshness(current);
       final base = incomingIsNewer ? incoming : current;
       final items = <String, AssistantTurnItemDto>{
         for (final item in current.items) item.id: item,
@@ -159,22 +212,33 @@ class AgentEventReducer {
             item.citationSnapshot.isEmpty &&
             !item.citationSnapshotProvided &&
             old.messageId == item.messageId) {
-          items[item.id] = _copyItem(item, citationSnapshot: old.citationSnapshot);
+          items[item.id] = _copyItem(
+            item,
+            citationSnapshot: old.citationSnapshot,
+          );
         } else {
           items[item.id] = item;
         }
       }
       final mergedItems = items.values.toList()
         ..sort((left, right) => left.sequence.compareTo(right.sequence));
-      final status = _isTerminal(current.status)
+      final status = reconciled
+          ? 'completed'
+          : _isTerminal(current.status)
           ? current.status
           : _isTerminal(incoming.status)
-              ? incoming.status
-              : incomingIsNewer ? incoming.status : current.status;
+          ? incoming.status
+          : incomingIsNewer
+          ? incoming.status
+          : current.status;
       final merged = _copyTurn(
         base,
         status: status,
-        completedAt: current.completedAt.isNotEmpty
+        completedAt: reconciled
+            ? (incoming.completedAt.isNotEmpty
+                  ? incoming.completedAt
+                  : incoming.updatedAt)
+            : current.completedAt.isNotEmpty
             ? current.completedAt
             : incoming.completedAt,
         items: mergedItems,
@@ -211,6 +275,15 @@ class AgentEventReducer {
     if (turnId.isEmpty) return AgentEventApplyResult.applied;
     var turn = _turns[turnId] ?? _newTurn(event);
     final type = event.type.trim();
+    if (turn.conversationId != event.conversationId ||
+        (turn.requestId.isNotEmpty &&
+            event.requestId.isNotEmpty &&
+            turn.requestId != event.requestId) ||
+        (turn.executionId.isNotEmpty &&
+            event.executionId.isNotEmpty &&
+            turn.executionId != event.executionId)) {
+      return AgentEventApplyResult.stale;
+    }
     if (type == 'turn.queued' ||
         type == 'turn.started' ||
         type == 'turn.waiting' ||
@@ -221,13 +294,20 @@ class AgentEventReducer {
         type == 'approval.denied' ||
         type == 'approval.expired') {
       if (_isTerminal(turn.status)) return AgentEventApplyResult.stale;
-      var nextStatus = _normalizeStatus(event.status.isNotEmpty ? event.status : turn.status);
+      var nextStatus = _normalizeStatus(
+        event.status.isNotEmpty ? event.status : turn.status,
+      );
       if (type == 'turn.queued') nextStatus = 'queued';
       if (type == 'turn.started') nextStatus = 'running';
-      if (type == 'turn.waiting') nextStatus = _normalizeStatus(event.status.isNotEmpty ? event.status : 'needs_reconciliation');
+      if (type == 'turn.waiting')
+        nextStatus = _normalizeStatus(
+          event.status.isNotEmpty ? event.status : 'needs_reconciliation',
+        );
       if (type == 'turn.cancelling') nextStatus = 'cancelling';
       if (type == 'approval.requested') nextStatus = 'waiting_approval';
-      if (type == 'approval.approved' || type == 'approval.denied' || type == 'approval.expired') {
+      if (type == 'approval.approved' ||
+          type == 'approval.denied' ||
+          type == 'approval.expired') {
         nextStatus = 'running';
       }
       turn = _copyTurn(
@@ -245,8 +325,24 @@ class AgentEventReducer {
       }
       return AgentEventApplyResult.applied;
     }
-    if (type == 'turn.completed' || type == 'turn.failed' || type == 'turn.interrupted') {
-      if (_isTerminal(turn.status)) return AgentEventApplyResult.stale;
+    if (type == 'turn.completed' ||
+        type == 'turn.failed' ||
+        type == 'turn.interrupted') {
+      final reconciled =
+          turn.status == 'interrupted' &&
+          type == 'turn.completed' &&
+          event.eventSequence > 0 &&
+          event.payload['saved'] == true &&
+          event.messageId.isNotEmpty &&
+          _sameTurnExecution(
+            turn,
+            event.conversationId,
+            event.requestId,
+            event.executionId,
+          );
+      if (_isTerminal(turn.status) && !reconciled) {
+        return AgentEventApplyResult.stale;
+      }
       final terminalStatus = type == 'turn.completed'
           ? 'completed'
           : type == 'turn.failed'
@@ -290,7 +386,9 @@ class AgentEventReducer {
               items[index],
               messageId: messageId,
               isFinal: terminalStatus == 'completed',
-              status: terminalStatus == 'completed' ? 'completed' : items[index].status,
+              status: terminalStatus == 'completed'
+                  ? 'completed'
+                  : items[index].status,
             );
             break;
           }
@@ -315,7 +413,8 @@ class AgentEventReducer {
     }
     if (_isTerminal(turn.status) &&
         (type.endsWith('.delta') ||
-         (type == 'text.completed' && _normalizeStatus(turn.status) != 'completed'))) {
+            (type == 'text.completed' &&
+                _normalizeStatus(turn.status) != 'completed'))) {
       return AgentEventApplyResult.stale;
     }
     if (event.blockId.trim().isEmpty) {
@@ -326,7 +425,9 @@ class AgentEventReducer {
     final blockId = event.blockId.trim();
     final index = items.indexWhere((item) => item.id == blockId);
     final current = index >= 0 ? items[index] : null;
-    if (current != null && event.revision > 0 && current.revision > event.revision) {
+    if (current != null &&
+        event.revision > 0 &&
+        current.revision > event.revision) {
       return AgentEventApplyResult.stale;
     }
     var item = current ?? _newItem(turn, event);
@@ -336,7 +437,8 @@ class AgentEventReducer {
     var arguments = item.argumentsJson;
     var result = item.resultJson;
     if (type.endsWith('.delta') && delta.isNotEmpty) {
-      if (type == 'tool.arguments.delta' || (payload['field'] ?? '').toString() == 'arguments') {
+      if (type == 'tool.arguments.delta' ||
+          (payload['field'] ?? '').toString() == 'arguments') {
         arguments += delta;
       } else {
         content += delta;
@@ -345,7 +447,8 @@ class AgentEventReducer {
     if (!type.endsWith('.delta') && payload.containsKey('content')) {
       content = (payload['content'] ?? '').toString();
     }
-    if (type == 'tool.arguments.completed' || payload.containsKey('arguments')) {
+    if (type == 'tool.arguments.completed' ||
+        payload.containsKey('arguments')) {
       arguments = (payload['arguments'] ?? arguments).toString();
     }
     if (payload.containsKey('result')) {
@@ -374,8 +477,8 @@ class AgentEventReducer {
           : null,
       isFinal: type == 'text.completed' || item.isFinal,
       messageId: event.messageId.isNotEmpty ? event.messageId : null,
-      citationSnapshot: type == 'text.completed' &&
-              payload.containsKey('citationSnapshot')
+      citationSnapshot:
+          type == 'text.completed' && payload.containsKey('citationSnapshot')
           ? normalizeCitationSnapshot(payload['citationSnapshot'])
           : null,
       updatedAt: event.createdAt,
@@ -387,12 +490,17 @@ class AgentEventReducer {
       items.sort((left, right) => left.sequence.compareTo(right.sequence));
     }
     var nextTurnStatus = turn.status;
-    if (!_isTerminal(nextTurnStatus) && nextTurnStatus != 'waiting_approval' && nextTurnStatus != 'cancelling' && nextTurnStatus != 'needs_reconciliation') {
-      final hasRunningTool = items.any((candidate) =>
-          candidate.type == 'tool_call' &&
-          candidate.status != 'completed' &&
-          candidate.status != 'failed' &&
-          candidate.status != 'interrupted');
+    if (!_isTerminal(nextTurnStatus) &&
+        nextTurnStatus != 'waiting_approval' &&
+        nextTurnStatus != 'cancelling' &&
+        nextTurnStatus != 'needs_reconciliation') {
+      final hasRunningTool = items.any(
+        (candidate) =>
+            candidate.type == 'tool_call' &&
+            candidate.status != 'completed' &&
+            candidate.status != 'failed' &&
+            candidate.status != 'interrupted',
+      );
       if (hasRunningTool) {
         nextTurnStatus = 'waiting_tool';
       } else if (nextTurnStatus == 'waiting_tool') {
@@ -421,7 +529,8 @@ class AgentEventReducer {
     final status = switch (type) {
       'turn.queued' => 'queued',
       'turn.started' => 'running',
-      'turn.waiting' => event.status.isNotEmpty ? event.status : 'needs_reconciliation',
+      'turn.waiting' =>
+        event.status.isNotEmpty ? event.status : 'needs_reconciliation',
       'turn.cancelling' => 'cancelling',
       'turn.completed' => 'completed',
       'turn.failed' => 'failed',
@@ -468,9 +577,7 @@ class AgentEventReducer {
     final id = (raw['turnId'] ?? '').toString().trim();
     if (id.isEmpty) return null;
     final rawBlocks = raw['blocks'];
-    final items = <AssistantTurnItemDto>[
-      ...?existing?.items,
-    ];
+    final items = <AssistantTurnItemDto>[...?existing?.items];
     if (rawBlocks is List) {
       for (final value in rawBlocks.whereType<Map>()) {
         final block = Map<String, dynamic>.from(value);
@@ -489,7 +596,8 @@ class AgentEventReducer {
           id: blockId,
           turnId: id,
           conversationId: old?.conversationId ?? existing?.conversationId ?? '',
-          sequence: (block['blockSequence'] as num?)?.toInt() ?? old?.sequence ?? 0,
+          sequence:
+              (block['blockSequence'] as num?)?.toInt() ?? old?.sequence ?? 0,
           type: (block['type'] ?? old?.type ?? 'text').toString(),
           status: (block['status'] ?? old?.status ?? 'running').toString(),
           revision: revision > 0 ? revision : old?.revision ?? 0,
@@ -503,7 +611,8 @@ class AgentEventReducer {
           citationSnapshot: payload.containsKey('citationSnapshot')
               ? normalizeCitationSnapshot(payload['citationSnapshot'])
               : old?.citationSnapshot ?? const <Map<String, dynamic>>[],
-          citationSnapshotProvided: payload.containsKey('citationSnapshot') ||
+          citationSnapshotProvided:
+              payload.containsKey('citationSnapshot') ||
               (old?.citationSnapshotProvided ?? false),
           argumentsJson: payload.containsKey('arguments')
               ? (payload['arguments'] ?? '').toString()
@@ -512,7 +621,8 @@ class AgentEventReducer {
               ? (payload['result'] ?? '').toString()
               : old?.resultJson ?? '',
           errorCode: (payload['errorCode'] ?? old?.errorCode ?? '').toString(),
-          durationMs: (payload['durationMs'] as num?)?.toInt() ?? old?.durationMs ?? 0,
+          durationMs:
+              (payload['durationMs'] as num?)?.toInt() ?? old?.durationMs ?? 0,
           isFinal: old?.isFinal ?? false,
           messageId: old?.messageId ?? '',
           createdAt: old?.createdAt ?? (raw['startedAt'] ?? '').toString(),
@@ -532,14 +642,21 @@ class AgentEventReducer {
       characterId: existing?.characterId ?? '',
       userMessageId: existing?.userMessageId ?? '',
       requestId: (raw['requestId'] ?? existing?.requestId ?? '').toString(),
-      executionId: (raw['executionId'] ?? existing?.executionId ?? '').toString(),
-      parentTurnId: (raw['parentTurnId'] ?? existing?.parentTurnId ?? '').toString(),
-      parentBlockId: (raw['parentBlockId'] ?? existing?.parentBlockId ?? '').toString(),
+      executionId: (raw['executionId'] ?? existing?.executionId ?? '')
+          .toString(),
+      parentTurnId: (raw['parentTurnId'] ?? existing?.parentTurnId ?? '')
+          .toString(),
+      parentBlockId: (raw['parentBlockId'] ?? existing?.parentBlockId ?? '')
+          .toString(),
       agentId: (raw['agentId'] ?? existing?.agentId ?? '').toString(),
-      sequence: (raw['turnSequence'] as num?)?.toInt() ?? existing?.sequence ?? 0,
-      status: _normalizeStatus((raw['status'] ?? existing?.status ?? 'running').toString()),
+      sequence:
+          (raw['turnSequence'] as num?)?.toInt() ?? existing?.sequence ?? 0,
+      status: _normalizeStatus(
+        (raw['status'] ?? existing?.status ?? 'running').toString(),
+      ),
       createdAt: (raw['startedAt'] ?? existing?.createdAt ?? '').toString(),
-      updatedAt: (raw['lastModifiedAt'] ?? existing?.updatedAt ?? '').toString(),
+      updatedAt: (raw['lastModifiedAt'] ?? existing?.updatedAt ?? '')
+          .toString(),
       completedAt: existing?.completedAt ?? '',
       items: items,
     );
@@ -556,7 +673,9 @@ class AgentEventReducer {
 
   String _blockStatus(String type, String eventStatus, String current) {
     if (type == 'tool.arguments.completed') {
-      return eventStatus.isNotEmpty ? eventStatus : (current.isEmpty ? 'running' : current);
+      return eventStatus.isNotEmpty
+          ? eventStatus
+          : (current.isEmpty ? 'running' : current);
     }
     if (type.endsWith('.failed')) return 'failed';
     if (type.endsWith('.interrupted')) return 'interrupted';
@@ -590,7 +709,9 @@ class AgentEventReducer {
       status: status ?? turn.status,
       createdAt: turn.createdAt,
       updatedAt: updatedAt?.isNotEmpty == true ? updatedAt! : turn.updatedAt,
-      completedAt: completedAt?.isNotEmpty == true ? completedAt! : turn.completedAt,
+      completedAt: completedAt?.isNotEmpty == true
+          ? completedAt!
+          : turn.completedAt,
       items: items ?? turn.items,
     );
   }
@@ -631,7 +752,8 @@ class AgentEventReducer {
       isFinal: isFinal ?? item.isFinal,
       messageId: messageId ?? item.messageId,
       citationSnapshot: citationSnapshot ?? item.citationSnapshot,
-      citationSnapshotProvided: citationSnapshot != null || item.citationSnapshotProvided,
+      citationSnapshotProvided:
+          citationSnapshot != null || item.citationSnapshotProvided,
       createdAt: item.createdAt,
       updatedAt: updatedAt?.isNotEmpty == true ? updatedAt! : item.updatedAt,
     );

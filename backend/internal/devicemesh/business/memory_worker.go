@@ -91,7 +91,11 @@ func (e *Engine) ResumeMemory(ctx context.Context, job coordination.MemoryJobLoc
 	}
 	inference := Inference{Scope: saved.Response.Scope, ConversationID: job.ConversationID, Snapshot: snapshot, Message: message, Context: saved.Context}
 	inference.Ingress = saved.Ingress
-	return e.completeMemory(coordination.WithScope(ctx, inference.Scope), inference, saved.Hash, *saved.Response, revision)
+	ctx = coordination.WithScope(ctx, inference.Scope)
+	if err := e.finishOwnedTitle(ctx, inference, saved.Response.Generation); err != nil {
+		return *saved.Response, err
+	}
+	return e.completeMemory(ctx, inference, saved.Hash, *saved.Response, revision)
 }
 
 func (e *Engine) RunMemoryWorker(ctx context.Context) {

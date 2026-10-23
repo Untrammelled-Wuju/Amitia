@@ -765,6 +765,14 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		}
 		return Response{}, err
 	}
+	if generation.Reasoning != "" {
+		if err := emitCurrent(Event{Type: "reasoning-completed"}); err != nil {
+			return Response{}, err
+		}
+	}
+	if err := emitCurrent(Event{Type: "output-completed"}); err != nil {
+		return Response{}, err
+	}
 	if err := e.coordination.Validate(ctx, scope); err != nil {
 		return Response{}, err
 	}
@@ -777,6 +785,9 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		if err != nil {
 			return Response{}, fmt.Errorf("角色运行状态尚未确认保存: %w", err)
 		}
+	}
+	if len(generation.CitationSnapshot) == 0 || strings.TrimSpace(string(generation.CitationSnapshot)) == "null" {
+		generation.CitationSnapshot = json.RawMessage("[]")
 	}
 	response := Response{Transcription: transcription, UserRevision: userRevision, ConversationID: request.ConversationID, RequestID: request.RequestID, TurnID: scope.TurnID, ExecutionID: scope.ExecutionID, Scope: scope, Generation: generation, Saved: true, MemoryStatus: "pending"}
 	if generation.Suppressed || hasIngress && ingress.SuppressReplyPersistence {
@@ -833,6 +844,9 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	}
 	if generation.Suppressed || hasIngress && ingress.SuppressReplyPersistence {
 		response.MemoryStatus = "skipped"
+		return response, nil
+	}
+	if emit != nil {
 		return response, nil
 	}
 	response, err = e.completeMemory(ctx, inference, fingerprint, response, checkpointRevision+1)

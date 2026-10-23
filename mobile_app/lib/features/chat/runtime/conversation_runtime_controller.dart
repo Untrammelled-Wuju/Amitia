@@ -482,6 +482,8 @@ class ConversationRuntimeController extends ChangeNotifier {
     _lastError = null;
     var text = '';
     var reasoning = '';
+    var reasoningComplete = false;
+    var outputComplete = false;
     var citationSnapshot = const <Map<String, dynamic>>[];
     var accepted = false;
     var completed = false;
@@ -493,6 +495,12 @@ class ConversationRuntimeController extends ChangeNotifier {
     final sequence = _nextLocalSequence();
     void project(MessageStatus status) {
       if (_disposed) return;
+      final local = _messages.findByRenderId(
+        _assistantRenderId(requestId),
+        role: MessageRole.assistant,
+        sourceOwnerId: '',
+      );
+      if (local != null && acceptedScope.isNotEmpty) _messages.remove(local);
       _messages.upsert(
         ChatMessage(
           id: '$requestId/assistant',
@@ -506,6 +514,8 @@ class ConversationRuntimeController extends ChangeNotifier {
           type: MessageType.text,
           content: text,
           reasoningContent: reasoning,
+          reasoningComplete: reasoningComplete,
+          outputComplete: outputComplete,
           citationSnapshot: citationSnapshot,
           time: time,
           sequence: sequence,
@@ -515,7 +525,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       notifyListeners();
     }
 
-    notifyListeners();
+    project(MessageStatus.queued);
     try {
       await _appearancePreferences?.init();
       await for (final event in _chatService.owned.send(
@@ -562,6 +572,7 @@ class ConversationRuntimeController extends ChangeNotifier {
             ),
           );
           if (wasDraft) _conversationUpdateEpoch++;
+          project(MessageStatus.streaming);
         } else if (type == 'task') {
           if (accepted)
             WorkbenchMobileEvents.taskChanged(
@@ -586,10 +597,19 @@ class ConversationRuntimeController extends ChangeNotifier {
           notifyListeners();
         } else if (type == 'delta') {
           if (event['reasoning'] == true) {
+            reasoningComplete = false;
             reasoning += (event['text'] ?? '').toString();
           } else {
+            reasoningComplete = true;
             text += (event['text'] ?? '').toString();
           }
+          project(MessageStatus.streaming);
+        } else if (type == 'reasoning-completed') {
+          reasoningComplete = true;
+          project(MessageStatus.streaming);
+        } else if (type == 'output-completed') {
+          reasoningComplete = true;
+          outputComplete = true;
           project(MessageStatus.streaming);
         } else if (type == 'completed') {
           final result = event['data'] as Map;
@@ -599,6 +619,8 @@ class ConversationRuntimeController extends ChangeNotifier {
             result['citationSnapshot'],
           );
           completed = true;
+          reasoningComplete = true;
+          outputComplete = true;
           savedRevision = result['saved'] == true ? 1 : null;
           final current = _messages.findById(
             pending.id,
@@ -627,11 +649,17 @@ class ConversationRuntimeController extends ChangeNotifier {
         }
       }
     } catch (error) {
-      if (!_disposed) {
+      if (!_disposed && !completed) {
         _lastError = error;
-        if (!accepted)
+        if (!accepted) {
           _messages.upsert(_cloneMessage(pending, status: MessageStatus.error));
-        if (text.isNotEmpty || reasoning.isNotEmpty)
+          final placeholder = _messages.findByRenderId(
+            _assistantRenderId(requestId),
+            role: MessageRole.assistant,
+          );
+          if (placeholder != null) _messages.remove(placeholder);
+        }
+        if (accepted || text.isNotEmpty || reasoning.isNotEmpty)
           project(MessageStatus.interrupted);
       }
     } finally {
@@ -896,6 +924,9 @@ class ConversationRuntimeController extends ChangeNotifier {
               persisted,
               renderId: renderId,
               assistantTurn: turn,
+              status: _isTerminalTurn(turn.status)
+                  ? _statusForDto(turn.status)
+                  : persisted.status,
               citationSnapshot: projectCitationSnapshot(
                 persisted.citationSnapshot,
                 finalItem,
@@ -1472,6 +1503,8 @@ class ConversationRuntimeController extends ChangeNotifier {
       type: message.type,
       content: content ?? message.content,
       reasoningContent: message.reasoningContent,
+      reasoningComplete: message.reasoningComplete,
+      outputComplete: message.outputComplete,
       reasoningDurationMs: message.reasoningDurationMs,
       time: message.time,
       sequence: sequence ?? message.sequence,
@@ -1688,6 +1721,9 @@ class ConversationRuntimeController extends ChangeNotifier {
         'role': message.role.name,
         'type': message.type.name,
         'content': message.content,
+        'reasoningContent': message.reasoningContent,
+        'reasoningComplete': message.reasoningComplete,
+        'outputComplete': message.outputComplete,
         if (message.reasoningDurationMs > 0)
           'reasoningDurationMs': message.reasoningDurationMs,
         'time': message.time.toIso8601String(),

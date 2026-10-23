@@ -110,3 +110,38 @@ describe("Phase 45 terminal and historical projection invariants", () => {
     expect(reducer.activeTurnId).toBe("");
   });
 });
+
+describe("interrupted execution reconciliation", () => {
+  it("replaces an interrupted state with newer completed history of the same execution", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([historic("interrupted", 5)], 5);
+    reducer.mergeTurns([{ ...historic("completed", 6), updatedAt: "2026-10-16T10:01:00Z" }]);
+    expect(reducer.turn("turn-a")?.status).toBe("completed");
+    reducer.mergeTurns([historic("interrupted", 5)]);
+    expect(reducer.turn("turn-a")?.status).toBe("completed");
+  });
+  it("accepts a later committed completion event and rejects subsequent interruption", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([historic("interrupted")], 5);
+    expect(reducer.apply({ ...event("turn.completed", 6), requestId: "request-a", executionId: "execution-a", messageId: "message-a", payload: { saved: true } })).toBe("applied");
+    expect(reducer.turn("turn-a")?.status).toBe("completed");
+    expect(reducer.apply({ ...event("turn.interrupted", 7), requestId: "request-a", executionId: "execution-a" })).toBe("stale");
+  });
+  it("rejects completion from a different execution and older completed history", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([{ ...historic("interrupted"), updatedAt: "2026-10-16T10:02:00Z" }], 5);
+    reducer.mergeTurns([{ ...historic("completed", 6), updatedAt: "2026-10-16T10:01:00Z" }]);
+    expect(reducer.turn("turn-a")?.status).toBe("interrupted");
+    reducer.mergeTurns([{ ...historic("completed", 8), executionId: "foreign" }]);
+    expect(reducer.turn("turn-a")?.items[0].revision).toBe(6);
+    expect(reducer.apply({ ...event("turn.completed", 6), requestId: "request-a", executionId: "foreign", messageId: "message-a" })).toBe("stale");
+    expect(reducer.turn("turn-a")?.status).toBe("interrupted");
+  });
+  it("does not infer success without a saved message and matching execution", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([historic("interrupted")], 5);
+    expect(reducer.apply({ ...event("turn.completed", 6), requestId: "request-a", executionId: "execution-a" })).toBe("stale");
+    expect(reducer.apply(event("turn.completed", 7))).toBe("stale");
+    expect(reducer.turn("turn-a")?.status).toBe("interrupted");
+  });
+});

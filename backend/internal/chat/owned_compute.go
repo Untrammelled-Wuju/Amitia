@@ -394,6 +394,11 @@ func (s *ownedReplySink) Emit(ctx context.Context, event ModelEvent) error {
 	switch event.Type {
 	case ModelEventTextDelta:
 		if !s.reasoningStarted.IsZero() {
+			if s.inference.Emit != nil {
+				if err := s.inference.Emit(business.Event{Type: "reasoning-completed"}); err != nil {
+					return err
+				}
+			}
 			s.reasoningElapsed += time.Since(s.reasoningStarted)
 			s.reasoningStarted = time.Time{}
 		}

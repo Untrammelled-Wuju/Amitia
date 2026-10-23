@@ -363,7 +363,7 @@ export function normalizeAIMessage(
     thinking: thinkingContent
       ? {
           content: thinkingContent,
-          state,
+          state: message.reasoningComplete === true || (message.reasoningComplete !== false && markdown.trim()) ? "completed" : state,
           duration: thinkingDurationSeconds,
         }
       : undefined,

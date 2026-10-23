@@ -3,13 +3,7 @@ import '../../../shared/models/models.dart';
 
 enum AmrpMessageRole { user, assistant, system }
 
-enum AmrpMessageState {
-  queued,
-  streaming,
-  completed,
-  interrupted,
-  failed,
-}
+enum AmrpMessageState { queued, streaming, completed, interrupted, failed }
 
 enum AmrpToolStatus { queued, running, success, failed, interrupted }
 
@@ -272,7 +266,9 @@ class AmrpMessage {
           ? null
           : AmrpThinkingBlock(
               content: message.reasoningContent,
-              state: _stateFor(message),
+              state: message.reasoningComplete
+                  ? AmrpMessageState.completed
+                  : _stateFor(message),
               duration: message.reasoningDurationMs > 0
                   ? Duration(milliseconds: message.reasoningDurationMs)
                   : null,
@@ -282,7 +278,10 @@ class AmrpMessage {
         for (final entry in normalizeCitationSnapshot(message.citationSnapshot))
           if ((entry['marker'] ?? '').toString().trim().isNotEmpty)
             AmrpCitationSource(
-              id: (entry['marker'] ?? '').toString().replaceAll(RegExp(r'[\[\]]'), ''),
+              id: (entry['marker'] ?? '').toString().replaceAll(
+                RegExp(r'[\[\]]'),
+                '',
+              ),
               title: (entry['title'] ?? '来源').toString(),
               url: (entry['url'] ?? '').toString(),
               snippet: (entry['excerpt'] ?? '').toString(),
@@ -295,6 +294,9 @@ class AmrpMessage {
   }
 
   static AmrpMessageState _stateFor(ChatMessage message) {
+    if (message.outputComplete && message.status == MessageStatus.streaming) {
+      return AmrpMessageState.completed;
+    }
     return switch (message.status) {
       MessageStatus.queued => AmrpMessageState.queued,
       MessageStatus.sending ||

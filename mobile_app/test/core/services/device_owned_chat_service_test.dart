@@ -192,6 +192,97 @@ Stream<List<int>> bytes(List<Map<String, dynamic>> events) {
 }
 
 void main() {
+  test('阶段结束事件校验归属，正文结束不能代替保存确认', () async {
+    final phases = [
+      {'type': 'started', 'executionScope': scope()},
+      {'type': 'reasoning-completed', 'executionScope': scope()},
+      {'type': 'output-completed', 'executionScope': scope()},
+    ];
+    await expectLater(
+      decodeOwnedChatStream(bytes(phases), 'request').toList(),
+      throwsStateError,
+    );
+    final events = await decodeOwnedChatStream(
+      bytes([
+        ...phases,
+        {
+          'type': 'completed',
+          'data': {
+            'requestId': 'request',
+            'executionScope': scope(),
+            'saved': true,
+          },
+        },
+      ]),
+      'request',
+    ).toList();
+    expect(events.map((e) => e['type']), [
+      'started',
+      'reasoning-completed',
+      'output-completed',
+      'completed',
+    ]);
+    await expectLater(
+      decodeOwnedChatStream(
+        bytes([
+          phases.first,
+          {
+            'type': 'output-completed',
+            'executionScope': {...scope(), 'roleId': 'foreign'},
+          },
+        ]),
+        'request',
+      ).toList(),
+      throwsStateError,
+    );
+  });
+
+  test('完成回执空引用统一为空数组，错误类型仍拒绝', () async {
+    for (final citation in [
+      <String, dynamic>{},
+      {'citationSnapshot': null},
+      {'citationSnapshot': <dynamic>[]},
+    ]) {
+      final events = await decodeOwnedChatStream(
+        bytes([
+          {'type': 'started', 'executionScope': scope()},
+          {'type': 'delta', 'executionScope': scope(), 'text': '状态诊断完成'},
+          {
+            'type': 'completed',
+            'data': {
+              'requestId': 'request',
+              'executionScope': scope(),
+              'saved': true,
+              'userRevision': 1,
+              ...citation,
+            },
+          },
+        ]),
+        'request',
+      ).toList();
+      expect(events.last['type'], 'completed');
+      expect((events.last['data'] as Map)['citationSnapshot'], isEmpty);
+    }
+    await expectLater(
+      decodeOwnedChatStream(
+        bytes([
+          {'type': 'started', 'executionScope': scope()},
+          {
+            'type': 'completed',
+            'data': {
+              'requestId': 'request',
+              'executionScope': scope(),
+              'saved': true,
+              'citationSnapshot': 'invalid',
+            },
+          },
+        ]),
+        'request',
+      ).toList(),
+      throwsStateError,
+    );
+  });
+
   test('Owner聊天管理和控制使用POST并拒绝迟到或越权回执', () async {
     SharedPreferences.setMockInitialValues({});
     final api = _OwnedApi();

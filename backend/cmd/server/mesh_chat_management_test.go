@@ -184,3 +184,19 @@ func TestUnsafeOwnedFeedbackCreatesScopedIncidentWithoutLegacyEvent(t *testing.T
 		t.Fatal("legacy event table still exists")
 	}
 }
+
+func TestOwnedChatFeedbackRejectsUnavailableReplies(t *testing.T) {
+	p := setupMeshLocalDataPort(t)
+	scope := coordination.ExecutionScope{CoreID: "core", RoleID: "one"}
+	records := []ownedChatManagementRecord{
+		{ID: "user", Kind: "message", Body: map[string]any{"role": "user"}},
+	}
+	for _, operation := range []string{"feedback/list", "feedback/create"} {
+		for _, id := range []string{"missing", "user"} {
+			_, err := p.managedChatFeedback(t.Context(), scope, coordination.ChatManagementRequest{Operation: operation, MessageID: id}, records)
+			if err == nil || err.Error() != "当前回复尚未保存、已删除或不属于当前Owner与角色，暂不可反馈" {
+				t.Fatalf("operation=%s message=%s error=%v", operation, id, err)
+			}
+		}
+	}
+}

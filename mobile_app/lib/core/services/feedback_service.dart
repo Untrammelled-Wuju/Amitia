@@ -21,12 +21,14 @@ class FeedbackService {
     String feedbackType, {
     String? comment,
     String characterId = '',
+    Map<String, dynamic>? expectedExecutionScope,
   }) async {
     final resp = await _owned.management(
       'feedback/create',
       characterId: characterId,
       body: {
         'messageId': messageId,
+        'expectedExecutionScope': ?expectedExecutionScope,
         'feedbackType': feedbackType,
         'reason': comment?.trim() ?? '',
       },
@@ -39,11 +41,15 @@ class FeedbackService {
   Future<FeedbackDto?> getByMessage(
     String messageId, {
     String characterId = '',
+    Map<String, dynamic>? expectedExecutionScope,
   }) async {
     final resp = await _owned.management(
       'feedback/list',
       characterId: characterId,
-      body: {'messageId': messageId},
+      body: {
+        'messageId': messageId,
+        'expectedExecutionScope': ?expectedExecutionScope,
+      },
     );
     final items = resp['items'];
     if (items is! List) throw StateError('反馈查询结果无效');
@@ -55,7 +61,11 @@ class FeedbackService {
     return _owned.management('feedback-stats', characterId: characterId);
   }
 
-  Future<bool> delete(String id, {String characterId = ''}) async {
+  Future<bool> delete(
+    String id, {
+    String characterId = '',
+    Map<String, dynamic>? expectedExecutionScope,
+  }) async {
     final feedbackId = int.tryParse(id);
     if (feedbackId == null || feedbackId <= 0) {
       throw ArgumentError.value(id, 'id');
@@ -63,7 +73,10 @@ class FeedbackService {
     final result = await _owned.management(
       'feedback/delete',
       characterId: characterId,
-      body: {'feedbackId': feedbackId},
+      body: {
+        'feedbackId': feedbackId,
+        'expectedExecutionScope': ?expectedExecutionScope,
+      },
     );
     if (result['deleted'] != true || result['id'].toString() != id) {
       throw StateError('反馈删除尚未确认');

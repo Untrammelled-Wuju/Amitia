@@ -92,6 +92,8 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
         'transcribed',
         'delta',
         'task',
+        'reasoning-completed',
+        'output-completed',
         'completed',
         'interrupted',
         'failed',
@@ -100,7 +102,9 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
       if (type == 'started' ||
           type == 'delta' ||
           type == 'transcribed' ||
-          type == 'task') {
+          type == 'task' ||
+          type == 'reasoning-completed' ||
+          type == 'output-completed') {
         final rawScope = event['executionScope'];
         if (rawScope is! Map) throw StateError('回复缺少执行范围');
         final current = _scopeStamp(
@@ -165,6 +169,11 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
             Map<String, dynamic>.from(result['executionScope'] as Map),
             requestId,
           );
+          if (result['citationSnapshot'] != null &&
+              result['citationSnapshot'] is! List) {
+            throw StateError('引用快照格式无效');
+          }
+          result['citationSnapshot'] ??= <dynamic>[];
           if (transcription != null || result.containsKey('transcription')) {
             final text = result['transcription'];
             if (text is! String ||

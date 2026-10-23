@@ -49,7 +49,7 @@ export interface OwnedChatResponse {
 }
 
 export interface OwnedChatEvent {
-  type: "started" | "transcribed" | "delta" | "task" | "completed" | "interrupted" | "failed";
+  type: "started" | "transcribed" | "delta" | "task" | "reasoning-completed" | "output-completed" | "completed" | "interrupted" | "failed";
 	task?: { coordinationId: string; status: string };
   executionScope?: OwnedExecutionScope;
   conversationId?: string;
@@ -118,8 +118,8 @@ export async function consumeOwnedChatStream(
     const event = JSON.parse(lines.map((line) => line.slice(5).trimStart()).join("\n")) as OwnedChatEvent;
     const suppliedScope = event.executionScope || event.data?.executionScope;
     if (expectedExecutionScope && suppliedScope && !sameOwnedAuthority(expectedExecutionScope, suppliedScope)) throw new Error("服务提供者、角色或数据归属已变化，迟到回复已拦截");
-    if (!["started", "transcribed", "delta", "task", "completed", "interrupted", "failed"].includes(event.type)) throw new Error("未知的回复事件");
-    if (event.type === "started" || event.type === "delta" || event.type === "transcribed" || event.type === "task") {
+    if (!["started", "transcribed", "delta", "task", "reasoning-completed", "output-completed", "completed", "interrupted", "failed"].includes(event.type)) throw new Error("未知的回复事件");
+    if (event.type === "started" || event.type === "delta" || event.type === "transcribed" || event.type === "task" || event.type === "reasoning-completed" || event.type === "output-completed") {
       const current = scopeFingerprint(validateScope(event.executionScope, requestId));
       if (event.type === "started") {
         if (fingerprint) throw new Error("重复的回复开始事件");
@@ -141,8 +141,8 @@ export async function consumeOwnedChatStream(
       if (event.type === "completed") {
         if (!event.data?.saved || event.data.requestId !== requestId) throw new Error("回复尚未确认保存");
         validateScope(event.data.executionScope, requestId);
-        if (event.data.citationSnapshot !== undefined && !Array.isArray(event.data.citationSnapshot)) throw new Error("引用快照格式无效");
-        if (event.data.citationSnapshot) event.data.citationSnapshot = normalizeCitationSnapshot(event.data.citationSnapshot);
+        if (event.data.citationSnapshot != null && !Array.isArray(event.data.citationSnapshot)) throw new Error("引用快照格式无效");
+        event.data.citationSnapshot = normalizeCitationSnapshot(event.data.citationSnapshot);
         if (transcription !== undefined || event.data.transcription !== undefined) {
           const text = event.data.transcription;
           if (typeof text !== "string" || !text.trim() || new TextEncoder().encode(text).byteLength > 65536 || event.data.userRevision !== 2 || (transcription !== undefined && text !== transcription)) throw new Error("语音转写结果与保存确认不一致");

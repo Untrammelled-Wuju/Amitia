@@ -22,6 +22,26 @@ function stream(events: unknown[], split = false) {
 }
 
 describe("device owned chat stream", () => {
+  it("validates phase events without treating output completion as a save acknowledgement", async () => {
+    const result = { requestId: "request", conversationId: "conversation", executionScope: scope, saved: true, reply: "正文", memoryStatus: "pending" };
+    const events = [{ type: "started", executionScope: scope }, { type: "delta", executionScope: scope, text: "思考", reasoning: true }, { type: "reasoning-completed", executionScope: scope }, { type: "delta", executionScope: scope, text: "正文" }, { type: "output-completed", executionScope: scope }];
+    await expect(consumeOwnedChatStream(stream(events), "request", () => {})).rejects.toThrow("结果尚未确认");
+    const seen: string[] = [];
+    await consumeOwnedChatStream(stream([...events, { type: "completed", data: result }]), "request", event => seen.push(event.type));
+    expect(seen).toEqual(["started", "delta", "reasoning-completed", "delta", "output-completed", "completed"]);
+    await expect(consumeOwnedChatStream(stream([events[0], { type: "output-completed", executionScope: { ...scope, roleId: "foreign" } }]), "request", () => {})).rejects.toThrow("归属");
+  });
+  it("accepts null, missing and empty citation snapshots from saved completion frames", async () => {
+    for (const citation of [{ citationSnapshot: null }, {}, { citationSnapshot: [] }]) {
+      const seen: any[] = [];
+      const result = { requestId: "request", conversationId: "conversation", executionScope: scope, saved: true, reply: "状态诊断完成", memoryStatus: "pending", userRevision: 1, ...citation };
+      const response = await consumeOwnedChatStream(stream([{ type: "started", executionScope: scope }, { type: "delta", executionScope: scope, text: "状态诊断完成" }, { type: "completed", data: result }], true), "request", event => seen.push(event), scope);
+      expect(response.saved).toBe(true);
+      expect(response.citationSnapshot).toEqual([]);
+      expect(seen.at(-1)).toMatchObject({ type: "completed", data: { saved: true, citationSnapshot: [] } });
+    }
+  });
+
 	it("accepts scoped task progress without ending or changing reply text", async () => {
 	  const seen: any[] = [];
 	  const result = { requestId: "request", conversationId: "conversation", executionScope: scope, saved: true, reply: "你好", memoryStatus: "saved" };

@@ -118,6 +118,7 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function loadSidebar() {
+    if (!owned.enabled.value && !await owned.refresh()) throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     if (owned.enabled.value) {
       const generation = ++sidebarGeneration;
       const role=owned.selectInitialRole(localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");

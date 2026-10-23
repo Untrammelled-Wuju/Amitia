@@ -27,6 +27,26 @@ ChatMessage message(
 );
 
 void main() {
+  test('思考完成不等待整条回复保存', () {
+    final raw = ChatMessage(
+      id: 'phase',
+      role: MessageRole.assistant,
+      type: MessageType.text,
+      content: '正文',
+      reasoningContent: '思考内容',
+      reasoningComplete: true,
+      status: MessageStatus.streaming,
+      time: DateTime(2026),
+    );
+    final normalized = AmrpMessage.fromChatMessage(raw);
+    expect(normalized.thinking!.state, AmrpMessageState.completed);
+    final output = projectBubbleContent(message: normalized);
+    expect(
+      output.whereType<BubbleThinking>().single.block.state,
+      AmrpMessageState.completed,
+    );
+  });
+
   test(
     'buffers incomplete segments and flushes completion or interruption',
     () {

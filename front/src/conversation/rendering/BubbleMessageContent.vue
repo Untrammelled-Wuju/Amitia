@@ -12,7 +12,7 @@
       </div>
       </div>
     </div>
-    <div v-if="pending && !items.some(item => item.kind === 'thinking' && !item.complete)" class="bubble-entry">
+    <div v-if="pending && !message.raw?.outputComplete && !items.some(item => item.kind === 'thinking' && !item.complete)" class="bubble-entry">
       <slot name="avatar" />
       <div class="bubble-entry-body">
       <slot name="identity" />

@@ -97,6 +97,14 @@ describe("conversation runtime projection", () => {
     });
   });
 
+  it("clears stale message state after receiving completed history", async () => {
+    const persisted = ref<any[]>([{ id: "message-1", requestId: "request-1", role: "assistant", content: "成功回复", status: "interrupted", state: "interrupted" }]);
+    const runtime = useConversationRuntime(ref("conversation-1"), persisted, ref(false), () => undefined);
+    mocks.snapshot.value = { version: 1, lastEventSequence: 2, messages: persisted.value, turns: [{ id: "turn-1", requestId: "request-1", executionId: "execution-1", conversationId: "conversation-1", status: "completed", items: [] }] };
+    await runtime.loadSnapshot();
+    expect(runtime.messages.value[0]).toMatchObject({ status: "completed", state: "completed" });
+    runtime.cleanup();
+  });
   it("projects completed citations before and after snapshot refresh", async () => {
     const persistedMessages = ref<any[]>([]);
     const runtime = useConversationRuntime(ref("conversation-1"), persistedMessages, ref(false), () => undefined);
