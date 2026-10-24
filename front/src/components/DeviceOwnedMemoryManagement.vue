@@ -15,6 +15,7 @@
       <el-button :disabled="loading" @click="openCreate">新增记忆</el-button>
       <el-button :disabled="loading" @click="openGenerate">从对话生成候选</el-button>
       <el-button :disabled="loading" @click="loadCandidates">待审核候选</el-button>
+      <el-button :disabled="loading" @click="emit('refresh')">刷新</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <article v-for="row in results" :key="`${row.ownerId}/${row.id}`" class="management-row"><strong>{{ row.body.key }}</strong><p>{{ text(row) }}</p><small>{{ row.ownerId }} · 版本 {{ row.revision }}</small></article>
@@ -49,7 +50,7 @@ import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 
 const props = defineProps<{ executionScope: OwnedExecutionScope; search?: string }>();
-const emit = defineEmits<{ saved: [] }>();
+const emit = defineEmits<{ saved: []; refresh: [] }>();
 const owned = useDeviceOwnedConversation();
 const api = useOwnedMemoryManagement();
 const internalQuery = ref("");

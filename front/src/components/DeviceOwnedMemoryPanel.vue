@@ -25,26 +25,27 @@
     </div>
     <el-alert v-if="source !== 'current'" title="原设备历史数据可供 Core 调用；请在原设备管理这些历史记录。" type="info" :closable="false" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <DeviceOwnedMemoryManagement v-if="source === 'current' && kind === 'memory' && loadedScope && !loading" :execution-scope="loadedScope" :search="search" @saved="load()" />
+    <DeviceOwnedMemoryManagement v-if="source === 'current' && kind === 'memory' && loadedScope && !loading" :execution-scope="loadedScope" :search="search" @saved="load()" @refresh="load(false)" />
     <div v-if="source === 'current' && !loadedScope?.memoryViewAll && ['vector', 'graph'].includes(kind)" class="projection-status">
       <p v-for="layer in projection?.status?.layers || []" :key="layer.kind">{{ layer.kind === 'vector' ? '向量' : '图谱' }}：已处理 {{ layer.current }}/{{ layer.total }} · 待更新 {{ layer.pending }} · 重试 {{ layer.retrying }}</p>
       <el-alert v-if="projectionNotice" :title="projectionNotice" type="info" :closable="false" />
       <el-button :disabled="!projection || loading" :loading="rebuilding" @click="rebuild">重建当前范围索引</el-button>
     </div>
-    <div v-if="search === undefined || view === 'profile' && source === 'current'" class="memory-filters page-filters">
+    <div v-if="search === undefined || ['profile', 'episodic', 'graph'].includes(view)" class="memory-filters page-filters">
       <div v-if="search === undefined" class="filter-field">
         <el-input :id="`${controlId}-page-search`" v-model="searchKeyword" clearable aria-label="搜索记忆" placeholder="搜索标题或内容" class="layer-select" />
       </div>
       <el-button v-if="view === 'profile' && source === 'current'" :disabled="loading" @click="createProfileOpen = true">新增画像</el-button>
-    </div>
-    <div v-loading="loading">
-      <OwnedMemoryGraph v-if="view === 'graph'" :resources="displayRows" :loading="loading" :error="error" :hide-search="search !== undefined" />
-      <div v-if="view === 'graph' && source === 'current' && rows.length" class="record-actions">
-        <el-select v-model="graphTransferId" filterable placeholder="选择要迁移的图谱关系" aria-label="待迁移图谱关系">
+      <template v-if="view === 'graph' && source === 'current' && rows.length">
+        <el-select v-model="graphTransferId" class="graph-transfer-select" filterable placeholder="选择要迁移的图谱关系" aria-label="待迁移图谱关系">
           <el-option v-for="row in rows" :key="row.id" :label="ownedMemoryTitle(row)" :value="row.id" />
         </el-select>
         <el-button :disabled="loading || !graphTransferId" @click="openTransfer(rows.find((row: any) => row.id === graphTransferId))">调整所属分区</el-button>
-      </div>
+      </template>
+      <el-button v-if="['profile', 'episodic', 'graph'].includes(view)" :disabled="loading" @click="load(false)">刷新</el-button>
+    </div>
+    <div v-loading="loading">
+      <OwnedMemoryGraph v-if="view === 'graph'" :resources="displayRows" :loading="loading" :error="error" :hide-search="search !== undefined" />
       <div v-else-if="view === 'timeline'" class="timeline-view">
         <div class="timeline-toolbar">
           <el-select v-model="timelineLayers" multiple collapse-tags clearable placeholder="记忆层" class="tl-layers">
@@ -128,7 +129,7 @@
       </template>
     </div>
     <el-button v-if="next || nextLegacy" :loading="loading" @click="load(true)">加载更多</el-button>
-    <el-button :disabled="loading" @click="load(false)">刷新</el-button>
+    <el-button v-if="!['profile', 'episodic', 'graph'].includes(view) && !(source === 'current' && kind === 'memory' && loadedScope)" :disabled="loading" @click="load(false)">刷新</el-button>
     <el-dialog v-model="transferOpen" title="调整记忆所属分区" width="min(480px, 92vw)" :close-on-click-modal="!transferring" :show-close="!transferring">
       <p>移动这条记录及关联事实、向量和图谱，保留来源和历史。原分区不再保留副本。</p>
       <el-select v-model="transferTarget" aria-label="目标记忆分区" :disabled="transferring">
@@ -586,6 +587,7 @@ onUnmounted(() => {
 .timeline-view { min-width: 0; }
 .page-filters { display: flex; align-items: center; flex-wrap: wrap; padding: 0; margin-bottom: 16px; }
 .page-filters .filter-field { flex: 1 1 280px; max-width: 480px; }
+.graph-transfer-select { width: min(100%, 320px); }
 .timeline-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
 .tl-search { width: 220px; max-width: 100%; }
 .tl-layers { width: 260px; max-width: 100%; }

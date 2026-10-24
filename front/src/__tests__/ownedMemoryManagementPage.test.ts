@@ -21,6 +21,13 @@ describe("Owned 记忆管理表单原意图", () => {
   const click = async (wrapper: any, text: string) => { await wrapper.findAll("button").find((button: any) => button.text() === text).trigger("click"); await flushPromises(); };
   beforeEach(() => { Object.values(mocks).forEach((fn) => fn.mockReset()); scope = { authorizationRealm: "realm", coreId: "core", resourceOwnerId: "device", roleOwnerId: "device", targetDeviceId: "device", roleId: "role", roleRevision: 1, permissionRevision: 1, coordinated: false }; mocks.conflicts.mockReturnValue([]); mocks.read.mockResolvedValue({ resources: [], nextCursor: "" }); mocks.historicalRoles.mockResolvedValue([{ id: "old-role", name: "旧角色" }]); });
   afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
+  it("刷新位于待审核候选右侧并通知列表重新加载", async () => {
+    const wrapper = open();
+    const buttons = wrapper.find(".management-actions").findAll("button");
+    expect(buttons.map((button: any) => button.text())).toEqual(["新增记忆", "从对话生成候选", "待审核候选", "刷新"]);
+    await buttons[3].trigger("click");
+    expect(wrapper.emitted("refresh")).toEqual([[]]);
+  });
   it("使用页面搜索条件检索，并在条件改变后丢弃旧结果", async () => {
     const wrapper = open();
     await wrapper.setProps({ search: "茶" });

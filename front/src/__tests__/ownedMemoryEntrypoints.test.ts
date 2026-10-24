@@ -73,7 +73,8 @@ describe("网页六层记忆的数据归属入口", () => {
       else expect(wrapper.text()).toContain("原始内容");
       expect(mocks.data).toHaveBeenCalledTimes(1);
     }
-    await wrapper.findAll("button").find((button) => button.text() === "刷新")!.trigger("click");
+    if (kind === "memory") wrapper.findComponent({ name: "DeviceOwnedMemoryManagement" }).vm.$emit("refresh");
+    else await wrapper.findAll("button").find((button) => button.text() === "刷新")!.trigger("click");
     await flushPromises();
     expect(mocks.data).toHaveBeenCalledTimes(2);
   });
