@@ -4,15 +4,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="deployment-panel" data-amitia-ui="settings.section">
-    <section class="mode-summary" aria-label="当前设备连接状态">
-      <div class="mode-summary-main">
-        <span class="mode-summary-label">当前设备连接到</span>
-        <strong>{{ currentMode === "local" ? "本地模式" : "云端统筹模式" }}</strong>
-        <span class="mode-summary-address">{{ currentApiURL || "连接地址读取中" }}</span>
-      </div>
-      <el-tag :type="statusType" effect="plain">{{ statusLabel }}</el-tag>
-    </section>
-
     <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span>选择运行模式</span></template>
       <p class="connection-explanation">本地模式在当前设备运行全部项目服务；云端统筹模式连接 Cloud Core 并统一管理多设备数据。</p>
@@ -52,6 +43,8 @@ SPDX-License-Identifier: AGPL-3.0-only
           <li>当前设备完成首设备设置码或一次性 Offer 配对</li>
           <li>保存 DeviceCredential、切换本机 Device Agent 并验证会话</li>
         </ol>
+        <DevicePairingPanel :serverURL="formData.serverURL" @paired="handleDevicePaired" />
+        <BoundDevicesPanel :key="deviceManagementGeneration" />
       </div>
 
       <div class="mode-save-row">
@@ -76,57 +69,22 @@ SPDX-License-Identifier: AGPL-3.0-only
         @health-check-done="completeCloudSetup"
       />
     </el-card>
-
-    <details class="deployment-advanced">
-      <summary>当前设备连接详情</summary>
-      <el-descriptions :column="1" border size="small">
-        <el-descriptions-item label="当前连接目标">
-          <el-tag
-            :type="currentMode === 'local' ? 'success' : 'warning'"
-            size="small"
-          >
-            {{ currentMode === "local" ? "本地模式" : "云端统筹模式" }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="API 地址">{{
-          currentApiURL || "—"
-        }}</el-descriptions-item>
-        <el-descriptions-item label="运行状态">
-          <el-tag :type="statusType" size="small">{{ statusLabel }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item v-if="runtimeStatus?.businessCore" label="业务 Core">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted);">{{ runtimeStatus.businessCore.baseURL }}</span>
-            <el-tag :type="endpointStatusType(runtimeStatus.businessCore.state)" size="small">{{ endpointStatusLabel(runtimeStatus.businessCore.state) }}</el-tag>
-          </div>
-        </el-descriptions-item>
-        <el-descriptions-item v-if="runtimeStatus?.localRuntime" label="本机执行节点">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted);">{{ runtimeStatus.localRuntime.baseURL }}</span>
-            <el-tag :type="endpointStatusType(runtimeStatus.localRuntime.state)" size="small">{{ endpointStatusLabel(runtimeStatus.localRuntime.state) }}</el-tag>
-            <span v-if="runtimeStatus.localRuntime.profile" style="font-size: var(--ac-font-size-xs); color: var(--ac-color-text-muted);">({{ runtimeStatus.localRuntime.profile }})</span>
-          </div>
-        </el-descriptions-item>
-      </el-descriptions>
-    </details>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed, watch } from "vue";
+import { ref, reactive, onMounted, watch } from "vue";
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import {
   getDeploymentConfig,
   saveDeploymentConfig,
-  getApiBaseURL,
 } from "../../runtime/runtime-adapter";
-import type {
-  DeploymentModeConfig,
-  RuntimeStatus,
-} from "../../runtime/runtime-types";
+import type { DeploymentModeConfig } from "../../runtime/runtime-types";
 import { initializeRuntimeCapabilities, isDesktopShell } from "../../runtime/runtime-capabilities";
 import StageRuntimeSetup from "@/views/onboarding/components/StageRuntimeSetup.vue";
+import DevicePairingPanel from "@/components/DevicePairingPanel.vue";
+import BoundDevicesPanel from "@/components/BoundDevicesPanel.vue";
 
 const formMode = ref<"local" | "cloud">("local");
 const formData = reactive({ serverURL: "" });
@@ -136,13 +94,11 @@ const saving = ref(false);
 const saveSuccess = ref(false);
 const saveError = ref("");
 
-const currentMode = ref<"local" | "cloud">("local");
-const currentApiURL = ref("");
-const runtimeStatus = ref<RuntimeStatus | null>(null);
 const cloudSetupURL = ref("");
 const cloudSetupSaving = ref(false);
 const cloudConfigPrepared = ref(false);
 const cloudPreviousConfig = ref<DeploymentModeConfig | null>(null);
+const deviceManagementGeneration = ref(0);
 
 watch(formMode, (value) => {
   if (value === "local") cloudSetupURL.value = "";
@@ -169,64 +125,27 @@ const rules: FormRules = {
   ],
 };
 
-const statusType = computed(() => {
-  if (!runtimeStatus.value) return "info";
-  const map: Record<string, string> = {
-    ready: "success",
-    starting: "warning",
-    "not-ready": "warning",
-    "not-installed": "info",
-    failed: "danger",
-  };
-  return map[runtimeStatus.value.state] || "info";
-});
-
-const statusLabel = computed(() => {
-  if (!runtimeStatus.value) return "未知";
-  const map: Record<string, string> = {
-    ready: "就绪",
-    starting: "启动中",
-    "not-ready": "未就绪",
-    "not-installed": "未安装",
-    failed: "失败",
-  };
-  return map[runtimeStatus.value.state] || runtimeStatus.value.state;
-});
-
-function endpointStatusType(state: string): string {
-  const map: Record<string, string> = {
-    ready: "success",
-    starting: "warning",
-    "not-ready": "warning",
-    "not-installed": "info",
-    failed: "danger",
-  };
-  return map[state] || "info";
-}
-
-function endpointStatusLabel(state: string): string {
-  const map: Record<string, string> = {
-    ready: "就绪",
-    starting: "启动中",
-    "not-ready": "未就绪",
-    "not-installed": "未安装",
-    failed: "失败",
-  };
-  return map[state] || state;
-}
-
 async function loadConfig() {
   try {
     const config = await getDeploymentConfig();
-    currentMode.value = config.mode;
     formMode.value = config.mode;
     if (config.mode === "cloud" && config.serverURL) {
       formData.serverURL = config.serverURL;
     }
-    currentApiURL.value = await getApiBaseURL();
   } catch (err) {
     console.error("加载部署配置失败:", err);
   }
+}
+
+function handleDevicePaired(baseURL: string) {
+  deviceManagementGeneration.value++;
+  formMode.value = "cloud";
+  formData.serverURL = baseURL;
+  saveSuccess.value = true;
+  saveError.value = "";
+  cloudSetupURL.value = "";
+  cloudConfigPrepared.value = false;
+  cloudPreviousConfig.value = null;
 }
 
 async function handleSave() {
@@ -267,8 +186,6 @@ async function handleSave() {
     await initializeRuntimeCapabilities(true);
     saveSuccess.value = true;
     ElMessage.success("本地模式已保存，业务连接会重新建立");
-    currentMode.value = "local";
-    currentApiURL.value = await getApiBaseURL();
   } catch (err: any) {
     saveError.value = err?.message || "保存失败";
     ElMessage.error("保存失败: " + saveError.value);
@@ -294,9 +211,7 @@ async function rollbackCloudSetup(_baseURL: string, error: unknown) {
   try {
     await saveDeploymentConfig(previous);
     await initializeRuntimeCapabilities(true);
-    currentMode.value = previous.mode;
     formMode.value = previous.mode;
-    currentApiURL.value = await getApiBaseURL();
   } catch {
     saveError.value += "；恢复原运行模式失败，请重新打开设置页";
   }
@@ -312,12 +227,11 @@ async function completeCloudSetup() {
     }
     saveSuccess.value = true;
     ElMessage.success("设备已完成云端统筹配对、凭证验证并切换");
-    currentMode.value = "cloud";
     formMode.value = "cloud";
-    currentApiURL.value = await getApiBaseURL();
     cloudSetupURL.value = "";
     cloudConfigPrepared.value = false;
     cloudPreviousConfig.value = null;
+    deviceManagementGeneration.value++;
   } catch (err: any) {
     saveError.value = err?.message || "保存云端统筹设置失败";
     ElMessage.error(saveError.value);
@@ -326,25 +240,7 @@ async function completeCloudSetup() {
   }
 }
 
-let unsubscribeStatus: (() => void) | null = null;
-
-onMounted(async () => {
-  await loadConfig();
-
-  const api = window.amitiaDesktop;
-  if (api) {
-    try {
-      runtimeStatus.value = await api.getRuntimeStatus();
-    } catch {}
-    unsubscribeStatus = api.onRuntimeStatusChanged((status) => {
-      runtimeStatus.value = status;
-    });
-  }
-});
-
-onUnmounted(() => {
-  unsubscribeStatus?.();
-});
+onMounted(loadConfig);
 </script>
 
 <style scoped>
@@ -406,11 +302,6 @@ onUnmounted(() => {
   font-size: var(--ac-font-size-xs);
   color: var(--el-color-danger);
 }
-.mode-summary { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 20px; padding: 24px; background: var(--surface-bg); border: 1px solid var(--surface-border); border-radius: 14px; }
-.mode-summary-main { display: grid; gap: 7px; min-width: 0; }
-.mode-summary-label { font-size: 12px; color: var(--text-secondary); }
-.mode-summary-main strong { font-size: 22px; line-height: 1.3; letter-spacing: -0.02em; }
-.mode-summary-address { color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
 .deployment-panel :deep(.section-card) { border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface-bg); margin-bottom: 0; }
 .deployment-panel :deep(.section-card .el-card__header) { padding: 20px 24px 8px; border-bottom: 0; font-weight: 600; }
 .deployment-panel :deep(.section-card .el-card__body) { padding: 16px 24px 24px; }
@@ -419,8 +310,5 @@ onUnmounted(() => {
 .mode-radio-card { min-width: min(210px, 100%); }
 .mode-save-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--surface-border); }
 .mode-save-hint { flex: 1; font-size: 12px; color: var(--text-secondary); }
-.deployment-advanced { padding: 16px 20px; border: 1px solid var(--surface-border); border-radius: 12px; margin-top: 18px; }
-.deployment-advanced summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
-.deployment-advanced .el-descriptions { margin-top: 16px; }
-@media (max-width: 720px) { .mode-summary { padding: 18px; } .deployment-panel :deep(.section-card .el-card__body) { padding: 14px 18px 20px; } .mode-radio-card { min-width: 100%; } }
+@media (max-width: 720px) { .deployment-panel :deep(.section-card .el-card__body) { padding: 14px 18px 20px; } .mode-radio-card { min-width: 100%; } }
 </style>

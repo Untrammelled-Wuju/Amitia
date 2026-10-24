@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ref } from "vue";
+import { effectScope, nextTick, ref } from "vue";
 import { useWebChatConversation } from "../composables/useWebChatConversation";
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../composables/useApi", () => ({ useApi: () => ({ get: mocks.get, del: vi.fn() }) }));
 vi.mock("../composables/useCachedApi", () => ({ useCachedApi: () => ({ saveCache: vi.fn() }) }));
-vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => ({ enabled: mocks.enabled, notice: { value: "" }, conversationSummary: mocks.summary, query: mocks.query, messages: mocks.messages, hasMore: mocks.hasMore }) }));
+vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => ({ enabled: mocks.enabled, coreId: { value: "core" }, roleOwnerId: { value: "owner" }, notice: { value: "" }, conversationSummary: mocks.summary, query: mocks.query, messages: mocks.messages, hasMore: mocks.hasMore }) }));
 vi.mock("../stores/chat", () => ({ useChatStore: () => ({ markConversationRead: mocks.markConversationRead, sidebar: mocks.sidebar }) }));
 vi.mock("../composables/useConversationWorkspace", () => ({ useConversationWorkspace: () => ({ applySnapshotWorkspace: mocks.applySnapshotWorkspace }) }));
 describe("网页摘要读取原设备历史", () => {
@@ -47,6 +47,36 @@ describe("网页摘要读取原设备历史", () => {
     mocks.summary.mockRejectedValue(new Error("Core 已切换"));
     expect(await conversation().fetchConvSummary()).toBe("");
     expect(mocks.get).not.toHaveBeenCalled();
+  });
+});
+
+describe("当前聊天角色头像", () => {
+  it("角色列表刷新后同步当前头像和名称，移除头像后清空且不切换会话", async () => {
+    const scope = effectScope();
+    const messages = ref<any[]>([{ id: "existing", role: "assistant" }]);
+    const conversationId = ref("conversation");
+    const characterId = ref("role");
+    const name = ref("");
+    const avatar = ref("");
+    const disconnect = vi.fn();
+    const api = scope.run(() => useWebChatConversation(messages, conversationId, characterId, ref(""), name, ref(""), avatar, ref(false), disconnect, vi.fn()))!;
+    try {
+      api.selectCharacter({ id: "role", name: "角色", avatar: "data:image/png;base64,first" });
+      expect(avatar.value).toBe("data:image/png;base64,first");
+      api.characters.value = [{ id: "role", name: "新名称", avatar: "data:image/png;base64,updated" }, { id: "other", name: "其他角色", avatar: "/other.png" }];
+      await nextTick();
+      expect(avatar.value).toBe("data:image/png;base64,updated");
+      expect(name.value).toBe("新名称");
+      api.characters.value = [{ id: "role", name: "新名称", avatar: "" }];
+      await nextTick();
+      expect(avatar.value).toBe("");
+      expect(characterId.value).toBe("role");
+      expect(conversationId.value).toBe("conversation");
+      expect(messages.value).toEqual([{ id: "existing", role: "assistant" }]);
+      expect(disconnect).not.toHaveBeenCalled();
+    } finally {
+      scope.stop();
+    }
   });
 });
 

@@ -24,9 +24,8 @@ async function renderSettings(path: string) {
     }] },
       { path: "/my-space", component: MySpaceView, redirect: "/my-space/profile", children: [
         { path: "profile", component: defineComponent({ template: '<div data-space-section="profile">个人资料内容</div>' }) },
-        { path: "identity", component: defineComponent({ template: '<div data-space-section="identity">Space 身份内容</div>' }) },
+        { path: "identity", component: defineComponent({ template: '<div data-space-section="identity">身份信息内容</div>' }) },
         { path: "runtime", component: defineComponent({ template: '<div data-space-section="runtime">运行模式内容</div>' }) },
-        { path: "devices", component: defineComponent({ template: '<div data-space-section="devices">设备配对内容</div>' }) },
       ] },
       { path: "/chat", component: defineComponent({ template: '<div>会话内容</div>' }) },
       { path: "/character", component: defineComponent({ template: '<div>角色内容</div>' }) },
@@ -114,13 +113,13 @@ describe("桌面设置分类导航", () => {
     } finally { wrapper.unmount(); }
   });
 
-  it("我的空间第二栏覆盖资料、运行模式和设备管理", async () => {
+  it("我的空间第二栏只保留资料、身份信息和运行模式", async () => {
     const { wrapper, router } = await renderSettings('/my-space');
     try {
       expect(wrapper.find(".settings-sidebar").exists()).toBe(false);
-      expect(wrapper.findAll('.account-navigation a').map(link => link.text())).toEqual(['资料与头像', 'Space 身份', '运行模式', '设备配对']);
+      expect(wrapper.findAll('.account-navigation a').map(link => link.text())).toEqual(['资料与头像', '身份信息', '运行模式']);
       expect(wrapper.find('[data-space-section="profile"]').exists()).toBe(true);
-      for (const section of ['identity', 'runtime', 'devices', 'profile']) {
+      for (const section of ['identity', 'runtime', 'profile']) {
         await wrapper.get(`a[href="/my-space/${section}"]`).trigger('click');
         await vi.waitFor(() => expect(router.currentRoute.value.path).toBe(`/my-space/${section}`));
         expect(wrapper.find(`[data-space-section="${section}"]`).exists()).toBe(true);

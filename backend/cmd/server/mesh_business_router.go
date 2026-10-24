@@ -425,7 +425,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 		}
 		visibleRoles := make([]gin.H, 0, len(roles))
 		for _, role := range roles {
-			visibleRoles = append(visibleRoles, gin.H{"id": role.ID, "name": role.Name, "revision": role.Revision})
+			visibleRoles = append(visibleRoles, gin.H{"id": role.ID, "name": role.Name, "avatar": role.Avatar, "revision": role.Revision})
 		}
 		c.JSON(200, gin.H{"roles": visibleRoles, "roleOwnerId": scope.RoleOwnerID, "providerEpoch": scope.ProviderEpoch, "modeRevision": scope.ModeRevision, "executionScope": scope})
 	})

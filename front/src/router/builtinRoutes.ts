@@ -3,18 +3,18 @@ import type { LocationQuery, RouteRecordRaw } from "vue-router";
 const legacySpaceSections: Record<string, string> = {
   "local-profile": "profile",
   "space-identity": "identity",
-  "device-pairing": "devices",
-  "current-device": "devices",
-  "bound-devices": "devices",
+  "device-pairing": "runtime",
+  "current-device": "runtime",
+  "bound-devices": "runtime",
   profile: "profile",
   identity: "identity",
   runtime: "runtime",
-  devices: "devices",
+  devices: "runtime",
 };
 
 function resolveMySpaceLegacy(
   to: { hash: string; query: LocationQuery },
-  fallback: "profile" | "identity" | "runtime" | "devices",
+  fallback: "profile" | "identity" | "runtime",
 ) {
   return { path: `/my-space/${legacySpaceSections[to.hash.slice(1)] ?? fallback}`, query: to.query };
 }
@@ -126,7 +126,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
     { path: "profile", name: "mySpaceProfile", component: () => import("@/views/user-settings/UserSettingsView.vue") },
     { path: "identity", name: "mySpaceIdentity", component: () => import("@/views/user-settings/SpaceIdentityView.vue") },
     { path: "runtime", name: "mySpaceRuntime", component: () => import("@/views/user-settings/MySpaceRuntimeView.vue") },
-    { path: "devices", name: "mySpaceDevices", component: () => import("@/views/devices/DevicesView.vue") },
+    { path: "devices", redirect: (to) => ({ path: "/my-space/runtime", query: to.query }) },
   ],
 },
 { path: "/user-settings", name: "userSettings", redirect: (to) => resolveMySpaceLegacy(to, "profile") },
@@ -142,6 +142,6 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/privacy-scan", name: "privacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
 { path: "/game-center", name: "gameCenter", component: () => import("@/views/game-center/GameCenterView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
 { path: "/game-center/plugin", name: "gamePlugin", component: () => import("@/views/game-center/GamePluginView.vue"), meta: { requiresAuth: true, runtimeCapability: "gameMode" } },
-{ path: "/devices", name: "devices", redirect: (to) => resolveMySpaceLegacy(to, "devices") },
+{ path: "/devices", name: "devices", redirect: (to) => resolveMySpaceLegacy(to, "runtime") },
 { path: "/long-running", name: "longRunning", component: () => import("@/views/long-running/LongRunningView.vue"), meta: { requiresAuth: true } },
 ];

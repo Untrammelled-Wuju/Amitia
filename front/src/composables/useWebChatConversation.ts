@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { ref, type Ref } from "vue";
+import { ref, watch, type Ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "./useApi";
 import { useCachedApi } from "./useCachedApi";
@@ -51,11 +51,23 @@ export function useWebChatConversation(
     return String(rows.find((conversation) => conversation.id === id)?.title || "").trim();
   }
 
-  function selectCharacter(c: any) {
-    characterId.value = c.id;
+  function updateCharacterPresentation(c: any) {
     charName.value = c.name;
     charIdentity.value = c.identity || c.personality || "";
     charAvatar.value = c.avatar || "";
+  }
+
+  watch(
+    () => characters.value.find((character) => character.id === characterId.value),
+    (character) => {
+      if (character) updateCharacterPresentation(character);
+    },
+    { deep: true },
+  );
+
+  function selectCharacter(c: any) {
+    characterId.value = c.id;
+    updateCharacterPresentation(c);
     localStorage.setItem(owned.enabled.value ? `webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}` : "webchat-char-id", c.id);
   }
 

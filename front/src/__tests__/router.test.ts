@@ -20,10 +20,11 @@ describe("router", () => {
   it("旧资料与设备地址指向统一空间并保留查询参数", () => {
     const legacyRoutes = [
       ["/user-settings", "/my-space/profile"],
-      ["/devices", "/my-space/devices"],
+      ["/devices", "/my-space/runtime"],
       ["/my-space", "/my-space/profile"],
+      ["/my-space/devices", "/my-space/runtime"],
       ["/my-space#space-identity", "/my-space/identity"],
-      ["/devices#bound-devices", "/my-space/devices"],
+      ["/devices#bound-devices", "/my-space/runtime"],
     ] as const;
     for (const [source, destination] of legacyRoutes) {
       const route = router.resolve(`${source}${source.includes("#") ? "" : "?source=legacy"}`);
@@ -38,7 +39,7 @@ describe("router", () => {
     }
     const deployment = router.resolve("/settings/deployment");
     expect(deployment.matched.at(-1)?.redirect).toBe("/my-space/runtime");
-    for (const section of ["profile", "identity", "runtime", "devices"]) {
+    for (const section of ["profile", "identity", "runtime"]) {
       expect(router.resolve(`/my-space/${section}`).name).toBe(`mySpace${section[0].toUpperCase()}${section.slice(1)}`);
     }
   });

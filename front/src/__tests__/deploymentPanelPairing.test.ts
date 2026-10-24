@@ -2,6 +2,8 @@ import { mount } from "@vue/test-utils";
 import ElementPlus from "element-plus";
 import { describe, expect, it, vi } from "vitest";
 import DeploymentPanel from "../views/settings/DeploymentPanel.vue";
+import DevicePairingPanel from "../components/DevicePairingPanel.vue";
+import BoundDevicesPanel from "../components/BoundDevicesPanel.vue";
 
 const mocks = vi.hoisted(() => ({
   getDeploymentConfig: vi.fn(),
@@ -31,6 +33,8 @@ describe("云端统筹设置", () => {
       global: {
         plugins: [ElementPlus],
         stubs: {
+          DevicePairingPanel: true,
+          BoundDevicesPanel: true,
           StageRuntimeSetup: {
             name: "StageRuntimeSetup",
             emits: ["healthCheckDone"],
@@ -48,9 +52,13 @@ describe("云端统筹设置", () => {
     try {
       const state = (wrapper.vm as any).$.setupState;
       await state.loadConfig();
+      expect(wrapper.findComponent(DevicePairingPanel).exists()).toBe(false);
+      expect(wrapper.findComponent(BoundDevicesPanel).exists()).toBe(false);
       state.formMode = "cloud";
       state.formData.serverURL = "https://core.example";
       await wrapper.vm.$nextTick();
+      expect(wrapper.findComponent(DevicePairingPanel).props("serverURL")).toBe("https://core.example");
+      expect(wrapper.findComponent(BoundDevicesPanel).exists()).toBe(true);
       await state.handleSave();
       await wrapper.vm.$nextTick();
       expect(mocks.saveDeploymentConfig).not.toHaveBeenCalled();
@@ -65,6 +73,16 @@ describe("云端统筹设置", () => {
       await wrapper.get('[data-testid="cloud-failed"]').trigger("click");
       await vi.waitFor(() => expect(mocks.saveDeploymentConfig).toHaveBeenLastCalledWith({ mode: "local" }));
       pairing.vm.$emit("healthCheckDone");
+      state.formMode = "cloud";
+      await wrapper.vm.$nextTick();
+      const devicePanel = wrapper.findComponent(DevicePairingPanel);
+      devicePanel.vm.$emit("paired", "https://new.core");
+      await wrapper.vm.$nextTick();
+      expect(state.formData.serverURL).toBe("https://new.core");
+      expect(state.deviceManagementGeneration).toBe(1);
+      state.formMode = "local";
+      await wrapper.vm.$nextTick();
+      expect(wrapper.findComponent(BoundDevicesPanel).exists()).toBe(false);
     } finally {
       wrapper.unmount();
     }
