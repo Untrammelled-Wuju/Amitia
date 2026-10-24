@@ -56,16 +56,13 @@ func TestManagementIntentBlocksEveryMutationAfterActorModeABA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "space", "a", 1, true, "role"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.ChangeMode(t.Context(), "space", "a", 2, false, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "space", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.SetCapabilityGrant(guarded, "space", "a", "b", "ai.chat", 0, true); !errors.Is(err, coordination.ErrScopeExpired) {
 		t.Fatalf("old grant: %v", err)
 	}
-	if _, err := service.ChangeMode(guarded, "space", "b", 1, true, "role"); !errors.Is(err, coordination.ErrScopeExpired) {
+	if _, err := service.InitializeCoordinated(guarded, "space", "b", 1, "role"); !errors.Is(err, coordination.ErrScopeExpired) {
 		t.Fatalf("old mode: %v", err)
 	}
 	if _, err := service.GrantAdministrator(guarded, "space", "b", 1, false); !errors.Is(err, coordination.ErrScopeExpired) {
@@ -88,7 +85,7 @@ func TestManagementIntentSelfModeAndAdministratorReturnCommittedPolicy(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy, err := service.ChangeMode(guarded, "space", "a", 1, true, "role")
+	policy, err := service.InitializeCoordinated(guarded, "space", "a", 1, "role")
 	if err != nil || policy.ModeRevision != 2 || policy.PermissionRevision != 2 || !policy.Coordinated {
 		t.Fatalf("committed self mode: %+v %v", policy, err)
 	}

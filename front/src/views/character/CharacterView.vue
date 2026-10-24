@@ -3,10 +3,18 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="char-layout">
+  <div class="character-page">
+    <ExtensionPageHeader
+      title="角色管理"
+      description="创建、编辑、导入与导出角色，维护角色的基础设定。"
+      parent-title="角色"
+      parent-path="/characters"
+      breadcrumb-label="角色页面层级"
+      class="character-breadcrumb"
+    />
+    <div class="char-layout">
     <div class="char-sidebar">
       <div class="sidebar-header">
-        <h3>角色</h3>
         <div class="sidebar-actions">
           <el-button size="small" @click="openTemplates">模板</el-button>
           <el-button size="small" @click="showImportDialog = true">导入</el-button>
@@ -361,6 +369,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @confirm="confirmImportAndReload"
       @file-selected="setSelectedFile"
     />
+    </div>
   </div>
 </template>
 
@@ -380,6 +389,7 @@ import ImportPackDialog from "@/views/character-config/components/ImportPackDial
 import TemplatePickerDialog from "@/views/character-config/components/TemplatePickerDialog.vue";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import ExtensionContributionRenderer from "@/components/extension/ExtensionContributionRenderer.vue";
+import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import type { TemplateItem } from "@/views/character-config/composables/types";
 import { normalizeVoicePitchRatio } from "@/utils/voicePitch";
 import { roleAuthorityConfig } from "@/runtime/role-authority";
@@ -941,10 +951,20 @@ async function deleteCurrent() {
   font-size: 28px;
   color: var(--ac-color-text-muted);
 }
+.character-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.character-breadcrumb {
+  flex-shrink: 0;
+  padding: 20px 24px 16px;
+}
 .char-layout {
   display: flex;
-  height: 100%;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
   gap: 0;
 }
 .char-sidebar {
@@ -975,11 +995,6 @@ async function deleteCurrent() {
   margin-left: 0;
 }
 
-.sidebar-header h3 {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0;
-}
 .char-list {
   flex: 1;
   overflow-y: auto;

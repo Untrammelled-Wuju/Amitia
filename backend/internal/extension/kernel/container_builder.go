@@ -1137,6 +1137,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	if b.meshHub != nil && taskRuntimeService != nil {
 		executor := task_runtime.NewMeshRemoteTaskExecutor(b.meshHub, sessionService)
+		if b.pendingInvocationManager != nil {
+			executor.SetInspectionPort(capability.NewMeshDeviceRuntimeInvocationPort(&capability.MeshRuntimePorts{
+				Hub: b.meshHub, SessionLookup: sessionService, PendingInvocations: b.pendingInvocationManager,
+			}))
+		}
 		executor.SetProgressHandler(taskRuntimeService)
 		executor.SetCheckpointHandler(taskRuntimeService)
 		executor.SetCompletionHandler(taskRuntimeService)

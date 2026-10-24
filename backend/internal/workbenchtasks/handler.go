@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/workbenchhttp"
 )
 
@@ -16,6 +17,7 @@ type Handler struct {
 	records RecordReader
 	live    SnapshotReader
 	access  ConversationAccess
+	budget  BudgetReconciliationReader
 }
 
 func NewHandler(records RecordReader, observers ...SnapshotReader) *Handler {
@@ -28,7 +30,20 @@ func NewHandler(records RecordReader, observers ...SnapshotReader) *Handler {
 func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	group.GET("/workbench/tasks", protectWorkbenchTaskResponse, h.list)
 	group.GET("/workbench/tasks/checkpoints", protectWorkbenchTaskResponse, h.checkpoints)
+	if h.budget != nil {
+		group.GET("/workbench/tasks/budget-reconciliation", protectWorkbenchTaskResponse, h.budgetReconciliation)
+		if _, ok := h.budget.(BudgetEvidenceReviewer); ok {
+			group.POST("/workbench/tasks/budget-reconciliation/review", protectWorkbenchTaskResponse, h.budgetReconciliationReview)
+		}
+	}
 }
+func (h *Handler) WithBudgetInspection(reader BudgetReconciliationReader) *Handler {
+	h.budget = reader
+	return h
+}
+
+var _ BudgetReconciliationReader = (*mindruntime.ModelUsageStore)(nil)
+
 func protectWorkbenchTaskResponse(c *gin.Context) {
 	workbenchhttp.ProtectResponse(c.Writer.Header())
 	c.Next()
@@ -40,7 +55,7 @@ func (h *Handler) list(c *gin.Context) {
 	var data TaskList
 	h.readConversation(c, func(ctx context.Context, query QueryContext) error {
 		var err error
-		data, err = List(ctx, scopedRecordReader{h.records, query.ExecutionScope.RoleID, query.CanReadRecord}, query.ExecutionScope.SpaceID, query.ConversationID, h.live)
+		data, err = List(ctx, scopedRecordReader{reader: h.records, role: query.ExecutionScope.RoleID, space: query.ExecutionScope.SpaceID, canRead: query.CanReadRecord}, query.ExecutionScope.SpaceID, query.ConversationID, h.live)
 		data.QueryContext = &query
 		return err
 	})

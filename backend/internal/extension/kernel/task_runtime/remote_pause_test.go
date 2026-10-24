@@ -20,6 +20,8 @@ func TestRemotePauseRequiresMatchingOwnerCheckpointAndCurrentAttempt(t *testing.
 			run.DefinitionFingerprint, _ = taskDefinitionFingerprint(definition)
 			run.Status, run.Generation, run.Revision, run.ExecutionAttemptID, run.LeaseID = RunStatusPausing, 4, 8, "attempt", "lease"
 			run.ExecutionPlacement = TaskExecutionPlacementDevice
+			future := time.Now().UTC().Add(time.Minute)
+			run.LeaseExpiresAt = &future
 			run.Input = json.RawMessage(`{"private":"device-input"}`)
 			run.InputHash = hashBytes(run.Input)
 			data := &taskInputData{}
@@ -38,11 +40,11 @@ func TestRemotePauseRequiresMatchingOwnerCheckpointAndCurrentAttempt(t *testing.
 				}
 				return guarded, func() {}, nil
 			}
-			payload := json.RawMessage(`{"cursor":2,"private":"only-at-device"}`)
-			if err := service.handleCheckpoint(ctx, run, definition, payload, hashBytes(payload), 2); err != nil {
+			payload := json.RawMessage(`{"cursor":1,"private":"only-at-device"}`)
+			if err := service.handleCheckpoint(ctx, run, definition, payload, hashBytes(payload), 1); err != nil {
 				t.Fatal(err)
 			}
-			attempt, lease, version := "attempt", "lease", int64(2)
+			attempt, lease, version := "attempt", "lease", int64(1)
 			switch scenario {
 			case "attempt":
 				attempt = "old-attempt"
@@ -85,6 +87,8 @@ func TestRemoteResumeRejectsUnconfirmedStopAndClearsOldLease(t *testing.T) {
 	run.DefinitionFingerprint, _ = taskDefinitionFingerprint(definition)
 	run.Status, run.Generation, run.Revision, run.ExecutionAttemptID, run.LeaseID = RunStatusPausing, 3, 7, "attempt", "lease"
 	run.ExecutionPlacement = TaskExecutionPlacementDevice
+	future := time.Now().UTC().Add(time.Minute)
+	run.LeaseExpiresAt = &future
 	run.ExecutionTarget = TaskExecutionTarget{SpaceID: "core", DeviceID: runtimeidentity.DeviceID(authority.TargetDeviceID), RuntimeID: "runtime", RuntimeSessionID: "session", ConnectionGeneration: 7}
 	run.Input, run.InputHash = nil, hashBytes(json.RawMessage(`{}`))
 	data := &taskInputData{}
@@ -114,11 +118,11 @@ func TestRemoteResumeRejectsUnconfirmedStopAndClearsOldLease(t *testing.T) {
 	service.config.OwnedExecutionGuard = func(ctx context.Context, scope coordination.ExecutionScope, _ *TaskRun) (context.Context, func(), error) {
 		return coordination.WithScope(ctx, scope), func() {}, nil
 	}
-	payload := json.RawMessage(`{"cursor":2}`)
-	if err := service.handleCheckpoint(ctx, run, definition, payload, hashBytes(payload), 2); err != nil {
+	payload := json.RawMessage(`{"cursor":1}`)
+	if err := service.handleCheckpoint(ctx, run, definition, payload, hashBytes(payload), 1); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.HandleRemotePaused(t.Context(), run.TaskRunID, "attempt", "lease", 2); err != nil {
+	if err := service.HandleRemotePaused(t.Context(), run.TaskRunID, "attempt", "lease", 1); err != nil {
 		t.Fatal(err)
 	}
 	manager := NewPendingTaskManager()
@@ -133,10 +137,19 @@ func TestRemoteResumeRejectsUnconfirmedStopAndClearsOldLease(t *testing.T) {
 	if err := service.recoverRun(t.Context(), store.run); err != nil || store.run.Status != RunStatusPaused || store.queued != 0 {
 		t.Fatalf("restart replayed or discarded a confirmed pause: %v", err)
 	}
+	pending, err := manager.Register(TaskExecutionRequest{Run: store.run, AttemptID: store.run.ExecutionAttemptID, Target: store.run.ExecutionTarget}, "session", 7, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.run.LeaseID = pending.LeaseID
+	if !manager.CompleteBound(run.TaskRunID, "attempt", pending.LeaseID, "session", 7, false, "paused") {
+		t.Fatal("could not confirm stopped paused worker")
+	}
 	atomic.StoreInt32(&service.dispatching, 1)
 	if err := service.ResumeTask(t.Context(), ResumeTaskRequest{TaskRunID: run.TaskRunID, Generation: 3}); !IsTaskErrorCode(err, ErrTaskPermissionDenied) || store.run.Status != RunStatusPaused || store.run.Generation != 3 || store.queued != 0 {
 		t.Fatalf("资源未批准的恢复改变了暂停状态或排队: %v %+v", err, store.run)
 	}
+
 	resourceApproved = true
 	if err := service.ResumeTask(t.Context(), ResumeTaskRequest{TaskRunID: run.TaskRunID, Generation: 3}); err != nil {
 		t.Fatal(err)
@@ -151,17 +164,33 @@ func TestConfirmedPauseReceiptDoesNotRepeatRoleRPCInsideShortWait(t *testing.T) 
 	now := time.Now().UTC()
 	run.Status, run.PausedAt, run.Generation = RunStatusPaused, &now, 1
 	run.ExecutionAttemptID, run.LeaseID = "attempt", "lease"
-	run.ExecutionTarget = TaskExecutionTarget{SpaceID: "core", DeviceID: runtimeidentity.DeviceID(authority.TargetDeviceID), RuntimeSessionID: "session", ConnectionGeneration: 1}
+	run.ExecutionTarget = TaskExecutionTarget{SpaceID: "core", DeviceID: runtimeidentity.DeviceID(authority.TargetDeviceID), RuntimeID: "runtime", RuntimeSessionID: "session", ConnectionGeneration: 1}
 	checks := 0
 	ctx := coordination.WithAdditionalGuard(coordination.WithScope(t.Context(), authority), func(context.Context) error { checks++; return nil })
-	executor := NewMeshRemoteTaskExecutor(nil, nil, NewPendingTaskManager())
+	manager := NewPendingTaskManager()
+	executor := NewMeshRemoteTaskExecutor(nil, nil, manager)
+	if executor.ConfirmPauseStopped(ctx, run) {
+		t.Fatal("missing worker was mistaken for a stop receipt")
+	}
+	pending, err := manager.Register(TaskExecutionRequest{Run: run, AttemptID: run.ExecutionAttemptID, Target: run.ExecutionTarget}, "session", 1, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.LeaseID = pending.LeaseID
+	if executor.ConfirmPauseStopped(ctx, run) {
+		t.Fatal("active worker was mistaken for a stop receipt")
+	}
+	if !manager.CompleteBound(run.TaskRunID, "attempt", pending.LeaseID, "session", 1, true, "paused") {
+		t.Fatal("could not confirm paused worker termination")
+	}
+	checks = 0
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !executor.ConfirmPauseStopped(ctx, run) || checks != 1 {
-		t.Fatal("停止回执复核重复执行了远端角色查询")
+	if !executor.ConfirmPauseStopped(ctx, run) || checks != 2 {
+		t.Fatal("停止确认没有核对授权，或缺少原始 Worker 停止凭证")
 	}
-	if err := coordination.ValidateCurrent(ctx); err != nil || checks != 2 {
+	if err := coordination.ValidateCurrent(ctx); err != nil || checks != 3 {
 		t.Fatal("调用者在停止确认后不能重新复核当前权限")
 	}
 	cancelled, cancel := context.WithCancel(ctx)

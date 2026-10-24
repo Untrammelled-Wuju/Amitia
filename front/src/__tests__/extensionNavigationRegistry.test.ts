@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
-import { collectExtensionNavigationItems, resolveBuiltinNavigationItems } from "@/ui-runtime/navigationRegistry";
+import {
+  collectChannelPluginNavigationItems,
+  collectExtensionNavigationItems,
+  resolveBuiltinNavigationItems,
+} from "@/ui-runtime/navigationRegistry";
 import { collectEffectiveProviderRoutes, shadowsProtectedRoute, syncProviderRoutes } from "@/ui-runtime/providerRoutes";
 import { builtinBusinessRoutes } from "@/router/builtinRoutes";
 
@@ -68,17 +72,48 @@ describe("extension navigation registry", () => {
     expect(items.some((item) => item.route.startsWith("/dashboard"))).toBe(false);
   });
 
-  it("shows the channel center only when a channel presentation is available", () => {
-    expect(resolveBuiltinNavigationItems(store([])).some((item) => item.route === "/channel-messages")).toBe(false);
-    const channels = resolveBuiltinNavigationItems(store([
+  it("exposes character and memory as single top-level hub entries", () => {
+    const items = resolveBuiltinNavigationItems(store([]));
+    expect(items.filter((item) => item.group === "character").map((item) => ({
+      route: item.route,
+      label: item.label,
+    }))).toEqual([{ route: "/characters", label: "角色" }]);
+    expect(items.filter((item) => item.group === "memory").map((item) => ({
+      route: item.route,
+      label: item.label,
+    }))).toEqual([{ route: "/memory", label: "记忆" }]);
+    expect(items.filter((item) => item.group === "continuity").map((item) => ({
+      route: item.route,
+      label: item.label,
+      order: item.order,
+    }))).toEqual([{ route: "/continuity", label: "持续事项", order: 75 }]);
+  });
+
+  it("shows one fixed channel center after a plugin is available and lists plugins separately", () => {
+    expect(resolveBuiltinNavigationItems(store([])).some((item) => item.route === "/channel-center")).toBe(false);
+    const channelStore = store([
       provider({
         providerId: "channel.wechat.presentation",
         extensionId: "com.amitia/channel-wechat",
         capability: "channel.presentation",
         metadata: { channelId: "wechat_personal", displayName: "个人微信" },
       }),
-    ]));
-    expect(channels.some((item) => item.route === "/channel-messages")).toBe(true);
+      routeRegistry("com.amitia/channel-wechat", "wechat-routes", "/channels/wechat", "wechat-page", 100),
+      pageProvider("com.amitia/channel-wechat", "wechat-page"),
+    ]);
+    const channels = resolveBuiltinNavigationItems(channelStore);
+    expect(channels.filter((item) => item.route === "/channel-center")).toHaveLength(1);
+    expect(channels.find((item) => item.route === "/channel-center")).toMatchObject({
+      label: "渠道接入",
+      match: ["/channels"],
+    });
+    expect(collectChannelPluginNavigationItems(channelStore)).toEqual([{
+      id: "channel:com.amitia/channel-wechat:wechat_personal",
+      route: "/channels/wechat",
+      label: "个人微信",
+      channelId: "wechat_personal",
+      extensionId: "com.amitia/channel-wechat",
+    }]);
   });
 
   it("aggregates navigation items from multiple enabled providers", () => {

@@ -50,6 +50,9 @@ func TestRemoteTaskOwnerRPCRejectsForeignExpiredAndChangedExecution(t *testing.T
 			}
 			defer manager.Cancel(run.TaskRunID, "cleanup")
 			request.LeaseID = pending.LeaseID
+			store.run.LeaseID = pending.LeaseID
+			expires := time.Now().UTC().Add(time.Minute)
+			store.run.LeaseExpiresAt = &expires
 			if err := manager.BindAuthority(run.TaskRunID, "attempt", "session", 7, func(context.Context) error { return nil }, "root-authority"); err != nil {
 				t.Fatal(err)
 			}

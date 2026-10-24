@@ -115,3 +115,30 @@ func TestWebUISessionDeleteIsIdempotent(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestWebUIResourceAllowsSandboxedOpaqueOrigin(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/extension/webui/resource/sess_test/index.html", nil)
+	request.Header.Set("Origin", "null")
+	recorder := httptest.NewRecorder()
+
+	applyWebUIResourceCORS(recorder, request)
+
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("expected opaque sandbox CORS allow origin, got %q", got)
+	}
+	if got := recorder.Header().Get("Vary"); got != "Origin" {
+		t.Fatalf("expected Origin variance, got %q", got)
+	}
+}
+
+func TestWebUIResourceLeavesRegularCORSUnchanged(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/extension/webui/resource/sess_test/index.html", nil)
+	request.Header.Set("Origin", "http://localhost:64204")
+	recorder := httptest.NewRecorder()
+
+	applyWebUIResourceCORS(recorder, request)
+
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("expected regular origin policy to remain owned by middleware, got %q", got)
+	}
+}

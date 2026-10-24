@@ -196,7 +196,12 @@ export function useWebChatSend(
           if (event.type === "started") {
             const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
             if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope?.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId };
-            if (event.conversationId && !convId.value) { convId.value = event.conversationId; activeConversation = event.conversationId; localStorage.setItem("webchat-conv-id", event.conversationId); }
+            if (event.conversationId && !convId.value) {
+              convId.value = event.conversationId;
+              activeConversation = event.conversationId;
+              localStorage.setItem("webchat-conv-id", event.conversationId);
+              window.dispatchEvent(new CustomEvent("amitia:owned-runtime-refresh", { detail: { conversationId: event.conversationId } }));
+            }
             messages.value.push({ id: assistantId, uiKey: `request:${requestEnvelope.requestId}`, ownerId: event.executionScope?.resourceOwnerId, requestId: requestEnvelope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString(), characterId: event.executionScope?.roleId, conversationId: event.conversationId, executionScope: event.executionScope });
           }
 					if (event.type === "transcribed") {

@@ -116,7 +116,7 @@ void main() {
     final api = _Api();
     await render(tester, api, cloud: true);
     expect(api.configReads, 0);
-    expect(find.textContaining('只有开启统筹模式的云端管理员设备'), findsOneWidget);
+    expect(find.textContaining('获授权的 Core 管理员'), findsOneWidget);
     expect(
       tester.widget<IconButton>(find.byWidgetPredicate(
         (widget) => widget is IconButton && widget.tooltip == '新建',

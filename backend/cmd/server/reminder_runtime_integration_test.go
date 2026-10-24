@@ -48,7 +48,7 @@ func newReminderRuntimeFixture(t *testing.T, coordinated bool) *reminderRuntimeF
 		t.Fatal(err)
 	}
 	if coordinated {
-		if _, err := provider.services.DeviceMesh.Coordination.ChangeMode(t.Context(), core, client.device.DeviceID.String(), policy.ModeRevision, true, "one"); err != nil {
+		if _, err := provider.services.DeviceMesh.Coordination.InitializeCoordinated(t.Context(), core, client.device.DeviceID.String(), policy.ModeRevision, "one"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -172,8 +172,8 @@ func TestReminderRuntimeDeviceMeshOfflineSourceIsBlockedWithoutCoreCopy(t *testi
 	}
 }
 
-func TestReminderRuntimeDoesNotTransferAfterOwnerOrProviderChanges(t *testing.T) {
-	for _, change := range []string{"owner", "provider"} {
+func TestReminderRuntimeDoesNotTransferAfterProviderChanges(t *testing.T) {
+	for _, change := range []string{"provider"} {
 		t.Run(change, func(t *testing.T) {
 			f := newReminderRuntimeFixture(t, true)
 			service := f.provider.services.DeviceMesh.Coordination
@@ -182,7 +182,7 @@ func TestReminderRuntimeDoesNotTransferAfterOwnerOrProviderChanges(t *testing.T)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := service.ChangeMode(t.Context(), f.provider.core, f.client.device.DeviceID.String(), policy.ModeRevision, false, "one"); err != nil {
+				if _, err := service.GrantAdministrator(t.Context(), f.provider.core, f.client.device.DeviceID.String(), policy.PermissionRevision, true); err != nil {
 					t.Fatal(err)
 				}
 			} else if _, _, err := service.BindProvider(t.Context(), "successor-core"); err != nil {

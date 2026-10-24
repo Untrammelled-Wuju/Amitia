@@ -201,8 +201,8 @@ export function useDeviceOwnedConversation() {
       const message = coreChanged
         ? deviceProviderChangedNotice(mode, coreId.value, String(current.coreId || ""), activeController ? "当前回复已中断。" : "旧数据已失效。")
         : activeController
-          ? "统筹模式或调用权限已变化，当前回复已中断；继续发送时将使用当前服务和数据归属。"
-          : "统筹模式或调用权限已更新，旧数据已失效。";
+          ? "数据归属或调用权限已变化，当前回复已中断；继续发送时将使用当前 Core。"
+          : "数据归属或调用权限已更新，旧数据已失效。";
       stopLocal(message);
     }
     if (transition?.coreId === current.coreId && transition?.providerChangeId && transition.previousCoreId && transition.previousCoreId !== current.coreId && providerChangeId !== transition.providerChangeId) {
@@ -240,13 +240,14 @@ export function useDeviceOwnedConversation() {
 
   const historyKey = (conversationId: string, characterId: string, keyword = "") => JSON.stringify([conversationId, characterId, keyword]);
 
-  async function query(conversationId: string, characterId: string, older = false, keyword = ""): Promise<MeshQueryResult> {
+  async function query(conversationId: string, characterId: string, older = false, keyword = "", requestScope = ""): Promise<MeshQueryResult> {
     const origin = parseConversationReference(conversationId);
     const path = "/api/device-mesh/v1/business/conversations" + (conversationId ? `/${encodeURIComponent(origin?.id || conversationId)}` : "");
     const captured = revision;
     const key = historyKey(conversationId, characterId, keyword);
-    const ticket = Symbol(key);
-    historyRequests.set(key, ticket);
+    const ticketKey = requestScope ? `${key}\u0000${requestScope}` : key;
+    const ticket = Symbol(ticketKey);
+    historyRequests.set(ticketKey, ticket);
     if (historyRequests.size > 128) historyRequests.delete(historyRequests.keys().next().value!);
     const previous = historyPages.get(key);
     const kind = conversationId ? "message" : "conversation";
@@ -254,7 +255,7 @@ export function useDeviceOwnedConversation() {
     const cursors = older ? previous?.cursors || {} : {};
     const params = { characterId, ...(keyword ? { keyword } : {}), ...(origin ? { conversationOwnerId: origin.ownerId } : {}), ...(older ? { resourceKind: kind, ...cursors } : {}) };
     const result = unwrap<MeshQueryResult>(await apiClient.get(path, { params }));
-    if (captured !== revision || historyRequests.get(key) !== ticket) throw new Error("服务状态或加载请求已变化，旧上下文已丢弃");
+    if (captured !== revision || historyRequests.get(ticketKey) !== ticket) throw new Error("服务状态或加载请求已变化，旧上下文已丢弃");
     const scope = JSON.stringify([result.executionScope.spaceId, result.executionScope.initiatorDeviceId, result.executionScope.targetDeviceId, result.executionScope.coreId, result.executionScope.providerEpoch, result.executionScope.targetProviderEpoch, result.executionScope.coordinated, result.executionScope.modeRevision, result.executionScope.permissionRevision, result.executionScope.targetPermissionRevision, result.executionScope.roleOwnerId, result.executionScope.resourceOwnerId, result.executionScope.roleId, result.executionScope.roleRevision]);
     if (older && previous?.scope !== scope) throw new Error("服务或角色已变化，请重新加载当前对话");
     const next: Record<string, string> = {};
@@ -398,7 +399,7 @@ export function useDeviceOwnedConversation() {
   }
 
   async function conversationSummary(conversationId: string, characterId: string) {
-    const result = await query(conversationId, characterId);
+    const result = await query(conversationId, characterId, false, "", "summary");
     summaryViews.delete(conversationId);
     for (const snapshot of [result.snapshot, result.historicalSnapshot]) {
       if (!snapshot) continue;
@@ -538,7 +539,7 @@ export function useDeviceOwnedConversation() {
     const captured = revision;
     const rows = new Map<string, OwnedProject>();
     const historical = new Map<string, OwnedProject>();
-    const availableHistoricalRoles = policy.value?.coordinated ? await historicalRoles(characterId) : [];
+    const availableHistoricalRoles = await historicalRoles(characterId);
     const historicalRole = selectedHistoricalRole || (availableHistoricalRoles.length === 1 ? availableHistoricalRoles[0].id : "");
     if (historicalRole && !availableHistoricalRoles.some((role) => role.id === historicalRole)) throw new Error("旧项目角色已变化，请重新选择");
     const cursors = new Set<string>();
@@ -577,7 +578,7 @@ export function useDeviceOwnedConversation() {
 
   async function createProject(title: string, expected: OwnedExecutionScope, workspaces: OwnedProjectWorkspace[], primaryWorkspaceId: string) {
     if (!enabled.value || !expected || expected.coreId !== coreId.value) throw new Error("项目归属无法确认，请重新加载");
-    if (!Array.isArray(workspaces) || workspaces.length === 0 || !primaryWorkspaceId || !workspaces.some((workspace) => workspace.id === primaryWorkspaceId)) throw new Error("项目工作区无效");
+    if (!Array.isArray(workspaces) || (workspaces.length > 0 && (!primaryWorkspaceId || !workspaces.some((workspace) => workspace.id === primaryWorkspaceId)))) throw new Error("项目工作区无效");
     const captured = revision;
     const requestId = crypto.randomUUID();
     const identity = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${expected.coreId}\0${expected.initiatorDeviceId}\0${requestId}`))), (value) => value.toString(16).padStart(2, "0")).join("");
@@ -586,5 +587,5 @@ export function useDeviceOwnedConversation() {
     if (captured !== revision || result.saved !== true || result.project?.id !== `project-${identity}` || result.project?.primaryWorkspaceId !== primaryWorkspaceId || result.executionScope?.requestId !== requestId || authorityStamp(result.executionScope) !== authorityStamp(expected) || result.acknowledgement?.ownerId !== expected.resourceOwnerId || result.acknowledgement?.requestId !== requestId || result.acknowledgement?.versions?.[`project/${result.project.id}`] !== 1 || result.acknowledgement?.versions?.[`checkpoint/project/${requestId}`] !== 1) throw new Error("项目尚未获得数据所有者保存确认");
     return { ...result.project, ownerId: expected.resourceOwnerId, roleId: expected.roleId, readOnly: false, revision: 1, executionScope: result.executionScope } as OwnedProject;
   }
-  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, interrupt, stopLocal, previousSummary, projects, createProject, coordinated: computed(() => policy.value?.coordinated === true) };
+  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, interrupt, stopLocal, previousSummary, projects, createProject };
 }

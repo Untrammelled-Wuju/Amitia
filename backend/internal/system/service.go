@@ -64,7 +64,6 @@ type Service interface {
 	GetRuntimeHealth() map[string]interface{}
 	GetRuntimeHealthHistory() map[string]interface{}
 	GetIdentityCore(characterID string) map[string]interface{}
-	GetRuntimeMode() map[string]interface{}
 	GetRuntimeStatus() map[string]interface{}
 	GetSecurityAccessConfig() map[string]interface{}
 	GetSecurityAccessStatus() map[string]interface{}
@@ -103,11 +102,9 @@ type Service interface {
 	UpdateAppConfig(body map[string]interface{}) map[string]interface{}
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
 	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
-	UpdateRuntimeMode(body map[string]interface{}) map[string]interface{}
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}
 	UpdateTheme(body map[string]interface{}) map[string]interface{}
 	UpdateUpdateConfig(body map[string]interface{}) map[string]interface{}
-	ValidateMode() map[string]interface{}
 	AttachTemporalService(temporalSvc *temporal.Service)
 	SetDataPortabilityCoordinator(coord *dataportability.Coordinator)
 	GetDataPortabilityCoordinator() (*dataportability.Coordinator, bool)

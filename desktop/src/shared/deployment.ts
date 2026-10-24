@@ -97,7 +97,7 @@ export function validateDeploymentConfigForSave(raw: unknown): DeploymentModeCon
   if (mode === "cloud") {
     const serverURL = obj.serverURL;
     if (typeof serverURL !== "string" || serverURL.trim().length === 0) {
-      throw new DeploymentConfigError("云端模式必须提供服务器地址");
+      throw new DeploymentConfigError("云端统筹模式必须提供服务器地址");
     }
     const normalized = normalizeServerURL(serverURL);
     return { mode: "cloud", serverURL: normalized };
@@ -107,12 +107,12 @@ export function validateDeploymentConfigForSave(raw: unknown): DeploymentModeCon
     return { mode: "local" };
   }
 
-  throw new DeploymentConfigError("无效的部署模式");
+  throw new DeploymentConfigError("无效的运行模式");
 }
 
 export function configToLabel(config: DeploymentModeConfig): string {
   if (config.mode === "cloud") {
-    return config.serverURL ? `云端 (${config.serverURL})` : "云端";
+    return config.serverURL ? `云端统筹 (${config.serverURL})` : "云端统筹";
   }
-  return "本地";
+  return "本地模式";
 }

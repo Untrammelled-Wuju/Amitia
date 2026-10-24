@@ -106,7 +106,7 @@ func TestPrivacyRealTLSModesLegacyImportAndVersionConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	core.request(t, phone, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
 	mask(old, 409)
 	send("cloud-private", "password cloud-secret")
 	result = scan()

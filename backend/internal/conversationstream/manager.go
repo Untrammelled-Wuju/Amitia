@@ -184,15 +184,8 @@ func (m *Manager) Publish(ctx context.Context, event AgentUIEvent, durable bool)
 	store := m.durableStore()
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	if !state.initialized {
-		if store != nil {
-			latest, err := store.LatestSequence(ctx, conversationID)
-			if err != nil {
-				return AgentUIEvent{}, err
-			}
-			state.lastSequence = latest
-		}
-		state.initialized = true
+	if err := m.initializeSequenceLocked(ctx, state, conversationID, store); err != nil {
+		return AgentUIEvent{}, err
 	}
 	event.Version = ProtocolVersion
 	if strings.TrimSpace(event.EventID) == "" {
@@ -206,8 +199,23 @@ func (m *Manager) Publish(ctx context.Context, event AgentUIEvent, durable bool)
 		event.Payload = map[string]any{}
 	}
 	if durable && store != nil {
-		if err := store.Persist(ctx, event); err != nil {
-			return AgentUIEvent{}, err
+		for attempt := 0; ; attempt++ {
+			err := store.Persist(ctx, event)
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, ErrSequenceConflict) || attempt >= 7 {
+				return AgentUIEvent{}, err
+			}
+			latest, readErr := store.LatestSequence(ctx, conversationID)
+			if readErr != nil {
+				return AgentUIEvent{}, readErr
+			}
+			if latest <= state.lastSequence {
+				return AgentUIEvent{}, err
+			}
+			state.lastSequence = latest
+			event.EventSequence = latest + 1
 		}
 	}
 	state.lastSequence = event.EventSequence
@@ -221,14 +229,66 @@ func (m *Manager) Publish(ctx context.Context, event AgentUIEvent, durable bool)
 	if len(state.ring) > ringSize {
 		state.ring = append([]AgentUIEvent(nil), state.ring[len(state.ring)-ringSize:]...)
 	}
-	for _, subscriber := range state.subscribers {
+	for subscriberID, subscriber := range state.subscribers {
 		select {
 		case subscriber <- cloneEvent(event):
 		default:
+			delete(state.subscribers, subscriberID)
+			close(subscriber)
 		}
 	}
 	m.notifyObservers(ctx, event)
 	return event, nil
+}
+
+func (m *Manager) initializeSequenceLocked(ctx context.Context, state *conversationState, conversationID string, store DurableStore) error {
+	if state.initialized {
+		return nil
+	}
+	if store != nil {
+		latest, err := store.LatestSequence(ctx, conversationID)
+		if err != nil {
+			return err
+		}
+		state.lastSequence = latest
+	}
+	state.initialized = true
+	return nil
+}
+
+func (m *Manager) RuntimeSnapshotCurrent(ctx context.Context, conversationID string) (RuntimeSnapshot, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	state := m.state(conversationID)
+	store := m.durableStore()
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if err := m.initializeSequenceLocked(ctx, state, conversationID, store); err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	if store != nil {
+		latest, err := store.LatestSequence(ctx, conversationID)
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		if latest > state.lastSequence {
+			state.lastSequence = latest
+			state.activeTurn = nil
+			state.ring = nil
+		}
+	}
+	snapshot := RuntimeSnapshot{LastEventSequence: state.lastSequence}
+	if state.activeTurn != nil {
+		snapshot.ActiveTurn = cloneActiveTurn(state.activeTurn)
+	}
+	return snapshot, nil
+}
+
+func (m *Manager) SubscribeCurrent(ctx context.Context, conversationID, subscriberID string, afterSequence int64) (<-chan AgentUIEvent, []AgentUIEvent, bool, func(), error) {
+	if _, err := m.RuntimeSnapshotCurrent(ctx, conversationID); err != nil {
+		return nil, nil, false, nil, err
+	}
+	live, replay, covered, cancel := m.Subscribe(conversationID, subscriberID, afterSequence)
+	return live, replay, covered, cancel, nil
 }
 
 func (m *Manager) Subscribe(conversationID, subscriberID string, afterSequence int64) (<-chan AgentUIEvent, []AgentUIEvent, bool, func()) {
@@ -254,14 +314,18 @@ func (m *Manager) Subscribe(conversationID, subscriberID string, afterSequence i
 			replay = append(replay, cloneEvent(event))
 		}
 	}
-	covered := afterSequence == 0 || afterSequence == state.lastSequence
-	if afterSequence > state.lastSequence {
-		covered = false
-	} else if afterSequence > 0 && len(state.ring) > 0 {
-		oldest := state.ring[0].EventSequence
-		covered = afterSequence >= oldest-1
-	} else if afterSequence > 0 && len(state.ring) == 0 {
-		covered = afterSequence == state.lastSequence
+	covered := afterSequence == state.lastSequence
+	if afterSequence < state.lastSequence {
+		covered = len(replay) > 0
+		expected := afterSequence + 1
+		for _, event := range replay {
+			if event.EventSequence != expected {
+				covered = false
+				break
+			}
+			expected++
+		}
+		covered = covered && expected == state.lastSequence+1
 	}
 	state.mu.Unlock()
 	var once sync.Once

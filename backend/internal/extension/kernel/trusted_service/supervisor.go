@@ -601,11 +601,24 @@ func applySandboxLaunchPlan(cmd *exec.Cmd, plan *sandboxLaunchPlan) {
 	cmd.ExtraFiles = append(cmd.ExtraFiles, plan.ExtraFiles...)
 }
 
-func activateSandboxLaunch(ctx context.Context, cmd *exec.Cmd, plan *sandboxLaunchPlan) error {
-	if plan == nil || plan.AfterStart == nil {
-		return nil
+func (s *ProcessSupervisor) startContainedService(ctx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, cmd *exec.Cmd, plan *sandboxLaunchPlan) error {
+	if instance == nil || def == nil || cmd == nil {
+		return fmt.Errorf("trusted_service: contained start requires an instance, definition and command")
 	}
-	return plan.AfterStart(ctx, cmd)
+	handle, err := process.StartProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
+	if err != nil {
+		return fmt.Errorf("trusted_service: start contained process: %w", err)
+	}
+	instance.PID = cmd.Process.Pid
+	instance.managedProc = cmd
+	instance.procHandle = uint64(handle)
+	if plan != nil && plan.AfterStart != nil {
+		if err := plan.AfterStart(ctx, cmd); err != nil {
+
+			return fmt.Errorf("trusted_service: activate network sandbox: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest, launchPlan *sandboxLaunchPlan) (*exec.Cmd, error) {
@@ -631,29 +644,12 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 		return cmd, fmt.Errorf("trusted_service: create stderr pipe: %w", err)
 	}
 
-	if err := cmd.Start(); err != nil {
-		stdinPipe.Close()
-		stdoutPipe.Close()
-		stderrPipe.Close()
-		return cmd, fmt.Errorf("trusted_service: start process: %w", err)
+	if err := s.startContainedService(processCtx, instance, def, cmd, launchPlan); err != nil {
+		_ = stdinPipe.Close()
+		_ = stdoutPipe.Close()
+		_ = stderrPipe.Close()
+		return cmd, err
 	}
-
-	instance.PID = cmd.Process.Pid
-	instance.managedProc = cmd
-	if err := activateSandboxLaunch(processCtx, cmd, launchPlan); err != nil {
-		return cmd, fmt.Errorf("trusted_service: activate network sandbox: %w", err)
-	}
-
-	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
-	if attachErr != nil {
-		stdinPipe.Close()
-		stdoutPipe.Close()
-		stderrPipe.Close()
-		s.rollbackStartedProcess(instance, cmd)
-		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
-	}
-
-	instance.procHandle = uint64(handle)
 
 	nonce := generateNonce()
 	rpcSession := NewRPCSession(stdinPipe, stdoutPipe, stderrPipe, RPCSessionConfig{
@@ -741,23 +737,9 @@ func (s *ProcessSupervisor) startPlainService(processCtx context.Context, instan
 	process.ConfigureProcess(cmd)
 	applySandboxLaunchPlan(cmd, launchPlan)
 
-	if err := cmd.Start(); err != nil {
-		return cmd, fmt.Errorf("trusted_service: start process: %w", err)
+	if err := s.startContainedService(processCtx, instance, def, cmd, launchPlan); err != nil {
+		return cmd, err
 	}
-
-	instance.PID = cmd.Process.Pid
-	instance.managedProc = cmd
-	if err := activateSandboxLaunch(processCtx, cmd, launchPlan); err != nil {
-		return cmd, fmt.Errorf("trusted_service: activate network sandbox: %w", err)
-	}
-
-	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
-	if attachErr != nil {
-		s.rollbackStartedProcess(instance, cmd)
-		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
-	}
-
-	instance.procHandle = uint64(handle)
 
 	return cmd, nil
 }
@@ -797,29 +779,12 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 		return cmd, fmt.Errorf("trusted_service: create stderr pipe: %w", err)
 	}
 
-	if err := cmd.Start(); err != nil {
-		stdinPipe.Close()
-		stdoutPipe.Close()
-		stderrPipe.Close()
-		return cmd, fmt.Errorf("trusted_service: start process: %w", err)
+	if err := s.startContainedService(processCtx, instance, def, cmd, launchPlan); err != nil {
+		_ = stdinPipe.Close()
+		_ = stdoutPipe.Close()
+		_ = stderrPipe.Close()
+		return cmd, err
 	}
-
-	instance.PID = cmd.Process.Pid
-	instance.managedProc = cmd
-	if err := activateSandboxLaunch(processCtx, cmd, launchPlan); err != nil {
-		return cmd, fmt.Errorf("trusted_service: activate network sandbox: %w", err)
-	}
-
-	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
-	if attachErr != nil {
-		stdinPipe.Close()
-		stdoutPipe.Close()
-		stderrPipe.Close()
-		s.rollbackStartedProcess(instance, cmd)
-		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
-	}
-
-	instance.procHandle = uint64(handle)
 
 	go s.drainStderr(stderrPipe, instance.ServiceID, instance.InstanceID)
 
@@ -1224,19 +1189,6 @@ func (s *ProcessSupervisor) waitForProcessExit(inst *ServiceInstance, timeout ti
 		case <-ticker.C:
 		case <-time.After(50 * time.Millisecond):
 		}
-	}
-}
-
-func (s *ProcessSupervisor) rollbackStartedProcess(inst *ServiceInstance, cmd *exec.Cmd) {
-	if inst != nil {
-		s.killProcessTree(inst)
-	} else if cmd != nil && cmd.Process != nil {
-		_ = cmd.Process.Kill()
-	}
-	if cmd != nil && cmd.Process != nil {
-		// Reap a process that failed after Start but before the normal supervisor
-		// wait loop was installed. Ignoring the exit status is intentional here.
-		_ = cmd.Wait()
 	}
 }
 

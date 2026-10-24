@@ -70,8 +70,8 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                   color: context.accentPrimary,
                   paragraphs: [
                     'Amitia 采用本地优先架构，你的对话记录、记忆数据、角色设定等核心数据均存储在本地设备的加密数据库中。',
-                    '在本地部署模式下，所有数据不会离开你的设备，我们无法访问你的任何数据。',
-                    '在云端部署模式下，数据将通过端到端加密传输至你指定的服务器，传输过程使用 TLS 1.3 加密协议。',
+                    '在本地模式下，项目服务与数据运行在当前设备。',
+                    '在云端统筹模式下，数据将通过受保护的连接传输至你指定的 Cloud Core。',
                   ],
                 ),
                 SizedBox(height: AppSpacing.lg),
@@ -147,9 +147,16 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                       padding: EdgeInsets.all(AppSpacing.md),
                       child: Column(
                         children: [
-                          Icon(Icons.arrow_downward, size: 20, color: context.textTertiary),
+                          Icon(
+                            Icons.arrow_downward,
+                            size: 20,
+                            color: context.textTertiary,
+                          ),
                           SizedBox(height: AppSpacing.xs),
-                          Text('向下滚动查看完整条款', style: AppTypography.label(context)),
+                          Text(
+                            '向下滚动查看完整条款',
+                            style: AppTypography.label(context),
+                          ),
                         ],
                       ),
                     ),
@@ -161,7 +168,9 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
             padding: EdgeInsets.all(AppSpacing.pagePadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
-              border: Border(top: BorderSide(color: context.borderSecondary, width: 1)),
+              border: Border(
+                top: BorderSide(color: context.borderSecondary, width: 1),
+              ),
             ),
             child: SafeArea(
               top: false,
@@ -172,9 +181,13 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     child: Row(
                       children: [
                         Icon(
-                          _agreed ? Icons.check_box : Icons.check_box_outline_blank,
+                          _agreed
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
                           size: 22,
-                          color: _agreed ? context.accentPrimary : context.textTertiary,
+                          color: _agreed
+                              ? context.accentPrimary
+                              : context.textTertiary,
                         ),
                         SizedBox(width: AppSpacing.sm),
                         Expanded(
@@ -246,13 +259,15 @@ class _Section extends StatelessWidget {
             ],
           ),
           SizedBox(height: AppSpacing.md),
-          ...paragraphs.map((p) => Padding(
-            padding: EdgeInsets.only(bottom: AppSpacing.sm),
-            child: Text(
-              p,
-              style: AppTypography.bodySmall(context).copyWith(height: 1.6),
+          ...paragraphs.map(
+            (p) => Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Text(
+                p,
+                style: AppTypography.bodySmall(context).copyWith(height: 1.6),
+              ),
             ),
-          )),
+          ),
         ],
       ),
     );

@@ -152,7 +152,7 @@ class DeviceOwnedSpeechService {
           policy['deviceId'] != scope['targetDeviceId'] ||
           policy['providerEpoch'] != scope['targetProviderEpoch'] ||
           policy['permissionRevision'] != scope['targetPermissionRevision']) {
-        throw StateError('Core、统筹模式或权限已变化，语音已中断');
+        throw StateError('Core、数据归属或权限已变化，语音已中断');
       }
       final roles = _data(
         await api.get<Map<String, dynamic>>(

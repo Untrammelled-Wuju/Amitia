@@ -16,7 +16,7 @@ export function useCoreConfigurationAccess() {
   const canConfigure = ref(false);
   const checking = ref(true);
   const contextKey = ref("");
-  const explanation = "AI 服务由 Core 提供，当前设备不能配置模型。请在 Core 控制页面修改，或由 Core 授予已开启统筹模式的设备管理员权限。";
+  const explanation = "云端统筹模式的模型由 Core 统一管理。请在 Core 控制页面修改，或由 Core 授予当前设备管理员权限。";
   let generation = 0;
   let refreshNumber = 0;
   let pending: { generation: number; promise: Promise<string> } | undefined;
@@ -39,7 +39,7 @@ export function useCoreConfigurationAccess() {
       if (deployment.mode === "cloud") {
         const status = await get<any>("/api/device-mesh/v1/coordination/me");
         const policy = status?.policy;
-        if (status?.canAdminister !== true || policy?.coordinated !== true || typeof status.coreId !== "string" || !status.coreId) throw new Error(explanation);
+        if (status?.canAdminister !== true || typeof status.coreId !== "string" || !status.coreId) throw new Error(explanation);
         const revisions = [policy.providerEpoch, policy.modeRevision, policy.permissionRevision];
         if (revisions.some((value) => !Number.isSafeInteger(value) || value < 1)) throw new Error(explanation);
         key = JSON.stringify([deployment.serverURL, status.coreId, ...revisions]);

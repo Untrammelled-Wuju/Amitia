@@ -48,7 +48,7 @@ func TestDeviceManagementRealTLSRequiresOriginalAuthorityAcrossPolicyABA(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "selectedRole": "one", "expectedRevision": policy.ModeRevision}, 200)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)
@@ -98,12 +98,6 @@ func TestDeviceManagementRealTLSRequiresOriginalAuthorityAcrossPolicyABA(t *test
 		t.Fatal("stale actor approved a pending device", err)
 	}
 	b.request(t, a, http.MethodPut, approvalPath, map[string]any{"allow": true, "expectedRevision": approval.Revision}, 200)
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": false, "expectedRevision": policy.ModeRevision}, 200)
-	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision}, 409, original)
 	revokePath := "/api/device-mesh/v1/devices/" + a.device.DeviceID.String()
 	b.request(t, a, http.MethodDelete, revokePath, nil, 409, original)
 	if err := b.services.DeviceMesh.DeviceReg.RequireTrustedDevice(t.Context(), runtimeidentity.SpaceID(b.core), a.device.DeviceID); err != nil {

@@ -1,17 +1,5 @@
 <template>
   <div class="privacy-scan-view">
-    <div class="page-header">
-      <div class="page-header-row">
-        <el-button text @click="$router.back()" class="back-btn">
-          <el-icon><ArrowLeft /></el-icon>
-        </el-button>
-        <h2>敏感数据扫描</h2>
-      </div>
-      <p class="page-desc">
-        扫描历史记录、记忆和导入数据中的敏感信息，进行脱敏处理
-      </p>
-    </div>
-
     <el-alert
       title="不会自动删除数据"
       type="info"
@@ -85,7 +73,6 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { ArrowLeft } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import ScanScopePanel from "./components/ScanScopePanel.vue";
 import ScanResultsPanel from "./components/ScanResultsPanel.vue";

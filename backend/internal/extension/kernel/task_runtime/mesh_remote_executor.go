@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -33,6 +36,7 @@ type MeshRemoteTaskExecutor struct {
 	hub               *server.ConnectionHub
 	sessionLookup     meshSessionLookup
 	PendingTasks      *PendingTaskManager
+	inspectionPort    capability.DeviceRuntimeInvocationPort
 	HeartbeatInterval time.Duration
 	LeaseDuration     time.Duration
 	progressHandler   TaskProgressHandler
@@ -52,6 +56,69 @@ func NewMeshRemoteTaskExecutor(hub *server.ConnectionHub, lookup meshSessionLook
 		HeartbeatInterval: 30 * time.Second,
 		LeaseDuration:     5 * time.Minute,
 	}
+}
+
+func (e *MeshRemoteTaskExecutor) SetInspectionPort(p capability.DeviceRuntimeInvocationPort) {
+	e.inspectionPort = p
+}
+
+func (e *MeshRemoteTaskExecutor) InspectExecutionJournal(ctx context.Context, run *TaskRun) (executionjournal.Inspection, error) {
+	var empty executionjournal.Inspection
+	if e == nil || e.inspectionPort == nil || run == nil || run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice || run.TaskRunID == "" || run.Generation < 1 || run.ExecutionAttemptID == "" || run.LeaseID == "" || run.ScopeSnapshotID == "" || !run.ExecutionTarget.HasRuntime() || run.ExecutionTarget.RuntimeSessionID == "" || run.ExecutionTarget.ConnectionGeneration < 1 || run.TaskDefinitionID == "" {
+		return empty, NewTaskError(ErrTaskExecutionAttemptInvalid, "设备账本检查缺少完整任务身份或执行入口")
+	}
+	target := run.ExecutionTarget.Normalize()
+	if scope, owned := coordination.FromContext(ctx); !owned || scope.SpaceID != target.SpaceID.String() || scope.TargetDeviceID != target.DeviceID.String() || !scope.Coordinated {
+		return empty, NewTaskError(ErrTaskScopeDenied, "设备账本检查需要原设备所有者授权")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return empty, err
+	}
+	taskDefinitionID := run.TaskDefinitionID
+	if run.ExecutionTarget.SourceTaskDefinitionID != "" {
+
+		taskDefinitionID = run.ExecutionTarget.SourceTaskDefinitionID
+	}
+	input, err := json.Marshal(executionjournal.TaskInspectionRequest{
+		TaskRunID: run.TaskRunID, TaskGeneration: run.Generation,
+		TaskExecutionBinding: executionjournal.TaskExecutionBinding{
+			AttemptID: run.ExecutionAttemptID.String(), LeaseID: run.LeaseID,
+			RuntimeID: target.RuntimeID.String(), SessionID: target.RuntimeSessionID.String(),
+			ConnectionGeneration: target.ConnectionGeneration, TaskDefinitionID: taskDefinitionID,
+		},
+	})
+	if err != nil {
+		return empty, err
+	}
+	route := capability.RuntimeExecutionRoute{
+		Binding:   capability.RuntimeBinding{RuntimeType: capability.RuntimeType("task_recovery"), HandlerName: executionjournal.TaskInspectionHandler},
+		Placement: capability.ProviderPlacementDevice,
+		SpaceID:   target.SpaceID, DeviceID: target.DeviceID, RuntimeID: target.RuntimeID, RemoteDevice: true,
+	}
+	result := e.inspectionPort.Execute(ctx, capability.DeviceRuntimeInvocationRequest{
+		Route: route, Binding: route.Binding,
+		Invocation: capability.ToolInvocationContext{InvocationID: uuid.NewString(), SpaceID: target.SpaceID.String(), DeadlineDuration: 10 * time.Second},
+		Input:      input,
+	})
+	if result.Status != capability.ToolResultStatusSuccess {
+		return empty, NewTaskError(ErrRemoteTaskExecutorUnavailable, "设备执行日志查询未确认，禁止据此继续执行")
+	}
+	if result.DeviceID != target.DeviceID.String() || result.RuntimeID != target.RuntimeID.String() || result.RuntimeSessionID == "" || result.Generation < 1 || len(result.Structured) == 0 {
+		return empty, NewTaskError(ErrTaskExecutionAttemptInvalid, "设备执行日志回执身份无效")
+	}
+	var inspected executionjournal.Inspection
+	if json.Unmarshal(result.Structured, &inspected) != nil || inspected.Result != nil {
+		return empty, NewTaskError(ErrTaskExecutionAttemptInvalid, "设备执行日志回执格式无效")
+	}
+	switch inspected.State {
+	case "absent", "started", "performed", "completed", "stopped_unknown", "stopped_performed":
+	default:
+		return empty, NewTaskError(ErrTaskExecutionAttemptInvalid, "设备执行日志回执状态无效")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return empty, err
+	}
+	return inspected, nil
 }
 
 func (e *MeshRemoteTaskExecutor) SetProgressHandler(h TaskProgressHandler) {
@@ -286,19 +353,29 @@ func (e *MeshRemoteTaskExecutor) resolveDeviceSession(ctx context.Context, targe
 	return conn.SessionID, conn.Generation, nil
 }
 
+func (e *MeshRemoteTaskExecutor) ConfirmStoppedAttempt(ctx context.Context, run *TaskRun) bool {
+	if e == nil || e.PendingTasks == nil || run == nil || run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice || ctx.Err() != nil {
+		return false
+	}
+	if coordination.ValidateCurrent(ctx) != nil {
+		return false
+	}
+	return e.PendingTasks.ConfirmStoppedAttempt(run)
+}
+
 func (e *MeshRemoteTaskExecutor) CancelAndWait(ctx context.Context, run *TaskRun, timeout time.Duration) error {
+
+	if e == nil || e.PendingTasks == nil {
+		return NewTaskError(ErrRemoteTaskExecutorUnavailable, "cannot confirm remote cancellation without pending task manager")
+	}
 	if err := e.Cancel(ctx, run); err != nil {
 		return err
-	}
-
-	if e.PendingTasks == nil {
-		return nil
 	}
 
 	cancelCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if !e.PendingTasks.WaitForCancelAck(cancelCtx, run.TaskRunID) {
+	if !e.PendingTasks.WaitForCancelAckBound(cancelCtx, run) {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "cancel ack timed out")
 	}
 	return nil
@@ -321,35 +398,31 @@ func (e *MeshRemoteTaskExecutor) ValidateTarget(ctx context.Context, target Task
 }
 
 func (e *MeshRemoteTaskExecutor) Cancel(ctx context.Context, run *TaskRun) error {
-	if e.hub == nil {
+	if e == nil || e.hub == nil {
 		return NewTaskError(ErrRemoteTaskExecutorUnavailable, "mesh remote executor not configured")
+	}
+	if run == nil {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "cancel requires original task identity")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
 	}
 
 	target := run.ExecutionTarget.Normalize()
-	if !target.HasDevice() {
-		return NewTaskError(ErrTaskDeviceBindingInvalid, "cancel requires device target")
+	if !target.HasRuntime() {
+		return NewTaskError(ErrTaskDeviceBindingInvalid, "cancel requires original device and runtime target")
 	}
 
 	sessionID := target.RuntimeSessionID
 	generation := target.ConnectionGeneration
-
-	if (!target.HasRuntimeSession() || generation < 1) && e.sessionLookup != nil {
-		session, err := e.sessionLookup.GetActiveSession(ctx, target.SpaceID, target.DeviceID, target.RuntimeID)
-		if err != nil {
-			return fmt.Errorf("resolve session for cancel: %w", err)
-		}
-		sessionID = session.ID
-		generation = session.ConnectionGeneration
-	}
-
-	if sessionID == "" || generation < 1 {
-		return NewTaskError(ErrTaskRuntimeSessionBindingInvalid, "cancel requires active session")
+	if run.TaskRunID == "" || run.ExecutionAttemptID == "" || run.LeaseID == "" || sessionID == "" || generation < 1 {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "cancel requires exact original attempt, lease and session binding")
 	}
 
 	leaseID := run.LeaseID
 	if e.PendingTasks != nil {
 		if pending, ok := e.PendingTasks.Get(run.TaskRunID); ok && pending != nil && pending.LeaseID != "" {
-			if pending.AttemptID != run.ExecutionAttemptID.String() || pending.SessionID != sessionID.String() || pending.Generation != generation || leaseID != "" && leaseID != pending.LeaseID {
+			if pending.AttemptID != run.ExecutionAttemptID.String() || pending.SessionID != sessionID.String() || pending.Generation != generation || pending.SpaceID != target.SpaceID.String() || pending.DeviceID != target.DeviceID.String() || pending.RuntimeID != target.RuntimeID.String() || leaseID != pending.LeaseID {
 				return NewTaskError(ErrTaskExecutionAttemptInvalid, "取消请求不能使用其他执行代次的租约")
 			}
 			leaseID = pending.LeaseID

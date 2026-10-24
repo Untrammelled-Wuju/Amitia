@@ -8,7 +8,7 @@ import (
 
 func TestSuccessorRequiresIndependentAdmissionPreservesModeAndClearsAdministrator(t *testing.T) {
 	service, db := pairingTestService(t)
-	offer, token, err := service.CreateSuccessorOffer(t.Context(), "issuer", "phone-a", true)
+	offer, token, err := service.CreateSuccessorOffer(t.Context(), "issuer", "phone-a")
 	if err != nil {
 		t.Fatal(err)
 	}

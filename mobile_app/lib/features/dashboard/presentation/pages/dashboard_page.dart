@@ -204,7 +204,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   '统一入口',
                   unifiedEntry['ready'] == true ? 'ready' : 'not ready',
                 ),
-                _kv('部署模式', health?['deployMode'] ?? 'unknown'),
+                _kv(
+                  '运行模式',
+                  health?['deployMode'] == 'cloud-web' ? '云端统筹' : '本地模式',
+                ),
                 _kv('运行时长', health?['uptime'] ?? 'unknown'),
                 _kv('安全状态', securityStatus),
               ],

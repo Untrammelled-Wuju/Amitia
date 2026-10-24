@@ -32,7 +32,7 @@ func TestPermissionChangeStopsRunningSourceBeforeWaitingForItsFence(t *testing.T
 	})
 	change, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	if _, err := service.ChangeMode(change, "space", "b", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(change, "space", "b", 1, "role"); err != nil {
 		t.Fatalf("mode change waited for a running action that it had not cancelled: %v", err)
 	}
 }
@@ -48,7 +48,7 @@ func TestFailedOwnerFenceCancelsRunningWorkButDoesNotCommitNewPermission(t *test
 		t.Fatal(err)
 	}
 	service.SetAuthorityBarrier(func(context.Context, string, string, int64, []string) error { return errors.New("source offline") })
-	if _, err := service.ChangeMode(t.Context(), "space", "b", 1, true, "role"); !errors.Is(err, coordination.ErrAuthorityUnconfirmed) {
+	if _, err := service.InitializeCoordinated(t.Context(), "space", "b", 1, "role"); !errors.Is(err, coordination.ErrAuthorityUnconfirmed) {
 		t.Fatalf("unconfirmed mode was accepted: %v", err)
 	}
 	if !errors.Is(context.Cause(execution), coordination.ErrScopeExpired) {

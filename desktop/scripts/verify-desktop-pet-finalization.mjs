@@ -55,13 +55,6 @@ function assert(condition, message) {
 
 const manager = await read("desktop/src/main/pet/manager.ts");
 const actionScheduler = await read("desktop/src/main/pet/action-scheduler.ts");
-const qualityRepository = await read("backend/internal/desktoppet/quality/repository.go");
-const qualityWorker = await read("backend/internal/desktoppet/quality/worker/worker.go");
-const qualityService = await read("backend/internal/desktoppet/quality/service.go");
-const qualityEngine = await read("backend/internal/desktoppet/quality/engine.go");
-const qualityCommitter = await read("backend/internal/desktoppet/quality/writeback/committer.go");
-const qualityRecovery = await read("backend/internal/desktoppet/quality/recovery/recovery_worker.go");
-const qualityHandler = await read("backend/internal/desktoppet/quality/handler.go");
 const deploymentLifecycle = await read("desktop/src/main/deployment-lifecycle.ts");
 const viteConfig = await read("desktop/vite.config.ts");
 const copyStaticAssets = await read("desktop/scripts/copy-static-assets.mjs");
@@ -73,7 +66,6 @@ const visualSurface = await read("desktop/src/desktop-pet/animation/surface/canv
 const backendPackageValidator = await read("backend/internal/desktoppet/packageformat/validator.go");
 const backendSchemaRegistry = await read("backend/internal/desktoppet/packageformat/schema_registry.go");
 const backendPackageManifest = await read("backend/internal/desktoppet/packageformat/manifest.go");
-const backendReleaseService = await read("backend/internal/desktoppet/release/service.go");
 const backendModel = await read("backend/internal/desktoppet/installation/model.go");
 const backendDto = await read("backend/internal/desktoppet/installation/dto.go");
 const backendInstallationCoordinator = await read("backend/internal/desktoppet/installation/coordinator/coordinator.go");
@@ -118,8 +110,6 @@ const frontendRuntimeAdapter = await read("front/src/runtime/runtime-adapter.ts"
 const frontendApi = await read("front/src/composables/useApi.ts");
 const frontendRequestAuth = await read("front/src/runtime/request-auth.ts");
 const authenticatedSSE = await read("front/src/runtime/authenticated-sse.ts");
-const generationTask = await read("front/src/composables/useGenerationTask.ts");
-const processingTask = await read("front/src/composables/useProcessingTask.ts");
 const realtimeCallDialog = await read("front/src/components/RealtimeCallDialog.vue");
 const frontendPetChatState = await read("front/src/runtime/desktop-pet-chat-state.ts");
 const desktopPreload = await read("desktop/src/preload/index.ts");
@@ -196,42 +186,6 @@ assert(
     actionScheduler.includes("this.recordPlaybackStarted(submitted.request)"),
   "random idle repeat limiting must count Renderer-confirmed consecutive playback, not process-lifetime submissions",
 );
-assert(
-  qualityRepository.includes('Where("id = ? AND execution_id = ?", ev.ID, executionID)') &&
-    qualityRepository.includes('Where("id = ? AND execution_id = ?", evaluationID, executionID)') &&
-    qualityRepository.includes("RecoverExpiredEvaluation(ctx context.Context, evaluationID, executionID string") &&
-    qualityRepository.includes('Where("execution_status = ? AND is_active = ?", string(EvalSucceeded), true)'),
-  "quality evaluation writes, lease release/recovery, and active reads must be execution/active fenced",
-);
-assert(
-  qualityWorker.includes("w.executeEvaluation(evalCtx, eval, req)") &&
-    qualityWorker.includes("context.WithoutCancel(ctx)") &&
-    qualityWorker.includes("w.flushOutbox(cleanupCtx)") &&
-    qualityWorker.includes("w.recoveryWorker.Start(ctx)"),
-  "quality worker execution must inherit lifecycle cancellation and wire recovery/outbox reliability",
-);
-assert(
-  qualityService.includes("ActionContentHash:      oldEval.ActionContentHash") &&
-    qualityService.includes("ProcessingRevisionID:   oldEval.ProcessingRevisionID") &&
-    qualityService.includes("ProfileID:              oldEval.ProfileID") &&
-    qualityService.includes("RuleSetVersion:         oldEval.RuleSetVersion"),
-  "quality reevaluation must preserve immutable source/profile/ruleset identity",
-);
-assert(
-  qualityEngine.includes("if ex.committer == nil") &&
-    qualityCommitter.includes("txRepo.UpdateEvaluationOwned(ctx, ev, req.ExecutionID)") &&
-    qualityCommitter.includes("txRepo.CreateOutboxEvent(ctx, outboxRecord)") &&
-    qualityCommitter.includes("stale source revision skipped activation") &&
-    qualityRecovery.includes("var event quality.QualityOutboxEvent") &&
-    qualityRecovery.includes("event.ExecutionID"),
-  "quality terminal commit must be owner-fenced with a transactional, correctly decoded single completion outbox",
-);
-assert(
-  qualityHandler.includes("errors.Is(err, io.EOF)") &&
-    qualityHandler.includes('"INVALID_JSON"'),
-  "quality reevaluation API must reject malformed JSON while allowing an intentionally empty body",
-);
-
 const tickReducerStart = animationPlayerState.indexOf('case "TICK"');
 const framePresentedReducerStart = animationPlayerState.indexOf('case "FRAME_PRESENTED"', tickReducerStart);
 const tickReducerBody = animationPlayerState.slice(tickReducerStart, framePresentedReducerStart);
@@ -450,13 +404,8 @@ assert(
 assert(
   backendPackageValidator.includes("expectedIntegrityAlgorithm := IntegrityAlgorithmV1") &&
     !backendPackageValidator.includes("legacy_v1") &&
-    backendPackageManifest.includes('Builder:    "amitia-packageformat-v1"') &&
-    backendReleaseService.includes('"maximumPlayMs":          nil') &&
-    backendReleaseService.includes('"mutexGroup":             nil') &&
-    backendReleaseService.includes('"supportsDefaultIdle":    supportsDefaultIdle') &&
-    backendReleaseService.includes('"isStableStateCandidate": isStableStateCandidate') &&
-    backendReleaseService.includes('"isTransitionOnly":       isTransitionOnly'),
-  "V1 package producers and validators must emit and enforce the same canonical semantic fields",
+    backendPackageManifest.includes('Builder:    "amitia-packageformat-v1"'),
+  "V1 package manifests and validators must retain canonical semantics",
 );
 assert(
   visualSurface.includes('anchorType === "normalized_canvas"') &&
@@ -503,8 +452,8 @@ assert(
     deviceAgentRouter.includes('runtime-bootstrap-tickets') &&
     deviceAgentRouter.includes('localAdmin.POST("/shutdown"') &&
     deviceAgentRouter.includes('security.RequirePermission("system.shutdown")') &&
-    deviceAgentRouter.includes("desktoppet.RegisterDesktopPetRouter") &&
-    deviceAgentRouter.includes("desktoppet.RegisterDesktopPetWriteRouter") &&
+    deviceAgentRouter.includes("installation.RegisterRoutes") &&
+    deviceAgentRouter.includes("release.RegisterRoutes") &&
     deviceAgentRouter.includes("runtimev1.RegisterUserRoutes") &&
     deviceAgentRouter.includes("runtimev1.RegisterInternalRoutes") &&
     !deviceAgentRouter.includes("setupRouter(ctx"),
@@ -687,11 +636,7 @@ assert(
     frontendRuntimeAdapter.includes("return api.getBackendAuthHeaders(target);") &&
     frontendRuntimeAdapter.includes("return getWebDeviceAuthHeaders(baseURL);") &&
     authenticatedSSE.includes("createAuthenticatedFetchInit") &&
-    authenticatedSSE.includes('Accept: "text/event-stream"') &&
-    generationTask.includes("consumeAuthenticatedSSE") &&
-    processingTask.includes("consumeAuthenticatedSSE") &&
-    !generationTask.includes("new EventSource") &&
-    !processingTask.includes("new EventSource"),
+    authenticatedSSE.includes('Accept: "text/event-stream"'),
   "fetch/SSE authentication must use cloud bearer for business traffic and Desktop Session for local pet streams",
 );
 

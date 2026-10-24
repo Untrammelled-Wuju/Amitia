@@ -1,4 +1,14 @@
-<template><DeviceOwnedDataView title="记忆时间线" initial-kind="memory" mode="timeline" :kinds="TIMELINE_KINDS" /></template>
+<template>
+  <DeviceOwnedDataView
+    title="时间线"
+    description="按时间顺序回顾角色和记忆的变化。"
+    initial-kind="memory"
+    mode="timeline"
+    :kinds="TIMELINE_KINDS"
+    parent-title="记忆"
+    parent-path="/memory"
+  />
+</template>
 <script setup lang="ts">
 import DeviceOwnedDataView from "@/components/DeviceOwnedDataView.vue";
 

@@ -1,22 +1,31 @@
 <template>
   <div class="devices-page">
-    <header id="device-pairing" class="page-head">
-      <div>
-        <h2>设备配对</h2>
-        <p>管理当前设备以及已连接到此 Space 的设备。</p>
+    <section id="device-pairing" class="device-hero">
+      <div class="device-hero-icon"><Connection class="device-hero-svg" /></div>
+      <div class="device-hero-copy">
+        <h2>设备互联</h2>
+        <p>管理当前设备、可信设备与 Core 之间的连接和权限。</p>
       </div>
-      <el-button text :loading="loading" @click="refreshAll">刷新状态</el-button>
-    </header>
+      <span class="device-hero-status" :data-state="localMeshState">
+        <i></i>{{ localMeshStateLabel }}
+      </span>
+      <el-button :loading="loading" @click="refreshAll">刷新状态</el-button>
+    </section>
     <section class="device-overview" aria-label="设备概览">
       <div>
-        <span class="overview-label">当前设备</span>
+        <div class="overview-heading"><span class="overview-label">当前设备</span><span class="overview-index">01</span></div>
         <strong>{{ desktopAvailable ? "桌面端" : "Web 端" }}</strong>
-        <el-tag size="small" :type="localMeshState === 'connected' ? 'success' : 'info'" effect="plain">{{ localMeshStateLabel }}</el-tag>
+        <span class="overview-subtitle">{{ localIdentity?.platform || "正在读取设备信息" }}</span>
       </div>
       <div>
-        <span class="overview-label">已绑定设备</span>
+        <div class="overview-heading"><span class="overview-label">已绑定设备</span><span class="overview-index">02</span></div>
         <strong>{{ devices.length }}</strong>
-        <span class="overview-subtitle">台设备</span>
+        <span class="overview-subtitle">台可信设备</span>
+      </div>
+      <div>
+        <div class="overview-heading"><span class="overview-label">在线设备</span><span class="overview-index">03</span></div>
+        <strong>{{ onlineDeviceCount }}</strong>
+        <span class="overview-subtitle">台设备在线</span>
       </div>
     </section>
     <section class="pairing-control" aria-labelledby="pairing-title">
@@ -75,10 +84,12 @@
           <div class="detail-row"><span>Runtime ID</span><code>{{ localIdentity.runtimeId || "—" }}</code></div>
           <div v-if="currentPolicy" class="device-policy">
             <div class="detail-row">
-              <span>统筹模式</span>
-              <el-switch :model-value="currentPolicy.coordinated" :disabled="!coordinationAvailable" :loading="policyBusy" @change="changeMode" />
+              <span>运行模式</span>
+              <el-tag size="small" :type="deploymentMode === 'cloud' ? 'warning' : 'success'">
+                {{ deploymentMode === "cloud" ? "云端统筹" : "本地模式" }}
+              </el-tag>
             </div>
-            <p class="muted">{{ !coordinationAvailable ? '统筹模式暂不可用，当前数据仍由现有服务管理。' : currentPolicy.coordinated ? '新对话、记忆及持续事项由 Core 保存和管理，使用 Core 角色。' : '使用本机角色，新对话、记忆及持续事项由本机保存和管理。' }} 历史数据保持原归属；AI 服务始终由 Core 提供。</p>
+            <p class="muted">{{ deploymentMode === 'cloud' ? '角色、对话、记忆和跨设备任务由 Cloud Core 统一管理。' : '项目服务、角色、对话和记忆全部在当前设备运行。' }}</p>
             <div class="detail-row"><span>云端管理员</span><el-tag :type="currentPolicy.administrator ? 'success' : 'info'">{{ currentPolicy.administrator ? '已授权' : '未授权' }}</el-tag></div>
           </div>
           <div v-if="localMeshBound" class="card-actions">
@@ -113,7 +124,7 @@
               <div class="detail-row"><span>信任状态</span><span>{{ device.trustState || "未知" }}</span></div>
               <div class="detail-row"><span>Runtime</span><span>{{ device.runtimes?.length || 0 }}</span></div>
               <div class="detail-row"><span>同步</span><span>{{ syncLabel(device.deviceId) }}</span></div>
-              <div v-if="device.coordination" class="detail-row"><span>统筹模式</span><span>{{ device.coordination.coordinated ? '开启' : '关闭' }}</span></div>
+              <div v-if="device.coordination" class="detail-row"><span>运行模式</span><span>云端统筹</span></div>
               <div v-if="device.coordination" class="detail-row"><span>管理员</span><span>{{ device.coordination.administrator ? '已授权' : '未授权' }}</span></div>
 
               <div v-if="device.runtimes?.length" class="runtime-list">
@@ -129,7 +140,7 @@
               <div class="card-actions">
                 <el-button v-if="device.trustState === 'trusted'" size="small" :disabled="!coordinationAvailable" @click="callDevice = device; callOpen = true">通过 Core 调用</el-button>
                 <el-button v-if="device.trustState === 'trusted' && (canAdminister || device.deviceId === localIdentity?.deviceId)" size="small" @click="grantDevice = device; grantsOpen = true">能力授权</el-button>
-                <el-button v-if="canAdminister && device.coordination" size="small" :disabled="!device.coordination.coordinated || device.trustState !== 'trusted'" :loading="busy === device.deviceId" @click="changeAdministrator(device)">{{ device.coordination.administrator ? '撤销管理员' : '授予管理员' }}</el-button>
+                <el-button v-if="canAdminister && device.coordination" size="small" :disabled="device.trustState !== 'trusted'" :loading="busy === device.deviceId" @click="changeAdministrator(device)">{{ device.coordination.administrator ? '撤销管理员' : '授予管理员' }}</el-button>
                 <el-button size="small" :disabled="device.trustState !== 'trusted' || (!canAdminister && device.deviceId !== managementIntent?.state.policy.deviceId)" @click="loadSync(device.deviceId)">刷新同步状态</el-button>
                 <el-button v-if="(canAdminister || device.deviceId === localIdentity?.deviceId) && device.deviceId !== coreConsoleDeviceId" size="small" type="danger" plain :loading="busy === device.deviceId" @click="revoke(device)">移除设备</el-button>
               </div>
@@ -144,6 +155,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { Connection } from "@element-plus/icons-vue";
 import { useApi } from "@/composables/useApi";
 import DevicePairScanner from '@/components/DevicePairScanner.vue';
 import DeviceCapabilityGrants from '@/components/DeviceCapabilityGrants.vue';
@@ -192,7 +204,6 @@ const currentPolicy = ref<Policy | null>(null);
 const canAdminister = ref(false);
 const coreConsoleDeviceId = ref("");
 const coordinationAvailable = ref(false);
-const policyBusy = ref(false);
 const desktopAvailable = computed(() => Boolean(window.amitiaDesktop));
 let managementIntent: DeviceManagementIntent | null = null;
 const management = useDeviceManagementIntent(() => {
@@ -215,6 +226,7 @@ async function originalManagement(target?: string, administrator = false) {
 }
 const localMeshState = computed(() => String(localMeshStatus.value?.state || "unknown").toLowerCase());
 const localMeshBound = computed(() => !["", "unknown", "unprovisioned"].includes(localMeshState.value));
+const onlineDeviceCount = computed(() => devices.value.filter((device) => device.trustState !== "revoked" && device.presence === "online").length);
 const localMeshStateLabel = computed(() => {
   if (["connected", "ready"].includes(localMeshState.value)) return "已加入 Mesh";
   if (localMeshState.value === "connecting") return "连接中";
@@ -311,7 +323,7 @@ async function refreshAll() {
 async function joinCurrentDevice(scanned?: string) {
   if (!localIdentity.value) return;
   if (deploymentMode.value !== "cloud" && !scanned) {
-    ElMessage.warning("请先切换到云端部署模式");
+    ElMessage.warning("云端统筹模式必须先配置 Cloud Core");
     return;
   }
   joinBusy.value = true;
@@ -510,27 +522,6 @@ function formatTime(value?: string) {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
-async function changeMode(value: string | number | boolean) {
-  if (!currentPolicy.value || policyBusy.value) return;
-  const original = managementIntent;
-  const policy = { ...currentPolicy.value };
-  try {
-    await ElMessageBox.confirm('切换将中断正在生成的回复。已有聊天、记忆及持续事项保留原归属，新数据按切换后的模式保存。', '切换统筹模式', { confirmButtonText: '切换', cancelButtonText: '取消' });
-  } catch { return; }
-  policyBusy.value = true;
-  try {
-    if (!original || original !== managementIntent) throw new Error("原设备管理页面已变化，请重新确认");
-    await management.validate(original);
-    const result = await api.put<{ policy: Policy }>("/api/device-mesh/v1/coordination/me", { coordinated: Boolean(value), expectedRevision: policy.modeRevision, selectedRole: policy.selectedRole }, deviceManagementRequestConfig(original));
-    if (original.controller.signal.aborted || result.policy.deviceId !== policy.deviceId || result.policy.coordinated !== Boolean(value) || result.policy.modeRevision !== policy.modeRevision + 1 || result.policy.permissionRevision !== policy.permissionRevision + 1 || result.policy.providerEpoch !== policy.providerEpoch) throw new Error("统筹模式确认与原设备权限不一致，请重新加载");
-    currentPolicy.value = result.policy;
-    window.dispatchEvent(new CustomEvent('amitia:execution-scope-changed', { detail: { reason: '统筹模式已切换，当前回复已中断', policy: result.policy } }));
-    ElMessage.success('统筹模式已更新');
-    await refresh();
-  } catch (err: any) { ElMessage.error(err?.message || '统筹模式更新失败'); await refresh(); }
-  finally { policyBusy.value = false; }
-}
-
 async function changeAdministrator(device: Device) {
   if (!device.coordination || !canAdminister.value) return;
   const original = managementIntent;
@@ -565,10 +556,19 @@ onUnmounted(() => { if (approvalTimer) clearInterval(approvalTimer); });
 </script>
 
 <style scoped>
-.devices-page { padding: 0; max-width: 880px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-.page-head, .device-head, .detail-row, .runtime-row, .card-actions, .head-actions, .device-head-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.page-head h2 { margin: 0 0 6px; font-size: calc(var(--ac-font-size-base) * 11 / 7); }
-.page-head p { margin: 0; color: var(--el-text-color-secondary); font-size: var(--ac-font-size-sm); }
+.devices-page { width: min(100%, 1040px); min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+.devices-page :deep(.el-card) { border: 0; background: var(--surface-bg-elevated); box-shadow: none; }
+.devices-page :deep(.el-card__header) { border-bottom: 0; }
+.device-hero { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 28px; border-radius: 24px; background: #2C2C2E; }
+.device-hero-icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 16px; background: color-mix(in srgb, var(--ac-color-primary) 12%, var(--control-hover-bg)); color: var(--ac-color-primary); }
+.device-hero-svg { width: 23px; height: 23px; }
+.device-hero-copy { min-width: 0; }
+.device-hero-copy h2 { margin: 0; font-size: 20px; line-height: 1.35; }
+.device-hero-copy p { margin: 6px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.device-hero-status { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; background: color-mix(in srgb, var(--workbench-bg) 68%, transparent); color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+.device-hero-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary); }
+.device-hero-status[data-state="connected"] i, .device-hero-status[data-state="ready"] i { background: var(--ac-color-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ac-color-success) 14%, transparent); }
+.device-head, .detail-row, .runtime-row, .card-actions, .head-actions, .device-head-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 14px; }
 .device-card, .current-device-card { min-width: 0; }
 .pairing-qr { display: block; max-width: 100%; height: auto; margin: 12px auto; }
@@ -576,40 +576,40 @@ onUnmounted(() => { if (approvalTimer) clearInterval(approvalTimer); });
 .detail-row { padding: 7px 0; font-size: var(--ac-font-size-sm); }
 .detail-row > span:first-child { flex-shrink: 0; color: var(--el-text-color-secondary); }
 code { min-width: 0; overflow-wrap: anywhere; max-width: 65%; text-align: right; }
-.runtime-list { margin-top: 12px; border-top: 1px solid var(--el-border-color-lighter); }
-.runtime-row { padding: 9px 0; border-bottom: 1px solid var(--el-border-color-lighter); font-size: var(--ac-font-size-xs); }
+.runtime-list { margin-top: 14px; display: grid; gap: 8px; }
+.runtime-row { padding: 10px 12px; border-radius: 10px; background: var(--control-hover-bg); font-size: var(--ac-font-size-xs); }
 .runtime-row > div { min-width: 0; overflow-wrap: anywhere; }
 .card-actions, .head-actions, .device-head-actions { flex-wrap: wrap; }
 .card-actions { justify-content: flex-end; margin-top: 14px; }
-@media (max-width: 700px) { .devices-page { padding: 0; } .device-grid { grid-template-columns: 1fr; } .page-head { align-items: flex-start; } .head-actions { width: 100%; flex-wrap: wrap; } }
-.page-head { margin-bottom: 4px; }
-.page-head h2 { font-size: 23px; font-weight: 650; letter-spacing: -0.025em; }
-.page-head p { line-height: 1.6; }
-.device-overview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
-.device-overview > div { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; min-width: 0; padding: 20px 22px; border: 1px solid var(--surface-border); border-radius: 13px; background: var(--surface-bg); }
-.overview-label { width: 100%; font-size: 12px; color: var(--text-secondary); }
-.device-overview strong { font-size: 19px; font-weight: 650; }
+@media (max-width: 700px) { .device-grid { grid-template-columns: 1fr; } .head-actions { width: 100%; flex-wrap: wrap; } }
+.device-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.device-overview > div { display: grid; gap: 7px; min-width: 0; padding: 20px; border-radius: 18px; background: var(--surface-bg-elevated); }
+.overview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.overview-label { font-size: 12px; color: var(--text-secondary); }
+.overview-index { color: var(--text-muted); font-size: 10px; letter-spacing: 0.08em; }
+.device-overview strong { font-size: 22px; font-weight: 680; letter-spacing: -0.03em; }
 .overview-subtitle { font-size: 12px; color: var(--text-secondary); }
-.pairing-control, .current-device-card, .bound-devices-panel { min-width: 0; border: 1px solid var(--surface-border); border-radius: 14px; padding: 22px 24px; background: var(--surface-bg); }
+.pairing-control, .current-device-card, .bound-devices-panel { min-width: 0; border-radius: 20px; padding: 24px; background: var(--surface-bg-elevated); }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .panel-heading h3 { margin: 0; font-size: 16px; font-weight: 600; }
 .panel-heading p { margin: 6px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
 .pairing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.device-detail-toggle { margin-top: 12px; border-top: 1px solid var(--surface-border); }
+.device-detail-toggle { margin-top: 14px; }
 .device-detail-toggle > summary { padding: 14px 0 2px; cursor: pointer; color: var(--text-secondary); font-size: 13px; }
 .device-detail-body { padding-top: 14px; }
-.device-policy { border-top: 1px solid var(--surface-border); margin-top: 12px; padding-top: 12px; }
+.device-policy { margin-top: 14px; padding: 14px; border-radius: 12px; background: color-mix(in srgb, var(--workbench-bg) 54%, transparent); }
 .device-count { display: inline-flex; margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
 .device-list { display: grid; gap: 12px; }
-.device-card { border-radius: 11px; border: 1px solid var(--surface-border); }
+.device-card { border: 0; border-radius: 14px; background: var(--workbench-bg); box-shadow: none; }
 .device-card :deep(.el-card__body) { padding: 16px 18px; }
 .device-title { min-width: 0; }
 .device-title strong { font-size: 14px; overflow-wrap: anywhere; }
 .device-head { align-items: flex-start; }
 .detail-row { align-items: flex-start; }
 .detail-row code { font-size: 12px; overflow-wrap: anywhere; }
-.card-actions { padding-top: 16px; border-top: 1px solid var(--surface-border); }
-.pairing-offer-card { border-radius: 12px; }
+.card-actions { padding-top: 16px; }
+.pairing-offer-card { border-radius: 16px; }
 .pairing-hint { margin: -7px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
-@media (max-width: 700px) { .pairing-control, .current-device-card, .bound-devices-panel { padding: 18px; } .device-overview > div { padding: 16px; } .device-overview { gap: 8px; } .pairing-actions .el-button { margin-left: 0; } }
+@media (max-width: 820px) { .device-hero { grid-template-columns: auto minmax(0, 1fr); } .device-hero-status, .device-hero > .el-button { grid-column: auto; justify-self: start; } .device-overview { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .device-hero { padding: 20px; } .pairing-control, .current-device-card, .bound-devices-panel { padding: 18px; } .device-overview > div { padding: 16px; } .pairing-actions .el-button { margin-left: 0; } }
 </style>

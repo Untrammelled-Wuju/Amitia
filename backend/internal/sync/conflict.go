@@ -17,7 +17,7 @@ const (
 )
 
 type ConflictResolver struct {
-	defaultStrategy ConflictStrategy
+	defaultStrategy  ConflictStrategy
 	entityStrategies map[EntityType]ConflictStrategy
 }
 

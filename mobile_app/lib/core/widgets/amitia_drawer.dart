@@ -205,6 +205,8 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     ProjectDto project, {
     String? name,
     String? workspaceId,
+    String? deviceId,
+    String? workspaceKind,
     String? rootUri,
     List<ProjectWorkspaceDto>? workspaces,
     String? primaryWorkspaceId,
@@ -217,9 +219,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
         conversationId: workspace.conversationId,
         projectId: project.id,
         workspaceId: workspaceId ?? workspace.workspaceId,
-        deviceId: workspace.deviceId,
+        deviceId: deviceId ?? workspace.deviceId,
         workspaceName: name ?? workspace.workspaceName,
-        workspaceKind: workspace.workspaceKind,
+        workspaceKind: workspaceKind ?? workspace.workspaceKind,
         rootUri: rootUri ?? workspace.rootUri,
         workspaces: workspaces ?? workspace.workspaces,
         primaryWorkspaceId: primaryWorkspaceId ?? workspace.primaryWorkspaceId,
@@ -518,38 +520,56 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
       final existing = project.workspaces
           .where((workspace) => workspace.id == mount.id)
           .firstOrNull;
-      final workspace =
-          existing ??
-          ProjectWorkspaceDto(
-            id: mount.id,
-            deviceId: project.deviceId,
-            name: mount.name.trim().isEmpty ? '工作区' : mount.name,
-            kind: mount.kind,
-            rootUri: mount.rootUri,
-            readOnly: mount.readOnly,
-          );
-      final workspaces = existing == null
-          ? <ProjectWorkspaceDto>[...project.workspaces, workspace]
-          : project.workspaces;
+      if (existing != null) {
+        amitiaSnackBar(context, '该工作区已经属于当前项目');
+        return;
+      }
+      final workspace = ProjectWorkspaceDto(
+        id: mount.id,
+        deviceId:
+            (project.executionScope?['targetDeviceId'] ?? project.deviceId)
+                .toString(),
+        name: mount.name.trim().isEmpty ? '工作区' : mount.name,
+        kind: mount.kind,
+        rootUri: mount.rootUri,
+        readOnly: mount.readOnly,
+      );
+      final workspaces = <ProjectWorkspaceDto>[
+        ...project.workspaces,
+        workspace,
+      ];
+      final primaryWorkspaceId = project.primaryWorkspaceId.isNotEmpty
+          ? project.primaryWorkspaceId
+          : workspaces.first.id;
+      final primary = workspaces.firstWhere(
+        (item) => item.id == primaryWorkspaceId,
+      );
       await ref
           .read(chatServiceProvider)
           .updateProject(
             project.id,
             workspaces: workspaces,
-            primaryWorkspaceId: workspace.id,
+            primaryWorkspaceId: primaryWorkspaceId,
             project: project,
           );
       _replaceActiveProjectWorkspace(
         project,
-        workspaceId: workspace.id,
-        rootUri: workspace.rootUri,
+        workspaceId: primary.id,
+        deviceId: primary.deviceId,
+        workspaceKind: primary.kind,
+        rootUri: primary.rootUri,
         workspaces: workspaces,
-        primaryWorkspaceId: workspace.id,
+        primaryWorkspaceId: primaryWorkspaceId,
       );
       await _refreshConversationSidebar();
-      if (mounted) amitiaSnackBar(context, '主工作区已更新');
+      if (mounted) {
+        amitiaSnackBar(
+          context,
+          project.workspaces.isEmpty ? '主工作区已添加' : '子工作区已添加',
+        );
+      }
     } catch (error) {
-      if (mounted) amitiaSnackBar(context, '更新项目根目录失败：$error');
+      if (mounted) amitiaSnackBar(context, '添加工作区失败：$error');
     }
   }
 
@@ -578,7 +598,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: Text(workspace.kind == 'saf' ? '系统授权目录' : '本机目录'),
+                subtitle: Text(
+                  '${workspace.id == project.primaryWorkspaceId ? '主工作区' : '子工作区'} · ${workspace.kind == 'saf' ? '系统授权目录' : '本机目录'}',
+                ),
                 onTap: () async {
                   Navigator.of(sheetContext).pop();
                   await ref
@@ -588,6 +610,14 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                         primaryWorkspaceId: workspace.id,
                         project: project,
                       );
+                  _replaceActiveProjectWorkspace(
+                    project,
+                    workspaceId: workspace.id,
+                    deviceId: workspace.deviceId,
+                    workspaceKind: workspace.kind,
+                    rootUri: workspace.rootUri,
+                    primaryWorkspaceId: workspace.id,
+                  );
                   await _refreshConversationSidebar();
                 },
                 trailing: project.workspaces.length > 1
@@ -598,17 +628,27 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                           final remaining = project.workspaces
                               .where((item) => item.id != workspace.id)
                               .toList(growable: false);
+                          final primary = remaining.firstWhere(
+                            (item) => item.id == project.primaryWorkspaceId,
+                            orElse: () => remaining.first,
+                          );
                           await ref
                               .read(chatServiceProvider)
                               .updateProject(
                                 project.id,
                                 workspaces: remaining,
-                                primaryWorkspaceId:
-                                    workspace.id == project.primaryWorkspaceId
-                                    ? remaining.first.id
-                                    : project.primaryWorkspaceId,
+                                primaryWorkspaceId: primary.id,
                                 project: project,
                               );
+                          _replaceActiveProjectWorkspace(
+                            project,
+                            workspaceId: primary.id,
+                            deviceId: primary.deviceId,
+                            workspaceKind: primary.kind,
+                            rootUri: primary.rootUri,
+                            workspaces: remaining,
+                            primaryWorkspaceId: primary.id,
+                          );
                           await _refreshConversationSidebar();
                         },
                         icon: const Icon(Icons.delete_outline),
@@ -617,7 +657,7 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
               ),
             ListTile(
               leading: const Icon(Icons.create_new_folder_outlined),
-              title: const Text('添加文件夹工作区'),
+              title: Text(project.workspaces.isEmpty ? '添加主工作区' : '添加子工作区'),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _addProjectWorkspace(project);
@@ -1496,9 +1536,9 @@ class _ProjectTile extends StatelessWidget {
               PopupMenuItem(
                 value: _ProjectAction.changeRoot,
                 enabled: !project.readOnly,
-                child: const _ProjectMenuItem(
+                child: _ProjectMenuItem(
                   icon: Icons.drive_file_move_outline,
-                  label: '添加/更换主工作区',
+                  label: project.workspaces.isEmpty ? '添加主工作区' : '添加子工作区',
                 ),
               ),
               PopupMenuItem(

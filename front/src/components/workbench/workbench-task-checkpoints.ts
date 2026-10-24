@@ -1,4 +1,4 @@
-import { readWorkbenchTasks } from './workbench-task-api';
+import { readWorkbenchTasks, WorkbenchTaskReadError } from './workbench-task-api';
 
 export interface TaskCheckpoint {
   updatedAt: string;
@@ -54,5 +54,9 @@ export function parseTaskCheckpoints(value: unknown, conversationId: string, coo
 
 export async function loadTaskCheckpoints(conversationId: string, coordinationId: string, signal: AbortSignal, characterId = ''): Promise<TaskCheckpointHistory> {
   const response = await readWorkbenchTasks(conversationId, characterId, signal, coordinationId);
-  return parseTaskCheckpoints(response, conversationId, coordinationId);
+  try {
+    return parseTaskCheckpoints(response, conversationId, coordinationId);
+  } catch {
+    throw new WorkbenchTaskReadError('持久检查点证据无效，旧任务快照已丢弃', true);
+  }
 }

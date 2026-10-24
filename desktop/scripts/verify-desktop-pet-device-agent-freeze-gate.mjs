@@ -93,11 +93,6 @@ for (const required of [
   assert(runtimeComponents.includes(required), `DesktopPet component start topology missing ${required}`);
 }
 for (const readiness of [
-  "generation worker not running",
-  "processing worker not running",
-  "quality worker not running",
-  "regeneration worker not running",
-  "revision bridge recovery worker not running",
   "installation projection bridge not running",
   "installation desired outbox worker not running",
   "installation recovery worker not running",

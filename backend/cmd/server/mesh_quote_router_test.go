@@ -25,7 +25,7 @@ func TestOwnedQuoteRealTLSUsesSourceHistoryAfterCoordinationWithoutMirroringIt(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	view = decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
 	digest := sha256.Sum256([]byte(originalText))
 	quote := business.QuoteReference{OwnerID: a.device.DeviceID.String(), RoleID: "one", ConversationID: original.ConversationID, MessageID: requestID + "/user", ExpectedRevision: original.UserRevision, ContentHash: hex.EncodeToString(digest[:]), ExpectedScope: &view.Scope}

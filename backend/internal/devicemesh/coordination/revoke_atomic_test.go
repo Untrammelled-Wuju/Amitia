@@ -64,7 +64,7 @@ func TestRevokeSerializesWithCommitAndRejectsLateCommit(t *testing.T) {
 
 func TestRevokeFailureRollsBackPolicyAndTrust(t *testing.T) {
 	db, service := setup(t)
-	policy, err := service.ChangeMode(t.Context(), "space", "a", 1, true, "role")
+	policy, err := service.InitializeCoordinated(t.Context(), "space", "a", 1, "role")
 	if err != nil {
 		t.Fatal(err)
 	}

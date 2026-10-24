@@ -65,7 +65,7 @@ func TestActualTLSProjectAPIPreservesSourceHistoryAndRejectsChangedOwnership(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	payload["requestId"] = "old-device-form"
 	b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/projects", payload, http.StatusConflict)
 	query = decodeThreeCoreMemoryResponse[projectListing](t, b.request(t, a, http.MethodGet, "/api/device-mesh/v1/business/projects?characterId=one&historicalRoleId=one", nil, 200))

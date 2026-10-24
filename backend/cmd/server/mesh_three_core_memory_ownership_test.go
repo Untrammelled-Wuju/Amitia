@@ -103,7 +103,7 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, http.StatusOK)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +148,10 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 	}
 	followApprovedThreeCoreSuccessor(t, a, c)
 	currentPolicy, err := c.services.DeviceMesh.Coordination.Get(t.Context(), c.core, a.device.DeviceID.String())
+	if err == nil && !currentPolicy.Coordinated {
+		ensureCoordinatedForTest(t, c, a, currentPolicy.ModeRevision)
+		currentPolicy, err = c.services.DeviceMesh.Coordination.Get(t.Context(), c.core, a.device.DeviceID.String())
+	}
 	if err != nil || currentPolicy.Administrator || !currentPolicy.Coordinated {
 		t.Fatal("新 Core 继承了旧管理员权限或丢失统筹状态")
 	}

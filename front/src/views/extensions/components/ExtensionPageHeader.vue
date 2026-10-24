@@ -1,23 +1,25 @@
 <template>
-  <header class="extension-page-header">
-    <div class="heading-group">
+  <header v-if="showHeading || $slots.actions" class="extension-page-header">
+    <div v-if="showHeading" class="heading-group">
       <div class="title-line">
-        <nav aria-label="扩展页面层级">
+        <nav :aria-label="breadcrumbLabel">
           <ol class="breadcrumb-list">
-            <template v-if="grandparentTitle && grandparentPath">
+            <template v-if="showParent">
+              <template v-if="grandparentTitle && grandparentPath">
+                <li>
+                  <RouterLink class="center-link" :to="grandparentPath"
+                    >{{ grandparentTitle }}</RouterLink
+                  >
+                </li>
+                <li class="separator" aria-hidden="true">/</li>
+              </template>
               <li>
-                <RouterLink class="center-link" :to="grandparentPath"
-                  >{{ grandparentTitle }}</RouterLink
+                <RouterLink class="center-link" :to="parentPath"
+                  >{{ parentTitle }}</RouterLink
                 >
               </li>
               <li class="separator" aria-hidden="true">/</li>
             </template>
-            <li>
-              <RouterLink class="center-link" :to="parentPath"
-                >{{ parentTitle }}</RouterLink
-              >
-            </li>
-            <li class="separator" aria-hidden="true">/</li>
             <li class="current-title" aria-current="page">
               <h1>{{ title }}</h1>
             </li>
@@ -42,9 +44,15 @@ const props = withDefaults(defineProps<{
   parentPath?: string;
   grandparentTitle?: string;
   grandparentPath?: string;
+  breadcrumbLabel?: string;
+  showParent?: boolean;
+  showHeading?: boolean;
 }>(), {
   parentTitle: '扩展中心',
   parentPath: '/extensions',
+  breadcrumbLabel: '页面层级',
+  showParent: true,
+  showHeading: false,
 });
 </script>
 

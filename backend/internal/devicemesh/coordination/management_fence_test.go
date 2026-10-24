@@ -56,7 +56,7 @@ func TestManagementFencePreservesAuthenticatedMutationUntilOwnerAcknowledges(t *
 				}
 				return coordination.FenceSourceAuthority(ctx, db, space, device, revision)
 			})
-			policy, err := service.ChangeMode(linked, "space", "a", 1, true, "role")
+			policy, err := service.InitializeCoordinated(linked, "space", "a", 1, "role")
 			if !barrierReached {
 				t.Fatal("未执行真实所有者屏障")
 			}

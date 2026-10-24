@@ -57,7 +57,7 @@ func TestCoreConsoleTaskCatalogStillRequiresTargetCapabilityGrant(t *testing.T) 
 	a, b := newThreeCoreFixture(t, "console-a", schemas), newThreeCoreFixture(t, "console-b", schemas)
 	pairThreeCoreFixtures(t, a, b)
 	installThreeCoreCatalogTasks(t, a, "1.0.0")
-	if err := b.services.DeviceMesh.Coordination.InitializeCoreConsole(t.Context(), b.core, b.device.DeviceID.String()); err != nil {
+	if err := b.services.DeviceMesh.Coordination.InitializeCoreConsole(t.Context(), b.core, b.device.DeviceID.String(), true); err != nil {
 		t.Fatal(err)
 	}
 	actor := &auth.ActorContext{PrincipalType: auth.PrincipalLocalUI, SpaceID: runtimeidentity.SpaceID(b.core), DeviceID: b.device.DeviceID, IsLocalTrusted: true, Permissions: []string{auth.PermSystemAdmin}}
@@ -110,7 +110,7 @@ func TestOwnedTaskDefinitionsReturnCoreDefinitionsUnderTargetScope(t *testing.T)
 	if err := b.services.KernelContainer.TaskRuntimeService.PutTaskDefinition(t.Context(), local); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.services.DeviceMesh.Coordination.InitializeCoreConsole(t.Context(), b.core, b.device.DeviceID.String()); err != nil {
+	if err := b.services.DeviceMesh.Coordination.InitializeCoreConsole(t.Context(), b.core, b.device.DeviceID.String(), true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.services.DeviceMesh.Coordination.SetCapabilityGrant(t.Context(), b.core, b.device.DeviceID.String(), a.device.DeviceID.String(), "task.execute", 0, true); err != nil {

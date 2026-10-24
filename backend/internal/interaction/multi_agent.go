@@ -168,14 +168,15 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now().UTC() }
 
 type MultiAgentCoordinator struct {
-	tracker        InteractionTracker
-	goals          *decision.GoalRegistry
-	recovery       *RecoveryDescriptorService
-	starter        AgentWorkerRunner
-	pauseSvc       *PauseResumeService
-	policy         MultiAgentPolicy
-	clock          CoordinatorClock
-	ownedExecution func(context.Context, coordination.ExecutionScope, func(context.Context) error) error
+	tracker         InteractionTracker
+	goals           *decision.GoalRegistry
+	recovery        *RecoveryDescriptorService
+	starter         AgentWorkerRunner
+	pauseSvc        *PauseResumeService
+	policy          MultiAgentPolicy
+	clock           CoordinatorClock
+	ownedExecution  func(context.Context, coordination.ExecutionScope, func(context.Context) error) error
+	durableObserver func(context.Context, string, MultiAgentRecoveryRef) error
 
 	mu            sync.Mutex
 	coordinations map[string]*activeCoordination
@@ -188,6 +189,9 @@ type activeCoordination struct {
 	resourceOwnerID     string
 	dispatchMu          sync.Mutex
 	persistMu           sync.Mutex
+	lastSnapshotJSON    string
+	snapshotInitialized bool
+	staleSnapshot       bool
 	id                  CoordinationID
 	parentGoalID        string
 	parentGoalRev       int64
@@ -200,11 +204,15 @@ type activeCoordination struct {
 	workspaceRootURI    string
 	status              CoordinationStatus
 	cancelConfirmed     bool
+	cancelRequested     bool
 	strategy            CoordinationStrategy
 	completionPlan      CoordinationCompletionPolicy
 	depth               int
 	assignments         []*AgentAssignment
 	deadlineAt          *time.Time
+	maxToolCalls        *int
+	maxTotalTokens      *int64
+	maxCostMicroUSD     *int64
 	createdAt           time.Time
 	updatedAt           time.Time
 }
@@ -251,6 +259,9 @@ type StartCoordinationRequest struct {
 	Strategy            CoordinationStrategy
 	CompletionPlan      CoordinationCompletionPolicy
 	DeadlineAt          *time.Time
+	MaxToolCalls        *int
+	MaxTotalTokens      *int64
+	MaxCostMicroUSD     *int64
 	Depth               int
 }
 
@@ -274,7 +285,7 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 	if len(req.Objectives) > c.policy.MaxAssignments {
 		return nil, fmt.Errorf("multi_agent_assignment_limit_exceeded: %d > %d", len(req.Objectives), c.policy.MaxAssignments)
 	}
-	if req.Depth > c.policy.MaxDepth {
+	if req.Depth < 0 || req.Depth > c.policy.MaxDepth {
 		return nil, fmt.Errorf("multi_agent_depth_exceeded: %d > %d", req.Depth, c.policy.MaxDepth)
 	}
 	if c.goals == nil || c.starter == nil || (req.ParentInteractionID != "" && c.tracker == nil) {
@@ -287,6 +298,24 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 	}
 	if parentGoal.Revision != req.ParentGoalRevision {
 		return nil, fmt.Errorf("multi_agent: parent goal revision mismatch: expected %d got %d", req.ParentGoalRevision, parentGoal.Revision)
+	}
+	if err := validateDispatchableGoalStatus(parentGoal.Status); err != nil {
+		return nil, err
+	}
+	if req.MaxToolCalls != nil && (*req.MaxToolCalls < 1 || *req.MaxToolCalls > 256) {
+		return nil, fmt.Errorf("multi_agent: invalid tool-call budget")
+	}
+	if req.MaxTotalTokens != nil && (*req.MaxTotalTokens < 1 || *req.MaxTotalTokens > 100000000) {
+		return nil, fmt.Errorf("multi_agent: invalid total-token budget")
+	}
+	if req.MaxCostMicroUSD != nil && (*req.MaxCostMicroUSD < 1 || *req.MaxCostMicroUSD > 100000000000) {
+		return nil, fmt.Errorf("multi_agent: invalid model-cost budget")
+	}
+	if err := validateCoordinationTimeBudget(c.clock.Now(), parentGoal.ExpiresAt, req.DeadlineAt); err != nil {
+		return nil, err
+	}
+	if err := c.validateStartParent(ctx, req, parentGoal); err != nil {
+		return nil, err
 	}
 
 	strategy := req.Strategy
@@ -319,6 +348,9 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 		completionPlan:      plan,
 		depth:               req.Depth,
 		deadlineAt:          req.DeadlineAt,
+		maxToolCalls:        req.MaxToolCalls,
+		maxTotalTokens:      req.MaxTotalTokens,
+		maxCostMicroUSD:     req.MaxCostMicroUSD,
 		assignments:         make([]*AgentAssignment, 0, len(req.Objectives)),
 		createdAt:           now,
 		updatedAt:           now,
@@ -352,6 +384,9 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 		assignmentIDs = append(assignmentIDs, a.ID)
 	}
 
+	if err := prepareAssignmentDependencies(ac.assignments); err != nil {
+		return nil, err
+	}
 	ac.status = CoordinationRunning
 	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
 		return nil, fmt.Errorf("multi_agent: persist full worker plan before dispatch: %w", err)
@@ -372,7 +407,8 @@ func (c *MultiAgentCoordinator) Start(ctx context.Context, req StartCoordination
 	}, nil
 }
 
-func (c *MultiAgentCoordinator) attachRecoveryDescriptor(ctx context.Context, parentInteractionID string, multiRef *MultiAgentRecoveryRef) error {
+func (c *MultiAgentCoordinator) attachRecoveryDescriptor(ctx context.Context, ac *activeCoordination, multiRef *MultiAgentRecoveryRef) error {
+	parentInteractionID := ac.parentInteractionID
 	record, ok, err := c.tracker.Get(ctx, parentInteractionID)
 	if err != nil {
 		return err
@@ -393,22 +429,52 @@ func (c *MultiAgentCoordinator) attachRecoveryDescriptor(ctx context.Context, pa
 			UpdatedAt:     c.clock.Now(),
 		}
 	}
+	current := ""
+	if record.RecoveryDescriptor != nil {
+		encoded, err := record.RecoveryDescriptor.NormalizeOnSerialize()
+		if err != nil {
+			return err
+		}
+		current = string(encoded)
+	}
+	if ac.snapshotInitialized {
+		if current != ac.lastSnapshotJSON {
+			c.markCoordinationStale(ac)
+			return ErrInteractionCASConflict
+		}
+	} else if updated.MultiAgent != nil && updated.MultiAgent.CoordinationID != string(ac.id) {
+		return ErrInteractionCASConflict
+	}
 	updated.MultiAgent = multiRef
 	updated.UpdatedAt = c.clock.Now()
 	updated.ComputeFingerprint()
 	result, err := c.tracker.UpdateMetadata(ctx, parentInteractionID, InteractionMetadataUpdate{
-		RecoveryDescriptor: &updated,
+		RecoveryDescriptor: &updated, ExpectedRecoveryDescriptorJSON: &current,
 	})
+	if err != nil {
+		if errors.Is(err, ErrInteractionCASConflict) {
+			c.markCoordinationStale(ac)
+		}
+		return err
+	}
+	if result == nil || result.RecoveryDescriptor == nil {
+		return fmt.Errorf("multi_agent: parent checkpoint was not returned")
+	}
+	encoded, err := result.RecoveryDescriptor.NormalizeOnSerialize()
 	if err != nil {
 		return err
 	}
-	_ = result
+	ac.lastSnapshotJSON = string(encoded)
+	ac.snapshotInitialized = true
 	return nil
 }
 
 func (c *MultiAgentCoordinator) launchReadyAssignments(ctx context.Context, ac *activeCoordination) error {
 	ac.dispatchMu.Lock()
 	defer ac.dispatchMu.Unlock()
+	if err := c.requireCurrentCoordinationSnapshot(ctx, ac); err != nil {
+		return err
+	}
 	if c.goals == nil {
 		return fmt.Errorf("multi_agent: parent goal registry unavailable")
 	}
@@ -532,6 +598,9 @@ func (c *MultiAgentCoordinator) startAuthorizedAssignment(ctx context.Context, a
 	if err := c.requireDispatchableParent(ctx, ac); err != nil {
 		return err
 	}
+	if err := c.requireCurrentCoordinationSnapshot(ctx, ac); err != nil {
+		return err
+	}
 	childID, err := c.starter.StartWorker(ctx, addr)
 	c.mu.Lock()
 	if childID != "" && a.ChildInteractionID != "" && childID != a.ChildInteractionID {
@@ -541,15 +610,23 @@ func (c *MultiAgentCoordinator) startAuthorizedAssignment(ctx context.Context, a
 	if childID != "" {
 		a.ChildInteractionID = childID
 	}
-	if err != nil && childID == "" {
-		a.Status = AssignmentFailed
-		a.Error = err.Error()
+	if err != nil {
+		if childID != "" {
+
+			a.Error = "worker dispatch acknowledgement indeterminate: " + err.Error()
+			a.UpdatedAt = c.clock.Now()
+			c.mu.Unlock()
+			return c.persistCoordinationSnapshot(ctx, ac)
+		}
+		a.Status = AssignmentWaiting
+		a.Error = "worker dispatch outcome indeterminate: " + err.Error()
+		ac.status = CoordinationWaiting
 		a.UpdatedAt = c.clock.Now()
 		c.mu.Unlock()
 		if saveErr := c.persistCoordinationSnapshot(ctx, ac); saveErr != nil {
-			return fmt.Errorf("multi_agent: worker failed and checkpoint failed: %w", saveErr)
+			return fmt.Errorf("multi_agent: uncertain worker dispatch and checkpoint failed: %w", errors.Join(err, saveErr))
 		}
-		return err
+		return fmt.Errorf("multi_agent: worker dispatch requires reconciliation: %w", err)
 	}
 	if childID == "" {
 		a.Status = AssignmentFailed
@@ -587,10 +664,20 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 		c.mu.Unlock()
 		return fmt.Errorf("multi_agent: unknown assignment %s", assignmentID)
 	}
+	if ac.staleSnapshot {
+		c.mu.Unlock()
+		return ErrInteractionCASConflict
+	}
 
 	if err := validateTerminalAssignmentResult(target, assignmentID, result); err != nil {
 		c.mu.Unlock()
 		return err
+	}
+	if ac.ownedScope != nil && !target.Status.IsTerminal() {
+		if err := c.validateOwnedTerminalResult(ctx, ac, *target, result); err != nil {
+			c.mu.Unlock()
+			return err
+		}
 	}
 	if target.Status.IsTerminal() {
 		c.mu.Unlock()
@@ -602,6 +689,10 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 	if result.Error != nil {
 		target.Error = result.Error.Code + ": " + result.Error.Message
 	}
+
+	failBlockedAssignments(ac.assignments, now)
+
+	convergeCoordinationAfterChildUpdate(ac)
 
 	allTerminal := true
 	anyFailed := false
@@ -622,9 +713,7 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 	}
 
 	switch {
-	case ac.completionPlan == CoordinationFirstSuccess && anySucceeded:
-		ac.status = CoordinationAggregating
-	case ac.completionPlan == CoordinationBestEffort && (anyFailed && !anySucceeded):
+	case ac.completionPlan == CoordinationFirstSuccess && anySucceeded && (ac.ownedScope == nil || allTerminal):
 		ac.status = CoordinationAggregating
 	case allTerminal:
 		ac.status = CoordinationAggregating
@@ -642,32 +731,47 @@ func (c *MultiAgentCoordinator) OnAssignmentTerminal(ctx context.Context, assign
 		ac.status = CoordinationAggregating
 	}
 
+	if ac.cancelRequested {
+		if allTerminal {
+			ac.status = CoordinationCancelled
+		} else {
+			ac.status = CoordinationWaiting
+		}
+	}
 	shouldAggregate := ac.status == CoordinationAggregating
 
-	var dispatchErr error
-	if !allTerminal && !shouldAggregate && ac.status != CoordinationPaused {
-		c.mu.Unlock()
-		dispatchErr = c.launchReadyAssignments(ctx, ac)
-		c.mu.Lock()
-	}
-
+	shouldDispatch := !ac.cancelRequested && !allTerminal && !shouldAggregate && ac.status == CoordinationRunning
 	ac.updatedAt = now
 	_ = anySucceeded
 	_ = anyCancelled
-
 	c.mu.Unlock()
-	if dispatchErr != nil {
-		return fmt.Errorf("multi_agent: launch next assignment: %w", dispatchErr)
+
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		return fmt.Errorf("multi_agent: persist terminal worker before dispatch: %w", err)
+	}
+	if shouldDispatch {
+		if err := c.launchReadyAssignments(ctx, ac); err != nil {
+			return fmt.Errorf("multi_agent: launch next assignment: %w", err)
+		}
 	}
 	if shouldAggregate {
 		if err := c.aggregate(ctx, ac); err != nil {
 			return err
 		}
 	}
-	return c.persistCoordinationSnapshot(ctx, ac)
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		return err
+	}
+	if ac.cancelRequested && ac.status == CoordinationCancelled && ac.ownedScope != nil {
+		return FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID)
+	}
+	return nil
 }
 
 func (c *MultiAgentCoordinator) aggregate(ctx context.Context, ac *activeCoordination) error {
+	if err := c.verifyOwnedAggregateEvidence(ctx, ac); err != nil {
+		return err
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if ac.status == CoordinationSucceeded || ac.status == CoordinationFailed || ac.status == CoordinationCancelled {
@@ -794,12 +898,20 @@ func (c *MultiAgentCoordinator) Reconcile(ctx context.Context, coordinationID st
 	if ac == nil {
 		return nil
 	}
+	fresh, err := c.refreshCoordinationIfStale(ctx, ac)
+	if err != nil {
+		return err
+	}
+	ac = fresh
+	if ac.cancelRequested {
+		return c.Cancel(ctx, coordinationID)
+	}
 	if cancelled, err := c.parentCancellationRequested(ctx, ac); err != nil {
 		return err
 	} else if cancelled {
 		return c.Cancel(ctx, coordinationID)
 	}
-	err := c.withOwnedExecution(ctx, ac, func(ctx context.Context) error { return c.reconcileAuthorized(ctx, coordinationID) })
+	err = c.withOwnedExecution(ctx, ac, func(ctx context.Context) error { return c.reconcileAuthorized(ctx, coordinationID) })
 	if err != nil {
 		return c.stopRevokedOwnedCoordination(ctx, ac, err)
 	}
@@ -816,6 +928,8 @@ func (c *MultiAgentCoordinator) reconcileAuthorized(ctx context.Context, coordin
 		c.mu.Unlock()
 		return nil
 	}
+	blockedChanged := failBlockedAssignments(ac.assignments, c.clock.Now())
+	stateChanged := convergeCoordinationAfterChildUpdate(ac)
 	if ac.status == CoordinationAggregating {
 		c.mu.Unlock()
 		if err := c.aggregate(ctx, ac); err != nil {
@@ -830,6 +944,11 @@ func (c *MultiAgentCoordinator) reconcileAuthorized(ctx context.Context, coordin
 		}
 	}
 	c.mu.Unlock()
+	if blockedChanged || stateChanged {
+		if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+			return fmt.Errorf("multi_agent: persist recovered coordination state: %w", err)
+		}
+	}
 
 	if c.tracker == nil {
 		return fmt.Errorf("multi_agent: tracker unavailable for reconciliation")
@@ -851,7 +970,13 @@ func (c *MultiAgentCoordinator) reconcileAuthorized(ctx context.Context, coordin
 				return scopeErr
 			}
 		}
-		if !found || record == nil || record.Status == InteractionStatusReceived {
+		if !found || record == nil {
+			if err := c.waitForMissingChildProof(ctx, ac, assignment); err != nil {
+				return fmt.Errorf("multi_agent: checkpoint missing child %s: %w", assignment.ChildInteractionID, err)
+			}
+			continue
+		}
+		if record.Status == InteractionStatusReceived {
 			if err := c.resumeReservedWorker(ctx, ac, assignment); err != nil {
 				return fmt.Errorf("multi_agent: resume child %s: %w", assignment.ChildInteractionID, err)
 			}
@@ -877,6 +1002,29 @@ func (c *MultiAgentCoordinator) reconcileAuthorized(ctx context.Context, coordin
 					if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
 						return fmt.Errorf("multi_agent: persist indeterminate child %s: %w", assignment.ChildInteractionID, err)
 					}
+				}
+			}
+			continue
+		}
+		if record.Status == InteractionStatusInterrupted {
+			c.mu.Lock()
+			changed := false
+			for _, live := range ac.assignments {
+				if live.ID == assignment.ID && !live.Status.IsTerminal() {
+					if live.Status != AssignmentWaiting || live.Error != "interrupted child execution; external effects require reconciliation" {
+						live.Status = AssignmentWaiting
+						live.Error = "interrupted child execution; external effects require reconciliation"
+						live.UpdatedAt = c.clock.Now()
+						ac.status = CoordinationWaiting
+						ac.updatedAt = live.UpdatedAt
+						changed = true
+					}
+				}
+			}
+			c.mu.Unlock()
+			if changed {
+				if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+					return fmt.Errorf("multi_agent: persist interrupted child %s: %w", assignment.ChildInteractionID, err)
 				}
 			}
 			continue
@@ -956,12 +1104,27 @@ func (c *MultiAgentCoordinator) Cancel(ctx context.Context, coordinationID strin
 	if !ok {
 		return nil
 	}
+	fresh, err := c.refreshCoordinationIfStale(ctx, ac)
+	if err != nil {
+		return err
+	}
+	ac = fresh
 	ac.dispatchMu.Lock()
 	defer ac.dispatchMu.Unlock()
 	c.mu.Lock()
-	if ac.status.IsTerminal() && (ac.status != CoordinationCancelled || ac.cancelConfirmed) {
-		finalizeOwned := ac.status == CoordinationCancelled && ac.ownedScope != nil
+	if ac.status.IsTerminal() {
+		wasCancelled := ac.status == CoordinationCancelled
+		confirmed := ac.cancelConfirmed
+		finalizeOwned := wasCancelled && ac.ownedScope != nil
 		c.mu.Unlock()
+		if wasCancelled && !confirmed {
+			if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+				return err
+			}
+			c.mu.Lock()
+			ac.cancelConfirmed = true
+			c.mu.Unlock()
+		}
 		if finalizeOwned {
 			return FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID)
 		}
@@ -974,50 +1137,111 @@ func (c *MultiAgentCoordinator) Cancel(ctx context.Context, coordinationID strin
 		}
 	}
 	c.mu.Lock()
-	now := c.clock.Now()
-	ac.status = CoordinationCancelled
-	ac.updatedAt = now
-	var children []string
-	for _, a := range ac.assignments {
-		if a.Status.IsTerminal() && a.Status != AssignmentCancelled {
+	ac.cancelRequested = true
+	ac.status = CoordinationWaiting
+	ac.updatedAt = c.clock.Now()
+	var children []AgentAssignment
+	for _, assignment := range ac.assignments {
+		if assignment.Status.IsTerminal() {
 			continue
 		}
-		if a.ChildInteractionID != "" {
-			children = append(children, a.ChildInteractionID)
-		}
-		if !a.Status.IsTerminal() {
-			a.Status = AssignmentCancelled
-			a.UpdatedAt = now
+		if assignment.ChildInteractionID == "" {
+			if assignment.Status == AssignmentPending {
+				assignment.Status = AssignmentCancelled
+				assignment.Error = "cancelled before worker dispatch"
+			} else {
+				assignment.Status = AssignmentWaiting
+				if assignment.Error == "" {
+					assignment.Error = "worker dispatch or effects unconfirmed; manual reconciliation required before cancellation can settle"
+				}
+			}
+			assignment.UpdatedAt = ac.updatedAt
+		} else {
+			children = append(children, *assignment)
 		}
 	}
 	c.mu.Unlock()
+
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		return err
+	}
 	var failures []error
-	for _, childID := range children {
+	for _, child := range children {
+		if err := c.validateCancellationChild(ctx, ac, child); err != nil {
+			failures = append(failures, fmt.Errorf("multi_agent: refusing unsafe cancellation for %s: %w", child.ID, err))
+			continue
+		}
 		if c.tracker != nil {
-			if err := c.tracker.RequestCancel(ctx, childID, "coordination_cancelled"); err != nil && !errors.Is(err, ErrInteractionNotFound) {
+			if err := c.tracker.RequestCancel(ctx, child.ChildInteractionID, "coordination_cancelled"); err != nil && !errors.Is(err, ErrInteractionNotFound) {
 				failures = append(failures, err)
 			}
 		}
 		if worker, ok := c.starter.(interface {
 			CancelWorker(context.Context, string) error
 		}); ok {
-			if err := worker.CancelWorker(ctx, childID); err != nil {
+			if err := worker.CancelWorker(ctx, child.ChildInteractionID); err != nil {
 				failures = append(failures, err)
 			}
 		}
-	}
-	if len(failures) > 0 {
-		return errors.Join(failures...)
-	}
-	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
-		return err
+		if c.tracker == nil {
+			continue
+		}
+		record, found, err := c.tracker.Get(ctx, child.ChildInteractionID)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if !found || record == nil || !record.IsTerminal() {
+			continue
+		}
+		space, conversation, scopeErr := c.cancellationScope(ctx, ac)
+		if scopeErr != nil {
+			failures = append(failures, scopeErr)
+			continue
+		}
+		if scopeErr = validateReconciledChildScope(record, child, space, conversation); scopeErr != nil {
+			failures = append(failures, scopeErr)
+			continue
+		}
+		c.mu.Lock()
+		for _, live := range ac.assignments {
+			if live.ID != child.ID || live.Status.IsTerminal() {
+				continue
+			}
+			switch record.Status {
+			case InteractionStatusCompleted:
+				live.Status = AssignmentSucceeded
+			case InteractionStatusCancelled, InteractionStatusSuperseded:
+				live.Status = AssignmentCancelled
+			case InteractionStatusInterrupted:
+				live.Status = AssignmentWaiting
+				live.Error = "interrupted child execution; external effects require reconciliation"
+			default:
+				live.Status = AssignmentFailed
+			}
+			live.UpdatedAt = c.clock.Now()
+		}
+		c.mu.Unlock()
 	}
 	c.mu.Lock()
-	ac.cancelConfirmed = true
+	settled := allTerminal(ac)
+	if settled {
+		ac.status = CoordinationCancelled
+		ac.updatedAt = c.clock.Now()
+	}
 	c.mu.Unlock()
-	if ac.ownedScope != nil && len(failures) == 0 {
-		if err := FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID); err != nil {
-			failures = append(failures, err)
+	if err := c.persistCoordinationSnapshot(ctx, ac); err != nil {
+		failures = append(failures, err)
+		settled = false
+	}
+	if settled && len(failures) == 0 {
+		c.mu.Lock()
+		ac.cancelConfirmed = true
+		c.mu.Unlock()
+		if ac.ownedScope != nil {
+			if err := FinalizeOwnedParent(ctx, c.tracker, ac.parentInteractionID); err != nil {
+				failures = append(failures, err)
+			}
 		}
 	}
 	return errors.Join(failures...)
@@ -1029,6 +1253,20 @@ func (c *MultiAgentCoordinator) Pause(ctx context.Context, coordinationID string
 	c.mu.Unlock()
 	if !ok {
 		return nil
+	}
+	fresh, err := c.refreshCoordinationIfStale(ctx, ac)
+	if err != nil {
+		return err
+	}
+	ac = fresh
+	return c.withOwnedExecution(ctx, ac, func(ctx context.Context) error {
+		return c.pauseAuthorizedCoordination(ctx, ac)
+	})
+}
+
+func (c *MultiAgentCoordinator) pauseAuthorizedCoordination(ctx context.Context, ac *activeCoordination) error {
+	if err := c.requireCurrentCoordinationSnapshot(ctx, ac); err != nil {
+		return err
 	}
 	if ac.status == CoordinationPaused {
 		return nil
@@ -1078,25 +1316,54 @@ func (c *MultiAgentCoordinator) Resume(ctx context.Context, coordinationID strin
 	if !ok {
 		return nil
 	}
+	fresh, err := c.refreshCoordinationIfStale(ctx, ac)
+	if err != nil {
+		return err
+	}
+	ac = fresh
+	if c.goals != nil {
+		goal, found := c.goals.Get(ac.parentGoalID)
+		if !found || goal.Revision != ac.parentGoalRev {
+			return c.Cancel(ctx, coordinationID)
+		}
+	}
+	err = c.withOwnedExecution(ctx, ac, func(ctx context.Context) error {
+		return c.resumeAuthorizedCoordination(ctx, ac)
+	})
+	if err != nil {
+		return c.stopRevokedOwnedCoordination(ctx, ac, err)
+	}
+	return nil
+}
+
+func (c *MultiAgentCoordinator) resumeAuthorizedCoordination(ctx context.Context, ac *activeCoordination) error {
+	if err := c.requireCurrentCoordinationSnapshot(ctx, ac); err != nil {
+		return err
+	}
+	if ac.cancelRequested {
+		return fmt.Errorf("multi_agent: cannot resume a cancelled coordination")
+	}
 	if ac.status != CoordinationPaused {
 		return nil
+	}
+	if c.goals == nil {
+		return fmt.Errorf("multi_agent: cannot resume without a parent goal registry")
+	}
+	parentGoal, goalOK := c.goals.Get(ac.parentGoalID)
+	if !goalOK || parentGoal.Revision != ac.parentGoalRev {
+		return c.Cancel(ctx, string(ac.id))
+	}
+	if err := validateDispatchableGoalStatus(parentGoal.Status); err != nil {
+		return err
+	}
+	if cancelled, err := c.parentCancellationRequested(ctx, ac); err != nil {
+		return err
+	} else if cancelled {
+		return c.Cancel(ctx, string(ac.id))
 	}
 	now := c.clock.Now()
 	ac.status = CoordinationRunning
 	ac.updatedAt = now
-
-	if parentGoal, goalOK := c.goals.Get(ac.parentGoalID); goalOK {
-		if parentGoal.Revision != ac.parentGoalRev {
-			ac.status = CoordinationCancelled
-			for _, a := range ac.assignments {
-				if !a.Status.IsTerminal() {
-					a.Status = AssignmentCancelled
-					a.UpdatedAt = now
-				}
-			}
-			return nil
-		}
-	}
 
 	for _, a := range ac.assignments {
 		if a.Status == AssignmentPaused && a.ChildInteractionID != "" && c.pauseSvc != nil {

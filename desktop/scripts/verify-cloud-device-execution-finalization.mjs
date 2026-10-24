@@ -11,12 +11,6 @@ function assert(condition, message) {
 }
 
 const [
-  cloudGeneration,
-  cloudProvider,
-  cloudProtocol,
-  petService,
-  petWorkerResolver,
-  petWorker,
   runtimeProfile,
   runtimeProfileResolve,
   serverRouter,
@@ -51,12 +45,6 @@ const [
   gameCenterView,
   runtimeCapabilityTests,
 ] = await Promise.all([
-  read("backend/cmd/server/desktop_pet_cloud_generation.go"),
-  read("backend/internal/imageprovider/cloudbridge/provider.go"),
-  read("backend/internal/imageprovider/cloudbridge/protocol.go"),
-  read("backend/internal/desktoppet/service.go"),
-  read("backend/internal/desktoppet/worker/provider_resolution.go"),
-  read("backend/internal/desktoppet/worker/worker.go"),
   read("backend/internal/runtimeprofile/current.go"),
   read("backend/internal/runtimeprofile/resolve.go"),
   read("backend/cmd/server/router.go"),
@@ -133,34 +121,6 @@ assert(
   "emotion history must use Owner snapshots, honor detection settings, migrate legacy mood/emotion/affect data, and be connected to both clients",
 );
 
-// Desktop-pet generation: Cloud Core owns provider configuration and secrets.
-assert(
-  cloudProtocol.includes('ProviderName = "cloud_core"') &&
-    cloudProtocol.includes('EndpointPath = "/api/device-mesh/v1/desktop-pet/image-generation"') &&
-    cloudProtocol.includes("HasAPIKey bool") &&
-    !/\bApiKey\s+(string|\[\]byte)\b/.test(cloudProtocol) &&
-    !/json:\"apiKey/.test(cloudProtocol),
-  "cloud image-generation protocol must expose metadata only and never define an API-key field",
-);
-assert(
-  cloudGeneration.includes("runtimeprofile.ProfileCloudCore") &&
-    cloudGeneration.includes("credential.DeviceAuthMiddleware") &&
-    cloudGeneration.includes("repo.GetByID(req.ConfigID)") &&
-    cloudGeneration.includes("ApiKey:    cfg.ApiKey") &&
-    cloudGeneration.includes("provider.Submit") &&
-    cloudGeneration.includes("provider.Query") &&
-    cloudGeneration.includes("provider.Cancel") &&
-    cloudGeneration.includes("Never return provider secrets to the device"),
-  "Cloud Core must authenticate the device, resolve cloud model config, and invoke the real image provider without exporting its secret",
-);
-assert(
-  cloudProvider.includes("agent.NewCredentialStore(dataDir)") &&
-    cloudProvider.includes('Authorization", "AmitiaDevice "+cred.Credential') &&
-    cloudProvider.includes("cred.CloudBaseUrl") &&
-    cloudProvider.includes("materializeReferenceImages") &&
-    !cloudProvider.includes("config.ApiKey"),
-  "Device Agent cloud provider must use its Device Mesh credential and must never consume a provider API key locally",
-);
 assert(
   runtimeProfile.includes("func CurrentProcessProfile() Profile") &&
     runtimeProfile.includes("cliFlag") &&
@@ -169,18 +129,6 @@ assert(
     runtimeProfileResolve.includes('const envKey = "AMITIA_RUNTIME_PROFILE"'),
   "lower-level device services must resolve the actual runtime profile from the canonical CLI/environment contract instead of assuming local mode",
 );
-assert(
-  petService.includes("runtimeprofile.CurrentProcessProfile().IsDeviceAgent()") &&
-    petService.includes("cloudProvider.DescribeConfig") &&
-    petService.includes("validateModelConfigForExecution") &&
-    petWorkerResolver.includes("runtimeprofile.CurrentProcessProfile().IsDeviceAgent()") &&
-    petWorkerResolver.includes("cloudProvider.DescribeConfig") &&
-    petWorkerResolver.includes("ProviderName:   metadata.Provider") &&
-    petWorkerResolver.includes("ApiType:   cloudbridge.ProviderName") &&
-    petWorker.includes("resolveGenerationProvider(ctx, task)"),
-  "desktop-pet task creation, retry validation, and Worker execution must all use the cloud provider bridge in Device Agent mode",
-);
-
 // Cloud Game Center: Cloud is the control plane, the selected device is the execution plane.
 assert(
   serverRouter.includes("remoteGameModeAvailable") &&
@@ -259,5 +207,5 @@ assert(
 );
 
 console.log(
-  "[verify-cloud-device-execution-finalization] PASSED: cloud pet generation secrets, local pet asset authority, Cloud Game Center gateway, explicit target device routing, and local game package authority are frozen",
+  "[verify-cloud-device-execution-finalization] PASSED: local pet asset authority, Cloud Game Center gateway, explicit target device routing, and local game package authority are frozen",
 );

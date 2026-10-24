@@ -317,6 +317,11 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 				Code:       "grant_matched",
 				Permission: req.PermissionID,
 			})
+		} else if def.DefaultApproval == ApprovalAuto {
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "default_auto_allowed",
+				Permission: req.PermissionID,
+			})
 		} else if b.requiresBoundGrant(def, request.ExecutionContext) {
 			result.Missing = append(result.Missing, req)
 			result.Reasons = append(result.Reasons, PermissionReason{

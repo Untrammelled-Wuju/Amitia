@@ -125,7 +125,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 	}
 
 	var confirmAuthority func(context.Context) error
-	if route.Binding.HandlerName != "coordination.data" {
+	if route.Binding.HandlerName != "coordination.data" && route.Binding.HandlerName != "task.journal.inspect" {
 		var err error
 		invokePayload.AuthorityCallID, confirmAuthority, err = coordination.TrackCurrentRemoteAuthority(ctx, route.SpaceID.String(), route.DeviceID.String(), sessionID.String(), generation)
 		if err != nil {

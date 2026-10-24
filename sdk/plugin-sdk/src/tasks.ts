@@ -29,9 +29,17 @@ export interface TaskProgressReport {
   readonly stage?: string;
 }
 
+export type TaskNextEffect =
+  | { readonly effectId: string; readonly method: "task.host.executeTool"; readonly toolId: string;
+      readonly input?: unknown; readonly inputHash?: string; readonly timeoutMs?: number }
+  | { readonly effectId: string; readonly method: "task.host.emitEvent"; readonly type: string;
+      readonly payload?: unknown; readonly payloadHash?: string };
+
 export interface TaskCheckpoint {
   readonly cursor?: number;
   readonly cursorKey?: string;
+  readonly nextEffectIds?: readonly string[];
+  readonly nextEffects?: readonly TaskNextEffect[];
   readonly data?: unknown;
   readonly savedAt: string;
 }
@@ -85,10 +93,14 @@ export interface TaskStorageClient {
   delete(key: string): Promise<void>;
 }
 
+export interface TaskEffectOptions {
+  readonly effectId?: string;
+}
+
 export interface TaskHostClient {
-	readonly capabilities?: Readonly<{ executeTool: boolean; emitEvent: boolean }>;
-  executeTool(toolId: string, input: unknown, timeoutMs?: number): Promise<unknown>;
-  emitEvent(type: string, payload: unknown): Promise<void>;
+  readonly capabilities?: Readonly<{ executeTool: boolean; emitEvent: boolean }>;
+  executeTool(toolId: string, input: unknown, timeoutMs?: number, options?: TaskEffectOptions): Promise<unknown>;
+  emitEvent(type: string, payload: unknown, options?: TaskEffectOptions): Promise<void>;
 }
 
 export type TaskHandler<I extends TaskInput = TaskInput, O = unknown> = (

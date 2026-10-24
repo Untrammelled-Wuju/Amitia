@@ -34,13 +34,13 @@ func TestActualTLSAttachmentsStayAtTheirSelectedOwner(t *testing.T) {
 	a, b := newThreeCoreFixture(t, "attachment-a", schemas), newThreeCoreFixture(t, "attachment-b", schemas)
 	pairThreeCoreFixtures(t, a, b)
 	const endpoint = "/api/device-mesh/v1/business"
-	for _, coordinated := range []bool{false, true} {
+	for _, coordinated := range []bool{true} {
 		if coordinated {
 			policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 			if err != nil {
 				t.Fatal(err)
 			}
-			b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+			ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 		}
 		view := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
 		for _, kind := range []string{"file", "video"} {
@@ -131,7 +131,7 @@ func TestActualTLSMemoryManagementPreservesOwnerAndRejectsOldIntent(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	payload["requestId"], payload["action"], payload["key"] = uuid.NewString(), "create", "新饮品"
 	b.request(t, a, http.MethodPost, endpoint+"/memories/manage", payload, 409)
 	current := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
@@ -166,7 +166,7 @@ func TestActualTLSMemoryCandidatesUseHistoricalSourceAndCurrentCoreOwner(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	view := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memory-candidates?characterId=one", nil, 200))
 	requestID := uuid.NewString()
 	payload := map[string]any{"requestId": requestID, "characterId": "one", "historicalRoleId": "one", "expectedExecutionScope": view.Scope, "action": "generate", "conversationId": conversation.ConversationID, "conversationOrigin": business.ConversationOrigin{OwnerID: a.device.DeviceID.String(), ID: conversation.ConversationID}}

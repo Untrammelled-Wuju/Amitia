@@ -69,7 +69,7 @@ func TestThreeRealCoreSpeechUsesCurrentRoleAndOwnerAndCancelsOnProviderSwitch(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, http.StatusOK)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	coreScope := threeCoreSpeechScope(t, b, a)
 	coreResult := decodeThreeCoreMemoryResponse[business.SpeechResponse](t, b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/speech", map[string]any{"requestId": "core-speech", "characterId": "one", "text": "云端角色朗读", "expectedExecutionScope": coreScope}, http.StatusOK))
 	if !coreResult.Saved || coreResult.Scope.ResourceOwnerID != b.core || coreResult.Acknowledgement.OwnerID != b.core {
@@ -119,6 +119,13 @@ func TestThreeRealCoreSpeechUsesCurrentRoleAndOwnerAndCancelsOnProviderSwitch(t 
 		t.Fatal(err)
 	}
 	followApprovedThreeCoreSuccessor(t, a, c)
+	currentPolicy, err := c.services.DeviceMesh.Coordination.Get(t.Context(), c.core, a.device.DeviceID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !currentPolicy.Coordinated {
+		ensureCoordinatedForTest(t, c, a, currentPolicy.ModeRevision)
+	}
 	c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/speech", map[string]any{"requestId": "stale-core-speech", "characterId": "one", "text": "旧页面音频", "expectedExecutionScope": coreScope}, http.StatusConflict)
 	currentScope := threeCoreSpeechScope(t, c, a)
 	current := decodeThreeCoreMemoryResponse[business.SpeechResponse](t, c.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/speech", map[string]any{"requestId": "new-core-speech", "characterId": "one", "text": "新Core角色朗读", "expectedExecutionScope": currentScope}, http.StatusOK))

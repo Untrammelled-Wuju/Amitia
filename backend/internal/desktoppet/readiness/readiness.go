@@ -303,9 +303,6 @@ type StartupReadinessDeps struct {
 	RuntimeTicketReady      func() error
 	RuntimeGatewayReady     func() error
 	PathGuardReady          func() error
-	GenerationWorkerReady   func() error
-	ProcessingWorkerReady   func() error
-	QualityWorkerReady      func() error
 	InstallationWorkerReady func() error
 	BehaviorWorkerReady     func() error
 	MigrationReady          func() error
@@ -343,15 +340,6 @@ func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessServic
 		return nil, err
 	}
 	if err := register("path_guard", true, wrapReadyFunc(deps.PathGuardReady, "path_guard")); err != nil {
-		return nil, err
-	}
-	if err := register("generation_worker", true, wrapReadyFunc(deps.GenerationWorkerReady, "generation_worker")); err != nil {
-		return nil, err
-	}
-	if err := register("processing_worker", true, wrapReadyFunc(deps.ProcessingWorkerReady, "processing_worker")); err != nil {
-		return nil, err
-	}
-	if err := register("quality_worker", true, wrapReadyFunc(deps.QualityWorkerReady, "quality_worker")); err != nil {
 		return nil, err
 	}
 	if err := register("installation_worker", true, wrapReadyFunc(deps.InstallationWorkerReady, "installation_worker")); err != nil {

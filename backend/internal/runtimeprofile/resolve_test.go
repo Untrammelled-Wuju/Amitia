@@ -73,6 +73,9 @@ func TestResolveRejectsExplicitInvalidValues(t *testing.T) {
 		{name: "empty cli equals", input: ResolveInput{Args: []string{"--runtime-profile="}, Env: map[string]string{}}},
 		{name: "missing cli value", input: ResolveInput{Args: []string{"--runtime-profile"}, Env: map[string]string{}}},
 		{name: "invalid env", input: ResolveInput{Env: map[string]string{envKey: "cloud-corex"}}},
+		{name: "profile alias cloud", input: ResolveInput{Env: map[string]string{envKey: "cloud"}}},
+		{name: "profile alias device", input: ResolveInput{Env: map[string]string{envKey: "device"}}},
+		{name: "profile alias desktop local", input: ResolveInput{Env: map[string]string{envKey: "desktop-local"}}},
 		{name: "empty explicit env", input: ResolveInput{Env: map[string]string{envKey: ""}}},
 		{name: "invalid legacy", input: ResolveInput{Env: map[string]string{}, LegacyDeployMode: "cloud-corex"}},
 	}

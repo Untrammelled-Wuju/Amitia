@@ -25,7 +25,7 @@ void main() {
 
     expect(source, isNot(contains("'制作工具'")));
     expect(source, contains("title: '角色卡工坊'"));
-    expect(source, contains("title: '桌宠制作'"));
+    expect(source, contains("title: '桌宠中心'"));
     expect(source, isNot(contains("title: '工作流'")));
     expect(source, isNot(contains("title: '技能制作'")));
     expect(source, contains('color: context.surfaceSecondary'));

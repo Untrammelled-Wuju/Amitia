@@ -33,8 +33,6 @@ void main() {
           AppRoutes.workshop,
           AppRoutes.workshopCharacterCards,
           AppRoutes.workshopPet,
-          AppRoutes.workshopPetCreate,
-          AppRoutes.workshopPetTasks,
           AppRoutes.workshopPetInstallations,
           AppRoutes.settings,
           AppRoutes.settingsOverview,
@@ -93,14 +91,6 @@ void main() {
       expect(AppRoutes.mcpDetail('m1'), '/extensions/mcp/m1');
       expect(AppRoutes.mcpEdit('m1'), '/extensions/mcp/m1/edit');
       expect(AppRoutes.extensionPage('page1'), '/extension/page/page1');
-      expect(
-        AppRoutes.petProcessing('task1'),
-        '/workshop/pet/processing/task1',
-      );
-      expect(
-        AppRoutes.petActionEditor('task1', 'wave'),
-        '/workshop/pet/processing/task1/actions/wave/editor',
-      );
       expect(AppRoutes.modelConfig('llm'), '/settings/models/llm');
       expect(AppRoutes.kernelPage('wasm'), '/developer/kernel/wasm');
     });
@@ -133,8 +123,6 @@ void main() {
         AppRoutes.workshop,
         AppRoutes.workshopCharacterCards,
         AppRoutes.workshopPet,
-        AppRoutes.workshopPetCreate,
-        AppRoutes.workshopPetTasks,
         AppRoutes.workshopPetInstallations,
         AppRoutes.settings,
         AppRoutes.settingsOverview,

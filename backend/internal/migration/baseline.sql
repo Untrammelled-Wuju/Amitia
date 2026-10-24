@@ -397,6 +397,9 @@ CREATE TABLE IF NOT EXISTS model_configs (
     protocol TEXT DEFAULT '',
     context_window INTEGER DEFAULT 0,
     max_output_tokens INTEGER DEFAULT 0,
+    budget_rate_version TEXT NOT NULL DEFAULT '',
+    budget_input_rate INTEGER NOT NULL DEFAULT 0,
+    budget_output_rate INTEGER NOT NULL DEFAULT 0,
     capabilities_json TEXT DEFAULT '',
     provider_config_json TEXT DEFAULT '{}',
     created_at TEXT DEFAULT '',
@@ -6378,3 +6381,64 @@ CREATE TABLE IF NOT EXISTS extension_agent_skill_cutover (
     started_at TEXT NOT NULL DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS runtime_model_usage (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
+    device_id TEXT,
+    owner_id TEXT,
+    role_id TEXT,
+    request_id TEXT,
+    model TEXT,
+    provider TEXT,
+    source TEXT,
+    status TEXT,
+    started_at TEXT,
+    completed_at TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cached_tokens INTEGER,
+    total_tokens INTEGER,
+    usage_reported NUMERIC,
+    coordination_id TEXT DEFAULT '',
+    parent_interaction_id TEXT DEFAULT '',
+    assignment_id TEXT DEFAULT '',
+    reserved_tokens INTEGER NOT NULL DEFAULT 0,
+    reserved_cost_micro_usd INTEGER NOT NULL DEFAULT 0,
+    budget_cost_limit_micro_usd INTEGER NOT NULL DEFAULT 0,
+    budget_input_rate INTEGER NOT NULL DEFAULT 0,
+    budget_output_rate INTEGER NOT NULL DEFAULT 0,
+    budget_rate_version TEXT DEFAULT '',
+    budget_overrun NUMERIC NOT NULL DEFAULT 0,
+    review_evidence_ref TEXT NOT NULL DEFAULT '',
+    review_actor_id TEXT NOT NULL DEFAULT '',
+    review_recorded_at TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS runtime_usage_baselines (
+    space_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    sequence INTEGER,
+    updated_at TEXT,
+    PRIMARY KEY (space_id, device_id)
+);
+
+CREATE TABLE IF NOT EXISTS runtime_owned_tool_calls (
+    effect_id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL,
+    coordination_id TEXT NOT NULL,
+    parent_interaction_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    assignment_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    review_evidence_ref TEXT NOT NULL DEFAULT '',
+    review_actor_id TEXT NOT NULL DEFAULT '',
+    review_recorded_at TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_model_usage_id ON runtime_model_usage(id);
+CREATE INDEX IF NOT EXISTS idx_model_usage_scope ON runtime_model_usage(space_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_model_usage_started_at ON runtime_model_usage(started_at);
+CREATE INDEX IF NOT EXISTS idx_owned_tool_coord ON runtime_owned_tool_calls(space_id, coordination_id);

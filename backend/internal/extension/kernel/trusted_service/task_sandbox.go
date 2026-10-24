@@ -79,3 +79,22 @@ func PrepareTaskSandbox(executable string, args []string, workingDir, hostRoot, 
 	outer.MaxMemoryBytes += 256 << 20
 	return TaskSandboxLaunch{Path: plan.Path, Args: plan.Args, WorkingDir: plan.WorkingDir, SupervisorLimits: outer, ExtraFiles: plan.ExtraFiles, AfterStart: plan.AfterStart, Cleanup: plan.Cleanup}, nil
 }
+
+func PrepareIsolatedTaskNetworkLaunch(executable string, args []string, workDir, runtimeRoot, bundleRoot string) (TaskSandboxLaunch, error) {
+	policy := ServiceNetworkPolicy{Mode: "none", Enforce: true}
+	if err := ValidateNetworkSandboxPrerequisites(policy); err != nil {
+		return TaskSandboxLaunch{}, err
+	}
+	plan, err := prepareNetworkLaunch(policy, executable, args, workDir, workDir, runtimeRoot, bundleRoot)
+	if err != nil {
+		return TaskSandboxLaunch{}, err
+	}
+	if !plan.NetworkPolicyEnforced || !plan.FilesystemIsolated {
+		plan.cleanup()
+		return TaskSandboxLaunch{}, ErrNetworkSandboxUnavailable
+	}
+	return TaskSandboxLaunch{
+		Path: plan.Path, Args: plan.Args, WorkingDir: plan.WorkingDir,
+		ExtraFiles: plan.ExtraFiles, AfterStart: plan.AfterStart, Cleanup: plan.Cleanup,
+	}, nil
+}

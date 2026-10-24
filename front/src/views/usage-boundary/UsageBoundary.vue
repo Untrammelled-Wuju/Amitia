@@ -4,16 +4,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="legal-page">
-    <div class="page-header">
-      <el-button text class="back-btn" @click="$router.back()">
-        <el-icon><ArrowLeft /></el-icon>
-      </el-button>
-      <div>
-        <h2>用户协议与使用边界</h2>
-        <p>覆盖服务使用、个人空间与设备、扩展工具、AI 安全边界和开源许可。</p>
-      </div>
-    </div>
-
     <el-card shadow="never" class="content-card">
       <section class="legal-section">
         <h3>服务使用</h3>
@@ -28,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <ul>
           <li>Space ID 仅用于数据归属；云端认证由 Device Credential 完成。</li>
           <li>设备配对、设备凭据、撤销与解除绑定应通过应用提供的真实 Device Mesh 接口完成。</li>
-          <li>云端模式下业务 WebSocket 连接 Cloud Core，但设备本地 Runtime/Device Agent 仍可以承担设备侧能力。</li>
+          <li>云端统筹模式下业务 WebSocket 连接 Cloud Core，本机 Device Agent 继续承担设备侧能力。</li>
         </ul>
       </section>
 
@@ -81,7 +71,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { ArrowLeft, CircleCloseFilled } from "@element-plus/icons-vue";
+import { CircleCloseFilled } from "@element-plus/icons-vue";
 import { useApi } from "@/composables/useApi";
 
 const { get } = useApi();

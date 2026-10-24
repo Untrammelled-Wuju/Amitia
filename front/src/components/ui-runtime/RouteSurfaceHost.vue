@@ -14,6 +14,7 @@ const store = useExtensionUIStore();
 
 const capability = computed<UIProviderCapability | null>(() => {
   const path = route.path;
+  if (route.meta.extensionRoute === true) return null;
   if (path === "/settings/ui-providers") return null;
   if (path === "/chat") return null; // WebChatView owns the conversation boundary.
   if (path === "/character") return "character.shell";

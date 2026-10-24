@@ -48,11 +48,11 @@ func Default() Profile {
 func Parse(raw string) (Profile, error) {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	switch s {
-	case "local", "desktop-local":
+	case "local":
 		return ProfileLocal, nil
-	case "cloud-core", "cloud", "remote-core", "cloud-web":
+	case "cloud-core":
 		return ProfileCloudCore, nil
-	case "device-agent", "device":
+	case "device-agent":
 		return ProfileDeviceAgent, nil
 	default:
 		return "", &InvalidProfileError{Raw: raw}

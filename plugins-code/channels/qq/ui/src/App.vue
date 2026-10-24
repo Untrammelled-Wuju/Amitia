@@ -144,7 +144,7 @@ async function openChannelMessages() {
     return
   }
   try {
-    await bridge.navigate("/channel-messages", "page")
+    await bridge.navigate("/channels/qq?tab=messages", "page")
   } catch (reason) {
     error.value = failure(reason)
   }

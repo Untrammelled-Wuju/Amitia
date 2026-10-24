@@ -49,6 +49,41 @@ describe("device owned chat stream", () => {
 	  expect(response.reply).toBe("你好");
 	  expect(seen.map(event => event.type)).toEqual(["started", "task", "delta", "completed"]);
 	});
+  it("accepts tool lifecycle events without interrupting the reply", async () => {
+    const seen: any[] = [];
+    const result = { requestId: "request", conversationId: "conversation", executionScope: scope, saved: true, reply: "计算完成", memoryStatus: "saved" };
+    const response = await consumeOwnedChatStream(stream([
+      { type: "started", executionScope: scope, conversationId: "conversation" },
+      { type: "tool-started", executionScope: scope, conversationId: "conversation", progress: { toolCallId: "call-1", toolName: "calculate", arguments: "{\"expression\":\"1+1\"}", result: "", status: "", durationMs: 0 } },
+      { type: "tool-completed", executionScope: scope, conversationId: "conversation", progress: { toolCallId: "call-1", toolName: "calculate", arguments: "{\"expression\":\"1+1\"}", result: "{\"result\":2}", status: "success", durationMs: 2 } },
+      { type: "delta", executionScope: scope, text: "计算完成" },
+      { type: "completed", data: result },
+    ]), "request", event => seen.push(event));
+    expect(response.reply).toBe("计算完成");
+    expect(seen.map(event => event.type)).toEqual(["started", "tool-started", "tool-completed", "delta", "completed"]);
+  });
+  it("rejects malformed, foreign or dishonest tool lifecycle events", async () => {
+    const base = { type: "tool-started", executionScope: scope, conversationId: "conversation", progress: { toolCallId: "call-1", toolName: "calculate", arguments: "{\"expression\":\"1+1\"}", result: "", status: "", durationMs: 0 } };
+    const changes = [
+      { conversationId: "other" },
+      { executionScope: { ...scope, coreId: "other" } },
+      { progress: undefined },
+      { progress: { ...base.progress, toolCallId: "" } },
+      { progress: { ...base.progress, toolName: "bad name" } },
+      { progress: { ...base.progress, arguments: "{" } },
+      { progress: { ...base.progress, result: "x".repeat(1024 * 1024 + 1) } },
+      { progress: { ...base.progress, durationMs: -1 } },
+      { type: "tool-completed", progress: { ...base.progress, status: "" } },
+      { type: "tool-completed", progress: { ...base.progress, status: "failed", errorCode: "", error: "" } },
+    ];
+    for (const change of changes) {
+      const event = { ...base, ...change };
+      await expect(consumeOwnedChatStream(stream([
+        { type: "started", executionScope: scope, conversationId: "conversation" },
+        event,
+      ]), "request", () => undefined)).rejects.toThrow();
+    }
+  });
   it("normalizes the committed citation snapshot from the final response", async () => {
     const result = {
       requestId: "request",

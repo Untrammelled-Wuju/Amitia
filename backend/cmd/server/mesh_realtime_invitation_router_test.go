@@ -15,13 +15,13 @@ func TestOwnedRealtimeInvitationRealTLSOnlyRecipientAcceptsAtOriginalOwner(t *te
 	pairThreeCoreFixtures(t, a, b)
 	pairThreeCoreFixtures(t, other, b)
 	const endpoint = "/api/device-mesh/v1/business"
-	for _, coordinated := range []bool{false, true} {
+	for _, coordinated := range []bool{true} {
 		if coordinated {
 			policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 			if err != nil {
 				t.Fatal(err)
 			}
-			b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+			ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 		}
 		view := decodeThreeCoreMemoryResponse[business.MemoryManagementResponse](t, b.request(t, a, http.MethodGet, endpoint+"/memories?characterId=one", nil, 200))
 		payload := map[string]any{"requestId": uuid.NewString(), "characterId": "one", "expectedExecutionScope": view.Scope, "callType": "audio"}

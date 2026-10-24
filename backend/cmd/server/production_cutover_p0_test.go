@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/binding"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
@@ -12,7 +11,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
-	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -210,39 +208,6 @@ func TestExecuteDesktopPetWriteCanaryRequiresCoordinatorCommandAndAppliedProject
 	port := &appWriteLockoutPort{services: &AppServices{InstallationRepo: repo, DesktopPetRuntimeV1: runtimeFacade}}
 	if err := port.VerifyCanaryOperation(context.Background(), result); err != nil {
 		t.Fatalf("verify coordinator canary: %v", err)
-	}
-}
-
-func TestExecuteDesktopPetEditingWriteCanary_UsesProductionServiceAndCleansUp(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := migration.ApplyBaseline(db); err != nil {
-		t.Fatalf("apply baseline: %v", err)
-	}
-	if err := migration.MarkAllMigrationsApplied(db, migration.DefaultMigrations()); err != nil {
-		t.Fatalf("mark migrations: %v", err)
-	}
-	repo := editing.NewRepository(db)
-	dataDir := t.TempDir()
-	svc := editing.NewService(repo, editing.NewAssetStore(dataDir, repo), nil, nil, nil, db, dataDir)
-	if err := executeDesktopPetEditingWriteCanary(context.Background(), svc, db); err != nil {
-		t.Fatalf("editing write canary: %v", err)
-	}
-	var revisions int64
-	if err := db.Model(&editing.ActionRevision{}).Where("id LIKE ?", "cutover-canary-rev-%").Count(&revisions).Error; err != nil {
-		t.Fatalf("count canary revisions: %v", err)
-	}
-	if revisions != 0 {
-		t.Fatalf("expected canary prerequisite revision cleanup, got %d rows", revisions)
-	}
-	var sessions int64
-	if err := db.Model(&editing.EditSession{}).Where("client_instance_id = ?", "migration-cutover-canary").Count(&sessions).Error; err != nil {
-		t.Fatalf("count canary sessions: %v", err)
-	}
-	if sessions != 0 {
-		t.Fatalf("expected canary session cleanup, got %d rows", sessions)
 	}
 }
 

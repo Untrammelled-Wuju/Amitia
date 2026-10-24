@@ -65,7 +65,7 @@ func TestOwnedConversationOriginContinuesHistoryWithoutOverwritingSameIDAtCore(t
 			t.Fatal(err)
 		}
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "same-id", RequestID: "ambiguous", Message: "continue"}
@@ -208,7 +208,7 @@ func TestHistoricalContinuationMirrorsKeepOriginOnlyRecords(t *testing.T) {
 
 func TestOwnedConversationQueryFiltersOnlyContinuationHistoryMirrors(t *testing.T) {
 	engine, db, service, model := engineHarness(t)
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	origin := &ConversationOrigin{OwnerID: "a", ID: "same-id"}
@@ -253,7 +253,7 @@ func TestOwnedConversationQueryFiltersOnlyContinuationHistoryMirrors(t *testing.
 func TestCoreCutoverContinuesOnlyForwardedContextWithoutReadingFormerCore(t *testing.T) {
 	engine, db, service, model := engineHarness(t)
 	engine.data = originDataPort{testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{}`)}}}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "old-conversation", ConversationOrigin: &ConversationOrigin{OwnerID: "former-core", ID: "old-conversation"}, RequestID: "cutover-context", Message: "continue"}

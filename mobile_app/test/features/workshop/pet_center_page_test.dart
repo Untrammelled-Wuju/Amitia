@@ -8,7 +8,7 @@ import 'package:go_router/go_router.dart';
 
 class _PetApi implements BackendServiceApi {
   final List<String> requests = [];
-  List<Map<String, dynamic>> tasks = [];
+  List<Map<String, dynamic>> plugins = [];
   bool fail = false;
 
   @override
@@ -19,14 +19,15 @@ class _PetApi implements BackendServiceApi {
     T Function(dynamic)? fromJson,
   }) async {
     requests.add(path);
-    if (path == '/api/desktop-pets/generation-tasks') {
-      expect(queryParameters, {'page': 1, 'pageSize': 100});
-      if (fail) throw StateError('连接暂时不可用');
-      return {'items': tasks, 'total': tasks.length, 'page': 1, 'pageSize': 100}
-          as T;
-    }
     if (path == '/api/extensions/pet/plugins') {
-      return {'plugins': [], 'total': 0, 'page': 1, 'pageSize': 20} as T;
+      expect(queryParameters, {'page': '1', 'pageSize': '20'});
+      if (fail) throw StateError('连接暂时不可用');
+      return {
+        'plugins': plugins,
+        'total': plugins.length,
+        'page': 1,
+        'pageSize': 20,
+      } as T;
     }
     throw StateError('不应调用接口: $path');
   }
@@ -54,56 +55,48 @@ Future<void> _pumpPage(WidgetTester tester, _PetApi api) async {
 }
 
 void main() {
-  testWidgets('首页使用桌宠任务接口并正常显示空任务', (tester) async {
+  testWidgets('桌宠中心只展示安装、插件与运行入口', (tester) async {
     final api = _PetApi();
     await _pumpPage(tester, api);
-    expect(api.requests, [
-      '/api/desktop-pets/generation-tasks',
-      '/api/extensions/pet/plugins',
-    ]);
-    expect(find.text('桌宠制作'), findsOneWidget);
-    expect(find.text('创建桌宠'), findsOneWidget);
-    expect(find.text('没有进行中的任务'), findsOneWidget);
+    expect(api.requests, ['/api/extensions/pet/plugins']);
+    expect(find.text('桌宠中心'), findsOneWidget);
+    expect(find.text('安装管理'), findsOneWidget);
+    expect(find.text('桌宠运行'), findsOneWidget);
+    expect(find.text('暂无已安装的桌宠插件'), findsOneWidget);
+    expect(find.text('创建桌宠'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('新任务字段和终态正确展示', (tester) async {
+  testWidgets('已启用插件显示运行概览', (tester) async {
     final api = _PetApi()
-      ..tasks = [
+      ..plugins = [
         {
-          'id': 'running',
-          'name': '生成任务',
-          'status': 'running',
-          'selectedActionCount': 8,
-          'progress': 35,
-          'modelName': '测试模型',
+          'extensionId': 'com.example.pet',
+          'pluginId': 'pet-main',
+          'name': '测试桌宠',
+          'description': '桌宠运行插件',
+          'version': '1.2.3',
+          'enabled': true,
+          'installState': 'installed',
         },
-        {'id': 'done', 'name': '完成任务', 'status': 'succeeded'},
-        {'id': 'failed', 'name': '失败任务', 'status': 'failed'},
       ];
     await _pumpPage(tester, api);
-    expect(find.text('8 个动作'), findsOneWidget);
-    expect(find.text('35%'), findsOneWidget);
-    expect(find.text('生成中'), findsNWidgets(2));
-    expect(find.text('完成任务'), findsOneWidget);
-    expect(find.text('失败任务'), findsOneWidget);
-    expect(find.text('已完成'), findsOneWidget);
-    expect(find.text('生成失败'), findsOneWidget);
-    expect(find.text('测试模型'), findsOneWidget);
+    expect(find.text('测试桌宠'), findsOneWidget);
+    expect(find.text('已启用'), findsOneWidget);
+    expect(find.text('已安装 1 个桌宠插件，其中 1 个已启用'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('加载失败保留导航并可以重试恢复', (tester) async {
+  testWidgets('加载失败后可以重试', (tester) async {
     final api = _PetApi()..fail = true;
     await _pumpPage(tester, api);
-    expect(find.text('桌宠制作'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
     api.fail = false;
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
-    expect(find.text('创建桌宠'), findsOneWidget);
+    expect(find.text('安装管理'), findsOneWidget);
     expect(find.text('重试'), findsNothing);
-    expect(api.requests.where((p) => p.endsWith('generation-tasks')).length, 2);
+    expect(api.requests.length, 2);
     expect(tester.takeException(), isNull);
   });
 }

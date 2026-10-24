@@ -47,7 +47,7 @@ class ModelSettingsPage extends ConsumerWidget {
               error: (_, __) => '无法确认模型配置权限，请恢复 Core 连接后重试',
               data: (intent) => intent.canConfigure
                   ? '选择模型类型进行配置'
-                  : 'AI 服务由云端 Core 全权提供，请在 Core 控制页面配置模型。管理员设备需开启统筹模式。',
+                  : '云端统筹模式的模型由 Core 统一管理，请由获授权的管理员在 Core 控制页面配置。',
             ),
             style: AppTypography.caption(context),
           ),

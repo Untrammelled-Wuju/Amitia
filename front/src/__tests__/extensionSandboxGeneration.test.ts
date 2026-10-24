@@ -20,6 +20,12 @@ describe("extension sandbox generation contract", () => {
     );
   });
 
+  it("resolves sandbox resources against the runtime API origin", () => {
+    expect(sandboxFrameSource).toContain('import { resolveApiUrl } from "@/runtime/runtime-adapter";');
+    expect(sandboxFrameSource).toContain("return resolveApiUrl(value);");
+    expect(sandboxFrameSource).toContain("resourceUrl.value = resolvedResourceURL;");
+  });
+
   it("passes the page session generation into the extension page contribution", () => {
     expect(extensionPageHostSource).toContain("generation: pageSessionGeneration.value");
     expect(extensionPageHostSource).toContain("pageSessionGeneration.value = result.generation ?? 0");

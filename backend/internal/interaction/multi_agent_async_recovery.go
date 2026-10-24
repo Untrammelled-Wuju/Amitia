@@ -10,6 +10,9 @@ func (c *MultiAgentCoordinator) resumeReservedWorker(ctx context.Context, ac *ac
 }
 
 func (c *MultiAgentCoordinator) resumeAuthorizedWorker(ctx context.Context, ac *activeCoordination, assignment AgentAssignment) error {
+	if err := c.requireCurrentCoordinationSnapshot(ctx, ac); err != nil {
+		return err
+	}
 	if err := c.requireDispatchableParent(ctx, ac); err != nil {
 		return err
 	}
@@ -39,6 +42,19 @@ func (c *MultiAgentCoordinator) resumeAuthorizedWorker(ctx context.Context, ac *
 	if expected := reserved.WorkerInteractionID(request); expected != assignment.ChildInteractionID {
 		return fmt.Errorf("multi_agent: recovered worker %s has mismatched durable child ID", assignment.ID)
 	}
+	if c.tracker == nil {
+		return fmt.Errorf("multi_agent: tracker unavailable to verify reserved child %s", assignment.ID)
+	}
+	child, found, err := c.tracker.Get(ctx, assignment.ChildInteractionID)
+	if err != nil {
+		return err
+	}
+	if !found || child == nil || child.Status != InteractionStatusReceived {
+		return fmt.Errorf("multi_agent: worker %s has no unstarted durable child reservation; manual reconciliation required", assignment.ID)
+	}
+	if err := validateReconciledChildScope(child, assignment, spaceID, conversationID); err != nil {
+		return err
+	}
 	childID, err := c.starter.StartWorker(ctx, request)
 	if err != nil {
 		return fmt.Errorf("multi_agent: resume reserved worker %s: %w", assignment.ID, err)
@@ -55,6 +71,31 @@ func (c *MultiAgentCoordinator) Shutdown(ctx context.Context) error {
 	}
 	if stopper, ok := c.starter.(interface{ Shutdown(context.Context) error }); ok {
 		return stopper.Shutdown(ctx)
+	}
+	return nil
+}
+
+func (c *MultiAgentCoordinator) waitForMissingChildProof(ctx context.Context, ac *activeCoordination, assignment AgentAssignment) error {
+	const reason = "durable child reservation missing; previous dispatch outcome is unknown and requires manual reconciliation"
+	c.mu.Lock()
+	changed := false
+	for _, live := range ac.assignments {
+		if live.ID != assignment.ID || live.Status.IsTerminal() {
+			continue
+		}
+		if live.Status != AssignmentWaiting || live.Error != reason || ac.status != CoordinationWaiting {
+			live.Status = AssignmentWaiting
+			live.Error = reason
+			live.UpdatedAt = c.clock.Now()
+			ac.status = CoordinationWaiting
+			ac.updatedAt = live.UpdatedAt
+			changed = true
+		}
+		break
+	}
+	c.mu.Unlock()
+	if changed {
+		return c.persistCoordinationSnapshot(ctx, ac)
 	}
 	return nil
 }

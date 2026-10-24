@@ -80,7 +80,7 @@ func TestOwnedMultiAgentHTTPDelegationAndWorkbenchProjection(t *testing.T) {
 	source, provider := newThreeCoreFixture(t, "owned-integration-source", schemas), newThreeCoreFixture(t, "owned-integration-core", schemas)
 	pairThreeCoreFixtures(t, source, provider)
 	tracker := interaction.NewInMemoryTracker()
-	workers := &harnessTestWorker{tracker: tracker}
+	workers := &ownedIntegrationTestWorker{&harnessTestWorker{tracker: tracker, reserveIdentity: true}}
 	goals := decision.NewGoalRegistry()
 	coordinator := interaction.NewMultiAgentCoordinator(tracker, goals, nil, workers, nil, interaction.DefaultMultiAgentPolicy())
 	provider.services.WorkbenchTaskTracker, provider.services.MultiAgentCoordinator = tracker, coordinator
@@ -93,14 +93,14 @@ func TestOwnedMultiAgentHTTPDelegationAndWorkbenchProjection(t *testing.T) {
 	provider.services.OwnedBusiness = business.NewEngine(rt.Coordination, rt, model)
 	coordinator.SetOwnedExecution(provider.services.OwnedBusiness.WithExecutionScope)
 	registerWorkbenchFixture(provider, tracker)
-	for _, coordinated := range []bool{false, true} {
+	for _, coordinated := range []bool{true} {
 		t.Run(fmt.Sprintf("coordinated-%t", coordinated), func(t *testing.T) {
 			if coordinated {
 				policy, err := rt.Coordination.Get(t.Context(), provider.core, source.device.DeviceID.String())
 				if err != nil {
 					t.Fatal(err)
 				}
-				provider.request(t, source, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+				ensureCoordinatedForTest(t, provider, source, policy.ModeRevision)
 			}
 			queryScope := decodeThreeCoreMemoryResponse[projectListing](t, provider.request(t, source, http.MethodGet, "/api/device-mesh/v1/business/projects?characterId=one", nil, 200))
 			workspace := fmt.Sprintf("owned-integration-%t", coordinated)

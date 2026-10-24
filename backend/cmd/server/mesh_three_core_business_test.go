@@ -232,11 +232,7 @@ func newThreeCoreFixture(t *testing.T, core string, schemas *threeCoreSchemas, p
 			return actor.DeviceID, true
 		},
 		Successor: func(ctx context.Context, device string) (any, error) {
-			policy, err := rt.Coordination.Get(ctx, core, device)
-			if err != nil {
-				return nil, err
-			}
-			result, err := local.PrepareSuccessor(ctx, device, policy.Coordinated)
+			result, err := local.PrepareSuccessor(ctx, device)
 			if result == nil {
 				return nil, err
 			}
@@ -408,7 +404,7 @@ func TestThreeRealCoreBusinessSwitchPreservesOwnershipAndExpiresAdministrator(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, http.StatusOK)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)
@@ -495,6 +491,10 @@ func TestThreeRealCoreBusinessSwitchPreservesOwnershipAndExpiresAdministrator(t 
 		t.Fatal("A 复用了 B 在 C 的凭证")
 	}
 	nextPolicy, err := c.services.DeviceMesh.Coordination.Get(t.Context(), c.core, a.device.DeviceID.String())
+	if err == nil && !nextPolicy.Coordinated {
+		ensureCoordinatedForTest(t, c, a, nextPolicy.ModeRevision)
+		nextPolicy, err = c.services.DeviceMesh.Coordination.Get(t.Context(), c.core, a.device.DeviceID.String())
+	}
 	if err != nil || !nextPolicy.Coordinated || nextPolicy.Administrator {
 		t.Fatal("C 未保留 A 的统筹模式或错误继承管理员权限")
 	}

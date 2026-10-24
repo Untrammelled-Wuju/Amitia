@@ -109,7 +109,7 @@ func TestMultiAgentRestoredPendingWorkersDispatchOnlyOnce(t *testing.T) {
 	if err := original.persistCoordinationSnapshot(ctx, original.coordinations[id]); err != nil {
 		t.Fatal(err)
 	}
-	workers := &fakeWorkerRunner{}
+	workers := &fakeWorkerRunner{tracker: tracker}
 	restored := NewMultiAgentCoordinator(tracker, original.goals, nil, workers, nil, DefaultMultiAgentPolicy())
 	if err := restored.restoreCoordinationFromRecord(tracker.records["parent-reconcile"]); err != nil {
 		t.Fatal(err)

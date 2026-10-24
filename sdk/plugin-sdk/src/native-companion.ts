@@ -85,7 +85,8 @@ function normalizeDescriptor(value: unknown, index: number): NativeCompanionRunt
 }
 
 function stringField(row: Record<string, unknown>, field: string, index: number): string {
-  const value = typeof row[field] === "string" ? row[field].trim() : "";
+  const fieldValue = row[field];
+  const value = typeof fieldValue === "string" ? fieldValue.trim() : "";
   if (!value) throw new Error(`native companion descriptor ${index} is missing ${field}`);
   return value;
 }

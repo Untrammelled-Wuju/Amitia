@@ -40,7 +40,7 @@ func SharedCoreAdminOnly() gin.HandlerFunc {
 			policy, valid := value.(coordination.Policy)
 			current := fmt.Sprintf("%d:%d:%d", policy.ProviderEpoch, policy.ModeRevision, policy.PermissionRevision)
 			if expectedCore == "" || !exists || !valid || !policy.Coordinated || !policy.Administrator || len(expectedPolicy) > 80 || expectedPolicy != current {
-				c.AbortWithStatusJSON(http.StatusConflict, gin.H{"code": http.StatusConflict, "msg": "统筹模式或管理员权限已变化，请重新加载配置后操作"})
+				c.AbortWithStatusJSON(http.StatusConflict, gin.H{"code": http.StatusConflict, "msg": "数据归属或管理员权限已变化，请重新加载配置后操作"})
 				return
 			}
 		}

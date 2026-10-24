@@ -7,6 +7,9 @@ func validateTerminalAssignmentResult(target *AgentAssignment, assignmentID stri
 		result.AssignmentID != assignmentID || !result.Status.IsTerminal() {
 		return fmt.Errorf("multi_agent: terminal result identity or status mismatch")
 	}
+	if !target.Status.IsTerminal() && (target.Status == AssignmentPending || target.ChildInteractionID == "") {
+		return fmt.Errorf("multi_agent: terminal result for worker without durable dispatch")
+	}
 	if target.ChildInteractionID != result.ChildInteractionID {
 		return fmt.Errorf("multi_agent: terminal result does not match durable child interaction")
 	}

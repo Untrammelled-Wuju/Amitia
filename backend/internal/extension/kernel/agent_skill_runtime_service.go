@@ -129,7 +129,7 @@ func (s *AgentSkillRuntime) Installed(ctx context.Context, spaceID, characterID,
 	items := make([]agent_skill.AgentSkillDefinition, 0)
 	for _, installation := range installations {
 		ownerSpaceID := agentSkillMetadataText(installation.Metadata["ownerSpaceId"])
-		if ownerSpaceID != "" && spaceID != "" && ownerSpaceID != spaceID {
+		if ownerSpaceID != "" && ownerSpaceID != spaceID {
 			continue
 		}
 		if installation.InstallationState != domain.InstallationStateInstalled {
@@ -347,6 +347,12 @@ func (s *AgentSkillRuntime) Activate(ctx context.Context, scope InvocationScope,
 func (s *AgentSkillRuntime) activateDefinition(ctx context.Context, scope InvocationScope, definition agent_skill.AgentSkillDefinition, explicit bool) (ActivatedSkill, error) {
 	key := applyRoundKey(scope)
 	s.mu.Lock()
+	current, ok := s.catalog.GetScopedState(scope.SpaceID, definition.StateID())
+	if !ok || !current.Enabled || !current.MatchesScope(scope.SpaceID, scope.CharacterID, scope.ConversationID) || current.ContentHash != definition.ContentHash {
+		s.mu.Unlock()
+		return ActivatedSkill{}, fmt.Errorf("agent skill authorization changed")
+	}
+	definition = current
 	round := s.ensureRoundLocked(key)
 	if existing, ok := round.active[definition.StateID()]; ok {
 		s.mu.Unlock()
@@ -411,8 +417,8 @@ func (s *AgentSkillRuntime) ActiveDefinitions(scope InvocationScope) []agent_ski
 		return nil
 	}
 	result := make([]agent_skill.AgentSkillDefinition, 0, len(round.active))
-	for _, active := range round.active {
-		if definition, ok := s.catalog.GetScoped(scope.SpaceID, active.ExtensionID); ok {
+	for stateID := range round.active {
+		if definition, ok := s.catalog.GetScopedState(scope.SpaceID, stateID); ok && definition.Enabled && definition.MatchesScope(scope.SpaceID, scope.CharacterID, scope.ConversationID) {
 			result = append(result, definition)
 		}
 	}
@@ -428,8 +434,8 @@ func (s *AgentSkillRuntime) activeDefinition(scope InvocationScope, skillRef str
 	}
 	for stateID, active := range round.active {
 		if strings.EqualFold(active.Name, skillRef) || strings.EqualFold(active.ExtensionID, skillRef) {
-			definition, ok := s.catalog.GetScoped(scope.SpaceID, active.ExtensionID)
-			if !ok {
+			definition, ok := s.catalog.GetScopedState(scope.SpaceID, stateID)
+			if !ok || !definition.Enabled || !definition.MatchesScope(scope.SpaceID, scope.CharacterID, scope.ConversationID) {
 				break
 			}
 			_ = stateID
@@ -567,8 +573,8 @@ func (s *AgentSkillRuntime) ReadInstalledResource(ctx context.Context, spaceID, 
 		return agent_skill.SkillResourceDescriptor{}, nil, fmt.Errorf("agent skill catalog unavailable")
 	}
 	definition, ok := s.catalog.GetScoped(spaceID, skillID)
-	if !ok {
-		return agent_skill.SkillResourceDescriptor{}, nil, fmt.Errorf("agent skill not found")
+	if !ok || !definition.Enabled || !definition.MatchesScope(spaceID, "", "") {
+		return agent_skill.SkillResourceDescriptor{}, nil, fmt.Errorf("agent skill resource access denied")
 	}
 	return s.readResource(InvocationScope{SpaceID: spaceID}, definition, resourcePath)
 }

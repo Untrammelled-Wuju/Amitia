@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/u-ai/backend/internal/execution"
@@ -106,6 +107,9 @@ func scopeWorkspaceInvocationInput(invocation capability.ToolInvocationContext, 
 	for _, key := range []string{"uri", "sourceUri", "destinationDirUri", "workspaceUri"} {
 		value, ok := payload[key].(string)
 		if !ok || strings.TrimSpace(value) == "" {
+			continue
+		}
+		if filepath.IsAbs(value) || strings.HasPrefix(value, "file://") || strings.HasPrefix(value, "~/") {
 			continue
 		}
 		normalized, err := bindProjectWorkspaceURI(roots, workspaceID, primaryID, value)

@@ -27,7 +27,6 @@ type Successor struct {
 	OfferToken   string       `json:"offerToken"`
 	ExpiresAt    time.Time    `json:"expiresAt"`
 	DeviceID     string       `json:"deviceId"`
-	Coordinated  bool         `json:"coordinated"`
 }
 
 func (h *LocalHandler) providerRequest(ctx context.Context, credential *StoredCredential, method, path string, input any) (int, []byte, error) {
@@ -69,7 +68,7 @@ func (h *LocalHandler) providerRequest(ctx context.Context, credential *StoredCr
 	return response.StatusCode, body, nil
 }
 
-func (h *LocalHandler) PrepareSuccessor(ctx context.Context, target string, coordinated bool) (*Successor, error) {
+func (h *LocalHandler) PrepareSuccessor(ctx context.Context, target string) (*Successor, error) {
 	h.successorMu.Lock()
 	defer h.successorMu.Unlock()
 	if target == "" || len(target) > 512 {
@@ -83,13 +82,13 @@ func (h *LocalHandler) PrepareSuccessor(ctx context.Context, target string, coor
 	path := filepath.Join(h.dataDir, "device-mesh", "successors", hex.EncodeToString(digest[:])+".json")
 	if encoded, err := secretstore.Read(path); err == nil {
 		var saved Successor
-		if json.Unmarshal(encoded, &saved) == nil && saved.Coordinated == coordinated && saved.DeviceID == target && saved.Endpoint.CoreID == credential.SpaceID.String() && saved.Endpoint.Fingerprint == credential.Fingerprint && saved.Endpoint.URL == credential.CloudBaseUrl && time.Now().Add(15*time.Second).Before(saved.ExpiresAt) {
+		if json.Unmarshal(encoded, &saved) == nil && saved.DeviceID == target && saved.Endpoint.CoreID == credential.SpaceID.String() && saved.Endpoint.Fingerprint == credential.Fingerprint && saved.Endpoint.URL == credential.CloudBaseUrl && time.Now().Add(15*time.Second).Before(saved.ExpiresAt) {
 			return &saved, nil
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
-	status, body, err := h.providerRequest(ctx, credential, http.MethodPost, "/api/device-mesh/v1/pairing/successor-offers", map[string]any{"deviceId": target, "coordinated": coordinated})
+	status, body, err := h.providerRequest(ctx, credential, http.MethodPost, "/api/device-mesh/v1/pairing/successor-offers", map[string]any{"deviceId": target})
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +109,6 @@ func (h *LocalHandler) PrepareSuccessor(ctx context.Context, target string, coor
 		providerPath = []string{credential.SpaceID.String()}
 	}
 	result := &Successor{Endpoint: lan.Endpoint{URL: credential.CloudBaseUrl, CoreID: credential.SpaceID.String(), Fingerprint: credential.Fingerprint}, ProviderPath: providerPath, OfferToken: response.OfferToken, ExpiresAt: response.ExpiresAt, DeviceID: target}
-	result.Coordinated = coordinated
 	encoded, err := json.Marshal(result)
 	if err != nil {
 		return nil, err

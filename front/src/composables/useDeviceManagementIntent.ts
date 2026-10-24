@@ -4,7 +4,7 @@ import { useApi } from "./useApi";
 
 export type DeviceManagementState = { coreId: string; coreConsoleDeviceId?: string; canAdminister: boolean; coordinationAvailable?: boolean; policy: { deviceId: string; coordinated: boolean; administrator: boolean; providerEpoch: number; modeRevision: number; permissionRevision: number; selectedRole?: string } };
 export type DeviceManagementIntent = { state: DeviceManagementState; apiBaseURL: string; controller: AbortController };
-const changed = "Core、统筹模式或设备权限已变化，请刷新后重新操作";
+const changed = "Core、数据归属或设备权限已变化，请刷新后重新操作";
 
 export function deviceManagementFingerprint(state: DeviceManagementState, permissionIncrement = 0) {
   const policy = state?.policy;

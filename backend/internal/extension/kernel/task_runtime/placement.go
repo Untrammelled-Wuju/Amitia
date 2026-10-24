@@ -2,6 +2,7 @@ package task_runtime
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,7 +153,7 @@ func (t TaskExecutionTarget) Summary() string {
 		parts = append(parts, "session="+string(t.RuntimeSessionID))
 	}
 	if t.ConnectionGeneration > 0 {
-		parts = append(parts, "gen="+string(rune('0'+t.ConnectionGeneration%10)))
+		parts = append(parts, "gen="+strconv.FormatInt(t.ConnectionGeneration, 10))
 	}
 	return strings.Join(parts, " ")
 }

@@ -83,7 +83,7 @@ func TestRestoredExecutionRetainsScopeAndIsCancelledByPolicyChanges(t *testing.T
 	if !ok || actual != saved {
 		t.Fatal("restore changed immutable authority")
 	}
-	if _, err := service.ChangeMode(t.Context(), "space", "b", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "space", "b", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	if !errors.Is(context.Cause(restored), coordination.ErrScopeExpired) {

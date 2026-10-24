@@ -220,6 +220,9 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 	if row == nil || row.Deleted || row.Revision != input.ExpectedRevision || json.Unmarshal(row.Body, &candidate) != nil || candidate.Type != "owned-memory-candidate" || candidate.ID != row.ID || candidate.State != "pending" {
 		return MemoryManagementResponse{}, coordination.ErrResourceVersion
 	}
+	if row.OwnerID != scope.ResourceOwnerID || row.RoleID != scope.RoleID || summaryAuthority(candidate.ExecutionScope) != summaryAuthority(scope) {
+		return MemoryManagementResponse{}, coordination.ErrWrongOwner
+	}
 	mutations := []coordination.Mutation{}
 	dependencies := []coordination.ResourceVersion{}
 	switch input.Action {
@@ -305,6 +308,20 @@ func (e *Engine) ManageOwnedMemoryCandidates(ctx context.Context, request Reques
 		}
 		content["value"], content["memoryType"], content["importance"], content["source"] = candidate.Value, candidate.MemoryType, candidate.Importance, "reviewed"
 		content["retentionLevel"], content["pinned"] = candidate.RetentionLevel, candidate.Pinned
+		content["sourceCandidateId"] = candidate.ID
+		content["sourceConversationId"] = candidate.ConversationID
+		content["sourceProvenanceHash"] = candidate.ProvenanceHash
+		content["sourceHistoricalRoleId"] = candidate.HistoricalRoleID
+		content["sourceSpaceId"] = scope.SpaceID
+		content["sourceRoleId"] = scope.RoleID
+		content["sourceOwnerId"] = scope.ResourceOwnerID
+		content["sourceCreatedAt"] = candidate.CreatedAt
+		content["sourceDependenciesHash"] = memoryManagementHash(candidate.Dependencies)
+		if existing != nil {
+			content["supersedesMemoryId"] = existing.ID
+			content["supersedesMemoryRevision"] = existing.Revision
+			content["supersedesMemoryHash"] = memoryManagementHash(existing.Body)
+		}
 		prepared, err := e.prepareMemoryMutations(ctx, scope, candidate.ConversationID, []DerivedMemory{{Kind: candidate.DerivedKind, Key: key, Body: body(content)}}, &snapshot)
 		if err != nil {
 			return MemoryManagementResponse{}, err

@@ -65,7 +65,7 @@ func configurationDB(t *testing.T) (*gorm.DB, *coordination.Service) {
 		t.Fatal(err)
 	}
 	svc := coordination.NewService(kernelDB)
-	if err := svc.InitializeCoreConsole(t.Context(), "space", "admin"); err != nil {
+	if err := svc.InitializeCoreConsole(t.Context(), "space", "admin", false); err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{"model_configs", "tts_configs", "asr_configs", "embedding_configs", "vision_configs", "image_gen_configs"} {
@@ -205,7 +205,7 @@ func TestConfigurationHTTPHandlersKeepTheRevocableRequestScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ChangeMode(t.Context(), "space", "admin", policy.ModeRevision, false, ""); err != nil {
+	if _, err := svc.GrantAdministrator(t.Context(), "space", "admin", policy.PermissionRevision, false); err != nil {
 		t.Fatal(err)
 	}
 	appctx := &app.AppContext{DB: db}

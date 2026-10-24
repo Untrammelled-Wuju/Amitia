@@ -72,7 +72,7 @@ func TestScheduledMessageUsesChosenOwnerAndStableSavedReply(t *testing.T) {
 			engine, db, service, model := engineHarness(t)
 			owner := "a"
 			if cloud {
-				if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 				owner = "core"
@@ -122,7 +122,7 @@ func TestScheduledMessageDoesNotFollowOwnerSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request.ConversationID = conversation
@@ -155,7 +155,7 @@ func TestScheduledMessagePersistsFallbackButRechecksAuthority(t *testing.T) {
 	}
 	request.RequestID = "reminder:revoked"
 	model.generate = func(context.Context, Inference) (Generation, error) {
-		_, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role")
+		_, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role")
 		if err != nil {
 			t.Fatal(err)
 		}

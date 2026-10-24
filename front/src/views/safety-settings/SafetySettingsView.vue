@@ -4,8 +4,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="safety-page">
-    <h2 class="page-title">安全</h2>
-
     <el-alert
       type="info"
       :closable="false"
@@ -698,13 +696,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.safety-page {
-}
-.page-title {
-  font-size: var(--ac-font-size-lg);
-  font-weight: 600;
-  margin-bottom: 14px;
-}
 .section-card {
   margin-bottom: 12px;
 }

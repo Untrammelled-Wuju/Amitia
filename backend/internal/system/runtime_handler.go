@@ -53,12 +53,4 @@ func (h *Handler) CheckNow(c *gin.Context) { h.administratorAction(c, "check-now
 
 func (h *Handler) CleanupTemp(c *gin.Context) { h.administratorAction(c, "temp-clean", "") }
 
-func (h *Handler) ValidateMode(c *gin.Context) { util.SuccessResponse(c, h.service.ValidateMode()) }
-
 func (h *Handler) RotateLogs(c *gin.Context) { h.administratorAction(c, "logs-rotate", "") }
-
-func (h *Handler) GetRuntimeMode(c *gin.Context) { util.SuccessResponse(c, h.service.GetRuntimeMode()) }
-
-func (h *Handler) UpdateRuntimeMode(c *gin.Context) {
-	h.updateAdministratorSettings(c, "runtime", true)
-}

@@ -258,15 +258,15 @@ func PublicSkillID(extensionID string) string {
 func (d AgentSkillDefinition) MatchesScope(scopeID, characterID, conversationID string) bool {
 	switch d.Scope {
 	case "", AgentSkillScopeGlobal:
-		return true
-	case "character":
-		return d.ScopeID == characterID
-	case "conversation":
-		return d.ScopeID == conversationID
-	case "space":
-		return d.ScopeID == scopeID
+		return d.ScopeID == ""
+	case AgentSkillScopeCharacter:
+		return characterID != "" && d.ScopeID == characterID
+	case AgentSkillScopeConversation:
+		return conversationID != "" && d.ScopeID == conversationID
+	case AgentSkillScopeSpace:
+		return scopeID != "" && d.ScopeID == scopeID
 	default:
-		return d.ScopeID == "" || d.ScopeID == scopeID
+		return false
 	}
 }
 

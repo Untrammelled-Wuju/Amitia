@@ -1,33 +1,33 @@
-import { ref, watch, type Ref } from "vue";
+import { onScopeDispose, ref, watch, type Ref } from "vue";
 
 export function useStreamRenderScheduler(
   source: Ref<string>,
   streaming: Ref<boolean>,
-  interval = 40,
 ): Ref<string> {
   const rendered = ref(source.value);
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let lastFlush = 0;
+  let frame: number | null = null;
 
   const flush = () => {
-    timer = null;
-    lastFlush = Date.now();
+    frame = null;
     rendered.value = source.value;
   };
 
   const schedule = () => {
     if (!streaming.value) {
-      if (timer) clearTimeout(timer);
-      timer = null;
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
       flush();
       return;
     }
-    if (timer) return;
-    const wait = Math.max(0, interval - (Date.now() - lastFlush));
-    timer = setTimeout(flush, wait);
+    if (frame !== null) return;
+    frame = requestAnimationFrame(flush);
   };
 
   watch([source, streaming], schedule, { flush: "post" });
+  onScopeDispose(() => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+  });
 
   return rendered;
 }

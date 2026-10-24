@@ -122,7 +122,7 @@ func TestLegacySyncRemoteAuthorityAndLocalContinuity(t *testing.T) {
 	if rec := request(remote, "GET", "/api/v1/sync/status?deviceId=victim", "", "", ""); rec.Code != 403 {
 		t.Fatalf("ordinary cross-device %d", rec.Code)
 	}
-	policy, err := policies.ChangeMode(t.Context(), "core-space", "device", 1, true, "role")
+	policy, err := policies.InitializeCoordinated(t.Context(), "core-space", "device", 1, "role")
 	if err != nil {
 		t.Fatal(err)
 	}

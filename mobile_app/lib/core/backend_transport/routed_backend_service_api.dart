@@ -62,20 +62,7 @@ final class RoutedBackendServiceApiProxy implements BackendServiceApi {
   Future<BackendServiceApi> _apiFor(String path) async {
     if (isDeviceRoleManagementPath(path) &&
         (_isCloudDeployment?.call() ?? false)) {
-      final generation = _businessApi.generation;
-      final payload = await _businessApi.get<Map<String, dynamic>>(
-        '/api/device-mesh/v1/coordination/me',
-      );
-      if (generation != _businessApi.generation ||
-          !(_isCloudDeployment?.call() ?? false)) {
-        throw StateError('Core 已切换，请重新加载角色');
-      }
-      final data = payload?['data'] is Map ? payload!['data'] as Map : payload;
-      final policy = data?['policy'];
-      if (policy is! Map || policy['coordinated'] is! bool) {
-        throw StateError('无法确认角色所属设备，请恢复 Core 连接后重试');
-      }
-      return policy['coordinated'] == true ? _businessApi : _deviceLocalApi;
+      return _businessApi;
     }
     return isDeviceLocalApiPath(path) ? _deviceLocalApi : _businessApi;
   }

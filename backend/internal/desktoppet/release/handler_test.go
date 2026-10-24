@@ -59,14 +59,6 @@ func (s *stubOwnershipGuard) RequireBehaviorBinding(ctx context.Context, actor *
 }
 
 type stubReleaseService struct {
-	buildReleaseResult *BuildReleaseResult
-	buildReleaseErr    error
-
-	getBuildOperationResult *ReleaseBuildOperation
-	getBuildOperationErr    error
-
-	cancelBuildOperationErr error
-
 	listReleasesResult []*ReleaseData
 	listReleasesErr    error
 
@@ -84,18 +76,6 @@ type stubReleaseService struct {
 
 	getPetIdentityResult *PetIdentityData
 	getPetIdentityErr    error
-}
-
-func (s *stubReleaseService) BuildRelease(ctx context.Context, req *BuildReleaseRequest) (*BuildReleaseResult, error) {
-	return s.buildReleaseResult, s.buildReleaseErr
-}
-
-func (s *stubReleaseService) GetBuildOperation(ctx context.Context, operationID, spaceID string) (*ReleaseBuildOperation, error) {
-	return s.getBuildOperationResult, s.getBuildOperationErr
-}
-
-func (s *stubReleaseService) CancelBuildOperation(ctx context.Context, operationID, spaceID string) error {
-	return s.cancelBuildOperationErr
 }
 
 func (s *stubReleaseService) GetRelease(ctx context.Context, releaseID, spaceID string) (*ReleaseData, error) {
@@ -178,67 +158,6 @@ func parseResponse(t *testing.T, body []byte) apiResponse {
 	return r
 }
 
-func TestBuildRelease_Returns400_WhenProcessingTaskIDEmpty(t *testing.T) {
-	svc := &stubReleaseService{}
-	r := newTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/build", map[string]interface{}{
-		"processingTaskId": "",
-	})
-
-	resp := parseResponse(t, w.Body.Bytes())
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected body code 400, got %d: %s", resp.Code, w.Body.String())
-	}
-}
-
-func TestBuildRelease_Returns200_OnSuccess(t *testing.T) {
-	now := time.Now().Format("2006-01-02 15:04:05")
-	svc := &stubReleaseService{
-		buildReleaseResult: &BuildReleaseResult{
-			Operation: &ReleaseBuildOperation{
-				ID:        uuid.NewString(),
-				State:     BuildOpStateCompleted,
-				StartedAt: now,
-			},
-			Release: &ReleaseData{
-				ID:      uuid.NewString(),
-				Version: "1.0.1",
-			},
-			Snapshot: &ReleaseBuildSequenceInfo{
-				Sequence: 1,
-				Version:  "1.0.1",
-			},
-		},
-	}
-	r := newTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/build", map[string]interface{}{
-		"processingTaskId": "task-1",
-	})
-
-	resp := parseResponse(t, w.Body.Bytes())
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected body code 200, got %d: %s", resp.Code, w.Body.String())
-	}
-}
-
-func TestBuildRelease_ReturnsError_OnServiceError(t *testing.T) {
-	svc := &stubReleaseService{
-		buildReleaseErr: NewReleaseError("INVALID_REQUEST", "missing fields", nil),
-	}
-	r := newTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/build", map[string]interface{}{
-		"processingTaskId": "",
-	})
-
-	resp := parseResponse(t, w.Body.Bytes())
-	if resp.Code == http.StatusOK {
-		t.Fatalf("expected non-200 body code, got 200")
-	}
-}
-
 func TestGetRelease_Returns404_WhenNotFound(t *testing.T) {
 	svc := &stubReleaseService{
 		getReleaseErr: NewReleaseError("RELEASE_NOT_FOUND", "不存在", errors.New("not found")),
@@ -292,39 +211,6 @@ func TestGetPetIdentity_MissingPetID(t *testing.T) {
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("expected body code 400, got %d: %s", resp.Code, w.Body.String())
-	}
-}
-
-func TestGetBuildOperation_Success(t *testing.T) {
-	operationID := uuid.NewString()
-	now := time.Now().Format("2006-01-02 15:04:05")
-	svc := &stubReleaseService{
-		getBuildOperationResult: &ReleaseBuildOperation{
-			ID:        operationID,
-			State:     BuildOpStateBuilding,
-			StartedAt: now,
-		},
-	}
-	r := newTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodGet, "/api/desktop-pets/releases/operations/"+operationID, nil)
-
-	resp := parseResponse(t, w.Body.Bytes())
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected body code 200, got %d: %s", resp.Code, w.Body.String())
-	}
-}
-
-func TestCancelBuildOperation_Success(t *testing.T) {
-	operationID := uuid.NewString()
-	svc := &stubReleaseService{}
-	r := newTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/operations/"+operationID+"/cancel", nil)
-
-	resp := parseResponse(t, w.Body.Bytes())
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected body code 200, got %d: %s", resp.Code, w.Body.String())
 	}
 }
 

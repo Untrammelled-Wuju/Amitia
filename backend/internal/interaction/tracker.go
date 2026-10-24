@@ -6,23 +6,24 @@ import (
 )
 
 type InteractionMetadataUpdate struct {
-	Priority              *int
-	PathType              *string
-	SupersedesID          *string
-	CommitID              *string
-	ExecutorID            *string
-	OwnerInstanceID       *string
-	CommitToken           *string
-	CommitOwner           *string
-	ResultMessageIDs      *string
-	ResultRef             *string
-	DeliveryIntentIDs     *string
-	CorrelationID         *string
-	CausationID           *string
-	DeadlineAt            *time.Time
-	ExpectedStatusVersion *int64
-	ExpectedOwner         *string
-	RecoveryDescriptor    *RecoveryDescriptor
+	Priority                       *int
+	PathType                       *string
+	SupersedesID                   *string
+	CommitID                       *string
+	ExecutorID                     *string
+	OwnerInstanceID                *string
+	CommitToken                    *string
+	CommitOwner                    *string
+	ResultMessageIDs               *string
+	ResultRef                      *string
+	DeliveryIntentIDs              *string
+	CorrelationID                  *string
+	CausationID                    *string
+	DeadlineAt                     *time.Time
+	ExpectedStatusVersion          *int64
+	ExpectedRecoveryDescriptorJSON *string
+	ExpectedOwner                  *string
+	RecoveryDescriptor             *RecoveryDescriptor
 }
 
 type InteractionTracker interface {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -79,7 +80,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           _configs = const [];
           _providers = const [];
           _loading = false;
-          _error = 'AI 服务由云端 Core 提供。只有开启统筹模式的云端管理员设备可以配置模型，请在 Core 控制页面修改。';
+          _error = '云端统筹模式下，只有获授权的 Core 管理员设备可以配置模型，请在 Core 控制页面修改。';
         });
         return;
       }
@@ -90,7 +91,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               : false,
           await _loadConfigs(),
           await _loadProviders(),
-          _isText ? await ref.read(modelConfigServiceProvider).routes() : <Map<String, dynamic>>[],
+          _isText
+              ? await ref.read(modelConfigServiceProvider).routes()
+              : <Map<String, dynamic>>[],
         ],
       );
       await coreConfigurationGuardFor(ref).validate(intent);
@@ -275,22 +278,34 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           SizedBox(height: AppSpacing.sectionGap),
           Text('用途分配', style: AppTypography.body(context)),
           Text('未分配时使用当前 Core 的默认模型', style: AppTypography.caption(context)),
-          ..._routes.map((route) => ListTile(
-            title: Text('${route['label'] ?? route['scenario']}'),
-            subtitle: Text('${route['description'] ?? ''}'),
-            trailing: SizedBox(width: 140, child: DropdownButton<int>(
-              isExpanded: true,
-              value: (route['modelConfigId'] as num?)?.toInt() ?? 0,
-              items: [
-                const DropdownMenuItem(value: 0, child: Text('使用默认')),
-                ..._configs.map((config) => DropdownMenuItem(
-                  value: int.parse(_idOf(config)),
-                  child: Text('${config['name'] ?? config['modelName']}', overflow: TextOverflow.ellipsis),
-                )),
-              ],
-              onChanged: _busy || !_canConfigure ? null : (id) => _assignRoute('${route['scenario']}', id ?? 0),
-            )),
-          )),
+          ..._routes.map(
+            (route) => ListTile(
+              title: Text('${route['label'] ?? route['scenario']}'),
+              subtitle: Text('${route['description'] ?? ''}'),
+              trailing: SizedBox(
+                width: 140,
+                child: DropdownButton<int>(
+                  isExpanded: true,
+                  value: (route['modelConfigId'] as num?)?.toInt() ?? 0,
+                  items: [
+                    const DropdownMenuItem(value: 0, child: Text('使用默认')),
+                    ..._configs.map(
+                      (config) => DropdownMenuItem(
+                        value: int.parse(_idOf(config)),
+                        child: Text(
+                          '${config['name'] ?? config['modelName']}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: _busy || !_canConfigure
+                      ? null
+                      : (id) => _assignRoute('${route['scenario']}', id ?? 0),
+                ),
+              ),
+            ),
+          ),
         ],
         if (widget.modelType == 'voice') ...<Widget>[
           SizedBox(height: AppSpacing.sectionGap),
@@ -305,9 +320,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     if (!await _ensureConfiguration(intent)) return;
     setState(() => _busy = true);
     try {
-      await intent!.run(() => ref.read(modelConfigServiceProvider).updateRoutes([
-        {'scenario': scenario, 'modelConfigId': modelConfigId},
-      ]));
+      await intent!.run(
+        () => ref.read(modelConfigServiceProvider).updateRoutes([
+          {'scenario': scenario, 'modelConfigId': modelConfigId},
+        ]),
+      );
       await coreConfigurationGuardFor(ref).validate(intent);
       await _load();
       if (mounted && _error == null) _toast('用途分配已更新');
@@ -599,6 +616,15 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     );
     final maxTokensCtrl = TextEditingController(
       text: ((existing?['maxTokens'] as num?)?.toInt() ?? 4096).toString(),
+    );
+    final budgetVersionCtrl = TextEditingController(
+      text: existing?['budgetRateVersion']?.toString() ?? '',
+    );
+    final budgetInputCtrl = TextEditingController(
+      text: (existing?['budgetInputRate'] ?? 0).toString(),
+    );
+    final budgetOutputCtrl = TextEditingController(
+      text: (existing?['budgetOutputRate'] ?? 0).toString(),
     );
     final timeoutCtrl = TextEditingController(
       text: ((existing?['timeoutSeconds'] as num?)?.toInt() ?? 60).toString(),
@@ -1023,6 +1049,31 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                           ],
                         ),
                         SizedBox(height: AppSpacing.md),
+                        if (widget.modelType == 'text') ...[
+                          _SheetField(
+                            label: '预算计价版本',
+                            controller: budgetVersionCtrl,
+                            hint: '如 provider-20261024',
+                          ),
+                          SizedBox(height: AppSpacing.md),
+                          _SheetField(
+                            label: '输入计价上界（微美元／百万 Token）',
+                            controller: budgetInputCtrl,
+                            hint: '0 表示未配置',
+                            keyboardType: TextInputType.number,
+                          ),
+                          SizedBox(height: AppSpacing.md),
+                          _SheetField(
+                            label: '输出计价上界（微美元／百万 Token）',
+                            controller: budgetOutputCtrl,
+                            hint: '0 表示未配置',
+                            keyboardType: TextInputType.number,
+                          ),
+                          const Text(
+                            '1 美元 = 1000000 微美元。启用费用预算时填写版本和两个正整数；未配置的模型不会用于受费用限制的委派。',
+                          ),
+                          SizedBox(height: AppSpacing.md),
+                        ],
                         Row(
                           children: <Widget>[
                             Expanded(
@@ -1064,6 +1115,26 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 _toast('配置名称不能为空', error: true);
                                 return;
                               }
+                              if (widget.modelType == 'text' &&
+                                  (utf8.encode(budgetVersionCtrl.text).length >
+                                          128 ||
+                                      budgetVersionCtrl.text.trim() !=
+                                          budgetVersionCtrl.text ||
+                                      [
+                                        budgetInputCtrl.text,
+                                        budgetOutputCtrl.text,
+                                      ].any((value) {
+                                        final rate = int.tryParse(value);
+                                        return rate == null ||
+                                            rate < 0 ||
+                                            rate > 100000000;
+                                      }))) {
+                                _toast(
+                                  '预算版本最多 128 字节，计价上界须为 0–100000000 的整数',
+                                  error: true,
+                                );
+                                return;
+                              }
                               Navigator.of(sheetContext).pop();
                               await _saveConfig(
                                 existing,
@@ -1078,6 +1149,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 voiceType: voiceCtrl.text.trim(),
                                 temperature: temperatureCtrl.text.trim(),
                                 maxTokens: maxTokensCtrl.text.trim(),
+                                budgetRateVersion: budgetVersionCtrl.text,
+                                budgetInputRate:
+                                    int.tryParse(budgetInputCtrl.text) ?? 0,
+                                budgetOutputRate:
+                                    int.tryParse(budgetOutputCtrl.text) ?? 0,
                                 timeoutSeconds: timeoutCtrl.text.trim(),
                                 retryCount: retryCtrl.text.trim(),
                                 supportsReasoning: supportsReasoning,
@@ -1115,6 +1191,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     voiceCtrl.dispose();
     temperatureCtrl.dispose();
     maxTokensCtrl.dispose();
+    budgetVersionCtrl.dispose();
+    budgetInputCtrl.dispose();
+    budgetOutputCtrl.dispose();
     timeoutCtrl.dispose();
     retryCtrl.dispose();
     speedCtrl.dispose();
@@ -1139,6 +1218,9 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     required String voiceType,
     required String temperature,
     required String maxTokens,
+    required String budgetRateVersion,
+    required int budgetInputRate,
+    required int budgetOutputRate,
     required String timeoutSeconds,
     required String retryCount,
     required bool supportsReasoning,
@@ -1193,6 +1275,11 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         data['realtimeSecretKey'] = realtimeSecretKey;
     } else {
       data['modelName'] = model;
+      if (widget.modelType == 'text') {
+        data['budgetRateVersion'] = budgetRateVersion;
+        data['budgetInputRate'] = budgetInputRate;
+        data['budgetOutputRate'] = budgetOutputRate;
+      }
       if (_isText) {
         data['temperature'] = (double.tryParse(temperature) ?? 0.7)
             .clamp(0.0, 2.0)

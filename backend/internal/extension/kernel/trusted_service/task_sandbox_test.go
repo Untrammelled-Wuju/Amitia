@@ -65,13 +65,8 @@ func TestActualTaskSandboxBlocksPrivateFilesNetworkAndChildProcesses(t *testing.
 	process.ConfigureProcess(cmd)
 	var outputBuffer bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &outputBuffer, &outputBuffer
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	tree, err := process.AttachProcessTreeWithLimits(cmd, plan.SupervisorLimits)
+	tree, err := process.StartProcessTreeWithLimits(cmd, plan.SupervisorLimits)
 	if err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
 		t.Fatal(err)
 	}
 	defer process.CloseProcessTree(tree)

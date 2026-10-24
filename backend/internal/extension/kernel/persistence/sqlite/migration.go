@@ -2559,7 +2559,6 @@ var schemaMigrations = []string{
 	executionjournal.Schema,
 	executionjournal.FenceSchema,
 	pairing.OfferTargetSchema,
-	pairing.SuccessorModeSchema,
 	coordination.ContinuityJobsSchema,
 	coordination.ProjectionSchema,
 	coordination.ProjectionLocationsSchema,

@@ -18,8 +18,8 @@ type Backoff struct {
 
 func NewBackoff() *Backoff {
 	return &Backoff{
-		baseDelay: 1 * time.Second,
-		maxDelay:  60 * time.Second,
+		baseDelay:  1 * time.Second,
+		maxDelay:   60 * time.Second,
 		resetAfter: 30 * time.Second,
 		increments: []time.Duration{
 			1 * time.Second,

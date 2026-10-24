@@ -103,7 +103,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.reads, 0);
     expect(find.byType(TextFormField), findsNothing);
-    expect(find.textContaining('只有开启统筹模式'), findsOneWidget);
+    expect(find.textContaining('获授权的 Core 管理员'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 

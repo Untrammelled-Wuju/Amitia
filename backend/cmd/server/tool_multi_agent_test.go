@@ -20,6 +20,30 @@ type harnessTestWorker struct {
 	tracker           *interaction.InMemoryTracker
 	started           []interaction.WorkerRunRequest
 	finishImmediately bool
+	reserveIdentity   bool
+}
+
+type ownedIntegrationTestWorker struct {
+	*harnessTestWorker
+}
+
+func (w *ownedIntegrationTestWorker) WorkerInteractionID(req interaction.WorkerRunRequest) string {
+	return newOwnedMultiAgentWorkerRunner(nil, w.tracker).WorkerInteractionID(req)
+}
+
+func (w *ownedIntegrationTestWorker) CancelWorker(ctx context.Context, id string) error {
+	record, found, err := w.tracker.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !found || record == nil {
+		return interaction.ErrInteractionNotFound
+	}
+	if record.IsTerminal() {
+		return nil
+	}
+	_, err = w.tracker.TransitionCAS(ctx, id, record.StatusVersion, interaction.InteractionStatusCancelled)
+	return err
 }
 
 func (w *harnessTestWorker) StartWorker(ctx context.Context, req interaction.WorkerRunRequest) (string, error) {
@@ -29,6 +53,9 @@ func (w *harnessTestWorker) StartWorker(ctx context.Context, req interaction.Wor
 		RequestID: "ma-" + req.AssignmentID, Source: "multi_agent", Channel: "web",
 	}
 	rec := interaction.NewInteractionRecord(scope)
+	if w.reserveIdentity {
+		rec.ID = newOwnedMultiAgentWorkerRunner(nil, w.tracker).WorkerInteractionID(req)
+	}
 	rec.Status = interaction.InteractionStatusProcessing
 	if w.finishImmediately {
 		rec.Status = interaction.InteractionStatusCompleted
@@ -92,7 +119,7 @@ func TestChatHarnessMultiAgentToolsHonorWorkspaceAuthorization(t *testing.T) {
 
 func TestChatHarnessMultiAgentPersistsOwnedTaskBinding(t *testing.T) {
 	a, _, scope, tracker := testMultiAgentModelRuntime(t)
-	ctx := coordination.WithScope(t.Context(), coordination.ExecutionScope{SpaceID: scope.SpaceID, RoleID: scope.CharacterID, CoreID: "execution-core", ResourceOwnerID: "device-owner"})
+	ctx := coordination.WithScope(t.Context(), coordination.ExecutionScope{SpaceID: scope.SpaceID, RoleID: scope.CharacterID, CoreID: "execution-core", ResourceOwnerID: "device-owner", InitiatorDeviceID: "device-a", TargetDeviceID: "device-a"})
 	result := a.Execute(ctx, multiAgentDelegateTool, json.RawMessage(`{"objectives":["Inspect the api endpoints","Add durable worker tests"]}`), scope)
 	if result.Error != nil {
 		t.Fatalf("delegation failed: %+v", result.Error)

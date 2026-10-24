@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <DesktopTitleBar v-if="isDesktopShell()" :transparent="isOnboardingPage" />
+  <DesktopTitleBar :transparent="isOnboardingPage" />
   <div id="amitia-overlay-root" aria-live="polite"></div>
   <UpdateDialog />
   <AgentApprovalGuard />
@@ -13,13 +13,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <ApplicationBackground :visible="!isPublicPage" />
     <div class="workspace-foreground">
       <Transition name="route-slide" mode="out-in">
-        <component :is="secondaryPage.kind === 'settings' ? SettingsWorkspace : AccountWorkspace"
-          v-if="secondaryPage" key="secondary" :return-to="returnTo" :title="secondaryPage.title">
-          <router-view v-slot="{ Component }">
-            <RouteSurfaceHost v-if="Component" :fallback="Component" />
-          </router-view>
-        </component>
-        <AppLayout v-else-if="!isPublicPage" key="app">
+        <AppLayout v-if="!isPublicPage" key="app">
           <router-view v-slot="{ Component }">
             <RouteSurfaceHost v-if="Component" :fallback="Component" />
           </router-view>
@@ -51,9 +45,6 @@ import { applyStylePatchToDocument, applyStyleRuntime } from "./ui-runtime/style
 import { initializeStyleProfile, stylePatch, styleRules } from "./ui-runtime/styleProfile";
 import { normalizeStylePageId } from "./ui-runtime/stylePage";
 import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
-import SettingsWorkspace from "./components/SettingsWorkspace.vue";
-import AccountWorkspace from "./components/AccountWorkspace.vue";
-import { useSecondaryWorkspace } from "./composables/useSecondaryWorkspace";
 import { useAppUIHost } from "./composables/useAppUIHost";
 import ApplicationBackground from "./components/ApplicationBackground.vue";
 import { isServiceTransitionMessage } from "./runtime/service-transition";
@@ -79,7 +70,6 @@ const isOnboardingPage = computed(
   () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
 );
 const isUIProviderRecoveryPage = computed(() => route.path === "/settings/ui-providers");
-const { secondaryPage, returnTo } = useSecondaryWorkspace();
 useAppUIHost(isPublicPage);
 
 watch(
@@ -248,45 +238,45 @@ details {
   background: #f5f7fa;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-html.amitia-desktop-shell body {
-  padding-top: var(--desktop-titlebar-height, 34px);
+html.amitia-titlebar-shell body {
+  padding-top: var(--desktop-titlebar-height, 40px);
   box-sizing: border-box;
   overflow: hidden;
 }
-html.amitia-desktop-shell #app {
-  height: calc(100vh - var(--desktop-titlebar-height, 34px));
+html.amitia-titlebar-shell #app {
+  height: calc(100vh - var(--desktop-titlebar-height, 40px));
 }
-html.amitia-desktop-shell .app-shell {
+html.amitia-titlebar-shell .app-shell {
   height: 100%;
 }
 
-html.amitia-desktop-shell .el-overlay {
-  top: var(--desktop-titlebar-height, 34px) !important;
+html.amitia-titlebar-shell .el-overlay {
+  top: var(--desktop-titlebar-height, 40px) !important;
 }
 
-html.amitia-desktop-shell .el-message {
-  top: calc(var(--desktop-titlebar-height, 34px) + 20px) !important;
+html.amitia-titlebar-shell .el-message {
+  top: calc(var(--desktop-titlebar-height, 40px) + 20px) !important;
 }
-html.amitia-desktop-shell .el-notification {
-  top: calc(var(--desktop-titlebar-height, 34px) + 20px) !important;
-}
-
-html.amitia-desktop-shell .el-drawer.ltr,
-html.amitia-desktop-shell .el-drawer.rtl,
-html.amitia-desktop-shell .el-drawer.ttb,
-html.amitia-desktop-shell .el-drawer.btt {
-  height: calc(100% - var(--desktop-titlebar-height, 34px)) !important;
+html.amitia-titlebar-shell .el-notification {
+  top: calc(var(--desktop-titlebar-height, 40px) + 20px) !important;
 }
 
-html.amitia-desktop-shell .search-overlay {
-  top: var(--desktop-titlebar-height, 34px) !important;
+html.amitia-titlebar-shell .el-drawer.ltr,
+html.amitia-titlebar-shell .el-drawer.rtl,
+html.amitia-titlebar-shell .el-drawer.ttb,
+html.amitia-titlebar-shell .el-drawer.btt {
+  height: calc(100% - var(--desktop-titlebar-height, 40px)) !important;
 }
 
-html.amitia-desktop-shell.amitia-desktop-onboarding body {
+html.amitia-titlebar-shell .search-overlay {
+  top: var(--desktop-titlebar-height, 40px) !important;
+}
+
+html.amitia-titlebar-shell.amitia-desktop-onboarding body {
   padding-top: 0;
 }
 
-html.amitia-desktop-shell.amitia-desktop-onboarding #app {
+html.amitia-titlebar-shell.amitia-desktop-onboarding #app {
   height: 100vh;
 }
 

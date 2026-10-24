@@ -348,6 +348,44 @@ func (r *ownedContinuityRuntime) applyRuntimeEvent(ctx context.Context, spaceID,
 	return err
 }
 
+func (r *ownedContinuityRuntime) ApplyMultiAgentProgress(ctx context.Context, parent *interaction.InteractionRecord, ref interaction.MultiAgentRecoveryRef) error {
+	if r == nil || r.engine == nil || parent == nil || parent.RecoveryDescriptor == nil || parent.RecoveryDescriptor.ParentTurn == nil || parent.RecoveryDescriptor.ParentTurn.ThreadID == "" {
+		return nil
+	}
+	scope := ref.OwnedScope
+	parentScope := parent.Scope.Normalize()
+	if scope == nil || scope.SpaceID != parentScope.SpaceID || scope.RoleID != parentScope.CharacterID || ref.CoordinationID == "" || scope.ResourceOwnerID != ref.ResourceOwnerID {
+		return coordination.ErrWrongOwner
+	}
+	statuses := make([]string, 0, len(ref.AssignmentRefs))
+	for _, assignment := range ref.AssignmentRefs {
+		statuses = append(statuses, assignment.Status)
+	}
+	payload := continuityRuntimePayload(map[string]any{"coordinationId": ref.CoordinationID, "parentInteractionId": parent.ID, "snapshotRevision": parent.UpdatedAt.UTC().Format(time.RFC3339Nano), "status": ref.Status, "cancelRequested": ref.CancelRequested, "assignmentStatuses": statuses, "verification": "requires_parent_review"})
+	requestID := continuityOwnerRequestID("multi-agent-progress|" + payload)
+	request := r.request(interaction.EntryOwner{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID}, scope.RoleID, requestID)
+	request.ExpectedScope = scope
+	threadID := parent.RecoveryDescriptor.ParentTurn.ThreadID
+	document, _, err := r.engine.Continuity(ctx, request, business.ContinuityMutation{ID: threadID, Action: "read", ExpectedScope: scope})
+	if err != nil {
+		return err
+	}
+	if document.ReadOnly || document.OwnerID != scope.ResourceOwnerID || document.Thread.CharacterID != scope.RoleID {
+		return coordination.ErrWrongOwner
+	}
+	if document.Thread.Status.IsTerminal() {
+		return nil
+	}
+	for _, event := range document.Events {
+		if event.EventType == "multi_agent.progress" && event.SourceID == ref.CoordinationID && event.PayloadJSON == payload {
+			return nil
+		}
+	}
+	event := business.ContinuityRuntimeEvent{EventType: "multi_agent.progress", SourceType: "multi_agent", SourceID: ref.CoordinationID, PayloadJSON: payload}
+	_, _, err = r.engine.Continuity(ctx, request, business.ContinuityMutation{ID: threadID, Action: "runtime_event", ExpectedScope: scope, ExpectedRevision: document.Thread.Revision, RuntimeEvent: &event})
+	return err
+}
+
 func runtimeTerminalContinuityStatus(status string) bool {
 	switch status {
 	case "succeeded", "completed", "failed", "cancelled", "canceled", "interrupted", "timed_out", "timeout", "cancel_timeout", "cancel_failed", "dropped", "compensated", "compensation_failed", "manual_intervention_required", "manual_intervention":

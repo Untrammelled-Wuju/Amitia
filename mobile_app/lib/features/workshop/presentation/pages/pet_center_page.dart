@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
+
 import '../../../../app/app_routes.dart';
-import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../desktop_pet/infrastructure/desktop_pet_plugin_dto.dart';
 import '../../../desktop_pet/presentation/controllers/desktop_pet_plugin_controller_provider.dart';
 
@@ -20,7 +19,6 @@ class PetCenterPage extends ConsumerStatefulWidget {
 }
 
 class _PetCenterPageState extends ConsumerState<PetCenterPage> {
-  List<Map<String, dynamic>> _tasks = [];
   List<DesktopPetPluginSummary> _plugins = [];
   bool _loading = true;
   String? _error;
@@ -37,34 +35,17 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       _error = null;
     });
     try {
-      final api = ref.read(backendServiceProvider);
-      final desktopPetApi = ref.read(desktopPetPluginApiProvider);
-      final results = await Future.wait([
-        api.get<Map<String, dynamic>>(
-          '/api/desktop-pets/generation-tasks',
-          queryParameters: {'page': 1, 'pageSize': 100},
-        ),
-        desktopPetApi.list(),
-      ]);
-      final response = results[0];
-      final items = response is Map ? response['items'] : null;
-      if (items is! List) {
-        throw StateError('桌宠生成任务列表返回格式无效');
-      }
+      final plugins = await ref.read(desktopPetPluginApiProvider).list();
       if (mounted) {
         setState(() {
-          _tasks = items
-              .whereType<Map>()
-              .map((item) => Map<String, dynamic>.from(item))
-              .toList();
-          _plugins = (results[1] as DesktopPetPluginList).plugins;
+          _plugins = plugins.plugins;
           _loading = false;
         });
       }
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = error.toString();
           _loading = false;
         });
       }
@@ -74,7 +55,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
   @override
   Widget build(BuildContext context) {
     final appBar = AmitiaAppBar(
-      title: '桌宠制作',
+      title: '桌宠中心',
       showBackButton: true,
       fallbackRoute: AppRoutes.workshop,
     );
@@ -93,20 +74,8 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       );
     }
 
-    final running = _plugins.where((p) => p.enabled).toList();
+    final running = _plugins.where((plugin) => plugin.enabled).toList();
     final runningPet = running.isNotEmpty ? running.first : null;
-
-    final activeTasks = _tasks.where((s) {
-      final status = s['status']?.toString() ?? '';
-      return !{
-        'succeeded',
-        'completed',
-        'failed',
-        'cancelled',
-      }.contains(status);
-    }).toList();
-
-    final recentTasks = _tasks.take(3).toList();
 
     return AmitiaScaffold(
       appBar: appBar,
@@ -122,17 +91,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
             SizedBox(height: AppSpacing.sm),
             _buildQuickActions(context),
             SizedBox(height: AppSpacing.sectionGap),
-            AmitiaSectionHeader(
-              title: '生成任务',
-              actionText: '查看全部',
-              onAction: () => context.push(AppRoutes.workshopPetTasks),
-            ),
-            SizedBox(height: AppSpacing.sm),
-            _buildTaskListCard(context, activeTasks),
-            SizedBox(height: AppSpacing.sectionGap),
-            const AmitiaSectionHeader(title: '最近记录'),
-            SizedBox(height: AppSpacing.sm),
-            _buildRecentRecords(context, recentTasks),
+            _buildOverview(context),
           ],
         ),
       ),
@@ -141,10 +100,9 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   Widget _buildRunningPetCard(
     BuildContext context,
-    DesktopPetPluginSummary pet,
+    DesktopPetPluginSummary plugin,
   ) {
-    final name = pet.name;
-
+    final name = plugin.name;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
@@ -176,13 +134,13 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
                   Text(name, style: AppTypography.cardTitle(context)),
                   const SizedBox(height: 2),
                   Text(
-                    '${pet.description} · v${pet.version}',
+                    '${plugin.description} · v${plugin.version}',
                     style: AppTypography.caption(context),
                   ),
                 ],
               ),
             ),
-            AmitiaStatusBadge(label: '运行中', type: BadgeType.success),
+            const AmitiaStatusBadge(label: '已启用', type: BadgeType.success),
           ],
         ),
       ),
@@ -192,16 +150,11 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
   Widget _buildQuickActions(BuildContext context) {
     final actions = [
       (
-        Icons.add_circle_outline,
-        '创建桌宠',
-        () => context.push(AppRoutes.workshopPetCreate),
-      ),
-      (Icons.list_alt, '任务列表', () => context.push(AppRoutes.workshopPetTasks)),
-      (
         Icons.install_desktop,
         '安装管理',
         () => context.push(AppRoutes.workshopPetInstallations),
       ),
+      (Icons.pets, '桌宠运行', () => context.push(AppRoutes.desktopPet)),
     ];
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
@@ -247,202 +200,25 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     );
   }
 
-  Widget _buildTaskListCard(
-    BuildContext context,
-    List<Map<String, dynamic>> tasks,
-  ) {
-    if (tasks.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-        child: AmitiaCard(
-          child: AmitiaEmptyState(
-            icon: Icons.check_circle_outline,
-            title: '没有进行中的任务',
-            subtitle: '创建桌宠后可在这里查看生成进度',
-          ),
-        ),
-      );
-    }
+  Widget _buildOverview(BuildContext context) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Column(
+        child: Row(
           children: [
-            for (int i = 0; i < tasks.length; i++) ...[
-              _buildTaskItem(context, tasks[i]),
-              if (i < tasks.length - 1)
-                Divider(height: 1, color: context.borderSecondary),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTaskItem(BuildContext context, Map<String, dynamic> task) {
-    final name = task['name']?.toString() ?? '';
-    final selectedActionCount = (task['selectedActionCount'] is num)
-        ? (task['selectedActionCount'] as num).toInt()
-        : 0;
-    final progress = (task['progress'] is num)
-        ? (task['progress'] as num).toInt().clamp(0, 100)
-        : 0;
-    final status = task['status']?.toString() ?? '';
-    final taskId = task['id']?.toString() ?? '';
-
-    return GestureDetector(
-      onTap: () => context.push(AppRoutes.petProcessing(taskId)),
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: AppSpacing.cardPadding,
-          vertical: 12,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(name, style: AppTypography.body(context))),
-                AmitiaStatusBadge(
-                  label: _statusLabel(status),
-                  type: _statusBadgeType(status),
-                ),
-              ],
-            ),
-            SizedBox(height: AppSpacing.xs),
-            Row(
-              children: [
-                Text(
-                  '$selectedActionCount 个动作',
-                  style: AppTypography.caption(context),
-                ),
-                SizedBox(width: AppSpacing.md),
-                Expanded(child: AmitiaProgressBar(progress: progress / 100.0)),
-                SizedBox(width: AppSpacing.sm),
-                Text('$progress%', style: AppTypography.caption(context)),
-              ],
+            Icon(Icons.extension_outlined, color: context.accentPrimary),
+            SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                _plugins.isEmpty
+                    ? '暂无已安装的桌宠插件'
+                    : '已安装 ${_plugins.length} 个桌宠插件，其中 ${_plugins.where((item) => item.enabled).length} 个已启用',
+                style: AppTypography.body(context),
+              ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildRecentRecords(
-    BuildContext context,
-    List<Map<String, dynamic>> records,
-  ) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: AmitiaCard(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Column(
-          children: [
-            for (int i = 0; i < records.length; i++) ...[
-              _buildRecordItem(context, records[i]),
-              if (i < records.length - 1)
-                Divider(height: 1, color: context.borderSecondary),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecordItem(BuildContext context, Map<String, dynamic> task) {
-    final name = task['name']?.toString() ?? '';
-    final modelName = task['modelName']?.toString() ?? '';
-    final createdAt = task['createdAt']?.toString() ?? '';
-    final status = task['status']?.toString() ?? '';
-
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: AppSpacing.cardPadding,
-        vertical: 10,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: context.accentSoft,
-              borderRadius: AppRadius.brExtraSmall,
-            ),
-            child: Icon(
-              Icons.pets_outlined,
-              size: 18,
-              color: context.accentPrimary,
-            ),
-          ),
-          SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: AppTypography.body(context)),
-                const SizedBox(height: 2),
-                Text(
-                  [
-                    modelName,
-                    createdAt,
-                  ].where((value) => value.isNotEmpty).join(' · '),
-                  style: AppTypography.label(context),
-                ),
-              ],
-            ),
-          ),
-          AmitiaStatusBadge(
-            label: _statusLabel(status),
-            type: _statusBadgeType(status),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'pending':
-        return '待处理';
-      case 'queued':
-        return '排队中';
-      case 'running':
-        return '生成中';
-      case 'processing':
-        return '处理中';
-      case 'completed':
-      case 'succeeded':
-        return '已完成';
-      case 'failed':
-        return '生成失败';
-      case 'cancelling':
-        return '取消中';
-      case 'cancelled':
-        return '已取消';
-      default:
-        return status;
-    }
-  }
-
-  BadgeType _statusBadgeType(String status) {
-    switch (status) {
-      case 'pending':
-        return BadgeType.neutral;
-      case 'processing':
-      case 'running':
-      case 'cancelling':
-        return BadgeType.accent;
-      case 'completed':
-      case 'succeeded':
-        return BadgeType.success;
-      case 'cancelled':
-      case 'failed':
-        return BadgeType.error;
-      default:
-        return BadgeType.neutral;
-    }
   }
 }

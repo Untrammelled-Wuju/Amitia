@@ -36,7 +36,7 @@ void main() {
     final about = categories.firstWhere((item) => item.id == 'about');
     expect(
       advanced.group.items.map((item) => item.title),
-      containsAll(['界面提供者', 'Core 运行模式', '开发者模式']),
+      containsAll(['界面提供者', '开发者模式']),
     );
     expect(
       advanced.group.items.map((item) => item.title),

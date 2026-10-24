@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,82 +35,6 @@ var (
 	linuxCgroupHandles   = make(map[ProcessTreeHandle]string)
 	linuxCgroupSequence  atomic.Uint64
 )
-
-func attachProcessTreeWithLimits(cmd *exec.Cmd, limits ResourceLimits) (ProcessTreeHandle, error) {
-	if strings.TrimSpace(os.Getenv("AMITIA_RUNTIME_MODE")) == "android-proot" {
-		return attachProcessTree(cmd)
-	}
-	if limits.MaxMemoryBytes == 0 && limits.MaxCPUPercent == 0 && limits.MaxProcesses == 0 {
-		return attachProcessTree(cmd)
-	}
-	if cmd == nil || cmd.Process == nil || cmd.Process.Pid <= 0 {
-		return 0, fmt.Errorf("process: cgroup attach requires a started process")
-	}
-
-	support := resourceLimitSupport()
-	if limits.MaxMemoryBytes > 0 && !support.Memory {
-		return 0, fmt.Errorf("process: cgroup v2 memory limit is unavailable")
-	}
-	if limits.MaxCPUPercent > 0 && !support.CPU {
-		return 0, fmt.Errorf("process: cgroup v2 CPU limit is unavailable")
-	}
-	if limits.MaxProcesses > 0 && !support.Processes {
-		return 0, fmt.Errorf("process: cgroup v2 process limit is unavailable")
-	}
-
-	parent, err := currentCgroupV2Dir()
-	if err != nil {
-		return 0, err
-	}
-	seq := linuxCgroupSequence.Add(1)
-	name := fmt.Sprintf("amitia-gamehost-%d-%d", cmd.Process.Pid, seq)
-	group := filepath.Join(parent, name)
-	if err := os.Mkdir(group, 0o755); err != nil {
-		return 0, fmt.Errorf("process: create cgroup %s: %w", group, err)
-	}
-	cleanup := func() { _ = os.Remove(group) }
-
-	if limits.MaxMemoryBytes > 0 {
-		if err := writeCgroupValue(group, "memory.max", strconv.FormatUint(limits.MaxMemoryBytes, 10)); err != nil {
-			cleanup()
-			return 0, err
-		}
-	}
-	if limits.MaxCPUPercent > 0 {
-		pct := limits.MaxCPUPercent
-		if pct > 100 {
-			pct = 100
-		}
-		const periodMicros = uint64(100000)
-		quota := periodMicros * uint64(pct) / 100
-		if quota == 0 {
-			quota = 1
-		}
-		if err := writeCgroupValue(group, "cpu.max", fmt.Sprintf("%d %d", quota, periodMicros)); err != nil {
-			cleanup()
-			return 0, err
-		}
-	}
-	if limits.MaxProcesses > 0 {
-		if err := writeCgroupValue(group, "pids.max", strconv.FormatUint(uint64(limits.MaxProcesses), 10)); err != nil {
-			cleanup()
-			return 0, err
-		}
-	}
-	if err := writeCgroupValue(group, "cgroup.procs", strconv.Itoa(cmd.Process.Pid)); err != nil {
-		cleanup()
-		return 0, err
-	}
-
-	handle := ProcessTreeHandle(linuxCgroupSequence.Add(1))
-	if handle == 0 {
-		handle = ProcessTreeHandle(linuxCgroupSequence.Add(1))
-	}
-	linuxCgroupMu.Lock()
-	linuxCgroupHandles[handle] = group
-	linuxCgroupMu.Unlock()
-	return handle, nil
-}
 
 func resourceLimitSupport() ResourceLimitSupport {
 	linuxCgroupProbeOnce.Do(func() {
@@ -205,6 +128,11 @@ func cgroupPathForHandle(handle ProcessTreeHandle) string {
 }
 
 func forceStopProcessTree(pid int, handle ProcessTreeHandle) error {
+	return terminateProcessTree(pid, handle)
+}
+
+func terminateProcessTree(pid int, handle ProcessTreeHandle) error {
+
 	if group := cgroupPathForHandle(handle); group != "" {
 		if _, err := os.Stat(filepath.Join(group, "cgroup.kill")); err == nil {
 			if err := writeCgroupValue(group, "cgroup.kill", "1"); err == nil {
@@ -212,10 +140,6 @@ func forceStopProcessTree(pid int, handle ProcessTreeHandle) error {
 			}
 		}
 	}
-	return terminateProcessTree(pid, handle)
-}
-
-func terminateProcessTree(pid int, _ ProcessTreeHandle) error {
 	if pid <= 0 {
 		return nil
 	}

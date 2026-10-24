@@ -7,8 +7,16 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="header-leading">
       <div class="header-info">
         <span class="header-conv-name">{{ convTitle || "新对话" }}</span>
-        <span class="header-brand-desc">Amitia · AI 陪伴角色</span>
       </div>
+      <span
+        v-if="charAvatar || charName"
+        class="header-character-avatar"
+        :title="charName ? `当前角色：${charName}` : '当前角色'"
+        :aria-label="charName ? `当前角色：${charName}` : '当前角色'"
+      >
+        <img v-if="charAvatar" :src="charAvatar" :alt="charName || '当前角色'" />
+        <span v-else>{{ characterInitial }}</span>
+      </span>
     </div>
 
     <div class="header-actions">
@@ -72,6 +80,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import {
   MoreFilled,
   Delete,
@@ -87,7 +96,7 @@ import {
   Document,
 } from "@element-plus/icons-vue";
 
-defineProps<{
+const props = defineProps<{
   charName: string;
   charAvatar?: string;
   charIdentity: string;
@@ -99,6 +108,7 @@ defineProps<{
   callActive: boolean;
   hasSummary?: boolean;
 }>();
+const characterInitial = computed(() => String(props.charName || "角").trim().slice(0, 1).toUpperCase());
 
 const emit = defineEmits<{
   clear: [];
@@ -141,18 +151,18 @@ function handleMoreCommand(command: string | number | object) {
   border-bottom: 1px solid transparent;
   flex-shrink: 0;
 }
-.header-leading { display: flex; align-items: center; min-width: 0; gap: 8px; }
+.header-leading { display: flex; flex: 1; align-items: center; min-width: 0; gap: 8px; overflow: hidden; }
 .header-avatar { flex: 0 0 auto; background: var(--control-active-bg); color: var(--text-primary); font-size: 11px; }
-.header-info { display: flex; flex-direction: column; justify-content: center; min-width: 0; max-width: 280px; }
+.header-info { display: flex; flex: 0 1 auto; flex-direction: column; justify-content: center; min-width: 0; max-width: none; }
 .header-conv-name { overflow: hidden; color: var(--text-primary); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.header-brand-desc { margin-top: 1px; overflow: hidden; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.header-character-avatar { display: grid; place-items: center; width: 20px; height: 20px; flex: 0 0 20px; overflow: hidden; border-radius: 50%; background: var(--control-active-bg); color: var(--text-primary); font-size: 9px; font-weight: 650; line-height: 1; }
+.header-character-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .header-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
 .header-icon-btn { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px; }
 .header-icon-btn:hover, .header-icon-btn:focus-visible { background: var(--control-hover-bg); color: var(--text-primary); outline: none; }
 .header-icon-btn.active { background: var(--control-active-bg); color: var(--text-primary); }
 @media (max-width: 760px) {
   .chat-header { padding-inline: 8px; }
-  .header-brand-desc { display: none; }
   .header-info { max-width: 120px; }
 }
 </style>

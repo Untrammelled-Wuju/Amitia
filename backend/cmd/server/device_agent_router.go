@@ -11,13 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/character"
-	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/device"
-	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
-	"github.com/u-ai/backend/internal/desktoppet/processing"
-	"github.com/u-ai/backend/internal/desktoppet/quality"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	desktoppetruntime "github.com/u-ai/backend/internal/desktoppet/runtime"
@@ -358,11 +354,6 @@ func registerDeviceAgentDesktopPetRoutes(
 	))
 	petAPI.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 	{
-		desktoppet.RegisterDesktopPetRouter(petAPI, ctx, services.PathRegistry)
-		desktoppet.RegisterDesktopPetWriteRouter(petAPI, ctx, services.PathRegistry)
-		processing.RegisterProcessingRouter(petAPI, ctx, services.PathRegistry)
-		editing.RegisterEditingRouterWithService(petAPI, services.EditingService, services.OwnershipGuard, services.PathRegistry)
-		quality.RegisterQualityRouter(petAPI, services.QualityService, services.OwnershipGuard)
 		installation.RegisterRoutes(petAPI, services.InstallationCoordinator, services.InstallationRepo, services.OwnershipGuard)
 		release.RegisterRoutes(petAPI, services.NewReleaseService, services.OwnershipGuard)
 		registerImportStagingRoutes(petAPI, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
@@ -391,21 +382,6 @@ func registerDeviceAgentDesktopPetRoutes(
 func deviceAgentDesktopPetReady(services *AppServices) error {
 	if services == nil {
 		return fmt.Errorf("desktop pet services not initialized")
-	}
-	if services.DesktopPetWorker == nil || !services.DesktopPetWorker.IsRunning() {
-		return fmt.Errorf("desktop pet generation worker not running")
-	}
-	if services.ProcessingWorker == nil || !services.ProcessingWorker.IsRunning() {
-		return fmt.Errorf("desktop pet processing worker not running")
-	}
-	if services.QualityWorker == nil || !services.QualityWorker.IsRunning() {
-		return fmt.Errorf("desktop pet quality worker not running")
-	}
-	if services.RegenerationWorker == nil || !services.RegenerationWorker.IsRunning() {
-		return fmt.Errorf("desktop pet regeneration worker not running")
-	}
-	if services.BridgeRecoveryWorker == nil || !services.BridgeRecoveryWorker.IsRunning() {
-		return fmt.Errorf("desktop pet revision bridge recovery worker not running")
 	}
 	if services.InstallationProjectionBridge == nil || !services.InstallationProjectionBridge.IsRunning() {
 		return fmt.Errorf("desktop pet installation projection bridge not running")

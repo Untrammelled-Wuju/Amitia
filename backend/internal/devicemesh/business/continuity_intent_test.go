@@ -7,7 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
-func TestContinuityOriginalIntentRejectsModeABAAndForeignRealm(t *testing.T) {
+func TestContinuityOriginalIntentRejectsOwnershipChangeAndForeignRealm(t *testing.T) {
 	engine, db, service, _ := engineHarness(t)
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "create-original"}
 	query, err := engine.Query(t.Context(), request, coordination.DataQuery{})
@@ -19,15 +19,12 @@ func TestContinuityOriginalIntentRejectsModeABAAndForeignRealm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 2, false, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request.RequestID = "old-resume"
 	if _, _, err := engine.Continuity(t.Context(), request, ContinuityMutation{ID: created.Thread.ID, Action: "resume", ExpectedRevision: 1, ExpectedScope: &original}); !errors.Is(err, coordination.ErrScopeExpired) {
-		t.Fatalf("old form after mode ABA admitted: %v", err)
+		t.Fatalf("old form after ownership change admitted: %v", err)
 	}
 	query, err = engine.Query(t.Context(), request, coordination.DataQuery{})
 	if err != nil {
@@ -41,10 +38,5 @@ func TestContinuityOriginalIntentRejectsModeABAAndForeignRealm(t *testing.T) {
 	rows, err := coordination.NewOwnershipStore(db, "a").List(t.Context(), "continuity", "role", false)
 	if err != nil || len(rows) != 1 || rows[0].Revision != 1 {
 		t.Fatalf("rejected intent changed owner data: %+v %v", rows, err)
-	}
-	request.RequestID = "explicit-current-resume"
-	resumed, _, err := engine.Continuity(t.Context(), request, ContinuityMutation{ID: created.Thread.ID, Action: "resume", ExpectedRevision: 1, ExpectedScope: &query.Scope})
-	if err != nil || resumed.Thread.Revision != 2 {
-		t.Fatalf("fresh explicit resume failed: %+v %v", resumed, err)
 	}
 }

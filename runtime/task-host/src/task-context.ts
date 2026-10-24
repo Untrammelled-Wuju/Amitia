@@ -7,6 +7,7 @@ import type {
   TaskArtifactOptions,
   TaskStorageClient,
   TaskHostClient,
+  TaskEffectOptions,
 } from "@amitia/plugin-sdk/tasks";
 import type { RpcClient } from "./rpc.js";
 import { CheckpointClient } from "./checkpoint.js";
@@ -139,6 +140,15 @@ export class StorageClient implements TaskStorageClient {
   }
 }
 
+export function validateTaskEffectID(options?: TaskEffectOptions): string | undefined {
+  if (options === undefined || options.effectId === undefined) return undefined;
+  const id = options.effectId;
+  if (typeof id !== "string" || !/^[a-zA-Z0-9_.:-]{1,128}$/.test(id)) {
+    throw new Error("任务稳定效果编号必须为1-128位ASCII字母、数字、_ . : -");
+  }
+  return id;
+}
+
 export class HostClient implements TaskHostClient {
   readonly capabilities: Readonly<{ executeTool: boolean; emitEvent: boolean }>;
   constructor(
@@ -152,11 +162,13 @@ export class HostClient implements TaskHostClient {
     });
   }
 
-  async executeTool(toolId: string, input: unknown, timeoutMs?: number): Promise<unknown> {
+  async executeTool(toolId: string, input: unknown, timeoutMs?: number, options?: TaskEffectOptions): Promise<unknown> {
+    const effectId = validateTaskEffectID(options);
     const response = await this.rpc.call<{ result: unknown }>(
       "task.host.executeTool",
       {
         task_run_id: this.taskRunId,
+        ...(effectId ? { effect_id: effectId } : {}),
         tool_id: toolId,
         input,
         timeout_ms: timeoutMs,
@@ -165,9 +177,11 @@ export class HostClient implements TaskHostClient {
     return response.result;
   }
 
-  async emitEvent(type: string, payload: unknown): Promise<void> {
+  async emitEvent(type: string, payload: unknown, options?: TaskEffectOptions): Promise<void> {
+    const effectId = validateTaskEffectID(options);
     const ack = await this.rpc.call<{ confirmed: boolean; eventId: string; outboxId: string }>("task.host.emitEvent", {
       task_run_id: this.taskRunId,
+      ...(effectId ? { effect_id: effectId } : {}),
       type,
       payload,
     });

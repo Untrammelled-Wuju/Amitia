@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import UserSettingsView from "../views/user-settings/UserSettingsView.vue";
 import SpaceIdentityView from "../views/user-settings/SpaceIdentityView.vue";
 import MySpaceRuntimeView from "../views/user-settings/MySpaceRuntimeView.vue";
-import ModeSwitchPanel from "../views/runtime-mode/components/ModeSwitchPanel.vue";
 
 vi.mock("../composables/useApi", () => ({
   apiClient: {
@@ -39,35 +38,15 @@ describe("我的空间内容层级", () => {
     } finally { wrapper.unmount(); }
   });
 
-  it("服务端部署形态独立于设备连接目标，修改前明确告知不迁移服务", async () => {
-    const wrapper = mount(ModeSwitchPanel, {
-      props: { modeDeployMode: "desktop-local", switching: false },
-      global: { plugins: [ElementPlus] },
-    });
-    try {
-      expect(wrapper.get(".section-title").text()).toBe("修改当前 Core 的服务端部署形态");
-      expect(wrapper.get(".mode-scope-note").text()).toContain("不会切换这台设备连接的服务器");
-      expect(wrapper.findAll(".mo-label").map(item => item.text())).toEqual(["本机 Core 部署", "Core 私有云部署"]);
-      await wrapper.findAll(".mode-option")[1].trigger("click");
-      expect(wrapper.get(".impact-box").text()).toContain("不会自动迁移至云服务器");
-      expect(wrapper.get(".impact-actions .el-button").text()).toContain("确认修改 Core 为私有云部署配置");
-      await wrapper.get(".impact-actions .el-button").trigger("click");
-      expect(wrapper.emitted("confirmSwitch")?.[0]).toEqual(["cloud-web"]);
-    } finally { wrapper.unmount(); }
-  });
-
-  it("运行模式保留常用连接配置并收纳高级 Core 参数", () => {
+  it("运行模式只保留连接与配对配置", () => {
     const wrapper = mount(MySpaceRuntimeView, {
       global: { stubs: {
         DeploymentPanel: { template: '<div data-testid="deployment">连接方式</div>' },
-        RuntimeModeView: { template: '<div data-testid="runtime-detail">Core 参数</div>' },
       } },
     });
     try {
       expect(wrapper.find('[data-testid="deployment"]').exists()).toBe(true);
-      expect(wrapper.get(".runtime-advanced").element.hasAttribute("open")).toBe(false);
-      expect(wrapper.get(".runtime-advanced summary").text()).toContain("Core 服务端设置");
-      expect(wrapper.find('[data-testid="runtime-detail"]').exists()).toBe(true);
+      expect(wrapper.find(".runtime-advanced").exists()).toBe(false);
     } finally { wrapper.unmount(); }
   });
 });

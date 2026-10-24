@@ -73,7 +73,6 @@ type Service interface {
 	SetArtifactResolver(resolver ArtifactResolver)
 	SetArtifactImporter(importer MessageArtifactImporter)
 	GetArtifactResolver() ArtifactResolver
-	SetWorkspaceAvailabilityResolver(resolver WorkspaceAvailabilityResolver)
 }
 
 type ArtifactResolver interface {
@@ -94,10 +93,6 @@ type ArtifactResolution struct {
 	Filename     string
 	Status       string
 	Revision     int64
-}
-
-type WorkspaceAvailabilityResolver interface {
-	ResolveWorkspaceAvailability(workspaceID string) (available bool, status string, reason string)
 }
 
 type service struct {
@@ -132,7 +127,6 @@ type service struct {
 	localModels          map[string]LocalModelInfer
 	cleanupMu            sync.Mutex
 	cleanupPlans         map[string]cleanupPlan
-	workspaceResolver    WorkspaceAvailabilityResolver
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -197,10 +191,6 @@ func (s *service) SetArtifactImporter(importer MessageArtifactImporter) {
 
 func (s *service) GetArtifactResolver() ArtifactResolver {
 	return s.artifactResolver
-}
-
-func (s *service) SetWorkspaceAvailabilityResolver(resolver WorkspaceAvailabilityResolver) {
-	s.workspaceResolver = resolver
 }
 
 type ResolvedAttachment struct {

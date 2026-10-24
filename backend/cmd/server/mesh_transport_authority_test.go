@@ -390,7 +390,7 @@ func TestOwnedAuthorityAcrossRealTLSMeshReconnectAndPermissionChange(t *testing.
 	case <-nativeWait.Done():
 		t.Fatal("native scoped action did not start")
 	}
-	policy, err := rt.Coordination.ChangeMode(nativeWait, "core", "caller", 1, true, "one")
+	policy, err := rt.Coordination.InitializeCoordinated(nativeWait, "core", "caller", 1, "one")
 	if err != nil || policy.PermissionRevision <= scope.PermissionRevision {
 		t.Fatalf("live source did not acknowledge authority barrier: %+v %v", policy, err)
 	}

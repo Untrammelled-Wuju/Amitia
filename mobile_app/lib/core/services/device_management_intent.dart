@@ -58,7 +58,7 @@ class DeviceManagementIntent {
 
   void requireAdministrator() {
     assertConnection();
-    if (!canAdminister) throw StateError('只有开启统筹模式的当前Core管理员可以管理设备');
+    if (!canAdminister) throw StateError('只有获授权的云端统筹 Core 管理员可以管理设备');
   }
 
   void validate(Map<String, dynamic> state, {int permissionIncrement = 0}) {

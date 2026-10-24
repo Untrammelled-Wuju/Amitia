@@ -82,7 +82,7 @@ func TestUsageRealTLSOwnerModesAndReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	core.request(t, phone, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
 	view = read("/api/usage/overview")
 	if view["businessOwnerId"] != core.core || view["messageCount"] != float64(0) {
 		t.Fatalf("coordinated Owner not isolated: %+v", view)

@@ -234,6 +234,8 @@ const emit = defineEmits<{
   closeImport: [];
   toggleImportDetail: [];
   scrollToBottom: [];
+  contentLoading: [conversationId: string];
+  contentReady: [conversationId: string];
 }>();
 
 const store = useExtensionUIStore();
@@ -578,8 +580,13 @@ async function loadClientRuntimeSession(id: string) {
 
 watch(() => [conversationId.value, historyMessages.value, projectionContributions.value] as const, rebuildConversationEventLog, { deep: true });
 watch(conversationId, (id) => {
-  void loadDurableConversationEventWindow(id);
-  void loadClientRuntimeSession(id);
+  emit("contentLoading", id);
+  void Promise.allSettled([
+    loadDurableConversationEventWindow(id),
+    loadClientRuntimeSession(id),
+  ]).then(() => {
+    if (id === conversationId.value) emit("contentReady", id);
+  });
 }, { immediate: true });
 
 function messageContext(

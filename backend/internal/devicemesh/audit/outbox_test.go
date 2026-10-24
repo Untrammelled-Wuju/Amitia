@@ -220,7 +220,7 @@ func TestAuthorityChangesQueueRealActorAndAuditFailureRollsBack(t *testing.T) {
 	kernel, main := databases(t)
 	service := coordination.NewService(kernel)
 	ctx := auth.WithActor(t.Context(), &auth.ActorContext{SpaceID: runtimeidentity.SpaceID("core"), DeviceID: runtimeidentity.DeviceID("administrator"), PrincipalType: auth.PrincipalLocalUI, AuthMethod: "desktop_session", IsLocalTrusted: true})
-	policy, err := service.ChangeMode(ctx, "core", "phone", 1, true, "role")
+	policy, err := service.InitializeCoordinated(ctx, "core", "phone", 1, "role")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestAuthorityChangesQueueRealActorAndAuditFailureRollsBack(t *testing.T) {
 	if _, err := kernel.Exec(`CREATE TRIGGER reject_queue BEFORE INSERT ON kernel_security_audit_outbox BEGIN SELECT RAISE(ABORT,'audit unavailable'); END`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeMode(ctx, "core", "phone", before.ModeRevision, false, ""); err == nil {
+	if _, err := service.InitializeCoordinated(ctx, "core", "phone", before.ModeRevision, "role"); err == nil {
 		t.Fatal("audit failure was ignored")
 	}
 	after, err := service.Get(ctx, "core", "phone")

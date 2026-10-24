@@ -24,7 +24,7 @@ func TestCurrentAdministratorReadsCoreTaskAfterOriginalDeviceRevoked(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy, err := rt.Coordination.ChangeMode(t.Context(), "core", "admin", 1, true, "current-role")
+	policy, err := rt.Coordination.InitializeCoordinated(t.Context(), "core", "admin", 1, "current-role")
 	if err != nil {
 		t.Fatal(err)
 	}

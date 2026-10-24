@@ -3,29 +3,21 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <main class="task-workspace" aria-labelledby="task-page-title">
+  <main class="task-workspace" aria-label="主动任务">
     <header class="workspace-header">
-      <div>
-        <p class="eyebrow">陪伴，按时发生</p>
-        <h1 id="task-page-title">主动任务</h1>
-        <p class="page-description">统一管理定时任务、主动消息规则、执行状态和投递历史。</p>
-        <div class="task-kind-switch" role="group" aria-label="主动任务类型">
-          <el-radio-group v-model="taskKind" @change="switchTaskKind">
-            <el-radio-button value="user_reminder">定时任务</el-radio-button>
-            <el-radio-button value="proactive_task">主动消息</el-radio-button>
-          </el-radio-group>
-          <span>{{
-            taskKind === "user_reminder"
-              ? "按指定时间执行的一次性或重复任务"
-              : "由角色按规则、频率和安静时段主动发起消息"
-          }}</span>
-        </div>
+      <div class="task-kind-switch" role="group" aria-label="主动任务类型">
+        <el-radio-group v-model="taskKind" @change="switchTaskKind">
+          <el-radio-button value="user_reminder">定时任务</el-radio-button>
+          <el-radio-button value="proactive_task">主动消息</el-radio-button>
+        </el-radio-group>
+        <span>{{
+          taskKind === "user_reminder"
+            ? "按指定时间执行的一次性或重复任务"
+            : "由角色按规则、频率和安静时段主动发起消息"
+        }}</span>
       </div>
       <div class="header-actions">
-        <el-button :icon="Refresh" :loading="refreshing" @click="refreshWorkspace">刷新</el-button
-        ><el-button type="primary" :icon="Plus" :loading="openingEditor" @click="openCreate"
-          >新建任务</el-button
-        >
+        <el-button :icon="Refresh" :loading="refreshing" @click="refreshWorkspace">刷新</el-button>
       </div>
     </header>
     <section class="overview" aria-label="任务概览">
@@ -216,10 +208,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                     filterCharacterId = '';
                     activeGroup = '';
                   "
-                  >清除筛选</el-button
-                ><el-button v-else :icon="Plus" :loading="openingEditor" @click="openCreate"
-                  >新建任务</el-button
-                >
+                  >清除筛选</el-button>
               </div></template
             >
           </el-table>
@@ -606,6 +595,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Plus,
@@ -624,6 +614,9 @@ import { randomUUID } from "../../runtime/secure-random";
 import ProspectivePanel from "./components/ProspectivePanel.vue";
 import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue";
 import { requireSavedTask, currentOwnerConversations, validateChannelTargets } from "./contract";
+
+const route = useRoute();
+const router = useRouter();
 
 const props = withDefaults(defineProps<{ initialCharacterId?: string }>(), {
   initialCharacterId: "",
@@ -1263,7 +1256,18 @@ onMounted(async () => {
   reminderRefreshTimer = setInterval(() => void refreshReminderRuntime(), 5000);
   await fetchCleanupConfig();
   await fetchCharacterOptions();
+  await maybeOpenCreateFromQuery();
 });
+
+async function maybeOpenCreateFromQuery() {
+  if (String(route.query.create || "") !== "1" || openingEditor.value) return;
+  const query = { ...route.query };
+  delete query.create;
+  await router.replace({ path: route.path, query, hash: route.hash });
+  await openCreate();
+}
+
+watch(() => route.query.create, () => { void maybeOpenCreateFromQuery(); });
 
 watch(
   () => props.initialCharacterId,
@@ -1283,7 +1287,7 @@ onUnmounted(() => {
 .task-workspace {
   max-width: 1440px;
   margin: 0 auto;
-  padding: 32px;
+  padding: 0;
   color: var(--tp-text);
 }
 .workspace-header {
@@ -1293,30 +1297,11 @@ onUnmounted(() => {
   gap: 24px;
   margin-bottom: 28px;
 }
-.eyebrow {
-  margin: 0 0 8px;
-  color: var(--tp-text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-}
-h1 {
-  margin: 0;
-  font-size: 30px;
-  line-height: 1.3;
-  letter-spacing: -0.5px;
-  font-weight: 650;
-}
-.page-description {
-  margin: 10px 0 0;
-  color: var(--tp-text-secondary);
-  line-height: 1.6;
-  font-size: 14px;
-}
 .task-kind-switch {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 18px;
+  margin-top: 0;
 }
 .task-kind-switch > span {
   color: var(--tp-text-secondary);
@@ -1659,7 +1644,7 @@ h1 {
 }
 @media (max-width: 1100px) {
   .task-workspace {
-    padding: 24px;
+    padding: 0;
   }
   .overview {
     grid-template-columns: repeat(3, 1fr);
@@ -1675,7 +1660,7 @@ h1 {
 }
 @media (max-width: 760px) {
   .task-workspace {
-    padding: 16px;
+    padding: 0;
   }
   .workspace-header {
     align-items: flex-start;

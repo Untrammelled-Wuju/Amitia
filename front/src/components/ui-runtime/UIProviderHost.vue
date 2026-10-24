@@ -18,6 +18,7 @@ const props = defineProps<{
   fallback: Component;
   context?: UIProviderRenderContext;
   actions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
+  frameless?: boolean;
 }>();
 
 const store = useExtensionUIStore();
@@ -188,6 +189,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
       :context="mergedContext"
       :slot-id="surfaceSlotId"
       :host-actions="actions"
+      :frameless="frameless"
       @error="advanceFallback"
     />
   </div>
@@ -215,6 +217,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     :context="mergedContext"
     :slot-id="surfaceSlotId"
     :host-actions="actions"
+    :frameless="frameless"
     @error="advanceFallback"
   />
 

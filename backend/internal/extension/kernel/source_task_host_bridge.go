@@ -130,8 +130,7 @@ func (b *sourceTaskHostBridge) Execute(ctx context.Context, run *task_runtime.Ta
 	}
 	current, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
-	idHash := sha256.Sum256([]byte(run.TaskRunID + "\x00" + run.ExecutionAttemptID.String() + "\x00" + requestID))
-	id := "task-native-" + hex.EncodeToString(idHash[:16])
+	id := task_runtime.TaskHostNativeInvocationID(run, requestID, call)
 	target.ExtensionID, target.ModuleID = definition.ExtensionID, definition.ModuleID
 	invocation := capability.ToolInvocationContext{InvocationID: id, ParentID: run.InvocationID, RootID: run.InvocationID, ExternalCallID: id, SpaceID: scope.SpaceID, CharacterID: scope.RoleID, ExtensionID: definition.ExtensionID, ModuleID: definition.ModuleID, Generation: pin.InstalledGeneration, Source: capability.InvocationSourcePlugin, ApprovalMode: capability.ApprovalModeManual, TraceID: id, OperationID: scope.RequestID, IsBackground: true, DeadlineDuration: deadline, IdempotencyKey: id, ExecutionTarget: target}
 	if definition.RemoteSource == nil {

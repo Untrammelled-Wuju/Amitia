@@ -22,13 +22,13 @@ func TestPrivacyDeletionRealTLSModesAndActualReadBlocking(t *testing.T) {
 	pairThreeCoreFixtures(t, phone, core)
 	pairThreeCoreFixtures(t, desktop, core)
 	const endpoint = "/api/privacy/deletion/"
-	for _, coordinated := range []bool{false, true} {
+	for _, coordinated := range []bool{true} {
 		if coordinated {
 			policy, err := core.services.DeviceMesh.Coordination.Get(t.Context(), core.core, phone.device.DeviceID.String())
 			if err != nil {
 				t.Fatal(err)
 			}
-			core.request(t, phone, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+			ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
 		}
 		id := uuid.NewString()
 		reply := decodeThreeCoreMemoryResponse[business.Response](t, core.request(t, phone, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": id, "characterId": "one", "message": "需要删除的私有测试消息"}, 200))
@@ -144,7 +144,7 @@ func TestPrivacyDeletionLegacyHistoricalAndFailureRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	core.request(t, phone, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
 	result := remove("legacy-delete-two", false)
 	if result["ownerId"] != phone.device.DeviceID.String() {
 		t.Fatal("historical deletion was routed to Core")
@@ -234,7 +234,7 @@ func TestPrivacyDeletionLegacyJobMigrationAndVersionFence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	core.request(t, phone, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
 	policy, err = core.services.DeviceMesh.Coordination.Get(t.Context(), core.core, phone.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)

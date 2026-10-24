@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,6 +16,9 @@ import (
 	"sync"
 	"time"
 )
+
+var ErrSequenceConflict = errors.New("conversation event sequence conflict")
+var ErrDurableSequenceRollback = errors.New("conversation event log rolled back behind durable snapshot")
 
 type ConversationSnapshot struct {
 	ConversationID    string `json:"conversationId"`
@@ -62,16 +66,36 @@ func (s *FileStore) Persist(ctx context.Context, event AgentUIEvent) error {
 	state := s.state(conversationID)
 	state.mu.Lock()
 	defer state.mu.Unlock()
+	release, err := s.lockConversation(ctx, conversationID)
+	if err != nil {
+		return err
+	}
+	defer release()
+	state.loaded = false
 	if err := s.loadLocked(state, conversationID); err != nil {
 		return err
+	}
+	if len(state.events) == 0 {
+		snapshot, err := s.readSnapshot(conversationID)
+		if err != nil {
+			return fmt.Errorf("read conversation event snapshot: %w", err)
+		}
+		if snapshot != nil && event.EventSequence <= snapshot.LastEventSequence {
+			return fmt.Errorf("%w: sequence %d is not newer than durable snapshot %d", ErrSequenceConflict, event.EventSequence, snapshot.LastEventSequence)
+		}
 	}
 	if len(state.events) > 0 {
 		last := state.events[len(state.events)-1]
 		if event.EventSequence <= last.EventSequence {
 			if event.EventSequence == last.EventSequence {
-				return nil
+				stored, storedErr := json.Marshal(last)
+				incoming, incomingErr := json.Marshal(event)
+				if storedErr == nil && incomingErr == nil && bytes.Equal(stored, incoming) {
+					return nil
+				}
+				return fmt.Errorf("%w: sequence %d has another event", ErrSequenceConflict, event.EventSequence)
 			}
-			return fmt.Errorf("conversation event sequence moved backwards: got %d after %d", event.EventSequence, last.EventSequence)
+			return fmt.Errorf("%w: sequence moved backwards: got %d after %d", ErrSequenceConflict, event.EventSequence, last.EventSequence)
 		}
 	}
 	path := s.path(conversationID)
@@ -98,10 +122,10 @@ func (s *FileStore) Persist(ctx context.Context, event AgentUIEvent) error {
 	state.events = append(state.events, cloneEvent(event))
 	if isTerminalEvent(event.Type) {
 		if err := s.writeSnapshotLocked(state, conversationID); err != nil {
-			return err
+			log.Printf("conversation event snapshot maintenance failed: %v", err)
 		}
 		if err := s.compactLocked(state, conversationID); err != nil {
-			return err
+			log.Printf("conversation event compaction maintenance failed: %v", err)
 		}
 	}
 	return nil
@@ -118,6 +142,12 @@ func (s *FileStore) ListAfter(ctx context.Context, conversationID string, afterS
 	state := s.state(conversationID)
 	state.mu.Lock()
 	defer state.mu.Unlock()
+	release, err := s.lockConversation(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	state.loaded = false
 	if err := s.loadLocked(state, conversationID); err != nil {
 		return nil, err
 	}
@@ -149,12 +179,21 @@ func (s *FileStore) LatestSequence(ctx context.Context, conversationID string) (
 	state := s.state(conversationID)
 	state.mu.Lock()
 	defer state.mu.Unlock()
+	release, err := s.lockConversation(ctx, conversationID)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	state.loaded = false
 	if err := s.loadLocked(state, conversationID); err != nil {
 		return 0, err
 	}
 	if len(state.events) == 0 {
 		snapshot, err := s.readSnapshot(conversationID)
-		if err == nil && snapshot != nil {
+		if err != nil {
+			return 0, fmt.Errorf("read conversation event snapshot: %w", err)
+		}
+		if snapshot != nil {
 			return snapshot.LastEventSequence, nil
 		}
 		return 0, nil
@@ -173,6 +212,12 @@ func (s *FileStore) Snapshot(ctx context.Context, conversationID string) (*Conve
 	state := s.state(conversationID)
 	state.mu.Lock()
 	defer state.mu.Unlock()
+	release, err := s.lockConversation(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	state.loaded = false
 	if err := s.loadLocked(state, conversationID); err != nil {
 		return nil, err
 	}
@@ -183,6 +228,44 @@ func (s *FileStore) Snapshot(ctx context.Context, conversationID string) (*Conve
 		return nil, err
 	}
 	return s.readSnapshot(conversationID)
+}
+
+func (s *FileStore) lockConversation(ctx context.Context, conversationID string) (func(), error) {
+	path := strings.TrimSuffix(s.path(conversationID), ".jsonl") + ".lock"
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("create conversation event lock directory: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open conversation event lock: %w", err)
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		acquired, err := tryFileLock(file)
+		if err != nil {
+			_ = file.Close()
+			return nil, fmt.Errorf("lock conversation event storage: %w", err)
+		}
+		if acquired {
+			return func() {
+				if err := unlockFile(file); err != nil {
+					log.Printf("unlock conversation event storage failed: %v", err)
+				}
+				_ = file.Close()
+			}, nil
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			_ = file.Close()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *FileStore) state(conversationID string) *fileConversationState {
@@ -202,6 +285,10 @@ func (s *FileStore) loadLocked(state *fileConversationState, conversationID stri
 	}
 	data, err := os.ReadFile(s.path(conversationID))
 	if errors.Is(err, os.ErrNotExist) {
+		if _, err := s.readSnapshot(conversationID); err != nil {
+			return fmt.Errorf("read conversation event snapshot: %w", err)
+		}
+		state.events = nil
 		state.loaded = true
 		return nil
 	}
@@ -233,6 +320,16 @@ func (s *FileStore) loadLocked(state *fileConversationState, conversationID stri
 		}
 		events = append(events, cloneEvent(event))
 		lastSequence = event.EventSequence
+	}
+	snapshot, err := s.readSnapshot(conversationID)
+	if err != nil {
+		info, statErr := os.Stat(s.snapshotPath(conversationID))
+		if len(events) == 0 || statErr != nil || !info.IsDir() {
+			return fmt.Errorf("read conversation event snapshot: %w", err)
+		}
+	}
+	if snapshot != nil && (snapshot.ConversationID != conversationID || len(events) > 0 && snapshot.LastEventSequence > lastSequence) {
+		return fmt.Errorf("%w: conversation %q, log sequence %d, snapshot sequence %d", ErrDurableSequenceRollback, conversationID, lastSequence, snapshot.LastEventSequence)
 	}
 	if truncatedTail {
 		validLength := bytes.LastIndexByte(data, '\n') + 1
@@ -355,6 +452,9 @@ func (s *FileStore) readSnapshot(conversationID string) (*ConversationSnapshot, 
 	var snapshot ConversationSnapshot
 	if err := json.Unmarshal(data, &snapshot); err != nil {
 		return nil, err
+	}
+	if snapshot.ConversationID != conversationID || snapshot.LastEventSequence < 0 {
+		return nil, fmt.Errorf("%w: snapshot identity or sequence is invalid", ErrDurableSequenceRollback)
 	}
 	return &snapshot, nil
 }

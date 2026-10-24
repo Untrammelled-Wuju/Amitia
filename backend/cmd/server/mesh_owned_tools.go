@@ -54,6 +54,7 @@ func ownedToolScope(inference business.Inference, call string) kernel.Invocation
 	exec.Metadata["deviceMeshScope"] = scope
 	exec.Metadata["ownedDeviceTarget"] = true
 	exec.Metadata["projectId"] = inference.ProjectID
+	exec.Metadata["workingDirectory"] = inference.WorkingDirectory
 	permissionMode := strings.TrimSpace(inference.PermissionMode)
 	if permissionMode == "" {
 		permissionMode = "request_approval"

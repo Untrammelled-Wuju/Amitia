@@ -54,4 +54,18 @@ describe("插件页面公共适配", () => {
       wrapper.unmount();
     }
   });
+
+  it("渠道插件页面直接渲染内容，不增加固定标题", async () => {
+    const wrapper = mount(ExtensionContributionRenderer, {
+      props: { contribution: contribution("web_page"), context: {}, slotId: "provider.page.provider", frameless: true },
+    });
+    try {
+      await flushPromises();
+      expect(wrapper.find(".plugin-page-frame").exists()).toBe(false);
+      expect(wrapper.findAll("h2")).toHaveLength(0);
+      expect(wrapper.text()).toContain("Web 内容");
+    } finally {
+      wrapper.unmount();
+    }
+  });
 });

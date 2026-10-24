@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DeploymentConfigError,
+  configToLabel,
   validateDeploymentConfigForSave,
 } from "./deployment";
 
@@ -49,6 +50,13 @@ describe("deployment endpoint normalization", () => {
         serverURL: "https://cloud.example.com/core",
       }),
     ).toThrow(DeploymentConfigError);
+  });
+
+  it("exposes only the two user-facing deployment modes", () => {
+    expect(configToLabel({ mode: "local" })).toBe("本地模式");
+    expect(configToLabel({ mode: "cloud", serverURL: "https://cloud.example.com" })).toBe(
+      "云端统筹 (https://cloud.example.com)",
+    );
   });
 
   it.each([

@@ -1,173 +1,10 @@
 <template>
   <div class="game-mode-page">
-    <header class="page-head">
-      <div class="page-copy">
-<h1>游戏模式</h1>
-        <p>游戏系统 v1 · 通过游戏插件连接目标游戏。GameHost 只负责插件运行、权限与连接生命周期，具体感知和控制能力由插件提供。</p>
-      </div>
-      <div class="head-actions">
-        <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="openInstallDialog()">添加游戏</el-button>
-      </div>
-    </header>
-
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
 
-    <section class="current-game-card" :class="{ 'is-connected': !!activeRuntime?.connected }">
-      <div class="current-game-visual" aria-hidden="true">
-        <div class="visual-grid"></div>
-        <div class="visual-mark">{{ gameInitial(activePlugin?.name || 'GAME') }}</div>
-      </div>
-
-      <div class="current-game-content">
-        <div class="current-game-meta">
-          <span class="status-pill" :class="activeRuntime?.connected ? 'online' : 'offline'">
-            <span class="status-dot"></span>
-            {{ activeRuntime?.connected ? "插件运行时已连接" : "等待插件运行时连接" }}
-          </span>
-          <span v-if="activePlugin" class="version-text">v{{ activePlugin.version }}</span>
-        </div>
-
-        <h2>{{ activePlugin?.name || "还没有可用的游戏插件" }}</h2>
-        <p v-if="activeRuntime?.connected">
-          插件 Runtime 已连接{{ activeRuntime.ready ? "并完成准备" : "，正在准备中" }}。插件向 Agent 注册的能力可在对话中使用；GameHost 不解释这些能力的游戏语义。
-        </p>
-        <p v-else-if="activePlugin">
-          游戏扩展已安装，由插件检测并连接其支持的游戏。
-        </p>
-        <p v-else>
-          添加一个 `.gamex` 游戏扩展。安装完成后，Amitia 会自动把它归入游戏模式。
-        </p>
-
-        <div class="current-game-stats">
-          <div class="stat-item">
-            <span>扩展状态</span>
-            <strong>{{ activePlugin ? (activePlugin.enabled ? "已启用" : "已禁用") : "未安装" }}</strong>
-          </div>
-          <div class="stat-item">
-            <span>连接状态</span>
-            <strong>{{ activeRuntime?.connected ? "在线" : "离线" }}</strong>
-          </div>
-          <div v-if="activePluginSupportsControl" class="stat-item">
-            <span>控制模式</span>
-            <strong>{{ controlModeLabel(activeRuntime?.controlMode) }}</strong>
-          </div>
-        </div>
-
-        <div class="current-game-actions">
-          <el-button
-            v-if="activeRuntime?.connected"
-            type="primary"
-            size="large"
-            :icon="VideoPlay"
-            :disabled="!activeRuntime.ready"
-            @click="goToGameChat"
-          >
-            去对话使用插件能力
-          </el-button>
-          <el-button
-            v-if="activeRuntime?.connected && activePluginSupportsControl && activeRuntime.controlMode !== 'user_control'"
-            size="large"
-            :loading="busy === activeRuntime.runtimeId"
-            @click="takeManualControl"
-          >手动接管</el-button>
-          <el-button
-            v-if="activeRuntime?.connected && activePluginSupportsControl && activeRuntime.controlMode === 'user_control'"
-            size="large"
-            :loading="busy === activeRuntime.runtimeId"
-            @click="releaseManualControl"
-          >释放手动控制</el-button>
-          <el-button v-if="!activePlugin" size="large" @click="openInstallDialog()">选择游戏扩展</el-button>
-          <el-button v-else-if="!activeRuntime?.connected" size="large" @click="refresh">检查连接</el-button>
-        </div>
-      </div>
-    </section>
-
-    <section class="content-section">
-      <div class="section-heading">
-        <div>
-          <h2>游戏插件</h2>
-          <p>已安装的游戏扩展。安装、更新和权限校验统一由扩展包内核处理。</p>
-        </div>
-        <span class="section-count">{{ plugins.length }} 个</span>
-      </div>
-
-      <div v-if="loading && plugins.length === 0" class="game-grid loading-grid">
-        <div v-for="index in 3" :key="index" class="game-card skeleton-card"></div>
-      </div>
-
-      <div v-else-if="plugins.length" class="game-grid">
-        <article
-          v-for="plugin in plugins"
-          :key="plugin.extensionId"
-          class="game-card"
-          :class="{ 'is-active': activePlugin?.extensionId === plugin.extensionId }"
-          @click="openGamePlugin(plugin)"
-        >
-          <div class="game-card-top">
-            <div class="game-icon">{{ gameInitial(plugin.name) }}</div>
-            <el-dropdown trigger="click" @command="(command: string | number | object) => pluginMenuAction(plugin, String(command))">
-              <button class="icon-button" type="button" aria-label="游戏扩展操作" @click.stop>
-                <el-icon><MoreFilled /></el-icon>
-              </button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="detail">扩展详情</el-dropdown-item>
-                  <el-dropdown-item command="update">从本地更新</el-dropdown-item>
-                  <el-dropdown-item command="uninstall" divided>卸载</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-
-          <div class="game-card-body">
-            <div class="game-card-title-row">
-              <h3>{{ plugin.name }}</h3>
-              <span class="mini-status" :class="pluginRuntime(plugin)?.connected ? 'online' : 'offline'">
-                {{ pluginRuntime(plugin)?.connected ? "已连接" : plugin.enabled ? "待连接" : "已禁用" }}
-              </span>
-            </div>
-            <p>{{ plugin.runtimeCount ? `${plugin.runtimeCount} 个运行连接` : "暂无运行连接" }}</p>
-          </div>
-
-          <div class="game-card-footer">
-            <span>v{{ plugin.version }}</span>
-            <div class="card-actions">
-              <el-button
-                v-if="pluginRuntime(plugin)?.state === 'running'"
-                size="small"
-                type="warning"
-                :loading="busy === plugin.extensionId"
-                @click.stop="stopPlugin(plugin)"
-              >停止</el-button>
-              <el-button
-                size="small"
-                type="primary"
-                :disabled="!isRuntimeStartable(pluginRuntime(plugin)?.state)"
-                :loading="busy === plugin.extensionId"
-                @click.stop="startPlugin(plugin)"
-              >启动</el-button>
-              <button class="text-action" type="button" @click.stop="openPluginRuntimeDetail(plugin)">
-                运行详情
-                <el-icon><ArrowRight /></el-icon>
-              </button>
-            </div>
-          </div>
-        </article>
-
-        <button class="add-game-card" type="button" @click="openInstallDialog()">
-          <span class="add-icon"><el-icon><Plus /></el-icon></span>
-          <strong>添加游戏</strong>
-          <span>安装 .gamex 游戏扩展</span>
-        </button>
-      </div>
-
-      <button v-else class="empty-game-state" type="button" @click="openInstallDialog()">
-        <span class="empty-game-icon"><el-icon><Plus /></el-icon></span>
-        <strong>添加第一个游戏</strong>
-        <span>选择或拖入 `.gamex` 游戏扩展，安装前会进行安全检查和权限预览。</span>
-      </button>
-    </section>
+    <div v-loading="loading" class="game-mode-placeholder">
+      <el-empty v-if="!loading" description="请从第二栏选择或添加游戏插件" :image-size="80" />
+    </div>
 
     <el-dialog
       v-model="installDialogVisible"
@@ -410,16 +247,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
-  ArrowRight,
   MoreFilled,
-  Plus,
-  Refresh,
   UploadFilled,
-  VideoPlay,
 } from "@element-plus/icons-vue";
 import { useApi } from "@/composables/useApi";
 import {
@@ -454,6 +287,7 @@ type GameService = { serviceId: string; state?: string; health?: string };
 type PackageOperationView = { status?: string; errorCode?: string };
 
 const api = useApi();
+const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
 const detailLoading = ref(false);
@@ -462,22 +296,6 @@ const error = ref("");
 const plugins = ref<Plugin[]>([]);
 const runtimes = ref<Runtime[]>([]);
 const developerAccess = ref(false);
-const activeRuntime = computed<Runtime | null>(() =>
-  runtimes.value.find((item) => item.connected && item.ready)
-  || runtimes.value.find((item) => item.connected)
-  || runtimes.value.find((item) => item.ready)
-  || null,
-);
-const activePlugin = computed<Plugin | null>(() => {
-  const runtime = activeRuntime.value;
-  if (runtime?.pluginId) {
-    const matched = plugins.value.find((item) => item.pluginId === runtime.pluginId);
-    if (matched) return matched;
-  }
-  return plugins.value.find((item) => item.enabled) || plugins.value[0] || null;
-});
-
-const activePluginSupportsControl = computed(() => pluginSupportsCapability(activePlugin.value, "realtime_control"));
 const selectedRuntimeSupportsControl = computed(() => {
   const runtime = runtimes.value.find((item) => item.runtimeId === selectedRuntimeId.value);
   const plugin = plugins.value.find((item) => item.pluginId === (runtime?.pluginId || runtimeDetail.value?.pluginId));
@@ -701,32 +519,6 @@ function formatBytes(bytes: number) {
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / 1024 ** index;
   return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
-}
-
-async function goToGameChat() {
-  if (activeRuntime.value?.runtimeId) {
-    await bindRuntimeAgentContext(activeRuntime.value.runtimeId);
-  }
-  await router.push("/chat");
-}
-
-async function takeManualControl() {
-  const runtime = activeRuntime.value;
-  if (!runtime?.connected) {
-    ElMessage.warning("当前没有已连接的游戏运行时");
-    return;
-  }
-  if (!runtime.ready) {
-    ElMessage.warning("游戏运行时尚未准备完成");
-    return;
-  }
-  await controlAction(runtime.runtimeId, "takeover", "已切换为手动接管");
-}
-
-async function releaseManualControl() {
-  const runtime = activeRuntime.value;
-  if (!runtime) return;
-  await controlAction(runtime.runtimeId, "release", "已释放手动控制");
 }
 
 function openInstallDialog(plugin?: Plugin) {
@@ -1182,7 +974,18 @@ async function controlAction(runtimeId: string, action: string, successMessage =
 
 onMounted(() => {
   void refresh();
+  void maybeOpenInstallFromQuery();
 });
+
+async function maybeOpenInstallFromQuery() {
+  if (String(route.query.install || "") !== "1" || installDialogVisible.value) return;
+  const query = { ...route.query };
+  delete query.install;
+  await router.replace({ path: route.path, query, hash: route.hash });
+  openInstallDialog();
+}
+
+watch(() => route.query.install, () => { void maybeOpenInstallFromQuery(); });
 </script>
 
 <style scoped>
@@ -1207,6 +1010,12 @@ onMounted(() => {
   gap: 24px;
   max-width: 1440px;
   margin: 0 auto;
+}
+
+.game-mode-placeholder {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
 }
 
 .page-head,

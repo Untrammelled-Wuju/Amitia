@@ -1,12 +1,11 @@
 import { mount } from "@vue/test-utils";
-import { defineComponent } from "vue";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { computed, defineComponent } from "vue";
+import { createMemoryHistory, createRouter, useRoute } from "vue-router";
 import { describe, expect, it, vi } from "vitest";
 import SettingsView from "../views/settings/SettingsView.vue";
-import SettingsWorkspace from "../components/SettingsWorkspace.vue";
-import AccountWorkspace from "../components/AccountWorkspace.vue";
+import SettingsSidebar from "../components/SettingsSidebar.vue";
+import AccountSidebar from "../components/AccountSidebar.vue";
 import MySpaceView from "../views/user-settings/MySpaceView.vue";
-import { useSecondaryWorkspace } from "../composables/useSecondaryWorkspace";
 
 vi.mock("../components/extension/ExtensionSlot.vue", async () => {
   const { defineComponent } = await import("vue");
@@ -36,9 +35,14 @@ async function renderSettings(path: string) {
   await router.push(path);
   await router.isReady();
   const wrapper = mount(defineComponent({
-    components: { SettingsWorkspace, AccountWorkspace },
-    setup: useSecondaryWorkspace,
-    template: `<component :is="secondaryPage.kind === 'settings' ? 'SettingsWorkspace' : 'AccountWorkspace'" v-if="secondaryPage" :return-to="returnTo" :title="secondaryPage.title"><router-view /></component><div v-else data-main-shell><nav>新对话 角色列表</nav><router-view /></div>`,
+    components: { SettingsSidebar, AccountSidebar },
+    setup() {
+      const currentRoute = useRoute();
+      const isSettings = computed(() => currentRoute.path === "/settings" || currentRoute.path.startsWith("/settings/"));
+      const isAccount = computed(() => currentRoute.path === "/my-space" || currentRoute.path.startsWith("/my-space/"));
+      return { isAccount, isSettings };
+    },
+    template: `<div data-main-shell class="app-main"><AccountSidebar v-if="isAccount" /><SettingsSidebar v-else-if="isSettings" /><main><router-view /></main></div>`,
   }), { global: { plugins: [router] } });
   return { wrapper, router };
 }
@@ -47,13 +51,15 @@ describe("桌面设置分类导航", () => {
   it("普通设置使用精简背景，切换关于和日志页面时恢复原样式", async () => {
     const { wrapper, router } = await renderSettings("/settings/system");
     try {
-      expect(wrapper.get(".secondary-workspace").classes()).toContain("settings-refined");
+      expect(wrapper.get(".settings-page").classes()).toContain("settings-refined");
+      expect(wrapper.find(".settings-sidebar").exists()).toBe(true);
+      expect(wrapper.find(".secondary-workspace").exists()).toBe(false);
       for (const path of ["/settings/about", "/settings/system-logs", "/settings/prompt-trace"]) {
         await router.push(path);
-        expect(wrapper.get(".secondary-workspace").classes()).not.toContain("settings-refined");
+        expect(wrapper.get(".settings-page").classes()).not.toContain("settings-refined");
       }
       await router.push("/settings/model/providers");
-      expect(wrapper.get(".secondary-workspace").classes()).toContain("settings-refined");
+      expect(wrapper.get(".settings-page").classes()).toContain("settings-refined");
     } finally { wrapper.unmount(); }
   });
   it("保留全部入口及插件插槽，并识别模型子页面", async () => {
@@ -86,44 +92,32 @@ describe("桌面设置分类导航", () => {
     } finally { wrapper.unmount(); }
   });
 
-  it("设置和我的空间返回原会话且保留查询参数", async () => {
+  it("设置复用主工作区第二栏，不再进入独立工作区", async () => {
     const { wrapper, router } = await renderSettings("/chat?conversationId=test&workspace=local");
     try {
-      for (const path of ["/settings/system", "/my-space"]) {
-        await router.push(path);
-        expect(wrapper.find("[data-main-shell]").exists()).toBe(false);
-        expect(wrapper.get('.workspace-back').attributes('href')).toBe('/chat?conversationId=test&workspace=local');
-        expect(wrapper.get('.workspace-back').attributes('aria-label')).toBe('返回主界面');
-        expect(wrapper.get('.workspace-back').text()).toBe('');
-        expect(wrapper.get('.secondary-header').element.firstElementChild).toBe(wrapper.get('.workspace-back').element);
-        expect(wrapper.find(".settings-navigation").exists()).toBe(path.startsWith("/settings"));
-        expect(wrapper.find(".secondary-sidebar").exists()).toBe(true);
-        if (!path.startsWith("/settings")) {
-          const links = wrapper.findAll('.account-navigation a');
-          expect(links).toHaveLength(4);
-          expect(links.every(link => link.attributes('href')?.startsWith(`${path}/`))).toBe(true);
-        }
-      }
-      await wrapper.get('.workspace-back').trigger('click');
-      await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/chat?conversationId=test&workspace=local'));
-      expect(wrapper.find("[data-main-shell]").exists()).toBe(true);
-      expect(wrapper.find('.secondary-sidebar').exists()).toBe(false);
+      await router.push("/settings/system");
+      expect(wrapper.get("[data-main-shell]").classes()).toContain("app-main");
+      expect(wrapper.find(".settings-sidebar").exists()).toBe(true);
+      expect(wrapper.find(".secondary-workspace").exists()).toBe(false);
+      expect(wrapper.find(".workspace-back").exists()).toBe(false);
     } finally { wrapper.unmount(); }
   });
 
-  it("直接打开设置返回聊天，重新进入设置记住新的来源", async () => {
+  it("我的空间直接使用主工作区，不再进入独立返回页", async () => {
     const { wrapper, router } = await renderSettings("/my-space");
     try {
-      expect(wrapper.get('.workspace-back').attributes('href')).toBe('/chat');
-      await router.push('/character?tab=list');
-      await router.push('/my-space');
-      expect(wrapper.get('.workspace-back').attributes('href')).toBe('/character?tab=list');
+      expect(router.currentRoute.value.path).toBe("/my-space/profile");
+      expect(wrapper.get("[data-main-shell]").classes()).toContain("app-main");
+      expect(wrapper.find(".account-sidebar").exists()).toBe(true);
+      expect(wrapper.find(".secondary-workspace").exists()).toBe(false);
+      expect(wrapper.find(".workspace-back").exists()).toBe(false);
     } finally { wrapper.unmount(); }
   });
 
-  it("我的空间统一侧栏覆盖资料、运行模式和设备管理", async () => {
+  it("我的空间第二栏覆盖资料、运行模式和设备管理", async () => {
     const { wrapper, router } = await renderSettings('/my-space');
     try {
+      expect(wrapper.find(".settings-sidebar").exists()).toBe(false);
       expect(wrapper.findAll('.account-navigation a').map(link => link.text())).toEqual(['资料与头像', 'Space 身份', '运行模式', '设备配对']);
       expect(wrapper.find('[data-space-section="profile"]').exists()).toBe(true);
       for (const section of ['identity', 'runtime', 'devices', 'profile']) {
@@ -133,7 +127,6 @@ describe("桌面设置分类导航", () => {
         expect(wrapper.findAll('[data-space-section]')).toHaveLength(1);
         expect(wrapper.get(`a[href="/my-space/${section}"]`).attributes('aria-current')).toBe('page');
       }
-      expect(wrapper.get('.workspace-back').attributes('href')).toBe('/chat');
       expect(wrapper.find('a[href="/settings/system"]').exists()).toBe(false);
     } finally { wrapper.unmount(); }
   });

@@ -31,13 +31,13 @@ func setup(t *testing.T) (*sql.DB, *coordination.Service) {
 	return db, coordination.NewService(db)
 }
 
-func TestAdministratorRequiresModeAndNeverRestoresImplicitly(t *testing.T) {
+func TestAdministratorRequiresCoordinatedPolicyAndPersistsExplicitGrant(t *testing.T) {
 	db, svc := setup(t)
 	ctx := t.Context()
 	if _, err := svc.GrantAdministrator(ctx, "space", "a", 1, true); !errors.Is(err, coordination.ErrAdministratorMode) {
 		t.Fatalf("grant while off: %v", err)
 	}
-	p, err := svc.ChangeMode(ctx, "space", "a", 1, true, "core-role")
+	p, err := svc.InitializeCoordinated(ctx, "space", "a", 1, "core-role")
 	if err != nil || p.Administrator {
 		t.Fatalf("mode alone granted administration: %+v %v", p, err)
 	}
@@ -45,17 +45,9 @@ func TestAdministratorRequiresModeAndNeverRestoresImplicitly(t *testing.T) {
 	if err != nil || !p.Administrator {
 		t.Fatalf("explicit grant failed: %+v %v", p, err)
 	}
-	p, err = svc.ChangeMode(ctx, "space", "a", p.ModeRevision, false, "device-role")
-	if err != nil || p.Administrator {
-		t.Fatalf("off retained administrator: %+v %v", p, err)
-	}
-	p, err = svc.ChangeMode(ctx, "space", "a", p.ModeRevision, true, "core-role")
-	if err != nil || p.Administrator {
-		t.Fatalf("on restored administrator: %+v %v", p, err)
-	}
 	restarted := coordination.NewService(db)
 	p, err = restarted.Get(ctx, "space", "a")
-	if err != nil || !p.Coordinated || p.Administrator {
+	if err != nil || !p.Coordinated || !p.Administrator {
 		t.Fatalf("restart lost policy: %+v %v", p, err)
 	}
 	other, err := restarted.Get(ctx, "space", "b")
@@ -74,7 +66,7 @@ func TestModeCancelsActiveGenerationAndRejectsLateCommit(t *testing.T) {
 	if scope.RoleOwnerID != "a" || scope.ResourceOwnerID != "a" {
 		t.Fatalf("off owner: %+v", scope)
 	}
-	if _, err := svc.ChangeMode(t.Context(), "space", "a", 1, true, "core-role"); err != nil {
+	if _, err := svc.InitializeCoordinated(t.Context(), "space", "a", 1, "core-role"); err != nil {
 		t.Fatal(err)
 	}
 	if !errors.Is(context.Cause(ctx), coordination.ErrScopeExpired) {
@@ -104,7 +96,7 @@ func TestConcurrentModeUpdatesHaveOneWinner(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := svc.ChangeMode(t.Context(), "space", "a", 1, true, "role")
+			_, err := svc.InitializeCoordinated(t.Context(), "space", "a", 1, "role")
 			results <- err
 		}()
 	}
@@ -127,7 +119,7 @@ func TestConcurrentModeUpdatesHaveOneWinner(t *testing.T) {
 
 func TestRevocationInvalidatesScopeAndAdministrator(t *testing.T) {
 	db, svc := setup(t)
-	p, err := svc.ChangeMode(t.Context(), "space", "a", 1, true, "role")
+	p, err := svc.InitializeCoordinated(t.Context(), "space", "a", 1, "role")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +173,7 @@ func TestRoleSelection(t *testing.T) {
 
 func TestDelegatedScopeUsesTargetModeAndBothDevicesFenceExecution(t *testing.T) {
 	_, svc := setup(t)
-	if _, err := svc.ChangeMode(t.Context(), "space", "a", 1, true, "core-role"); err != nil {
+	if _, err := svc.InitializeCoordinated(t.Context(), "space", "a", 1, "core-role"); err != nil {
 		t.Fatal(err)
 	}
 	ctx, scope, finish, err := svc.Begin(t.Context(), "space", "a", "b", "core", "device-role", "delegated")
@@ -195,7 +187,7 @@ func TestDelegatedScopeUsesTargetModeAndBothDevicesFenceExecution(t *testing.T) 
 	if err := svc.Validate(ctx, scope); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ChangeMode(t.Context(), "space", "b", 1, true, "core-role"); err != nil {
+	if _, err := svc.InitializeCoordinated(t.Context(), "space", "b", 1, "core-role"); err != nil {
 		t.Fatal(err)
 	}
 	if !errors.Is(context.Cause(ctx), coordination.ErrScopeExpired) {
@@ -209,7 +201,11 @@ func TestDelegatedScopeUsesTargetModeAndBothDevicesFenceExecution(t *testing.T) 
 	if !nextScope.Coordinated || nextScope.ResourceOwnerID != "core" {
 		t.Fatalf("target on ownership: %+v", nextScope)
 	}
-	if _, err := svc.ChangeMode(t.Context(), "space", "a", 2, false, "device-role"); err != nil {
+	policy, err := svc.Get(t.Context(), "space", "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.GrantAdministrator(t.Context(), "space", "a", policy.PermissionRevision, true); err != nil {
 		t.Fatal(err)
 	}
 	if !errors.Is(context.Cause(next), coordination.ErrScopeExpired) {

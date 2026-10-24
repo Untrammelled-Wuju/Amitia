@@ -21,94 +21,6 @@ func NewHandler(svc ReleaseService, guard security.OwnershipGuard) *Handler {
 	return &Handler{svc: svc, ownershipGuard: guard}
 }
 
-type buildReleasePayload struct {
-	ProcessingTaskID string   `json:"processingTaskId"`
-	PetID            string   `json:"petId"`
-	DefaultAction    string   `json:"defaultAction"`
-	IncludedActions  []string `json:"includedActions"`
-	ProfileID        string   `json:"profileId"`
-	IdempotencyKey   string   `json:"idempotencyKey"`
-}
-
-func (h *Handler) BuildRelease(c *gin.Context) {
-	var payload buildReleasePayload
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": "INVALID_PARAMS"})
-		return
-	}
-	if payload.ProcessingTaskID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "处理任务 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
-		return
-	}
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	spaceID := actorID
-
-	req := &BuildReleaseRequest{
-		SpaceID:            spaceID,
-		ProcessingTaskID:   payload.ProcessingTaskID,
-		PetID:              payload.PetID,
-		DefaultAction:      payload.DefaultAction,
-		IncludedActionKeys: payload.IncludedActions,
-		BuildProfileID:     payload.ProfileID,
-		IdempotencyKey:     payload.IdempotencyKey,
-	}
-	result, err := h.svc.BuildRelease(c.Request.Context(), req)
-	if err != nil {
-		writeReleaseError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "构建成功", gin.H{
-		"operation": result.Operation,
-		"release":   result.Release,
-		"snapshot":  result.Snapshot,
-	})
-}
-
-func (h *Handler) GetBuildOperation(c *gin.Context) {
-	operationID := c.Param("operationId")
-	if operationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "操作 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
-		return
-	}
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	spaceID := actorID
-
-	op, err := h.svc.GetBuildOperation(c.Request.Context(), operationID, spaceID)
-	if err != nil {
-		writeReleaseError(c, err)
-		return
-	}
-	util.SuccessResponse(c, op)
-}
-
-func (h *Handler) CancelBuildOperation(c *gin.Context) {
-	operationID := c.Param("operationId")
-	if operationID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "操作 ID 为空", gin.H{"errorCode": "INVALID_PARAMS"})
-		return
-	}
-	actorID, err := middleware.ResolveActorID(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	spaceID := actorID
-
-	if err := h.svc.CancelBuildOperation(c.Request.Context(), operationID, spaceID); err != nil {
-		writeReleaseError(c, err)
-		return
-	}
-	util.SuccessMsgResponse(c, "已取消", nil)
-}
-
 func (h *Handler) ListReleases(c *gin.Context) {
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
@@ -268,14 +180,12 @@ func writeReleaseError(c *gin.Context, err error) {
 	var releaseErr *ReleaseError
 	if errors.As(err, &releaseErr) {
 		switch releaseErr.Code {
-		case "INVALID_REQUEST", "IDEMPOTENCY_CONFLICT", "QUALITY_GATE_READ_FAILED":
+		case "INVALID_REQUEST":
 			util.ErrorResponse(c, response.InvalidParams, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
-		case "OPERATION_NOT_FOUND", "RELEASE_NOT_FOUND", "PET_IDENTITY_NOT_FOUND":
+		case "RELEASE_NOT_FOUND", "PET_IDENTITY_NOT_FOUND", "IDENTITY_NOT_FOUND":
 			util.ErrorResponse(c, response.NotFound, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
 		case "OPERATION_CONFLICT", "RELEASE_INTEGRITY_MISMATCH":
 			util.ErrorResponse(c, response.BusinessError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
-		case "LEGACY_PACKAGE_WRITE_DISABLED":
-			util.ErrorResponse(c, response.BusinessError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code, "successor": "/api/desktop-pets/releases/build"})
 		default:
 			util.ErrorResponse(c, response.InternalError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
 		}

@@ -9,8 +9,8 @@
   --el-button-hover-bg-color: var(--tp-action-hover);
   --el-button-hover-border-color: var(--tp-action-hover);
   --el-button-active-text-color: var(--tp-action-text);
-  --el-button-active-bg-color: var(--tp-action-active);
-  --el-button-active-border-color: var(--tp-action-active);
+  --el-button-active-bg-color: var(--tp-action-hover);
+  --el-button-active-border-color: var(--tp-action-hover);
   --el-button-disabled-text-color: color-mix(in srgb, var(--tp-action-text) 55%, var(--tp-action));
   --el-button-disabled-bg-color: color-mix(in srgb, var(--tp-action) 40%, var(--tp-panel));
   --el-button-disabled-border-color: transparent;
@@ -50,7 +50,7 @@ html[data-custom-palette="true"] .el-button--primary:not(.is-text):not(.is-link)
   --el-button-hover-border-color: var(--tp-border-strong);
   --el-button-hover-text-color: var(--tp-text);
   --el-button-active-bg-color: var(--tp-control-hover);
-  --el-button-active-border-color: var(--tp-primary);
+  --el-button-active-border-color: var(--tp-border-strong);
   --el-button-active-text-color: var(--tp-text);
 }
 
@@ -64,6 +64,37 @@ html[data-custom-palette="true"] .el-button:not(.el-button--primary):not(.el-but
   --el-button-hover-bg-color: var(--tp-secondary-soft);
   --el-button-hover-border-color: var(--tp-secondary);
   --el-button-active-border-color: var(--tp-secondary);
+}
+
+.el-button:active {
+  color: var(--el-button-hover-text-color);
+  border-color: var(--el-button-hover-border-color);
+  background-color: var(--el-button-hover-bg-color);
+  transform: none;
+}
+
+.el-button.is-text:not(.is-disabled):active {
+  background-color: var(--el-fill-color-light);
+  transform: none;
+}
+
+.el-button.is-text:not(.is-disabled).is-has-bg:active {
+  background-color: var(--el-fill-color-light);
+  transform: none;
+}
+
+.el-button.is-link:not(.is-disabled):active {
+  color: var(--el-button-hover-link-text-color);
+  background-color: transparent;
+  border-color: transparent;
+  transform: none;
+}
+
+.el-button--text:not(.is-disabled):active {
+  color: var(--el-color-primary-light-3);
+  background-color: transparent;
+  border-color: transparent;
+  transform: none;
 }
 
 .el-button--text:hover,

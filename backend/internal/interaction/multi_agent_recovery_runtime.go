@@ -15,13 +15,18 @@ func (c *MultiAgentCoordinator) persistCoordinationSnapshot(ctx context.Context,
 	ac.persistMu.Lock()
 	defer ac.persistMu.Unlock()
 	c.mu.Lock()
+	if ac.staleSnapshot {
+		c.mu.Unlock()
+		return ErrInteractionCASConflict
+	}
 	ref := &MultiAgentRecoveryRef{
 		OwnedScope: ac.ownedScope, DispatchFingerprint: ac.dispatchFingerprint,
 		ExecutionCoreID: ac.executionCoreID, ResourceOwnerID: ac.resourceOwnerID,
 		CoordinationID: string(ac.id), ParentGoalID: ac.parentGoalID,
 		ParentGoalRevision: ac.parentGoalRev, Status: string(ac.status),
-		Strategy: ac.strategy, CompletionPlan: ac.completionPlan,
-		Depth: ac.depth, DeadlineAt: ac.deadlineAt,
+		CancelRequested: ac.cancelRequested,
+		Strategy:        ac.strategy, CompletionPlan: ac.completionPlan,
+		Depth: ac.depth, DeadlineAt: ac.deadlineAt, MaxToolCalls: ac.maxToolCalls, MaxTotalTokens: ac.maxTotalTokens, MaxCostMicroUSD: ac.maxCostMicroUSD,
 		WorkspaceID: ac.workspaceID, PermissionMode: ac.permissionMode,
 		WorkspaceDeviceID: ac.workspaceDeviceID,
 		WorkspaceName:     ac.workspaceName, WorkspaceKind: ac.workspaceKind,
@@ -50,7 +55,17 @@ func (c *MultiAgentCoordinator) persistCoordinationSnapshot(ctx context.Context,
 			ref.ParentGoalDescription = goal.Description
 		}
 	}
-	return c.attachRecoveryDescriptor(ctx, parentID, ref)
+	if err := c.attachRecoveryDescriptor(ctx, ac, ref); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	observer := c.durableObserver
+	c.mu.Unlock()
+	if observer != nil {
+		_ = observer(ctx, parentID, *ref)
+	}
+	return nil
 }
 
 func (c *MultiAgentCoordinator) restoreCoordinationFromRecord(record *InteractionRecord) error {
@@ -112,8 +127,13 @@ func (c *MultiAgentCoordinator) restoreCoordinationFromRecord(record *Interactio
 	if err := validateRecoveredParent(record, ref, goal); err != nil {
 		return err
 	}
+	lastSnapshot, err := record.RecoveryDescriptor.NormalizeOnSerialize()
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	ac := &activeCoordination{
+		lastSnapshotJSON: string(lastSnapshot), snapshotInitialized: true,
 		ownedScope: ref.OwnedScope, dispatchFingerprint: ref.DispatchFingerprint,
 		executionCoreID: ref.ExecutionCoreID, resourceOwnerID: ref.ResourceOwnerID,
 		id:           CoordinationID(ref.CoordinationID),
@@ -125,7 +145,8 @@ func (c *MultiAgentCoordinator) restoreCoordinationFromRecord(record *Interactio
 		workspaceRootURI: ref.WorkspaceRootURI,
 		strategy:         ref.Strategy, completionPlan: ref.CompletionPlan,
 		cancelConfirmed: CoordinationStatus(ref.Status) == CoordinationCancelled,
-		depth:           ref.Depth, deadlineAt: ref.DeadlineAt,
+		cancelRequested: ref.CancelRequested || CoordinationStatus(ref.Status) == CoordinationCancelled,
+		depth:           ref.Depth, deadlineAt: ref.DeadlineAt, maxToolCalls: ref.MaxToolCalls, maxTotalTokens: ref.MaxTotalTokens, maxCostMicroUSD: ref.MaxCostMicroUSD,
 		assignments: make([]*AgentAssignment, 0, len(ref.AssignmentRefs)),
 		createdAt:   now, updatedAt: now,
 	}

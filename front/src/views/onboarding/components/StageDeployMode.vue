@@ -1,9 +1,9 @@
 <template>
   <div class="ob-stage-inner ob-flow-stage-inner">
-    <div class="kicker">选择运行方式</div>
-    <h2 class="ob-title">在哪里运行 Amitia？</h2>
+    <div class="kicker">选择运行模式</div>
+    <h2 class="ob-title">选择 Amitia 的运行模式</h2>
     <p class="ob-sub-title">
-      选择运行方式后，系统将按照所选方式进行后续配置。
+      本地模式不限制模型或扩展能力；云端统筹模式统一管理多设备数据。
     </p>
     <div class="ob-deploy-container">
       <div class="ob-deploy-options">
@@ -15,9 +15,9 @@
         >
           <div class="ob-deploy-icon">⌂</div>
           <div class="ob-deploy-info">
-            <div class="ob-deploy-title">在这台设备上运行</div>
+            <div class="ob-deploy-title">本地模式</div>
             <div class="ob-deploy-desc">
-              由 Amitia 自动启动本地服务，数据默认保存在当前设备
+              项目服务、数据和设备能力全部在当前设备运行
             </div>
           </div>
         </button>
@@ -50,9 +50,9 @@
             </svg>
           </div>
           <div class="ob-deploy-info">
-            <div class="ob-deploy-title">连接已有服务</div>
+            <div class="ob-deploy-title">云端统筹模式</div>
             <div class="ob-deploy-desc">
-              连接已部署好的 Amitia 服务，本设备仅作为使用端
+              验证 Cloud Core 并完成设备配对后，统一管理角色、数据和跨设备任务
             </div>
           </div>
         </button>

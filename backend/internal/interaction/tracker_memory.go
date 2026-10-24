@@ -164,6 +164,21 @@ func (t *InMemoryTracker) UpdateMetadata(ctx context.Context, id string, update 
 		rec.mu.Unlock()
 		return nil, ErrInteractionCASConflict
 	}
+	if update.ExpectedRecoveryDescriptorJSON != nil {
+		current := ""
+		if rec.RecoveryDescriptor != nil {
+			encoded, err := rec.RecoveryDescriptor.NormalizeOnSerialize()
+			if err != nil {
+				rec.mu.Unlock()
+				return nil, err
+			}
+			current = string(encoded)
+		}
+		if current != *update.ExpectedRecoveryDescriptorJSON {
+			rec.mu.Unlock()
+			return nil, ErrInteractionCASConflict
+		}
+	}
 	if update.ResultRef != nil {
 		rec.ResultRef = *update.ResultRef
 	}
@@ -181,6 +196,12 @@ func (t *InMemoryTracker) UpdateMetadata(ctx context.Context, id string, update 
 	}
 	if update.ExecutorID != nil {
 		rec.ExecutorID = *update.ExecutorID
+	}
+	if update.CorrelationID != nil {
+		rec.CorrelationID = *update.CorrelationID
+	}
+	if update.CausationID != nil {
+		rec.CausationID = *update.CausationID
 	}
 	if update.DeadlineAt != nil {
 		rec.DeadlineAt = *update.DeadlineAt

@@ -96,7 +96,12 @@ import {
   provisionCurrentDeviceMesh,
 } from "@/runtime/runtime-adapter";
 
-const props = defineProps<{ deployMode: string; serverURL: string }>();
+const props = defineProps<{
+  deployMode: string;
+  serverURL: string;
+  beforeVerify?: (baseURL: string) => void | Promise<void>;
+  afterVerificationFailed?: (baseURL: string, error: unknown) => void | Promise<void>;
+}>();
 const emit = defineEmits<{ healthCheckDone: [] }>();
 
 type Row = { name: string; state: "" | "running" | "done" | "error"; stateText: string };
@@ -115,6 +120,7 @@ const webAccessBusy = ref(false);
 const webAccessError = ref("");
 let currentBaseURL = "";
 let abortController: AbortController | null = null;
+let verificationPrepared = false;
 
 function resetRows() {
   const names = props.deployMode === "local"
@@ -131,6 +137,7 @@ function resetRows() {
   webAccessPasswordConfirm.value = "";
   webAccessBusy.value = false;
   webAccessError.value = "";
+  verificationPrepared = false;
 }
 
 function delay(ms: number, signal: AbortSignal) {
@@ -232,8 +239,17 @@ async function finishPairedDevice(baseURL: string): Promise<void> {
     }
   }
 
-  if (!(await verifyPrivateDeviceAuth(baseURL))) {
-    throw new Error("当前设备凭证验证失败");
+  if (props.beforeVerify && !verificationPrepared) {
+    await props.beforeVerify(baseURL);
+    verificationPrepared = true;
+  }
+  try {
+    if (!(await verifyPrivateDeviceAuth(baseURL))) {
+      throw new Error("当前设备凭证验证失败");
+    }
+  } catch (error) {
+    await props.afterVerificationFailed?.(baseURL, error);
+    throw error;
   }
   emit("healthCheckDone");
 }

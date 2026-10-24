@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -749,6 +750,11 @@ func (s *Service) Delete(ctx context.Context, uriStr string, opts DeleteOptions)
 }
 
 func (s *Service) resolveURIToMount(uriStr string) (WorkspaceMount, string, error) {
+	if mount, rel, ok, err := directLocalWorkspaceTarget(uriStr); err != nil {
+		return WorkspaceMount{}, "", err
+	} else if ok {
+		return mount, rel, nil
+	}
 	uri, err := resourceuri.Parse(uriStr)
 	if err != nil {
 		return WorkspaceMount{}, "", fmt.Errorf("%w: %v", ErrInvalidURI, err)
@@ -778,6 +784,52 @@ func (s *Service) resolveURIToMount(uriStr string) (WorkspaceMount, string, erro
 		return mount, pathPart, nil
 	}
 	return s.defaultMount(), rel, nil
+}
+
+func directLocalWorkspaceTarget(raw string) (WorkspaceMount, string, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "file://") {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			return WorkspaceMount{}, "", false, err
+		}
+		raw = parsed.Path
+		if runtime.GOOS == "windows" && len(raw) >= 3 && raw[0] == '/' && raw[2] == ':' {
+			raw = raw[1:]
+		}
+	}
+	if !filepath.IsAbs(raw) {
+		return WorkspaceMount{}, "", false, nil
+	}
+	absolute, err := filepath.Abs(raw)
+	if err != nil {
+		return WorkspaceMount{}, "", false, err
+	}
+	root := ""
+	rel := ""
+	if info, statErr := os.Stat(absolute); statErr == nil {
+		if info.IsDir() {
+			root, err = filepath.EvalSymlinks(absolute)
+		} else {
+			root, err = filepath.EvalSymlinks(filepath.Dir(absolute))
+			rel = filepath.Base(absolute)
+		}
+	} else {
+		root, err = filepath.EvalSymlinks(filepath.Dir(absolute))
+		rel = filepath.Base(absolute)
+	}
+	if err != nil {
+		return WorkspaceMount{}, "", false, err
+	}
+	return WorkspaceMount{
+		ID:        "direct",
+		Name:      "Local filesystem",
+		Kind:      WorkspaceKindLocal,
+		Available: true,
+		Status:    WorkspaceStatusReady,
+		RootURI:   MountURI("direct"),
+		LocalRoot: root,
+	}, filepath.ToSlash(rel), true, nil
 }
 
 func (s *Service) defaultMount() WorkspaceMount {

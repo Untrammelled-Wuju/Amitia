@@ -3,24 +3,33 @@ package workbenchtasks
 import "time"
 
 type Assignment struct {
-	ID             string `json:"id"`
-	Status         string `json:"status"`
-	Role           string `json:"role"`
-	Objective      string `json:"objective"`
-	ReviewRequired bool   `json:"reviewRequired"`
+	ID             string   `json:"id"`
+	Status         string   `json:"status"`
+	Role           string   `json:"role"`
+	Dependencies   []string `json:"dependencies,omitempty"`
+	Objective      string   `json:"objective"`
+	ReviewRequired bool     `json:"reviewRequired"`
 }
 
 type Task struct {
-	CoordinationID  string       `json:"coordinationId"`
-	Status          string       `json:"status"`
-	Strategy        string       `json:"strategy,omitempty"`
-	UpdatedAt       time.Time    `json:"updatedAt"`
-	RecoveryState   string       `json:"recoveryState"`
-	RecoveryReason  string       `json:"recoveryReason,omitempty"`
-	AssignmentCount int          `json:"assignmentCount"`
-	CompletedCount  int          `json:"completedCount"`
-	FailedCount     int          `json:"failedCount"`
-	Assignments     []Assignment `json:"assignments"`
+	CoordinationID      string       `json:"coordinationId"`
+	ParentInteractionID string       `json:"parentInteractionId,omitempty"`
+	TaskRunID           string       `json:"taskRunId,omitempty"`
+	GoalID              string       `json:"goalId,omitempty"`
+	GoalRevision        int64        `json:"goalRevision,omitempty"`
+	ExecutionCoreID     string       `json:"executionCoreId,omitempty"`
+	DeviceID            string       `json:"deviceId,omitempty"`
+	DeadlineAt          *time.Time   `json:"deadlineAt,omitempty"`
+	CancelRequested     bool         `json:"cancelRequested,omitempty"`
+	Status              string       `json:"status"`
+	Strategy            string       `json:"strategy,omitempty"`
+	UpdatedAt           time.Time    `json:"updatedAt"`
+	RecoveryState       string       `json:"recoveryState"`
+	RecoveryReason      string       `json:"recoveryReason,omitempty"`
+	AssignmentCount     int          `json:"assignmentCount"`
+	CompletedCount      int          `json:"completedCount"`
+	FailedCount         int          `json:"failedCount"`
+	Assignments         []Assignment `json:"assignments"`
 }
 
 type TaskSummary struct {

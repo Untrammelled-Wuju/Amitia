@@ -19,19 +19,6 @@ class _PetReleaseApi extends Fake implements BackendServiceApi {
     paths.add(path);
     bodies.add(data);
     requestHeaders.add(headers);
-    if (path == '/api/desktop-pets/releases/build') {
-      return {
-            'release': {
-              'id': 'release-one',
-              'petId': 'pet-one',
-              'version': '1.0.1',
-              'lifecycle': 'ready',
-              'defaultActionKey': 'idle_normal',
-              'actionCount': 2,
-            },
-          }
-          as T;
-    }
     if (path.endsWith('/install') ||
         path.endsWith('/enable') ||
         path.endsWith('/disable') ||
@@ -139,28 +126,6 @@ class _PetReleaseApi extends Fake implements BackendServiceApi {
 }
 
 void main() {
-  test(
-    'release build uses canonical release endpoint and idempotency key',
-    () async {
-      final api = _PetReleaseApi();
-      final service = PetReleaseService(api);
-
-      final release = await service.buildRelease(
-        processingTaskId: 'processing-one',
-        defaultAction: 'idle_normal',
-        includedActions: const ['idle_normal', 'wave'],
-      );
-
-      expect(api.paths, ['/api/desktop-pets/releases/build']);
-      expect(api.bodies.single, isA<Map<String, dynamic>>());
-      final body = api.bodies.single as Map<String, dynamic>;
-      expect(body['processingTaskId'], 'processing-one');
-      expect(body['idempotencyKey'], startsWith('mobile-pet-release-'));
-      expect(release.id, 'release-one');
-      expect(release.version, '1.0.1');
-    },
-  );
-
   test('release list excludes non-ready records', () async {
     final service = PetReleaseService(_PetReleaseApi());
     final releases = await service.listReleases();

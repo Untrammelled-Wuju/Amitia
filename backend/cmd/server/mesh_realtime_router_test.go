@@ -150,13 +150,13 @@ func TestOwnedRealtimeRealTLSRejectsReplayForeignCoreOriginAndSavesEachMode(t *t
 			t.Fatal("foreign Core or Origin ticket accepted")
 		}
 	}
-	for _, coordinated := range []bool{false, true} {
+	for _, coordinated := range []bool{true} {
 		if coordinated {
 			policy, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 			if err != nil {
 				t.Fatal(err)
 			}
-			b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+			ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 			scope = threeCoreSpeechScope(t, b, a)
 		}
 		ticket := realtimeTicketHTTP(t, b, a, scope, "")
@@ -232,12 +232,11 @@ func TestOwnedRealtimeRealTLSRejectsReplayForeignCoreOriginAndSavesEachMode(t *t
 			t.Fatal("single use ticket replay accepted")
 		}
 	}
-	if model.asr.Load() != 2 || model.frames.Load() != 2 {
+	if model.asr.Load() != 1 || model.frames.Load() != 1 {
 		t.Fatal("realtime bypassed Core ASR")
 	}
 	firstSpeech := <-model.speech
-	secondSpeech := <-model.speech
-	if firstSpeech.VoiceType != "voice.custom" || firstSpeech.ResourceID != "resource.custom" || secondSpeech.VoiceType != "" || secondSpeech.ResourceID != "" {
+	if firstSpeech.VoiceType != "" || firstSpeech.ResourceID != "" {
 		t.Fatal("实时朗读没有继承当前票据的音色与资源配置")
 	}
 }
@@ -273,7 +272,7 @@ func TestOwnedRealtimeRealTLSDisconnectAndModeChangeCancelASR(t *testing.T) {
 			if disconnect {
 				conn.Close()
 			} else {
-				b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": scope.ModeRevision, "selectedRole": "one"}, 200)
+				ensureCoordinatedForTest(t, b, a, scope.ModeRevision)
 			}
 			select {
 			case <-model.cancelled:

@@ -317,7 +317,7 @@ class DeviceOwnedChatService {
       stopLocal(
         coreId != nextCore
             ? '云端服务提供者已从「$coreId」切换为「$nextCore」，当前回复已中断。'
-            : '统筹模式或调用权限已变化，当前回复已中断；继续发送时使用当前服务和数据归属。',
+            : '数据归属或调用权限已变化，当前回复已中断；继续发送时使用当前 Core。',
       );
     }
     final changeId = (transition?['providerChangeId'] ?? '').toString();
@@ -811,12 +811,10 @@ class DeviceOwnedChatService {
     final seen = <String>{};
     var cursor = '';
     var historicalCursor = '';
-    final historyRoles = policy?['coordinated'] == true
-        ? (await historicalRoles(role))
-              .map((row) => (row['id'] ?? '').toString())
-              .where((id) => id.isNotEmpty)
-              .toList()
-        : <String>[];
+    final historyRoles = (await historicalRoles(role))
+        .map((row) => (row['id'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toList();
     var historyIndex = 0;
     var currentDone = false;
     final visitedCursors = <String>{};

@@ -184,6 +184,9 @@ type ModelConfig struct {
 	MaxTokens              int      `gorm:"column:max_tokens;default:4096" json:"maxTokens"`
 	ContextWindow          int      `gorm:"column:context_window;default:0" json:"contextWindow"`
 	MaxOutputTokens        int      `gorm:"column:max_output_tokens;default:0" json:"maxOutputTokens"`
+	BudgetRateVersion      string   `gorm:"column:budget_rate_version" json:"budgetRateVersion"`
+	BudgetInputRate        int64    `gorm:"column:budget_input_rate;default:0" json:"budgetInputRate"`
+	BudgetOutputRate       int64    `gorm:"column:budget_output_rate;default:0" json:"budgetOutputRate"`
 	CapabilitiesJSON       string   `gorm:"column:capabilities_json" json:"capabilitiesJson"`
 	SupportsReasoning      bool     `gorm:"-" json:"supportsReasoning"`
 	SupportsVision         bool     `gorm:"-" json:"supportsVision"`
@@ -269,11 +272,10 @@ type WebChatRequest struct {
 }
 
 type CreateConversationRequest struct {
-	ProjectID string `json:"projectId"`
-	Title     string `json:"title"`
-	Channel   string `json:"channel"`
-	Source    string `json:"source"`
-	PeerID    string `json:"peerId"`
+	Title   string `json:"title"`
+	Channel string `json:"channel"`
+	Source  string `json:"source"`
+	PeerID  string `json:"peerId"`
 }
 
 type ConversationQuery struct {
@@ -285,75 +287,8 @@ type ConversationQuery struct {
 	PageSize             int    `form:"pageSize"`
 	Channel              string `form:"channel"`
 	Source               string `form:"source"`
-	ProjectID            string `form:"projectId"`
 	RecentOnly           bool   `form:"recentOnly"`
 	Keyword              string `form:"keyword"`
-}
-
-type Project struct {
-	ID          string `gorm:"column:id;primaryKey" json:"id"`
-	SpaceID     string `gorm:"column:space_id;not null;index" json:"-"`
-	Name        string `gorm:"column:name;not null" json:"name"`
-	WorkspaceID string `gorm:"column:workspace_id;not null;index" json:"workspaceId"`
-	DeviceID    string `gorm:"column:device_id;not null;default:''" json:"deviceId"`
-	RootURI     string `gorm:"column:root_uri;not null;default:''" json:"rootUri"`
-	PinnedAt    string `gorm:"column:pinned_at;not null;default:''" json:"pinnedAt,omitempty"`
-	CreatedAt   string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt   string `gorm:"column:updated_at" json:"updatedAt"`
-	Revision    int64  `gorm:"column:revision;not null;default:1" json:"revision"`
-}
-
-func (Project) TableName() string { return "projects" }
-
-func (p *Project) BeforeCreate(tx *gorm.DB) error {
-	if p.ID == "" {
-		p.ID = uuid.New().String()
-	}
-	now := time.Now().Format("2006-01-02 15:04:05")
-	if p.CreatedAt == "" {
-		p.CreatedAt = now
-	}
-	if p.UpdatedAt == "" {
-		p.UpdatedAt = now
-	}
-	return nil
-}
-
-type CreateProjectRequest struct {
-	Name        string `json:"name"`
-	WorkspaceID string `json:"workspaceId" binding:"required"`
-	DeviceID    string `json:"deviceId"`
-	RootURI     string `json:"rootUri"`
-}
-
-type UpdateProjectRequest struct {
-	Name        *string `json:"name"`
-	WorkspaceID *string `json:"workspaceId"`
-	DeviceID    *string `json:"deviceId"`
-	RootURI     *string `json:"rootUri"`
-	Pinned      *bool   `json:"pinned"`
-}
-
-type ProjectConversationSummary struct {
-	Project
-	Available         bool           `json:"available"`
-	Status            string         `json:"status"`
-	StatusReason      string         `json:"statusReason,omitempty"`
-	WorkspaceKind     string         `json:"workspaceKind"`
-	ConversationCount int64          `json:"conversationCount"`
-	Conversations     []Conversation `json:"conversations"`
-}
-
-type ConversationSidebarResponse struct {
-	Pinned   []Conversation               `json:"pinned"`
-	Recent   []Conversation               `json:"recent"`
-	Projects []ProjectConversationSummary `json:"projects"`
-}
-
-type ProjectOpenTarget struct {
-	Kind string `json:"kind"`
-	Path string `json:"path,omitempty"`
-	URI  string `json:"uri,omitempty"`
 }
 
 type MessageSearchQuery struct {
@@ -420,7 +355,6 @@ type ProcessMessageRequest struct {
 	Message                  string                       `json:"message"`
 	ConversationID           string                       `json:"conversationId"`
 	ThreadID                 string                       `json:"threadId,omitempty"`
-	ProjectID                string                       `json:"projectId"`
 	Sequence                 int64                        `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
 	Channel                  string                       `json:"channel"`
 	Source                   string                       `json:"source"`

@@ -1,14 +1,16 @@
 import type { BrowserWindowConstructorOptions } from "electron";
 
+export const TITLEBAR_HEIGHT = 40;
+
 export function windowChromeOptions(platform: NodeJS.Platform, dark: boolean): BrowserWindowConstructorOptions {
   if (platform === "darwin") {
-    return { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 10 } };
+    return { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 13 } };
   }
   if (platform === "win32") {
     return {
       titleBarStyle: "hidden",
       titleBarOverlay: {
-        height: 34,
+        height: TITLEBAR_HEIGHT,
         color: dark ? "#1b1b1c" : "#f9fafb",
         symbolColor: dark ? "#f9fafb" : "#0f1115",
       },

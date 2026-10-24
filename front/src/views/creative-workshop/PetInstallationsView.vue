@@ -63,10 +63,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     <el-card shadow="never" class="table-card">
       <el-empty
         v-if="!loading && !installations.length"
-        description="暂无安装的桌宠，前往处理结果审核页安装资源包"
+        description="暂无已安装的桌宠，可从已有发布记录中选择安装"
         :image-size="80"
       >
-        <el-button type="primary" @click="goToTasks">前往任务列表</el-button>
+        <el-button type="primary" @click="openInstallDialog">选择安装</el-button>
       </el-empty>
 
       <div v-else class="installation-grid" v-loading="loading">
@@ -1097,7 +1097,7 @@ async function onReinstall(item: DesktopPetInstallation) {
 
 function confirmUninstall(item: DesktopPetInstallation) {
   ElMessageBox.confirm(
-    `卸载桌宠「${item.name}」会删除安装目录与安装记录,生成历史与原始素材将保留。是否继续?`,
+    `卸载桌宠「${item.name}」会删除安装目录与安装记录，发布资源将保留。是否继续?`,
     "确认卸载桌宠",
     {
       confirmButtonText: "确认卸载",
@@ -1120,11 +1120,7 @@ function confirmUninstall(item: DesktopPetInstallation) {
 }
 
 function goBack() {
-  router.push("/creative-workshop/pet/tasks");
-}
-
-function goToTasks() {
-  router.push("/creative-workshop/pet/tasks");
+  router.push("/creative-workshop/pet");
 }
 
 async function openInstallDialog() {

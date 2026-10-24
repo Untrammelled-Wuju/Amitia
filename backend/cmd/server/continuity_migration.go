@@ -17,6 +17,22 @@ func migrateLegacyContinuity(ctx context.Context, db *gorm.DB, engine *business.
 	if !db.Migrator().HasTable("continuity_threads") {
 		return nil
 	}
+	if db.Migrator().HasTable("continuity_thread_bindings") {
+		var conflict struct {
+			BindingID string `gorm:"column:binding_id"`
+		}
+		result := db.WithContext(ctx).Table("continuity_thread_bindings AS binding").
+			Select("binding.binding_id").
+			Joins("JOIN continuity_threads thread ON thread.id=binding.thread_id").
+			Where("binding.binding_type=? AND binding.role=?", "task_run", "execution").
+			Group("binding.binding_id").Having("COUNT(DISTINCT binding.thread_id)>1").Limit(1).Scan(&conflict)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected > 0 {
+			return fmt.Errorf("旧持续事项存在任务执行归属冲突，保留原记录并停止迁移，请先核对原始绑定")
+		}
+	}
 	var threads []continuity.Thread
 	if err := db.WithContext(ctx).Order("created_at ASC, id ASC").Find(&threads).Error; err != nil {
 		return err

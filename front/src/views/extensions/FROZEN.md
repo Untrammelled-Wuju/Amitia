@@ -44,11 +44,8 @@
 被冻结的入口文件：
 
 - `CreativeWorkshopView.vue`：创意工坊主入口；
-- `PetCreationView.vue`：宠物创建页；
 - `PetHubView.vue`：宠物中心页；
 - `PetInstallationsView.vue`：宠物安装页；
-- `PetProcessingReviewView.vue`：宠物处理审阅页；
-- `PetTaskListView.vue`：宠物任务列表页。
 
 ### 4. 前端路由与导航
 

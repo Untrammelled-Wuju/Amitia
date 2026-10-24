@@ -324,6 +324,13 @@ export function useModelConfig(options?: ModelConfigOptions) {
     if (!valid) return;
     if (!await allowConfiguration(editorContext.value)) return;
 
+    if (apiBase === "/api/model" && "budgetRateVersion" in form) {
+      if (typeof form.budgetRateVersion !== "string" || form.budgetRateVersion.trim() !== form.budgetRateVersion || new TextEncoder().encode(form.budgetRateVersion).length > 128 ||
+        ![form.budgetInputRate, form.budgetOutputRate].every(rate => Number.isSafeInteger(rate) && rate >= 0 && rate <= 100000000)) {
+        ElMessage.warning("预算计价版本最多 128 字节，计价上界须为 0–100000000 的整数");
+        return;
+      }
+    }
     saving.value = true;
     try {
       let payload: any = { ...form };

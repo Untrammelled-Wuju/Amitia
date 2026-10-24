@@ -325,7 +325,11 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
   Future<void> _bindCurrentDevice() async {
     if (_submitting) return;
     final deployment = ref.read(mobileDeploymentConfigProvider);
-    var cloudUri = deployment.remoteCoreUri?.trim() ?? '';
+    final routeUri =
+        GoRouterState.of(context).uri.queryParameters['endpoint']?.trim() ?? '';
+    var cloudUri = routeUri.isNotEmpty
+        ? routeUri
+        : (deployment.remoteCoreUri?.trim() ?? '');
     final raw = _pairingController.text.trim();
     final scanned = raw.startsWith('amitia://') ? Uri.tryParse(raw) : null;
     final fingerprint = scanned?.queryParameters['fingerprint'] ?? '';
@@ -339,9 +343,8 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
       }
       cloudUri = scanned?.queryParameters['endpoint'] ?? '';
     }
-    if (fingerprint.isEmpty &&
-        (deployment.mode != MobileDeploymentMode.cloud || cloudUri.isEmpty)) {
-      _show('请先配置并启用云端模式');
+    if (fingerprint.isEmpty && cloudUri.isEmpty) {
+      _show('请先填写 Cloud Core 地址并完成配对');
       return;
     }
     setState(() => _submitting = true);
@@ -397,21 +400,19 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
         fingerprint: fingerprint,
         coreId: coreId,
       );
-      if (fingerprint.isNotEmpty) {
-        final previous = ref.read(mobileDeploymentConfigProvider);
-        final next = MobileDeploymentConfig(
-          mode: MobileDeploymentMode.cloud,
-          remoteCoreUri: cloudUri,
-        );
-        if (previous.mode != next.mode ||
-            previous.remoteCoreUri?.trim() != next.remoteCoreUri?.trim()) {
-          await notificationCoordinator
-              .revokeCurrentRegistrationForDeploymentTransition();
-          notificationHandoff = true;
-        }
-        await ref.read(mobileDeploymentConfigProvider.notifier).update(next);
-        deploymentConfigChanged = true;
+      final previous = ref.read(mobileDeploymentConfigProvider);
+      final next = MobileDeploymentConfig(
+        mode: MobileDeploymentMode.cloud,
+        remoteCoreUri: cloudUri,
+      );
+      if (previous.mode != next.mode ||
+          previous.remoteCoreUri?.trim() != next.remoteCoreUri?.trim()) {
+        await notificationCoordinator
+            .revokeCurrentRegistrationForDeploymentTransition();
+        notificationHandoff = true;
       }
+      await ref.read(mobileDeploymentConfigProvider.notifier).update(next);
+      deploymentConfigChanged = true;
       ref.invalidate(localDeviceMeshStatusProvider);
       ref.invalidate(localDeviceMeshIdentityProvider);
       ref.invalidate(deviceMeshDevicesProvider);
@@ -578,7 +579,7 @@ class _ConnectionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  cloudReady ? 'Cloud Core 已配置' : '需要云端模式',
+                  cloudReady ? 'Cloud Core 已配置' : '需要云端统筹模式',
                   style: AppTypography.body(context),
                 ),
                 const SizedBox(height: 2),

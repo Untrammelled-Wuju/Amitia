@@ -89,8 +89,8 @@ func TestSnapshotMustMatchDurableParentAndAssignments(t *testing.T) {
 		{AssignmentID: "worker-1", Status: interaction.AssignmentSucceeded}, {AssignmentID: "worker-2", Status: interaction.AssignmentSucceeded},
 	}}
 	got, err := List(context.Background(), taskRecordReader{records: []*interaction.InteractionRecord{record}}, "space", "conv", fakeSnapshot{snapshot: live})
-	if err != nil || got.Tasks[0].RecoveryState != "runtime-observed" || got.Tasks[0].CompletedCount != 2 || got.Tasks[0].Status != "succeeded" {
-		t.Fatalf("live projection failed: %+v %v", got, err)
+	if err != nil || got.Tasks[0].RecoveryState != "needs-reconciliation" || got.Tasks[0].CompletedCount != 1 || got.Tasks[0].Status != "running" || got.Summary.Succeeded != 0 {
+		t.Fatalf("unproven live terminal was accepted: %+v %v", got, err)
 	}
 	live.ParentInteractionID = "foreign-parent"
 	got, _ = List(context.Background(), taskRecordReader{records: []*interaction.InteractionRecord{record}}, "space", "conv", fakeSnapshot{snapshot: live})

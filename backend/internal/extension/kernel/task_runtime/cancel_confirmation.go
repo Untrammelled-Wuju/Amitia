@@ -10,6 +10,9 @@ func (s *TaskRuntimeService) CancelAndWait(ctx context.Context, taskRunID, reaso
 	if err != nil || current == nil {
 		return NewTaskError(ErrTaskNotFound, "待取消的任务不存在")
 	}
+	if current.Status.IsTerminal() && current.Status != RunStatusCancelled {
+		return NewTaskError(ErrTaskNotCancelable, "任务已终结但未确认取消: "+string(current.Status))
+	}
 	if !current.Status.IsTerminal() {
 		if err := s.Cancel(ctx, taskRunID, reason); err != nil {
 			return err
@@ -35,8 +38,14 @@ func (s *TaskRuntimeService) CancelAndWait(ctx context.Context, taskRunID, reaso
 					s.handleFinished(ctx, live, "cancelled", nil, "", "", "任务已取消")
 				}
 				confirmed, err := s.store.GetTaskRun(ctx, taskRunID)
-				if err != nil || confirmed == nil || !confirmed.Status.IsTerminal() {
+				if err != nil || confirmed == nil {
 					return NewTaskError(ErrTaskExecutionAttemptInvalid, "进程已停止，取消状态尚未确认")
+				}
+				if confirmed.Generation != current.Generation || confirmed.ExecutionAttemptID != current.ExecutionAttemptID {
+					return NewTaskError(ErrTaskExecutionAttemptInvalid, "取消确认期间执行代次已变化")
+				}
+				if confirmed.Status != RunStatusCancelled {
+					return NewTaskError(ErrTaskExecutionAttemptInvalid, "进程停止后任务未确认取消: "+string(confirmed.Status))
 				}
 				return nil
 			case <-ctx.Done():
@@ -52,6 +61,9 @@ func (s *TaskRuntimeService) CancelAndWait(ctx context.Context, taskRunID, reaso
 			return NewTaskError(ErrTaskExecutionAttemptInvalid, "取消期间任务执行代次已变化")
 		}
 		if live.Status.IsTerminal() {
+			if live.Status != RunStatusCancelled {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务终态并非已确认取消: "+string(live.Status))
+			}
 			return nil
 		}
 		select {

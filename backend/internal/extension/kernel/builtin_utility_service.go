@@ -1,14 +1,19 @@
 package kernel
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -73,7 +78,7 @@ func NewBuiltinUtilityService(deps BuiltinUtilityDeps) *BuiltinUtilityService {
 func (s *BuiltinUtilityService) Supports(name string) bool {
 	switch name {
 	case "list_files", "read_file_part", "apply_file":
-		return s.workspace != nil
+		return true
 	case "send_attachment":
 		return s.artifact != nil
 	case "visit_web":
@@ -91,7 +96,7 @@ func (s *BuiltinUtilityService) Supports(name string) bool {
 	case "execute_terminal", "execute_in_terminal_session_streaming", "get_terminal_session_screen", "ssh_login", "ssh_exit":
 		return s.androidLinux != nil && amitiaLinuxAvailable(s.androidLinux)
 	case "execute_host_command":
-		return s.workspace != nil && (runtime.GOOS == "windows" || runtime.GOOS == "linux" || runtime.GOOS == "darwin")
+		return runtime.GOOS == "windows" || runtime.GOOS == "linux" || runtime.GOOS == "darwin"
 	default:
 		return false
 	}
@@ -261,14 +266,200 @@ func resolveWorkspaceURI(obj map[string]any, invocation capability.ToolInvocatio
 	return bindWorkspaceURI(rootURI, filePath)
 }
 
+func invocationWorkingDirectory(invocation capability.ToolInvocationContext) string {
+	if invocation.ExecContext == nil || invocation.ExecContext.Metadata == nil {
+		return ""
+	}
+	for _, key := range []string{"workingDirectory", "cwd"} {
+		if value, ok := invocation.ExecContext.Metadata[key].(string); ok && strings.TrimSpace(value) != "" {
+			return filepath.Clean(strings.TrimSpace(value))
+		}
+	}
+	return ""
+}
+
+func directLocalPath(obj map[string]any, invocation capability.ToolInvocationContext) (string, bool, error) {
+	raw := strings.TrimSpace(stringValue(obj, "uri"))
+	if strings.HasPrefix(raw, "file://") {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			return "", false, err
+		}
+		raw = parsed.Path
+		if runtime.GOOS == "windows" && len(raw) >= 3 && raw[0] == '/' && raw[2] == ':' {
+			raw = raw[1:]
+		}
+	} else if strings.HasPrefix(raw, "amitia://") || strings.HasPrefix(raw, "workspace://") {
+		return "", false, nil
+	}
+	if raw == "" {
+		raw = strings.TrimSpace(stringValue(obj, "path", "filePath"))
+	}
+	if raw == "" {
+		return "", false, nil
+	}
+	if strings.HasPrefix(raw, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", false, err
+		}
+		raw = filepath.Join(home, strings.TrimPrefix(raw, "~/"))
+	}
+	if !filepath.IsAbs(raw) {
+		workingDirectory := invocationWorkingDirectory(invocation)
+		if workingDirectory == "" {
+			return "", false, nil
+		}
+		raw = filepath.Join(workingDirectory, raw)
+	}
+	absolute, err := filepath.Abs(raw)
+	if err != nil {
+		return "", false, err
+	}
+	return filepath.Clean(absolute), true, nil
+}
+
+func localFileURI(entryPath string) string {
+	normalized := filepath.ToSlash(entryPath)
+	if runtime.GOOS == "windows" && len(normalized) >= 2 && normalized[1] == ':' {
+		normalized = "/" + normalized
+	}
+	return (&url.URL{Scheme: "file", Path: normalized}).String()
+}
+
+func localEntry(entryPath string, info os.FileInfo) workspace.WorkspaceEntry {
+	entryType := workspace.WorkspaceEntryTypeFile
+	uri := localFileURI(entryPath)
+	if info.IsDir() {
+		entryType = workspace.WorkspaceEntryTypeDirectory
+		uri += "/"
+	}
+	size := info.Size()
+	modified := info.ModTime()
+	mimeType := ""
+	if entryType == workspace.WorkspaceEntryTypeFile {
+		mimeType = mime.TypeByExtension(strings.ToLower(filepath.Ext(entryPath)))
+	}
+	mode := info.Mode().Perm()
+	return workspace.WorkspaceEntry{
+		URI:        uri,
+		Name:       info.Name(),
+		Type:       entryType,
+		MIMEType:   mimeType,
+		SizeBytes:  &size,
+		ModifiedAt: &modified,
+		Readable:   mode&0444 != 0,
+		Writable:   mode&0222 != 0,
+	}
+}
+
+func listLocalFiles(entryPath string, limit int, cursor string) (workspace.ListResult, error) {
+	info, err := os.Stat(entryPath)
+	if err != nil {
+		return workspace.ListResult{}, err
+	}
+	if !info.IsDir() {
+		return workspace.ListResult{}, errors.New("path is not a directory")
+	}
+	dirEntries, err := os.ReadDir(entryPath)
+	if err != nil {
+		return workspace.ListResult{}, err
+	}
+	offset, _ := strconv.Atoi(cursor)
+	if offset < 0 {
+		offset = 0
+	}
+	result := workspace.ListResult{Entries: make([]workspace.WorkspaceEntry, 0, minInt(limit, len(dirEntries)))}
+	for index := offset; index < len(dirEntries) && len(result.Entries) < limit; index++ {
+		child := dirEntries[index]
+		childInfo, infoErr := child.Info()
+		if infoErr != nil {
+			return workspace.ListResult{}, infoErr
+		}
+		result.Entries = append(result.Entries, localEntry(filepath.Join(entryPath, child.Name()), childInfo))
+	}
+	if offset+len(result.Entries) < len(dirEntries) {
+		result.HasMore = true
+		result.NextCursor = strconv.Itoa(offset + len(result.Entries))
+	}
+	return result, nil
+}
+
+func readLocalFilePart(entryPath string, start, end int) (string, int, bool, error) {
+	file, err := os.Open(entryPath)
+	if err != nil {
+		return "", 0, false, err
+	}
+	defer file.Close()
+	reader := bufio.NewReaderSize(file, 256*1024)
+	var out strings.Builder
+	lineNo := 1
+	lastLine := start - 1
+	truncated := false
+	for {
+		line, readErr := reader.ReadString('\n')
+		if len(line) > 0 {
+			hasNewline := strings.HasSuffix(line, "\n")
+			line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+			if lineNo >= start && lineNo <= end {
+				out.WriteString(line)
+				if hasNewline {
+					out.WriteByte('\n')
+				}
+				lastLine = lineNo
+			}
+			if lineNo >= end {
+				_, probeErr := reader.Peek(1)
+				truncated = probeErr == nil || readErr != io.EOF
+				break
+			}
+			lineNo++
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				return "", 0, false, readErr
+			}
+			break
+		}
+	}
+	return out.String(), lastLine, truncated, nil
+}
+
+func writeLocalFile(entryPath string, content []byte, exclusive bool) (workspace.WorkspaceEntry, error) {
+	if entryPath == "" || entryPath == string(filepath.Separator) {
+		return workspace.WorkspaceEntry{}, errors.New("cannot write filesystem root")
+	}
+	if err := os.MkdirAll(filepath.Dir(entryPath), 0755); err != nil {
+		return workspace.WorkspaceEntry{}, err
+	}
+	flags := os.O_WRONLY | os.O_CREATE
+	if exclusive {
+		flags |= os.O_EXCL
+	} else {
+		flags |= os.O_TRUNC
+	}
+	file, err := os.OpenFile(entryPath, flags, 0644)
+	if err != nil {
+		return workspace.WorkspaceEntry{}, err
+	}
+	if _, err = file.Write(content); err != nil {
+		_ = file.Close()
+		return workspace.WorkspaceEntry{}, err
+	}
+	if err = file.Close(); err != nil {
+		return workspace.WorkspaceEntry{}, err
+	}
+	info, err := os.Stat(entryPath)
+	if err != nil {
+		return workspace.WorkspaceEntry{}, err
+	}
+	return localEntry(entryPath, info), nil
+}
+
 func (s *BuiltinUtilityService) listFiles(ctx context.Context, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
 	obj, err := unmarshalObject(input)
 	if err != nil {
 		return nil, fmt.Errorf("list_files input: %w", err)
-	}
-	uri, err := resolveWorkspaceURI(obj, invocation)
-	if err != nil {
-		return nil, err
 	}
 	limit := intValue(obj, 200, "limit")
 	if limit < 1 {
@@ -276,6 +467,19 @@ func (s *BuiltinUtilityService) listFiles(ctx context.Context, input json.RawMes
 	}
 	if limit > 1000 {
 		limit = 1000
+	}
+	if localPath, direct, pathErr := directLocalPath(obj, invocation); pathErr != nil {
+		return nil, pathErr
+	} else if direct {
+		result, listErr := listLocalFiles(localPath, limit, stringValue(obj, "cursor"))
+		if listErr != nil {
+			return nil, listErr
+		}
+		return marshalResult(map[string]any{"uri": localPath, "entries": result.Entries, "nextCursor": result.NextCursor, "hasMore": result.HasMore})
+	}
+	uri, err := resolveWorkspaceURI(obj, invocation)
+	if err != nil {
+		return nil, err
 	}
 	result, err := s.workspace.List(ctx, uri, workspace.ListOptions{
 		Limit:  limit,
@@ -297,10 +501,6 @@ func (s *BuiltinUtilityService) readFilePart(ctx context.Context, input json.Raw
 	if err != nil {
 		return nil, fmt.Errorf("read_file_part input: %w", err)
 	}
-	uri, err := resolveWorkspaceURI(obj, invocation)
-	if err != nil {
-		return nil, err
-	}
 	start := intValue(obj, 1, "line_start", "startLine")
 	end := intValue(obj, 0, "line_end", "endLine")
 	maxLines := intValue(obj, 400, "maxLines")
@@ -318,6 +518,19 @@ func (s *BuiltinUtilityService) readFilePart(ctx context.Context, input json.Raw
 	}
 	if end-start+1 > 20000 {
 		end = start + 19999
+	}
+	if localPath, direct, pathErr := directLocalPath(obj, invocation); pathErr != nil {
+		return nil, pathErr
+	} else if direct {
+		content, lastLine, truncated, readErr := readLocalFilePart(localPath, start, end)
+		if readErr != nil {
+			return nil, fmt.Errorf("read_file_part %s: %w", localPath, readErr)
+		}
+		return marshalResult(map[string]any{"uri": localPath, "content": content, "startLine": start, "endLine": lastLine, "truncated": truncated})
+	}
+	uri, err := resolveWorkspaceURI(obj, invocation)
+	if err != nil {
+		return nil, err
 	}
 
 	const chunkSize int64 = 256 * 1024
@@ -405,10 +618,6 @@ func (s *BuiltinUtilityService) applyFile(ctx context.Context, input json.RawMes
 	if err != nil {
 		return nil, fmt.Errorf("apply_file input: %w", err)
 	}
-	uri, err := resolveWorkspaceURI(obj, invocation)
-	if err != nil {
-		return nil, err
-	}
 	op := strings.ToLower(strings.TrimSpace(stringValue(obj, "operation")))
 	oldText := stringValuePreserveEmpty(obj, "oldText", "old_content")
 	newText := stringValuePreserveEmpty(obj, "newText", "new_content")
@@ -424,6 +633,15 @@ func (s *BuiltinUtilityService) applyFile(ctx context.Context, input json.RawMes
 		default:
 			return nil, errors.New("operation is required when no replacement/content fields are supplied")
 		}
+	}
+	if localPath, direct, pathErr := directLocalPath(obj, invocation); pathErr != nil {
+		return nil, pathErr
+	} else if direct {
+		return applyLocalFile(obj, localPath, op, oldText, newText, content)
+	}
+	uri, err := resolveWorkspaceURI(obj, invocation)
+	if err != nil {
+		return nil, err
 	}
 
 	switch op {
@@ -492,6 +710,78 @@ func (s *BuiltinUtilityService) applyFile(ctx context.Context, input json.RawMes
 	}
 }
 
+func applyLocalFile(obj map[string]any, entryPath, op, oldText, newText, content string) (json.RawMessage, error) {
+	switch op {
+	case "delete":
+		info, statErr := os.Stat(entryPath)
+		if statErr != nil {
+			return nil, statErr
+		}
+		remove := os.Remove
+		if info.IsDir() && boolValue(obj, false, "recursive") {
+			remove = os.RemoveAll
+		}
+		if err := remove(entryPath); err != nil {
+			return nil, err
+		}
+		return marshalResult(map[string]any{"applied": true, "operation": "delete", "uri": entryPath})
+	case "create", "write":
+		if !hasAnyKey(obj, "content") {
+			content = newText
+		}
+		entry, err := writeLocalFile(entryPath, []byte(content), op == "create")
+		if err != nil {
+			return nil, err
+		}
+		return marshalResult(map[string]any{"applied": true, "operation": op, "uri": entryPath, "entry": entry})
+	case "patch":
+		patchText := stringValuePreserveEmpty(obj, "patch")
+		if strings.TrimSpace(patchText) == "" {
+			return nil, errors.New("patch is required for patch operation")
+		}
+		current, err := os.ReadFile(entryPath)
+		if err != nil {
+			return nil, err
+		}
+		baseHash := stringValuePreserveEmpty(obj, "baseSha256")
+		if baseHash != "" && workspace.ComputeSHA256(current) != baseHash {
+			return nil, errors.New("baseSha256 does not match current file")
+		}
+		updated, err := workspace.ApplyUnifiedPatch(current, patchText)
+		if err != nil {
+			return nil, err
+		}
+		entry, err := writeLocalFile(entryPath, updated, false)
+		if err != nil {
+			return nil, err
+		}
+		return marshalResult(map[string]any{"applied": true, "operation": "patch", "uri": entryPath, "entry": entry})
+	case "replace":
+		if !hasAnyKey(obj, "oldText", "old_content") {
+			return nil, errors.New("oldText/old_content is required for replace")
+		}
+		if oldText == "" {
+			return nil, errors.New("oldText must not be empty for replacement")
+		}
+		current, err := os.ReadFile(entryPath)
+		if err != nil {
+			return nil, err
+		}
+		count := strings.Count(string(current), oldText)
+		expected := intValue(obj, 1, "expectedOccurrences")
+		if expected >= 0 && count != expected {
+			return nil, fmt.Errorf("replacement occurrence mismatch: expected %d, found %d", expected, count)
+		}
+		entry, err := writeLocalFile(entryPath, []byte(strings.ReplaceAll(string(current), oldText, newText)), false)
+		if err != nil {
+			return nil, err
+		}
+		return marshalResult(map[string]any{"applied": true, "operation": "replace", "uri": entryPath, "occurrences": count, "entry": entry})
+	default:
+		return nil, fmt.Errorf("unsupported apply_file operation %q", op)
+	}
+}
+
 func resolveWorkspaceIdentity(obj map[string]any, uri string, invocation capability.ToolInvocationContext) (string, string, error) {
 	workspaceID := strings.TrimSpace(stringValue(obj, "workspaceId"))
 	filePath := strings.TrimPrefix(strings.TrimSpace(stringValue(obj, "path", "filePath")), "/")
@@ -549,7 +839,7 @@ func (s *BuiltinUtilityService) sendAttachment(ctx context.Context, input json.R
 		fileName = strings.TrimSpace(stringValue(obj, "fileName", "filename", "name"))
 		if strings.HasPrefix(source, "data:") {
 			data, mimeType, err = decodeAttachmentDataURI(source)
-		} else if parsed, parseErr := url.Parse(source); parseErr == nil && parsed.Scheme != "" {
+		} else if parsed, parseErr := url.Parse(source); parseErr == nil && parsed.Scheme != "" && parsed.Scheme != "file" {
 			if parsed.Scheme != "https" && parsed.Scheme != "http" {
 				return nil, errors.New("send_attachment only accepts http or https URLs")
 			}
@@ -573,13 +863,29 @@ func (s *BuiltinUtilityService) sendAttachment(ctx context.Context, input json.R
 				return nil, err
 			}
 		} else {
-			workspaceURI, resolveErr := resolveWorkspaceURI(obj, invocation)
-			if resolveErr != nil {
-				return nil, resolveErr
-			}
-			data, err = s.readWorkspaceBytes(ctx, workspaceURI, 64*1024*1024)
-			if err == nil && fileName == "" {
-				fileName = path.Base(strings.TrimSuffix(workspaceURI, "/"))
+			if localPath, direct, pathErr := directLocalPath(obj, invocation); pathErr != nil {
+				return nil, pathErr
+			} else if direct {
+				info, statErr := os.Stat(localPath)
+				if statErr != nil {
+					return nil, statErr
+				}
+				if info.Size() > 64*1024*1024 {
+					return nil, errors.New("attachment exceeds 64 MiB")
+				}
+				data, err = os.ReadFile(localPath)
+				if err == nil && fileName == "" {
+					fileName = filepath.Base(localPath)
+				}
+			} else {
+				workspaceURI, resolveErr := resolveWorkspaceURI(obj, invocation)
+				if resolveErr != nil {
+					return nil, resolveErr
+				}
+				data, err = s.readWorkspaceBytes(ctx, workspaceURI, 64*1024*1024)
+				if err == nil && fileName == "" {
+					fileName = path.Base(strings.TrimSuffix(workspaceURI, "/"))
+				}
 			}
 		}
 		if err != nil {

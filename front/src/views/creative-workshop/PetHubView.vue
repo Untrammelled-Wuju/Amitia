@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <main class="pet-hub">
-    <ExtensionPageHeader title="桌宠" description="桌宠系统 v1 · 管理桌宠制作、安装与记录" parent-title="创意工坊" parent-path="/creative-workshop" />
+    <ExtensionPageHeader title="桌宠" description="管理桌宠安装、插件与运行" parent-title="创意工坊" parent-path="/creative-workshop" />
 
     <section class="entry-grid">
       <router-link
@@ -25,27 +25,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ArrowRight, Star, Clock, Box } from "@element-plus/icons-vue";
+import { ArrowRight, Box } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 
 
 const entries = [
   {
-    to: "/creative-workshop/pet/create",
-    title: "制作桌宠",
-    description: "创建和定制你的桌面陪伴角色",
-    icon: Star,
-  },
-  {
-    to: "/creative-workshop/pet/tasks",
-    title: "制作记录",
-    description: "查看桌宠生成任务的状态与进度",
-    icon: Clock,
-  },
-  {
     to: "/creative-workshop/pet/installations",
     title: "安装管理",
-    description: "管理已安装的桌宠、启用停用与配置",
+    description: "管理桌宠安装、插件、启用停用与运行配置",
     icon: Box,
   },
 ];

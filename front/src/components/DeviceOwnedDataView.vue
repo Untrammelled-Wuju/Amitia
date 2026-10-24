@@ -1,43 +1,65 @@
 <template>
-  <div v-if="loading" v-loading="true" class="data-loading" :data-amitia-ui="semanticTarget" />
-  <el-alert v-else-if="error" :title="error" type="error" :closable="false" :data-amitia-ui="semanticTarget"><el-button @click="initialize">重试</el-button></el-alert>
-  <section v-else-if="owned.enabled.value" class="owned-data-page" :data-amitia-ui="semanticTarget">
-    <header class="data-page-header">
+  <section class="owned-data-page" :data-amitia-ui="semanticTarget">
+    <ExtensionPageHeader
+      v-if="parentTitle && parentPath"
+      :title="title"
+      :description="description"
+      :parent-title="parentTitle"
+      :parent-path="parentPath"
+      breadcrumb-label="数据页面层级"
+    />
+    <header v-else class="data-page-header">
       <h2>{{ title }}</h2>
     </header>
-    <div class="data-toolbar">
-      <div v-if="owned.coordinated.value" class="toolbar-field">
-          <label :for="`${roleSelectId}-source`">数据来源</label>
-          <el-select :id="`${roleSelectId}-source`" v-model="dataSource" filterable aria-label="记忆数据来源" class="role-select">
-            <el-option label="当前 Core 的数据" value="current" />
-            <el-option v-for="item in historicalRoles" :key="item.id" :label="`原设备历史 · ${item.name}`" :value="`history:${item.id}`" />
-          </el-select>
+    <div v-if="loading" v-loading="true" class="data-loading" />
+    <el-alert v-else-if="error" :title="error" type="error" :closable="false">
+      <el-button @click="initialize">重试</el-button>
+    </el-alert>
+    <template v-else-if="owned.enabled.value">
+      <div class="data-toolbar">
+        <div class="toolbar-field">
+            <label :for="`${roleSelectId}-source`">数据来源</label>
+            <el-select :id="`${roleSelectId}-source`" v-model="dataSource" filterable aria-label="记忆数据来源" class="role-select">
+              <el-option label="当前 Core 的数据" value="current" />
+              <el-option v-for="item in historicalRoles" :key="item.id" :label="`原设备历史 · ${item.name}`" :value="`history:${item.id}`" />
+            </el-select>
+        </div>
+        <div class="toolbar-field">
+            <label :for="roleSelectId">查看范围</label>
+            <el-select :id="roleSelectId" v-model="viewSelection" filterable aria-label="记忆查看范围" class="role-select">
+              <el-option v-for="option in viewOptions" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
+        </div>
+        <div class="toolbar-field search-field">
+          <label :for="`${roleSelectId}-search`">搜索</label>
+          <el-input :id="`${roleSelectId}-search`" v-model="searchKeyword" clearable aria-label="搜索记忆" placeholder="搜索标题或内容" />
+        </div>
       </div>
-      <div class="toolbar-field">
-          <label :for="roleSelectId">查看范围</label>
-          <el-select :id="roleSelectId" v-model="viewSelection" filterable aria-label="记忆查看范围" class="role-select">
-            <el-option v-for="option in viewOptions" :key="option.value" :label="option.label" :value="option.value" />
-          </el-select>
-      </div>
-      <div class="toolbar-field search-field">
-        <label :for="`${roleSelectId}-search`">搜索</label>
-        <el-input :id="`${roleSelectId}-search`" v-model="searchKeyword" clearable aria-label="搜索记忆" placeholder="搜索标题或内容" />
-      </div>
-    </div>
-    <DeviceOwnedMemoryPanel v-if="role" :key="`${owned.coreId.value}/${role}/${mode || initialKind}`" embedded fixed-kind :source="dataSource" :requested-memory-view="viewSelection" :search="searchKeyword" :visible="true" :character-id="role" conversation-id="" :initial-kind="initialKind" :mode="mode" :kinds="kinds" />
-    <el-empty v-else description="选择角色后查看其数据；未配置角色时不能调用服务" />
+      <DeviceOwnedMemoryPanel v-if="role" :key="`${owned.coreId.value}/${role}/${mode || initialKind}`" embedded fixed-kind :source="dataSource" :requested-memory-view="viewSelection" :search="searchKeyword" :visible="true" :character-id="role" conversation-id="" :initial-kind="initialKind" :mode="mode" :kinds="kinds" />
+      <el-empty v-else description="选择角色后查看其数据；未配置角色时不能调用服务" />
+    </template>
+    <el-alert v-else title="当前 Core 的设备数据服务尚未就绪，请恢复服务后重试" type="warning" :closable="false" />
   </section>
-  <el-alert v-else title="当前 Core 的设备数据服务尚未就绪，请恢复服务后重试" type="warning" :closable="false" />
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, useId } from "vue";
 import DeviceOwnedMemoryPanel from "./DeviceOwnedMemoryPanel.vue";
+import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { getDeploymentConfig } from "@/runtime/runtime-adapter";
 import { ownedMemoryViewOptions } from "@/runtime/owned-memory-view-options";
 
-const props = defineProps<{ title: string; initialKind: string; semanticTarget?: string; mode?: string; kinds?: string[] }>();
+const props = defineProps<{
+  title: string;
+  initialKind: string;
+  description?: string;
+  semanticTarget?: string;
+  mode?: string;
+  kinds?: string[];
+  parentTitle?: string;
+  parentPath?: string;
+}>();
 const owned = useDeviceOwnedConversation();
 const loading = ref(true);
 const error = ref("");
@@ -78,7 +100,7 @@ async function loadHistoricalRoles() {
   const ticket = ++historicalGeneration;
   const selectedRole = role.value;
   const selectedCore = owned.coreId.value;
-  if (!owned.coordinated.value || !role.value) {
+  if (!role.value) {
     historicalRoles.value = [];
     return;
   }
@@ -112,16 +134,16 @@ onUnmounted(() => {
 
 <style scoped>
 .data-loading { min-height: 240px; }
-.owned-data-page { padding: 20px; min-width: 0; }
+.owned-data-page { padding: 0; min-width: 0; }
 .data-page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
 .data-page-header h2 { margin: 0; color: var(--ac-color-text-primary); font-size: var(--ac-font-size-xl); font-weight: 600; line-height: 1.5; }
-.data-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding: 16px; margin-bottom: 20px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); }
+.data-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding: 16px; margin: 20px 0; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); }
 .toolbar-field { display: flex; flex: 0 1 240px; flex-direction: column; gap: 8px; min-width: 0; }
 .toolbar-field label { color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.5; }
 .search-field { flex: 1 1 280px; }
 .role-select { width: 100%; min-width: 0; }
 @media (max-width: 640px) {
-  .owned-data-page { padding: 16px; }
+  .owned-data-page { padding: 0; }
   .data-page-header { align-items: stretch; flex-direction: column; }
   .data-toolbar { align-items: stretch; flex-direction: column; gap: 12px; }
   .toolbar-field { flex: auto; }

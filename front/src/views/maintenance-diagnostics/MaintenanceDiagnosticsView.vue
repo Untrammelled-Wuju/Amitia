@@ -4,10 +4,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="maintenance-page">
-    <div class="mp-header">
-      <h2 class="page-title">维护与诊断</h2>
-      <span class="mp-subtitle">单用户运维工具 - 仅服务部署者本人</span>
-    </div>
     <el-alert
       v-if="showRestartWarning"
       title="高风险操作警告"
@@ -58,18 +54,6 @@ function onExported(record: ExportRecord) {
 <style scoped>
 .maintenance-page {
   padding: 0 0 24px 0;
-}
-.mp-header {
-  margin-bottom: 16px;
-}
-.page-title {
-  font-size: var(--ac-font-size-lg);
-  font-weight: 600;
-  margin: 0 0 4px 0;
-}
-.mp-subtitle {
-  font-size: 12px;
-  color: var(--ac-color-text-muted);
 }
 .mp-alert {
   margin-bottom: 12px;

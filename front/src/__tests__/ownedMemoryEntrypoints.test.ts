@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
+import { createMemoryHistory, createRouter } from "vue-router";
 import DeviceOwnedMemoryPanel from "../components/DeviceOwnedMemoryPanel.vue";
 import DeviceOwnedDataView from "../components/DeviceOwnedDataView.vue";
 import MemoryInjectPanel from "../views/web-chat/components/MemoryInjectPanel.vue";
@@ -16,7 +17,11 @@ vi.mock("vue-echarts", () => ({ default: { name: "VChart", props: ["option"], te
 vi.mock("../composables/useApi", () => ({ apiClient: {}, useApi: () => ({ get: mocks.legacy, post: mocks.legacy, put: mocks.legacy, del: mocks.legacy }) }));
 vi.mock("../runtime/runtime-adapter", () => ({ getDeploymentConfig: mocks.deployment }));
 vi.mock("element-plus", async () => ({ ...await vi.importActual<any>("element-plus"), ElMessageBox: { confirm: mocks.confirm, prompt: mocks.prompt } }));
-const global = { directives: { loading: () => {} }, stubs: {
+const router = createRouter({
+  history: createMemoryHistory(),
+  routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
+});
+const global = { plugins: [router], directives: { loading: () => {} }, stubs: {
   DeviceOwnedMemoryManagement: true,
   ElForm: { template: "<div><slot /></div>" }, ElFormItem: { template: "<div><slot /></div>" }, ElDrawer: true, ElDatePicker: true,
   ElDialog: { props: ["modelValue"], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },

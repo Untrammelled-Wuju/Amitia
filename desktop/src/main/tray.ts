@@ -41,7 +41,7 @@ export function createAppTray(
           click: () => showWindow(win),
         },
         { label: "隐藏窗口", enabled: visible, click: () => win.hide() },
-        { label: `当前部署模式：${configToLabel(config)}`, enabled: false },
+        { label: `当前运行模式：${configToLabel(config)}`, enabled: false },
         { type: "separator" },
         {
           label: "开机自启动",

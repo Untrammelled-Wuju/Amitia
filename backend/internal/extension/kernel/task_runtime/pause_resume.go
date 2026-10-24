@@ -63,7 +63,10 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 	}
 
 	if current.Status == RunStatusPaused {
-		return nil
+		if current.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+			return s.confirmRemotePaused(ctx, current)
+		}
+		return coordination.ValidateCurrent(ctx)
 	}
 
 	if current.Status != RunStatusRunning && current.Status != RunStatusCheckpointing {
@@ -124,7 +127,9 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 		return err
 	}
 	cp, err := s.readTaskCheckpoint(ctx, latest)
-	if err != nil || cp == nil || cp.Version != version || cp.DefinitionHash != def.DefinitionHash || cp.InputHash != latest.InputHash || cp.PayloadHash != hashBytes(cp.Payload) {
+	_, owned := coordination.FromContext(ctx)
+	if err != nil || cp == nil || latest.CheckpointID == nil ||
+		validateRecoveryCheckpoint(latest, def, cp, owned) != nil || cp.Version != version {
 		return s.failPause(ctx, pausedRun, "暂停检查点未完成持久化确认")
 	}
 	if latest.Status != RunStatusPausing || latest.Generation != current.Generation || latest.ExecutionAttemptID != current.ExecutionAttemptID {
@@ -198,10 +203,10 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 	}
 	defer finish()
 	cp, err := s.readTaskCheckpoint(restored, current)
-	if err != nil || cp == nil || current.CheckpointID == nil || cp.CheckpointID != *current.CheckpointID || cp.DefinitionHash != def.DefinitionHash || cp.InputHash != current.InputHash || cp.PayloadHash != hashBytes(cp.Payload) {
+	_, owned := coordination.FromContext(restored)
+	if err != nil || cp == nil || current.CheckpointID == nil || validateRecoveryCheckpoint(current, def, cp, owned) != nil {
 		return NewTaskError(ErrTaskCheckpointIncompatible, "恢复检查点缺失或与任务不匹配")
 	}
-	_, owned := coordination.FromContext(restored)
 	if err := validateTaskDefinition(owned, current, def); err != nil {
 		return err
 	}
@@ -209,13 +214,8 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 		return err
 	}
 	if current.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
-		executor, supported := s.remoteExecutor.(interface {
-			ConfirmPauseStopped(context.Context, *TaskRun) bool
-		})
-		confirmation, cancel := context.WithTimeout(restored, time.Second)
-		defer cancel()
-		if !supported || !executor.ConfirmPauseStopped(confirmation, current) {
-			return NewTaskError(ErrTaskPauseInProgress, "旧设备执行停止尚未确认，不能恢复")
+		if err := s.confirmRemotePaused(restored, current); err != nil {
+			return err
 		}
 	}
 	if err := coordination.ValidateCurrent(restored); err != nil {

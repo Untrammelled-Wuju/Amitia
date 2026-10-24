@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -56,7 +57,49 @@ func identity(invoke protocol.RuntimeInvokePayload) (string, string, error) {
 	return action, hex.EncodeToString(digest[:]), nil
 }
 
-func (s *Store) Execute(ctx context.Context, invoke protocol.RuntimeInvokePayload, run func() (*protocol.RuntimeResultPayload, error)) (result *protocol.RuntimeResultPayload, err error) {
+type TaskExecutionBinding struct {
+	AttemptID            string `json:"attemptId"`
+	LeaseID              string `json:"leaseId"`
+	RuntimeID            string `json:"runtimeId"`
+	SessionID            string `json:"runtimeSessionId"`
+	ConnectionGeneration int64  `json:"connectionGeneration"`
+	TaskDefinitionID     string `json:"taskDefinitionId"`
+}
+
+func (b TaskExecutionBinding) valid(invoke protocol.RuntimeInvokePayload) bool {
+	return b.AttemptID != "" && b.LeaseID != "" && b.RuntimeID != "" && b.SessionID != "" && b.ConnectionGeneration > 0 && b.TaskDefinitionID != "" &&
+		len(b.AttemptID) <= 256 && len(b.LeaseID) <= 256 && len(b.RuntimeID) <= 256 && len(b.SessionID) <= 256 && len(b.TaskDefinitionID) <= 256 &&
+		b.AttemptID == invoke.InvocationID && b.RuntimeID == invoke.RuntimeID.String() && b.SessionID == invoke.RuntimeSessionID.String() &&
+		b.ConnectionGeneration == invoke.ConnectionGeneration && b.TaskDefinitionID == invoke.Handler && invoke.RuntimeType == "task" &&
+		strings.HasPrefix(invoke.IdempotencyKey, "task/")
+}
+
+func (s *Store) ExecuteTask(ctx context.Context, invoke protocol.RuntimeInvokePayload, binding TaskExecutionBinding, run func() (*protocol.RuntimeResultPayload, error)) (*protocol.RuntimeResultPayload, error) {
+	if !binding.valid(invoke) || len(invoke.OwnedExecutionScope) == 0 {
+		return nil, ErrConflict
+	}
+	var scope coordination.ExecutionScope
+	if json.Unmarshal(invoke.OwnedExecutionScope, &scope) != nil {
+		return nil, ErrConflict
+	}
+	if scope.Coordinated && (scope.ResourceOwnerID != scope.CoreID || scope.RoleOwnerID != scope.CoreID) {
+		return nil, ErrConflict
+	}
+	if !scope.Coordinated && (scope.ResourceOwnerID != invoke.DeviceID.String() || scope.RoleOwnerID != invoke.DeviceID.String()) {
+		return nil, ErrConflict
+	}
+	encoded, err := json.Marshal(binding)
+	if err != nil {
+		return nil, err
+	}
+	return s.execute(ctx, invoke, encoded, run)
+}
+
+func (s *Store) Execute(ctx context.Context, invoke protocol.RuntimeInvokePayload, run func() (*protocol.RuntimeResultPayload, error)) (*protocol.RuntimeResultPayload, error) {
+	return s.execute(ctx, invoke, nil, run)
+}
+
+func (s *Store) execute(ctx context.Context, invoke protocol.RuntimeInvokePayload, taskBinding []byte, run func() (*protocol.RuntimeResultPayload, error)) (result *protocol.RuntimeResultPayload, err error) {
 	action, digest, err := identity(invoke)
 	if err != nil {
 		return nil, err
@@ -79,7 +122,7 @@ func (s *Store) Execute(ctx context.Context, invoke protocol.RuntimeInvokePayloa
 		return nil, err
 	}
 	defer tx.Rollback()
-	insertion, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_execution_journal(device_id,action_id,payload_hash,core_id,status,updated_at) VALUES(?,?,?,?,'started',?) ON CONFLICT DO NOTHING`, invoke.DeviceID.String(), action, digest, invoke.SpaceID.String(), time.Now().UTC().Format(time.RFC3339Nano))
+	insertion, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_execution_journal(device_id,action_id,payload_hash,core_id,status,result,updated_at) VALUES(?,?,?,?,'started',?,?) ON CONFLICT DO NOTHING`, invoke.DeviceID.String(), action, digest, invoke.SpaceID.String(), taskBinding, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +132,10 @@ func (s *Store) Execute(ctx context.Context, invoke protocol.RuntimeInvokePayloa
 		return nil, err
 	}
 	if storedHash != digest {
+		return nil, ErrConflict
+	}
+
+	if taskBinding != nil && string(taskBinding) != string(storedResult) {
 		return nil, ErrConflict
 	}
 	if status == "completed" {
@@ -161,7 +208,8 @@ func (s *Store) Execute(ctx context.Context, invoke protocol.RuntimeInvokePayloa
 	completion := "completed"
 	if ownedScope.Coordinated {
 		completion = "performed"
-		encoded = nil
+
+		encoded = taskBinding
 	}
 	tx, err = s.db.BeginTx(ctx, nil)
 	if err != nil {

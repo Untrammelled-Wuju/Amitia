@@ -93,7 +93,7 @@ export const useChatStore = defineStore("chat", () => {
     const workspaces: ProjectWorkspace[] = rawWorkspaces.map((workspace: any): ProjectWorkspace => ({ id: String(workspace.id || ""), deviceId: String(workspace.deviceId || ""), name: String(workspace.name || ""), kind: String(workspace.kind || "local"), rootUri: String(workspace.rootUri || ""), readOnly: workspace.readOnly === true })).filter((workspace: ProjectWorkspace) => Boolean(workspace.id && workspace.rootUri));
     const primaryWorkspaceId = String(value.primaryWorkspaceId || workspaces[0]?.id || "");
     const primary = workspaces.find((workspace) => workspace.id === primaryWorkspaceId) || workspaces[0];
-    return { id: ownedProjectReference(value.ownerId, value.id), resourceId: value.id, roleId: value.roleId, readOnly: value.readOnly, ownerId: value.ownerId, revision: value.revision, executionScope: value.executionScope, name: value.title, workspaces, primaryWorkspaceId, hiddenAt: value.hiddenAt || null, workspaceId: primary?.id || "", deviceId: primary?.deviceId || "", rootUri: primary?.rootUri || "", available: workspaces.length > 0, status: workspaces.length > 0 ? "available" : "unavailable", pinnedAt: value.pinnedAt, conversationCount: conversations.length, conversations };
+    return { id: ownedProjectReference(value.ownerId, value.id), resourceId: value.id, roleId: value.roleId, readOnly: value.readOnly, ownerId: value.ownerId, revision: value.revision, executionScope: value.executionScope, name: value.title, workspaces, primaryWorkspaceId, hiddenAt: value.hiddenAt || null, workspaceId: primary?.id || "", deviceId: primary?.deviceId || "", rootUri: primary?.rootUri || "", available: true, status: "available", pinnedAt: value.pinnedAt, conversationCount: conversations.length, conversations };
   }
 
   function normalizeProjectRow(project: ProjectItem): ProjectItem {
@@ -205,7 +205,8 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function moveConversation(conversationId: string, projectId: string) {
-    throw new Error("现有对话不能手动移入或移出项目");
+    await owned.edit("conversation", conversationId, { projectId: String(projectId || "").trim() });
+    await fetchSidebar();
   }
 
   async function renameConversation(conversationId: string, title: string) {

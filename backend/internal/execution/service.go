@@ -155,12 +155,18 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 		}
 	}
 
-	resume.MarkInProgress()
-	s.mu.Lock()
-	s.resumeContexts[resumeID] = resume
-	s.mu.Unlock()
-	if s.repo != nil {
-		_ = s.repo.UpdateState(ctx, resumeID, ResumeStateInProgress, "")
+	if resume.Type == ResumeTypeCapabilityAcquisition {
+		if resume.State != ResumeStatePending {
+			return nil, fmt.Errorf("capability approval %s has already been claimed", resumeID)
+		}
+	} else {
+		resume.MarkInProgress()
+		s.mu.Lock()
+		s.resumeContexts[resumeID] = resume
+		s.mu.Unlock()
+		if s.repo != nil {
+			_ = s.repo.UpdateState(ctx, resumeID, ResumeStateInProgress, "")
+		}
 	}
 
 	var handled bool

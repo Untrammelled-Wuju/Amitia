@@ -4,9 +4,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="worldbook-page">
-    <div class="page-header">
-      <h2>世界书</h2>
-      <div v-if="canConfigure && loadedContext" class="header-actions">
+    <ExtensionPageHeader
+      title="世界书"
+      description="维护世界观、背景设定和可供角色使用的资料。"
+      parent-title="角色"
+      parent-path="/characters"
+      breadcrumb-label="角色页面层级"
+    >
+      <template #actions>
+        <div v-if="canConfigure && loadedContext" class="header-actions">
         <el-button
           size="small"
           :type="testPanelOpen ? 'warning' : 'success'"
@@ -19,9 +25,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-button size="small" type="primary" @click="showAddForm = true"
           >新增规则</el-button
         >
-      </div>
-    </div>
-    <el-alert v-if="!canConfigure" title="世界书由 Core 管理，只有本机或开启统筹模式的当前 Core 管理员可以查看和配置。" type="info" :closable="false" show-icon />
+        </div>
+      </template>
+    </ExtensionPageHeader>
+    <el-alert v-if="!canConfigure" title="云端统筹模式的世界书由 Core 管理，只有获授权的 Core 管理员可以查看和配置。" type="info" :closable="false" show-icon />
     <template v-if="canConfigure && loadedContext">
     <div class="filter-bar">
       <el-select
@@ -345,6 +352,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, ref, reactive, watch, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { DocumentCopy, UploadFilled } from "@element-plus/icons-vue";
+import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import { useWorldBook, type WorldBookEntry } from "@/composables/useWorldBook";
 import {
   importExampleJson,
@@ -598,19 +606,10 @@ async function exportRules() {
 .worldbook-page {
   max-width: 100%;
 }
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.page-header h2 {
-  margin: 0;
-  font-size: 24px;
-}
 .header-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .hidden-input {
   display: none;

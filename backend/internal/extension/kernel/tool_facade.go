@@ -341,6 +341,18 @@ func workspacePromptContribution(scope InvocationScope) (ContextContribution, bo
 		bindings = append(bindings, binding)
 	}
 	if len(bindings) == 0 {
+		if workingDirectory := invocationWorkingDirectoryFromMetadata(scope.ExecContext.Metadata); workingDirectory != "" {
+			return ContextContribution{
+				Source:     "conversation_workspace",
+				Priority:   95,
+				Content:    "The conversation working directory is " + workingDirectory + ". Projects and folders are defaults and organization, not access boundaries. Relative paths use this directory; explicit absolute paths are allowed subject to runtime permission.",
+				TokenLimit: 260,
+				Metadata: map[string]string{
+					"workingDirectory": workingDirectory,
+					"workspaceCount":   "0",
+				},
+			}, true
+		}
 		return ContextContribution{}, false
 	}
 	primaryID := strings.TrimSpace(scope.ExecContext.PrimaryWorkspaceID)
@@ -388,7 +400,7 @@ func workspacePromptContribution(scope InvocationScope) (ContextContribution, bo
 	if primary.RootURI != "" {
 		content += " Primary rootUri=" + primary.RootURI + "."
 	}
-	content += " Resolve relative paths and default writes against the primary workspace. Other listed workspaces are also authorized for read, search and edit operations; pass their workspaceId explicitly. Results and paths must state their workspaceId when more than one workspace is available. Do not access workspaces outside this list."
+	content += " Resolve relative paths and default writes against the primary workspace. Other listed project folders are available for context and operations; pass their workspaceId explicitly. Projects and folders are defaults and organization, not access boundaries, so explicit absolute paths requested by the user remain allowed subject to runtime permission."
 	content += " Workspaces: " + strings.Join(parts, "; ") + "."
 	return ContextContribution{
 		Source:     "conversation_workspace",
@@ -405,6 +417,18 @@ func workspacePromptContribution(scope InvocationScope) (ContextContribution, bo
 			"workspacePrimaryId": primaryID,
 		},
 	}, true
+}
+
+func invocationWorkingDirectoryFromMetadata(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	for _, key := range []string{"workingDirectory", "cwd"} {
+		if value, ok := metadata[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func stringMetadata(metadata map[string]any, key, fallback string) string {

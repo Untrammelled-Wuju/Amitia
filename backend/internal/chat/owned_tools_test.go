@@ -104,3 +104,25 @@ func TestOwnedToolLoopRejectsDuplicateUnknownAndCancelledActions(t *testing.T) {
 		})
 	}
 }
+
+func TestOwnedToolExecutionErrorReturnsToModel(t *testing.T) {
+	runtime := &ownedToolTestRuntime{execute: func(context.Context, business.Inference, string, string, json.RawMessage) (ToolResult, error) {
+		return ToolResult{}, errors.New("permission denied")
+	}}
+	s := &service{ownedToolRuntime: runtime}
+	var rounds int
+	s.llmWithTools = func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		rounds++
+		if rounds == 1 {
+			return "", "", ownedToolCall("device_action"), 1, nil
+		}
+		if len(messages) != 2 || messages[1]["role"] != "tool" || messages[1]["content"] != "工具执行失败：TOOL_EXECUTION_FAILED: permission denied" {
+			t.Fatalf("tool error was not returned to model: %+v", messages)
+		}
+		return "工具没有权限，但对话可以继续", "", nil, 2, nil
+	}
+	result, err := s.generateOwnedWithTools(t.Context(), business.Inference{}, &ModelConfig{}, nil, &ownedReplySink{})
+	if err != nil || result.Text != "工具没有权限，但对话可以继续" || runtime.calls != 1 {
+		t.Fatalf("result=%+v err=%v calls=%d", result, err, runtime.calls)
+	}
+}

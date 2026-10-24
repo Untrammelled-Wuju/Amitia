@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-icon :size="22"><Monitor /></el-icon>
       </div>
       <div class="sc-body">
-        <div class="sc-label">本地桌面</div>
+        <div class="sc-label">运行模式</div>
         <div class="sc-value">{{ deployLabel }}</div>
       </div>
     </div>

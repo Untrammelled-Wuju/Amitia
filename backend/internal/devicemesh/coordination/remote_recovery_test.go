@@ -56,7 +56,7 @@ func TestRemoteRecoveryCancelsOldInvocationIDsAndPreservesPolicyAndCurrentGenera
 	if err := service.ConfirmRemoteAuthority(t.Context(), current); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "space", "b", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "space", "b", 1, "role"); err != nil {
 		t.Fatalf("confirmed recovery still blocked: %v", err)
 	}
 }

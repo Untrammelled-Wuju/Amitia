@@ -47,57 +47,61 @@ func (o *hostCommandOutput) Snapshot() (string, bool) {
 }
 
 func resolveHostCommandDirectory(root, requested string) (string, error) {
-	canonicalRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", fmt.Errorf("resolve workspace root: %w", err)
-	}
-	root = canonicalRoot
-	directory := root
-	if strings.TrimSpace(requested) != "" {
-		directory = requested
-		if !filepath.IsAbs(directory) {
-			directory = filepath.Join(root, directory)
+	requested = strings.TrimSpace(requested)
+	if strings.HasPrefix(requested, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
 		}
+		requested = filepath.Join(home, strings.TrimPrefix(requested, "~/"))
 	}
-	directory, err = filepath.EvalSymlinks(directory)
+	directory := requested
+	if directory == "" {
+		if strings.TrimSpace(root) == "" {
+			return "", errors.New("working directory is required when no project folder is selected")
+		}
+		directory = root
+	} else if !filepath.IsAbs(directory) {
+		if strings.TrimSpace(root) == "" {
+			return "", errors.New("relative working directory requires a project folder")
+		}
+		directory = filepath.Join(root, directory)
+	}
+	canonical, err := filepath.EvalSymlinks(directory)
 	if err != nil {
 		return "", fmt.Errorf("resolve host command directory: %w", err)
 	}
-	relative, err := filepath.Rel(root, directory)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
-		return "", errors.New("working directory is outside the bound workspace")
-	}
-	info, err := os.Stat(directory)
+	info, err := os.Stat(canonical)
 	if err != nil || !info.IsDir() {
 		return "", errors.New("working directory does not exist")
 	}
-	return directory, nil
+	return canonical, nil
 }
 
 func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
-	if s.workspace == nil || invocation.ExecContext == nil {
-		return nil, errors.New("WORKSPACE_NOT_BOUND: host commands require a local conversation workspace")
-	}
 	obj, err := unmarshalObject(input)
 	if err != nil {
 		return nil, err
 	}
 	workspaceID := strings.TrimSpace(stringValue(obj, "workspaceId"))
-	if workspaceID == "" {
+	if workspaceID == "" && invocation.ExecContext != nil {
 		workspaceID = strings.TrimSpace(invocation.ExecContext.PrimaryWorkspaceID)
 	}
-	if workspaceID == "" {
+	if workspaceID == "" && invocation.ExecContext != nil {
 		workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
 	}
-	if workspaceID == "" {
-		return nil, errors.New("WORKSPACE_NOT_BOUND: host commands require a local conversation workspace")
-	}
-	if executionWorkspaceRoot(invocation.ExecContext, workspaceID) == "" {
-		return nil, errors.New("WORKSPACE_SCOPE_MISMATCH: selected workspace is outside the current project")
-	}
-	root, err := s.workspace.LocalWorkspaceRoot(workspaceID)
-	if err != nil {
-		return nil, err
+	root := ""
+	if workspaceID != "" {
+		if executionWorkspaceRoot(invocation.ExecContext, workspaceID) == "" {
+			return nil, errors.New("WORKSPACE_SCOPE_MISMATCH: selected workspace is outside the current project")
+		}
+		if s.workspace == nil {
+			return nil, errors.New("workspace service not configured")
+		}
+		root, err = s.workspace.LocalWorkspaceRoot(workspaceID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	command := stringValue(obj, "command")
 	if command == "" {
@@ -106,7 +110,14 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 	requestedDirectory := stringValue(obj, "cwd", "workingDir")
 	if mountedWorkspaceID, relative, ok := parseMountedWorkspaceDirectory(requestedDirectory); ok {
 		if mountedWorkspaceID != workspaceID {
-			return nil, errors.New("working directory is outside the selected workspace")
+			workspaceID = mountedWorkspaceID
+			if s.workspace == nil {
+				return nil, errors.New("workspace service not configured")
+			}
+			root, err = s.workspace.LocalWorkspaceRoot(workspaceID)
+			if err != nil {
+				return nil, err
+			}
 		}
 		requestedDirectory = relative
 	}

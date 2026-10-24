@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRoute } from "vue-router";
+import { resolveLinkedTask, detailStillAuthorized, currentControlTarget, taskEvidenceMatches } from "./task-link";
+import { TaskCenterReadFence } from "./task-center-read-fence";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Refresh, Search, VideoPause, VideoPlay, RefreshRight, SetUp } from "@element-plus/icons-vue";
 import { listWorkflowDevices, type WorkflowDeviceDescriptor } from "@/api/workflow";
@@ -41,7 +44,19 @@ import {
   isActive,
 } from "./types";
 
+const route = useRoute();
+let openedLinkedTaskID = "";
+function openLinkedTaskFromAuthorizedList() {
+  const requested = route.query.taskRunId;
+  if (typeof requested !== 'string' || openedLinkedTaskID === requested) return;
+  const linked = resolveLinkedTask(requested, tasks.value);
+  if (!linked) return;
+  openedLinkedTaskID = requested;
+  void showDetail(linked);
+}
 const loading = ref(false);
+let taskListGeneration = 0;
+const readFence = new TaskCenterReadFence();
 const hasLocalRuntime = Boolean(window.amitiaDesktop);
 const approvalsVisible = ref(false);
 const approvalsLoading = ref(false);
@@ -53,30 +68,39 @@ const approvalStatusLabels = { pending: "待审批", approved: "已批准", deni
 
 async function revokeApproval(approval: SourceTaskApproval) {
   if (approvalsLoading.value) return;
+  const ticket = readFence.begin("approval-mutation");
   approvalsLoading.value = true;
   try {
     await revokeSourceTaskApproval(approval);
-    ElMessage.success("已撤销单次授权，正在执行的任务将被中断");
+    if (readFence.current("approval-mutation", ticket)) ElMessage.success("已撤销单次授权，正在执行的任务将被中断");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (readFence.current("approval-mutation", ticket)) ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
-    approvalsLoading.value = false;
-    await refreshSourceApprovals();
+    if (readFence.current("approval-mutation", ticket)) {
+      approvalsLoading.value = false;
+      await refreshSourceApprovals();
+    }
   }
 }
 
 async function refreshSourceApprovals() {
   if (approvalsLoading.value) return;
+  const ticket = readFence.begin("approvals");
   approvalsLoading.value = true;
   approvalsError.value = "";
   try {
-    sourceApprovals.value = await listSourceTaskApprovals();
+    const next = await listSourceTaskApprovals();
+    if (readFence.current("approvals", ticket)) sourceApprovals.value = next;
   } catch (error) {
-    sourceApprovals.value = [];
-    approvalsError.value = error instanceof Error ? error.message : String(error);
+    if (readFence.current("approvals", ticket)) {
+      sourceApprovals.value = [];
+      approvalsError.value = error instanceof Error ? error.message : String(error);
+    }
   } finally {
-    approvalsLoading.value = false;
-    lastApprovalRefresh = Date.now();
+    if (readFence.current("approvals", ticket)) {
+      approvalsLoading.value = false;
+      lastApprovalRefresh = Date.now();
+    }
   }
 }
 
@@ -87,18 +111,36 @@ async function openSourceApprovals() {
 
 async function decideApproval(approval: SourceTaskApproval, approved: boolean) {
   if (approvalsLoading.value) return;
+  const ticket = readFence.begin("approval-mutation");
   approvalsLoading.value = true;
   try {
     await decideSourceTaskApproval(approval, approved);
-    ElMessage.success(approved ? "已批准这次设备执行，请在发起设备使用原请求重试" : "已拒绝这次设备执行");
+    if (readFence.current("approval-mutation", ticket)) ElMessage.success(approved ? "已批准这次设备执行，请在发起设备使用原请求重试" : "已拒绝这次设备执行");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (readFence.current("approval-mutation", ticket)) ElMessage.error(error instanceof Error ? error.message : String(error));
   } finally {
-    approvalsLoading.value = false;
-    await refreshSourceApprovals();
+    if (readFence.current("approval-mutation", ticket)) {
+      approvalsLoading.value = false;
+      await refreshSourceApprovals();
+    }
   }
 }
 const tasks = ref<TaskRun[]>([]);
+watch(() => route.query.taskRunId, () => {
+  openedLinkedTaskID = "";
+  ++detailGeneration;
+  detailVisible.value = false;
+  detailTask.value = null;
+  detailProgress.value = null;
+  detailResult.value = null;
+  detailCheckpoint.value = null;
+  void fetchTasks();
+});
+function requireCurrentTask(task: TaskRun): TaskRun {
+  const current = currentControlTarget(task, tasks.value);
+  if (!current) throw new Error("任务执行状态或授权已变化，请刷新列表后重新操作");
+  return current;
+}
 const definitions = ref<TaskDefinition[]>([]);
 const statusFilter = ref<string>("");
 const extensionFilter = ref<string>("");
@@ -214,23 +256,51 @@ const statusOptions = [
 ];
 
 async function fetchTasks() {
+  const requestGeneration = ++taskListGeneration;
   loading.value = true;
   try {
     const res = await listTasks({});
-    tasks.value = res.items || [];
+    if (requestGeneration !== taskListGeneration) return;
+    const authorized = res.items || [];
+    tasks.value = authorized;
+    if (detailTask.value) {
+      if (!detailStillAuthorized(detailTask.value, authorized)) {
+        openedLinkedTaskID = "";
+        ++detailGeneration;
+        detailVisible.value = false;
+        detailTask.value = null;
+        detailProgress.value = null;
+        detailResult.value = null;
+        detailCheckpoint.value = null;
+      }
+    }
+    openLinkedTaskFromAuthorizedList();
   } catch (e: unknown) {
-    ElMessage.error("加载任务列表失败: " + (e instanceof Error ? e.message : String(e)));
+    if (requestGeneration !== taskListGeneration) return;
+    tasks.value = [];
+    openedLinkedTaskID = "";
+    ++detailGeneration;
+    detailVisible.value = false;
+    detailTask.value = null;
+    detailProgress.value = null;
+    detailResult.value = null;
+    detailCheckpoint.value = null;
+    ElMessage.error("任务列表暂无法重新验证授权，已清除旧结果: " + (e instanceof Error ? e.message : String(e)));
   } finally {
-    loading.value = false;
+    if (requestGeneration === taskListGeneration) loading.value = false;
   }
 }
 
 async function fetchDefinitions() {
+  const ticket = readFence.begin("definitions");
   try {
     const res = await listTaskDefinitions();
-    definitions.value = res.items || [];
+    if (readFence.current("definitions", ticket)) definitions.value = res.items || [];
   } catch (e: unknown) {
-    ElMessage.error("加载任务定义失败: " + (e instanceof Error ? e.message : String(e)));
+    if (readFence.current("definitions", ticket)) {
+      definitions.value = [];
+      ElMessage.error("加载任务定义失败: " + (e instanceof Error ? e.message : String(e)));
+    }
   }
 }
 
@@ -250,6 +320,39 @@ function startAutoRefresh() {
   }, 3000);
 }
 
+function clearTaskCenterAuthority() {
+  readFence.invalidate();
+  ++taskListGeneration;
+  ++roleLoadGeneration;
+  ++catalogLoadGeneration;
+  enqueueDialogVisible.value = false;
+  approvalsVisible.value = false;
+  approvalsLoading.value = false;
+  approvalsError.value = "";
+  enqueueLoading.value = false;
+  enqueueRoleLoading.value = false;
+  enqueueCatalogLoading.value = false;
+  enqueueRoles.value = null;
+  enqueueRoleId.value = "";
+  enqueueCatalog.value = [];
+  enqueueLocalDefinitions.value = [];
+  enqueueCatalogRevision.value = "";
+  enqueueCatalogCursor.value = "";
+  workflowDevices.value = [];
+  lastSubmission = { key: "", requestId: "" };
+  ++detailGeneration;
+  openedLinkedTaskID = "";
+  tasks.value = [];
+  definitions.value = [];
+  sourceApprovals.value = [];
+  detailVisible.value = false;
+  detailTask.value = null;
+  detailProgress.value = null;
+  detailResult.value = null;
+  detailCheckpoint.value = null;
+  loading.value = false;
+}
+
 function stopAutoRefresh() {
   if (refreshTimer) {
     clearInterval(refreshTimer);
@@ -260,6 +363,12 @@ function stopAutoRefresh() {
 async function showDetail(expected: TaskRun) {
   const taskRunId = expected.taskRunId;
   const generation = ++detailGeneration;
+  if (!detailStillAuthorized(expected, tasks.value)) {
+    if (openedLinkedTaskID === taskRunId) openedLinkedTaskID = "";
+    detailVisible.value = false;
+    detailTask.value = null;
+    return;
+  }
   detailVisible.value = true;
   detailLoading.value = true;
   detailTask.value = null;
@@ -274,83 +383,116 @@ async function showDetail(expected: TaskRun) {
       getTaskCheckpoint(taskRunId, expected),
     ]);
     if (generation !== detailGeneration) return;
+    if (!detailStillAuthorized(expected, tasks.value) || !detailStillAuthorized(task, [expected]) || !taskEvidenceMatches(task, progress, result, checkpoint)) {
+      openedLinkedTaskID = "";
+      detailVisible.value = false;
+      detailTask.value = null;
+      detailProgress.value = null;
+      detailResult.value = null;
+      detailCheckpoint.value = null;
+      return;
+    }
     detailTask.value = task;
     detailProgress.value = progress;
     detailResult.value = result;
     detailCheckpoint.value = checkpoint;
   } catch (error) {
-    if (generation === detailGeneration) ElMessage.error(error instanceof Error ? error.message : String(error));
+    if (generation === detailGeneration) {
+      detailVisible.value = false;
+      detailTask.value = null;
+      detailProgress.value = null;
+      detailResult.value = null;
+      detailCheckpoint.value = null;
+      openedLinkedTaskID = "";
+      ElMessage.error("无法确认任务详情，已清除旧证据: " + (error instanceof Error ? error.message : String(error)));
+    }
   } finally {
     if (generation === detailGeneration) detailLoading.value = false;
   }
 }
 
+async function handleControlUncertain(operation: string, error: unknown) {
+  ElMessage.warning(operation + "结果未确认，请核对最新任务状态后再决定是否操作: " + (error instanceof Error ? error.message : String(error)));
+  await fetchTasks();
+}
+
 async function handlePause(task: TaskRun) {
   try {
-    await pauseTask(task.taskRunId, task.generation ?? 0, "user_requested", task);
+    const current = requireCurrentTask(task);
+    await pauseTask(current.taskRunId, current.generation ?? 0, "user_requested", current);
     ElMessage.success("已发送暂停请求");
     await fetchTasks();
-    if (detailTask.value?.taskRunId === task.taskRunId) await showDetail(task);
+    const updated = resolveLinkedTask(task.taskRunId, tasks.value);
+    if (detailVisible.value && updated) await showDetail(updated);
   } catch (e: unknown) {
-    ElMessage.error("暂停失败: " + (e instanceof Error ? e.message : String(e)));
+    await handleControlUncertain("暂停", e);
   }
 }
 
 async function handleResume(task: TaskRun) {
   try {
-    await resumeTask(task.taskRunId, task.generation ?? 0, task);
+    const current = requireCurrentTask(task);
+    await resumeTask(current.taskRunId, current.generation ?? 0, current);
     ElMessage.success("已发送继续请求");
     await fetchTasks();
-    if (detailTask.value?.taskRunId === task.taskRunId) await showDetail(task);
+    const updated = resolveLinkedTask(task.taskRunId, tasks.value);
+    if (detailVisible.value && updated) await showDetail(updated);
   } catch (e: unknown) {
-    ElMessage.error("继续失败: " + (e instanceof Error ? e.message : String(e)));
+    await handleControlUncertain("继续", e);
   }
 }
 
 async function handleCancel(task: TaskRun) {
   try {
     await ElMessageBox.confirm("确认取消此任务？", "取消任务", { type: "warning" });
-    await cancelTask(task.taskRunId, undefined, task);
+    const current = requireCurrentTask(task);
+    await cancelTask(current.taskRunId, undefined, current);
     ElMessage.success("已发送取消请求");
     fetchTasks();
   } catch (e: unknown) {
     if (e !== "cancel") {
-      ElMessage.error("取消失败: " + (e instanceof Error ? e.message : String(e)));
+      await handleControlUncertain("取消", e);
     }
   }
 }
 
 async function handleRetry(task: TaskRun) {
   try {
-    await retryTask(task.taskRunId, task);
+    const current = requireCurrentTask(task);
+    await retryTask(current.taskRunId, current);
     ElMessage.success("已重新入队");
     fetchTasks();
   } catch (e: unknown) {
-    ElMessage.error("重试失败: " + (e instanceof Error ? e.message : String(e)));
+    await handleControlUncertain("重试", e);
   }
 }
 
 async function handleRecover(task: TaskRun) {
   try {
     await ElMessageBox.confirm("请先核对任务结果并确认旧执行已停止。是否从已确认的检查点恢复？", "恢复任务", { type: "warning" });
-    await recoverTask(task.taskRunId, task);
+    const current = requireCurrentTask(task);
+    await recoverTask(current.taskRunId, current);
     ElMessage.success("已提交恢复请求");
     fetchTasks();
   } catch (e: unknown) {
     if (e !== "cancel") {
-      ElMessage.error("恢复失败: " + (e instanceof Error ? e.message : String(e)));
+      await handleControlUncertain("恢复", e);
     }
   }
 }
 
 async function refreshEnqueueDeviceOptions() {
+  const ticket = readFence.begin("devices");
   try {
-    workflowDevices.value = await listWorkflowDevices();
-    const online = workflowDevices.value.filter((device) => device.online && !!device.deviceId);
-    if (!online.some((device) => device.deviceId === enqueueForm.value.deviceId)) {
+    const devices = await listWorkflowDevices();
+    if (!readFence.current("devices", ticket) || !enqueueDialogVisible.value) return;
+    workflowDevices.value = devices;
+    const online = devices.filter(device => device.online && !!device.deviceId);
+    if (!online.some(device => device.deviceId === enqueueForm.value.deviceId)) {
       enqueueForm.value.deviceId = online.length === 1 ? online[0].deviceId : "";
     }
   } catch (e: unknown) {
+    if (!readFence.current("devices", ticket) || !enqueueDialogVisible.value) return;
     workflowDevices.value = [];
     enqueueForm.value.deviceId = "";
     ElMessage.warning("设备列表加载失败: " + (e instanceof Error ? e.message : String(e)));
@@ -358,6 +500,16 @@ async function refreshEnqueueDeviceOptions() {
 }
 
 async function openEnqueue() {
+  readFence.begin("submission");
+  readFence.begin("roles");
+  readFence.begin("catalog");
+  ++roleLoadGeneration;
+  ++catalogLoadGeneration;
+  enqueueCatalog.value = [];
+  enqueueLocalDefinitions.value = [];
+  enqueueCatalogRevision.value = "";
+  enqueueCatalogCursor.value = "";
+  workflowDevices.value = [];
   enqueueRoles.value = null;
   enqueueRoleId.value = "";
   enqueueRoleError.value = "";
@@ -373,6 +525,7 @@ async function openEnqueue() {
 
 async function refreshEnqueueRoles() {
   const ticket = ++roleLoadGeneration;
+  const readTicket = readFence.begin("roles");
   const target = enqueueForm.value.deviceId;
   enqueueRoles.value = null;
   enqueueRoleId.value = "";
@@ -384,20 +537,21 @@ async function refreshEnqueueRoles() {
   enqueueRoleLoading.value = true;
   try {
     const result = await prepareOwnedTask(target);
-    if (ticket !== roleLoadGeneration || !enqueueDialogVisible.value) return;
+    if (ticket !== roleLoadGeneration || !readFence.current("roles", readTicket) || target !== enqueueForm.value.deviceId || !enqueueDialogVisible.value) return;
     enqueueRoles.value = result;
     if (result.roles.length === 1) enqueueRoleId.value = result.roles[0].id;
     else if (result.roles.some(role => role.id === result.selectedRole)) enqueueRoleId.value = result.selectedRole;
     if (!result.roles.length) enqueueRoleError.value = "目标数据来源没有可用角色，拒绝调用";
   } catch (error) {
-    if (ticket === roleLoadGeneration) enqueueRoleError.value = error instanceof Error ? error.message : String(error);
+    if (ticket === roleLoadGeneration && readFence.current("roles", readTicket)) enqueueRoleError.value = error instanceof Error ? error.message : String(error);
   } finally {
-    if (ticket === roleLoadGeneration) enqueueRoleLoading.value = false;
+    if (ticket === roleLoadGeneration && readFence.current("roles", readTicket)) enqueueRoleLoading.value = false;
   }
 }
 
 async function refreshEnqueueCatalog(more = false) {
   const ticket = ++catalogLoadGeneration;
+  const readTicket = readFence.begin("catalog");
   const options = enqueueRoles.value;
   const roleId = enqueueRoleId.value;
   const cursor = more ? enqueueCatalogCursor.value : "";
@@ -418,7 +572,7 @@ async function refreshEnqueueCatalog(more = false) {
       listOwnedTaskDefinitions(options, roleId),
       listOwnedDeviceTaskCatalog(options, roleId, cursor),
     ]);
-    if (ticket !== catalogLoadGeneration || enqueueRoles.value !== options || enqueueRoleId.value !== roleId || !enqueueDialogVisible.value) return;
+    if (ticket !== catalogLoadGeneration || !readFence.current("catalog", readTicket) || enqueueRoles.value !== options || enqueueRoleId.value !== roleId || !enqueueDialogVisible.value) return;
     if (more && (page.revision !== enqueueCatalogRevision.value || page.entries.some(entry => enqueueCatalog.value.some(existing => existing.reference.catalogId === entry.reference.catalogId)))) throw new Error("设备任务目录已更新，请刷新角色与服务后重新选择");
     if (enqueueCatalog.value.length + page.entries.length > 256) throw new Error("设备任务目录超过上限");
     enqueueLocalDefinitions.value = localDefinitions;
@@ -426,7 +580,7 @@ async function refreshEnqueueCatalog(more = false) {
     enqueueCatalogCursor.value = page.nextCursor || "";
     enqueueCatalogRevision.value = page.revision;
   } catch (error) {
-    if (ticket === catalogLoadGeneration) {
+    if (ticket === catalogLoadGeneration && readFence.current("catalog", readTicket)) {
       enqueueCatalog.value = [];
       enqueueLocalDefinitions.value = [];
       enqueueCatalogCursor.value = "";
@@ -434,7 +588,7 @@ async function refreshEnqueueCatalog(more = false) {
       enqueueCatalogError.value = error instanceof Error ? error.message : String(error);
     }
   } finally {
-    if (ticket === catalogLoadGeneration) enqueueCatalogLoading.value = false;
+    if (ticket === catalogLoadGeneration && readFence.current("catalog", readTicket)) enqueueCatalogLoading.value = false;
   }
 }
 
@@ -458,13 +612,16 @@ async function handleEnqueue() {
     ElMessage.warning("绑定设备任务需要在线目标设备与有效角色，请先刷新角色");
     return;
   }
+  const ticket = readFence.begin("submission");
   enqueueLoading.value = true;
   try {
     const def = selectedEnqueueDefinition.value;
     const options = enqueueRoles.value!;
     const role = options.roles.find(item => item.id === enqueueRoleId.value);
     if (!role) throw new Error("角色已失效，请刷新角色");
-    const current = await prepareOwnedTask(enqueueForm.value.deviceId);
+    const targetDevice = enqueueForm.value.deviceId;
+    const current = await prepareOwnedTask(targetDevice);
+    if (!readFence.current("submission", ticket) || !enqueueDialogVisible.value || enqueueRoles.value !== options || enqueueRoleId.value !== role.id || enqueueForm.value.deviceId !== targetDevice) return;
     const expected = options.executionScope;
     const actual = current.executionScope;
     if (actual.coreId !== expected.coreId || actual.modeRevision !== expected.modeRevision || actual.providerEpoch !== expected.providerEpoch || actual.permissionRevision !== expected.permissionRevision || actual.targetPermissionRevision !== expected.targetPermissionRevision || actual.targetProviderEpoch !== expected.targetProviderEpoch || actual.resourceOwnerId !== expected.resourceOwnerId || !current.roles.some(item => item.id === role.id && item.revision === role.revision)) {
@@ -479,13 +636,14 @@ async function handleEnqueue() {
     const key = JSON.stringify(body);
     if (lastSubmission.key !== key) lastSubmission = { key, requestId: crypto.randomUUID() };
     const result = await enqueueOwnedTask({ ...body, requestId: lastSubmission.requestId });
+    if (!readFence.current("submission", ticket) || !enqueueDialogVisible.value) return;
     ElMessage.success(`${result.queued ? "任务已入队" : STATUS_LABELS[result.status]}: ${result.taskRunId}`);
     enqueueDialogVisible.value = false;
     fetchTasks();
   } catch (e: unknown) {
-    ElMessage.error("入队失败: " + (e instanceof Error ? e.message : String(e)));
+    if (readFence.current("submission", ticket)) ElMessage.error("入队失败: " + (e instanceof Error ? e.message : String(e)));
   } finally {
-    enqueueLoading.value = false;
+    if (readFence.current("submission", ticket)) enqueueLoading.value = false;
   }
 }
 
@@ -532,12 +690,19 @@ watch(() => [enqueueForm.value.deviceId, enqueueDialogVisible.value], () => { vo
 watch(() => [enqueueRoles.value, enqueueRoleId.value, enqueueDialogVisible.value], () => { void refreshEnqueueCatalog(); });
 
 onMounted(() => {
+  window.addEventListener('amitia:execution-scope-changed', clearTaskCenterAuthority);
+  window.addEventListener('amitia:runtime-connection-changed', clearTaskCenterAuthority);
   handleRefresh();
   if (hasLocalRuntime) void refreshSourceApprovals();
   startAutoRefresh();
 });
 
 onUnmounted(() => {
+  readFence.invalidate();
+  window.removeEventListener('amitia:execution-scope-changed', clearTaskCenterAuthority);
+  window.removeEventListener('amitia:runtime-connection-changed', clearTaskCenterAuthority);
+  ++taskListGeneration;
+  ++detailGeneration;
   roleLoadGeneration++;
   catalogLoadGeneration++;
   stopAutoRefresh();

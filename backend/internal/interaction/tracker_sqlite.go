@@ -197,6 +197,14 @@ func (t *SQLiteInteractionTracker) UpdateMetadata(ctx context.Context, id string
 		result = result.Where("commit_owner = ?", *update.ExpectedOwner)
 		casSet = true
 	}
+	if update.ExpectedRecoveryDescriptorJSON != nil {
+		if *update.ExpectedRecoveryDescriptorJSON == "" {
+			result = result.Where("(recovery_descriptor_json IS NULL OR recovery_descriptor_json = '')")
+		} else {
+			result = result.Where("recovery_descriptor_json = ?", *update.ExpectedRecoveryDescriptorJSON)
+		}
+		casSet = true
+	}
 
 	result = result.Updates(updates)
 	if result.Error != nil {

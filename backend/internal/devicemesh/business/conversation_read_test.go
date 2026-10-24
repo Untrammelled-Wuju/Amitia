@@ -51,7 +51,7 @@ func TestConversationReadAuthorizesOwnerAndTurn(t *testing.T) {
 
 func TestConversationReadResolvesContinuationAndRejectsRevocation(t *testing.T) {
 	engine, _, service, _ := engineHarness(t)
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "source", RequestID: "continued", Message: "hello", ConversationOrigin: &ConversationOrigin{OwnerID: "a", ID: "source"}}

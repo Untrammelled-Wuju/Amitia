@@ -133,9 +133,6 @@ $BaselineExtensionRoutes = @(
     '/extensions/runs|extensionRuns',
     '/creative-workshop|creativeWorkshop',
     '/creative-workshop/pet|creativeWorkshopPet',
-    '/creative-workshop/pet/create|creativeWorkshopPetCreate',
-    '/creative-workshop/pet/tasks|creativeWorkshopPetTasks',
-    '/creative-workshop/pet/processing/:processingTaskId|creativeWorkshopPetProcessing',
     '/creative-workshop/pet/installations|pet-installations'
 )
 

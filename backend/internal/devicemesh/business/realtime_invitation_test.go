@@ -13,7 +13,7 @@ func TestRealtimeInvitationRequiresOriginalOwnerAuthorityAndSingleAccept(t *test
 		t.Run(map[bool]string{false: "device", true: "core"}[coordinated], func(t *testing.T) {
 			engine, db, service, _ := engineHarness(t)
 			if coordinated {
-				if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -58,8 +58,14 @@ func TestRealtimeInvitationRequiresOriginalOwnerAuthorityAndSingleAccept(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := service.ChangeMode(t.Context(), "core", "a", policy.ModeRevision, !coordinated, "role"); err != nil {
-				t.Fatal(err)
+			if coordinated {
+				if _, err := service.GrantAdministrator(t.Context(), "core", "a", policy.PermissionRevision, true); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", policy.ModeRevision, "role"); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if _, err := engine.ReadRealtimeInvitation(t.Context(), request, invitation.ID); !errors.Is(err, coordination.ErrScopeExpired) {
 				t.Fatalf("expired owner invitation read succeeded: %v", err)

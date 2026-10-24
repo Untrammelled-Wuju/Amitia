@@ -44,6 +44,10 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				c.JSON(400, gin.H{"message": "聊天运行控制参数无效"})
 				return
 			}
+			if operation == "events" && validateOwnedRuntimeEventCursor(request.AfterSequence, c.GetHeader("Last-Event-ID")) != nil {
+				c.JSON(400, gin.H{"message": "事件游标与请求不匹配，请重新加载快照"})
+				return
+			}
 			request.SpaceID, request.DeviceID, request.CoreID = actor.SpaceID.String(), actor.DeviceID.String(), coreID
 			if request.ExpectedScope.SpaceID != request.SpaceID || request.ExpectedScope.InitiatorDeviceID != request.DeviceID || request.ExpectedScope.TargetDeviceID != request.TargetDeviceID || request.ExpectedScope.CoreID != coreID || request.ExpectedScope.RoleID != request.RoleID {
 				c.JSON(409, gin.H{"message": "聊天数据归属已变化，请刷新"})
@@ -80,6 +84,12 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				}
 				manager := business.RuntimeManager()
 				runtime := manager.RuntimeSnapshot(key)
+				if operation == "snapshot" || operation == "events" {
+					runtime, err = manager.RuntimeSnapshotCurrent(ctx, key)
+					if err != nil {
+						return err
+					}
+				}
 				approvals := ownedRuntimeApprovals(services, view.Scope, request.ConversationID, turns)
 				data := gin.H{"executionScope": view.Scope, "version": conversationstream.ProtocolVersion, "revision": len(turns), "conversation": conversation, "messages": messages, "turns": turns, "lastEventSequence": runtime.LastEventSequence, "activeTurn": runtime.ActiveTurn, "approvals": approvals, "messageHistory": gin.H{"hasMore": view.Snapshot.NextCursors["message"] != "", "nextCursor": view.Snapshot.NextCursors["message"]}, "turnHistory": gin.H{"hasMore": view.Snapshot.NextCursors["checkpoint"] != "", "nextCursor": view.Snapshot.NextCursors["checkpoint"]}}
 				switch operation {
@@ -266,7 +276,10 @@ func ownedRuntimeApprovals(services *AppServices, scope coordination.ExecutionSc
 }
 
 func streamOwnedRuntime(c *gin.Context, services *AppServices, request ownedRuntimeRequest, key string, scope coordination.ExecutionScope) error {
-	live, replay, covered, unsubscribe := business.RuntimeManager().Subscribe(key, uuid.NewString(), request.AfterSequence)
+	live, replay, covered, unsubscribe, err := business.RuntimeManager().SubscribeCurrent(c.Request.Context(), key, uuid.NewString(), request.AfterSequence)
+	if err != nil {
+		return err
+	}
 	defer unsubscribe()
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -278,10 +291,6 @@ func streamOwnedRuntime(c *gin.Context, services *AppServices, request ownedRunt
 		if err := services.DeviceMesh.Coordination.Validate(c.Request.Context(), scope); err != nil {
 			return err
 		}
-		if event.EventSequence != request.AfterSequence+1 {
-			return errors.New("聊天事件存在缺口，请重新加载快照")
-		}
-		request.AfterSequence = event.EventSequence
 		event.ConversationID = request.ConversationID
 		raw, err := json.Marshal(event)
 		if err != nil {
@@ -294,12 +303,18 @@ func streamOwnedRuntime(c *gin.Context, services *AppServices, request ownedRunt
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(c.Writer, "event: agent_event\ndata: %s\n\n", raw)
+		resync, err := writeOwnedRuntimeSequencedFrame(c.Writer, request.AfterSequence, event.EventSequence, raw)
 		c.Writer.Flush()
+		if resync && err == nil {
+			return errOwnedRuntimeSnapshotRequired
+		}
+		if err == nil {
+			request.AfterSequence = event.EventSequence
+		}
 		return err
 	}
 	if !covered {
-		if _, err := fmt.Fprint(c.Writer, "event: snapshot_required\ndata: {}\n\n"); err != nil {
+		if err := writeOwnedRuntimeSnapshotRequired(c.Writer); err != nil {
 			return err
 		}
 		c.Writer.Flush()
@@ -307,6 +322,9 @@ func streamOwnedRuntime(c *gin.Context, services *AppServices, request ownedRunt
 	}
 	for _, event := range replay {
 		if err := write(event); err != nil {
+			if errors.Is(err, errOwnedRuntimeSnapshotRequired) {
+				return nil
+			}
 			return err
 		}
 	}
@@ -318,17 +336,41 @@ func streamOwnedRuntime(c *gin.Context, services *AppServices, request ownedRunt
 			return c.Request.Context().Err()
 		case event, ok := <-live:
 			if !ok {
+				latest, err := business.RuntimeManager().LatestSequence(c.Request.Context(), key)
+				if err != nil {
+					return err
+				}
+				if ownedRuntimeDurableCursorAdvanced(request.AfterSequence, latest) {
+					if err := writeOwnedRuntimeSnapshotRequired(c.Writer); err != nil {
+						return err
+					}
+					c.Writer.Flush()
+				}
 				return nil
 			}
 			if err := services.DeviceMesh.Coordination.Validate(c.Request.Context(), scope); err != nil {
 				return err
 			}
 			if err := write(event); err != nil {
+				if errors.Is(err, errOwnedRuntimeSnapshotRequired) {
+					return nil
+				}
 				return err
 			}
 		case <-ticker.C:
 			if err := services.DeviceMesh.Coordination.Validate(c.Request.Context(), scope); err != nil {
 				return err
+			}
+			latest, err := business.RuntimeManager().LatestSequence(c.Request.Context(), key)
+			if err != nil {
+				return err
+			}
+			if ownedRuntimeDurableCursorAdvanced(request.AfterSequence, latest) {
+				if err := writeOwnedRuntimeSnapshotRequired(c.Writer); err != nil {
+					return err
+				}
+				c.Writer.Flush()
+				return nil
 			}
 			if _, err := fmt.Fprint(c.Writer, ": heartbeat\n\n"); err != nil {
 				return err

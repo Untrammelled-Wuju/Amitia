@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/platform/process"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 type taskProcessMessage struct {
@@ -49,6 +51,20 @@ func (w *taskDiagnosticWriter) Write(value []byte) (int, error) {
 }
 
 func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json.RawMessage, deadline *time.Time, attempt, maxAttempts int, callbacks ProcessCallbacks) (int, error) {
+	profile := runtimeprofile.CurrentProcessProfile()
+	if err := validateHostExecutionIdentity(profile, os.Geteuid()); err != nil {
+		return 1, err
+	}
+	resourceSupport := process.ResourceLimitsSupported()
+	resourcePolicy := os.Getenv(cloudTaskResourcePolicyEnv)
+	if err := validateCloudHostResourceLimits(profile, h.config.RequireSandbox, h.config.NativeLimits, resourceSupport, resourcePolicy); err != nil {
+		return 1, err
+	}
+	if profile == runtimeprofile.ProfileCloudCore && !h.config.RequireSandbox && strings.TrimSpace(resourcePolicy) == "allow-degraded" {
+		if missing := cloudHostMissingResourceLimits(h.config.NativeLimits, resourceSupport); len(missing) > 0 {
+			slog.Warn("Cloud Core 任务宿主运行在资源隔离降级模式", "task_run_id", h.config.TaskRunID, "missing_hard_limits", strings.Join(missing, ","))
+		}
+	}
 	if err := coordination.ValidateCurrent(ctx); err != nil {
 		return 1, err
 	}
@@ -72,8 +88,18 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 		defer deadlineStop()
 	}
 	nonce := uuid.NewString()
-	cmd := exec.CommandContext(processCtx, h.config.NodePath, "--max-old-space-size=128", h.config.HostPath)
+	nodeArgs, err := taskNodeLaunchArgs(profile, h.config)
+	if err != nil {
+		return 1, err
+	}
+	cloudNetworkMode, err := cloudHostNetworkMode(profile, h.config.RequireSandbox, os.Getenv(cloudTaskNetworkPolicyEnv))
+	if err != nil {
+		return 1, err
+	}
+	cmd := exec.CommandContext(processCtx, h.config.NodePath, nodeArgs...)
 	cmd.Dir = h.config.WorkDir
+
+	cmd.WaitDelay = 3 * time.Second
 	limits := h.config.NativeLimits
 	if h.config.RequireSandbox {
 		args := []string{"--max-old-space-size=128", "--preserve-symlinks", "--preserve-symlinks-main", "--permission", "--allow-fs-read=" + filepath.Dir(h.config.HostPath), "--allow-fs-read=" + h.config.BundleRoot, "--allow-fs-read=" + h.config.WorkDir, "--allow-fs-write=" + h.config.WorkDir, h.config.HostPath}
@@ -85,11 +111,46 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 			defer plan.Cleanup()
 		}
 		cmd = exec.CommandContext(processCtx, plan.Path, plan.Args...)
+		cmd.WaitDelay = 3 * time.Second
 		cmd.Dir = plan.WorkingDir
 		cmd.ExtraFiles = plan.ExtraFiles
 		limits = plan.SupervisorLimits
+	} else if cloudNetworkMode == cloudTaskNetworkIsolated {
+
+		bundleRoot := h.config.BundleRoot
+		if bundleRoot == "" {
+			bundleRoot = filepath.Dir(h.config.EntryPath)
+		}
+		plan, err := trusted_service.PrepareIsolatedTaskNetworkLaunch(
+			h.config.NodePath, nodeArgs, h.config.WorkDir,
+			filepath.Dir(h.config.HostPath), bundleRoot,
+		)
+		if err != nil {
+			return 1, fmt.Errorf("云端任务无法获得网络隔离: %w", err)
+		}
+		if plan.Cleanup != nil {
+			defer plan.Cleanup()
+		}
+		cmd = exec.CommandContext(processCtx, plan.Path, plan.Args...)
+		cmd.Dir = plan.WorkingDir
+		cmd.ExtraFiles = plan.ExtraFiles
+		cmd.WaitDelay = 3 * time.Second
+
+		if plan.AfterStart != nil {
+			return 1, NewTaskError(ErrTaskScopeDenied, "云端任务网络沙箱不得要求启动后激活")
+		}
+	} else if cloudNetworkMode == cloudTaskNetworkDegraded {
+		slog.Warn("Cloud Core 任务在管理员显式授权的网络隔离降级模式运行", "task_run_id", h.config.TaskRunID)
 	}
-	cmd.Env = process.NewEnvironmentBuilder().Build()
+	environment := process.NewEnvironmentBuilder()
+	if profile == runtimeprofile.ProfileCloudCore && !h.config.RequireSandbox {
+		environment.Set("HOME", h.config.WorkDir)
+		environment.Set("TMP", h.config.WorkDir)
+		environment.Set("TEMP", h.config.WorkDir)
+		environment.Set("TMPDIR", h.config.WorkDir)
+		environment.Set("XDG_CACHE_HOME", h.config.WorkDir)
+	}
+	cmd.Env = environment.Build()
 	cmd.Env = append(cmd.Env, "AMITIA_GENERATION="+strconv.FormatInt(h.config.Generation, 10))
 	cmd.Env = append(cmd.Env, "AMITIA_ENTRY_HASH="+h.config.EntryHash)
 	cmd.Env = append(cmd.Env, "AMITIA_BUNDLE_ROOT="+h.config.BundleRoot, "AMITIA_BUNDLE_HASH="+h.config.BundleHash)
@@ -100,24 +161,36 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 		return 1, err
 	}
 	defer stdin.Close()
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return 1, err
-	}
+
+	stdoutReader, stdoutWriter := io.Pipe()
+	cmd.Stdout = stdoutWriter
+	defer stdoutReader.Close()
+	defer stdoutWriter.Close()
 	cmd.Stderr = io.Discard
 	if h.config.Diagnostics != nil {
 		cmd.Stderr = &taskDiagnosticWriter{writer: h.config.Diagnostics, remaining: 8192}
 	}
-	if err = cmd.Start(); err != nil {
-		return 1, err
-	}
-	tree, err := process.AttachProcessTreeWithLimits(cmd, limits)
+
+	tree, err := process.StartProcessTreeWithLimits(cmd, limits)
 	if err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
 		return 1, err
 	}
 	defer process.CloseProcessTree(tree)
+	type processExit struct {
+		code int
+		err  error
+	}
+
+	exited := make(chan processExit, 1)
+	go func() {
+		waitErr := cmd.Wait()
+		code := -1
+		if cmd.ProcessState != nil {
+			code = cmd.ProcessState.ExitCode()
+		}
+		_ = stdoutWriter.Close()
+		exited <- processExit{code: code, err: waitErr}
+	}()
 	var writeMu sync.Mutex
 	write := func(value any) error {
 		encoded, err := json.Marshal(value)
@@ -173,7 +246,7 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 	var finalStatus, finalCode, finalMessage, finalArtifactID string
 	var finalResult json.RawMessage
 	sessionID := uuid.NewString()
-	scanner := bufio.NewScanner(stdout)
+	scanner := bufio.NewScanner(stdoutReader)
 	scanner.Buffer(make([]byte, 4096), 2<<20)
 	var protocolErr error
 	for scanner.Scan() {
@@ -384,8 +457,9 @@ func (h *TaskProcessHost) runProcess(ctx context.Context, input, checkpoint json
 		stop()
 		_ = process.TerminateProcessTree(cmd.Process.Pid, tree)
 	}
-	err = cmd.Wait()
-	exitCode := cmd.ProcessState.ExitCode()
+	wait := <-exited
+	err = wait.err
+	exitCode := wait.code
 	if protocolErr != nil {
 		return 1, protocolErr
 	}

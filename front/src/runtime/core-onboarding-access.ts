@@ -8,6 +8,6 @@ export async function canSkipCoreOnboarding(): Promise<boolean> {
     if (!await isCurrentDevicePaired(base)) return false;
     const response = await apiClient.get("/api/device-mesh/v1/coordination/me");
     const status = response.data?.data || response.data;
-    return status?.canAdminister === false && typeof status?.coreId === "string" && Boolean(status.coreId) && typeof status?.policy?.coordinated === "boolean";
+    return status?.canAdminister === false && typeof status?.coreId === "string" && Boolean(status.coreId) && typeof status?.policy === "object";
   } catch { return false; }
 }

@@ -47,8 +47,9 @@ class CoreConfigurationGuard {
       policy['modeRevision'],
       policy['permissionRevision'],
     ];
-    if (values.any((value) =>
-        value is! int || value < 1 || value > 9007199254740991)) {
+    if (values.any(
+      (value) => value is! int || value < 1 || value > 9007199254740991,
+    )) {
       throw StateError('云端配置权限版本无法确认，请恢复 Core 连接后重试');
     }
     return values.join(':');
@@ -81,8 +82,10 @@ class CoreConfigurationGuard {
           data['canAdminister'] is! bool) {
         throw StateError('无法确认云端配置权限，请恢复 Core 连接后重试');
       }
-      canConfigure =
-          policy['coordinated'] == true && data['canAdminister'] == true;
+      if (policy['coordinated'] != true) {
+        throw StateError('云端统筹 Core 尚未完成数据归属初始化');
+      }
+      canConfigure = data['canAdminister'] == true;
       policyRevision = _revision(policy);
     }
     if (!stillCurrent()) {

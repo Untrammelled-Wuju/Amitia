@@ -48,9 +48,21 @@ export interface OwnedChatResponse {
   memoryError?: string;
 }
 
+export interface OwnedChatToolProgress {
+  toolCallId: string;
+  toolName: string;
+  arguments?: string;
+  result?: string;
+  status?: string;
+  errorCode?: string;
+  error?: string;
+  durationMs?: number;
+}
+
 export interface OwnedChatEvent {
-  type: "started" | "transcribed" | "delta" | "task" | "reasoning-completed" | "output-completed" | "completed" | "interrupted" | "failed";
-	task?: { coordinationId: string; status: string };
+  type: "started" | "transcribed" | "delta" | "task" | "tool-started" | "tool-completed" | "reasoning-completed" | "output-completed" | "completed" | "interrupted" | "failed";
+  task?: { coordinationId: string; status: string };
+  progress?: OwnedChatToolProgress;
   executionScope?: OwnedExecutionScope;
   conversationId?: string;
   text?: string;
@@ -76,6 +88,7 @@ export interface OwnedChatRequest {
   reasoningEffort?: string;
   reasoningEnabled?: boolean;
   messageStyle?: string;
+  workingDirectory?: string;
   message: string;
 }
 
@@ -94,6 +107,42 @@ function validateScope(scope: OwnedExecutionScope | undefined, requestId: string
     throw new Error("回复缺少有效的服务提供者和数据归属信息");
   }
   return scope;
+}
+
+function validateToolProgress(event: OwnedChatEvent, conversationId: string): OwnedChatToolProgress {
+  const progress = event.progress;
+  if (!conversationId || event.conversationId !== conversationId || !progress || typeof progress !== "object") {
+    throw new Error("工具事件归属或载荷无效");
+  }
+  const toolCallId = typeof progress.toolCallId === "string" ? progress.toolCallId.trim() : "";
+  const toolName = typeof progress.toolName === "string" ? progress.toolName.trim() : "";
+  if (!toolCallId || toolCallId.length > 256 || !toolName || toolName.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(toolName)) {
+    throw new Error("工具事件身份无效");
+  }
+  const argumentsText = progress.arguments == null ? "" : String(progress.arguments);
+  if (new TextEncoder().encode(argumentsText).byteLength > 256 * 1024) throw new Error("工具事件参数超出上限");
+  if (argumentsText) {
+    try {
+      JSON.parse(argumentsText);
+    } catch {
+      throw new Error("工具事件参数不是有效 JSON");
+    }
+  }
+  const result = progress.result == null ? "" : String(progress.result);
+  if (new TextEncoder().encode(result).byteLength > 1024 * 1024) throw new Error("工具事件结果超出上限");
+  if (progress.durationMs != null && (!Number.isFinite(progress.durationMs) || progress.durationMs < 0)) {
+    throw new Error("工具事件耗时无效");
+  }
+  if (event.type === "tool-completed") {
+    const status = typeof progress.status === "string" ? progress.status.trim() : "";
+    if (!status) throw new Error("工具完成事件缺少状态");
+    const errorCode = progress.errorCode == null ? "" : String(progress.errorCode);
+    const errorMessage = progress.error == null ? "" : String(progress.error);
+    if (["failed", "cancelled", "canceled", "timed_out"].includes(status.toLowerCase()) && !errorCode && !errorMessage) {
+      throw new Error("工具失败事件缺少错误信息");
+    }
+  }
+  return { ...progress, toolCallId, toolName };
 }
 
 export async function consumeOwnedChatStream(
@@ -118,8 +167,8 @@ export async function consumeOwnedChatStream(
     const event = JSON.parse(lines.map((line) => line.slice(5).trimStart()).join("\n")) as OwnedChatEvent;
     const suppliedScope = event.executionScope || event.data?.executionScope;
     if (expectedExecutionScope && suppliedScope && !sameOwnedAuthority(expectedExecutionScope, suppliedScope)) throw new Error("服务提供者、角色或数据归属已变化，迟到回复已拦截");
-    if (!["started", "transcribed", "delta", "task", "reasoning-completed", "output-completed", "completed", "interrupted", "failed"].includes(event.type)) throw new Error("未知的回复事件");
-    if (event.type === "started" || event.type === "delta" || event.type === "transcribed" || event.type === "task" || event.type === "reasoning-completed" || event.type === "output-completed") {
+    if (!["started", "transcribed", "delta", "task", "tool-started", "tool-completed", "reasoning-completed", "output-completed", "completed", "interrupted", "failed"].includes(event.type)) throw new Error("未知的回复事件");
+    if (event.type === "started" || event.type === "delta" || event.type === "transcribed" || event.type === "task" || event.type === "tool-started" || event.type === "tool-completed" || event.type === "reasoning-completed" || event.type === "output-completed") {
       const current = scopeFingerprint(validateScope(event.executionScope, requestId));
       if (event.type === "started") {
         if (fingerprint) throw new Error("重复的回复开始事件");
@@ -132,7 +181,10 @@ export async function consumeOwnedChatStream(
         if (transcription !== undefined || typeof event.text !== "string" || !event.text.trim() || new TextEncoder().encode(event.text).byteLength > 65536) throw new Error("语音转写事件无效");
         transcription = event.text;
       }
-	  if (event.type === "task" && (!conversationId || event.conversationId !== conversationId || !event.task || typeof event.task.coordinationId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(event.task.coordinationId) || !["planning", "running", "waiting", "aggregating", "succeeded", "failed", "cancelled", "paused"].includes(event.task.status))) throw new Error("任务事件归属或状态无效");
+      if (event.type === "task" && (!conversationId || event.conversationId !== conversationId || !event.task || typeof event.task.coordinationId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(event.task.coordinationId) || !["planning", "running", "waiting", "aggregating", "succeeded", "failed", "cancelled", "paused"].includes(event.task.status))) throw new Error("任务事件归属或状态无效");
+      if (event.type === "tool-started" || event.type === "tool-completed") {
+        event.progress = validateToolProgress(event, conversationId);
+      }
     } else {
       if (event.data?.executionScope) {
         const current = scopeFingerprint(validateScope(event.data.executionScope, requestId));

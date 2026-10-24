@@ -36,19 +36,19 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 	specs := []BuiltinUtilityToolSpec{
 		{
 			id: "builtin.list_files", modelName: "list_files", name: "List Files",
-			description: "List files and directories in the current conversation workspace. Relative paths are resolved from the bound workspace root.",
+			description: "List files and directories at an explicit local path or in the current conversation workspace. Relative paths use the conversation working directory or bound project folder.",
 			input:       `{"type":"object","additionalProperties":false,"properties":{"uri":{"type":"string"},"path":{"type":"string"},"filePath":{"type":"string"},"workspaceId":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":1000},"cursor":{"type":"string"}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "workspace.read", Risk: "low"}}, risk: capability.RiskLow, side: capability.SideEffectReadOnly, background: true, idempotent: true, timeout: 15 * time.Second, maxOutput: 512 * 1024, category: "workspace",
 		},
 		{
 			id: "builtin.read_file_part", modelName: "read_file_part", name: "Read File Part",
-			description: "Read a text file by 1-based inclusive line range. Relative paths are resolved from the bound conversation workspace.",
+			description: "Read a text file by 1-based inclusive line range from an explicit local path or the current conversation workspace.",
 			input:       `{"type":"object","additionalProperties":false,"properties":{"uri":{"type":"string"},"path":{"type":"string"},"filePath":{"type":"string"},"workspaceId":{"type":"string"},"line_start":{"type":"integer","minimum":1},"line_end":{"type":"integer","minimum":1},"startLine":{"type":"integer","minimum":1},"endLine":{"type":"integer","minimum":1},"maxLines":{"type":"integer","minimum":1,"maximum":20000}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "workspace.read", Risk: "low"}}, risk: capability.RiskLow, side: capability.SideEffectReadOnly, background: true, idempotent: true, timeout: 15 * time.Second, maxOutput: 512 * 1024, category: "workspace",
 		},
 		{
 			id: "builtin.apply_file", modelName: "apply_file", name: "Apply File",
-			description: "Create, overwrite, delete, apply a unified patch, or exact-match replace file content in one call. Relative paths are resolved from the bound conversation workspace.",
+			description: "Create, overwrite, delete, apply a unified patch, or exact-match replace file content at an explicit local path or in the current conversation workspace.",
 			input:       `{"type":"object","additionalProperties":false,"properties":{"uri":{"type":"string"},"path":{"type":"string"},"filePath":{"type":"string"},"workspaceId":{"type":"string"},"operation":{"type":"string","enum":["replace","create","write","delete","patch"]},"oldText":{"type":"string"},"old_content":{"type":"string"},"newText":{"type":"string"},"new_content":{"type":"string"},"content":{"type":"string"},"expectedOccurrences":{"type":"integer","minimum":0},"recursive":{"type":"boolean"},"patch":{"type":"string"},"baseSha256":{"type":"string"}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "workspace.write", Risk: "medium"}}, risk: capability.RiskMedium, side: capability.SideEffectWrite, approval: true, idempotent: false, timeout: 30 * time.Second, maxOutput: 32 * 1024, category: "workspace",
 		},
@@ -102,7 +102,7 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 		},
 		{
 			id: "builtin.execute_host_command", modelName: "execute_host_command", name: "Execute Host Command",
-			description: "Run a bounded command in a bound local workspace on Windows, Linux, or macOS. Requires explicit high-risk command approval; use for builds, tests, and code verification.",
+			description: "Run a bounded command on Windows, Linux, or macOS using an explicit cwd or the current conversation workspace. Requires explicit high-risk command approval; use for builds, tests, and code verification.",
 			input:       `{"type":"object","required":["command"],"additionalProperties":false,"properties":{"workspaceId":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":131072},"cwd":{"type":"string"},"workingDir":{"type":"string"},"timeoutMs":{"type":"integer","minimum":100,"maximum":300000},"maxOutputBytes":{"type":"integer","minimum":1,"maximum":1048576}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "runtime.host.command.execute", Risk: "high"}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, idempotent: false, timeout: 305 * time.Second, maxOutput: 2 * 1024 * 1024, category: "terminal",
 		},

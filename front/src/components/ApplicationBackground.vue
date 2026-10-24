@@ -24,6 +24,5 @@ html[data-custom-background="true"] .app-shell,
 html[data-custom-background="true"] .app-body.is-desktop-shell,
 html[data-custom-background="true"] .app-main,
 html[data-custom-background="true"] .app-content,
-html[data-custom-background="true"] .secondary-workspace,
 html[data-custom-background="true"] .chat-surface { background: transparent !important; }
 </style>

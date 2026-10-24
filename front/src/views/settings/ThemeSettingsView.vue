@@ -4,8 +4,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="theme-page" data-amitia-ui="settings.section">
-    <h2 class="page-title">外观设置</h2>
-
     <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
       <template #header><span class="section-title">主题模式</span></template>
       <div class="theme-preset-list">
@@ -208,11 +206,6 @@ function resetStyle() {
 </script>
 
 <style scoped>
-.page-title {
-  font-size: var(--ac-font-size-lg);
-  font-weight: 600;
-  margin-bottom: 14px;
-}
 .section-card {
   margin-bottom: 14px;
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -17,7 +18,7 @@ func TestTaskProcessLimitsCannotBeRaisedByPluginDeclarations(t *testing.T) {
 	support := process.ResourceLimitsSupported()
 	for _, definition := range []*TaskDefinition{nil, {ResourceLimits: TaskResourceLimits{MaxMemoryMB: 8192, MaxCPUPercent: 100}}, {ResourceLimits: TaskResourceLimits{MaxMemoryMB: -1, MaxCPUPercent: -1}}} {
 		limits := taskProcessLimits(definition)
-		if support.Memory && limits.MaxMemoryBytes != 512<<20 || support.CPU && limits.MaxCPUPercent != 50 || support.Processes && limits.MaxProcesses != 1 {
+		if support.Memory && limits.MaxMemoryBytes != 512<<20 || support.CPU && limits.MaxCPUPercent != 50 || support.Processes && limits.MaxProcesses != taskProcessPIDBudget(runtime.GOOS) {
 			t.Fatalf("plugin raised host policy: %+v", limits)
 		}
 		if !support.Memory && limits.MaxMemoryBytes != 0 || !support.CPU && limits.MaxCPUPercent != 0 || !support.Processes && limits.MaxProcesses != 0 {
@@ -69,6 +70,10 @@ func TestTaskProcessNativeMemoryLimitStopsActualNodeBeforeConfirmingSuccess(t *t
 }
 
 func TestTaskProcessNativeCountLimitBlocksChildProcessesBeforeTheyExecute(t *testing.T) {
+
+	if runtime.GOOS != "windows" {
+		t.Skip("single-process job semantics apply to Windows only")
+	}
 	if !process.ResourceLimitsSupported().Processes {
 		t.Skip("当前平台没有可验证的原生进程数量限制")
 	}

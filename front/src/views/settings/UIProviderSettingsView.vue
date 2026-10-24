@@ -1,10 +1,6 @@
 <template>
   <div class="provider-settings">
     <div class="heading">
-      <div>
-        <h2>界面提供者</h2>
-        <p>Provider 按云端默认、用户、平台、设备与运行时分层解析。当前层只保存 override，不会复制继承配置。</p>
-      </div>
       <el-button :loading="store.loading" @click="refreshAll">刷新</el-button>
     </div>
     <el-alert type="info" :closable="false" show-icon title="恢复路径、登录和首次引导属于安全壳，不允许扩展替换。云端不可用时自动使用 Last-Known-Good，最终回退 Built-in。" />
@@ -133,7 +129,7 @@ void refreshAll();
 
 <style scoped>
 .provider-settings { display: grid; gap: 18px; }
-.heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.heading { display:flex; justify-content:flex-end; align-items:flex-start; gap:16px; }
 h2 { margin:0 0 6px; font-size:22px; }
 p { margin:0; color:var(--el-text-color-secondary); font-size:13px; }
 .scope-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--el-border-color-light); border-radius:12px; }

@@ -12,6 +12,15 @@ func summarizeTasks(tasks []Task) TaskSummary {
 		default:
 			out.CheckpointOnly++
 		}
+		if task.RecoveryState == "needs-reconciliation" {
+			out.Active++
+			for _, child := range task.Assignments {
+				if child.ReviewRequired {
+					out.CodingWorkersRequiringReview++
+				}
+			}
+			continue
+		}
 		switch task.Status {
 		case "succeeded":
 			out.Succeeded++

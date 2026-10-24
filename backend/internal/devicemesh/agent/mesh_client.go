@@ -733,6 +733,10 @@ func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) 
 	if invoke.InvocationID == "" || len(invoke.InvocationID) > 512 || invoke.SpaceID != c.conf.SpaceID || invoke.DeviceID != c.conf.Identity.DeviceID || invoke.RuntimeID != c.conf.Identity.RuntimeID || invoke.RuntimeSessionID != c.sessionIdentity() || invoke.ConnectionGeneration != c.sessionGeneration() || c.State() != StateReady {
 		return nil, fmt.Errorf("设备调用身份或会话已失效")
 	}
+
+	if invoke.Handler == executionjournal.TaskInspectionHandler {
+		return c.inspectTaskJournal(invoke)
+	}
 	handler := c.resolveHandler(invoke.Handler)
 	var contextual CancellableRuntimeInvokeHandler
 	if dispatcher, ok := c.conf.RuntimeDispatcher.(RuntimeContextDispatcher); ok {

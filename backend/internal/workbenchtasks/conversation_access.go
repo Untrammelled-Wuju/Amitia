@@ -74,6 +74,7 @@ func (h *Handler) readConversation(c *gin.Context, read func(context.Context, Qu
 type scopedRecordReader struct {
 	reader  RecordReader
 	role    string
+	space   string
 	canRead func(context.Context, *interaction.InteractionRecord) (bool, error)
 }
 
@@ -110,4 +111,19 @@ func (r scopedRecordReader) ListRecentWorkbenchTaskRecords(ctx context.Context, 
 		}
 	}
 	return filtered, nil
+}
+
+func (r scopedRecordReader) Get(ctx context.Context, id string) (*interaction.InteractionRecord, bool, error) {
+	getter, ok := r.reader.(terminalChildReader)
+	if !ok {
+		return nil, false, nil
+	}
+	child, found, err := getter.Get(ctx, id)
+	if err != nil || !found || child == nil {
+		return nil, false, err
+	}
+	if child.Scope.CharacterID != r.role || child.Scope.SpaceID != r.space || child.Scope.Source != "multi_agent" {
+		return nil, false, nil
+	}
+	return child, true, nil
 }

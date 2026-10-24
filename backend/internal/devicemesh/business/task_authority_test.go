@@ -98,12 +98,12 @@ func TestTaskExecutionAuthorityRequiresTaskGrantRoleAndCurrentMode(t *testing.T)
 		t.Fatal(err)
 	}
 	defer closeSelf()
-	policy, err := service.ChangeMode(t.Context(), "core", "a", original.ModeRevision, true, "role")
+	policy, err := service.InitializeCoordinated(t.Context(), "core", "a", original.ModeRevision, "role")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if coordination.ValidateCurrent(self) == nil {
-		t.Fatal("切换统筹模式后原任务授权没有失效")
+		t.Fatal("数据归属变化后原任务授权没有失效")
 	}
 	coordinated, owned, closeCoordinated, err := engine.OpenTaskExecution(t.Context(), request)
 	if err != nil {

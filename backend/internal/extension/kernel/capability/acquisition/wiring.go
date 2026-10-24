@@ -120,18 +120,6 @@ func inputSchemaAcquireCapability() json.RawMessage {
       "type": "string",
       "description": "Optional: the id of the candidate from find_capability result. If empty, Planner will auto-select."
     },
-    "resumeToken": {
-      "type": "string",
-      "description": "Resume token from a previous approval-required acquisition. When supplied with userConfirmed=true, resumes that exact transaction."
-    },
-    "approval": {
-      "type": "boolean",
-      "description": "Whether the AI should proceed with auto-install when user pre-approved"
-    },
-    "userConfirmed": {
-      "type": "boolean",
-      "description": "Whether the explicit user approval was already granted"
-    },
     "query": {"type":"string"},
     "preferredKind": {"type":"string"},
     "sourceUri": {"type":"string","description":"Carry the exact sourceUri from discovery when acquiring an explicit source"},

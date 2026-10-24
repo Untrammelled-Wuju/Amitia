@@ -593,7 +593,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (deployment.mode == MobileDeploymentMode.cloud) {
       final localMesh = ref.read(deviceMeshLocalServiceProvider);
       if (localMesh == null) {
-        throw StateError('本机 Device Agent 尚未就绪，云端模式无法绑定本地工作目录');
+        throw StateError('本机 Device Agent 尚未就绪，云端统筹模式无法绑定本地工作目录');
       }
       final identity = await localMesh.identity();
       deviceId = (identity['deviceId'] ?? '').toString().trim();

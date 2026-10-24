@@ -109,7 +109,7 @@ func TestContinuityCoreChangeDoesNotRecreateOldCoreData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", policy.ModeRevision, true, ""); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", policy.ModeRevision, ""); err != nil {
 		t.Fatal(err)
 	}
 	document, _, err := engine.Continuity(t.Context(), request, ContinuityMutation{Action: "create", Title: "旧云端事项"})

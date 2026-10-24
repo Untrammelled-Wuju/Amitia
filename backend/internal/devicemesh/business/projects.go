@@ -122,28 +122,6 @@ func (e *Engine) CreateProject(ctx context.Context, request Request, input Creat
 		}
 		return saved.Response, nil
 	}
-	existing, err := e.data.Snapshot(ctx, scope, coordination.DataQuery{Management: true, ResourceKind: "project", Limit: 128})
-	if err != nil {
-		return ProjectResponse{}, err
-	}
-	requestedWorkspaces := make(map[string]bool, len(workspaces))
-	for _, workspace := range workspaces {
-		requestedWorkspaces[workspace.ID] = true
-	}
-	for _, row := range existing.Resources {
-		if row.Kind != "project" {
-			continue
-		}
-		var saved Project
-		if json.Unmarshal(row.Body, &saved) != nil {
-			continue
-		}
-		for _, workspace := range saved.Workspaces {
-			if requestedWorkspaces[workspace.ID] {
-				return ProjectResponse{}, errors.New("该文件夹已经属于一个项目")
-			}
-		}
-	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	response := ProjectResponse{Project: Project{ID: id, Title: title, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, CreatedAt: now, UpdatedAt: now}, Scope: scope, Saved: true, Acknowledgement: coordination.Acknowledgement{RequestID: scope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{"project/" + id: 1, "checkpoint/" + receiptID: 1}}}
 	commit := coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "project", ID: id, RoleID: scope.RoleID, Body: body(response.Project)}, {Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: body(map[string]any{"hash": fingerprint, "response": response})}}}
@@ -164,8 +142,14 @@ func (e *Engine) CreateProject(ctx context.Context, request Request, input Creat
 }
 
 func normalizeProjectWorkspaces(items []ProjectWorkspace, primaryID string) ([]ProjectWorkspace, string, error) {
-	if len(items) == 0 || len(items) > 32 {
+	if len(items) > 32 {
 		return nil, "", errors.New("项目工作区数量无效")
+	}
+	if len(items) == 0 {
+		if strings.TrimSpace(primaryID) != "" {
+			return nil, "", errors.New("无文件夹项目不能指定主工作区")
+		}
+		return []ProjectWorkspace{}, "", nil
 	}
 	seen := make(map[string]bool, len(items))
 	result := make([]ProjectWorkspace, 0, len(items))
@@ -191,13 +175,19 @@ func normalizeProjectWorkspaces(items []ProjectWorkspace, primaryID string) ([]P
 		result = append(result, item)
 	}
 	primaryID = strings.TrimSpace(primaryID)
-	if primaryID == "" || !seen[primaryID] {
+	if primaryID == "" {
+		primaryID = result[0].ID
+	}
+	if !seen[primaryID] {
 		return nil, "", errors.New("项目主工作区无效")
 	}
 	return result, primaryID, nil
 }
 
 func projectWorkspacesBelongToDevice(items []ProjectWorkspace, deviceID string) bool {
+	if len(items) == 0 {
+		return true
+	}
 	deviceID = strings.TrimSpace(deviceID)
 	if deviceID == "" {
 		return false

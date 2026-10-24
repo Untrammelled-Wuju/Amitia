@@ -24,7 +24,7 @@ import (
 )
 
 func testTaskOwnerRPCOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db, sourceDB *sql.DB, services *AppServices, signer *agent.IdentityStore, device runtimeidentity.DeviceID, credential string, server *httptest.Server, definition *task_runtime.TaskDefinition) {
-	for _, coordinated := range []bool{false, true} {
+	for _, coordinated := range []bool{true} {
 		testTaskOwnerRPCModeOverActualTLS(t, rt, db, sourceDB, services, signer, device, credential, server, definition, coordinated)
 	}
 }
@@ -40,8 +40,8 @@ func testTaskOwnerRPCModeOverActualTLS(t *testing.T, rt *devicemesh.Runtime, db,
 	if err != nil {
 		t.Fatal(err)
 	}
-	if policy.Coordinated != coordinated {
-		if _, err := rt.Coordination.ChangeMode(t.Context(), "core", device.String(), policy.ModeRevision, coordinated, "one"); err != nil {
+	if coordinated && !policy.Coordinated {
+		if _, err := rt.Coordination.InitializeCoordinated(t.Context(), "core", device.String(), policy.ModeRevision, "one"); err != nil {
 			t.Fatal(err)
 		}
 	}

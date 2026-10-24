@@ -24,7 +24,7 @@ func TestCorsMiddleware_AllowsDesktopDevelopmentUploadPreflight(t *testing.T) {
 	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
 	request.Header.Set(
 		"Access-Control-Request-Headers",
-		"content-type,cache-control,x-amitia-desktop-session,x-amitia-desktop-instance,x-amitia-device-id,x-amitia-client-type,x-amitia-management-target,idempotency-key",
+		"content-type,cache-control,last-event-id,x-amitia-desktop-session,x-amitia-desktop-instance,x-amitia-device-id,x-amitia-client-type,x-amitia-management-target,idempotency-key",
 	)
 
 	response := httptest.NewRecorder()
@@ -40,6 +40,7 @@ func TestCorsMiddleware_AllowsDesktopDevelopmentUploadPreflight(t *testing.T) {
 	for _, header := range []string{
 		"content-type",
 		"cache-control",
+		"last-event-id",
 		"x-amitia-desktop-session",
 		"x-amitia-desktop-instance",
 		"x-amitia-device-id",

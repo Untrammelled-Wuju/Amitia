@@ -112,7 +112,7 @@ func TestOwnedConversationAndAllDerivedDataAreSavedOnlyByChosenOwner(t *testing.
 	if err != nil || replayed.Text != "reply" || replayed.MemoryStatus != "saved" || model.calls.Load() != 1 {
 		t.Fatalf("request replay called model again: %+v %v %d", replayed, err, model.calls.Load())
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request.RequestID = "core-request"
@@ -133,7 +133,7 @@ func TestOwnedConversationAndAllDerivedDataAreSavedOnlyByChosenOwner(t *testing.
 func TestModeChangeDuringGenerationRejectsLateReplyAndNeverReplaysUncertainWork(t *testing.T) {
 	engine, db, service, model := engineHarness(t)
 	model.generate = func(ctx context.Context, _ Inference) (Generation, error) {
-		_, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role")
+		_, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,9 +156,6 @@ func TestModeChangeDuringGenerationRejectsLateReplyAndNeverReplaysUncertainWork(
 			}
 		}
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 2, false, "role"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := engine.Run(t.Context(), request); !errors.Is(err, ErrUncertainExecution) {
 		t.Fatalf("uncertain work was replayed: %v", err)
 	}
@@ -178,7 +175,7 @@ func TestCompletedRequestCannotRunAgainAfterOwnerSwitch(t *testing.T) {
 	if err != nil || replay.ConversationID != first.ConversationID || model.calls.Load() != 1 {
 		t.Fatalf("unstable new conversation retry: %+v %v", replay, err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := engine.Run(t.Context(), request); !errors.Is(err, coordination.ErrScopeExpired) {
@@ -282,7 +279,7 @@ func TestStreamCutoverSavesOnlyAcceptedPartialOnOriginalOwner(t *testing.T) {
 		if err := inference.Emit(Event{Type: "delta", Text: "accepted partial"}); err != nil {
 			return Generation{}, err
 		}
-		if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+		if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 			t.Fatal(err)
 		}
 		if err := inference.Emit(Event{Type: "delta", Text: "late text"}); !errors.Is(err, coordination.ErrScopeExpired) {

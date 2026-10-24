@@ -1,8 +1,8 @@
 <template>
   <component :is="embedded ? 'section' : ElDrawer" :model-value="visible" title="记忆与数据归属" size="min(620px, 100vw)" @update:model-value="$emit('update:visible', $event)">
     <div v-if="!fixedKind" class="memory-controls">
-      <div v-if="owned.coordinated.value || !fixedKind" class="memory-filters">
-        <div v-if="owned.coordinated.value" class="filter-field">
+      <div class="memory-filters">
+        <div class="filter-field">
           <label :for="`${controlId}-source`">数据来源</label>
           <el-select :id="`${controlId}-source`" v-model="source" aria-label="记忆数据来源" class="layer-select">
             <el-option label="当前 Core 的数据" value="current" />
@@ -337,7 +337,7 @@ async function loadAggregate() {
   error.value = "";
   loading.value = true;
   try {
-    if (owned.coordinated.value && historicalRoles.value.length === 0) {
+    if (historicalRoles.value.length === 0) {
       historicalRoles.value = await owned.historicalRoles(props.characterId);
       if (ticket !== generation || !props.visible) return;
     }
@@ -386,7 +386,7 @@ async function load(older = false) {
   error.value = "";
   loading.value = true;
   try {
-    if (owned.coordinated.value && historicalRoles.value.length === 0) {
+    if (historicalRoles.value.length === 0) {
       const catalog = await owned.historicalRoles(props.characterId);
       if (ticket !== generation || !props.visible) return;
       historicalRoles.value = catalog;

@@ -62,7 +62,7 @@ func TestModelScenarioRealTLSCoreConfigurationAndModeSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, http.StatusOK)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	policy, err = b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)
@@ -73,26 +73,12 @@ func TestModelScenarioRealTLSCoreConfigurationAndModeSwitch(t *testing.T) {
 	}
 	headers := map[string]string{security.ExpectedCoreHeader: b.core, security.ExpectedConfigurationPolicyHeader: fmt.Sprintf("%d:%d:%d", policy.ProviderEpoch, policy.ModeRevision, policy.PermissionRevision)}
 	b.request(t, a, http.MethodPut, "/api/model/routes", map[string]any{"routes": []any{map[string]any{"scenario": "chat", "modelConfigId": 2}}}, http.StatusOK, headers)
-	for index, coordinated := range []bool{true, false} {
-		if !coordinated {
-			current, err := b.services.DeviceMesh.Coordination.Get(t.Context(), b.core, a.device.DeviceID.String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": false, "expectedRevision": current.ModeRevision}, http.StatusOK)
-		}
-		var result struct{ Data business.Response }
-		body := b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": fmt.Sprintf("route-%d", index), "characterId": "one", "message": "你好"}, http.StatusOK)
-		if err := json.Unmarshal(body, &result); err != nil {
-			t.Fatal(err)
-		}
-		owner := b.core
-		if !coordinated {
-			owner = a.device.DeviceID.String()
-		}
-		if !result.Data.Saved || result.Data.Generation.Text != "cloud-assigned" || result.Data.Scope.ResourceOwnerID != owner {
-			t.Fatalf("wrong mode result: %s", body)
-		}
+	var result struct{ Data business.Response }
+	body := b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "route-core", "characterId": "one", "message": "你好"}, http.StatusOK)
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/model/routes", map[string]any{"routes": []any{map[string]any{"scenario": "chat", "modelConfigId": 1}}}, http.StatusForbidden, headers)
+	if !result.Data.Saved || result.Data.Generation.Text != "cloud-assigned" || result.Data.Scope.ResourceOwnerID != b.core {
+		t.Fatalf("wrong cloud mode result: %s", body)
+	}
 }

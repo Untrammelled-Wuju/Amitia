@@ -89,21 +89,9 @@ func (s *TaskRuntimeService) ExecuteOwnedSourceDispatch(ctx context.Context, dis
 	if err != nil {
 		return empty, err
 	}
-	var checkpoint json.RawMessage
-	if run.CheckpointID != nil {
-		var confirmed TaskCheckpoint
-		if len(dispatch.ResumeCheckpoint) > (1<<20)+(64<<10) || json.Unmarshal(dispatch.ResumeCheckpoint, &confirmed) != nil || confirmed.CheckpointID != *run.CheckpointID || confirmed.TaskRunID != run.TaskRunID || confirmed.InputHash != run.InputHash || confirmed.Version < 1 || hashBytes(confirmed.Payload) != confirmed.PayloadHash || len(confirmed.Payload) > 1<<20 {
-			return empty, NewTaskError(ErrTaskCheckpointIncompatible, "恢复设备任务缺少已确认检查点正文")
-		}
-		var cursor struct {
-			Cursor int64 `json:"cursor"`
-		}
-		if json.Unmarshal(confirmed.Payload, &cursor) != nil || cursor.Cursor != confirmed.Version {
-			return empty, NewTaskError(ErrTaskCheckpointIncompatible, "恢复检查点游标与已确认版本不一致")
-		}
-		checkpoint = confirmed.Payload
-	} else if len(dispatch.ResumeCheckpoint) != 0 {
-		return empty, NewTaskError(ErrTaskCheckpointIncompatible, "新设备任务不能携带未绑定检查点")
+	checkpoint, err := verifiedSourceResumeCheckpoint(&run, definition, dispatch.ResumeCheckpoint)
+	if err != nil {
+		return empty, err
 	}
 	var entry string
 	if s.config.InstalledExecutionLease != nil {
@@ -183,9 +171,9 @@ func (s *TaskRuntimeService) ExecuteOwnedSourceDispatch(ctx context.Context, dis
 					return nil, err
 				}
 				var ack TaskHostNativeConfirmation
-				resourceID := taskHostOperationID(&run, id)
-				commitScope := taskHostCommitScope(authority, &run, id, 2)
-				if json.Unmarshal(confirmed, &ack) != nil || ack.Scope != authority || ack.TaskRunID != run.TaskRunID || ack.Generation != run.Generation || ack.AttemptID != run.ExecutionAttemptID.String() || ack.RequestID != id || ack.Method != method || ack.InputHash != hashBytes(params) || !json.Valid(ack.ResultBytes) || len(ack.ResultBytes) > 64<<10 || ack.ResultHash != hashBytes(ack.ResultBytes) || ack.Acknowledgment.OwnerID != authority.ResourceOwnerID || ack.Acknowledgment.RequestID != commitScope.RequestID || ack.Acknowledgment.Versions["tool-result/"+resourceID] != 2 {
+				resourceID := TaskHostNativeOperationID(&run, id, native)
+				commitScope := taskHostCommitScope(authority, resourceID, 2)
+				if json.Unmarshal(confirmed, &ack) != nil || ack.Scope != authority || ack.TaskRunID != run.TaskRunID || ack.Generation != run.Generation || ack.AttemptID != run.ExecutionAttemptID.String() || ack.RequestID != id || ack.EffectID != native.EffectID || ack.Method != method || ack.InputHash != hashBytes(params) || !json.Valid(ack.ResultBytes) || len(ack.ResultBytes) > 64<<10 || ack.ResultHash != hashBytes(ack.ResultBytes) || ack.Acknowledgment.OwnerID != authority.ResourceOwnerID || ack.Acknowledgment.RequestID != commitScope.RequestID || ack.Acknowledgment.Versions["tool-result/"+resourceID] != 2 {
 					return nil, NewTaskError(ErrTaskScopeDenied, "Native结果未获得原所有者的精确归属确认")
 				}
 				if err := validateTaskHostNativeResult(method, ack.ResultBytes); err != nil {

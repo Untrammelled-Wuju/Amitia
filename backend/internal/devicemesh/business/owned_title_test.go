@@ -103,7 +103,7 @@ func TestOwnedTitleRejectsModeChangeDuringGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine.model = ownedTitleTestModel{testModel: model, plan: func(ctx context.Context, _ Inference, _ Generation) (string, error) {
-		_, err := service.ChangeMode(ctx, "core", "a", 1, true, "role")
+		_, err := service.InitializeCoordinated(ctx, "core", "a", 1, "role")
 		return "自动标题", err
 	}}
 	if err := engine.finishOwnedTitle(coordination.WithScope(t.Context(), response.Scope), inference, response.Generation); !errors.Is(err, coordination.ErrScopeExpired) {

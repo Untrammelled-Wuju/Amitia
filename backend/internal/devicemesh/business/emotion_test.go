@@ -25,7 +25,7 @@ func TestEmotionSnapshotImportsToOwnerAndIsIdempotent(t *testing.T) {
 
 func TestEmotionSnapshotUsesCoordinatedCoreOwner(t *testing.T) {
 	engine, _, service, _ := engineHarness(t)
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "emotion-cloud"}

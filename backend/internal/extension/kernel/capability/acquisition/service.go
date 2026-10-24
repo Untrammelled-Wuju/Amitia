@@ -2,6 +2,9 @@ package acquisition
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -211,6 +214,31 @@ func (s *AcquisitionService) FindCapabilities(ctx context.Context, request Acqui
 //     c. On success → State = StateReady.
 //     d. On failure → rollback, State = StateFailed.
 func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionRequest, yes bool) (*AcquisitionResult, error) {
+	return s.acquireWithApproval(ctx, request, yes, "")
+}
+
+func acquisitionCandidateFingerprint(candidate CapabilityCandidate) string {
+	data, err := json.Marshal(struct {
+		ID           string
+		Kind         CandidateKind
+		Version      string
+		Source       CandidateSource
+		Trust        CandidateTrust
+		Install      CandidateInstallDescriptor
+		Permissions  []string
+		Capabilities []capability.CapabilityID
+		Runtime      CandidateRuntimeSupport
+		Dependencies []CandidateDependency
+		Metadata     map[string]any
+	}{candidate.ID, candidate.Kind, candidate.Version, candidate.Source, candidate.Trust, candidate.Install, candidate.Permissions, candidate.Capabilities, candidate.Runtime, candidate.Dependencies, candidate.Metadata})
+	if err != nil {
+		return ""
+	}
+	fingerprint := sha256.Sum256(data)
+	return hex.EncodeToString(fingerprint[:])
+}
+
+func (s *AcquisitionService) acquireWithApproval(ctx context.Context, request AcquisitionRequest, yes bool, approvalFingerprint string) (*AcquisitionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -267,6 +295,9 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 	plan, err := s.planner.Plan(ctx, request)
 	if err != nil {
 		return nil, err
+	}
+	if approvalFingerprint != "" && (acquisitionCandidateFingerprint(plan.Candidate) != approvalFingerprint) {
+		return nil, NewAcquisitionError("approval_candidate_changed", "The approved candidate changed; a new review is required", nil)
 	}
 
 	result := &AcquisitionResult{
@@ -328,9 +359,13 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 			State:                    ResumePending,
 			CapabilityID:             plan.Request.CapabilityID,
 			AcquisitionTransactionID: resumeToken,
+			ApprovalFingerprint:      acquisitionCandidateFingerprint(plan.Candidate),
 			ConversationID:           request.ConversationID(),
 			SpaceID:                  string(request.SpaceID),
 			ExecContext:              request.ExecContext,
+		}
+		if resumeContext.ApprovalFingerprint == "" {
+			return result, NewAcquisitionError("approval_candidate_invalid", "Cannot reliably fingerprint the capability candidate for review", nil)
 		}
 		s.mu.Lock()
 		s.resumeContexts[resumeToken] = resumeContext
@@ -349,12 +384,18 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 					resume.Metadata["conversationId"] = resumeContext.ConversationID
 					resume.Metadata["spaceId"] = resumeContext.SpaceID
 					resume.Metadata["executionId"] = acqExecCtx.ExecutionID
+					resume.Metadata["approvalCandidateFingerprint"] = resumeContext.ApprovalFingerprint
 					if savedRequest, safe := approvalRequestMetadata(request); !safe {
 						resume.Metadata["requiresConfigurationResubmission"] = true
 					} else {
 						resume.Metadata["acquisitionRequest"] = savedRequest
 					}
-					_ = s.resumeRepo.Save(ctx, *resume)
+					if err := s.resumeRepo.Save(ctx, *resume); err != nil {
+						s.mu.Lock()
+						delete(s.resumeContexts, resumeToken)
+						s.mu.Unlock()
+						return result, err
+					}
 				}
 			}
 		}
@@ -593,6 +634,9 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 					ExecContext:              restoredExec,
 				}
 				if persisted.Metadata != nil {
+					if fingerprint, ok := persisted.Metadata["approvalCandidateFingerprint"].(string); ok {
+						resumeCtx.ApprovalFingerprint = fingerprint
+					}
 					if required, _ := persisted.Metadata["requiresConfigurationResubmission"].(bool); required {
 						return nil, NewAcquisitionError("configuration_resubmission_required", "MCP configuration must be supplied again after restart; sensitive values are not stored in approval metadata", nil)
 					}
@@ -648,12 +692,62 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 		SpaceID:      runtimeidentity.SpaceID(resumeCtx.SpaceID),
 		ExecContext:  resumeCtx.ExecContext,
 	}
-	if resumeCtx.Request != nil {
-		request = *resumeCtx.Request
+	if resumeCtx.Request == nil {
+		return nil, NewAcquisitionError("approval_request_missing", "The original scoped acquisition request is unavailable; resubmit it for approval", nil)
+	}
+	request = *resumeCtx.Request
+	if resumeCtx.SpaceID == "" || string(request.SpaceID) != resumeCtx.SpaceID || (resumeCtx.ConversationID != "" && request.ConversationID() != resumeCtx.ConversationID) {
+		return nil, NewAcquisitionError("resume_scope_forbidden", "Acquisition approval no longer matches its original conversation or space", nil)
+	}
+	if request.CapabilityID != resumeCtx.CapabilityID {
+		return nil, NewAcquisitionError("resume_scope_forbidden", "Acquisition approval capability changed", nil)
+	}
+	if resumeCtx.ApprovalFingerprint == "" {
+		return nil, NewAcquisitionError("approval_candidate_missing", "The approved candidate evidence is missing; request approval again", nil)
 	}
 
-	// Proceed with acquisition now that approval is granted.
-	return s.Acquire(ctx, request, true)
+	persistedID := ""
+	if s.resumeRepo != nil {
+		persisted, err := s.resumeRepo.GetByAcquisitionTransactionID(ctx, resumeToken)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		if persisted != nil {
+			if persisted.Type != execution.ResumeTypeCapabilityAcquisition || persisted.State != execution.ResumeStatePending || persisted.RequiredCapabilityID != string(request.CapabilityID) {
+				return nil, NewAcquisitionError("approval_already_consumed", "Acquisition approval cannot be replayed", nil)
+			}
+			claimer, ok := s.resumeRepo.(interface {
+				ClaimPending(context.Context, string) (bool, error)
+			})
+			if !ok {
+				return nil, NewAcquisitionError("approval_claim_unavailable", "Durable approval requires an atomic claim", nil)
+			}
+			claimed, err := claimer.ClaimPending(ctx, persisted.ResumeID)
+			if err != nil {
+				return nil, err
+			}
+			if !claimed {
+				return nil, NewAcquisitionError("approval_already_consumed", "Acquisition approval cannot be replayed", nil)
+			}
+			persistedID = persisted.ResumeID
+		}
+	}
+	result, err := s.acquireWithApproval(ctx, request, true, resumeCtx.ApprovalFingerprint)
+	if persistedID != "" {
+		state, reason := execution.ResumeStateCompleted, ""
+		if err != nil {
+			state, reason = execution.ResumeStateFailed, err.Error()
+		}
+		persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if updateErr := s.resumeRepo.UpdateState(persistCtx, persistedID, state, reason); updateErr != nil {
+			if err != nil {
+				return result, errors.Join(err, updateErr)
+			}
+			return result, updateErr
+		}
+	}
+	return result, err
 }
 
 // executePlan runs the ordered steps of an acquisition plan.

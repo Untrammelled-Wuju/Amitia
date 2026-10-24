@@ -14,8 +14,30 @@ func validateRecoveredParent(record *InteractionRecord, ref *MultiAgentRecoveryR
 	scope := record.Scope.Normalize()
 	if scope.SpaceID != ref.ParentGoalSpaceID || scope.ConversationID != ref.ParentGoalConversationID ||
 		goal.SpaceID != ref.ParentGoalSpaceID || goal.ConversationID != ref.ParentGoalConversationID ||
-		goal.CharacterID != ref.ParentGoalCharacterID {
+		goal.CharacterID != ref.ParentGoalCharacterID ||
+		(scope.CharacterID != "" && ref.ParentGoalCharacterID != "" && scope.CharacterID != ref.ParentGoalCharacterID) {
 		return fmt.Errorf("multi_agent: recovered parent goal scope does not match parent interaction")
+	}
+	if ref.MaxToolCalls != nil && (*ref.MaxToolCalls < 1 || *ref.MaxToolCalls > 256) {
+		return fmt.Errorf("multi_agent: recovered invalid tool-call budget")
+	}
+	if ref.MaxTotalTokens != nil && (*ref.MaxTotalTokens < 1 || *ref.MaxTotalTokens > 100000000) {
+		return fmt.Errorf("multi_agent: recovered invalid total-token budget")
+	}
+	if ref.MaxCostMicroUSD != nil && (*ref.MaxCostMicroUSD < 1 || *ref.MaxCostMicroUSD > 100000000000) {
+		return fmt.Errorf("multi_agent: recovered invalid cost budget")
+	}
+	if ref.OwnedScope != nil {
+		owned := *ref.OwnedScope
+		if owned.SpaceID == "" || owned.RoleID == "" || owned.CoreID == "" || owned.ResourceOwnerID == "" ||
+			owned.SpaceID != scope.SpaceID || owned.RoleID != scope.CharacterID {
+			return fmt.Errorf("multi_agent: recovered owner authority differs from durable parent")
+		}
+		for _, child := range ref.AssignmentRefs {
+			if child.CharacterID != owned.RoleID {
+				return fmt.Errorf("multi_agent: recovered worker would cross parent character authority")
+			}
+		}
 	}
 	return nil
 }

@@ -338,7 +338,16 @@ func (api *TaskAPI) cancelTask(c *gin.Context) {
 		writeTaskError(c, err)
 		return
 	}
-	api.writeScopedTask(c, http.StatusOK, gin.H{"taskRunId": taskRunID, "status": "cancelling"})
+	live, err := svc.GetTaskRun(c.Request.Context(), taskRunID)
+	if err != nil || live == nil {
+		writeTaskError(c, task_runtime.NewTaskError(task_runtime.ErrTaskNotFound, "取消请求已提交，但最新任务状态无法确认"))
+		return
+	}
+	if err := coordination.ValidateCurrent(c.Request.Context()); err != nil {
+		writeTaskError(c, err)
+		return
+	}
+	api.writeScopedTask(c, http.StatusOK, gin.H{"taskRunId": taskRunID, "status": live.Status, "cancelConfirmed": live.Status == task_runtime.RunStatusCancelled, "cancelRequestedAt": live.CancelRequestedAt})
 }
 
 func (api *TaskAPI) pauseTask(c *gin.Context) {

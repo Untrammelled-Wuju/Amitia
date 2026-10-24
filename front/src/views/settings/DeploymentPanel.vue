@@ -7,24 +7,24 @@ SPDX-License-Identifier: AGPL-3.0-only
     <section class="mode-summary" aria-label="当前设备连接状态">
       <div class="mode-summary-main">
         <span class="mode-summary-label">当前设备连接到</span>
-        <strong>{{ currentMode === "local" ? "本机 Core" : "远程 Core" }}</strong>
+        <strong>{{ currentMode === "local" ? "本地模式" : "云端统筹模式" }}</strong>
         <span class="mode-summary-address">{{ currentApiURL || "连接地址读取中" }}</span>
       </div>
       <el-tag :type="statusType" effect="plain">{{ statusLabel }}</el-tag>
     </section>
 
     <el-card shadow="never" class="section-card" data-amitia-ui="settings.card">
-      <template #header><span>当前设备的 Core 连接目标</span></template>
-      <p class="connection-explanation">只决定这台设备使用哪个 Core，不会改变 Core 服务器自身的部署形态。</p>
+      <template #header><span>选择运行模式</span></template>
+      <p class="connection-explanation">本地模式在当前设备运行全部项目服务；云端统筹模式连接 Cloud Core 并统一管理多设备数据。</p>
 
       <el-radio-group v-model="formMode" class="mode-radio-group">
         <el-radio value="local" border class="mode-radio-card" :disabled="!desktopShell">
-          <div class="mode-label">连接本机 Core</div>
-          <div class="mode-desc">当前设备直接使用本机启动的 Core 服务</div>
+          <div class="mode-label">本地模式</div>
+          <div class="mode-desc">项目服务在本地运行，不限制模型或扩展能力</div>
         </el-radio>
         <el-radio value="cloud" border class="mode-radio-card">
-          <div class="mode-label">连接远程 Core</div>
-          <div class="mode-desc">当前设备连接一台已经部署好的远程 Core</div>
+          <div class="mode-label">云端统筹模式</div>
+          <div class="mode-desc">连接远程 Core，统一管理角色、数据和跨设备任务</div>
         </el-radio>
       </el-radio-group>
 
@@ -47,14 +47,34 @@ SPDX-License-Identifier: AGPL-3.0-only
             </div>
           </el-form-item>
         </el-form>
+        <ol class="cloud-requirements">
+          <li>验证 Cloud Core 健康状态、空间身份和运行时兼容性</li>
+          <li>当前设备完成首设备设置码或一次性 Offer 配对</li>
+          <li>保存 DeviceCredential、切换本机 Device Agent 并验证会话</li>
+        </ol>
       </div>
 
       <div class="mode-save-row">
-        <span class="mode-save-hint">仅更改当前设备的连接目标，保存后可能需要重新连接。</span>
+        <span class="mode-save-hint">
+          {{ formMode === "cloud" ? "填写地址不会直接切换，必须完成配对和凭证验证。" : "保存后业务连接会重新建立，不迁移当前运行数据。" }}
+        </span>
         <el-tag v-if="saveSuccess" type="success" size="small" effect="plain">已保存</el-tag>
         <div v-if="saveError" class="save-error">{{ saveError }}</div>
-        <el-button type="primary" data-amitia-ui="settings.button" @click="handleSave" :loading="saving">保存连接设置</el-button>
+        <el-button type="primary" data-amitia-ui="settings.button" @click="handleSave" :loading="saving">
+          {{ formMode === "cloud" ? "检查、配对并切换" : "保存本地模式" }}
+        </el-button>
       </div>
+    </el-card>
+
+    <el-card v-if="formMode === 'cloud' && cloudSetupURL" shadow="never" class="section-card">
+      <template #header><span>云端统筹设备配对</span></template>
+      <StageRuntimeSetup
+        deploy-mode="remote"
+        :serverURL="cloudSetupURL"
+        :before-verify="prepareCloudConnection"
+        :after-verification-failed="rollbackCloudSetup"
+        @health-check-done="completeCloudSetup"
+      />
     </el-card>
 
     <details class="deployment-advanced">
@@ -65,7 +85,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             :type="currentMode === 'local' ? 'success' : 'warning'"
             size="small"
           >
-            {{ currentMode === "local" ? "连接本机 Core" : "连接远程 Core" }}
+            {{ currentMode === "local" ? "本地模式" : "云端统筹模式" }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="API 地址">{{
@@ -93,7 +113,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, computed } from "vue";
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from "vue";
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import {
@@ -106,6 +126,7 @@ import type {
   RuntimeStatus,
 } from "../../runtime/runtime-types";
 import { initializeRuntimeCapabilities, isDesktopShell } from "../../runtime/runtime-capabilities";
+import StageRuntimeSetup from "@/views/onboarding/components/StageRuntimeSetup.vue";
 
 const formMode = ref<"local" | "cloud">("local");
 const formData = reactive({ serverURL: "" });
@@ -118,6 +139,14 @@ const saveError = ref("");
 const currentMode = ref<"local" | "cloud">("local");
 const currentApiURL = ref("");
 const runtimeStatus = ref<RuntimeStatus | null>(null);
+const cloudSetupURL = ref("");
+const cloudSetupSaving = ref(false);
+const cloudConfigPrepared = ref(false);
+const cloudPreviousConfig = ref<DeploymentModeConfig | null>(null);
+
+watch(formMode, (value) => {
+  if (value === "local") cloudSetupURL.value = "";
+});
 
 const rules: FormRules = {
   serverURL: [
@@ -228,18 +257,72 @@ async function handleSave() {
       return;
     }
 
+    if (config.mode === "cloud") {
+      cloudSetupURL.value = config.serverURL || "";
+      cloudConfigPrepared.value = false;
+      cloudPreviousConfig.value = await getDeploymentConfig();
+      return;
+    }
     await saveDeploymentConfig(config);
     await initializeRuntimeCapabilities(true);
     saveSuccess.value = true;
-    ElMessage.success(desktopShell ? "设备连接设置已保存，可能需要重新连接或重启应用生效；Core 服务端配置未改变" : "远程 Core 连接地址已保存；如服务已变更，请在设备配对页完成配对");
-
-    currentMode.value = config.mode;
+    ElMessage.success("本地模式已保存，业务连接会重新建立");
+    currentMode.value = "local";
     currentApiURL.value = await getApiBaseURL();
   } catch (err: any) {
     saveError.value = err?.message || "保存失败";
     ElMessage.error("保存失败: " + saveError.value);
   } finally {
     saving.value = false;
+  }
+}
+
+async function prepareCloudConnection(baseURL: string) {
+  if (cloudConfigPrepared.value) return;
+  await saveDeploymentConfig({ mode: "cloud", serverURL: baseURL });
+  await initializeRuntimeCapabilities(true);
+  cloudConfigPrepared.value = true;
+}
+
+async function rollbackCloudSetup(_baseURL: string, error: unknown) {
+  const previous = cloudPreviousConfig.value;
+  cloudConfigPrepared.value = false;
+  cloudSetupURL.value = "";
+  saveSuccess.value = false;
+  saveError.value = error instanceof Error ? error.message : "云端统筹凭证验证失败";
+  if (!previous) return;
+  try {
+    await saveDeploymentConfig(previous);
+    await initializeRuntimeCapabilities(true);
+    currentMode.value = previous.mode;
+    formMode.value = previous.mode;
+    currentApiURL.value = await getApiBaseURL();
+  } catch {
+    saveError.value += "；恢复原运行模式失败，请重新打开设置页";
+  }
+  cloudPreviousConfig.value = null;
+}
+
+async function completeCloudSetup() {
+  if (!cloudSetupURL.value || cloudSetupSaving.value) return;
+  cloudSetupSaving.value = true;
+  try {
+    if (!cloudConfigPrepared.value) {
+      await prepareCloudConnection(cloudSetupURL.value);
+    }
+    saveSuccess.value = true;
+    ElMessage.success("设备已完成云端统筹配对、凭证验证并切换");
+    currentMode.value = "cloud";
+    formMode.value = "cloud";
+    currentApiURL.value = await getApiBaseURL();
+    cloudSetupURL.value = "";
+    cloudConfigPrepared.value = false;
+    cloudPreviousConfig.value = null;
+  } catch (err: any) {
+    saveError.value = err?.message || "保存云端统筹设置失败";
+    ElMessage.error(saveError.value);
+  } finally {
+    cloudSetupSaving.value = false;
   }
 }
 
@@ -270,6 +353,13 @@ onUnmounted(() => {
 .section-card {
   margin-bottom: 12px;
   border: 1px solid var(--ac-color-border-light);
+}
+.cloud-requirements {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  color: var(--ac-color-text-muted);
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .mode-radio-group {

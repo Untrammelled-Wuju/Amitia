@@ -17,6 +17,7 @@ import (
 func signedApprovalRequest(t *testing.T, token string, key ed25519.PrivateKey) pairing.ClaimRequest {
 	t.Helper()
 	request := pairingTestRequest(token, "phone-a")
+	request.Coordinated = true
 	body := proof.ClaimBody{OfferToken: token, DeviceID: request.DeviceID.String(), RuntimeID: request.RuntimeID.String(), Platform: request.Platform.String()}
 	signed := proof.New(base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey)), "space-a", uuid.NewString(), body, time.Now())
 	signed.Signature = base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, signed.SigningBytes()))

@@ -6,29 +6,44 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 type ModelUsageRecord struct {
-	Sequence      int64  `gorm:"primaryKey;autoIncrement" json:"sequence"`
-	ID            string `gorm:"uniqueIndex;not null" json:"id"`
-	SpaceID       string `gorm:"index:idx_model_usage_scope,priority:1;not null" json:"spaceId"`
-	DeviceID      string `gorm:"index:idx_model_usage_scope,priority:2" json:"deviceId"`
-	OwnerID       string `json:"ownerId"`
-	RoleID        string `json:"roleId"`
-	RequestID     string `json:"requestId"`
-	Model         string `json:"model"`
-	Provider      string `json:"provider"`
-	Source        string `json:"source"`
-	Status        string `json:"status"`
-	StartedAt     string `gorm:"index" json:"startedAt"`
-	CompletedAt   string `json:"completedAt"`
-	InputTokens   int64  `json:"inputTokens"`
-	OutputTokens  int64  `json:"outputTokens"`
-	CachedTokens  int64  `json:"cachedTokens"`
-	TotalTokens   int64  `json:"totalTokens"`
-	UsageReported bool   `json:"usageReported"`
+	Sequence                int64  `gorm:"primaryKey;autoIncrement" json:"sequence"`
+	ID                      string `gorm:"uniqueIndex;not null" json:"id"`
+	SpaceID                 string `gorm:"index:idx_model_usage_scope,priority:1;index:idx_model_usage_coord,priority:1;not null" json:"spaceId"`
+	DeviceID                string `gorm:"index:idx_model_usage_scope,priority:2" json:"deviceId"`
+	OwnerID                 string `json:"ownerId"`
+	RoleID                  string `json:"roleId"`
+	RequestID               string `json:"requestId"`
+	Model                   string `json:"model"`
+	Provider                string `json:"provider"`
+	Source                  string `json:"source"`
+	Status                  string `json:"status"`
+	StartedAt               string `gorm:"index" json:"startedAt"`
+	CompletedAt             string `json:"completedAt"`
+	InputTokens             int64  `json:"inputTokens"`
+	OutputTokens            int64  `json:"outputTokens"`
+	CachedTokens            int64  `json:"cachedTokens"`
+	TotalTokens             int64  `json:"totalTokens"`
+	UsageReported           bool   `json:"usageReported"`
+	CoordinationID          string `gorm:"index:idx_model_usage_coord,priority:2" json:"coordinationId,omitempty"`
+	ParentInteractionID     string `json:"parentInteractionId,omitempty"`
+	AssignmentID            string `json:"assignmentId,omitempty"`
+	ReservedTokens          int64  `gorm:"not null;default:0" json:"reservedTokens,omitempty"`
+	ReservedCostMicroUSD    int64  `gorm:"column:reserved_cost_micro_usd;not null;default:0" json:"reservedCostMicroUSD"`
+	BudgetCostLimitMicroUSD int64  `gorm:"column:budget_cost_limit_micro_usd;not null;default:0" json:"budgetCostLimitMicroUSD"`
+	BudgetInputRate         int64  `gorm:"column:budget_input_rate;not null;default:0" json:"budgetInputRate"`
+	BudgetOutputRate        int64  `gorm:"column:budget_output_rate;not null;default:0" json:"budgetOutputRate"`
+	BudgetRateVersion       string `gorm:"column:budget_rate_version" json:"budgetRateVersion"`
+	BudgetOverrun           bool   `gorm:"column:budget_overrun;not null;default:false" json:"budgetOverrun"`
+	ReviewEvidenceRef       string `gorm:"column:review_evidence_ref;not null;default:''" json:"reviewEvidenceRef,omitempty"`
+	ReviewActorID           string `gorm:"column:review_actor_id;not null;default:''" json:"reviewActorId,omitempty"`
+	ReviewRecordedAt        string `gorm:"column:review_recorded_at;not null;default:''" json:"reviewRecordedAt,omitempty"`
 }
 
 func (ModelUsageRecord) TableName() string { return "runtime_model_usage" }
@@ -48,18 +63,19 @@ type UsageFilter struct {
 }
 
 type ModelUsageStore struct {
-	db      *gorm.DB
-	SpaceID string
+	db              *gorm.DB
+	SpaceID         string
+	coreOwnerReview func(context.Context, coordination.ExecutionScope) error
 }
 
 func NewModelUsageStore(db *gorm.DB, spaceID string) (*ModelUsageStore, error) {
 	if db == nil || spaceID == "" {
 		return nil, errors.New("模型计量数据库或空间未就绪")
 	}
-	if err := db.AutoMigrate(&ModelUsageRecord{}, &UsageBaseline{}); err != nil {
+	if err := (migration.Runner{DB: db}).Apply([]migration.Migration{migration.RuntimeModelBudgetMigration()}); err != nil {
 		return nil, err
 	}
-	if err := db.Model(&ModelUsageRecord{}).Where("space_id=? AND status='running'", spaceID).Updates(map[string]any{"status": "interrupted", "completed_at": time.Now().UTC().Format(time.RFC3339Nano)}).Error; err != nil {
+	if err := db.Model(&ModelUsageRecord{}).Where("space_id=? AND status='running' AND (coordination_id IS NULL OR coordination_id='')", spaceID).Updates(map[string]any{"status": "interrupted", "completed_at": time.Now().UTC().Format(time.RFC3339Nano)}).Error; err != nil {
 		return nil, err
 	}
 	state := UsageBaseline{SpaceID: spaceID, DeviceID: "@tracking-start", UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
@@ -70,17 +86,61 @@ func NewModelUsageStore(db *gorm.DB, spaceID string) (*ModelUsageStore, error) {
 }
 
 func (s *ModelUsageStore) Begin(ctx context.Context, record ModelUsageRecord) (string, error) {
-	record.ID = uuid.NewString()
-	if record.SpaceID == "" {
-		record.SpaceID = s.SpaceID
+	if s == nil || s.db == nil {
+		return "", errors.New("multi_agent: model usage store is unavailable")
 	}
+	if record.SpaceID != "" && record.SpaceID != s.SpaceID {
+		return "", errors.New("multi_agent: model usage space conflicts with store")
+	}
+	record.ID = uuid.NewString()
+	record.SpaceID = s.SpaceID
 	record.Status = "running"
 	record.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if budget, exists := OwnedModelBudgetFromContext(ctx); exists {
+		if err := s.reserveOwnedModelTokens(ctx, &record, budget); err != nil {
+			return "", err
+		}
+		return record.ID, nil
+	}
 	return record.ID, s.db.WithContext(ctx).Create(&record).Error
 }
 
 func (s *ModelUsageStore) Finish(ctx context.Context, id string, usage ModelUsageRecord) error {
-	return s.db.WithContext(ctx).Model(&ModelUsageRecord{}).Where("id=? AND status='running'", id).Updates(map[string]any{"status": usage.Status, "completed_at": time.Now().UTC().Format(time.RFC3339Nano), "input_tokens": usage.InputTokens, "output_tokens": usage.OutputTokens, "cached_tokens": usage.CachedTokens, "total_tokens": usage.TotalTokens, "usage_reported": usage.UsageReported}).Error
+	if s == nil || s.db == nil || s.SpaceID == "" || id == "" {
+		return errors.New("multi_agent: model usage settlement requires an initialized store and record")
+	}
+	verified := validOwnedModelSettlement(usage)
+	updates := map[string]any{"status": usage.Status, "completed_at": time.Now().UTC().Format(time.RFC3339Nano), "input_tokens": usage.InputTokens, "output_tokens": usage.OutputTokens, "cached_tokens": usage.CachedTokens, "total_tokens": usage.TotalTokens}
+	if verified {
+		costSQL := "((?*budget_input_rate+?*budget_output_rate+(?-?-?)*MAX(budget_input_rate,budget_output_rate)+999999)/1000000)"
+		costArgs := []any{usage.InputTokens, usage.OutputTokens, usage.TotalTokens, usage.InputTokens, usage.OutputTokens}
+		overrunSQL := "(reserved_tokens>0 AND ?>reserved_tokens OR budget_cost_limit_micro_usd>0 AND " + costSQL + ">reserved_cost_micro_usd)"
+		overrunArgs := append([]any{usage.TotalTokens}, costArgs...)
+		updates["budget_overrun"] = gorm.Expr("CASE WHEN COALESCE(coordination_id,'')<>'' AND "+overrunSQL+" THEN 1 ELSE 0 END", overrunArgs...)
+		usageArgs := append(append([]any{}, overrunArgs...), true, usage.UsageReported)
+		updates["usage_reported"] = gorm.Expr("CASE WHEN COALESCE(coordination_id,'')<>'' AND "+overrunSQL+" THEN 0 WHEN COALESCE(coordination_id,'')<>'' THEN ? ELSE ? END", usageArgs...)
+		tokenArgs := append(append([]any{}, overrunArgs...), usage.TotalTokens, usage.TotalTokens, usage.TotalTokens)
+		updates["reserved_tokens"] = gorm.Expr("CASE WHEN COALESCE(coordination_id,'')<>'' AND "+overrunSQL+" THEN CASE WHEN reserved_tokens>? THEN reserved_tokens ELSE ? END WHEN COALESCE(coordination_id,'')<>'' THEN ? ELSE reserved_tokens END", tokenArgs...)
+		costSettlementArgs := append(append([]any{}, overrunArgs...), usage.TotalTokens)
+		costSettlementArgs = append(costSettlementArgs, costArgs...)
+		updates["reserved_cost_micro_usd"] = gorm.Expr("CASE WHEN COALESCE(coordination_id,'')<>'' AND budget_cost_limit_micro_usd>0 AND "+overrunSQL+" THEN budget_cost_limit_micro_usd WHEN COALESCE(coordination_id,'')<>'' AND budget_cost_limit_micro_usd>0 AND ?<=reserved_tokens THEN MIN(budget_cost_limit_micro_usd,"+costSQL+") WHEN COALESCE(coordination_id,'')<>'' AND budget_cost_limit_micro_usd>0 THEN budget_cost_limit_micro_usd ELSE reserved_cost_micro_usd END", costSettlementArgs...)
+	} else {
+		updates["usage_reported"] = gorm.Expr("CASE WHEN COALESCE(coordination_id,'')<>'' THEN 0 ELSE ? END", usage.UsageReported)
+	}
+	result := s.db.WithContext(ctx).Model(&ModelUsageRecord{}).Where("id=? AND space_id=? AND status='running'", id, s.SpaceID).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		var saved ModelUsageRecord
+		if err := s.db.WithContext(ctx).Where("id=? AND space_id=?", id, s.SpaceID).First(&saved).Error; err != nil {
+			return err
+		}
+		if saved.CoordinationID != "" {
+			return errors.New("multi_agent: model usage reservation is already settled or interrupted")
+		}
+	}
+	return nil
 }
 
 func (s *ModelUsageStore) Clear(ctx context.Context, filter UsageFilter) (int64, error) {

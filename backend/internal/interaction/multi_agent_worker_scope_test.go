@@ -74,7 +74,7 @@ func TestMultiAgentRejectsCrossSpaceChildDispatch(t *testing.T) {
 		WorkerRefs: []AgentWorkerRef{{WorkerID: "worker-a", CharacterID: "worker-char"}},
 		Objectives: []AssignmentObjective{{WorkerIndex: 0, Objective: "do not cross the space boundary"}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "space identities conflict") {
+	if err == nil || !strings.Contains(err.Error(), "ownership conflict") {
 		t.Fatalf("cross-space dispatch must be refused: %v", err)
 	}
 	if len(workers.started) > 0 {

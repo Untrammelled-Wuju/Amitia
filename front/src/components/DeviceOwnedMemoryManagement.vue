@@ -123,14 +123,14 @@ async function save() { if (!editorScope || !form.key.trim() || !form.value.trim
 async function accept(row: OwnedMemoryManagementResource) { const original = JSON.parse(JSON.stringify(row)); await mutate(original.executionScope, { action: "accept", id: original.id, expectedRevision: original.revision }, true); }
 async function reject(row: OwnedMemoryManagementResource) { const original = JSON.parse(JSON.stringify(row)); try { await ElMessageBox.confirm("拒绝此候选，不会将其保存为可用于对话的记忆。", "拒绝候选", { type: "warning" }); await mutate(original.executionScope, { action: "reject", id: original.id, expectedRevision: original.revision }, true); } catch {} }
 async function resolveConflict() { const original = conflictIntent; const row = conflictRows.value[0]; if (!original || !row || !resolution.value) return; await mutate(original.scope, { ...original.input, action: original.candidates ? "accept" : "resolve", conflictId: row.id, expectedConflictRevision: row.revision, resolution: resolution.value }, original.candidates); }
-async function openGenerate() { const scope = snapshot(); const ticket = generation; try { const roles = scope.coordinated ? await owned.historicalRoles(scope.roleId) : []; if (ticket !== generation) return; historicalRoles.value = roles; generationSource.value = "current"; generateScope = scope; attempt = ""; generateOpen.value = true; await loadGenerationConversations(); } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "对话加载失败"; } }
+async function openGenerate() { const scope = snapshot(); const ticket = generation; try { const roles = await owned.historicalRoles(scope.roleId); if (ticket !== generation) return; historicalRoles.value = roles; generationSource.value = "current"; generateScope = scope; attempt = ""; generateOpen.value = true; await loadGenerationConversations(); } catch (cause) { if (ticket === generation) error.value = cause instanceof Error ? cause.message : "对话加载失败"; } }
 async function loadGenerationConversations() {
   const scope = generateScope; if (!scope) return;
   const ticket = generation; const source = generationSource.value;
   conversationId.value = ""; conversations.value = []; loading.value = true;
   try {
     if (source === "current") { const rows = await owned.conversations(scope.roleId); if (ticket !== generation || source !== generationSource.value) return; conversations.value = rows.filter((row) => row.ownerId === scope.resourceOwnerId); return; }
-    if (!scope.coordinated || !historicalRoles.value.some((role) => role.id === source)) throw new Error("旧设备角色目录已变化");
+    if (!historicalRoles.value.some((role) => role.id === source)) throw new Error("历史角色目录已变化");
     const rows = new Map<string, any>(); let cursor = ""; let legacyCursor = ""; const visited = new Set<string>();
     do {
       const result = await owned.data("conversation", scope.roleId, "", "", { historicalRoleId: source, historicalCursor: cursor, historicalLegacyCursor: legacyCursor });

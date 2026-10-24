@@ -18,7 +18,6 @@ const ROUTE_ALIAS_RULES: RouteAliasRule[] = [
   { canonicalPrefix: "/memory/knowledge", aliasPrefix: "/knowledge", exact: true },
   { canonicalPrefix: "/chat-logs", aliasPrefix: "/logs", exact: true },
   { canonicalPrefix: "/chat-import", aliasPrefix: "/import", exact: true },
-  { canonicalPrefix: "/settings/runtime-mode", aliasPrefix: "/runtime-mode", exact: true },
   { canonicalPrefix: "/settings/long-running", aliasPrefix: "/long-running", exact: true },
   { canonicalPrefix: "/settings/decision-viz", aliasPrefix: "/decision-viz", exact: true },
   { canonicalPrefix: "/settings/privacy-scan", aliasPrefix: "/privacy-scan", exact: true },

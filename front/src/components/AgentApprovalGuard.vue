@@ -69,9 +69,13 @@ const conversationId = computed(() =>
     ? String(route.query.conversationId || "").trim()
     : "",
 );
-const current = computed(() =>
-  pending.value.find((item) => item.conversationId === conversationId.value),
-);
+const current = computed(() => {
+  const targetConversationId = conversationId.value;
+  if (targetConversationId) {
+    return pending.value.find((item) => item.conversationId === targetConversationId);
+  }
+  return route.path.startsWith("/chat") ? pending.value.at(-1) : undefined;
+});
 const visible = computed({
   get: () => Boolean(current.value),
   set: () => undefined,
@@ -124,6 +128,7 @@ function onApprovalEvent(event: Event) {
 }
 
 async function resolve(approved: boolean) {
+  if (resolving.value) return;
   const item = current.value;
   if (!item) return;
   if (!item.conversationId || !item.turnId || !item.id) {
@@ -132,7 +137,11 @@ async function resolve(approved: boolean) {
   }
   resolving.value = true;
   try {
-    await ownedChatRuntimeRequest("approval", { conversationId: item.conversationId, turnId: item.turnId, approvalId: item.id, approved });
+    const result = await ownedChatRuntimeRequest<{ id: string; turnId: string; approved: boolean }>("approval", { conversationId: item.conversationId, turnId: item.turnId, approvalId: item.id, approved });
+    if (result.id !== item.id || result.turnId !== item.turnId || result.approved !== approved) {
+      throw new Error("审批结果与当前请求不匹配");
+    }
+    pending.value = pending.value.filter((candidate) => candidate.id !== item.id);
   } catch (error: any) {
     const status = error?.response?.status;
     if (status === 400 || status === 404) {

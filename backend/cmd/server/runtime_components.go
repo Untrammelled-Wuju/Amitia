@@ -460,45 +460,6 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		}
 		return fmt.Errorf("readiness blocked: %d blocking", snap.BlockingCount)
 	}
-	workerStarts := []struct {
-		name  string
-		start func()
-	}{
-		{name: "generation", start: func() {
-			if svc.DesktopPetWorker != nil {
-				svc.DesktopPetWorker.Start(ctx)
-			}
-		}},
-		{name: "processing", start: func() {
-			if svc.ProcessingWorker != nil {
-				svc.ProcessingWorker.Start(ctx)
-			}
-		}},
-		{name: "quality", start: func() {
-			if svc.QualityWorker != nil {
-				svc.QualityWorker.Start(ctx)
-			}
-		}},
-		{name: "regeneration", start: func() {
-			if svc.RegenerationWorker != nil {
-				svc.RegenerationWorker.Start(ctx)
-			}
-		}},
-		{name: "revision-bridge-recovery", start: func() {
-			if svc.BridgeRecoveryWorker != nil {
-				svc.BridgeRecoveryWorker.Start(ctx)
-			}
-		}},
-	}
-	for _, item := range workerStarts {
-		if err := runDesktopPetWorkerStart(item.name, item.start); err != nil {
-			c.stopAllLocked(ctx, svc)
-			if svc.SafeMode != nil {
-				svc.SafeMode.Enter("desktop pet worker start failed")
-			}
-			return err
-		}
-	}
 	// Installation reliability is part of the desktop-pet runtime body. Keeping
 	// these workers inside this component guarantees that both local and
 	// device-agent profiles own the same durable desired-state lifecycle.
@@ -639,21 +600,6 @@ func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
 		}
 		return fmt.Errorf("readiness blocked: %s", strings.Join(details, "; "))
 	}
-	if svc.DesktopPetWorker == nil || !svc.DesktopPetWorker.IsRunning() {
-		return fmt.Errorf("desktop pet generation worker not running")
-	}
-	if svc.ProcessingWorker == nil || !svc.ProcessingWorker.IsRunning() {
-		return fmt.Errorf("desktop pet processing worker not running")
-	}
-	if svc.QualityWorker == nil || !svc.QualityWorker.IsRunning() {
-		return fmt.Errorf("desktop pet quality worker not running")
-	}
-	if svc.RegenerationWorker == nil || !svc.RegenerationWorker.IsRunning() {
-		return fmt.Errorf("desktop pet regeneration worker not running")
-	}
-	if svc.BridgeRecoveryWorker == nil || !svc.BridgeRecoveryWorker.IsRunning() {
-		return fmt.Errorf("desktop pet revision bridge recovery worker not running")
-	}
 	if svc.InstallationProjectionBridge == nil || !svc.InstallationProjectionBridge.IsRunning() {
 		return fmt.Errorf("desktop pet installation projection bridge not running")
 	}
@@ -721,21 +667,6 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 	}
 	if c.state.installationProjectionOK && svc.InstallationProjectionBridge != nil {
 		svc.InstallationProjectionBridge.Stop()
-	}
-	if svc.BridgeRecoveryWorker != nil {
-		svc.BridgeRecoveryWorker.Stop()
-	}
-	if svc.RegenerationWorker != nil {
-		svc.RegenerationWorker.Stop()
-	}
-	if svc.QualityWorker != nil {
-		svc.QualityWorker.Stop()
-	}
-	if svc.ProcessingWorker != nil {
-		svc.ProcessingWorker.Stop()
-	}
-	if svc.DesktopPetWorker != nil {
-		svc.DesktopPetWorker.Stop()
 	}
 }
 

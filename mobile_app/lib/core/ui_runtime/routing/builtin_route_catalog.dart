@@ -43,10 +43,6 @@ import '../../../features/workshop/presentation/pages/workshop_home_page.dart';
 import '../../../features/workshop/presentation/pages/workflow_list_page.dart';
 import '../../../features/workshop/presentation/pages/workflow_editor_page.dart';
 import '../../../features/workshop/presentation/pages/pet_center_page.dart';
-import '../../../features/workshop/presentation/pages/pet_create_page.dart';
-import '../../../features/workshop/presentation/pages/pet_tasks_page.dart';
-import '../../../features/workshop/presentation/pages/pet_processing_page.dart';
-import '../../../features/workshop/presentation/pages/pet_action_editor_page.dart';
 import '../../../features/workshop/presentation/pages/pet_installations_page.dart';
 import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../../features/characters/presentation/pages/character_create_page.dart';
@@ -55,7 +51,6 @@ import '../../../features/settings/presentation/pages/model_settings_page.dart';
 import '../../../features/settings/presentation/pages/search_api_settings_page.dart';
 import '../../../features/settings/presentation/pages/appearance_settings_page.dart';
 import '../../../features/runtime/presentation/pages/runtime_page.dart';
-import '../../../features/settings/presentation/pages/runtime_mode_page.dart';
 import '../../../features/settings/presentation/pages/long_running_page.dart';
 import '../../../features/settings/presentation/pages/advanced_system_page.dart';
 import '../../../features/settings/presentation/pages/decision_viz_page.dart';
@@ -481,41 +476,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     ),
   ),
   GoRoute(
-    path: '/workshop/pet/create',
-    pageBuilder: (context, state) => slideFadePage(
-      context: context,
-      state: state,
-      child: const PetCreatePage(),
-    ),
-  ),
-  GoRoute(
-    path: '/workshop/pet/tasks',
-    pageBuilder: (context, state) => slideFadePage(
-      context: context,
-      state: state,
-      child: const PetTasksPage(),
-    ),
-  ),
-  GoRoute(
-    path: '/workshop/pet/processing/:taskId',
-    pageBuilder: (context, state) => slideFadePage(
-      context: context,
-      state: state,
-      child: PetProcessingPage(taskId: state.pathParameters['taskId']!),
-    ),
-  ),
-  GoRoute(
-    path: '/workshop/pet/processing/:taskId/actions/:actionKey/editor',
-    pageBuilder: (context, state) => slideFadePage(
-      context: context,
-      state: state,
-      child: PetActionEditorPage(
-        taskId: state.pathParameters['taskId']!,
-        actionKey: state.pathParameters['actionKey']!,
-      ),
-    ),
-  ),
-  GoRoute(
     path: '/workshop/pet/installations',
     pageBuilder: (context, state) => slideFadePage(
       context: context,
@@ -669,14 +629,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: const UserFeedbackPage(),
-    ),
-  ),
-  GoRoute(
-    path: '/settings/runtime-mode',
-    pageBuilder: (context, state) => slideFadePage(
-      context: context,
-      state: state,
-      child: const RuntimeModePage(),
     ),
   ),
   GoRoute(

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
+vi.mock("vue-router", () => ({
+  useRoute: () => ({ query: {} }),
+  useRouter: () => ({ replace: vi.fn() }),
+}));
 import ContinuityThreadsView from "../views/continuity/ContinuityThreadsView.vue";
 const mocks = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), update: vi.fn(), create: vi.fn(), cancel: vi.fn(), confirm: vi.fn(), refresh: vi.fn(), data: vi.fn(), historicalRoles: vi.fn(), owned: null as any }));
 vi.mock("../composables/useDeviceOwnedConversation", () => ({ useDeviceOwnedConversation: () => mocks.owned }));
@@ -57,6 +61,27 @@ describe("持续事项页面的原始详情意图", () => {
     expect(wrapper.text()).toContain("仅供读取");
     expect(wrapper.findAll("button").some((item) => item.text() === "恢复")).toBe(false);
     expect(button(wrapper, "新建事项").attributes("disabled")).toBeDefined();
+  });
+  it("连续查看不同事项时，旧详情响应不能覆盖最新选择", async () => {
+    const wrapper = open(); await flushPromises();
+    let resolveFirst!: (value: any) => void;
+    let count = 0;
+    mocks.get.mockImplementation(() => {
+      count++;
+      if (count === 1) return new Promise(resolve => { resolveFirst = resolve; });
+      return Promise.resolve({ ...document, thread: { ...document.thread, id: "newer", goal: "最新详情" }, bindings: [] });
+    });
+    const first = wrapper.get(".thread-card");
+    await first.trigger("click");
+    await first.trigger("click"); await flushPromises();
+    resolveFirst({ ...document, bindings: [] }); await flushPromises();
+    expect(wrapper.find("aside").text()).toContain("最新详情");
+  });
+  it("执行中或未知回执的目标不显示编辑入口", async () => {
+    const wrapper = open(); await flushPromises();
+    mocks.get.mockResolvedValue({ ...document, lease: { state: "unknown" }, bindings: [] });
+    await wrapper.get(".thread-card").trigger("click"); await flushPromises();
+    expect(wrapper.text()).not.toContain("编辑目标与下一步");
   });
   it("Core 变化立即关闭已打开详情及创建表单，迟到详情不能重新打开", async () => {
     const wrapper = open(); await flushPromises();

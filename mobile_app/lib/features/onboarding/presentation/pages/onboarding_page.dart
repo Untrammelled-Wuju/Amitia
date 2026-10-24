@@ -31,7 +31,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   static const _steps = [
     '欢迎',
     '运行环境检查',
-    '部署模式选择',
+    '运行模式选择',
     '个人空间与设备',
     '使用边界确认',
     '文本模型配置',
@@ -170,11 +170,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     });
     try {
       final onboarding = ref.read(onboardingServiceProvider);
-      final localRuntimeUri = (await ref
-              .read(embeddedRuntimeControllerProvider)
-              .getEndpoint())
-          .httpBaseUri
-          .toString();
+      final localRuntimeUri =
+          (await ref.read(embeddedRuntimeControllerProvider).getEndpoint())
+              .httpBaseUri
+              .toString();
       final results = await Future.wait<dynamic>(<Future<dynamic>>[
         onboarding.livenessAt(localRuntimeUri),
         onboarding.readinessAt(localRuntimeUri),
@@ -307,7 +306,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     switch (_currentStep) {
       case 2:
         if (_deployMode == 1 && _remoteCoreCtrl.text.trim().isEmpty) {
-          throw StateError('云端模式必须填写 Cloud Core 地址');
+          throw StateError('云端统筹模式必须填写 Cloud Core 地址');
         }
         await _applyDeploymentSelection();
         return;
@@ -883,7 +882,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               Text('接下来我们将引导你完成以下配置：', style: AppTypography.body(context)),
               SizedBox(height: AppSpacing.md),
               ...[
-                '运行环境与部署模式',
+                '运行环境与运行模式',
                 '个人空间与设备配对',
                 '文本 / 视觉 / 语音 / 向量模型',
                 'AI 角色头像、名字与性格',
@@ -1053,15 +1052,23 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   Widget _buildDeployMode() {
     final modes = [
-      ('本地部署', '所有数据存储在本地设备，隐私安全，无需网络', Icons.laptop, true),
-      ('云端部署', '业务直连 Cloud Core，设备能力由当前手机原生运行时提供', Icons.cloud_outlined, false),
+      ('本地模式', '项目服务、数据和设备能力全部在当前设备运行', Icons.laptop, true),
+      (
+        '云端统筹模式',
+        '连接 Cloud Core，由 Core 统一管理角色、对话、记忆和跨设备任务',
+        Icons.cloud_outlined,
+        false,
+      ),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('选择部署模式', style: AppTypography.sectionTitle(context)),
+        Text('选择运行模式', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.sm),
-        Text('不同的部署模式影响数据存储和访问方式。', style: AppTypography.caption(context)),
+        Text(
+          '本地模式不限模型或扩展能力；云端统筹模式统一管理多设备数据。',
+          style: AppTypography.caption(context),
+        ),
         SizedBox(height: AppSpacing.lg),
         ...List.generate(modes.length, (i) {
           final mode = modes[i];
@@ -1163,7 +1170,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 ),
                 SizedBox(height: AppSpacing.sm),
                 Text(
-                  '业务 HTTP/WS 会连接该 Cloud Core；本机 Runtime 保留设备身份、原生能力与设备数据管理职责。',
+                  '业务 HTTP/WS 会连接该 Cloud Core；本机 Device Agent 负责设备能力执行。',
                   style: AppTypography.caption(context),
                 ),
               ],
@@ -1835,7 +1842,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         .map((e) => e.value)
         .join('、');
     final items = <(String, String)>[
-      ('部署模式', _deployMode == 0 ? '本地部署' : '云端部署'),
+      ('运行模式', _deployMode == 0 ? '本地模式' : '云端统筹模式'),
       (
         '个人空间',
         _profileNameController.text.trim().isNotEmpty

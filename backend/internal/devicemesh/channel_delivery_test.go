@@ -79,7 +79,7 @@ func TestChannelDeliveryRecoveryRestoresOwnerAndRevocationGuard(t *testing.T) {
 			}
 			rt.LocalDeviceID = "phone"
 			if mode == "coordinated" || mode == "cloud-target-offline" {
-				if _, err := rt.Coordination.ChangeMode(t.Context(), "core", "phone", 1, true, "role"); err != nil {
+				if _, err := rt.Coordination.InitializeCoordinated(t.Context(), "core", "phone", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 			}

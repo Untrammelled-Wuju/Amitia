@@ -1,9 +1,20 @@
 package task_runtime
 
-import "github.com/u-ai/backend/internal/platform/process"
+import (
+	"runtime"
+
+	"github.com/u-ai/backend/internal/platform/process"
+)
+
+func taskProcessPIDBudget(goos string) uint32 {
+	if goos == "linux" {
+		return 32
+	}
+	return 1
+}
 
 func taskProcessLimits(definition *TaskDefinition) process.ResourceLimits {
-	limits := process.ResourceLimits{MaxMemoryBytes: 512 << 20, MaxCPUPercent: 50, MaxProcesses: 1}
+	limits := process.ResourceLimits{MaxMemoryBytes: 512 << 20, MaxCPUPercent: 50, MaxProcesses: taskProcessPIDBudget(runtime.GOOS)}
 	if definition != nil {
 		if value := definition.ResourceLimits.MaxMemoryMB; value > 0 && value < 512 {
 			limits.MaxMemoryBytes = uint64(value) << 20

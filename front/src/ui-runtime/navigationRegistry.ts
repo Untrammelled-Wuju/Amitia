@@ -1,14 +1,13 @@
 import { computed, type Component } from "vue";
 import {
+  AlarmClock,
   Avatar,
   Calendar,
   ChatLineRound,
   Collection,
-  Connection,
   DataAnalysis,
   DataLine,
   Film,
-  Grid,
   List,
   MagicStick,
   Menu,
@@ -16,20 +15,30 @@ import {
   Share,
   StarFilled,
   Timer,
-  User,
-  UserFilled,
 } from "@element-plus/icons-vue";
+import BrainIcon from "@/components/icons/BrainIcon.vue";
+import ChannelIcon from "@/components/icons/ChannelIcon.vue";
+import CharacterIcon from "@/components/icons/CharacterIcon.vue";
+import ContinuityIcon from "@/components/icons/ContinuityIcon.vue";
+import GamepadIcon from "@/components/icons/GamepadIcon.vue";
+import HomeIcon from "@/components/icons/HomeIcon.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { isRuntimeCapabilityAvailable, isRuntimeRouteAvailable, type RuntimeCapabilityName } from "@/runtime/runtime-capabilities";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
 import { collectRegistryProviders } from "./providerCollection";
-import { effectiveExtensionRouteKeys, effectiveProviderRouteKeys, shadowsProtectedRoute } from "./providerRoutes";
+import {
+  collectEffectiveProviderRoutes,
+  effectiveExtensionRouteKeys,
+  effectiveProviderRouteKeys,
+  shadowsProtectedRoute,
+} from "./providerRoutes";
 import { resolveChannelPresentations } from "./channelPresentation";
 
 export interface UINavigationItem {
   id: string;
   route: string;
   label: string;
+  description?: string;
   icon: Component;
   order: number;
   group: string;
@@ -55,15 +64,16 @@ const iconMap: Record<string, Component> = {
   dashboard: Odometer,
   data: DataAnalysis,
   run: DataLine,
-  character: UserFilled,
-  user: User,
+  character: CharacterIcon,
+  user: CharacterIcon,
   calendar: Calendar,
   profile: Avatar,
   collection: Collection,
-  connection: Connection,
-  channel: Connection,
+  connection: ChannelIcon,
+  channel: ChannelIcon,
   star: StarFilled,
-  memory: Grid,
+  memory: BrainIcon,
+  continuity: ContinuityIcon,
   list: List,
   film: Film,
   graph: Share,
@@ -77,30 +87,28 @@ export function resolveNavigationIcon(name?: string): Component {
 }
 
 const builtinItems: UINavigationItem[] = [
-  { id: "character.manage", route: "/character", label: "角色管理", icon: User, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 20, mobile: true, match: ["/character"] },
-  { id: "character.reminders", route: "/reminders", label: "主动任务", icon: Calendar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 25 },
-  { id: "character.profiles", route: "/profiles", label: "用户画像", icon: Avatar, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 30 },
-  { id: "character.world-book", route: "/world-book", label: "世界书", icon: Collection, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 35 },
-  { id: "memory.knowledge", route: "/knowledge", label: "知识库", icon: Collection, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 50, mobile: true, match: ["/knowledge"] },
-  { id: "memory.manager", route: "/memory-manager", label: "记忆总览", icon: List, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 55, mobile: true, match: ["/memory", "/memory-manager"] },
-  { id: "memory.episodic", route: "/episodic", label: "情景记忆", icon: Film, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 60 },
-  { id: "memory.graph", route: "/graph", label: "记忆图谱", icon: Share, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 65 },
-  { id: "memory.timeline", route: "/memory-timeline", label: "时间线", icon: Timer, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 70 },
-  { id: "continuity.threads", route: "/continuity", label: "持续事项", icon: List, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 72, mobile: true },
-  { id: "workshop.game-center", route: "/game-center", label: "游戏模式", icon: MagicStick, group: "workshop", order: 80, runtimeCapability: "gameMode" },
-  { id: "workshop", route: "/creative-workshop", label: "创意工坊", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
-  { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
+  { id: "home", route: "/chat", label: "主页", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat", "/logs"] },
+  { id: "tasks.proactive", route: "/reminders", label: "主动任务", description: "安排定时消息和角色主动执行的任务。", icon: AlarmClock, group: "tasks", order: 70 },
+  { id: "character.hub", route: "/characters", label: "角色", description: "管理角色、用户画像和世界书。", icon: CharacterIcon, group: "character", order: 20, mobile: true, match: ["/character", "/profiles", "/world-book"] },
+  { id: "memory.hub", route: "/memory", label: "记忆", description: "查看知识库、记忆图谱、情景和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, match: ["/memory-manager", "/memory-timeline", "/knowledge", "/episodic", "/graph"] },
+  { id: "continuity.threads", route: "/continuity", label: "持续事项", description: "跟踪跨对话的长期目标、承诺和进展。", icon: ContinuityIcon, group: "continuity", order: 75, mobile: true },
+  { id: "workshop.game-center", route: "/game-center", label: "游戏模式", description: "安装、运行并查看游戏插件。", icon: GamepadIcon, group: "workshop", order: 80, runtimeCapability: "gameMode" },
+  { id: "workshop", route: "/creative-workshop", label: "创意工坊", description: "创建角色卡、桌宠和其他创作内容。", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
+  { id: "extensions", route: "/extensions", label: "扩展中心", description: "管理扩展包、工作流、MCP 和 Agent Skills。", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
 
 const channelCenterItem: UINavigationItem = {
   id: "channels.messages",
-  route: "/channel-messages",
-  label: "渠道消息",
-  icon: Connection,
+  route: "/channel-center",
+  label: "渠道接入",
+  description: "管理渠道插件、连接状态和宿主消息。",
+  icon: ChannelIcon,
   group: "channels",
-  groupLabel: "渠道",
-  groupIcon: Connection,
+  groupLabel: "渠道接入",
+  groupIcon: ChannelIcon,
   order: 78,
+  mobile: true,
+  match: ["/channels"],
 };
 
 const pageTitleOverrides: Record<string, string> = {
@@ -108,15 +116,26 @@ const pageTitleOverrides: Record<string, string> = {
   "/privacy": "隐私说明",
   "/usage-boundary": "使用边界",
   "/storage": "存储清理",
-  "/runtime-mode": "运行模式",
   "/runtime-debug": "运行时调试",
   "/chat": "新对话",
+  "/character": "角色管理",
+  "/profiles": "用户画像",
+  "/world-book": "世界书",
+  "/memory-manager": "记忆总览",
+  "/memory-timeline": "时间线",
+  "/knowledge": "知识库",
+  "/episodic": "情景记忆",
+  "/graph": "记忆图谱",
   "/settings/overview": "运行概览",
   "/settings/data": "运行数据",
   "/settings/search-api": "搜索 API",
-  "/channel-messages": "渠道消息",
+  "/channel-center": "渠道接入",
   "/continuity": "持续事项",
   "/my-space": "我的空间",
+  "/my-space/profile": "资料与头像",
+  "/my-space/identity": "Space 身份",
+  "/my-space/runtime": "运行模式",
+  "/my-space/devices": "设备配对",
   "/user-settings": "我的空间",
   "/creative-workshop/character-cards": "角色卡工坊",
   "/creative-workshop/pet": "桌宠",
@@ -211,6 +230,7 @@ export function collectExtensionNavigationItems(
         id: key,
         route,
         label,
+        description: String(row.description ?? row.summary ?? "").trim(),
         icon: resolveNavigationIcon(String(row.icon ?? "extension")),
         order: finiteNumber(row.order, 1000),
         group,
@@ -223,6 +243,46 @@ export function collectExtensionNavigationItems(
     }
   }
   return result;
+}
+
+export interface ChannelPluginNavigationItem {
+  id: string;
+  route: string;
+  label: string;
+  channelId: string;
+  extensionId: string;
+}
+
+export function resolveChannelPluginNavigationItems(
+  store: ReturnType<typeof useExtensionUIStore>,
+  extensionItems: UINavigationItem[],
+): ChannelPluginNavigationItem[] {
+  const items: ChannelPluginNavigationItem[] = [];
+  const providerRoutes = collectEffectiveProviderRoutes(store);
+  for (const presentation of resolveChannelPresentations(store)) {
+    const routeItem = extensionItems.find((item) =>
+      item.extensionId === presentation.extensionId && item.route.startsWith("/channels/"),
+    );
+    const providerRoute = providerRoutes.find((item) =>
+      item.extensionId === presentation.extensionId && item.path.startsWith("/channels/"),
+    );
+    const route = routeItem?.route || providerRoute?.path;
+    if (!route) continue;
+    items.push({
+      id: `channel:${presentation.extensionId}:${presentation.channelId}`,
+      route,
+      label: presentation.displayName || routeItem?.label || providerRoute?.title || presentation.channelId,
+      channelId: presentation.channelId,
+      extensionId: presentation.extensionId,
+    });
+  }
+  return items;
+}
+
+export function collectChannelPluginNavigationItems(
+  store: ReturnType<typeof useExtensionUIStore>,
+): ChannelPluginNavigationItem[] {
+  return resolveChannelPluginNavigationItems(store, collectExtensionNavigationItems(store));
 }
 
 function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items: UINavigationItem[]): UINavigationItem[] {
@@ -249,7 +309,14 @@ export function resolveBuiltinNavigationItems(store: ReturnType<typeof useExtens
 export function useUINavigationRegistry() {
   const store = useExtensionUIStore();
   const items = computed<UINavigationItem[]>(() => {
-    const merged = applyIconProvider(store, [...resolveBuiltinNavigationItems(store), ...collectExtensionNavigationItems(store)]);
+    const extensionItems = collectExtensionNavigationItems(store);
+    const channelPluginRoutes = new Set(
+      resolveChannelPluginNavigationItems(store, extensionItems).map((item) => item.route),
+    );
+    const visibleExtensionItems = extensionItems.filter((item) =>
+      !item.route.startsWith("/channels/") && !channelPluginRoutes.has(item.route),
+    );
+    const merged = applyIconProvider(store, [...resolveBuiltinNavigationItems(store), ...visibleExtensionItems]);
     return merged.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   });
   const groups = computed<UINavigationGroup[]>(() => {

@@ -35,7 +35,7 @@ func TestRequestAuthorityRechecksCallerInsideTaskCommitBarrier(t *testing.T) {
 		t.Fatalf("有效管理请求不能提交: %v", err)
 	}
 	window := coordination.WithAdditionalGuard(task, func(context.Context) error {
-		_, err := service.ChangeMode(t.Context(), "space", "a", 1, true, "role")
+		_, err := service.InitializeCoordinated(t.Context(), "space", "a", 1, "role")
 		return err
 	})
 	committed = false

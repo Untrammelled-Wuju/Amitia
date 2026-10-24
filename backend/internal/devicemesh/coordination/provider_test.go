@@ -10,7 +10,7 @@ import (
 
 func TestProviderBindingRevokesOldAdministratorsWithoutMigratingData(t *testing.T) {
 	db, svc := setup(t)
-	p, err := svc.ChangeMode(t.Context(), "space", "a", 1, true, "role")
+	p, err := svc.InitializeCoordinated(t.Context(), "space", "a", 1, "role")
 	if err != nil {
 		t.Fatal(err)
 	}

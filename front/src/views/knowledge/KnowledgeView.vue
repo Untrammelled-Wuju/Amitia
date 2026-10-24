@@ -4,19 +4,23 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="knowledge-page">
-    <div class="page-header">
-      <div>
-        <h2>全局知识库</h2>
-        <p class="page-subtitle">当前账户 / 空间内所有角色共享。知识库与角色世界书、长期记忆相互独立。</p>
-      </div>
-      <div class="header-actions">
+    <ExtensionPageHeader
+      title="知识库"
+      description="当前账户或空间内所有角色共享。知识库与角色世界书、长期记忆相互独立。"
+      parent-title="记忆"
+      parent-path="/memory"
+      breadcrumb-label="记忆页面层级"
+    >
+      <template #actions>
+        <div class="header-actions">
         <el-button size="small" :loading="collecting" @click="handleGarbageCollect">清理过期版本</el-button>
         <el-button size="small" :loading="reconciling" @click="handleReconcile">一致性修复</el-button>
         <el-button size="small" type="primary" :loading="uploading" @click="pickFile">上传文件</el-button>
         <input ref="fileInput" class="hidden-input" type="file" :accept="acceptTypes" @change="onFilePicked" />
         <input ref="revisionFileInput" class="hidden-input" type="file" :accept="acceptTypes" @change="onRevisionFilePicked" />
-      </div>
-    </div>
+        </div>
+      </template>
+    </ExtensionPageHeader>
 
     <el-alert
       title="知识库内容按数据处理，检索结果不会被当成系统指令执行。向量服务不可用时会自动退化到 Exact + Sparse 检索。"
@@ -488,6 +492,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
+import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import {
   useKnowledge,
   type KnowledgeEvidence,
@@ -1010,12 +1015,12 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.knowledge-page { padding: 20px; max-width: 1440px; margin: 0 auto; }
-.page-header, .section-title-row, .search-row, .evidence-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.knowledge-page { padding: 0; max-width: 1440px; margin: 0 auto; }
+.section-title-row, .search-row, .evidence-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .temporal-select { width: 128px; flex: 0 0 128px; }
-.page-header h2, .panel h3 { margin: 0; }
-.page-subtitle, .muted, .source-file, .evidence-meta { color: var(--el-text-color-secondary); font-size: 12px; }
-.header-actions { display: flex; gap: 8px; }
+.panel h3 { margin: 0; }
+.muted, .source-file, .evidence-meta { color: var(--el-text-color-secondary); font-size: 12px; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .boundary-alert { margin: 14px 0; }
 .upload-strip { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(220px, 360px); gap: 18px; align-items: center; border: 1px dashed var(--el-border-color); border-radius: 10px; padding: 16px; margin-bottom: 16px; background: var(--el-fill-color-lighter); }
 .upload-strip div { display: flex; flex-direction: column; gap: 4px; }
@@ -1061,8 +1066,7 @@ onUnmounted(() => {
 .read-unit-head strong { color: var(--el-text-color-primary); }
 .read-unit pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; line-height: 1.65; }
 @media (max-width: 760px) {
-  .knowledge-page { padding: 12px; }
-  .page-header { align-items: flex-start; flex-direction: column; }
+  .knowledge-page { padding: 0; }
   .upload-strip { grid-template-columns: 1fr; }
   .trace-columns { grid-template-columns: 1fr; }
 }

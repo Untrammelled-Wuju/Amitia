@@ -29,8 +29,6 @@ abstract final class AppRoutes {
   static const workshopCharacterCards = '/workshop/character-cards';
   static const workshopWorkflows = '/workshop/workflows';
   static const workshopPet = '/workshop/pet';
-  static const workshopPetCreate = '/workshop/pet/create';
-  static const workshopPetTasks = '/workshop/pet/tasks';
   static const workshopPetInstallations = '/workshop/pet/installations';
   static const settings = '/settings';
   static const settingsOverview = '/settings/overview';
@@ -40,7 +38,6 @@ abstract final class AppRoutes {
   static const settingsAppearance = '/settings/appearance';
   static const settingsUIProviders = '/settings/ui-providers';
   static const settingsRuntime = '/settings/runtime';
-  static const settingsRuntimeMode = '/settings/runtime-mode';
   static const settingsLongRunning = '/settings/long-running';
   static const settingsAdvanced = '/settings/advanced';
   static const settingsDecisionViz = '/settings/decision-viz';
@@ -100,10 +97,6 @@ abstract final class AppRoutes {
       extensionId == null || extensionId.isEmpty
       ? '/extension/page/$pageId'
       : '/extension/page/$pageId?extensionId=${Uri.encodeQueryComponent(extensionId)}';
-  static String petProcessing(String taskId) =>
-      '/workshop/pet/processing/$taskId';
-  static String petActionEditor(String taskId, String actionKey) =>
-      '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
   static String workflowEditor(
     String id, {
     String location = 'cloud',

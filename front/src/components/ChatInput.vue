@@ -281,7 +281,6 @@ SPDX-License-Identifier: AGPL-3.0-only
               </div>
             </el-popover>
             <el-popover
-              v-if="!deviceOwned"
               v-model:visible="permissionMenuOpen"
               placement="top-start"
               :width="280"
@@ -393,7 +392,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                     <el-icon class="workspace-option-icon"><FolderOpened /></el-icon>
                     <span class="workspace-option-copy">
                       <strong>{{ workspace.name }}</strong>
-                      <small>{{ workspace.available ? '项目工作区' : (workspace.statusReason || '工作区不可用') }}</small>
+                      <small>{{ workspace.available ? (workspace.rootUri ? '项目工作区' : '未添加文件夹') : (workspace.statusReason || '工作区不可用') }}</small>
                     </span>
                     <el-icon
                       v-if="currentWorkspace?.workspaceId === workspace.id"
@@ -410,7 +409,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                   @click="handleChooseWorkspaceDirectory"
                 >
                   <el-icon><FolderOpened /></el-icon>
-                  <span>新建文件夹项目…</span>
+                  <span>从文件夹新建项目…</span>
                 </button>
                 <button
                   v-if="currentWorkspace && !activeConversationId"
@@ -529,7 +528,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
                     <div class="input-actions">
             <el-popover
-              v-if="!deviceOwned"
               v-model:visible="modelMenuOpen"
               placement="top-end"
               :width="260"
@@ -772,7 +770,6 @@ const env = resolveHostEnvironment();
 const { sendOnEnter } = useChatInputPreference();
 const props = withDefaults(defineProps<{
   disabled?: boolean;
-  deviceOwned?: boolean;
   sending?: boolean;
   generating?: boolean;
   isSubmitting?: boolean;

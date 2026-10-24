@@ -32,7 +32,7 @@ class CoreConfigurationSession {
     final captured = await guard.capture();
     if (_closed || epoch != _epoch) throw StateError('旧配置加载已取消');
     if (!captured.canConfigure)
-      throw StateError('Core 配置由云端统一管理，只有开启统筹模式的当前 Core 管理员可以修改');
+      throw StateError('Core 配置由云端统筹统一管理，只有获授权的 Core 管理员设备可以修改');
     final value = await captured.run(read);
     await guard.validate(captured);
     if (_closed || epoch != _epoch) throw StateError('旧配置加载结果已丢弃');

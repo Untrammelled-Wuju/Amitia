@@ -73,6 +73,23 @@ type TaskStore interface {
 	WithinTaskTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
+type RetryTaskCreationStore interface {
+	CreateRetryTaskRun(ctx context.Context, run *TaskRun) (bool, error)
+}
+
+type RemoteLeaseRenewalStore interface {
+	RenewRemoteLeaseCAS(ctx context.Context, next *TaskRun, expectedStatus TaskRunStatus, expectedGeneration, expectedRevision int64) (bool, error)
+}
+
+type RemoteLeaseWriteStore interface {
+	PutRemoteProgressCAS(ctx context.Context, run *TaskRun, seq int64, progressJSON []byte) (bool, error)
+	PutRemoteCheckpointCAS(ctx context.Context, run *TaskRun, checkpoint *TaskCheckpoint) (bool, error)
+}
+
+type RemoteLeaseTaskMutationStore interface {
+	UpdateRemoteTaskRunCAS(ctx context.Context, next *TaskRun, expectedStatus TaskRunStatus, expectedGeneration, expectedRevision int64) (bool, error)
+}
+
 func CloneTaskRun(run *TaskRun) *TaskRun {
 	return cloneTaskRun(run)
 }

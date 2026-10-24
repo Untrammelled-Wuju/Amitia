@@ -91,17 +91,6 @@ func (s *service) CreateConversationForSpace(req *CreateConversationRequest, spa
 	if req == nil {
 		return nil, fmt.Errorf("conversation request is required")
 	}
-	projectID := strings.TrimSpace(req.ProjectID)
-	if existing, err := s.findReusableEmptyConversationForSpace(projectID, req.Channel, req.Source, spaceID); err != nil {
-		return nil, err
-	} else if existing != nil {
-		return existing, nil
-	}
-	if projectID != "" {
-		if _, err := s.requireProjectForSpace(projectID, spaceID); err != nil {
-			return nil, err
-		}
-	}
 	if req.Title == "" {
 		req.Title = "新对话"
 	}
@@ -112,12 +101,12 @@ func (s *service) CreateConversationForSpace(req *CreateConversationRequest, spa
 		req.Source = "manual"
 	}
 	owner := normalizeConversationOwner(spaceID)
-	c := &Conversation{ID: uuid.New().String(), SpaceID: owner, ProjectID: projectID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
+	c := &Conversation{ID: uuid.New().String(), SpaceID: owner, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := tx.Exec("INSERT INTO conversations (id, space_id, project_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-			c.ID, c.SpaceID, c.ProjectID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
+		if err := tx.Exec("INSERT INTO conversations (id, space_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+			c.ID, c.SpaceID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
 			return err
 		}
 		if err := s.recordConversationChangeTx(tx, c, sync.OpCreate, 1, spaceID); err != nil {

@@ -84,6 +84,15 @@ func ensureOptionalBaselineIndexes(db *gorm.DB) error {
 		}
 		return true, nil
 	}
+	budgetColumns, err := hasColumns("runtime_model_usage", "space_id", "coordination_id")
+	if err != nil {
+		return err
+	}
+	if budgetColumns {
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_model_usage_coord ON runtime_model_usage(space_id, coordination_id)").Error; err != nil {
+			return err
+		}
+	}
 	projectColumn, err := hasColumn("conversations", "project_id")
 	if err != nil {
 		return err

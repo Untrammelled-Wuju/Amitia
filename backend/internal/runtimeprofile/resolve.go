@@ -126,14 +126,18 @@ func resolveEnv(env map[string]string) (Profile, bool, error) {
 }
 
 func resolveLegacy(legacyDeployMode string) (Profile, bool, error) {
-	if strings.TrimSpace(legacyDeployMode) == "" {
+	raw := strings.ToLower(strings.TrimSpace(legacyDeployMode))
+	if raw == "" {
 		return "", false, nil
 	}
-	profile, err := Parse(legacyDeployMode)
-	if err != nil {
-		return "", true, err
+	switch raw {
+	case "desktop-local":
+		return ProfileLocal, true, nil
+	case "cloud-web":
+		return ProfileCloudCore, true, nil
+	default:
+		return "", true, &InvalidProfileError{Raw: legacyDeployMode}
 	}
-	return profile, true, nil
 }
 
 func ResolveOrExit(input ResolveInput) Resolution {

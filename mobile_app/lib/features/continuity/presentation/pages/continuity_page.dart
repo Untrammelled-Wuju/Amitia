@@ -234,53 +234,52 @@ class _ContinuityPageState extends ConsumerState<ContinuityPage> {
     final service = ref.read(continuityServiceProvider);
     return Column(
       children: [
-        if (service.coordinated)
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: AppSpacing.pagePadding,
-              vertical: AppSpacing.sm,
-            ),
-            child: DropdownButtonFormField<String>(
-              key: ValueKey('continuity-source/${service.dataSource}'),
-              isExpanded: true,
-              initialValue: service.dataSource,
-              decoration: const InputDecoration(labelText: '数据来源'),
-              items: [
-                const DropdownMenuItem(
-                  value: 'current',
-                  child: Text('当前 Core 的数据'),
-                ),
-                ..._historicalRoles.map(
-                  (role) => DropdownMenuItem(
-                    value: 'history:${role['id']}',
-                    child: Text('原设备历史 · ${role['name'] ?? role['id']}'),
-                  ),
-                ),
-              ],
-              onChanged: _refreshing
-                  ? null
-                  : (value) {
-                      setState(() {
-                        service.dataSource = value ?? 'current';
-                        final options = ownedMemoryViewOptions(
-                          service.dataSource,
-                          _roles,
-                          _historicalRoles,
-                          kind: 'continuity',
-                        );
-                        if (!options.any(
-                          (option) => option.value == service.memoryView,
-                        )) {
-                          service.memoryView = options.first.value;
-                        }
-                        _items = const [];
-                        _searchResults = const [];
-                        _searchRevision++;
-                      });
-                      unawaited(_load());
-                    },
-            ),
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSpacing.pagePadding,
+            vertical: AppSpacing.sm,
           ),
+          child: DropdownButtonFormField<String>(
+            key: ValueKey('continuity-source/${service.dataSource}'),
+            isExpanded: true,
+            initialValue: service.dataSource,
+            decoration: const InputDecoration(labelText: '数据来源'),
+            items: [
+              const DropdownMenuItem(
+                value: 'current',
+                child: Text('当前 Core 的数据'),
+              ),
+              ..._historicalRoles.map(
+                (role) => DropdownMenuItem(
+                  value: 'history:${role['id']}',
+                  child: Text('原设备历史 · ${role['name'] ?? role['id']}'),
+                ),
+              ),
+            ],
+            onChanged: _refreshing
+                ? null
+                : (value) {
+                    setState(() {
+                      service.dataSource = value ?? 'current';
+                      final options = ownedMemoryViewOptions(
+                        service.dataSource,
+                        _roles,
+                        _historicalRoles,
+                        kind: 'continuity',
+                      );
+                      if (!options.any(
+                        (option) => option.value == service.memoryView,
+                      )) {
+                        service.memoryView = options.first.value;
+                      }
+                      _items = const [];
+                      _searchResults = const [];
+                      _searchRevision++;
+                    });
+                    unawaited(_load());
+                  },
+          ),
+        ),
         if (_roles.isNotEmpty)
           Padding(
             padding: EdgeInsets.symmetric(

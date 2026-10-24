@@ -4,7 +4,6 @@ import '../../core/models/conversation.dart';
 export 'character_models.dart';
 export 'memory_models.dart';
 export 'extension_models.dart';
-export 'workshop_models.dart';
 export 'settings_models.dart';
 export 'dashboard_models.dart';
 export 'kernel_models.dart';

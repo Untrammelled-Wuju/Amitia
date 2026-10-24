@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type {
   AgentSkillDirectorySelection,
@@ -42,6 +42,9 @@ const api = {
   },
   selectWorkspaceDirectory(): Promise<WorkspaceDirectorySelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectWorkspaceDirectory);
+  },
+  getPathForFile(file: File): string {
+    return webUtils.getPathForFile(file);
   },
   openPath(path: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.openPath, path);

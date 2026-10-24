@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 type completionFenceStore struct {
@@ -84,4 +85,11 @@ func TestTaskCompletionRejectsPausedOrReplacedExecution(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (s *completionFenceStore) UpdateRemoteTaskRunCAS(ctx context.Context, next *TaskRun, status TaskRunStatus, generation, revision int64) (bool, error) {
+	if s.run.ExecutionAttemptID == "" || s.run.ExecutionAttemptID != next.ExecutionAttemptID || s.run.LeaseID == "" || s.run.LeaseID != next.LeaseID || !remoteLeaseIsCurrent(s.run.LeaseExpiresAt, time.Now().UTC()) {
+		return false, nil
+	}
+	return s.UpdateTaskRunCAS(ctx, next, status, generation, revision)
 }

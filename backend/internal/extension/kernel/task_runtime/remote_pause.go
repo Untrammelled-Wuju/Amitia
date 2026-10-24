@@ -26,19 +26,25 @@ func (e *MeshRemoteTaskExecutor) RequestPause(ctx context.Context, run *TaskRun,
 }
 
 func (e *MeshRemoteTaskExecutor) ConfirmPauseStopped(ctx context.Context, run *TaskRun) bool {
-	if run == nil || e.PendingTasks == nil || run.Status != RunStatusPaused || run.PausedAt == nil || run.ScopeSnapshotID == "" || run.Generation < 1 || run.ExecutionAttemptID == "" || run.LeaseID == "" || run.ExecutionTarget.RuntimeSessionID == "" || run.ExecutionTarget.ConnectionGeneration < 1 {
+	if e == nil || run == nil || e.PendingTasks == nil || run.Status != RunStatusPaused || run.PausedAt == nil || run.ScopeSnapshotID == "" || run.Generation < 1 || run.ExecutionAttemptID == "" || run.LeaseID == "" || run.ExecutionTarget.RuntimeSessionID == "" || run.ExecutionTarget.ConnectionGeneration < 1 {
 		return false
 	}
 	if authority, owned := coordination.FromContext(ctx); !owned || run.ExecutionTarget.SpaceID.String() != authority.SpaceID || run.ExecutionTarget.DeviceID.String() != authority.TargetDeviceID || context.Cause(ctx) != nil {
 		return false
 	}
-	if pending, exists := e.PendingTasks.Get(run.TaskRunID); exists {
-		if pending.AttemptID != run.ExecutionAttemptID.String() || pending.LeaseID != run.LeaseID || pending.SessionID != run.ExecutionTarget.RuntimeSessionID.String() || pending.Generation != run.ExecutionTarget.ConnectionGeneration {
-			return false
-		}
-		return e.PendingTasks.WaitForCancelAck(ctx, run.TaskRunID)
+	if coordination.ValidateCurrent(ctx) != nil {
+		return false
 	}
-	return true
+
+	if e.PendingTasks.ConfirmStoppedAttempt(run) {
+		return true
+	}
+
+	if run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice || run.CheckpointID == nil || *run.CheckpointID == "" {
+		return false
+	}
+	inspection, err := e.InspectExecutionJournal(ctx, run)
+	return err == nil && inspection.State == "stopped_performed"
 }
 
 func (s *TaskRuntimeService) HandleRemotePaused(ctx context.Context, taskID, attemptID, leaseID string, version int64) error {
@@ -67,7 +73,8 @@ func (s *TaskRuntimeService) HandleRemotePaused(ctx context.Context, taskID, att
 		return err
 	}
 	checkpoint, err := s.readTaskCheckpoint(guarded, run)
-	if err != nil || !definition.Checkpoint || checkpoint == nil || run.CheckpointID == nil || checkpoint.CheckpointID != *run.CheckpointID || checkpoint.Version != version || checkpoint.DefinitionHash != definition.DefinitionHash || checkpoint.InputHash != run.InputHash || checkpoint.PayloadHash != hashBytes(checkpoint.Payload) {
+	if err != nil || !definition.Checkpoint || checkpoint == nil || run.CheckpointID == nil ||
+		validateRecoveryCheckpoint(run, definition, checkpoint, true) != nil || checkpoint.Version != version {
 		return NewTaskError(ErrTaskCheckpointIncompatible, "设备暂停检查点尚未获得数据所有者确认")
 	}
 	if err := coordination.ValidateCurrent(guarded); err != nil {

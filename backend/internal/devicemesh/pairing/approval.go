@@ -13,7 +13,6 @@ import (
 
 const ApprovalPolicySchema = `CREATE TABLE IF NOT EXISTS kernel_device_pairing_approval_policy (offer_id TEXT PRIMARY KEY, required INTEGER NOT NULL)`
 const OfferTargetSchema = `CREATE TABLE IF NOT EXISTS kernel_device_pairing_offer_targets (offer_id TEXT PRIMARY KEY, device_id TEXT NOT NULL)`
-const SuccessorModeSchema = `CREATE TABLE IF NOT EXISTS kernel_device_pairing_successor_modes (offer_id TEXT PRIMARY KEY, coordinated INTEGER NOT NULL)`
 const ApprovalSchema = `CREATE TABLE IF NOT EXISTS kernel_device_pairing_approvals (
 	request_id TEXT PRIMARY KEY, offer_id TEXT NOT NULL UNIQUE, space_id TEXT NOT NULL,
 	device_id TEXT NOT NULL, runtime_id TEXT NOT NULL, platform TEXT NOT NULL, label TEXT NOT NULL,

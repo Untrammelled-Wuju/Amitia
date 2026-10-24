@@ -258,6 +258,8 @@ func DefaultMigrations() []Migration {
 		DesktopPetInstallationDeviceScopeIndexMigration(),
 		ChatImportStagingMigration(),
 		SafetyGovernanceMigration(),
+		ModelBudgetRatesMigration(),
+		RuntimeModelBudgetMigration(),
 	}
 }
 

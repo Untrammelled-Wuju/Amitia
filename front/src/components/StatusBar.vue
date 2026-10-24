@@ -99,7 +99,7 @@ const appStore = useAppStore();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 
 const deployLabel = computed(() =>
-  props.deployMode === "cloud-web" ? "私有云" : "本地",
+  props.deployMode === "cloud-web" ? "云端统筹" : "本地模式",
 );
 
 </script>

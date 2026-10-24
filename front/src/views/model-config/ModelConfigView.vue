@@ -4,9 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="page">
-    <h2 class="page-title">模型配置</h2>
-
-    <el-alert v-if="!checking && !canConfigure" title="AI 服务由云端 Core 提供。当前设备没有云端管理员权限，请在 Core 控制页面修改模型配置。" type="info" :closable="false" show-icon />
+    <el-alert v-if="!checking && !canConfigure" title="云端统筹模式的模型由 Core 统一管理。当前设备没有管理员权限，请在 Core 控制页面修改。" type="info" :closable="false" show-icon />
     <el-tabs v-if="canConfigure" :model-value="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="普通模型" name="llm" />
       <el-tab-pane label="语音模型" name="voice" />
@@ -56,11 +54,6 @@ onMounted(() => {
 .page {
   margin: 0 auto;
   padding: 20px 16px;
-}
-.page-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0 0 12px;
 }
 .access-loading { min-height: 120px; }
 </style>

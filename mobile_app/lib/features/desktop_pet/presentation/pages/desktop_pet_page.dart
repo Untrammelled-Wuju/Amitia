@@ -88,15 +88,6 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
               SizedBox(height: AppSpacing.sectionGap),
               _buildExtensionCenterCard(context),
               SizedBox(height: AppSpacing.sectionGap),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                child: AmitiaButton(
-                  label: '生成新桌宠',
-                  icon: Icons.auto_awesome_outlined,
-                  isFullWidth: true,
-                  onPressed: () => context.go(AppRoutes.workshopPetCreate),
-                ),
-              ),
             ],
           ),
         ),

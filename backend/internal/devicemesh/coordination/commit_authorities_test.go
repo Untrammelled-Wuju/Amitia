@@ -30,7 +30,7 @@ func TestPendingCommitRetainsOriginalCallerAuthorityAcrossRestartAndDropsRevoked
 	if err != nil || len(pending) != 1 || len(pending[0].Commit.AdditionalAuthorities) != 1 || pending[0].Commit.AdditionalAuthorities[0] != sender {
 		t.Fatal("outbox lost frozen original caller", pending, err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "space", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "space", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	if err := restarted.Validate(t.Context(), recipient); err != nil {

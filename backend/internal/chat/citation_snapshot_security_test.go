@@ -67,7 +67,7 @@ func TestCitationSnapshotDefensiveLegacyHydration(t *testing.T) {
 }
 
 func TestCitationSnapshotsEnforceConversationSpaceOwner(t *testing.T) {
-	svc := newProjectTestService(t)
+	svc := newCitationTestService(t)
 	previousConfig := config.AppCfg
 	config.AppCfg = &config.Config{Security: config.SecurityRuntimeConfig{Mode: "cloud"}}
 	t.Cleanup(func() { config.AppCfg = previousConfig })

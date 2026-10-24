@@ -10,7 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
-func (s *TaskRuntimeService) HandleRemoteProgress(ctx context.Context, taskRunID, attemptID string, seq int64, current, total, percentage *float64, stage, message string) error {
+func (s *TaskRuntimeService) HandleRemoteProgress(ctx context.Context, taskRunID, attemptID string, seq int64, current, total, percentage *float64, stage, message string, leaseIDs ...string) error {
 	run, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return err
@@ -23,6 +23,11 @@ func (s *TaskRuntimeService) HandleRemoteProgress(ctx context.Context, taskRunID
 		return err
 	}
 	defer finish()
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		if len(leaseIDs) != 1 || leaseIDs[0] == "" || leaseIDs[0] != run.LeaseID || !remoteLeaseIsCurrent(run.LeaseExpiresAt, time.Now().UTC()) {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote progress lease missing or expired")
+		}
+	}
 	if owned {
 		return s.handleProgress(guarded, taskRunID, seq, current, total, percentage, stage, message, run)
 	}
@@ -32,7 +37,7 @@ func (s *TaskRuntimeService) HandleRemoteProgress(ctx context.Context, taskRunID
 
 	s.progressMu.Lock()
 	last, ok := s.progressLast[taskRunID]
-	if ok && time.Since(last) < time.Second/time.Duration(s.config.MaxProgressPerSecond) {
+	if ok && run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice && time.Since(last) < time.Second/time.Duration(s.config.MaxProgressPerSecond) {
 		s.progressMu.Unlock()
 		return nil
 	}
@@ -53,10 +58,24 @@ func (s *TaskRuntimeService) HandleRemoteProgress(ctx context.Context, taskRunID
 	if err != nil {
 		return err
 	}
-	return s.store.PutProgress(ctx, taskRunID, seq, progJSON)
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		writer, ok := s.store.(RemoteLeaseWriteStore)
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote progress requires atomic lease write fencing")
+		}
+		written, err := writer.PutRemoteProgressCAS(guarded, run, seq, progJSON)
+		if err != nil {
+			return err
+		}
+		if !written {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote progress lease or execution changed before commit")
+		}
+		return nil
+	}
+	return s.store.PutProgress(guarded, taskRunID, seq, progJSON)
 }
 
-func (s *TaskRuntimeService) HandleRemoteCheckpoint(ctx context.Context, taskRunID, attemptID, checkpointID string, version int64, payload json.RawMessage, payloadHash string) error {
+func (s *TaskRuntimeService) HandleRemoteCheckpoint(ctx context.Context, taskRunID, attemptID, checkpointID string, version int64, payload json.RawMessage, payloadHash string, leaseIDs ...string) error {
 	run, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return err
@@ -69,6 +88,11 @@ func (s *TaskRuntimeService) HandleRemoteCheckpoint(ctx context.Context, taskRun
 		return err
 	}
 	defer finish()
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		if len(leaseIDs) != 1 || leaseIDs[0] == "" || leaseIDs[0] != run.LeaseID || !remoteLeaseIsCurrent(run.LeaseExpiresAt, time.Now().UTC()) {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote checkpoint lease missing or expired")
+		}
+	}
 	if owned {
 		def, err := s.store.GetTaskDefinition(guarded, run.TaskDefinitionID)
 		if err != nil {
@@ -105,7 +129,21 @@ func (s *TaskRuntimeService) HandleRemoteCheckpoint(ctx context.Context, taskRun
 		CreatedAt:      time.Now().UTC(),
 	}
 
-	return s.store.PutCheckpoint(ctx, cp)
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		writer, ok := s.store.(RemoteLeaseWriteStore)
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote checkpoint requires atomic lease write fencing")
+		}
+		written, err := writer.PutRemoteCheckpointCAS(guarded, run, cp)
+		if err != nil {
+			return err
+		}
+		if !written {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote checkpoint lease or execution changed before commit")
+		}
+		return nil
+	}
+	return s.store.PutCheckpoint(guarded, cp)
 }
 
 func (s *TaskRuntimeService) UpdateLease(ctx context.Context, taskRunID, leaseID string, extension time.Duration) error {
@@ -125,8 +163,11 @@ func (s *TaskRuntimeService) UpdateLease(ctx context.Context, taskRunID, leaseID
 	if current.Status != RunStatusRunning || extension <= 0 || extension > 5*time.Minute {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务状态或续租时长无效")
 	}
-	if current.LeaseID != leaseID {
+	if current.LeaseID == "" || current.LeaseID != leaseID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
+	}
+	if !remoteLeaseIsCurrent(current.LeaseExpiresAt, time.Now().UTC()) {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote lease expired; reconcile the existing execution before reclaim")
 	}
 
 	next := cloneTaskRun(current)
@@ -135,8 +176,12 @@ func (s *TaskRuntimeService) UpdateLease(ctx context.Context, taskRunID, leaseID
 	next.LastHeartbeatAt = ptrTime(now)
 	next.Revision = NextRevision(current.Revision)
 
+	renewalStore, ok := s.store.(RemoteLeaseRenewalStore)
+	if !ok {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote lease renewal requires atomic storage fencing")
+	}
 	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		ok, casErr := renewalStore.RenewRemoteLeaseCAS(txCtx, next, current.Status, current.Generation, current.Revision)
 		if casErr != nil {
 			return casErr
 		}
@@ -443,8 +488,11 @@ func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID,
 	if current.ExecutionAttemptID.String() != attemptID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
 	}
-	if current.LeaseID != leaseID {
+	if current.LeaseID == "" || current.LeaseID != leaseID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
+	}
+	if !remoteLeaseIsCurrent(current.LeaseExpiresAt, time.Now().UTC()) {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote lease expired; reconcile the existing execution before heartbeat")
 	}
 	if current.Status != RunStatusRunning && current.Status != RunStatusCheckpointing && current.Status != RunStatusPausing {
 		return NewTaskError(ErrTaskStateTransitionInvalid, "task not running")
@@ -456,8 +504,12 @@ func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID,
 	next.LastHeartbeatAt = ptrTime(now)
 	next.Revision = NextRevision(current.Revision)
 
+	renewalStore, ok := s.store.(RemoteLeaseRenewalStore)
+	if !ok {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote lease renewal requires atomic storage fencing")
+	}
 	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		ok, casErr := renewalStore.RenewRemoteLeaseCAS(txCtx, next, current.Status, current.Generation, current.Revision)
 		if casErr != nil {
 			return casErr
 		}
@@ -472,14 +524,14 @@ func (s *TaskRuntimeService) HandleProgress(ctx context.Context, taskRunID, atte
 	if err := s.validateRemoteAttemptLease(ctx, taskRunID, attemptID, leaseID); err != nil {
 		return err
 	}
-	return s.HandleRemoteProgress(ctx, taskRunID, attemptID, seq, current, total, percentage, stage, message)
+	return s.HandleRemoteProgress(ctx, taskRunID, attemptID, seq, current, total, percentage, stage, message, leaseID)
 }
 
 func (s *TaskRuntimeService) HandleCheckpoint(ctx context.Context, taskRunID, attemptID, leaseID, checkpointID string, version int64, payload json.RawMessage, payloadHash string) error {
 	if err := s.validateRemoteAttemptLease(ctx, taskRunID, attemptID, leaseID); err != nil {
 		return err
 	}
-	return s.HandleRemoteCheckpoint(ctx, taskRunID, attemptID, checkpointID, version, payload, payloadHash)
+	return s.HandleRemoteCheckpoint(ctx, taskRunID, attemptID, checkpointID, version, payload, payloadHash, leaseID)
 }
 
 func (s *TaskRuntimeService) HandleCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) error {
@@ -503,6 +555,9 @@ func (s *TaskRuntimeService) validateRemoteAttemptLease(ctx context.Context, tas
 	}
 	if run.LeaseID == "" || run.LeaseID != leaseID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
+	}
+	if !remoteLeaseIsCurrent(run.LeaseExpiresAt, time.Now().UTC()) {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote lease expired; progress and checkpoint rejected")
 	}
 	if run.Status.IsTerminal() {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "task already terminal")

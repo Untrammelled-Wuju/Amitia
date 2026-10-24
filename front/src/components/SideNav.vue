@@ -3,62 +3,37 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <nav class="side-nav" :class="{ 'is-collapsed': appStore.sidebarCollapsed }" data-amitia-ui="app.sidebar">
+  <nav class="side-nav" data-amitia-ui="app.sidebar">
     <div class="brand-row">
-      <div class="brand">
-        <img class="brand-mark" :src="logoUrl" alt="Amitia" />
-        <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
-      </div>
-      <div class="brand-actions">
-        <button
-          v-show="!appStore.sidebarCollapsed"
-          type="button"
-          class="icon-btn"
-          aria-label="搜索"
-          title="搜索"
-          @click="searchModal?.open()"
-        >
-          <el-icon><Search /></el-icon>
-        </button>
-        <button
-          v-if="!isDesktopShell() && !isOnboardingPage"
-          type="button"
-          class="icon-btn"
-          :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
-          :title="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
-          @click="appStore.toggleSidebar"
-        >
-          <svg v-if="appStore.sidebarCollapsed" class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.25"/>
-            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-            <path d="M12.6 8.9L15.4 12L12.6 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <svg v-else class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.25"/>
-            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-            <path d="M15.4 8.9L12.6 12L15.4 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-      </div>
+      <img class="brand-mark" :src="logoUrl" alt="Amitia" />
     </div>
 
     <div class="sidebar-scroll">
       <el-menu
         :default-active="activeIndex"
-        :collapse="appStore.sidebarCollapsed"
+        :collapse="true"
+        :collapse-transition="false"
         unique-opened
         router
         class="side-menu"
       >
-        <el-menu-item index="/chat" :style="navigationItemStyle" data-amitia-ui="app.sidebar.item" @click="handleNewChat">
-          <el-icon><Plus /></el-icon>
-          <span>新对话</span>
-        </el-menu-item>
         <template v-for="group in navigationGroups" :key="group.id">
           <el-sub-menu v-if="group.label && group.items.length > 1" :index="group.id">
-            <template #title>
+            <template
+              #title
+            >
+              <span
+                class="side-nav-tooltip-anchor"
+                :aria-label="`${group.label}：${groupDescription(group)}`"
+                aria-describedby="side-nav-tooltip"
+                @mouseenter="showTooltip($event, group.label!, groupDescription(group))"
+                @mouseleave="hideTooltip"
+                @focus="showTooltip($event, group.label!, groupDescription(group))"
+                @blur="hideTooltip"
+              >
               <el-icon><component :is="group.icon" /></el-icon>
               <span>{{ group.label }}</span>
+              </span>
             </template>
             <el-menu-item
               v-for="item in group.items"
@@ -66,8 +41,12 @@ SPDX-License-Identifier: AGPL-3.0-only
               :index="item.route"
               :style="navigationItemStyle"
               data-amitia-ui="app.sidebar.item"
-              @mouseenter="prewarmItem(item)"
-              @focus="prewarmItem(item)"
+              :aria-label="`${item.label}：${itemDescription(item)}`"
+              aria-describedby="side-nav-tooltip"
+              @mouseenter="handleItemEnter($event, item)"
+              @mouseleave="hideTooltip"
+              @focus="handleItemFocus($event, item)"
+              @blur="hideTooltip"
             >
               <el-icon><component :is="item.icon" /></el-icon>
               <span>{{ item.label }}</span>
@@ -79,106 +58,18 @@ SPDX-License-Identifier: AGPL-3.0-only
             :index="item.route"
             :style="navigationItemStyle"
             data-amitia-ui="app.sidebar.item"
-            @mouseenter="prewarmItem(item)"
-            @focus="prewarmItem(item)"
+            :aria-label="`${item.label}：${itemDescription(item)}`"
+            aria-describedby="side-nav-tooltip"
+            @mouseenter="handleItemEnter($event, item)"
+            @mouseleave="hideTooltip"
+            @focus="handleItemFocus($event, item)"
+            @blur="hideTooltip"
           >
             <el-icon><component :is="item.icon" /></el-icon>
             <span>{{ item.label }}</span>
           </el-menu-item>
         </template>
       </el-menu>
-
-      <div v-show="!appStore.sidebarCollapsed" class="thread-sidebar">
-      <div v-if="chatStore.sidebar.pinned.length || pinnedProjects.length" class="thread-section">
-        <div class="section-caption">置顶</div>
-        <SidebarConversationRow
-          v-for="conversation in chatStore.sidebar.pinned"
-          :key="conversation.id"
-          :conversation="conversation"
-          :active="conversation.id === activeConversationId"
-          @select="handleSelectConversation"
-          @rename="handleConversationRename"
-          @toggle-pin="handleToggleConversationPin"
-          @archive="handleArchiveConversation"
-        />
-        <SidebarProjectBlock
-          v-for="project in pinnedProjects"
-          :key="project.id"
-          :project="project"
-          :active="project.id === chatStore.currentProjectId"
-          :active-conversation-id="activeConversationId"
-          @select="handleSelectConversation"
-          @create-conversation="handleCreateProjectConversation"
-          @command="handleProjectCommand"
-          @rename-conversation="handleConversationRename"
-          @toggle-pin-conversation="handleToggleConversationPin"
-          @archive-conversation="handleArchiveConversation"
-        />
-      </div>
-
-      <div class="thread-section">
-        <div class="section-caption project-caption">
-          <span>最近</span>
-          <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新建对话" aria-label="新建对话" @click="handleNewChat">
-            <el-icon><Plus /></el-icon>
-          </button>
-        </div>
-        <SidebarConversationRow
-          v-for="conversation in visibleRecentConversations"
-          :key="conversation.id"
-          :conversation="conversation"
-          :active="conversation.id === activeConversationId"
-          @select="handleSelectConversation"
-          @rename="handleConversationRename"
-          @toggle-pin="handleToggleConversationPin"
-          @archive="handleArchiveConversation"
-        />
-        <button
-          v-if="canToggleRecentConversations"
-          type="button"
-          class="thread-expand"
-          @click="toggleRecentConversations"
-        >
-          {{ hasMoreRecentConversations ? "展开显示" : "收起" }}
-        </button>
-        <div v-if="chatStore.sidebar.recent.length === 0" class="thread-empty">暂无对话</div>
-      </div>
-
-      <div class="thread-section">
-        <div class="section-caption project-caption">
-          <span>项目</span>
-          <button type="button" class="section-add" data-amitia-ui="app.sidebar.item" title="新增项目" aria-label="新增项目" @click="handleAddProject">
-            <el-icon><Plus /></el-icon>
-          </button>
-        </div>
-        <SidebarProjectBlock
-          v-for="project in regularProjects"
-          :key="project.id"
-          :project="project"
-          :active="project.id === chatStore.currentProjectId"
-          :active-conversation-id="activeConversationId"
-          @select="handleSelectConversation"
-          @create-conversation="handleCreateProjectConversation"
-          @command="handleProjectCommand"
-          @rename-conversation="handleConversationRename"
-          @toggle-pin-conversation="handleToggleConversationPin"
-          @archive-conversation="handleArchiveConversation"
-        />
-        <div v-if="removedProjects.length" class="removed-projects">
-          <button type="button" class="removed-projects-toggle" data-amitia-ui="app.sidebar.item" @click="showRemovedProjects = !showRemovedProjects">
-            <el-icon><Box /></el-icon>
-            <span>已移除项目</span>
-            <small>{{ removedProjects.length }}</small>
-          </button>
-          <div v-if="showRemovedProjects" class="removed-projects-list">
-            <div v-for="project in removedProjects" :key="project.id" class="removed-project-row" data-amitia-ui="app.sidebar.item">
-              <span>{{ project.name }}</span>
-              <button type="button" @click="handleRestoreProject(project)">恢复</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
     </div>
 
     <div class="side-nav-bottom">
@@ -217,258 +108,82 @@ SPDX-License-Identifier: AGPL-3.0-only
         class="user-profile"
         type="button"
         data-amitia-ui="app.sidebar.item"
-        :title="username || '个人空间'"
+        :aria-label="username || '个人空间'"
+        aria-describedby="side-nav-tooltip"
         :aria-expanded="profileMenuOpen"
         aria-haspopup="menu"
+        @mouseenter="showTooltip($event, username || '我的空间', '管理个人资料、空间身份、运行模式和设备配对。')"
+        @mouseleave="hideTooltip"
+        @focus="showTooltip($event, username || '我的空间', '管理个人资料、空间身份、运行模式和设备配对。')"
+        @blur="hideTooltip"
         @click.stop="profileMenuOpen = !profileMenuOpen"
       >
         <span class="user-avatar">
           <img v-if="avatar" :src="avatar" alt="个人头像" />
           <el-icon v-else><UserFilled /></el-icon>
         </span>
-        <span v-show="!appStore.sidebarCollapsed" class="user-copy">
-          <strong>{{ username || "个人空间" }}</strong>
-          <span>个人空间</span>
-        </span>
       </button>
     </div>
-    <SearchModal ref="searchModal" />
+
+    <Teleport to="body">
+      <Transition name="side-nav-tooltip">
+        <div
+          v-if="tooltip"
+          id="side-nav-tooltip"
+          class="side-nav-tooltip"
+          role="tooltip"
+          :style="{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }"
+        >
+          <strong>{{ tooltip.title }}</strong>
+          <span>{{ tooltip.description }}</span>
+        </div>
+      </Transition>
+    </Teleport>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  Box,
-  Moon,
-  Plus,
-  Search,
-  Setting,
-  Sunny,
-  UserFilled,
-} from "@element-plus/icons-vue";
-import { ElMessage, ElMessageBox } from "element-plus";
-import { useAppStore } from "@/stores/app";
-import { useChatStore, type ConversationItem, type ProjectItem } from "@/stores/chat";
+import { Box, Moon, Setting, Sunny, UserFilled } from "@element-plus/icons-vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { useBrandLogo } from "@/composables/useBrandLogo";
-import { useApi } from "@/composables/useApi";
-import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
-import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
-import { isDesktopShell } from "@/runtime/runtime-capabilities";
-import SearchModal from "./SearchModal.vue";
-import SidebarConversationRow from "./SidebarConversationRow.vue";
-import SidebarProjectBlock from "./SidebarProjectBlock.vue";
-import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
+import {
+  isUINavigationItemActive,
+  useUINavigationRegistry,
+  type UINavigationGroup,
+  type UINavigationItem,
+} from "@/ui-runtime/navigationRegistry";
 import { prewarmNavigationItem } from "@/ui-runtime/navigationPrewarm";
 import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
 
-const route = useRoute();
-const router = useRouter();
-const isOnboardingPage = computed(
-  () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
-);
-const appStore = useAppStore();
-const chatStore = useChatStore();
-const extensionUIStore = useExtensionUIStore();
-const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
-const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
-const { logoUrl } = useBrandLogo();
-const { get } = useApi();
-const { startDraftConversation, chooseWorkspaceDirectory, addWorkspaceToProject, removeWorkspaceFromProject, setPrimaryWorkspace } = useConversationWorkspace();
 defineProps<{
   username?: string;
   avatar?: string;
   theme?: "light" | "dark";
 }>();
 const emit = defineEmits<{ toggleTheme: [] }>();
-const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
-const activeConversationId = computed(() => String(route.query.conversationId || ""));
+const route = useRoute();
+const router = useRouter();
+const extensionUIStore = useExtensionUIStore();
+const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
+const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
+const { logoUrl } = useBrandLogo();
 const profileMenuOpen = ref(false);
-let isMounted = false;
-const {
-  visible: visibleRecentConversations,
-  hasMore: hasMoreRecentConversations,
-  canToggle: canToggleRecentConversations,
-  toggle: toggleRecentConversations,
-} = useConversationDisclosure(() => chatStore.sidebar.recent);
-const pinnedProjects = computed(() =>
-  chatStore.sidebar.projects.filter((project) => Boolean(project.pinnedAt)),
-);
-const regularProjects = computed(() =>
-  chatStore.sidebar.projects.filter((project) => !project.pinnedAt),
-);
-const removedProjects = computed(() => chatStore.sidebar.removedProjects || []);
-const showRemovedProjects = ref(false);
-const hasGeneratingConversations = computed(() => {
-  const rows = [
-    ...chatStore.sidebar.pinned,
-    ...chatStore.sidebar.recent,
-    ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
-  ];
-  return rows.some((conversation) => Boolean(conversation.isGenerating));
-});
-let conversationActivityTimer: number | null = null;
-let conversationActivityRefreshing = false;
-
-function syncConversationActivityPolling() {
-  if (!hasGeneratingConversations.value) {
-    if (conversationActivityTimer !== null) {
-      window.clearInterval(conversationActivityTimer);
-      conversationActivityTimer = null;
-    }
-    return;
-  }
-  if (conversationActivityTimer !== null) return;
-  conversationActivityTimer = window.setInterval(async () => {
-    if (conversationActivityRefreshing) return;
-    conversationActivityRefreshing = true;
-    try {
-      await chatStore.fetchSidebar();
-    } catch {
-    } finally {
-      conversationActivityRefreshing = false;
-    }
-  }, 2000);
-}
-
-async function handleNewChat() {
-  await startDraftConversation();
-  await router.push({ path: "/chat" });
-}
-
-async function handleSelectConversation(conversation: ConversationItem) {
-  chatStore.currentProjectId = conversation.projectId || "";
-  chatStore.setConversationId(conversation.id);
-  await router.push({ path: "/chat", query: { conversationId: conversation.id } });
-}
-
-async function handleConversationRename(conversation: ConversationItem, title: string) {
-  await chatStore.renameConversation(conversation.id, title);
-}
-
-async function handleToggleConversationPin(conversation: ConversationItem) {
-  await chatStore.setConversationPinned(conversation.id, !conversation.pinnedAt);
-}
-
-async function handleArchiveConversation(conversation: ConversationItem) {
-  const wasActive = activeConversationId.value === conversation.id;
-  await chatStore.archiveConversation(conversation.id);
-  if (wasActive) {
-    await router.replace({ path: "/chat" });
-  }
-}
-
-async function handleCreateProjectConversation(project: ProjectItem) {
-  if (project.readOnly) { ElMessage.warning("该项目为只读"); return; }
-  try {
-    await startDraftConversation(project.id);
-    await router.push({ path: "/chat", query: { projectId: project.id } });
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "新建项目对话失败");
-  }
-}
-
-function handleProjectDialogDismiss(error: unknown): undefined {
-  if (error === "cancel" || error === "close") return;
-  throw error;
-}
-
-async function handleAddProject() {
-  try {
-    const project = await chooseWorkspaceDirectory();
-    if (project) ElMessage.success("项目已添加");
-  } catch {
-  }
-}
-
-async function handleProjectCommand(project: ProjectItem, command: string | number | object) {
-  if (project.readOnly) { ElMessage.warning("旧项目为只读，请在原设备管理"); return; }
-  if (command === "newChat") {
-    await handleCreateProjectConversation(project);
-    return;
-  }
-  if (command === "rename") {
-    const result = await ElMessageBox.prompt("输入新的项目名称", "重命名项目", {
-      inputValue: project.name,
-      confirmButtonText: "保存",
-      cancelButtonText: "取消",
-      inputValidator: (value) => Boolean(String(value || "").trim()) || "项目名称不能为空",
-    }).catch(handleProjectDialogDismiss);
-    if (!result) return;
-    await chatStore.updateProject(project.id, { name: result.value.trim() }, project);
-    return;
-  }
-  if (command === "addWorkspace") {
-    try {
-      const workspace = await addWorkspaceToProject(project);
-      if (workspace) ElMessage.success("工作区已添加");
-    } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : "添加工作区失败");
-    }
-    return;
-  }
-  if (typeof command === "string" && command.startsWith("primary:")) {
-    try {
-      await setPrimaryWorkspace(project, command.slice("primary:".length));
-      ElMessage.success("主工作区已切换");
-    } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : "切换主工作区失败");
-    }
-    return;
-  }
-  if (typeof command === "string" && command.startsWith("removeWorkspace:")) {
-    try {
-      const workspaceId = command.slice("removeWorkspace:".length);
-      const workspace = project.workspaces.find((item) => item.id === workspaceId);
-      await removeWorkspaceFromProject(project, workspaceId);
-      ElMessage.success(`已移除工作区${workspace ? `：${workspace.name}` : ""}`);
-    } catch (error) {
-      ElMessage.error(error instanceof Error ? error.message : "移除工作区失败");
-    }
-    return;
-  }
-  if (command === "pin") {
-    await chatStore.updateProject(project.id, { pinned: !project.pinnedAt }, project);
-    return;
-  }
-  if (command === "open") {
-    await handleOpenProject(project);
-    return;
-  }
-  if (command === "remove") {
-    const result = await ElMessageBox.confirm("项目只会从侧边栏隐藏，项目、工作区绑定、对话和消息都会保留。", "从侧边栏移除", {
-      type: "warning",
-      confirmButtonText: "移除",
-    }).catch(handleProjectDialogDismiss);
-    if (!result) return;
-    await chatStore.hideProject(project.id, project);
-    ElMessage.success("项目已从侧边栏移除");
-  }
-}
-
-async function handleOpenProject(project: ProjectItem) {
-  const primary = project.workspaces.find((workspace) => workspace.id === project.primaryWorkspaceId) || project.workspaces[0];
-  if (!primary) { ElMessage.warning("项目没有可用工作区"); return; }
-  const location = await get<{ kind: string; path?: string; uri?: string }>(
-    `/api/workspaces/${encodeURIComponent(primary.id)}/location`,
-  );
-  if (location?.path && window.amitiaDesktop?.openPath) {
-    await window.amitiaDesktop.openPath(location.path);
-    return;
-  }
-  ElMessage.warning("当前环境不支持在资源管理器中打开该项目");
-}
-
-async function handleRestoreProject(project: ProjectItem) {
-  await chatStore.restoreProject(project.id, project);
-  ElMessage.success("项目已恢复到侧边栏");
-}
-
+const tooltip = ref<{ title: string; description: string; left: number; top: number } | null>(null);
+let tooltipTimer: number | null = null;
+const groupDescriptions: Record<string, string> = {
+  home: "对话、最近会话和日常入口。",
+  character: "角色、用户画像和世界书。",
+  memory: "知识库、记忆总览、图谱和时间线。",
+  tasks: "定时消息和角色主动任务。",
+  continuity: "长期目标、承诺和进展。",
+  workshop: "游戏模式、角色卡和桌宠。",
+  extensions: "扩展包、工作流、MCP 与服务。",
+  channels: "渠道插件和宿主消息。",
+};
 const activeIndex = computed(() => {
   const path = route.path;
-  if (path === "/chat" && activeConversationId.value) return "";
   const active = navigationItems.value.find((item) => isUINavigationItemActive(path, item));
   return active?.route ?? path;
 });
@@ -496,8 +211,49 @@ function prewarmItem(item: UINavigationItem) {
   prewarmNavigationItem(extensionUIStore, item);
 }
 
+function itemDescription(item: UINavigationItem) {
+  return item.description || groupDescriptions[item.group] || `打开${item.label}。`;
+}
+
+function groupDescription(group: UINavigationGroup) {
+  return groupDescriptions[group.id] || `查看${group.label || "该分组"}相关功能。`;
+}
+
+function showTooltip(event: MouseEvent | FocusEvent, title: string, description: string) {
+  hideTooltip();
+  const anchor = event.currentTarget as HTMLElement | null;
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const width = 232;
+  const left = Math.min(rect.right + 12, window.innerWidth - width - 12);
+  const top = Math.min(Math.max(rect.top + rect.height / 2, 54), window.innerHeight - 54);
+  tooltipTimer = window.setTimeout(() => {
+    tooltip.value = { title, description, left, top };
+    tooltipTimer = null;
+  }, 100);
+}
+
+function hideTooltip() {
+  if (tooltipTimer !== null) {
+    window.clearTimeout(tooltipTimer);
+    tooltipTimer = null;
+  }
+  tooltip.value = null;
+}
+
+function handleItemEnter(event: MouseEvent, item: UINavigationItem) {
+  prewarmItem(item);
+  showTooltip(event, item.label, itemDescription(item));
+}
+
+function handleItemFocus(event: FocusEvent, item: UINavigationItem) {
+  prewarmItem(item);
+  showTooltip(event, item.label, itemDescription(item));
+}
+
 function closeProfileMenu() {
   profileMenuOpen.value = false;
+  hideTooltip();
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -505,152 +261,57 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
-  isMounted = true;
-  void chatStore.fetchSidebar().catch(() => undefined);
-  syncConversationActivityPolling();
   window.addEventListener("click", closeProfileMenu);
   window.addEventListener("keydown", handleKeydown);
 });
 
 onUnmounted(() => {
-  isMounted = false;
-  if (conversationActivityTimer !== null) {
-    window.clearInterval(conversationActivityTimer);
-    conversationActivityTimer = null;
-  }
   window.removeEventListener("click", closeProfileMenu);
   window.removeEventListener("keydown", handleKeydown);
+  hideTooltip();
 });
-
-watch(hasGeneratingConversations, syncConversationActivityPolling, { immediate: true });
 </script>
 
 <style scoped>
 .side-nav {
-  width: var(--ac-sidebar-width);
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+  flex: 0 0 64px;
+  box-sizing: border-box;
   height: 100%;
   background: var(--workbench-sidebar-bg);
   display: flex;
   flex-direction: column;
+  align-items: center;
   padding: 8px 8px 0;
   user-select: none;
   flex-shrink: 0;
-  transition: width 0.2s ease;
 }
-.side-nav.is-collapsed { width: 52px; padding-inline: 6px; }
-.brand-row { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 4px 6px; gap: 6px; }
-.brand { display: flex; align-items: center; min-width: 0; gap: 8px; }
-.brand-mark { width: 26px; height: 26px; border-radius: 7px; object-fit: contain; flex: 0 0 auto; }
-.brand-name { color: var(--text-primary); font-size: var(--ac-font-size-base); font-weight: 650; white-space: nowrap; }
-.brand-actions { display: flex; align-items: center; gap: 2px; }
-.icon-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; }
-.icon-btn:hover, .icon-btn:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
-.toggle-icon { width: 20px; height: 20px; display: block; color: var(--text-muted); }
-.side-nav.is-collapsed .brand-row { justify-content: center; flex-direction: column; padding-bottom: 8px; }
-.side-nav.is-collapsed .brand-actions { width: 100%; justify-content: center; }
-.sidebar-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
+.brand-row { width: 100%; min-height: 36px; display: grid; place-items: center; padding-bottom: 4px; }
+.brand-mark { width: 24px; height: 24px; border-radius: 7px; object-fit: contain; }
+.sidebar-scroll { width: 100%; min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; }
 .side-menu { border-right: none; background: transparent; width: 100%; margin-bottom: 12px; }
-.side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: auto; line-height: 1.45; min-height: 34px; margin: 1px 0; padding: 6px 9px !important; border-radius: 7px; font-size: var(--ac-font-size-sm); color: var(--text-secondary); }
-.side-menu :deep(.el-icon) { width: 18px; font-size: 15px; margin-right: 8px; }
+.side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 44px; min-height: 44px; margin: 4px 0; padding: 0 !important; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+.side-menu :deep(.el-icon) { width: 19px; height: 19px; margin: 0; font-size: 18px; }
 .side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; }
 .side-menu :deep(.el-sub-menu .el-menu) { background: transparent; }
-.side-menu :deep(.el-sub-menu .el-menu-item) { padding-left: 34px !important; height: auto; min-height: 31px; line-height: 1.45; font-size: var(--ac-font-size-sm); }
-.recent-section { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 12px 0 8px; }
-.section-caption { padding: 0 9px 5px; color: var(--text-muted); font-size: var(--ac-font-size-xs); font-weight: 550; }
-.recent-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 31px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
-.recent-item .el-icon { flex: 0 0 auto; font-size: var(--ac-font-size-sm); color: var(--text-muted); }
-.recent-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-item:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.thread-sidebar { display: flex; flex-direction: column; padding: 2px 0 8px; }
-.thread-row { display: flex; align-items: center; min-height: 30px; border-radius: 6px; color: var(--text-secondary); }
-.thread-row:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.thread-main { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; min-height: 30px; padding: 0 6px 0 8px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
-.thread-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-name-input { min-width: 0; width: 100%; min-height: 28px; padding: 3px 6px; border: 1px solid var(--ac-color-primary); border-radius: 5px; background: var(--surface-bg); color: var(--text-primary); font: inherit; outline: none; }
-.thread-delete { display: grid; place-items: center; width: 26px; height: 26px; margin-right: 2px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; opacity: 0; }
-.thread-row:hover .thread-delete { opacity: 1; }
-.thread-actions { opacity: 0; }
-.thread-row:hover .thread-actions, .thread-row:focus-within .thread-actions { opacity: 1; }
-.thread-delete:hover { background: var(--control-hover-bg); color: var(--danger-color, #d9534f); }
-.thread-expand { align-self: flex-start; margin: 2px 0; padding: 3px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-xs); }
-.thread-expand:hover { background: var(--workbench-sidebar-hover); }
-.thread-section { display: flex; flex-direction: column; gap: 1px; padding: 4px 0; }
-.thread-section + .thread-section { margin-top: 6px; border-top: 1px solid var(--surface-border); padding-top: 10px; }
-.project-caption { display: flex; align-items: center; justify-content: space-between; }
-.section-add, .project-action { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
-.section-add:hover, .project-action:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.section-add { opacity: 0; pointer-events: none; transition: opacity 0.16s ease, background-color 0.16s ease, color 0.16s ease; }
-.project-caption:hover .section-add, .project-caption:focus-within .section-add { opacity: 1; pointer-events: auto; }
-.project-action:disabled { cursor: not-allowed; opacity: 0.35; }
-.project-action-wrap { opacity: 0; }
-.project-row:hover .project-action-wrap, .project-row:focus-within .project-action-wrap { opacity: 1; }
-.project-block { display: grid; gap: 1px; }
-.project-row { display: flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 3px 0 7px; border-radius: 7px; color: var(--text-secondary); }
-.project-row:hover, .project-row.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.project-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; min-height: 32px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
-.project-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.project-main small { margin-left: auto; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
-.project-threads { display: grid; gap: 1px; padding-left: 18px; }
-.thread-item { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 30px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; }
-.thread-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-item:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.project-thread { min-height: 27px; font-size: var(--ac-font-size-xs); }
-.thread-empty { padding: 5px 9px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
-.removed-projects { display: grid; gap: 2px; margin-top: 4px; }
-.removed-projects-toggle,
-.removed-project-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  min-height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: var(--ac-font-size-xs);
-  text-align: left;
-}
-.removed-projects-toggle:hover,
-.removed-project-row:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
-.removed-projects-toggle span,
-.removed-project-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.removed-project-row { padding-left: 22px; }
-.removed-project-row button {
-  border: 0;
-  background: transparent;
-  color: var(--ac-color-primary);
-  cursor: pointer;
-  font: inherit;
-}
-.side-nav-bottom { position: relative; flex: 0 0 auto; margin-top: auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
-.profile-menu { position: absolute; right: 0; bottom: calc(100% + 8px); display: grid; gap: 2px; width: 100%; padding: 5px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--ac-color-surface); }
+.side-nav-bottom { position: relative; width: 100%; flex: 0 0 auto; margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; border-top: 1px solid var(--surface-border); padding: 8px 0; }
+.profile-menu { position: absolute; left: calc(100% + 8px); bottom: 0; display: grid; gap: 2px; width: 188px; padding: 5px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--ac-color-surface); z-index: 30; }
 .profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--ac-font-size-sm); text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }
 .profile-menu__item:hover, .profile-menu__item:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
 .profile-menu__item .el-icon { font-size: 15px; }
 .profile-menu__item:disabled { cursor: wait; opacity: 0.7; }
-.user-profile { display: flex; align-items: center; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
-.user-profile { gap: 9px; min-height: 38px; padding: 4px 7px; }
+.user-profile { display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-secondary); cursor: pointer; }
 .user-profile:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: var(--tp-selection); color: var(--text-primary); font-size: var(--ac-font-size-sm); overflow: hidden; }
 .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.user-copy { min-width: 0; }
-.user-copy strong, .user-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.user-copy strong { max-width: 132px; color: var(--text-primary); font-size: var(--ac-font-size-sm); font-weight: 550; }
-.user-copy span { margin-top: 1px; color: var(--text-muted); font-size: var(--ac-font-size-xs); }
-.side-nav.is-collapsed .user-profile { justify-content: center; padding-inline: 0; }
-.side-nav.is-collapsed .profile-menu { width: 188px; }
-
-.side-menu .el-icon {
-  font-size: var(--ui-component-icon-size, inherit);
-}
-
-.side-nav :deep(button), .thread-name-input, .section-caption { line-height: 1.45; }
 .side-nav :deep(button:not(:disabled):focus-visible), .side-menu :deep(.el-menu-item:focus-visible), .side-menu :deep(.el-sub-menu__title:focus-visible) { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-.side-nav :deep(button:not(:disabled):not(.user-profile):not(.project-main):active) { background: var(--control-active-bg); color: var(--text-primary); }
-.icon-btn:active, .section-add:active, .project-action:active { transform: scale(0.96); }
-.thread-row:focus-within .thread-delete { opacity: 1; }
+.side-nav-tooltip-anchor { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.side-nav-tooltip { position: fixed; z-index: 4000; width: max-content; max-width: 232px; padding: 9px 11px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--surface-bg-elevated); color: var(--text-primary); box-shadow: 0 10px 28px color-mix(in srgb, #000 24%, transparent); pointer-events: none; transform: translateY(-50%); }
+.side-nav-tooltip strong { display: block; font-size: 12px; font-weight: 620; line-height: 1.35; }
+.side-nav-tooltip span { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+.side-nav-tooltip-enter-active, .side-nav-tooltip-leave-active { transition: opacity 0.12s ease, transform 0.12s ease; }
+.side-nav-tooltip-enter-from, .side-nav-tooltip-leave-to { opacity: 0; transform: translateY(-50%) translateX(-4px); }
 </style>

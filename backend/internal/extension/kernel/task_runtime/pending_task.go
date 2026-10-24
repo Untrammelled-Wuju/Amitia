@@ -38,17 +38,28 @@ type TaskClaimResult struct {
 	Error    string
 }
 
+type confirmedTaskStop struct {
+	AttemptID   string
+	LeaseID     string
+	SessionID   string
+	SpaceID     string
+	DeviceID    string
+	RuntimeID   string
+	Generation  int64
+	ConfirmedAt time.Time
+}
+
 type PendingTaskManager struct {
 	mu         sync.RWMutex
 	pending    map[string]*PendingTask
-	confirmed  map[string]time.Time
+	confirmed  map[string]confirmedTaskStop
 	defaultTTL time.Duration
 }
 
 func NewPendingTaskManager() *PendingTaskManager {
 	return &PendingTaskManager{
 		pending:    make(map[string]*PendingTask),
-		confirmed:  make(map[string]time.Time),
+		confirmed:  make(map[string]confirmedTaskStop),
 		defaultTTL: 60 * time.Second,
 	}
 }
@@ -137,10 +148,6 @@ func (m *PendingTaskManager) watchDeadline(ctx context.Context, taskRunID string
 	}
 }
 
-func (m *PendingTaskManager) Claim(taskRunID string, workerID string, leaseDuration time.Duration) bool {
-	return m.ClaimBound(taskRunID, "", "", "", 0, workerID, leaseDuration)
-}
-
 func (m *PendingTaskManager) ClaimBound(taskRunID, attemptID, leaseID, sessionID string, generation int64, workerID string, leaseDuration time.Duration) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -196,26 +203,11 @@ func (m *PendingTaskManager) HeartbeatBound(taskRunID, attemptID, leaseID, sessi
 }
 
 func pendingTaskBindingMatches(pt *PendingTask, attemptID, leaseID, sessionID string, generation int64) bool {
-	if pt == nil {
-		return false
-	}
-	if attemptID != "" && pt.AttemptID != "" && pt.AttemptID != attemptID {
-		return false
-	}
-	if leaseID != "" && pt.LeaseID != "" && pt.LeaseID != leaseID {
-		return false
-	}
-	if sessionID != "" && pt.SessionID != "" && pt.SessionID != sessionID {
-		return false
-	}
-	if generation > 0 && pt.Generation > 0 && pt.Generation != generation {
-		return false
-	}
-	return true
-}
 
-func (m *PendingTaskManager) Complete(taskRunID string, success bool, errMsg string) {
-	m.CompleteBound(taskRunID, "", "", "", 0, success, errMsg)
+	if pt == nil || attemptID == "" || leaseID == "" || sessionID == "" || generation < 1 {
+		return false
+	}
+	return pt.AttemptID == attemptID && pt.LeaseID == leaseID && pt.SessionID == sessionID && pt.Generation == generation
 }
 
 func (m *PendingTaskManager) CompleteBound(taskRunID, attemptID, leaseID, sessionID string, generation int64, success bool, errMsg string) bool {
@@ -245,11 +237,11 @@ func (m *PendingTaskManager) CompleteBound(taskRunID, attemptID, leaseID, sessio
 	}
 	delete(m.pending, taskRunID)
 	if m.confirmed == nil {
-		m.confirmed = make(map[string]time.Time)
+		m.confirmed = make(map[string]confirmedTaskStop)
 	}
 	now := time.Now()
 	for id, confirmedAt := range m.confirmed {
-		if now.Sub(confirmedAt) > 10*time.Minute {
+		if now.Sub(confirmedAt.ConfirmedAt) > 10*time.Minute {
 			delete(m.confirmed, id)
 		}
 	}
@@ -257,13 +249,13 @@ func (m *PendingTaskManager) CompleteBound(taskRunID, attemptID, leaseID, sessio
 		oldestID := ""
 		var oldest time.Time
 		for id, confirmedAt := range m.confirmed {
-			if oldestID == "" || confirmedAt.Before(oldest) {
-				oldestID, oldest = id, confirmedAt
+			if oldestID == "" || confirmedAt.ConfirmedAt.Before(oldest) {
+				oldestID, oldest = id, confirmedAt.ConfirmedAt
 			}
 		}
 		delete(m.confirmed, oldestID)
 	}
-	m.confirmed[taskRunID] = now
+	m.confirmed[taskRunID] = confirmedTaskStop{AttemptID: pt.AttemptID, LeaseID: pt.LeaseID, SessionID: pt.SessionID, SpaceID: pt.SpaceID, DeviceID: pt.DeviceID, RuntimeID: pt.RuntimeID, Generation: pt.Generation, ConfirmedAt: now}
 	pt.CancelFunc()
 	result := TaskClaimResult{Success: success, Error: errMsg}
 	select {
@@ -362,17 +354,27 @@ func (m *PendingTaskManager) WaitForClaim(ctx context.Context, taskRunID string)
 	}
 }
 
-func (m *PendingTaskManager) WaitForCancelAck(ctx context.Context, taskRunID string) bool {
+func (m *PendingTaskManager) WaitForCancelAckBound(ctx context.Context, run *TaskRun) bool {
+	if m == nil || run == nil || run.ExecutionAttemptID == "" || run.LeaseID == "" || run.ExecutionTarget.RuntimeSessionID == "" || run.ExecutionTarget.ConnectionGeneration < 1 {
+		return false
+	}
+	if m.ConfirmStoppedAttempt(run) {
+		return true
+	}
 	m.mu.RLock()
-	pt, ok := m.pending[taskRunID]
-	confirmedAt, confirmed := m.confirmed[taskRunID]
+	pending, exists := m.pending[run.TaskRunID]
+	bound := exists && pending.AttemptID == run.ExecutionAttemptID.String() && pending.LeaseID == run.LeaseID && pending.SessionID == run.ExecutionTarget.RuntimeSessionID.String() && pending.SpaceID == run.ExecutionTarget.SpaceID.String() && pending.DeviceID == run.ExecutionTarget.DeviceID.String() && pending.RuntimeID == run.ExecutionTarget.RuntimeID.String() && pending.Generation == run.ExecutionTarget.ConnectionGeneration
+	var stopped <-chan struct{}
+	if bound {
+		stopped = pending.CancelAckCh
+	}
 	m.mu.RUnlock()
-	if !ok {
-		return confirmed && time.Since(confirmedAt) <= 10*time.Minute
+	if !bound {
+		return false
 	}
 	select {
-	case <-pt.CancelAckCh:
-		return true
+	case <-stopped:
+		return m.ConfirmStoppedAttempt(run)
 	case <-ctx.Done():
 		return false
 	}
@@ -396,4 +398,17 @@ func randomSuffix(n int) string {
 		b[i] = letters[idx.Int64()]
 	}
 	return string(b)
+}
+
+func (m *PendingTaskManager) ConfirmStoppedAttempt(run *TaskRun) bool {
+	if m == nil || run == nil || run.ExecutionAttemptID == "" || run.LeaseID == "" || run.ExecutionTarget.RuntimeSessionID == "" || run.ExecutionTarget.ConnectionGeneration < 1 {
+		return false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if _, active := m.pending[run.TaskRunID]; active {
+		return false
+	}
+	ack, ok := m.confirmed[run.TaskRunID]
+	return ok && time.Since(ack.ConfirmedAt) <= 10*time.Minute && ack.AttemptID == run.ExecutionAttemptID.String() && ack.LeaseID == run.LeaseID && ack.SessionID == run.ExecutionTarget.RuntimeSessionID.String() && ack.SpaceID == run.ExecutionTarget.SpaceID.String() && ack.DeviceID == run.ExecutionTarget.DeviceID.String() && ack.RuntimeID == run.ExecutionTarget.RuntimeID.String() && ack.Generation == run.ExecutionTarget.ConnectionGeneration
 }

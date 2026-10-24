@@ -17,6 +17,7 @@ type CapabilityResumeContext struct {
 	CapabilityID capability.CapabilityID `json:"capabilityId"`
 
 	AcquisitionTransactionID string `json:"acquisitionTransactionId,omitempty"`
+	ApprovalFingerprint      string `json:"approvalFingerprint,omitempty"`
 
 	State       ResumeState                 `json:"state"`
 	Approved    bool                        `json:"approved"`

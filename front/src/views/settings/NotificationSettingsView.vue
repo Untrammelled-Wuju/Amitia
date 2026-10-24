@@ -1,10 +1,6 @@
 <template>
   <div class="panel">
     <div class="head">
-      <div>
-        <h2>通知设置</h2>
-        <p>通知偏好保存到当前设备，并由正式通知运行时负责投递、重试和回执。</p>
-      </div>
       <el-button :loading="loading" data-amitia-ui="settings.button" @click="load">刷新</el-button>
     </div>
 
@@ -224,8 +220,6 @@ onMounted(load);
 
 <style scoped>
 .panel { display: grid; gap: 16px; }
-.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.head h2 { margin: 0 0 4px; }
-.head p { margin: 0; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
+.head { display: flex; align-items: flex-start; justify-content: flex-end; gap: 16px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 </style>

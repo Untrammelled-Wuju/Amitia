@@ -10,6 +10,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/mindruntime"
 	applog "github.com/u-ai/backend/log"
 )
 
@@ -239,9 +240,21 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 				continue
 			}
 			call.Function.Arguments = arguments
+			if budget, limited := mindruntime.OwnedToolBudgetFromContext(ctx); limited {
+				if s.usageStore == nil {
+					return partial(errors.New("multi-agent durable tool budget store unavailable"))
+				}
+				if err := s.usageStore.ReserveOwnedToolCall(ctx, budget, call.ID, modelName); err != nil {
+					return partial(err)
+				}
+			}
 			result, err := s.ownedToolRuntime.Execute(ctx, inference, call.ID, modelName, json.RawMessage(call.Function.Arguments))
 			if err != nil {
-				return partial(err)
+				if ctx.Err() != nil {
+					return partial(err)
+				}
+				messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": "工具执行失败：TOOL_EXECUTION_FAILED: " + err.Error()})
+				continue
 			}
 			if strings.EqualFold(result.Status, "UNKNOWN") || result.Error != nil && strings.Contains(strings.ToLower(result.Error.Code), "unknown") {
 				return partial(business.ErrUncertainExecution)

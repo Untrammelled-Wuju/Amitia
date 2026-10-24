@@ -1,10 +1,6 @@
 <template>
   <div class="temporal-settings" data-amitia-ui="settings.section">
     <div class="page-header">
-      <div>
-        <h2>时间与地区</h2>
-        <p>管理用户当地时间、安静时段、节日地区和可被角色感知的日期。</p>
-      </div>
       <el-button type="primary" data-amitia-ui="settings.button" :loading="saving" @click="saveProfile"
         >保存设置</el-button
       >
@@ -696,21 +692,10 @@ onMounted(async () => {
 }
 .page-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 16px;
   margin-bottom: 16px;
-}
-.page-header h2 {
-  margin: 0 0 4px;
-  font-size: 20px;
-  color: var(--ac-color-text);
-}
-.page-header p {
-  margin: 0;
-  color: var(--ac-color-text-muted);
-  line-height: 1.5;
-  font-size: 13px;
 }
 .suggestion-alert {
   margin-bottom: 16px;

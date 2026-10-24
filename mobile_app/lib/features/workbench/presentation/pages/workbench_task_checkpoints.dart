@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/workbench_task_service.dart';
 
 class WorkbenchTaskCheckpoints extends ConsumerStatefulWidget {
-  const WorkbenchTaskCheckpoints({super.key, required this.conversationId, required this.coordinationId, this.characterId = ''});
+  const WorkbenchTaskCheckpoints({super.key, required this.conversationId, required this.coordinationId, this.characterId = '', this.onAuthorizationInvalidated});
   final String conversationId;
   final String characterId;
   final String coordinationId;
+  final VoidCallback? onAuthorizationInvalidated;
   @override
   ConsumerState<WorkbenchTaskCheckpoints> createState() => _WorkbenchTaskCheckpointsState();
 }
@@ -67,6 +68,9 @@ class _WorkbenchTaskCheckpointsState extends ConsumerState<WorkbenchTaskCheckpoi
     } catch (cause) {
       if (!mounted || requestId != generation) return;
       setState(() { busy = false; error = cause.toString(); records = const []; });
+      if ((cause is WorkbenchTaskReadFailure && cause.invalidatesSnapshot) || cause is FormatException) {
+        widget.onAuthorizationInvalidated?.call();
+      }
     }
   }
 

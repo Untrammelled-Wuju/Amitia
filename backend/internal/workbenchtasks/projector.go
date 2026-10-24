@@ -2,11 +2,25 @@ package workbenchtasks
 
 import (
 	"context"
+	"regexp"
 	"sort"
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
 )
+
+var linkedTaskRunIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,160}$`)
+
+func linkedTaskRunID(descriptor *interaction.RecoveryDescriptor) string {
+	if descriptor == nil || descriptor.Task == nil {
+		return ""
+	}
+	id := descriptor.Task.TaskRunID
+	if !linkedTaskRunIDPattern.MatchString(id) {
+		return ""
+	}
+	return id
+}
 
 type BoundedRecordReader interface {
 	ListRecentWorkbenchTaskRecords(context.Context, interaction.InteractionScope, int) ([]*interaction.InteractionRecord, error)
@@ -50,6 +64,7 @@ func List(ctx context.Context, reader RecordReader, spaceID, conversationID stri
 	})
 	seen := map[string]bool{}
 	liveReads := 0
+	terminalProofReads := 0
 	for _, record := range records {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -69,6 +84,8 @@ func List(ctx context.Context, reader RecordReader, spaceID, conversationID stri
 		if !validateCheckpoint(checkpoint) ||
 			(checkpoint.ParentGoalSpaceID != "" && checkpoint.ParentGoalSpaceID != spaceID) ||
 			(checkpoint.ParentGoalConversationID != "" && checkpoint.ParentGoalConversationID != conversationID) ||
+			(checkpoint.ParentGoalCharacterID != "" && checkpoint.ParentGoalCharacterID != record.Scope.CharacterID) ||
+			(checkpoint.OwnedScope != nil && (checkpoint.OwnedScope.SpaceID != spaceID || checkpoint.OwnedScope.RoleID != record.Scope.CharacterID)) ||
 			seen[checkpoint.CoordinationID] {
 			continue
 		}
@@ -77,8 +94,8 @@ func List(ctx context.Context, reader RecordReader, spaceID, conversationID stri
 			break
 		}
 		seen[checkpoint.CoordinationID] = true
-		task := Task{CoordinationID: checkpoint.CoordinationID, Status: checkpoint.Status, Strategy: string(checkpoint.Strategy), UpdatedAt: record.UpdatedAt, RecoveryState: "checkpoint-only", AssignmentCount: len(checkpoint.AssignmentRefs), Assignments: make([]Assignment, 0, len(checkpoint.AssignmentRefs))}
-		markReconciliation(&task, reconciliationReason(record, checkpoint.Status))
+		task := Task{CoordinationID: checkpoint.CoordinationID, ParentInteractionID: record.ID, TaskRunID: linkedTaskRunID(descriptor), GoalID: checkpoint.ParentGoalID, GoalRevision: checkpoint.ParentGoalRevision, ExecutionCoreID: checkpoint.ExecutionCoreID, DeviceID: checkpoint.WorkspaceDeviceID, DeadlineAt: checkpoint.DeadlineAt, CancelRequested: checkpoint.CancelRequested, Status: checkpoint.Status, Strategy: string(checkpoint.Strategy), UpdatedAt: record.UpdatedAt, RecoveryState: "checkpoint-only", AssignmentCount: len(checkpoint.AssignmentRefs), Assignments: make([]Assignment, 0, len(checkpoint.AssignmentRefs))}
+		markReconciliation(&task, reconciliationReason(record, checkpoint))
 		for _, child := range checkpoint.AssignmentRefs {
 			if child.Status == "succeeded" || child.Status == "failed" || child.Status == "cancelled" {
 				task.CompletedCount++
@@ -86,7 +103,10 @@ func List(ctx context.Context, reader RecordReader, spaceID, conversationID stri
 			if child.Status == "failed" || child.Status == "cancelled" {
 				task.FailedCount++
 			}
-			task.Assignments = append(task.Assignments, Assignment{ID: child.AssignmentID, Status: child.Status, Role: child.Role, Objective: trimObjective(child.Objective), ReviewRequired: child.Role == "coding_worker"})
+			task.Assignments = append(task.Assignments, Assignment{ID: child.AssignmentID, Status: child.Status, Role: child.Role, Dependencies: append([]string(nil), child.Dependencies...), Objective: trimObjective(child.Objective), ReviewRequired: child.Role == "coding_worker"})
+		}
+		if err := confirmTerminalWorkbenchChildren(ctx, reader, checkpoint, &task, &terminalProofReads); err != nil {
+			return out, err
 		}
 		if len(live) > 0 && live[0] != nil && ctx.Err() == nil && task.RecoveryState != "needs-reconciliation" {
 			if liveReads >= 8 {
@@ -133,9 +153,19 @@ func applySnapshot(task *Task, snapshot interaction.CoordinationSnapshot, parent
 		updates[a.AssignmentID] = a
 	}
 	for _, child := range task.Assignments {
-		if observed, found := updates[child.ID]; !found || (observed.WorkerRole != "" && observed.WorkerRole != child.Role) {
+		observed, found := updates[child.ID]
+		if !found || (observed.WorkerRole != "" && observed.WorkerRole != child.Role) {
 			return false
 		}
+		observedTerminal := observed.Status == interaction.AssignmentSucceeded || observed.Status == interaction.AssignmentFailed || observed.Status == interaction.AssignmentCancelled
+		checkpointTerminal := child.Status == "succeeded" || child.Status == "failed" || child.Status == "cancelled"
+		if (observedTerminal || checkpointTerminal) && string(observed.Status) != child.Status {
+			return false
+		}
+	}
+	observedTerminal := snapshot.Status == interaction.CoordinationSucceeded || snapshot.Status == interaction.CoordinationFailed || snapshot.Status == interaction.CoordinationCancelled
+	if observedTerminal && task.Status != string(snapshot.Status) {
+		return false
 	}
 	task.Status = string(snapshot.Status)
 	task.CompletedCount = 0

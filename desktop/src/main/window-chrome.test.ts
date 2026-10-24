@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validCaptionColors, windowChromeOptions } from "./window-chrome";
+import { TITLEBAR_HEIGHT, validCaptionColors, windowChromeOptions } from "./window-chrome";
 
 describe("平台原生窗口控件", () => {
   it("macOS 保留原生控件且不被无边框配置覆盖", () => {
@@ -7,7 +7,7 @@ describe("平台原生窗口控件", () => {
     expect(options.frame).not.toBe(false);
     expect(options.titleBarStyle).toBe("hiddenInset");
     expect(options.trafficLightPosition!.x).toBeGreaterThan(0);
-    expect(options.trafficLightPosition!.y! + 14).toBeLessThanOrEqual(34);
+    expect(options.trafficLightPosition!.y! + 14).toBeLessThanOrEqual(TITLEBAR_HEIGHT);
     expect(options.titleBarOverlay).toBeUndefined();
   });
 
@@ -17,7 +17,7 @@ describe("平台原生窗口控件", () => {
       expect(options.frame).not.toBe(false);
       expect(options.titleBarStyle).toBe("hidden");
       expect(options.trafficLightPosition).toBeUndefined();
-      expect(options.titleBarOverlay).toEqual(expect.objectContaining({ height: 34 }));
+      expect(options.titleBarOverlay).toEqual(expect.objectContaining({ height: TITLEBAR_HEIGHT }));
       expect(validCaptionColors(options.titleBarOverlay)).toBe(true);
       const colors = options.titleBarOverlay as { color: string; symbolColor: string };
       expect(colors.color).not.toBe(colors.symbolColor);

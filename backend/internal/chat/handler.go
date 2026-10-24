@@ -183,6 +183,10 @@ func (h *Handler) CreateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
+	if err := validateModelBudgetRateConfig(raw); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
 	cfg := ModelConfig{}
 	if v, ok := raw["apiType"]; ok {
 		cfg.APIType, _ = v.(string)
@@ -213,6 +217,15 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	}
 	if v, ok := raw["maxOutputTokens"].(float64); ok {
 		cfg.MaxOutputTokens = int(v)
+	}
+	if v, ok := raw["budgetRateVersion"].(string); ok {
+		cfg.BudgetRateVersion = v
+	}
+	if v, ok := raw["budgetInputRate"].(float64); ok && v >= 0 && v <= 100000000 && v == float64(int64(v)) {
+		cfg.BudgetInputRate = int64(v)
+	}
+	if v, ok := raw["budgetOutputRate"].(float64); ok && v >= 0 && v <= 100000000 && v == float64(int64(v)) {
+		cfg.BudgetOutputRate = int64(v)
 	}
 	if v, ok := raw["topP"].(float64); ok {
 		cfg.TopP = v
@@ -266,6 +279,10 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	if err := validateModelBudgetRateConfig(updates); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}

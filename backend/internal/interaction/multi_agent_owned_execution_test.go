@@ -67,17 +67,26 @@ func TestMultiAgentCancellationRetriesStopAndPersistence(t *testing.T) {
 	if tracker.records["parent-reconcile"].CancelRequestedAt.IsZero() {
 		t.Fatal("cancellation intent was not durable before stopping")
 	}
-	if err := coord.Cancel(t.Context(), id); err == nil {
-		t.Fatal("lost initial persistence failure")
+	if err := coord.Cancel(t.Context(), id); err != nil {
+		t.Fatalf("retrying cancellation without a receipt failed: %v", err)
+	}
+	ac := coord.coordinations[id]
+	if ac.cancelConfirmed || ac.status != CoordinationWaiting || worker.attempts != 2 {
+		t.Fatal("an unconfirmed cancellation was finalized")
+	}
+	childID := ac.assignments[0].ChildInteractionID
+	tracker.records[childID] = &InteractionRecord{ID: childID, Status: InteractionStatusCancelled}
+	if err := coord.Reconcile(t.Context(), id); err == nil {
+		t.Fatal("lost controlled terminal checkpoint failure")
 	}
 	if err := coord.Reconcile(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	ac := coord.coordinations[id]
-	if !ac.cancelConfirmed || worker.attempts != 3 || tracker.records["parent-reconcile"].RecoveryDescriptor.MultiAgent.Status != "cancelled" {
-		t.Fatal("cancellation did not converge after transient failures")
+	if !ac.cancelConfirmed || ac.status != CoordinationCancelled || tracker.records["parent-reconcile"].RecoveryDescriptor.MultiAgent.Status != "cancelled" {
+		t.Fatal("cancellation did not converge after confirmed child terminal result")
 	}
-	if err := coord.Cancel(t.Context(), id); err != nil || worker.attempts != 3 {
+	attempts := worker.attempts
+	if err := coord.Cancel(t.Context(), id); err != nil || worker.attempts != attempts {
 		t.Fatalf("confirmed cancellation was not idempotent: %v", err)
 	}
 }
@@ -138,12 +147,12 @@ func TestMultiAgentOwnedAuthorizationFailsClosed(t *testing.T) {
 	if len(workers.started) != 1 {
 		t.Fatal("unauthorized pending worker dispatched")
 	}
-	if ac.status != CoordinationCancelled || ac.assignments[1].Status != AssignmentCancelled || ac.assignments[1].Error == "" {
-		t.Fatal("revoked coordination remained falsely running")
+	if ac.status != CoordinationWaiting || !ac.cancelRequested || ac.assignments[1].Status != AssignmentCancelled || ac.assignments[1].Error == "" {
+		t.Fatal("revoked coordination should be waiting for external worker acknowledgement")
 	}
 	parent := tracker.records["parent-reconcile"]
-	if parent.RecoveryDescriptor == nil || parent.RecoveryDescriptor.MultiAgent.Status != "cancelled" {
-		t.Fatal("revocation was not durable")
+	if parent.RecoveryDescriptor == nil || !parent.RecoveryDescriptor.MultiAgent.CancelRequested {
+		t.Fatal("revocation was not durably requested")
 	}
 }
 
@@ -157,14 +166,20 @@ func TestMultiAgentParentCancellationStopsWorkersAndDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	ac := coord.coordinations[id]
-	if ac.status != CoordinationCancelled || ac.assignments[1].Status != AssignmentCancelled || len(worker.cancelled) != 1 || len(workers.started) != 1 {
-		t.Fatalf("parent cancellation did not stop plan: %#v cancelled=%v starts=%d", ac.assignments, worker.cancelled, len(workers.started))
+	if ac.status != CoordinationWaiting || !ac.cancelRequested || ac.assignments[1].Status != AssignmentCancelled || len(worker.cancelled) != 1 || len(workers.started) != 1 {
+		t.Fatalf("parent cancellation invented worker acknowledgement: %#v cancelled=%v starts=%d", ac.assignments, worker.cancelled, len(workers.started))
 	}
+	childID := ac.assignments[0].ChildInteractionID
+	tracker.records[childID] = &InteractionRecord{ID: childID, Status: InteractionStatusCancelled}
 	if err := coord.Reconcile(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	if len(worker.cancelled) != 1 {
-		t.Fatal("repeated cancellation dispatched another stop")
+	if ac.status != CoordinationCancelled || len(workers.started) != 1 {
+		t.Fatal("confirmed cancelled worker did not settle parent")
+	}
+	previous := len(worker.cancelled)
+	if err := coord.Reconcile(context.Background(), id); err != nil || len(worker.cancelled) != previous {
+		t.Fatal("settled cancellation sent duplicate worker stop")
 	}
 }
 

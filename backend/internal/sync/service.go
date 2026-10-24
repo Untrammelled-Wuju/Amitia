@@ -7,15 +7,15 @@ import (
 )
 
 type Service struct {
-	DB         *gorm.DB
-	ChangeLog  *ChangeLogService
-	Cursor     *CursorService
-	Pull       *PullService
-	Push       *PushService
-	Gap        *GapDetector
-	Replay     *ReplayService
-	Conflicts  *ConflictResolver
-	Apply      *ApplyService
+	DB        *gorm.DB
+	ChangeLog *ChangeLogService
+	Cursor    *CursorService
+	Pull      *PullService
+	Push      *PushService
+	Gap       *GapDetector
+	Replay    *ReplayService
+	Conflicts *ConflictResolver
+	Apply     *ApplyService
 }
 
 func NewService(db *gorm.DB, applier EntityMutationApplier) *Service {
@@ -33,15 +33,15 @@ func NewService(db *gorm.DB, applier EntityMutationApplier) *Service {
 	apply := NewApplyService(conflicts)
 
 	return &Service{
-		DB:         db,
-		ChangeLog:  changelog,
-		Cursor:     cursors,
-		Pull:       pull,
-		Push:       push,
-		Gap:        gap,
-		Replay:     replay,
-		Conflicts:  conflicts,
-		Apply:      apply,
+		DB:        db,
+		ChangeLog: changelog,
+		Cursor:    cursors,
+		Pull:      pull,
+		Push:      push,
+		Gap:       gap,
+		Replay:    replay,
+		Conflicts: conflicts,
+		Apply:     apply,
 	}
 }
 

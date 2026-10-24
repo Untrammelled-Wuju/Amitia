@@ -35,16 +35,19 @@ func TestMeshTaskInputActualDevicePortStoresOnlyAtOwnerAndRejectsChangedRole(t *
 	}
 	metadata := task_runtime.CloneTaskRun(run)
 	metadata.Input = nil
+	metadata.Generation, metadata.ExecutionAttemptID = 1, "attempt"
 	if loaded, err := port.Input(ctx, metadata); err != nil || string(loaded) != string(input) {
 		t.Fatalf("device input could not be restored: %s %v", loaded, err)
 	}
-	payload := json.RawMessage("{\n  \"cursor\": 2, \"private\": \"device checkpoint\"\n}")
+	payload := json.RawMessage("{\n  \"cursor\": 1, \"private\": \"device checkpoint\"\n}")
 	payloadDigest := sha256.Sum256(payload)
-	cp := &task_runtime.TaskCheckpoint{CheckpointID: "device-checkpoint", TaskRunID: run.TaskRunID, Version: 2, Payload: payload, PayloadHash: hex.EncodeToString(payloadDigest[:]), DefinitionHash: "definition", InputHash: run.InputHash}
+	checkpointDigest := sha256.Sum256([]byte(run.TaskRunID + "\x00attempt\x001\x001"))
+	cp := &task_runtime.TaskCheckpoint{CheckpointID: "cp-owned-" + hex.EncodeToString(checkpointDigest[:])[:32], TaskRunID: run.TaskRunID, Version: 1, Payload: payload, PayloadHash: hex.EncodeToString(payloadDigest[:]), DefinitionHash: "definition", InputHash: run.InputHash}
 	checkpointPort := task_runtime.AcknowledgedTaskCheckpointPort{Data: p}
 	if err := checkpointPort.SaveCheckpoint(ctx, metadata, cp); err != nil {
 		t.Fatal(err)
 	}
+	metadata.CheckpointID = &cp.CheckpointID
 	cpMetadata := *cp
 	cpMetadata.Payload = nil
 	if loaded, err := checkpointPort.Checkpoint(ctx, metadata, &cpMetadata); err != nil || string(loaded.Payload) != string(payload) {
@@ -104,8 +107,17 @@ func TestMeshTaskInputActualDevicePortStoresOnlyAtOwnerAndRejectsChangedRole(t *
 		t.Fatalf("device artifact body changed: %s %v", content, err)
 	}
 	artifactRun := task_runtime.CloneTaskRun(metadata)
-	artifactRun.Generation, artifactRun.ExecutionAttemptID = 2, "artifact-attempt"
-	artifactResult := &task_runtime.TaskRunResult{TaskRunID: run.TaskRunID, ResultType: task_runtime.ResultArtifact, ArtifactID: artifact.ArtifactID, ResultHash: artifact.Hash}
+	artifactRun.TaskRunID += "-artifact"
+	artifactRun.Generation, artifactRun.ExecutionAttemptID, artifactRun.CheckpointID, artifactRun.Input = 1, "artifact-attempt", nil, input
+	if err := port.SaveInput(ctx, artifactRun); err != nil {
+		t.Fatal(err)
+	}
+	artifactParams, _ = json.Marshal(map[string]any{"task_run_id": artifactRun.TaskRunID, "name": "result.json", "data": map[string]string{"private": "device-owned-artifact"}})
+	artifactResponse, err = artifactPort.Call(ctx, artifactRun, "artifact-save", "task.artifact.saveData", artifactParams)
+	if err != nil || json.Unmarshal(artifactResponse, &artifact) != nil {
+		t.Fatalf("independent artifact task failed: %v", err)
+	}
+	artifactResult := &task_runtime.TaskRunResult{TaskRunID: artifactRun.TaskRunID, ResultType: task_runtime.ResultArtifact, ArtifactID: artifact.ArtifactID, ResultHash: artifact.Hash}
 	if err := outcomePort.SaveOutcome(ctx, artifactRun, "succeeded", artifactResult, "", ""); err != nil {
 		t.Fatal(err)
 	}

@@ -69,6 +69,7 @@ type RouterDeps struct {
 	PairingSvc                   *pairing.Service
 	Coordination                 *coordination.Service
 	BusinessCoordinationReady    bool
+	Coordinated                  bool
 	LANEndpoints                 func() []lan.Endpoint
 	ProviderPath                 func() ([]string, error)
 	Successor                    func(context.Context, string) (any, error)
@@ -183,15 +184,14 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 			return
 		}
 		var request struct {
-			DeviceID    string `json:"deviceId"`
-			Coordinated bool   `json:"coordinated"`
+			DeviceID string `json:"deviceId"`
 		}
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<10)
 		if c.ShouldBindJSON(&request) != nil {
 			c.JSON(400, gin.H{"message": "服务切换配对参数无效"})
 			return
 		}
-		offer, token, err := deps.PairingSvc.CreateSuccessorOffer(c.Request.Context(), creator, runtimeidentity.ParseDeviceID(request.DeviceID), request.Coordinated)
+		offer, token, err := deps.PairingSvc.CreateSuccessorOffer(c.Request.Context(), creator, runtimeidentity.ParseDeviceID(request.DeviceID))
 		if err != nil {
 			c.JSON(409, gin.H{"message": err.Error()})
 			return
@@ -206,7 +206,6 @@ func RegisterCloudRoutes(router gin.IRouter, authMW gin.HandlerFunc, webAccessMW
 	authorized.POST("/devices/:deviceId/runtimes/:runtimeId/probe", makeProbeHandler(deps))
 	if deps.Coordination != nil {
 		authorized.GET("/coordination/me", makePolicyHandler(deps))
-		authorized.PUT("/coordination/me", makeModeHandler(deps))
 		authorized.PUT("/devices/:deviceId/administrator", makeAdministratorHandler(deps))
 	}
 
@@ -411,7 +410,7 @@ func makePairingClaimHandler(deps *RouterDeps) gin.HandlerFunc {
 		result, err := deps.PairingSvc.Claim(c.Request.Context(), pairing.ClaimRequest{
 			OfferToken: strings.TrimSpace(req.OfferToken), SetupCode: strings.TrimSpace(req.SetupCode),
 			DeviceID: runtimeidentity.ParseDeviceID(req.DeviceID), RuntimeID: runtimeidentity.ParseRuntimeID(req.RuntimeID),
-			Platform: platform, Label: strings.TrimSpace(req.Label), Proof: req.Proof,
+			Platform: platform, Label: strings.TrimSpace(req.Label), Proof: req.Proof, Coordinated: deps.Coordinated,
 		})
 		if err != nil {
 			if status, code := pairingErrorResponse(err); code != "" {

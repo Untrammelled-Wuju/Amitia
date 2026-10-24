@@ -79,6 +79,8 @@ func TestRemoteUnconfirmedReceiptPreservesUnknownAndDoesNotSaveFailedOutcome(t *
 			run.DefinitionFingerprint, _ = taskDefinitionFingerprint(definition)
 			run.Status, run.Generation, run.ExecutionAttemptID, run.LeaseID = RunStatusRunning, 2, "attempt", "lease"
 			run.ExecutionPlacement = TaskExecutionPlacementDevice
+ future := time.Now().UTC().Add(time.Minute)
+ run.LeaseExpiresAt = &future
 			store := &ownedCallbackStore{ownedOutcomeStore: ownedOutcomeStore{completionFenceStore: completionFenceStore{run: CloneTaskRun(run)}}, definition: definition}
 			service.store = store
 			service.config.OwnedExecutionGuard = func(ctx context.Context, authority coordination.ExecutionScope, _ *TaskRun) (context.Context, func(), error) {

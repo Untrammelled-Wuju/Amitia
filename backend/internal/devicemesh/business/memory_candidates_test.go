@@ -14,7 +14,7 @@ func TestOwnedMemoryCandidatesReplayAndAtomicReview(t *testing.T) {
 		t.Run(map[bool]string{false: "Source", true: "Core"}[on], func(t *testing.T) {
 			e, db, service, model := engineHarness(t)
 			if on {
-				if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -68,7 +68,7 @@ func TestOwnedMemoryCandidatesHistoricalSourceProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	req.RequestID = "history-candidate"
@@ -119,7 +119,7 @@ func TestOwnedMemoryCandidatesLateScopeAndUncertainRetry(t *testing.T) {
 			before := model.extractions.Load()
 			model.extract = func(context.Context, Inference, Generation) ([]DerivedMemory, error) {
 				if failure == "mode" {
-					if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+					if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 						t.Fatal(err)
 					}
 					return []DerivedMemory{{Kind: "fact", Key: "late", Body: json.RawMessage(`{"value":"迟到结果"}`)}}, nil

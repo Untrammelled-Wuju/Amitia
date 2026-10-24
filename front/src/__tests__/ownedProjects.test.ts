@@ -88,18 +88,42 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     expect(store.sidebar.projects).toHaveLength(1);
   });
 
-  it("重命名、置顶、隐藏使用原 Owner 和项目 CAS 版本，现有对话禁止移动", async () => {
+  it("重命名、置顶、移动对话和隐藏使用原 Owner 与 CAS 版本", async () => {
     const store = useChatStore();
     await store.fetchSidebar();
     const target = store.sidebar.projects[0];
     await store.updateProject(target.id, { name: "新名称", pinned: true }, target);
     expect(mocks.post.mock.calls[0][1]).toMatchObject({ kind: "project", id: "same-project", expectedRevision: 1, expectedExecutionScope: scope, changes: { title: "新名称", pinned: true } });
-    await expect(store.moveConversation(store.sidebar.projects[0].conversations[0].id, target.id)).rejects.toThrow("不能手动移入或移出");
+    await store.moveConversation(store.sidebar.projects[0].conversations[0].id, "");
+    expect(mocks.post.mock.calls[1][1]).toMatchObject({ kind: "conversation", id: "chat", changes: { projectId: "" } });
     await store.hideProject(target.id, target);
-    expect(mocks.post.mock.calls[1][1]).toMatchObject({ kind: "project", id: "same-project", changes: { hidden: true }, expectedRevision: 1 });
+    expect(mocks.post.mock.calls[2][1]).toMatchObject({ kind: "project", id: "same-project", changes: { hidden: true }, expectedRevision: 1 });
     expect(mocks.put).not.toHaveBeenCalled();
     expect(mocks.patch).not.toHaveBeenCalled();
     expect(mocks.del).not.toHaveBeenCalled();
+  });
+
+  it("允许创建没有文件夹的项目", async () => {
+    const store = useChatStore();
+    await store.fetchSidebar();
+    const created = await store.createProject({ name: "空项目", expectedExecutionScope: store.projectIntent!, workspaces: [], primaryWorkspaceId: "" });
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({ title: "空项目", workspaces: [], primaryWorkspaceId: "" });
+    expect(created.workspaces).toEqual([]);
+    expect(created.available).toBe(true);
+  });
+
+  it("允许不同项目复用同一个文件夹工作区", async () => {
+    const store = useChatStore();
+    const workspace = useConversationWorkspace();
+    await store.fetchSidebar();
+    const sharedWorkspace = { id: "workspace-source", deviceId: "source", name: "Downloads", kind: "local", rootUri: "amitia://workspace/@workspace-source/" };
+    const created = await workspace.createProjectFromWorkspaces("另一个项目", [sharedWorkspace]);
+    expect(mocks.post.mock.calls[0][1]).toMatchObject({
+      title: "另一个项目",
+      workspaces: [sharedWorkspace],
+      primaryWorkspaceId: "workspace-source",
+    });
+    expect(created.workspaces).toEqual([expect.objectContaining(sharedWorkspace)]);
   });
 
   it("添加工作区和切换主根使用同一项目版本提交", async () => {
@@ -122,6 +146,58 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     });
   });
 
+  it.each([false, true])("添加工作区仅在项目为空时设置主工作区，空项目=%s", async (empty) => {
+    if (empty) currentProjects = [{ ...project("source"), workspaces: [], primaryWorkspaceId: "" }];
+    else currentProjects[0].workspaces.unshift({ id: "workspace-other", deviceId: "source", name: "其他", kind: "local", rootUri: "amitia://workspace/@workspace-other/" });
+    const store = useChatStore();
+    await store.fetchSidebar();
+    const target = store.sidebar.projects[0];
+    const workspace = { id: "workspace-added", name: "新增", kind: "local", rootUri: "amitia://workspace/@workspace-added/" };
+    mocks.post.mockResolvedValueOnce(workspace);
+    await useConversationWorkspace().addWorkspaceToProject(target);
+    expect(mocks.post.mock.calls[1][1]).toMatchObject({
+      kind: "project",
+      expectedRevision: 1,
+      changes: {
+        primaryWorkspaceId: empty ? workspace.id : "workspace-source",
+        workspaces: [...target.workspaces, { ...workspace, deviceId: "source" }],
+      },
+    });
+  });
+
+  it("重复添加工作区不会提交或切换主工作区", async () => {
+    const store = useChatStore();
+    await store.fetchSidebar();
+    const target = store.sidebar.projects[0];
+    mocks.post.mockResolvedValueOnce(target.workspaces[0]);
+    await expect(useConversationWorkspace().addWorkspaceToProject(target)).rejects.toThrow("该工作区已经属于当前项目");
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("移除主工作区后提升剩余工作区", async () => {
+    const store = useChatStore();
+    currentProjects[0].workspaces.push({ id: "workspace-child", deviceId: "source", name: "子目录", kind: "local", rootUri: "amitia://workspace/@workspace-child/" });
+    await store.fetchSidebar();
+    const target = store.sidebar.projects[0];
+    await useConversationWorkspace().removeWorkspaceFromProject(target, target.primaryWorkspaceId);
+    expect(mocks.post.mock.calls[0][1].changes).toEqual({ workspaces: [target.workspaces[1]], primaryWorkspaceId: "workspace-child" });
+  });
+
+  it.each([false, true])("项目菜单区分主子工作区和添加入口，空项目=%s", async (empty) => {
+    const store = useChatStore();
+    if (empty) currentProjects = [{ ...project("source"), workspaces: [], primaryWorkspaceId: "" }];
+    else currentProjects[0].workspaces.push({ id: "workspace-child", deviceId: "source", name: "子目录", kind: "local", rootUri: "amitia://workspace/@workspace-child/" });
+    await store.fetchSidebar();
+    const wrapper = mount(SidebarProjectBlock, { props: { project: store.sidebar.projects[0], active: false, activeConversationId: "" }, global: { stubs: { ElIcon: { template: "<span><slot /></span>" }, ElDropdown: { template: "<div><slot /><slot name='dropdown' /></div>" }, ElDropdownMenu: { template: "<div><slot /></div>" }, ElDropdownItem: { template: "<span><slot /></span>" } } } });
+    expect(wrapper.text()).toContain(empty ? "添加主工作区" : "添加子工作区");
+    expect(wrapper.text()).not.toContain(empty ? "添加子工作区" : "添加主工作区");
+    if (!empty) {
+      expect(wrapper.text()).toContain("主工作区：source工作区");
+      expect(wrapper.text()).toContain("子工作区：子目录（设为主工作区）");
+    }
+    wrapper.unmount();
+  });
+
   it("B→C 后旧同 ID 项目操作被拦截，原项目列表立即失效", async () => {
     const store = useChatStore();
     await store.fetchSidebar();
@@ -139,7 +215,7 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     const readOnly = { ...project("source", "old-role", true), name: "只读项目", available: true, status: "available", workspaceId: "workspace-source", deviceId: "source", rootUri: "amitia://workspace/@workspace-source/", conversationCount: 0, conversations: [] };
     const wrapper = mount(SidebarProjectBlock, { props: { project: readOnly, active: false, activeConversationId: "" }, global: { stubs: { ElIcon: { template: "<span><slot /></span>" }, ElDropdown: { template: "<div><slot /><slot name='dropdown' /></div>" }, ElDropdownMenu: { template: "<div><slot /></div>" }, ElDropdownItem: { template: "<span><slot /></span>" } } } });
     expect(wrapper.text()).toContain("只读");
-    for (const text of ["重命名项目", "添加文件夹工作区", "置顶", "从侧边栏移除"]) expect(wrapper.text()).not.toContain(text);
+    for (const text of ["重命名项目", "添加主工作区", "添加子工作区", "置顶", "从侧边栏移除"]) expect(wrapper.text()).not.toContain(text);
     expect(wrapper.get(".project-create-action").attributes("disabled")).toBeDefined();
     wrapper.unmount();
   });
@@ -171,7 +247,10 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
   });
 
   it("项目分页期间角色版本改变时拒绝拼接混合快照", async () => {
-    mocks.get.mockImplementation(async (_path, config) => ({ data: { projects: currentProjects, executionScope: { ...scope, roleRevision: config.params.cursor ? 2 : 1 }, nextCursor: config.params.cursor ? "" : "next" } }));
+    const inheritedGet = mocks.get.getMockImplementation()!;
+    mocks.get.mockImplementation(async (path, config) => path.endsWith("/projects")
+      ? { data: { projects: currentProjects, executionScope: { ...scope, roleRevision: config.params.cursor ? 2 : 1 }, nextCursor: config.params.cursor ? "" : "next" } }
+      : inheritedGet(path, config));
     await expect(owned.projects("role")).rejects.toThrow("项目数据归属已变化");
   });
 

@@ -162,7 +162,7 @@ func TestOwnedSpeechRequiresOwnerAcknowledgementAndDeduplicatesModelCalls(t *tes
 		t.Run(map[bool]string{false: "source", true: "core"}[coordinated], func(t *testing.T) {
 			engine, db, policies, base := engineHarness(t)
 			if coordinated {
-				if _, err := policies.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+				if _, err := policies.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -242,7 +242,7 @@ func TestOwnedSpeechCancelsProviderAndRejectsOldScopeAfterModeChanges(t *testing
 	engine.model = model
 	request := speechTestRequest(t, engine, "cancelled-speech")
 	model.generateSpeech = func(ctx context.Context, _ SpeechInference) ([]byte, error) {
-		if _, err := policies.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+		if _, err := policies.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 			return nil, err
 		}
 		<-ctx.Done()

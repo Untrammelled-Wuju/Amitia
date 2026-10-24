@@ -120,6 +120,19 @@ func (r *SQLiteResumeRepository) UpdateState(ctx context.Context, resumeID strin
 	return nil
 }
 
+func (r *SQLiteResumeRepository) ClaimPending(ctx context.Context, resumeID string) (bool, error) {
+	result, err := r.db.ExecContext(ctx, `UPDATE execution_resumes SET resume_state = ?, updated_at = ? WHERE resume_id = ? AND resume_state = ?`,
+		string(ResumeStateInProgress), time.Now().UTC(), resumeID, string(ResumeStatePending))
+	if err != nil {
+		return false, fmt.Errorf("execution_resumes: claim %s: %w", resumeID, err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return count == 1, nil
+}
+
 func (r *SQLiteResumeRepository) ListPending(ctx context.Context) ([]ResumeContext, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT resume_id, root_execution_id, parent_execution_id,

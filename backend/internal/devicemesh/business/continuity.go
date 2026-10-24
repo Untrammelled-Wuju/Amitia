@@ -727,7 +727,7 @@ func PresentContinuity(document OwnedContinuity, scope coordination.ExecutionSco
 	}
 	if document.CoreID != scope.CoreID || document.ProviderEpoch != scope.ProviderEpoch || document.ModeRevision != scope.ModeRevision || document.PermissionRevision != scope.PermissionRevision || document.RoleRevision != scope.RoleRevision || document.Scope.TargetPermissionRevision != scope.TargetPermissionRevision || document.Scope.TargetProviderEpoch != scope.TargetProviderEpoch {
 		document.Thread.Status = continuity.ThreadStatusPaused
-		document.PausedReason = "服务提供者、统筹模式、权限或角色已变化，事项已暂停，请确认后恢复。"
+		document.PausedReason = "服务提供者、数据归属、权限或角色已变化，事项已暂停，请确认后恢复。"
 	}
 	return document
 }

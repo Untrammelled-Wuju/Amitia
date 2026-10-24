@@ -18,6 +18,20 @@ var sensitivePermissions = []string{
 	"camera",
 	"microphone",
 	"secret.access",
+	"memory.write",
+	"memory.delete",
+	"network.request",
+	"extensions.install",
+	"extensions.enable",
+	"runtime.linux.shell.execute",
+	"runtime.linux.terminal.control",
+	"runtime.linux.file.write",
+	"runtime.linux.file.control",
+	"runtime.linux.archive.write",
+	"runtime.linux.network.public",
+	"runtime.linux.network.download",
+	"runtime.linux.ssh.exec",
+	"runtime.linux.chroot.exec",
 }
 
 // PolicyEngine encapsulates the rules used to decide whether a candidate may
@@ -54,6 +68,10 @@ func (e *PolicyEngine) Evaluate(candidate CapabilityCandidate, request Acquisiti
 	deny := e.evaluateDeny(candidate, request)
 	if deny != nil {
 		return *deny
+	}
+
+	if candidate.Kind == CandidateGeneratedSkill || candidate.Install.Method == InstallGeneratedSkill || anySensitive(candidate.Permissions) {
+		return e.requireApproval(candidate, request)
 	}
 
 	auto := e.evaluateAuto(candidate, request)
@@ -115,7 +133,7 @@ func (e *PolicyEngine) evaluateAuto(candidate CapabilityCandidate, request Acqui
 		}
 	}
 
-	if candidate.Trust.SignatureVerified && e.isTrustedPublisher(candidate.Source.Publisher) {
+	if candidate.Trust.SignatureVerified && candidate.Trust.PublisherVerified && e.isTrustedPublisher(candidate.Source.Publisher) && e.riskLevelValue(candidate) <= e.maxAutoRisk() {
 		return &PolicyDecision{
 			Action:  ActionAllowAuto,
 			Reasons: []string{"signed and trusted publisher"},
@@ -149,6 +167,9 @@ func (e *PolicyEngine) requireApproval(candidate CapabilityCandidate, request Ac
 		reasons = append(reasons, "unverified publisher: "+candidate.Source.Publisher)
 	}
 
+	if candidate.Kind == CandidateGeneratedSkill || candidate.Install.Method == InstallGeneratedSkill {
+		reasons = append(reasons, "generated skill requires explicit review")
+	}
 	if len(reasons) == 0 {
 		reasons = append(reasons, "default approval policy requires user confirmation")
 	}

@@ -39,7 +39,7 @@ func TestProjectionRebuildRequiresDisplayedAuthority(t *testing.T) {
 	if _, _, err := engine.Projections(t.Context(), request, true, &scope); err != nil || port.rebuilds != 1 {
 		t.Fatalf("valid rebuild: %d %v", port.rebuilds, err)
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := engine.Projections(t.Context(), request, true, &scope); !errors.Is(err, coordination.ErrScopeExpired) || port.rebuilds != 1 {

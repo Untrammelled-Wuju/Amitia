@@ -41,6 +41,15 @@ func (s *pauseStore) UpdateTaskRunCAS(_ context.Context, next *TaskRun, status T
 	s.run = CloneTaskRun(next)
 	return true, nil
 }
+func (s *pauseStore) RenewRemoteLeaseCAS(ctx context.Context, next *TaskRun, status TaskRunStatus, generation, revision int64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.run.Status != status || s.run.Generation != generation || s.run.Revision != revision || s.run.LeaseID == "" || s.run.LeaseID != next.LeaseID || s.run.ExecutionAttemptID != next.ExecutionAttemptID || !remoteLeaseIsCurrent(s.run.LeaseExpiresAt, time.Now().UTC()) {
+		return false, nil
+	}
+	s.run = CloneTaskRun(next)
+	return true, nil
+}
 func (s *pauseStore) PutCheckpoint(_ context.Context, cp *TaskCheckpoint) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -185,4 +194,14 @@ func TestTaskCancelAndWaitConfirmsActualNodeQuiescenceAndTerminalStatus(t *testi
 	if live.Status != RunStatusCancelled {
 		t.Fatalf("cancelled process retained non-terminal status: %s", live.Status)
 	}
+}
+
+func (s *pauseStore) UpdateRemoteTaskRunCAS(ctx context.Context, next *TaskRun, status TaskRunStatus, generation, revision int64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.run.Status != status || s.run.Generation != generation || s.run.Revision != revision || s.run.ExecutionAttemptID == "" || s.run.ExecutionAttemptID != next.ExecutionAttemptID || s.run.LeaseID == "" || s.run.LeaseID != next.LeaseID || !remoteLeaseIsCurrent(s.run.LeaseExpiresAt, time.Now().UTC()) {
+		return false, nil
+	}
+	s.run = CloneTaskRun(next)
+	return true, nil
 }

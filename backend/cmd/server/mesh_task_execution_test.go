@@ -250,13 +250,13 @@ func testOwnedTaskExecutionOverActualTLS(t *testing.T, rt *devicemesh.Runtime, d
 	readTask("/unknown-device-task", http.StatusNotFound)
 	historicalRuns := make(map[string]string)
 	previousBinary := ""
-	for _, coordinated := range []bool{false, true} {
+	for _, coordinated := range []bool{true} {
 		policy, err := rt.Coordination.Get(t.Context(), "core", device.String())
 		if err != nil {
 			t.Fatal(err)
 		}
-		if policy.Coordinated != coordinated {
-			if _, err := rt.Coordination.ChangeMode(t.Context(), "core", device.String(), policy.ModeRevision, coordinated, "one"); err != nil {
+		if coordinated && !policy.Coordinated {
+			if _, err := rt.Coordination.InitializeCoordinated(t.Context(), "core", device.String(), policy.ModeRevision, "one"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -767,13 +767,5 @@ func testOwnedTaskExecutionOverActualTLS(t *testing.T, rt *devicemesh.Runtime, d
 	}
 	readTask("/"+legacy.TaskRunID, http.StatusForbidden)
 	callExtension(http.MethodPost, "/task-definitions", definitionBody, http.StatusForbidden)
-	readHistorical()
-	currentPolicy, err := rt.Coordination.Get(t.Context(), "core", device.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := rt.Coordination.ChangeMode(t.Context(), "core", device.String(), currentPolicy.ModeRevision, false, "one"); err != nil {
-		t.Fatal(err)
-	}
 	readHistorical()
 }

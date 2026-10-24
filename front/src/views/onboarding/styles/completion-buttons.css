@@ -34,11 +34,6 @@
   transform: translateX(-50%);
 }
 
-.onboarding-world .ob-identity-complete-next:active,
-.onboarding-world .ob-memory-complete-next:active {
-  transform: translateX(-50%) translateY(0);
-}
-
 @media (max-width: 540px) {
   .onboarding-world .ob-identity-complete-actions {
     left: 50%;

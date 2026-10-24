@@ -100,6 +100,13 @@ func (s *taskInputQueueStore) PutTaskRun(_ context.Context, run *TaskRun) error 
 	s.run = CloneTaskRun(run)
 	return nil
 }
+func (s *taskInputQueueStore) CreateRetryTaskRun(_ context.Context, run *TaskRun) (bool, error) {
+	if s.run != nil && s.run.TaskRunID == run.TaskRunID {
+		return false, nil
+	}
+	s.run = CloneTaskRun(run)
+	return true, nil
+}
 func (s *taskInputQueueStore) EnqueueTask(context.Context, *TaskQueueEntry) error {
 	s.queued++
 	return nil

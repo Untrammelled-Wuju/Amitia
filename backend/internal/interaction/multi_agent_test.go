@@ -16,10 +16,14 @@ func (f fakeClock) Now() time.Time { return f.now }
 
 type fakeWorkerRunner struct {
 	started []WorkerRunRequest
+	tracker *fakeTracker
 }
 
 func (r *fakeWorkerRunner) StartWorker(ctx context.Context, req WorkerRunRequest) (string, error) {
 	r.started = append(r.started, req)
+	if r.tracker != nil {
+		r.tracker.records["child-"+req.AssignmentID] = &InteractionRecord{ID: "child-" + req.AssignmentID, Status: InteractionStatusProcessing}
+	}
 	return "child-" + req.AssignmentID, nil
 }
 
@@ -255,7 +259,7 @@ func TestMultiAgentCoordinator_Start_DepthLimit(t *testing.T) {
 
 func TestMultiAgentCoordinator_Start_And_Aggregate(t *testing.T) {
 	tracker := newFakeTracker()
-	_ = tracker.Create(context.Background(), &InteractionRecord{ID: "parent-1", Status: InteractionStatusProcessing})
+	_ = tracker.Create(context.Background(), &InteractionRecord{ID: "parent-1", Status: InteractionStatusProcessing, Scope: InteractionScope{SpaceID: "user-1"}})
 	goals := decision.NewGoalRegistry()
 
 	goal := decision.Goal{
@@ -417,11 +421,11 @@ func TestMultiAgentCoordinator_Cancel(t *testing.T) {
 	c.mu.Lock()
 	ac := c.coordinations[string(res.CoordinationID)]
 	c.mu.Unlock()
-	if ac.status != CoordinationCancelled {
-		t.Fatalf("expected cancelled, got %s", ac.status)
+	if ac.status != CoordinationWaiting || !ac.cancelRequested {
+		t.Fatalf("unconfirmed child should leave cancellation pending, got %s", ac.status)
 	}
-	if ac.assignments[0].Status != AssignmentCancelled {
-		t.Fatalf("expected assignment cancelled, got %s", ac.assignments[0].Status)
+	if ac.assignments[0].Status != AssignmentRunning {
+		t.Fatalf("running child was declared cancelled without proof: %s", ac.assignments[0].Status)
 	}
 }
 
@@ -475,8 +479,8 @@ func TestMultiAgentCoordinator_Resume_StaleRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resume: %v", err)
 	}
-	if ac.status != CoordinationCancelled {
-		t.Fatalf("expected cancelled after stale revision, got %s", ac.status)
+	if ac.status != CoordinationWaiting || !ac.cancelRequested || ac.assignments[0].Status != AssignmentRunning {
+		t.Fatalf("stale revision must request cancellation without inventing worker receipt: %s", ac.status)
 	}
 }
 

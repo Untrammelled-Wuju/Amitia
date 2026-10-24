@@ -19,8 +19,8 @@ const PolicySchema = `CREATE TABLE IF NOT EXISTS kernel_device_coordination (
 	PRIMARY KEY(space_id, device_id))`
 
 var ErrRevision = errors.New("设备状态已变化，请刷新后重试")
-var ErrAdministratorMode = errors.New("管理员设备必须先开启统筹模式")
-var ErrScopeExpired = errors.New("服务提供者、统筹模式或权限已变化，当前回复已中断")
+var ErrAdministratorMode = errors.New("只有云端统筹设备可以授予管理员权限")
+var ErrScopeExpired = errors.New("服务提供者、数据归属或权限已变化，当前回复已中断")
 var ErrRoleRequired = errors.New("没有可用角色，拒绝调用")
 var ErrRoleSelection = errors.New("存在多个角色，请先指定调用角色")
 
@@ -166,7 +166,7 @@ func NewService(db *sql.DB) *Service {
 	return &Service{db: db, active: make(map[string]map[uint64]context.CancelCauseFunc)}
 }
 
-func (s *Service) InitializeCoreConsole(ctx context.Context, space, device string) error {
+func (s *Service) InitializeCoreConsole(ctx context.Context, space, device string, coordinated bool) error {
 	if space == "" || device == "" {
 		return ErrWrongOwner
 	}
@@ -175,7 +175,7 @@ func (s *Service) InitializeCoreConsole(ctx context.Context, space, device strin
 		return err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated,administrator) VALUES(?,?,1,1) ON CONFLICT DO NOTHING`, space, device)
+	result, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated,administrator) VALUES(?,?,?,1) ON CONFLICT DO NOTHING`, space, device, coordinated)
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func (s *Service) InitializeCoreConsole(ctx context.Context, space, device strin
 	}
 	if count > 0 {
 		granted := true
-		if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.core_console_initialized", meshaudit.Details{Coordinated: &granted, Administrator: &granted, ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}); err != nil {
+		if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.core_console_initialized", meshaudit.Details{Coordinated: &coordinated, Administrator: &granted, ModeRevision: 1, PermissionRevision: 1, ProviderEpoch: 1}); err != nil {
 			return err
 		}
 	}
@@ -201,7 +201,7 @@ func (s *Service) Get(ctx context.Context, space, device string) (Policy, error)
 	return p, err
 }
 
-func (s *Service) ChangeMode(ctx context.Context, space, device string, expected int64, coordinated bool, role string) (Policy, error) {
+func (s *Service) InitializeCoordinated(ctx context.Context, space, device string, expected int64, role string) (Policy, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.validateRequestAuthorities(ctx); err != nil {
@@ -228,15 +228,16 @@ func (s *Service) ChangeMode(ctx context.Context, space, device string, expected
 	if _, err = tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id) VALUES(?,?) ON CONFLICT DO NOTHING`, space, device); err != nil {
 		return Policy{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=?, selected_role=?, mode_revision=mode_revision+1, administrator=CASE WHEN ? THEN administrator ELSE 0 END, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=?`, coordinated, role, coordinated, space, device, expected)
+	result, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=1, selected_role=?, mode_revision=mode_revision+1, permission_revision=permission_revision+1 WHERE space_id=? AND device_id=? AND mode_revision=? AND coordinated=0`, role, space, device, expected)
 	if err != nil {
 		return Policy{}, err
 	}
 	if n, _ := result.RowsAffected(); n != 1 {
 		return Policy{}, ErrRevision
 	}
-	administrator := previous.Administrator && coordinated
-	if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.mode_changed", meshaudit.Details{ModeRevision: expected + 1, PermissionRevision: previous.PermissionRevision + 1, ProviderEpoch: previous.ProviderEpoch, Coordinated: &coordinated, Administrator: &administrator}); err != nil {
+	coordinated := true
+	administrator := previous.Administrator
+	if err := meshaudit.QueueTx(ctx, tx, space, device, "device_mesh.coordination_initialized", meshaudit.Details{ModeRevision: expected + 1, PermissionRevision: previous.PermissionRevision + 1, ProviderEpoch: previous.ProviderEpoch, Coordinated: &coordinated, Administrator: &administrator}); err != nil {
 		return Policy{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -301,7 +302,7 @@ func (s *Service) ResetTx(ctx context.Context, tx *sql.Tx, space, device string)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id) VALUES(?,?) ON CONFLICT DO NOTHING`, space, device); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET administrator=0, permission_revision=permission_revision+1, provider_epoch=provider_epoch+1 WHERE space_id=? AND device_id=?`, space, device)
+	_, err := tx.ExecContext(ctx, `UPDATE kernel_device_coordination SET coordinated=1, administrator=0, permission_revision=permission_revision+1, provider_epoch=provider_epoch+1 WHERE space_id=? AND device_id=?`, space, device)
 	return err
 }
 

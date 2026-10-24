@@ -277,10 +277,6 @@
   transform: translateX(-50%);
 }
 
-.onboarding-world .ob-identity-complete-next:active {
-  transform: translateX(-50%);
-}
-
 /* Obsolete bottom-alignment overrides - remove role */
 
 .onboarding-world .ob-identity-complete-footer {

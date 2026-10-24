@@ -1,10 +1,6 @@
 <template>
   <div class="advanced-page" data-amitia-ui="settings.section">
     <div class="head">
-      <div>
-        <h2>高级系统</h2>
-        <p>Space / 设备安全、审计、运行观测与语音会话的统一管理入口。</p>
-      </div>
       <el-button :loading="loading" data-amitia-ui="settings.button" @click="loadAll">刷新</el-button>
     </div>
 
@@ -156,5 +152,5 @@ onMounted(loadAll);
 </script>
 
 <style scoped>
-.advanced-page{display:grid;gap:16px}.head,.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.head h2{margin:0 0 4px}.head p{margin:0;color:var(--el-text-color-secondary);font-size:13px}.el-card{margin-bottom:14px}.json{max-height:360px;overflow:auto;background:var(--el-fill-color-light);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word}.log-content{max-height:65vh}.muted{color:var(--el-text-color-secondary);margin-left:10px}
+.advanced-page{display:grid;gap:16px}.head,.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.head{justify-content:flex-end}.el-card{margin-bottom:14px}.json{max-height:360px;overflow:auto;background:var(--el-fill-color-light);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word}.log-content{max-height:65vh}.muted{color:var(--el-text-color-secondary);margin-left:10px}
 </style>

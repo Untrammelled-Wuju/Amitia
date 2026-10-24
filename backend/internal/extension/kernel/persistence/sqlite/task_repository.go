@@ -154,6 +154,13 @@ func (r *TaskRepository) CreateTaskRun(ctx context.Context, run *task_runtime.Ta
 	return r.writeTaskRun(ctx, run, true)
 }
 
+func (r *TaskRepository) CreateRetryTaskRun(ctx context.Context, run *task_runtime.TaskRun) (bool, error) {
+	if run == nil || run.Revision != 1 || run.Generation < 2 || run.Attempt < 2 || run.Status != task_runtime.RunStatusQueued || run.ExecutionAttemptID != "" || run.TaskRunID == "" {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskStaleWrite, "重试任务必须保持合法初始排队版本")
+	}
+	return r.writeTaskRun(ctx, run, true)
+}
+
 func (r *TaskRepository) writeTaskRun(ctx context.Context, run *task_runtime.TaskRun, createOnly bool) (bool, error) {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
@@ -237,7 +244,47 @@ func (r *TaskRepository) writeTaskRun(ctx context.Context, run *task_runtime.Tas
 }
 
 func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64, expectedRevision int64) (bool, error) {
+	return r.updateTaskRunCAS(ctx, run, expectedStatus, expectedGeneration, expectedRevision, false)
+}
+
+func (r *TaskRepository) UpdateRemoteTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64, expectedRevision int64) (bool, error) {
+	if run == nil || run.LeaseID == "" || run.ExecutionAttemptID == "" || run.LeaseExpiresAt == nil {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskExecutionAttemptInvalid, "remote mutation missing persisted identity")
+	}
+	return r.updateTaskRunCAS(ctx, run, expectedStatus, expectedGeneration, expectedRevision, true)
+}
+
+func (r *TaskRepository) RenewRemoteLeaseCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64, expectedRevision int64) (bool, error) {
+	if run == nil || run.LeaseID == "" || run.ExecutionAttemptID == "" || run.LeaseExpiresAt == nil {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskExecutionAttemptInvalid, "remote lease renewal missing persisted identity")
+	}
+	return r.updateTaskRunCAS(ctx, run, expectedStatus, expectedGeneration, expectedRevision, true)
+}
+
+func (r *TaskRepository) updateTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64, expectedRevision int64, leaseGuard bool) (bool, error) {
+	where := ""
+	if leaseGuard {
+		where = " AND lease_id = ? AND execution_attempt_id = ? AND lease_expires_at IS NOT NULL AND julianday(lease_expires_at) > julianday('now')"
+	}
 	ex := getExecutor(ctx, r.db)
+	args := []any{
+		string(run.Status), run.Priority,
+		string(run.Input), run.InputHash,
+		nullableString(run.RuntimeInstanceID), nullableString(run.CheckpointID),
+		nullableString(run.ResultArtifactID),
+		run.Attempt, run.MaxAttempts,
+		nullableTime(run.QueuedAt), nullableTime(run.StartedAt), nullableTime(run.FinishedAt),
+		nullableTime(run.DeadlineAt), nullableTime(run.CancelRequestedAt),
+		nullableString(run.PauseReason), nullableTime(run.PauseRequestedAt), nullableTime(run.PausedAt), nullableTime(run.ResumedAt),
+		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
+		run.Generation, run.Revision,
+		string(run.ExecutionPlacement), serializeExecutionTarget(run.ExecutionTarget), string(run.ExecutionAttemptID), nullableTime(run.ExecutionResolvedAt), run.ExecutionResolvedBy,
+		run.LeaseID, nullableTime(run.LeaseExpiresAt), nullableTime(run.LastHeartbeatAt), time.Now().UTC(),
+		run.TaskRunID, string(expectedStatus), expectedGeneration, expectedRevision, run.DefinitionFingerprint,
+	}
+	if leaseGuard {
+		args = append(args, run.LeaseID, string(run.ExecutionAttemptID))
+	}
 	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET status = ?, priority = ?,
@@ -253,22 +300,8 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 		    revision = ?,
 		    execution_placement = ?, execution_target_json = ?, execution_attempt_id = ?, execution_resolved_at = ?, execution_resolved_by = ?,
 		    lease_id = ?, lease_expires_at = ?, last_heartbeat_at = ?, updated_at = ?
-		WHERE task_run_id = ? AND status = ? AND generation = ? AND revision = ? AND definition_fingerprint = ?
-`,
-		string(run.Status), run.Priority,
-		string(run.Input), run.InputHash,
-		nullableString(run.RuntimeInstanceID), nullableString(run.CheckpointID),
-		nullableString(run.ResultArtifactID),
-		run.Attempt, run.MaxAttempts,
-		nullableTime(run.QueuedAt), nullableTime(run.StartedAt), nullableTime(run.FinishedAt),
-		nullableTime(run.DeadlineAt), nullableTime(run.CancelRequestedAt),
-		nullableString(run.PauseReason), nullableTime(run.PauseRequestedAt), nullableTime(run.PausedAt), nullableTime(run.ResumedAt),
-		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
-		run.Generation,
-		run.Revision,
-		string(run.ExecutionPlacement), serializeExecutionTarget(run.ExecutionTarget), string(run.ExecutionAttemptID), nullableTime(run.ExecutionResolvedAt), run.ExecutionResolvedBy,
-		run.LeaseID, nullableTime(run.LeaseExpiresAt), nullableTime(run.LastHeartbeatAt), time.Now().UTC(),
-		run.TaskRunID, string(expectedStatus), expectedGeneration, expectedRevision, run.DefinitionFingerprint,
+		WHERE task_run_id = ? AND status = ? AND generation = ? AND revision = ? AND definition_fingerprint = ?`+where,
+		args...,
 	)
 	if err != nil {
 		return false, fmt.Errorf("sqlite: cas update task run: %w", err)
@@ -556,6 +589,30 @@ func (r *TaskRepository) PutCheckpoint(ctx context.Context, cp *task_runtime.Tas
 	return nil
 }
 
+func (r *TaskRepository) PutRemoteCheckpointCAS(ctx context.Context, run *task_runtime.TaskRun, cp *task_runtime.TaskCheckpoint) (bool, error) {
+	if run == nil || cp == nil || run.TaskRunID != cp.TaskRunID || run.LeaseID == "" || run.ExecutionAttemptID == "" || run.LeaseExpiresAt == nil || cp.CheckpointID == "" || cp.Version < 1 {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskExecutionAttemptInvalid, "remote checkpoint missing persisted execution identity")
+	}
+	ex := getExecutor(ctx, r.db)
+	res, err := ex.ExecContext(ctx, `
+		INSERT INTO extension_task_checkpoints
+			(checkpoint_id, task_run_id, checkpoint_version, payload_json, payload_hash, definition_hash, input_hash, created_at)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ? FROM extension_task_runs
+		WHERE task_run_id = ? AND execution_attempt_id = ? AND lease_id = ?
+		AND generation = ? AND revision = ? AND status IN ('running', 'checkpointing', 'pausing')
+		AND execution_placement = 'device' AND lease_expires_at IS NOT NULL
+		AND julianday(lease_expires_at) > julianday('now')
+		AND NOT EXISTS (SELECT 1 FROM extension_task_checkpoints WHERE task_run_id = ? AND checkpoint_version >= ?)
+		ON CONFLICT(checkpoint_id) DO NOTHING
+	`, cp.CheckpointID, cp.TaskRunID, cp.Version, string(cp.Payload), cp.PayloadHash, cp.DefinitionHash, cp.InputHash, cp.CreatedAt,
+		run.TaskRunID, string(run.ExecutionAttemptID), run.LeaseID, run.Generation, run.Revision, run.TaskRunID, cp.Version)
+	if err != nil {
+		return false, fmt.Errorf("sqlite: fenced remote checkpoint: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}
+
 func (r *TaskRepository) GetLatestCheckpoint(ctx context.Context, taskRunID string) (*task_runtime.TaskCheckpoint, error) {
 	ex := getExecutor(ctx, r.db)
 	var cp task_runtime.TaskCheckpoint
@@ -606,6 +663,29 @@ func (r *TaskRepository) PutProgress(ctx context.Context, taskRunID string, seq 
 		return fmt.Errorf("sqlite: put progress: %w", err)
 	}
 	return nil
+}
+
+func (r *TaskRepository) PutRemoteProgressCAS(ctx context.Context, run *task_runtime.TaskRun, seq int64, progressJSON []byte) (bool, error) {
+	if run == nil || run.LeaseID == "" || run.ExecutionAttemptID == "" || run.LeaseExpiresAt == nil || seq < 1 {
+		return false, task_runtime.NewTaskError(task_runtime.ErrTaskExecutionAttemptInvalid, "remote progress missing persisted execution identity")
+	}
+	ex := getExecutor(ctx, r.db)
+	res, err := ex.ExecContext(ctx, `
+		INSERT INTO extension_task_progress (task_run_id, sequence, progress_json, updated_at)
+		SELECT ?, ?, ?, ? FROM extension_task_runs
+		WHERE task_run_id = ? AND execution_attempt_id = ? AND lease_id = ?
+		AND generation = ? AND revision = ? AND status IN ('running', 'checkpointing', 'pausing')
+		AND execution_placement = 'device' AND lease_expires_at IS NOT NULL
+		AND julianday(lease_expires_at) > julianday('now')
+		ON CONFLICT(task_run_id) DO UPDATE SET
+			sequence = excluded.sequence, progress_json = excluded.progress_json, updated_at = excluded.updated_at
+		WHERE excluded.sequence > extension_task_progress.sequence
+	`, run.TaskRunID, seq, string(progressJSON), time.Now().UTC(), run.TaskRunID, string(run.ExecutionAttemptID), run.LeaseID, run.Generation, run.Revision)
+	if err != nil {
+		return false, fmt.Errorf("sqlite: fenced remote progress: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
 }
 
 func (r *TaskRepository) GetProgress(ctx context.Context, taskRunID string) (*task_runtime.TaskRunProgress, error) {

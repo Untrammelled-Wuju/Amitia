@@ -6,7 +6,13 @@ import PluginPageFrame from "./PluginPageFrame.vue";
 import ExtensionLoadingOverlay from "./ExtensionLoadingOverlay.vue";
 import { resolvePluginSurface } from "@/ui-runtime/pluginSurfaceResolver";
 
-const props = defineProps<{ contribution: UIContributionSummary; context: Record<string, unknown>; slotId: string; hostActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>> }>();
+const props = defineProps<{
+  contribution: UIContributionSummary;
+  context: Record<string, unknown>;
+  slotId: string;
+  hostActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
+  frameless?: boolean;
+}>();
 const emit = defineEmits<{ (e: "error", error: string): void }>();
 
 const isHostRuntime = computed(() => props.contribution.runtimeId?.trim().startsWith("host.") ?? false);
@@ -38,7 +44,16 @@ const isPage = computed(() => ["schema_page", "web_page"].includes(props.contrib
 </script>
 
 <template>
-  <PluginPageFrame v-if="renderer && isPage" :title="contribution.title">
+  <component
+    :is="renderer"
+    v-if="renderer && isPage && frameless"
+    :contribution="contribution"
+    :context="context"
+    :slot-id="slotId"
+    :host-actions="hostActions"
+    @error="(error: string) => emit('error', error)"
+  />
+  <PluginPageFrame v-else-if="renderer && isPage" :title="contribution.title">
     <component :is="renderer" :contribution="contribution" :context="context" :slot-id="slotId" :host-actions="hostActions" @error="(error: string) => emit('error', error)" />
   </PluginPageFrame>
   <ExtensionSurface v-else-if="renderer && needsSurface" :role="surfaceRole as any" :bordered="surfaceRole !== 'message' && surfaceRole !== 'composer'" :target="target">

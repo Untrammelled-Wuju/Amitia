@@ -3,16 +3,11 @@
 package system
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
-
-	"github.com/u-ai/backend/internal/runtimeendpoint"
-	"github.com/u-ai/backend/pkg/util"
 )
 
 func (s *service) GetRuntimeStatus() map[string]interface{} {
@@ -41,73 +36,6 @@ func (s *service) GetRuntimeHealthHistory() map[string]interface{} {
 		logs = []map[string]interface{}{}
 	}
 	return map[string]interface{}{"history": logs, "count": len(logs)}
-}
-
-func (s *service) GetRuntimeMode() map[string]interface{} {
-	mode := s.getAppSetting("runtime_mode")
-	if mode == "" {
-		mode = "desktop-local"
-	}
-	host := "127.0.0.1"
-	if mode == "cloud-web" {
-		host = "0.0.0.0"
-	}
-	port := envInt("AMITIA_SERVER_PORT", 18080)
-	if endpoint, err := runtimeendpoint.Read(util.RuntimeRunDir(util.RuntimeRoot())); err == nil {
-		host = endpoint.Host
-		port = endpoint.Port
-	}
-	publicBaseURL := s.getAppSetting("public_base_url")
-	requireAuth := s.getAppSetting("require_auth") != "false"
-	return map[string]interface{}{
-		"mode":           mode,
-		"deployMode":     mode,
-		"runtimeProfile": s.runtimeProfile.String(),
-		"host":           host,
-		"port":           port,
-		"web": map[string]interface{}{
-			"enabled":       true,
-			"publicBaseUrl": publicBaseURL,
-			"requireAuth":   requireAuth,
-		},
-		"storage": map[string]interface{}{"dataDir": s.dataDir},
-	}
-}
-
-func envInt(key string, fallback int) int {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed <= 0 || parsed > 65535 {
-		return fallback
-	}
-	return parsed
-}
-
-func (s *service) UpdateRuntimeMode(body map[string]interface{}) map[string]interface{} {
-	if _, ok := body["runtimeProfile"]; ok {
-		result := s.GetRuntimeMode()
-		result["requiresRestart"] = true
-		return result
-	}
-	mode, _ := body["deployMode"].(string)
-	if mode == "" {
-		mode, _ = body["mode"].(string)
-	}
-	if mode == "desktop-local" || mode == "cloud-web" {
-		s.setAppSetting("runtime_mode", mode)
-		if mode == "cloud-web" {
-			s.setAppSetting("require_auth", "true")
-		}
-	}
-	if publicBaseURL, ok := body["publicBaseUrl"].(string); ok {
-		s.setAppSetting("public_base_url", strings.TrimSpace(publicBaseURL))
-	}
-	result := s.GetRuntimeMode()
-	result["requiresRestart"] = true
-	return result
 }
 
 func (s *service) CheckDBIntegrity() map[string]interface{} {
@@ -159,29 +87,6 @@ func (s *service) RotateLogs() map[string]interface{} {
 		}
 	}
 	return map[string]interface{}{"rotated": true, "count": rotated}
-}
-
-func (s *service) ValidateMode() map[string]interface{} {
-	modeInfo := s.GetRuntimeMode()
-	mode, _ := modeInfo["deployMode"].(string)
-	errors := []string{}
-	warnings := []string{}
-	if mode != "desktop-local" && mode != "cloud-web" {
-		errors = append(errors, "unsupported deploy mode: "+mode)
-	}
-	web, _ := modeInfo["web"].(map[string]interface{})
-	if mode == "cloud-web" {
-		if web == nil || web["requireAuth"] != true {
-			errors = append(errors, "cloud-web mode requires authentication")
-		}
-		if web == nil || strings.TrimSpace(fmt.Sprint(web["publicBaseUrl"])) == "" {
-			warnings = append(warnings, "publicBaseUrl is not configured")
-		}
-	}
-	if _, err := os.Stat(s.dataDir); err != nil {
-		errors = append(errors, "data directory unavailable: "+err.Error())
-	}
-	return map[string]interface{}{"valid": len(errors) == 0, "mode": mode, "errors": errors, "warnings": warnings}
 }
 
 func (s *service) RunNow() map[string]interface{} {

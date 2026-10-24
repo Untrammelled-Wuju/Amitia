@@ -96,7 +96,9 @@
   --ac-shadow-sm: var(--tp-shadow-card);
   --ac-shadow-md: var(--tp-shadow-float);
   --ac-shadow-lg: var(--tp-shadow-float);
-  --ac-sidebar-width: 220px;
+  --ac-navigation-rail-width: 56px;
+  --ac-workspace-sidebar-width: 240px;
+  --ac-sidebar-width: calc(var(--ac-navigation-rail-width) + var(--ac-workspace-sidebar-width));
   --ac-statusbar-height: 44px;
   --ac-content-max-width: 900px;
   --ac-mobile-nav-height: 56px;

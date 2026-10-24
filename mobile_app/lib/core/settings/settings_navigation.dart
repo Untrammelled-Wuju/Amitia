@@ -170,11 +170,6 @@ List<SettingsCategory> buildSettingsCategories({
           route: AppRoutes.settingsUIProviders,
         ),
         SettingItem(
-          title: 'Core 运行模式',
-          icon: Icons.hub_outlined,
-          route: AppRoutes.settingsRuntimeMode,
-        ),
-        SettingItem(
           title: '长期运行维护',
           icon: Icons.schedule_send_outlined,
           route: AppRoutes.settingsLongRunning,

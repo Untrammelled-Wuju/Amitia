@@ -56,7 +56,7 @@ func TestWorkspacePromptListsEveryProjectWorkspace(t *testing.T) {
 	}
 }
 
-func TestWorkspaceScopeAllowsOnlyProjectWorkspaceRoots(t *testing.T) {
+func TestWorkspaceScopeAllowsProjectRootsAndExplicitPaths(t *testing.T) {
 	execCtx := &coreexec.ExecutionContext{
 		PrimaryWorkspaceID: "workspace-a",
 		WorkspaceBindings: []coreexec.WorkspaceBinding{
@@ -74,5 +74,18 @@ func TestWorkspaceScopeAllowsOnlyProjectWorkspaceRoots(t *testing.T) {
 	}
 	if _, err := scopeWorkspaceInvocationInput(capability.ToolInvocationContext{ExecContext: execCtx}, json.RawMessage(`{"workspaceId":"workspace-c","uri":"src/main.go"}`)); err == nil {
 		t.Fatal("workspace outside project was accepted")
+	}
+	explicit, err := scopeWorkspaceInvocationInput(capability.ToolInvocationContext{ExecContext: execCtx}, json.RawMessage(`{"uri":"/Users/example/external/project"}`))
+	if err != nil || !strings.Contains(string(explicit), "/Users/example/external/project") {
+		t.Fatalf("explicit absolute path was rewritten: %s %v", explicit, err)
+	}
+}
+
+func TestWorkspacePromptIncludesConversationWorkingDirectoryWithoutProjectFolders(t *testing.T) {
+	contribution, ok := workspacePromptContribution(InvocationScope{ExecContext: &coreexec.ExecutionContext{
+		Metadata: map[string]any{"workingDirectory": "/Users/example/work"},
+	}})
+	if !ok || !strings.Contains(contribution.Content, "/Users/example/work") || !strings.Contains(contribution.Content, "not access boundaries") {
+		t.Fatalf("contribution=%+v ok=%v", contribution, ok)
 	}
 }

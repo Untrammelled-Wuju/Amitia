@@ -30,9 +30,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior/events"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
 	"github.com/u-ai/backend/internal/desktoppet/device"
-	"github.com/u-ai/backend/internal/desktoppet/editing"
-	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
-	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationprojection "github.com/u-ai/backend/internal/desktoppet/installation/projection"
@@ -44,21 +41,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
-	"github.com/u-ai/backend/internal/desktoppet/processing"
-	"github.com/u-ai/backend/internal/desktoppet/processing/application"
-	processingcommit "github.com/u-ai/backend/internal/desktoppet/processing/commit"
-	processingevents "github.com/u-ai/backend/internal/desktoppet/processing/events"
-	processingworker "github.com/u-ai/backend/internal/desktoppet/processing/worker"
-	processingworkspace "github.com/u-ai/backend/internal/desktoppet/processing/workspace"
-	"github.com/u-ai/backend/internal/desktoppet/quality"
-	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
-	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
-	qualityinbox "github.com/u-ai/backend/internal/desktoppet/quality/inbox"
-	qualityinput "github.com/u-ai/backend/internal/desktoppet/quality/input"
-	qualitymeasurement "github.com/u-ai/backend/internal/desktoppet/quality/measurement"
-	qualityrecovery "github.com/u-ai/backend/internal/desktoppet/quality/recovery"
-	qualityworker "github.com/u-ai/backend/internal/desktoppet/quality/worker"
-	qualitywriteback "github.com/u-ai/backend/internal/desktoppet/quality/writeback"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	releasebuild "github.com/u-ai/backend/internal/desktoppet/release/build"
@@ -69,11 +51,11 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
-	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
 	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
 	meshaudit "github.com/u-ai/backend/internal/devicemesh/audit"
 	"github.com/u-ai/backend/internal/devicemesh/business"
+	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/extension"
@@ -91,7 +73,7 @@ import (
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageintelligence"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
-	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
+	"github.com/u-ai/backend/internal/imageprovider/defaultregistry"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/knowledge"
 	"github.com/u-ai/backend/internal/media"
@@ -149,10 +131,6 @@ type AppServices struct {
 	RuntimeQueue                 *queue.SQLiteRuntimeQueueStore
 	NewOutbox                    *newoutbox.SQLiteOutboxStore
 	OutboxWorker                 *newoutbox.Worker
-	DesktopPetWorker             *worker.Worker
-	ProcessingWorker             *processingworker.Worker
-	QualityService               quality.QualityService
-	QualityWorker                *qualityworker.Worker
 	InstallationCoordinator      coordinator.InstallationCoordinator
 	InstallationRepo             installation.RepositoryV2
 	InstallationRecoveryWorker   *installationrecovery.RecoveryWorker
@@ -163,9 +141,6 @@ type AppServices struct {
 	ReleaseEventPublisher        *release.ReleaseEventPublisher
 	ReleaseEventOutboxDispatcher *releaseworker.EventOutboxDispatcher
 	DesktopPetRuntimeV1          *runtimev1.RuntimeFacade
-	EditingService               editing.Service
-	RegenerationWorker           *editing.RegenerationWorker
-	BridgeRecoveryWorker         *revisioncommit.RecoveryWorker
 	BehaviorService              *behavior.BehaviorService
 	AdapterManager               *adapters.AdapterManager
 	DesktopPetBehaviorMesh       *desktopPetBehaviorMeshPublisher
@@ -333,7 +308,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	imagegenRepo := imagegen.NewRepository(ctx.DB)
 	imagegenSvc := imagegen.NewService(imagegenRepo)
-	providerRegistry, _ := desktoppet.NewProviderRegistry()
+	providerRegistry, _ := defaultregistry.New()
 	artifactRuntime, artifactErr := BuildArtifactRuntime(ctx.DB, "", nil)
 	if artifactErr != nil {
 		return nil, fmt.Errorf("failed to build artifact runtime: %w", artifactErr)
@@ -368,10 +343,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("initialize workspace services: %w", err)
 		}
 	}
-	if workspaceService != nil {
-		chatSvc.SetWorkspaceAvailabilityResolver(workspaceService)
-	}
-
 	var mediaService *media.Service
 	if bootstrap != nil {
 		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir, resourceResolver, workspaceService)
@@ -742,6 +713,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	ownedWorkerPort := &ownedWorkerEnginePort{}
 	codingAllocator := &codingWorkerWorktreeAllocator{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
 	ownedWorkerRunner := newOwnedMultiAgentWorkerRunner(ownedWorkerPort, tracker)
+	ownedWorkerRunner.usageStore = usageStore
 	multiAgentCoordinator := interaction.NewMultiAgentCoordinator(tracker, goalRegistry, recoveryDescriptor, interaction.NewCodingWorktreeWorkerRunner(ownedWorkerRunner, codingAllocator), pauseResumeService, interaction.DefaultMultiAgentPolicy())
 	nativeMultiAgent := &chatMultiAgentRuntime{coordinator: multiAgentCoordinator, tracker: tracker, goals: goalRegistry}
 	codingReviewer := &codingWorktreeReviewerService{git: workspaceGitHandler, localDeviceID: kernelRuntimeIdentity.DeviceID.String()}
@@ -761,105 +733,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	kernelContainer.MCPDuplicateProvider = &mcpDuplicateMetricAdapter{store: mcpDuplicateStore}
 	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
 	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(canonicalMCPCaller), makeKernelMCPHealth(canonicalMCPCaller), nil)
-	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
-	desktopPetService, err := desktoppet.NewService(desktopPetRepo, ctx.DB)
-	if err != nil {
-		return nil, fmt.Errorf("create desktop pet service: %w", err)
-	}
-	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
-	processingRepo := processing.NewRepository(ctx.DB, ctx)
-	processingDataDir := mcpDataDirectory(ctx)
-	processingService := processing.NewService(processingRepo, ctx.DB, ctx, processingDataDir)
-
-	bgRegistry := backgroundremoval.NewRegistry()
-	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-		log.Error("register local background provider failed: ", err)
-	}
-
-	processingPipeline := application.NewPipeline(bgRegistry, processingDataDir)
-	artifactSourceAdapter := application.NewRepoArtifactSourceAdapter(processingRepo)
-	processingSourceResolver := application.NewRepoSourceResolver(processingRepo, processingDataDir, artifactSourceAdapter)
-
-	processingWSManager := processingworkspace.NewWorkspaceManager(processingDataDir)
-	processingCommitJournalRepo := processingevents.NewCommitJournalRepository(ctx.DB)
-	processingOutboxRepo := processingevents.NewOutboxRepository(ctx.DB)
-	processingEventOutbox := processingevents.NewEventOutbox(processingOutboxRepo)
-	processingManifestStore := processing.NewManifestStore(ctx.DB)
-	processingCommitter := processingcommit.NewProcessingCommitter(
-		ctx.DB, processingRepo, processingWSManager,
-		processingCommitJournalRepo, processingEventOutbox,
-		processingManifestStore, processingDataDir,
-	)
-
-	processingWorker := processingworker.NewWorker(ctx.DB, processingRepo, processingDataDir, processingPipeline, processingSourceResolver, processingCommitter)
-
-	qualityRepo := quality.NewRepository(ctx.DB)
-	qualityGateEvaluator := quality.NewGateEvaluator(qualityRepo)
-	qualityWritebackSvc := qualitywriteback.NewQualityWritebackService(ctx.DB)
-	qualityActiveBindingSvc := qualitywriteback.NewActiveBindingService(qualityRepo)
-	qualityCommitter := qualitywriteback.NewCommitter(ctx.DB, qualityRepo, qualityWritebackSvc, qualityActiveBindingSvc)
-	qualityTaskGateSvc := qualitygate.NewTaskGateService(qualityRepo, qualityGateEvaluator)
-	qualityGateInvalidator := qualitygate.NewGateInvalidator(qualityRepo)
-	qualityReviewDecisionSvc := qualitygate.NewReviewDecisionService(qualityRepo)
-	qualityOutboxPublisher := qualityrecovery.NewOutboxPublisher(qualityRepo, quality.NewLogEventPublisher())
-	qualityRecoveryWorker := qualityrecovery.NewRecoveryWorker(qualityRepo)
-	qualityInputRepo := qualityinput.NewInputRepository(ctx.DB, processingDataDir)
-	qualityMeasurementEngine := qualitymeasurement.NewImageMeasurementEngine(qualityRepo)
-	qualitySvc, err := quality.NewQualityService(quality.ServiceConfig{
-		DB:                ctx.DB,
-		DataDir:           processingDataDir,
-		MeasurementSrc:    qualitymeasurement.NewActionRevisionMeasurementSource(qualityInputRepo, qualityMeasurementEngine),
-		Detectors:         detectors.NewDefaultDetectors(),
-		EventPublisher:    quality.NewLogEventPublisher(),
-		Repo:              qualityRepo,
-		Committer:         qualityCommitter,
-		TaskGateService:   qualityTaskGateSvc,
-		GateInvalidator:   qualityGateInvalidator,
-		ReviewDecisionSvc: qualityReviewDecisionSvc,
-		RecoveryWorker:    qualityRecoveryWorker,
-		OutboxPublisher:   qualityOutboxPublisher,
-		InputRepository:   qualityInputRepo,
-		MeasurementEngine: qualityMeasurementEngine,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create quality service: %w", err)
-	}
-	if qualitySvc == nil {
-		return nil, errors.New("quality service is nil")
-	}
-	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
-
-	evaluateTaskGateFor := func(taskID string) {
-		evalActions, err := processingRepo.ListProcessingActions(taskID)
-		if err != nil {
-			log.Error("list processing actions for task gate failed: ", err)
-			return
-		}
-		requiredKeys := make([]string, 0, len(evalActions))
-		optionalKeys := make([]string, 0, len(evalActions))
-		for _, a := range evalActions {
-			if a.Excluded == 1 {
-				continue
-			}
-			if a.Status == "succeeded" {
-				requiredKeys = append(requiredKeys, a.ActionKey)
-			} else {
-				optionalKeys = append(optionalKeys, a.ActionKey)
-			}
-		}
-		if _, err := qualityTaskGateSvc.Evaluate(context.Background(), quality.EvaluateTaskGateRequest{
-			ProcessingTaskID:   taskID,
-			RequiredActionKeys: requiredKeys,
-			OptionalActionKeys: optionalKeys,
-		}); err != nil {
-			log.Error("evaluate task quality gate failed: ", err)
-		}
-	}
-
-	processingWorker.SetOnTaskFinalized(evaluateTaskGateFor)
-	qualityWorker.SetOnEvaluationCommitted(func(taskID, actionKey string) {
-		evaluateTaskGateFor(taskID)
-	})
+	desktopPetDataDir := mcpDataDirectory(ctx)
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	installationRepoV2, ok := installationRepo.(installation.RepositoryV2)
@@ -907,52 +781,19 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimeNotifier := runtimev1.NewRuntimeNotifier(runtimeV1Facade.StateService(), runtimeV1Facade.Events())
 	_ = runtimeNotifier
 
-	editingRepo := editing.NewRepository(ctx.DB)
-	editingAssetStore := editing.NewAssetStore(processingDataDir, editingRepo)
-	editingGenAdapter := newEditingGenerationPort(ctx, desktopPetService, processingService)
-	editingProcAdapter := newEditingProcessingPort(ctx)
-	editingQualAdapter := newEditingQualityPort(ctx)
-	editingSvc := editing.NewService(editingRepo, editingAssetStore, editingGenAdapter, editingProcAdapter, editingQualAdapter, ctx.DB, processingDataDir)
-	if err := editingSvc.RecoverPendingJournals(context.Background()); err != nil {
-		log.Warn("editing journal recovery warning: ", err)
-	}
-	if err := editingSvc.ExpireSessions(context.Background()); err != nil {
-		log.Warn("editing session expiry warning: ", err)
-	}
-
-	regenerationWorker := editing.NewRegenerationWorker(editingRepo, editingGenAdapter, editingAssetStore, editingQualAdapter, editingProcAdapter)
-
-	baselineCommitter := baseline.NewBaselineActionRevisionCommitter(ctx.DB)
-	bridgeInboxRepo := revisioncommit.NewBridgeInboxRepository(ctx.DB)
-	bridgeOutboxRepo := revisioncommit.NewOutboxRepository(ctx.DB)
-	bridgeJournalRepo := revisioncommit.NewRepository(ctx.DB)
-	procRevReader := &processingRevisionReaderAdapter{repo: processingRepo}
-	qualityInboxPublisher := qualityinbox.NewEvaluationInboxConsumer(ctx.DB, qualitySvc)
-	bridgeProcessor := revisioncommit.NewBridgeProcessor(
-		bridgeInboxRepo, bridgeJournalRepo, baselineCommitter, procRevReader, bridgeOutboxRepo, processingOutboxRepo, qualityInboxPublisher, "worker-main",
-	)
-	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 5*time.Second)
-	_ = bridgeRecoveryWorker
-
 	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
-	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
+	releaseStoragePort := releasestorage.NewFileSystemStorage(desktopPetDataDir)
 
 	if err := releaseStoragePort.Validate(); err != nil {
 		return nil, fmt.Errorf("initialize release storage: %w", err)
 	}
 
-	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
 	releaseEventOutboxDispatcher := releaseworker.NewEventOutboxDispatcher(
 		releaseRepo,
 		newDesktopPetReleaseEventSink(kernelContainer.EventService),
 	)
-	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher, newGeneratedReleasePackageSource(processingService))
-	if migrationPort, ok := newReleaseService.(release.LegacyPackageBuildPort); ok {
-		if err := migrateLegacyDesktopPetPackages(ctx.Context, ctx.DB, migrationPort, config.AppCfg.Storage.DataDir); err != nil {
-			return nil, fmt.Errorf("migrate legacy desktop pet packages: %w", err)
-		}
-	}
+	newReleaseService := release.NewReleaseService(releaseRepo, releaseStoragePort, releaseEventPublisher)
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
 	if err := desktoppetsecurity.EnsureAllRequiredRoots(pathRegistry, config.AppCfg.Storage.DataDir); err != nil {
@@ -1004,7 +845,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 
 	v1BehaviorRuntimePort := wiring.NewV1RuntimeActionAdapter(runtimeV1Facade)
-	v1ActivePetPort := wiring.NewV1ActivePetAdapter(installationRepo, runtimeV1Facade, processingDataDir)
+	v1ActivePetPort := wiring.NewV1ActivePetAdapter(installationRepo, runtimeV1Facade, desktopPetDataDir)
 	runtimeStateOwners := make([]string, 0, 2)
 	if behaviorSpace, behaviorSpaceErr := spaceidentity.Open(mcpDataDirectory(ctx)); behaviorSpaceErr == nil {
 		runtimeStateOwners = append(runtimeStateOwners, behaviorSpace.SpaceID())
@@ -1024,7 +865,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		InstallRepo:        installationRepo,
 		RuntimeStateDB:     runtimeStateDB,
 		RuntimeStateOwners: runtimeStateOwners,
-		DataDir:            processingDataDir,
+		DataDir:            desktopPetDataDir,
 		ShadowMode:         false,
 		RuntimeCmdOn:       true,
 	})
@@ -1110,10 +951,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			canaryCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
 			_, err := executeDesktopPetWriteCanary(canaryCtx, installationCoordinator, installationRepoV2, runtimeV1Facade)
-			if err != nil {
-				return err
-			}
-			return executeDesktopPetEditingWriteCanary(canaryCtx, editingSvc, ctx.DB)
+			return err
 		},
 		ReleasePublishedReady: func(storageKey string) error {
 			publishedPath, err := pathRegistry.Resolve(desktoppetsecurity.RootReleasePublished, storageKey)
@@ -1193,10 +1031,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		DeliveryStore:                deliveryStore,
 		DeliveryWorker:               deliveryWorker,
 		OutboxWorker:                 newOutboxWorker,
-		DesktopPetWorker:             desktopPetWorker,
-		ProcessingWorker:             processingWorker,
-		QualityService:               qualitySvc,
-		QualityWorker:                qualityWorker,
 		InstallationCoordinator:      installationCoordinator,
 		InstallationRepo:             installationRepoV2,
 		InstallationRecoveryWorker:   installationRecoveryWorker,
@@ -1207,10 +1041,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		ReleaseEventPublisher:        releaseEventPublisher,
 		ReleaseEventOutboxDispatcher: releaseEventOutboxDispatcher,
 		DesktopPetRuntimeV1:          runtimeV1Facade,
-		EditingService:               editingSvc,
-		RegenerationWorker:           regenerationWorker,
-		BridgeRecoveryWorker:         bridgeRecoveryWorker,
-
 		BehaviorService:              behaviorSvc,
 		AdapterManager:               adapterManager,
 		DesktopPetBehaviorMesh:       behaviorMeshPublisher,
@@ -1361,6 +1191,23 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, err
 		}
 		services.ContinuityOwner = newOwnedContinuityRuntime(services.OwnedBusiness, chatSvc, embedding.NewService(ctx.DB), localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID())
+		multiAgentCoordinator.SetDurableProgressObserver(func(current context.Context, parentID string, ref interaction.MultiAgentRecoveryRef) error {
+			parent, found, err := tracker.Get(current, parentID)
+			if err != nil || !found {
+				return err
+			}
+			return services.ContinuityOwner.ApplyMultiAgentProgress(current, parent, ref)
+		})
+		usageStore.SetCoreOwnerBudgetReview(func(current context.Context, scope coordination.ExecutionScope) error {
+			policy, err := deviceMeshRuntime.Coordination.Get(current, scope.SpaceID, scope.InitiatorDeviceID)
+			if err != nil {
+				return err
+			}
+			if !policy.Coordinated || !policy.Administrator || policy.PermissionRevision != scope.PermissionRevision || policy.ProviderEpoch != scope.ProviderEpoch {
+				return mindruntime.ErrOwnedBudgetReviewForbidden
+			}
+			return nil
+		})
 		if err := migrateLegacyContinuity(context.Background(), services.DB, services.OwnedBusiness, localSpace.SpaceID(), deviceMeshRuntime.LocalDeviceID, localSpace.SpaceID()); err != nil {
 			return nil, err
 		}
@@ -1487,24 +1334,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 					return fmt.Errorf("path registry is nil")
 				}
 				return services.PathRegistry.Validate()
-			},
-			GenerationWorkerReady: func() error {
-				if services.DesktopPetWorker == nil {
-					return fmt.Errorf("generation worker is nil")
-				}
-				return nil
-			},
-			ProcessingWorkerReady: func() error {
-				if services.ProcessingWorker == nil {
-					return fmt.Errorf("processing worker is nil")
-				}
-				return nil
-			},
-			QualityWorkerReady: func() error {
-				if services.QualityWorker == nil {
-					return fmt.Errorf("quality worker is nil")
-				}
-				return nil
 			},
 			InstallationWorkerReady: func() error {
 				if services.InstallationCoordinator == nil {

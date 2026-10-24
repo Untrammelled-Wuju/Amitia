@@ -52,7 +52,7 @@ func (c *AgentSkillCatalog) Get(extensionID string) (AgentSkillDefinition, bool)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	for _, item := range c.items {
-		if item.ExtensionID == extensionID || item.ID == extensionID || item.ContributionID == extensionID {
+		if item.OwnerSpaceID == "" && (item.ExtensionID == extensionID || item.ID == extensionID || item.ContributionID == extensionID) {
 			return item, true
 		}
 	}
@@ -62,11 +62,31 @@ func (c *AgentSkillCatalog) Get(extensionID string) (AgentSkillDefinition, bool)
 func (c *AgentSkillCatalog) GetScoped(spaceID, skillID string) (AgentSkillDefinition, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	var global AgentSkillDefinition
+	foundGlobal := false
 	for _, item := range c.items {
 		if !skillMatchesSpace(item, spaceID) {
 			continue
 		}
-		if item.ExtensionID == skillID || item.ID == skillID || item.ContributionID == skillID {
+		if item.ExtensionID != skillID && item.ID != skillID && item.ContributionID != skillID {
+			continue
+		}
+		if item.OwnerSpaceID == spaceID && spaceID != "" {
+			return item, true
+		}
+		if item.OwnerSpaceID == "" {
+			global = item
+			foundGlobal = true
+		}
+	}
+	return global, foundGlobal
+}
+
+func (c *AgentSkillCatalog) GetScopedState(spaceID, stateID string) (AgentSkillDefinition, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, item := range c.items {
+		if item.StateID() == stateID && skillMatchesSpace(item, spaceID) {
 			return item, true
 		}
 	}
@@ -102,7 +122,7 @@ func (c *AgentSkillCatalog) SetEnabled(extensionID string, enabled bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, item := range c.items {
-		if item.ExtensionID != extensionID && item.ID != extensionID && item.ContributionID != extensionID {
+		if item.OwnerSpaceID != "" || item.ExtensionID != extensionID && item.ID != extensionID && item.ContributionID != extensionID {
 			continue
 		}
 		item.Enabled = enabled
@@ -115,7 +135,7 @@ func (c *AgentSkillCatalog) SetEnabledForSpace(spaceID, extensionID, skillID str
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for key, item := range c.items {
-		if !skillMatchesSpace(item, spaceID) {
+		if item.OwnerSpaceID != spaceID {
 			continue
 		}
 		if item.ExtensionID != extensionID {
@@ -178,8 +198,5 @@ func catalogKey(definition AgentSkillDefinition) string {
 }
 
 func skillMatchesSpace(item AgentSkillDefinition, spaceID string) bool {
-	if item.OwnerSpaceID == "" || spaceID == "" {
-		return true
-	}
-	return item.OwnerSpaceID == spaceID
+	return item.OwnerSpaceID == "" || spaceID != "" && item.OwnerSpaceID == spaceID
 }

@@ -68,19 +68,39 @@
     >
       <ArchiveConversationIcon class="thread-action-icon" />
     </button>
+    <el-dropdown trigger="click" @command="(value: string) => emit('move', conversation, value === '__recent__' ? '' : value)">
+      <button type="button" class="thread-action" title="移动到项目" aria-label="移动到项目" @click.stop>
+        <el-icon class="thread-action-icon"><MoreFilled /></el-icon>
+      </button>
+      <template #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item v-if="conversation.projectId" command="__recent__">移回最近</el-dropdown-item>
+          <el-dropdown-item
+            v-for="project in availableProjects"
+            :key="project.id"
+            :command="project.id"
+            :disabled="project.id === conversation.projectId"
+          >
+            移入项目：{{ project.name }}
+          </el-dropdown-item>
+          <el-dropdown-item v-if="!availableProjects.length && conversation.projectId" disabled>暂无其他项目</el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
-import { ChatLineRound } from "@element-plus/icons-vue";
-import type { ConversationItem } from "@/stores/chat";
+import { ChatLineRound, MoreFilled } from "@element-plus/icons-vue";
+import type { ConversationItem, ProjectItem } from "@/stores/chat";
 import ArchiveConversationIcon from "./ArchiveConversationIcon.vue";
 
 const props = defineProps<{
   conversation: ConversationItem;
   active: boolean;
   compact?: boolean;
+  projects?: ProjectItem[];
 }>();
 
 const emit = defineEmits<{
@@ -88,12 +108,14 @@ const emit = defineEmits<{
   rename: [conversation: ConversationItem, title: string];
   togglePin: [conversation: ConversationItem];
   archive: [conversation: ConversationItem];
+  move: [conversation: ConversationItem, projectId: string];
 }>();
 
 const editing = ref(false);
 const draftTitle = ref("");
 const inputRef = ref<HTMLInputElement | null>(null);
 const isPinned = computed(() => Boolean(props.conversation.pinnedAt));
+const availableProjects = computed(() => (props.projects || []).filter((project) => !project.readOnly && !project.hiddenAt));
 const activityState = computed(() => props.conversation.isGenerating ? "generating" : props.conversation.hasUnread ? "unread" : "idle");
 
 async function beginRename() {
@@ -132,7 +154,7 @@ function cancelRename() {
   color: var(--text-primary);
 }
 .thread-row:has([aria-current="page"]) {
-  background: var(--workbench-sidebar-active);
+  background: var(--workbench-sidebar-hover);
   color: var(--text-primary);
 }
 .thread-main {
@@ -255,5 +277,4 @@ function cancelRename() {
 
 button, .thread-main, .thread-name-input { line-height: 1.45; }
 button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-button:not(:disabled):active { background: var(--control-active-bg); color: var(--text-primary); }
 </style>

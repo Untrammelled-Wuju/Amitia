@@ -105,14 +105,9 @@ func TestWindowsNetworkSandboxE2E(t *testing.T) {
 		cmd := exec.CommandContext(ctx, plan.Path, plan.Args...)
 		cmd.Dir = plan.WorkingDir
 		process.ConfigureProcess(cmd)
-		if startErr := cmd.Start(); startErr != nil {
+		handle, startErr := process.StartProcessTreeWithLimits(cmd, process.ResourceLimits{})
+		if startErr != nil {
 			t.Fatal(startErr)
-		}
-		handle, attachErr := process.AttachProcessTreeWithLimits(cmd, process.ResourceLimits{})
-		if attachErr != nil {
-			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
-			t.Fatal(attachErr)
 		}
 		if plan.AfterStart != nil {
 			if startErr := plan.AfterStart(ctx, cmd); startErr != nil {
@@ -168,17 +163,9 @@ func runWindowsSandboxProbe(t *testing.T, policy ServiceNetworkPolicy, executabl
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return stdout.String(), stderr.String(), err
-	}
-	// Windows ConfigureProcess deliberately creates the trusted PowerShell
-	// launcher suspended. Attach it to the same kill-on-close Job Object used by
-	// production before resuming; otherwise this smoke test would never execute
-	// the AppContainer child and could not validate the real production boundary.
-	handle, err := process.AttachProcessTreeWithLimits(cmd, process.ResourceLimits{})
+
+	handle, err := process.StartProcessTreeWithLimits(cmd, process.ResourceLimits{})
 	if err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
 		return stdout.String(), stderr.String(), err
 	}
 	defer process.CloseProcessTree(handle)

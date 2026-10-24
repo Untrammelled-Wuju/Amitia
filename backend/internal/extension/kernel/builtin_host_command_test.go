@@ -13,7 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 )
 
-func TestHostCommandWorkspaceDirectoryBoundaries(t *testing.T) {
+func TestHostCommandDirectoryResolution(t *testing.T) {
 	root := t.TempDir()
 	sub := filepath.Join(root, "subdir")
 	if err := os.Mkdir(sub, 0700); err != nil {
@@ -36,11 +36,11 @@ func TestHostCommandWorkspaceDirectoryBoundaries(t *testing.T) {
 			t.Fatalf("unexpected working directory: %q", got)
 		}
 	}
-	if _, err := resolveHostCommandDirectory(root, ".."); err == nil {
-		t.Fatal("parent directory traversal must be rejected")
+	if got, err := resolveHostCommandDirectory(root, ".."); err != nil || got != filepath.Dir(canonicalRoot) {
+		t.Fatalf("parent directory should resolve as an explicit working directory: %q %v", got, err)
 	}
-	if _, err := resolveHostCommandDirectory(root, filepath.Dir(root)); err == nil {
-		t.Fatal("absolute directory outside the workspace must be rejected")
+	if got, err := resolveHostCommandDirectory(root, filepath.Dir(root)); err != nil || got != filepath.Dir(canonicalRoot) {
+		t.Fatalf("absolute directory should not be restricted by the project folder: %q %v", got, err)
 	}
 	if _, err := resolveHostCommandDirectory(root, "not-created"); err == nil {
 		t.Fatal("nonexistent working directory must be rejected")
@@ -78,7 +78,23 @@ func TestHostCommandExecutesInBoundWorkspace(t *testing.T) {
 	if !strings.Contains(string(result), "amitia_host_command_ok") {
 		t.Fatalf("unexpected command output: %s", result)
 	}
-	if _, err := service.executeHostCommand(context.Background(), json.RawMessage(`{"command":"echo should_not_run","cwd":".."}`), invocation); err == nil {
-		t.Fatal("host command escaped its bound workspace")
+	if _, err := service.executeHostCommand(context.Background(), json.RawMessage(`{"command":"echo explicit_parent","cwd":".."}`), invocation); err != nil {
+		t.Fatalf("explicit parent working directory failed: %v", err)
+	}
+}
+
+func TestHostCommandAcceptsExplicitCwdWithoutWorkspace(t *testing.T) {
+	service := NewBuiltinUtilityService(BuiltinUtilityDeps{})
+	if !service.Supports("execute_host_command") {
+		t.Skip("host command execution is unavailable on this platform")
+	}
+	directory := t.TempDir()
+	input, _ := json.Marshal(map[string]any{"command": "echo explicit_cwd_ok", "cwd": directory, "timeoutMs": 30000})
+	result, err := service.executeHostCommand(context.Background(), input, capability.ToolInvocationContext{})
+	if err != nil {
+		t.Fatalf("explicit cwd failed: %v", err)
+	}
+	if !strings.Contains(string(result), "explicit_cwd_ok") {
+		t.Fatalf("unexpected command output: %s", result)
 	}
 }

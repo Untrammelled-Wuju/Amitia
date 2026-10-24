@@ -29,7 +29,7 @@ func TestSummarizeProjectedTasks(t *testing.T) {
 	a := taskRecord("space", "conv", "coord-a", "running")
 	b := taskRecord("space", "conv", "coord-b", "succeeded")
 	result, err := List(context.Background(), taskRecordReader{records: []*interaction.InteractionRecord{a, b}}, "space", "conv")
-	if err != nil || result.Summary.Total != 2 || result.Summary.Active != 1 || result.Summary.Succeeded != 1 || result.Summary.CheckpointOnly != 2 || result.Summary.CodingWorkersRequiringReview != 4 {
+	if err != nil || result.Summary.Total != 2 || result.Summary.Active != 2 || result.Summary.Succeeded != 0 || result.Summary.CheckpointOnly != 1 || result.Summary.NeedsReconciliation != 1 || result.Summary.CodingWorkersRequiringReview != 4 {
 		t.Fatalf("summary error: %+v %v", result, err)
 	}
 }
@@ -82,6 +82,9 @@ func TestRejectsRuntimeRoleMismatch(t *testing.T) {
 
 func TestRuntimeStateConflictRequiresReconciliation(t *testing.T) {
 	record := taskRecord("space", "conv", "coord", "succeeded")
+	for i := range record.RecoveryDescriptor.MultiAgent.AssignmentRefs {
+		record.RecoveryDescriptor.MultiAgent.AssignmentRefs[i].Status = "succeeded"
+	}
 	snapshot := interaction.CoordinationSnapshot{CoordinationID: "coord", ParentInteractionID: record.ID, Status: interaction.CoordinationRunning, Assignments: []interaction.CoordinationAssignmentSnapshot{
 		{AssignmentID: "worker-1", Status: interaction.AssignmentRunning},
 		{AssignmentID: "worker-2", Status: interaction.AssignmentRunning},

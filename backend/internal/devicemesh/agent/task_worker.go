@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 )
 
@@ -92,14 +93,44 @@ func (w *defaultTaskWorker) ExecuteTask(ctx context.Context, dispatch protocol.T
 		return err
 	}
 
-	go w.runHeartbeat(taskCtx, dispatch, lease)
+	heartbeatDone := make(chan struct{})
+	go func() {
+		defer close(heartbeatDone)
+		w.runHeartbeat(taskCtx, dispatch, lease)
+	}()
 	go func() {
 		defer cancel()
 		defer lease.Close()
 		w.runTask(taskCtx, dispatch)
+
+		cancel()
+		lease.Close()
+		<-heartbeatDone
+		w.recordWorkerStop(dispatch)
 	}()
 
 	return nil
+}
+
+func (w *defaultTaskWorker) recordWorkerStop(dispatch protocol.TaskDispatchPayload) {
+	if w == nil || w.client == nil || w.client.conf.ExecutionJournal == nil || len(dispatch.OwnedExecutionScope) == 0 || dispatch.TaskGeneration < 1 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := w.client.conf.ExecutionJournal.RecordWorkerStop(ctx,
+		w.client.conf.SpaceID.String(), dispatch.DeviceID.String(), executionjournal.TaskInspectionRequest{
+			TaskRunID: dispatch.TaskRunID, TaskGeneration: dispatch.TaskGeneration,
+			TaskExecutionBinding: executionjournal.TaskExecutionBinding{
+				AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID,
+				RuntimeID: dispatch.RuntimeID.String(), SessionID: dispatch.RuntimeSessionID.String(),
+				ConnectionGeneration: dispatch.ConnectionGeneration, TaskDefinitionID: dispatch.TaskDefinitionID,
+			},
+		})
+	if err != nil {
+
+		log.Printf("devicemesh: agent: durable worker stop not recorded: taskRunId=%s: %v", dispatch.TaskRunID, err)
+	}
 }
 
 func (w *defaultTaskWorker) CancelTask(ctx context.Context, taskRunID, attemptID, leaseID string) error {
@@ -214,6 +245,14 @@ func (w *defaultTaskWorker) executeAuthorizedTask(ctx context.Context, dispatch 
 		if journal := w.client.conf.ExecutionJournal; journal != nil {
 			if err := w.validateTaskConnection(dispatch); err != nil {
 				return nil, err
+			}
+			if len(dispatch.OwnedExecutionScope) != 0 {
+				binding := executionjournal.TaskExecutionBinding{
+					AttemptID: dispatch.AttemptID, LeaseID: dispatch.LeaseID,
+					RuntimeID: dispatch.RuntimeID.String(), SessionID: dispatch.RuntimeSessionID.String(),
+					ConnectionGeneration: dispatch.ConnectionGeneration, TaskDefinitionID: dispatch.TaskDefinitionID,
+				}
+				return journal.ExecuteTask(current, invoke, binding, run)
 			}
 			return journal.Execute(current, invoke, run)
 		}

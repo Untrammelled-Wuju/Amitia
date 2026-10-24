@@ -113,7 +113,7 @@ class DeviceOwnedRealtimeService {
     if (result['executionScope'] is! Map ||
         ownedRealtimeAuthority(result['executionScope'] as Map) !=
             ownedRealtimeAuthority(scope))
-      throw StateError('Core、角色、统筹模式或权限已变化，通话已中断');
+      throw StateError('Core、角色、数据归属或权限已变化，通话已中断');
   }
 
   Future<Map<String, dynamic>> ticket() async {

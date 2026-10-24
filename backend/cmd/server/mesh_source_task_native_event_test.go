@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,7 +61,10 @@ func TestSourceTaskEventUsesActualTLSNativeRPCAndSourceDurableOutbox(t *testing.
 func runSourceTaskEventTLS(t *testing.T, coordinated bool) {
 	binary := os.Getenv("AMITIA_TEST_NODE")
 	if binary == "" {
-		t.Fatal("真实Source Native联测必须使用项目Node")
+		binary, _ = filepath.Abs("../../../AmitiaData/node/bin/node")
+		if _, err := os.Stat(binary); err != nil {
+			t.Fatal("真实Source Native联测必须使用项目Node")
+		}
 	}
 	schemas := newThreeCoreSchemas(t)
 	a, b := newThreeCoreFixture(t, "native-source", schemas), newThreeCoreFixture(t, "native-core", schemas)
@@ -73,7 +75,7 @@ func runSourceTaskEventTLS(t *testing.T, coordinated bool) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, http.StatusOK)
+		ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	}
 	dir := t.TempDir()
 	root, err := filepath.Abs("../../../runtime/task-host")

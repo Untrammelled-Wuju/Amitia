@@ -47,7 +47,7 @@ func TestNativeMultiAgentSharedRuntimeNormalizesIdempotentArguments(t *testing.T
 
 func TestNativeMultiAgentOwnedAuthorizationSurvivesCoordinatorRestart(t *testing.T) {
 	adapter, workers, scope, tracker := testMultiAgentModelRuntime(t)
-	bound := coordination.ExecutionScope{SpaceID: scope.SpaceID, RoleID: scope.CharacterID, CoreID: "core-a", ResourceOwnerID: "owner-a", RoleOwnerID: "role-owner", AuthorizationRealm: "realm-a"}
+	bound := coordination.ExecutionScope{SpaceID: scope.SpaceID, RoleID: scope.CharacterID, CoreID: "core-a", ResourceOwnerID: "owner-a", RoleOwnerID: "role-owner", AuthorizationRealm: "realm-a", InitiatorDeviceID: "device-a", TargetDeviceID: "device-a"}
 	parent, found, err := tracker.GetByRequestID(t.Context(), scope.SpaceID, scope.RequestID)
 	if err != nil || !found {
 		t.Fatal(err)

@@ -49,10 +49,7 @@ func TestDeviceManagementIntentOriginalPolicyAndOrdinarySelfGrant(t *testing.T) 
 				t.Fatal(err)
 			}
 			if scenario.changed {
-				if _, err := svc.ChangeMode(t.Context(), "space", "a", 1, true, "role"); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := svc.ChangeMode(t.Context(), "space", "a", 2, false, "role"); err != nil {
+				if _, err := svc.InitializeCoordinated(t.Context(), "space", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 			}

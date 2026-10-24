@@ -1,5 +1,9 @@
 class _RouteAliasRule {
-  const _RouteAliasRule(this.canonicalPrefix, this.aliasPrefix, {this.exact = false});
+  const _RouteAliasRule(
+    this.canonicalPrefix,
+    this.aliasPrefix, {
+    this.exact = false,
+  });
 
   final String canonicalPrefix;
   final String aliasPrefix;
@@ -29,7 +33,6 @@ const _routeAliasRules = <_RouteAliasRule>[
   _RouteAliasRule('/memory/world-book', '/world-book', exact: true),
   _RouteAliasRule('/chat-logs', '/logs', exact: true),
   _RouteAliasRule('/chat-import', '/import', exact: true),
-  _RouteAliasRule('/settings/runtime-mode', '/runtime-mode', exact: true),
   _RouteAliasRule('/settings/long-running', '/long-running', exact: true),
   _RouteAliasRule('/settings/decision-viz', '/decision-viz', exact: true),
   _RouteAliasRule('/settings/privacy-scan', '/privacy-scan', exact: true),
@@ -68,9 +71,8 @@ Set<String> uiRouteAliases(String rawRoute) {
 
 String canonicalUISurfaceId(String rawRoute) {
   final aliases = uiRouteAliases(rawRoute);
-  bool hasPrefix(String prefix) => aliases.any(
-        (route) => route == prefix || route.startsWith('$prefix/'),
-      );
+  bool hasPrefix(String prefix) =>
+      aliases.any((route) => route == prefix || route.startsWith('$prefix/'));
 
   if (aliases.contains('/characters') || aliases.contains('/character')) {
     return 'surface.character.list';
@@ -78,17 +80,20 @@ String canonicalUISurfaceId(String rawRoute) {
   if (hasPrefix('/characters') || hasPrefix('/character')) {
     return 'surface.character.detail';
   }
-  if (aliases.contains('/memory/manager') || aliases.contains('/memory-manager')) {
+  if (aliases.contains('/memory/manager') ||
+      aliases.contains('/memory-manager')) {
     return 'surface.memory.manager';
   }
   if (hasPrefix('/memory') ||
-      aliases.any((route) => const {
-            '/memory-timeline',
-            '/episodic',
-            '/graph',
-            '/profiles',
-            '/world-book',
-          }.contains(route))) {
+      aliases.any(
+        (route) => const {
+          '/memory-timeline',
+          '/episodic',
+          '/graph',
+          '/profiles',
+          '/world-book',
+        }.contains(route),
+      )) {
     return 'surface.memory.detail';
   }
   if (hasPrefix('/workshop') || hasPrefix('/creative-workshop')) {

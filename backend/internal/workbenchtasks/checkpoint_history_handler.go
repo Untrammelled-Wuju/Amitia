@@ -20,7 +20,7 @@ func (h *Handler) checkpoints(c *gin.Context) {
 	var out TaskCheckpointHistory
 	h.readConversation(c, func(ctx context.Context, query QueryContext) error {
 		var err error
-		out, err = ListCheckpoints(ctx, scopedRecordReader{h.records, query.ExecutionScope.RoleID, query.CanReadRecord}, query.ExecutionScope.SpaceID, query.ConversationID, coordinationID)
+		out, err = ListCheckpoints(ctx, scopedRecordReader{reader: h.records, role: query.ExecutionScope.RoleID, space: query.ExecutionScope.SpaceID, canRead: query.CanReadRecord}, query.ExecutionScope.SpaceID, query.ConversationID, coordinationID)
 		out.QueryContext = &query
 		return err
 	})

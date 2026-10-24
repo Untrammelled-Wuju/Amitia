@@ -15,9 +15,35 @@ func (s *service) SetUsageStore(store *mindruntime.ModelUsageStore) { s.usageSto
 
 func (s *service) meterModel(ctx context.Context, cfg *ModelConfig) (func(*ModelResult, error) error, error) {
 	if s.usageStore == nil {
+		if _, limited := mindruntime.OwnedModelBudgetFromContext(ctx); limited {
+			return nil, errors.New("multi_agent: durable model-token usage store is unavailable")
+		}
 		return func(*ModelResult, error) error { return nil }, nil
 	}
 	record := mindruntime.ModelUsageRecord{Model: cfg.ModelName, Provider: cfg.APIType, Source: "system"}
+	if budget, limited := mindruntime.OwnedModelBudgetFromContext(ctx); limited {
+		record.SpaceID = budget.SpaceID
+		if cfg.ContextWindow <= 0 {
+			return nil, errors.New("multi_agent: model context window is required for a conservative token reservation")
+		}
+		if ceiling := ownedModelOutputCeiling(cfg); ceiling < 1 || ceiling > int64(cfg.ContextWindow) {
+			return nil, errors.New("multi_agent: model output ceiling exceeds reserved context window")
+		}
+		record.ReservedTokens = int64(cfg.ContextWindow)
+		if budget.CostLimitMicroUSD > 0 {
+			if cfg.BudgetRateVersion == "" || cfg.BudgetInputRate < 1 || cfg.BudgetOutputRate < 1 || cfg.BudgetInputRate > 100000000 || cfg.BudgetOutputRate > 100000000 {
+				return nil, errors.New("multi_agent: verified model cost-rate ceiling is not configured")
+			}
+			cost, ok := mindruntime.CeilingOwnedModelCost(int64(cfg.ContextWindow), ownedModelOutputCeiling(cfg), cfg.BudgetInputRate, cfg.BudgetOutputRate)
+			if !ok {
+				return nil, errors.New("multi_agent: model cost reservation overflow")
+			}
+			record.ReservedCostMicroUSD = cost
+			record.BudgetInputRate = cfg.BudgetInputRate
+			record.BudgetOutputRate = cfg.BudgetOutputRate
+			record.BudgetRateVersion = cfg.BudgetRateVersion
+		}
+	}
 	if actor, ok := auth.FromContext(ctx); ok {
 		record.SpaceID = actor.SpaceID.String()
 		record.DeviceID = actor.DeviceID.String()
@@ -38,6 +64,12 @@ func (s *service) meterModel(ctx context.Context, cfg *ModelConfig) (func(*Model
 		if ingress.Source != "" {
 			record.Source = ingress.Source
 		}
+	}
+	if budget, limited := mindruntime.OwnedModelBudgetFromContext(ctx); limited {
+		if record.SpaceID != "" && record.SpaceID != budget.SpaceID {
+			return nil, errors.New("multi_agent: model metering scope conflicts with authorized parent")
+		}
+		record.SpaceID = budget.SpaceID
 	}
 	id, err := s.usageStore.Begin(ctx, record)
 	if err != nil {
@@ -60,7 +92,10 @@ func (s *service) meterModel(ctx context.Context, cfg *ModelConfig) (func(*Model
 			if usage.TotalTokens == 0 {
 				usage.TotalTokens = usage.InputTokens + usage.OutputTokens
 			}
-			usage.UsageReported = u.Reported || usage.TotalTokens > 0
+			usage.UsageReported = u.Reported
+			if _, limited := mindruntime.OwnedModelBudgetFromContext(ctx); !limited && usage.TotalTokens > 0 {
+				usage.UsageReported = true
+			}
 		}
 		save, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()

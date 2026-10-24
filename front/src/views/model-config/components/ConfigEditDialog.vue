@@ -184,6 +184,17 @@ SPDX-License-Identifier: AGPL-3.0-only
         </el-col>
       </el-row>
 
+      <template v-if="showReasoning && 'budgetRateVersion' in form">
+        <el-form-item label="预算计价版本" prop="budgetRateVersion">
+          <el-input v-model="form.budgetRateVersion" placeholder="自定版本，如 provider-20261024" maxlength="128" />
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="12"><el-form-item label="输入计价上界"><el-input-number v-model="form.budgetInputRate" :min="0" :max="100000000" :precision="0" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="输出计价上界"><el-input-number v-model="form.budgetOutputRate" :min="0" :max="100000000" :precision="0" /></el-form-item></el-col>
+        </el-row>
+        <p>单位：每百万 Token 的微美元（1 美元 = 1000000 微美元）。费用预算按此上界预留；启用时填写版本和两个正整数，未配置时受费用限制的委派不会调用模型。</p>
+      </template>
+
       <el-row v-if="showAdvanced" :gutter="12">
         <el-col :span="12">
           <el-form-item label="超时(秒)">

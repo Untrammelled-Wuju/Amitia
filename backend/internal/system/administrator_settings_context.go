@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
-	"github.com/u-ai/backend/internal/runtimeendpoint"
-	"github.com/u-ai/backend/pkg/util"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -103,18 +101,6 @@ func (s *service) AdministratorSettingsContext(ctx context.Context, operation st
 		return map[string]interface{}{"enabled": text("audit_enabled", "true") != "false", "logActions": text("audit_log_actions", "true") != "false", "retentionDays": days}, nil
 	case "security":
 		return map[string]interface{}{"requireAuth": text("require_auth", "true") != "false", "allowedOrigins": text("allowed_origins", "*"), "rateLimit": text("rate_limit", "true") != "false"}, nil
-	case "runtime":
-		mode := text("runtime_mode", "desktop-local")
-		host := "127.0.0.1"
-		if mode == "cloud-web" {
-			host = "0.0.0.0"
-		}
-		port := envInt("AMITIA_SERVER_PORT", 18080)
-		if endpoint, err := runtimeendpoint.Read(util.RuntimeRunDir(util.RuntimeRoot())); err == nil {
-			host = endpoint.Host
-			port = endpoint.Port
-		}
-		return map[string]interface{}{"mode": mode, "deployMode": mode, "runtimeProfile": s.runtimeProfile.String(), "host": host, "port": port, "web": map[string]interface{}{"enabled": true, "publicBaseUrl": text("public_base_url", ""), "requireAuth": text("require_auth", "true") != "false"}, "storage": map[string]interface{}{"dataDir": s.dataDir}, "requiresRestart": true}, nil
 	case "update":
 		return map[string]interface{}{"autoCheck": text("auto_update", "true") != "false", "channel": "stable", "lastCheckAt": nil}, nil
 	case "setup-finish":

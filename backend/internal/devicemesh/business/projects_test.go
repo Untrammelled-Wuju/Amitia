@@ -30,7 +30,7 @@ func TestOwnedProjectCreationRenameDeleteAndRetryKeepOriginalOwner(t *testing.T)
 		t.Run(map[bool]string{false: "device", true: "core"}[coordinated], func(t *testing.T) {
 			engine, db, service, _ := engineHarness(t)
 			if coordinated {
-				if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -96,18 +96,18 @@ func TestConversationProjectAssignmentIsRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	edit := EditRequest{ExpectedScope: &query.Scope, RoleID: "role", RequestID: "move-project", Kind: "conversation", ID: "conversation", ExpectedRevision: 1, Changes: map[string]json.RawMessage{"projectId": body(project.Project.ID)}}
-	if _, err := engine.Edit(t.Context(), request, edit); err == nil {
-		t.Fatal("existing conversation was allowed to move into a project")
+	if _, err := engine.Edit(t.Context(), request, edit); err != nil {
+		t.Fatal(err)
 	}
 	row, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "conversation", "conversation")
-	if err != nil || row.Revision != 1 {
-		t.Fatal("failed assignment changed conversation")
+	if err != nil || row.Revision != 2 {
+		t.Fatal("project assignment did not change conversation")
 	}
 	var document struct {
 		ProjectID string `json:"projectId"`
 	}
-	if json.Unmarshal(row.Body, &document) != nil || document.ProjectID != "" {
-		t.Fatal("conversation project assignment changed despite rejection")
+	if json.Unmarshal(row.Body, &document) != nil || document.ProjectID != project.Project.ID {
+		t.Fatal("conversation project assignment missing")
 	}
 }
 
@@ -127,11 +127,106 @@ func TestOwnedProjectRejectsMissingOrChangedScopeAndInvalidTitle(t *testing.T) {
 			t.Fatal("invalid title accepted")
 		}
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := engine.CreateProject(t.Context(), request, projectInput("valid", query.Scope.TargetDeviceID)); !errors.Is(err, coordination.ErrScopeExpired) {
 		t.Fatalf("old owner accepted: %v", err)
+	}
+}
+
+func TestOwnedProjectCanExistWithoutFolders(t *testing.T) {
+	engine, _, _, _ := engineHarness(t)
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "empty-project"}
+	query, err := engine.Query(t.Context(), request, coordination.DataQuery{ResourceKind: "project", Management: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.ExpectedScope = &query.Scope
+	created, err := engine.CreateProject(t.Context(), request, CreateProjectInput{Title: "无文件夹项目"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Project.Workspaces) != 0 || created.Project.PrimaryWorkspaceID != "" {
+		t.Fatalf("unexpected folders: %+v", created.Project)
+	}
+	run := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "empty-project-chat", RequestID: "empty-project-message", ProjectID: created.Project.ID, Message: "hello"}
+	response, err := engine.Run(t.Context(), run)
+	if err != nil || !response.Saved {
+		t.Fatalf("response=%+v err=%v", response, err)
+	}
+}
+
+func TestOwnedProjectsCanReuseTheSameWorkspace(t *testing.T) {
+	engine, _, _, _ := engineHarness(t)
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "shared-workspace-project-one"}
+	query, err := engine.Query(t.Context(), request, coordination.DataQuery{ResourceKind: "project", Management: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.ExpectedScope = &query.Scope
+	workspace := ProjectWorkspace{
+		ID:       "workspace-downloads",
+		DeviceID: query.Scope.TargetDeviceID,
+		Name:     "Downloads",
+		Kind:     "local",
+		RootURI:  "amitia://workspace/@workspace-downloads/",
+	}
+	first, err := engine.CreateProject(t.Context(), request, CreateProjectInput{Title: "项目一", Workspaces: []ProjectWorkspace{workspace}, PrimaryWorkspaceID: workspace.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "shared-workspace-project-two"
+	second, err := engine.CreateProject(t.Context(), request, CreateProjectInput{Title: "项目二", Workspaces: []ProjectWorkspace{workspace}, PrimaryWorkspaceID: workspace.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Project.ID == second.Project.ID || !reflect.DeepEqual(first.Project.Workspaces, second.Project.Workspaces) {
+		t.Fatalf("first=%+v second=%+v", first.Project, second.Project)
+	}
+}
+
+func TestOwnedProjectEditCanAddWorkspaceUsedByAnotherProject(t *testing.T) {
+	engine, db, _, _ := engineHarness(t)
+	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", RequestID: "workspace-edit-project-one"}
+	query, err := engine.Query(t.Context(), request, coordination.DataQuery{ResourceKind: "project", Management: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.ExpectedScope = &query.Scope
+	shared := ProjectWorkspace{ID: "workspace-shared", DeviceID: query.Scope.TargetDeviceID, Name: "Shared", Kind: "local", RootURI: "amitia://workspace/@workspace-shared/"}
+	other := ProjectWorkspace{ID: "workspace-other", DeviceID: query.Scope.TargetDeviceID, Name: "Other", Kind: "local", RootURI: "amitia://workspace/@workspace-other/"}
+	if _, err := engine.CreateProject(t.Context(), request, CreateProjectInput{Title: "项目一", Workspaces: []ProjectWorkspace{shared}, PrimaryWorkspaceID: shared.ID}); err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "workspace-edit-project-two"
+	second, err := engine.CreateProject(t.Context(), request, CreateProjectInput{Title: "项目二", Workspaces: []ProjectWorkspace{other}, PrimaryWorkspaceID: other.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaces := []ProjectWorkspace{other, shared}
+	ack, err := engine.Edit(t.Context(), request, EditRequest{
+		ExpectedScope:    &query.Scope,
+		RoleID:           "role",
+		RequestID:        "add-shared-workspace",
+		Kind:             "project",
+		ID:               second.Project.ID,
+		ExpectedRevision: 1,
+		Changes:          map[string]json.RawMessage{"workspaces": body(workspaces)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ack.Versions["project/"+second.Project.ID] != 2 {
+		t.Fatalf("ack=%+v", ack)
+	}
+	row, err := coordination.NewOwnershipStore(db, query.Scope.ResourceOwnerID).Get(t.Context(), "project", second.Project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved Project
+	if json.Unmarshal(row.Body, &saved) != nil || !reflect.DeepEqual(saved.Workspaces, workspaces) || saved.PrimaryWorkspaceID != other.ID {
+		t.Fatalf("project=%+v", saved)
 	}
 }
 

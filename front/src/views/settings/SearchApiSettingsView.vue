@@ -1,10 +1,5 @@
 <template>
   <div class="search-api-settings">
-    <header class="page-header">
-      <h2>搜索 API</h2>
-      <p>配置商业搜索与内容引擎凭据，保存后由搜索工具直接调用。</p>
-    </header>
-
     <div v-loading="loading" class="credential-list">
       <section
         v-for="item in items"
@@ -168,24 +163,6 @@ onMounted(load);
   max-width: 920px;
   margin: 0 auto;
   padding: 20px 16px 40px;
-}
-
-.page-header {
-  margin-bottom: 18px;
-}
-
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.page-header p {
-  margin: 8px 0 0;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--el-text-color-secondary);
 }
 
 .credential-list {

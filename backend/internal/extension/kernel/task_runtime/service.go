@@ -18,8 +18,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/devicemesh/executionjournal"
 
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 type TaskRuntimeService struct {
@@ -678,6 +680,13 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		return
 	}
 
+	defer func() {
+		finalRun, readErr := s.store.GetTaskRun(context.WithoutCancel(ctx), run.TaskRunID)
+		if readErr != nil || finalRun == nil || finalRun.Status != RunStatusPaused && finalRun.Status != RunStatusPausing {
+			s.cleanupWorkspace(run.TaskRunID, workspace)
+		}
+	}()
+
 	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
 	if err != nil {
 		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("reload run: %v", err))
@@ -834,10 +843,6 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	s.mu.Unlock()
 
 	defer func() {
-		finalRun, _ := s.store.GetTaskRun(ctx, run.TaskRunID)
-		if finalRun == nil || finalRun.Status != RunStatusPaused && finalRun.Status != RunStatusPausing {
-			s.cleanupWorkspace(run.TaskRunID, workspace)
-		}
 		s.mu.Lock()
 		if s.activeHosts[run.TaskRunID] == host {
 			delete(s.activeHosts, run.TaskRunID)
@@ -1165,6 +1170,20 @@ func (s *TaskRuntimeService) persistTaskProgress(ctx context.Context, taskRunID 
 		if latest == nil || latest.Generation != live.Generation || latest.ExecutionAttemptID != live.ExecutionAttemptID || latest.Revision != live.Revision || latest.Status != live.Status {
 			return NewTaskError(ErrTaskExecutionAttemptInvalid, "任务进度所属执行已变化")
 		}
+		if live.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+			writer, ok := s.store.(RemoteLeaseWriteStore)
+			if !ok {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote progress requires atomic lease write fencing")
+			}
+			written, err := writer.PutRemoteProgressCAS(txCtx, live, seq, progJSON)
+			if err != nil {
+				return err
+			}
+			if !written {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote progress lease expired or taken over")
+			}
+			return nil
+		}
 		return s.store.PutProgress(txCtx, taskRunID, seq, progJSON)
 	}); err != nil {
 		return err
@@ -1184,13 +1203,68 @@ func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun,
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点所属执行状态已变化")
 	}
 	previous, err := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
-	if err != nil || previous != nil && previous.Version >= version {
-		return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点版本已失效")
+	if err != nil {
+		return err
 	}
 
+	if err := validateCheckpointPayloadVersion(payload, version); err != nil {
+		return err
+	}
 	actualHash := hashBytes(payload)
 	if hash != "" && hash != actualHash {
 		return NewTaskError(ErrTaskCheckpointHashMismatch, "检查点摘要不匹配")
+	}
+	if previous != nil {
+
+		if current.CheckpointID == nil || *current.CheckpointID != previous.CheckpointID {
+			return NewTaskError(ErrTaskCheckpointIncompatible, "最新检查点与任务已确认的引用不一致")
+		}
+		if previous.Version == version {
+			if previous.TaskRunID != current.TaskRunID || previous.InputHash != current.InputHash ||
+				previous.DefinitionHash != def.DefinitionHash || previous.PayloadHash != actualHash ||
+				previous.CheckpointID == "" {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点版本已失效或已确认不同内容")
+			}
+
+			if _, owned := coordination.FromContext(ctx); owned {
+				if current.ExecutionAttemptID == "" || current.Generation < 1 ||
+					previous.CheckpointID != ownedStableCheckpointID(current, version) ||
+					s.config.OwnedCheckpoints == nil {
+					return NewTaskError(ErrTaskCheckpointIncompatible, "重复检查点缺少原执行身份或所有者端口")
+				}
+				verified, readErr := s.config.OwnedCheckpoints.Checkpoint(ctx, current, previous)
+				if readErr != nil || verified == nil || string(verified.Payload) != string(payload) ||
+					verified.PayloadHash != actualHash {
+					return NewTaskError(ErrTaskCheckpointIncompatible, "所有者检查点重放正文无法验证")
+				}
+			} else if string(previous.Payload) != string(payload) || !json.Valid(previous.Payload) {
+				return NewTaskError(ErrTaskCheckpointIncompatible, "本地检查点重放正文无法验证")
+			}
+			if err := coordination.ValidateCurrent(ctx); err != nil {
+				return err
+			}
+			run.CheckpointID = current.CheckpointID
+			run.Revision = current.Revision
+			return nil
+		}
+		if version <= previous.Version || previous.Version == int64(^uint64(0)>>1) || version != previous.Version+1 {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点版本不能倒退或跳号")
+		}
+
+		previousVerified, verifyErr := s.readTaskCheckpoint(ctx, current)
+		if verifyErr != nil {
+			return NewTaskError(ErrTaskCheckpointIncompatible, "前序检查点所有者验证失败: "+verifyErr.Error())
+		}
+		_, owned := coordination.FromContext(ctx)
+		if err := validateRecoveryCheckpoint(current, def, previousVerified, owned); err != nil {
+			return err
+		}
+		if previousVerified == nil || previousVerified.Version != previous.Version ||
+			previousVerified.CheckpointID != previous.CheckpointID {
+			return NewTaskError(ErrTaskCheckpointIncompatible, "前序检查点版本与任务引用不一致")
+		}
+	} else if current.CheckpointID != nil {
+		return NewTaskError(ErrTaskCheckpointIncompatible, "任务已有检查点引用，但检查点存储缺失")
 	}
 
 	cp := &TaskCheckpoint{
@@ -1204,6 +1278,13 @@ func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun,
 		CreatedAt:      time.Now().UTC(),
 	}
 
+	if _, owned := coordination.FromContext(ctx); owned {
+
+		if current.ExecutionAttemptID == "" || current.Generation < 1 {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "所有者检查点缺少原执行身份")
+		}
+		cp.CheckpointID = ownedStableCheckpointID(current, version)
+	}
 	cpID := cp.CheckpointID
 	next := CloneTaskRun(current)
 	next.CheckpointID = &cpID
@@ -1221,12 +1302,22 @@ func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun,
 	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		ok, err := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		var ok bool
+		var err error
+		if current.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+			writer, available := s.store.(RemoteLeaseTaskMutationStore)
+			if !available {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote checkpoint requires atomic task lease fencing")
+			}
+			ok, err = writer.UpdateRemoteTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		} else {
+			ok, err = s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		}
 		if err != nil {
 			return err
 		}
 		if !ok {
-			return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点保存前任务已变化")
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "检查点保存前任务已变化或租约失效")
 		}
 		if err := s.store.PutCheckpoint(txCtx, cp); err != nil {
 			return err
@@ -1430,11 +1521,23 @@ func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def 
 	var eventType TaskDomainEventType
 	switch recoverability {
 	case CheckpointRecoverable:
-		cp, _ := s.store.GetLatestCheckpoint(ctx, next.TaskRunID)
-		if cp != nil {
+		cp, checkpointErr := s.readTaskCheckpoint(ctx, next)
+		switch {
+		case checkpointErr != nil:
+
+			next.Status = RunStatusManualIntervention
+			eventType = TaskEventFailed
+			errMsg = "task checkpoint could not be verified after crash: " + checkpointErr.Error()
+			next.ErrorMessage = &errMsg
+		case cp != nil && next.CheckpointID != nil && validateRecoveryCheckpoint(next, def, cp, false) == nil:
 			next.Status = RunStatusRecoveryRequired
 			eventType = TaskEventRecoveryRequired
-		} else {
+		case cp != nil || next.CheckpointID != nil:
+			next.Status = RunStatusManualIntervention
+			eventType = TaskEventFailed
+			errMsg = "task checkpoint reference or contents are incompatible after crash"
+			next.ErrorMessage = &errMsg
+		default:
 			next.Status = RunStatusFailed
 			eventType = TaskEventFailed
 		}
@@ -1538,9 +1641,15 @@ func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code Tas
 
 func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason string) error {
 	current, err := s.store.GetTaskRun(ctx, taskRunID)
-	if err != nil {
-		return NewTaskError(ErrTaskNotFound, err.Error())
+	if err != nil || current == nil {
+		return NewTaskError(ErrTaskNotFound, "任务不存在")
 	}
+	guarded, finish, err := s.restoreTaskAuthority(ctx, current)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	ctx = guarded
 
 	if current.Status.IsTerminal() {
 		return NewTaskError(ErrTaskNotCancelable, "task already terminal: "+string(current.Status))
@@ -1567,14 +1676,17 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 				eventMsg:   reason,
 			})
 		}
+		if current.Status == RunStatusPaused && placement == TaskExecutionPlacementDevice {
+			return s.cancelConfirmedPausedRemote(ctx, current, reason, now)
+		}
 		if s.remoteExecutor == nil {
 			return NewTaskError(ErrRemoteTaskExecutorUnavailable, "remote cancellation not available")
 		}
-		if current.Status != RunStatusRunning && current.Status != RunStatusCancelling {
-			return NewTaskError(ErrTaskNotCancelable, "remote task is not running: "+string(current.Status))
+		if !remoteCancellationAllowed(current.Status) {
+			return NewTaskError(ErrTaskNotCancelable, "remote task is not cancellable: "+string(current.Status))
 		}
 
-		if current.Status == RunStatusRunning {
+		if current.Status != RunStatusCancelling {
 			cancelling := cloneTaskRun(current)
 			cancelling.Status = RunStatusCancelling
 			cancelling.CancelRequestedAt = &now
@@ -1608,7 +1720,13 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 		if err != nil {
 			return err
 		}
-		if latest.Status == RunStatusCancelled {
+		if latest == nil {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote cancellation result unavailable")
+		}
+		if latest.Generation != current.Generation || latest.ExecutionAttemptID != current.ExecutionAttemptID || latest.TaskRunID != current.TaskRunID {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote cancellation execution attempt changed")
+		}
+		if cancellationConfirmedForAttempt(current, latest) {
 			return nil
 		}
 		if latest.Status.IsTerminal() {
@@ -1670,8 +1788,8 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 
 func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*TaskRun, error) {
 	run, err := s.store.GetTaskRun(ctx, taskRunID)
-	if err != nil {
-		return nil, NewTaskError(ErrTaskNotFound, err.Error())
+	if err != nil || run == nil {
+		return nil, NewTaskError(ErrTaskNotFound, "任务不存在")
 	}
 
 	if !run.Status.IsTerminal() {
@@ -1683,6 +1801,9 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 	}
 	defer finish()
 	ctx = guarded
+	if run.DeadlineAt != nil && !run.DeadlineAt.After(time.Now().UTC()) {
+		return nil, NewTaskError(ErrTaskNotRetryable, "任务截止时间已过，不得重新排队")
+	}
 	_, owned := coordination.FromContext(ctx)
 	if owned && run.Status == RunStatusSucceeded {
 		return nil, NewTaskError(ErrTaskNotRetryable, "已完成的设备任务不能重复执行")
@@ -1708,14 +1829,30 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 	if idempotency == NonIdempotent {
 		return nil, NewTaskError(ErrTaskNotRetryable, "non-idempotent task cannot be retried")
 	}
+	if owned {
+		requirements, err := sourceTaskPermissionRequirements(def)
+		if err != nil {
+			return nil, err
+		}
+		for _, permission := range requirements {
+			if permission.PermissionID == "service.tool.execute" || permission.PermissionID == "event.emit" {
+				return nil, NewTaskError(ErrTaskNotRetryable, "带有外部副作用权限的设备任务不得以新的TaskRunID重试，请在原任务检查点完成效果对账后恢复")
+			}
+		}
+	}
 
 	if run.Attempt >= run.MaxAttempts {
 		return nil, NewTaskError(ErrTaskNotRetryable, "max attempts exceeded")
 	}
 
+	existing, err := s.existingRetry(ctx, run)
+	if err != nil || existing != nil {
+		return existing, err
+	}
+
 	now := time.Now().UTC()
 	newRun := &TaskRun{
-		TaskRunID:             "tr-" + uuid.NewString(),
+		TaskRunID:             retryTaskRunID(run.TaskRunID),
 		OperationID:           run.OperationID,
 		InvocationID:          run.InvocationID,
 		DefinitionFingerprint: run.DefinitionFingerprint,
@@ -1774,18 +1911,40 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 		newRun.Input = nil
 	}
 
+	created := false
 	if err := s.withManagementTaskTx(ctx, func(txCtx context.Context) error {
-		if err := s.store.PutTaskRun(txCtx, newRun); err != nil {
+		creator, supported := s.store.(RetryTaskCreationStore)
+		if !supported {
+			return NewTaskError(ErrTaskDependencyUnavailable, "重试需要持久存储原子创建能力")
+		}
+		inserted, err := creator.CreateRetryTaskRun(txCtx, newRun)
+		if err != nil {
 			return fmt.Errorf("task_runtime: persist retry run: %w", err)
+		}
+		if !inserted {
+			return nil
 		}
 		if err := s.store.EnqueueTask(txCtx, queueEntry); err != nil {
 			return fmt.Errorf("task_runtime: enqueue retry: %w", err)
 		}
-		return s.publishTaskEvent(txCtx, TaskEventQueued, newRun, "", "")
+		if err := s.publishTaskEvent(txCtx, TaskEventQueued, newRun, "", ""); err != nil {
+			return err
+		}
+		created = true
+		return nil
 	}); err != nil {
 		return nil, err
 	}
-
+	if !created {
+		existing, err := s.existingRetry(ctx, run)
+		if err != nil {
+			return nil, err
+		}
+		if existing == nil {
+			return nil, NewTaskError(ErrTaskStaleWrite, "重试身份已占用但无法读取权威任务")
+		}
+		return existing, nil
+	}
 	go s.tryDispatch()
 	return newRun, nil
 }
@@ -1795,9 +1954,20 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 	if err != nil {
 		return nil, NewTaskError(ErrTaskNotFound, err.Error())
 	}
-
+	if run == nil {
+		return nil, NewTaskError(ErrTaskNotFound, "任务不存在")
+	}
 	if run.Status != RunStatusRecoveryRequired && run.Status != RunStatusManualIntervention {
 		return nil, NewTaskError(ErrTaskStateTransitionInvalid, "task not in recovery state")
+	}
+	s.mu.RLock()
+	host := s.activeHosts[taskRunID]
+	s.mu.RUnlock()
+	if host != nil {
+		return nil, NewTaskError(ErrTaskPauseInProgress, "旧任务进程尚未退出，不能开启新的执行代次")
+	}
+	if _, active := s.sourceHosts.Load(taskRunID); active {
+		return nil, NewTaskError(ErrTaskPauseInProgress, "旧设备任务进程仍在运行，不能开启新的执行代次")
 	}
 	guarded, finish, err := s.restoreTaskAuthority(ctx, run)
 	if err != nil {
@@ -1815,53 +1985,184 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 		return nil, err
 	}
 
-	cp, _ := s.readTaskCheckpoint(ctx, run)
-	if owned && (cp == nil || run.CheckpointID == nil || cp.CheckpointID != *run.CheckpointID || cp.PayloadHash != hashBytes(cp.Payload)) {
-		return nil, NewTaskError(ErrTaskCheckpointIncompatible, "设备任务结果未知，缺少已确认检查点，拒绝从头执行")
+	if owned {
+		inspector, ok := s.config.OwnedOutcomes.(interface {
+			InspectOutcome(context.Context, *TaskRun) (*CommittedTaskOutcome, error)
+		})
+		if !ok {
+			return nil, NewTaskError(ErrTaskDependencyUnavailable, "所有者终态对账端口未就绪")
+		}
+		committed, inspectErr := inspector.InspectOutcome(ctx, run)
+		if inspectErr != nil {
+			return nil, inspectErr
+		}
+		if committed != nil {
+			return s.finalizeCommittedOwnerOutcome(ctx, run, committed)
+		}
 	}
+
+	if owned {
+		mayCallNative, permissionErr := taskMayCallNativeEffects(def)
+		if permissionErr != nil {
+			return nil, permissionErr
+		}
+		if mayCallNative {
+			inspector, ok := s.config.OwnedHost.(interface {
+				InspectPendingNativeEffects(context.Context, *TaskRun) ([]string, error)
+			})
+			if !ok || inspector == nil {
+				return nil, NewTaskError(ErrTaskDependencyUnavailable, "Owner Native执行端口缺少可信未决效果核查能力")
+			}
+			pending, inspectionErr := inspector.InspectPendingNativeEffects(ctx, run)
+			if inspectionErr != nil {
+				return nil, inspectionErr
+			}
+			if len(pending) > 0 {
+				return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "Owner仍存在未确认Native工具效果，必须先对账，禁止开启新执行代次")
+			}
+		}
+	}
+
+	if run.DeadlineAt != nil && !run.DeadlineAt.After(time.Now().UTC()) {
+		return nil, NewTaskError(ErrTaskResumeIncompatible, "任务执行期限已过")
+	}
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementCloud {
+		return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "远端云任务缺少可信停止证明，不能直接重派")
+	}
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice &&
+		(run.Generation < 1 || run.ExecutionAttemptID == "" || run.LeaseID == "" || run.ExecutionTarget.RuntimeSessionID == "" || run.ExecutionTarget.ConnectionGeneration < 1) {
+		return nil, NewTaskError(ErrTaskExecutionAttemptInvalid, "设备历史执行缺少完整原代次身份，禁止直接重派")
+	}
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice && run.LeaseExpiresAt != nil && run.LeaseExpiresAt.After(time.Now().UTC()) {
+		return nil, NewTaskError(ErrTaskPauseInProgress, "旧设备执行租约仍在有效期内，禁止开启新代次")
+	}
+	cp, err := s.readTaskCheckpoint(ctx, run)
+	if err != nil {
+		return nil, NewTaskError(ErrTaskCheckpointIncompatible, "恢复检查点读取或所有者验证失败: "+err.Error())
+	}
+
+	if cp != nil || run.CheckpointID != nil || !owned {
+		if err := validateRecoveryCheckpoint(run, def, cp, owned); err != nil {
+			return nil, err
+		}
+	}
+
+	if owned {
+		run, cp, err = s.reconcilePendingOwnerCheckpoint(ctx, run, def, cp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := validateRecoveryCheckpoint(run, def, cp, owned); err != nil {
+		return nil, err
+	}
+	if cp == nil && (def.Recoverability != RestartableFromBeginning || (def.Idempotency != Idempotent && !(def.Idempotency == "" && def.Idempotent))) {
+		return nil, NewTaskError(ErrTaskCheckpointIncompatible, "缺少检查点的任务只有在显式声明可从头恢复且具有幂等性时才能重试")
+	}
+
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice && run.ExecutionAttemptID != "" {
+		if err := s.confirmRecoveryStop(ctx, run, def, cp, owned); err != nil {
+			return nil, err
+		}
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return nil, err
+	}
+
+	resumedRun := CloneTaskRun(run)
 	if cp != nil {
-		if cp.DefinitionHash != def.DefinitionHash {
-			return nil, NewTaskError(ErrTaskCheckpointIncompatible, "definition hash mismatch")
-		}
-		if cp.InputHash != run.InputHash {
-			return nil, NewTaskError(ErrTaskCheckpointIncompatible, "input hash mismatch")
-		}
 		cpID := cp.CheckpointID
-		run.CheckpointID = &cpID
+		resumedRun.CheckpointID = &cpID
 	}
-
 	previousStatus := run.Status
-	run.Status = RunStatusQueued
+	resumedRun.Status = RunStatusQueued
 	now := time.Now().UTC()
-	run.QueuedAt = &now
-	run.Generation++
-	run.Revision = NextRevision(run.Revision)
-
-	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
-		run.ClearTransientConnectionBinding()
+	resumedRun.QueuedAt = &now
+	resumedRun.Generation++
+	resumedRun.Revision = NextRevision(run.Revision)
+	if resumedRun.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		resumedRun.ClearTransientConnectionBinding()
 	}
-
-	run.ExecutionAttemptID = ""
-	run.RuntimeInstanceID = nil
+	resumedRun.ExecutionAttemptID = ""
+	resumedRun.RuntimeInstanceID = nil
+	resumedRun.LeaseID = ""
+	resumedRun.LeaseExpiresAt, resumedRun.LastHeartbeatAt = nil, nil
 
 	if err := s.withManagementTaskTx(ctx, func(txCtx context.Context) error {
-		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, run, previousStatus, run.Generation-1, run.Revision-1)
+		if owned {
+			inspector, ok := s.config.OwnedCheckpoints.(pendingOwnerCheckpointInspector)
+			if !ok {
+				return NewTaskError(ErrTaskDependencyUnavailable, "Owner检查点恢复端口不支持最终入队核验")
+			}
+			if err := verifyOwnerRecoveryQueuePosition(txCtx, inspector, run, def, cp); err != nil {
+				return err
+			}
+		}
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, resumedRun, previousStatus, run.Generation, run.Revision)
 		if casErr != nil {
 			return fmt.Errorf("task_runtime: recover cas: %w", casErr)
 		}
 		if !ok {
 			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry recover")
 		}
-		if err := s.queue.Enqueue(txCtx, run); err != nil {
+		if err := s.queue.Enqueue(txCtx, resumedRun); err != nil {
 			return err
 		}
-		return s.publishTaskEvent(txCtx, TaskEventQueued, run, "", "")
+		return s.publishTaskEvent(txCtx, TaskEventQueued, resumedRun, "", "")
 	}); err != nil {
 		return nil, err
 	}
 
 	go s.tryDispatch()
-	return run, nil
+	return resumedRun, nil
+}
+
+func (s *TaskRuntimeService) confirmRecoveryStop(ctx context.Context, run *TaskRun, def *TaskDefinition, checkpoint *TaskCheckpoint, owned bool) error {
+	owner, hasOwner := coordination.FromContext(ctx)
+	if !owned || !hasOwner || !owner.Coordinated || run == nil || def == nil ||
+		owner.SpaceID != run.ExecutionTarget.SpaceID.String() || owner.TargetDeviceID != run.ExecutionTarget.DeviceID.String() {
+		return NewTaskError(ErrTaskScopeDenied, "设备任务恢复必须绑定原所有者和设备执行范围")
+	}
+	if err := coordination.ValidateCurrent(ctx); err != nil {
+		return err
+	}
+
+	allowReplay := owned && checkpoint != nil && run.CheckpointID != nil && *run.CheckpointID == checkpoint.CheckpointID &&
+		def.Recoverability == CheckpointRecoverable && def.Checkpoint &&
+		(def.Idempotency == Idempotent || (def.Idempotency == "" && def.Idempotent))
+	if !allowReplay {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "设备任务缺少 Owner 确认检查点和显式幂等恢复保证，禁止重新执行")
+	}
+	verifier, supported := s.remoteExecutor.(interface {
+		ConfirmStoppedAttempt(context.Context, *TaskRun) bool
+	})
+	if supported && verifier.ConfirmStoppedAttempt(ctx, run) {
+		return nil
+	}
+	inspector, supported := s.remoteExecutor.(interface {
+		InspectExecutionJournal(context.Context, *TaskRun) (executionjournal.Inspection, error)
+	})
+	if !supported {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "原设备执行缺少可验证的停止证明，不能开启新执行代次")
+	}
+	inspection, err := inspector.InspectExecutionJournal(ctx, run)
+	if err != nil {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "设备历史执行状态无法可信核对，禁止恢复")
+	}
+	switch inspection.State {
+	case "stopped_performed":
+		return nil
+	case "stopped_unknown":
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "设备已停止但副作用结果不明，必须先对账")
+	case "performed", "completed":
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "设备已有执行返回但缺少可信停止和 Owner 结果确认")
+	case "started":
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "设备历史执行仍可能在运行，禁止重复派发")
+	case "absent":
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "设备未发现历史记录不等于任务未产生副作用")
+	default:
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "设备返回未知执行状态，禁止恢复")
+	}
 }
 
 func (s *TaskRuntimeService) GetTaskRun(ctx context.Context, taskRunID string) (*TaskRun, error) {
@@ -1959,6 +2260,9 @@ func (s *TaskRuntimeService) StartupRecovery(ctx context.Context) error {
 }
 
 func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error {
+	if run == nil {
+		return NewTaskError(ErrTaskNotFound, "恢复任务不存在")
+	}
 	if run.ScopeSnapshotID != "" {
 		if run.Status == RunStatusPaused && run.PausedAt != nil && run.CheckpointID != nil && *run.CheckpointID != "" && run.Generation > 0 && run.ExecutionAttemptID != "" && run.LeaseID != "" && run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice && run.ExecutionTarget.RuntimeSessionID != "" && run.ExecutionTarget.ConnectionGeneration > 0 {
 			return nil
@@ -1966,7 +2270,7 @@ func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error
 		return s.markTaskRecoveryUnknown(ctx, run)
 	}
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
-	if err != nil {
+	if err != nil || def == nil {
 		run.Status = RunStatusManualIntervention
 		msg := "definition not found during recovery"
 		run.ErrorMessage = &msg
@@ -1981,7 +2285,6 @@ func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error
 			recoverability = NotRecoverable
 		}
 	}
-
 	idempotency := def.Idempotency
 	if idempotency == "" {
 		if def.Idempotent {
@@ -1991,11 +2294,23 @@ func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error
 		}
 	}
 
+	var cp *TaskCheckpoint
+	if recoverability == CheckpointRecoverable || run.CheckpointID != nil || run.Status == RunStatusPaused {
+		cp, err = s.readTaskCheckpoint(ctx, run)
+		if err != nil {
+			return fmt.Errorf("task_runtime: startup checkpoint read %s: %w", run.TaskRunID, err)
+		}
+	}
+	checkpointValid := cp != nil && validateRecoveryCheckpoint(run, def, cp, false) == nil
+	if run.Status == RunStatusPaused && run.PausedAt != nil && run.EffectiveExecutionPlacement() == TaskExecutionPlacementLocal && checkpointValid && run.CheckpointID != nil {
+
+		return nil
+	}
+
 	var enqueueNeeded bool
 	switch recoverability {
 	case CheckpointRecoverable:
-		cp, _ := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
-		if cp != nil && cp.DefinitionHash == def.DefinitionHash && cp.InputHash == run.InputHash {
+		if checkpointValid {
 			cpID := cp.CheckpointID
 			run.CheckpointID = &cpID
 			run.Status = RunStatusRecoveryRequired
@@ -2003,7 +2318,10 @@ func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error
 			run.Status = RunStatusManualIntervention
 		}
 	case RestartableFromBeginning:
-		if idempotency == Idempotent {
+
+		if run.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
+			run.Status = RunStatusRecoveryRequired
+		} else if idempotency == Idempotent && run.CheckpointID == nil {
 			run.Status = RunStatusQueued
 			now := time.Now().UTC()
 			run.QueuedAt = &now
@@ -2047,20 +2365,85 @@ func (s *TaskRuntimeService) leaseReclaimLoop() {
 	}
 }
 
+func (s *TaskRuntimeService) taskWorkspacePath(taskRunID string) (string, error) {
+	if len(taskRunID) == 0 || len(taskRunID) > 128 || taskRunID == "." || taskRunID == ".." {
+		return "", NewTaskError(ErrTaskInputInvalid, "任务工作目录标识无效")
+	}
+	for _, c := range taskRunID {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-' {
+			continue
+		}
+		return "", NewTaskError(ErrTaskInputInvalid, "任务工作目录标识包含非法字符")
+	}
+	base, err := hostWorkspaceRoot(runtimeprofile.CurrentProcessProfile(), s.config.WorkspaceRoot)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, "task-workspace-"+taskRunID), nil
+}
+
+func (s *TaskRuntimeService) validateTaskWorkspaceRoot(create bool) error {
+	root, err := hostWorkspaceRoot(runtimeprofile.CurrentProcessProfile(), s.config.WorkspaceRoot)
+	if err != nil {
+		return err
+	}
+	strict := runtimeprofile.CurrentProcessProfile() == runtimeprofile.ProfileCloudCore
+	if strict {
+
+		if err := verifyExistingWorkspaceAncestors(root); err != nil {
+			return err
+		}
+	}
+	if create {
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return err
+		}
+	}
+	return verifyWorkspaceRoot(root, strict)
+}
+
 func (s *TaskRuntimeService) cleanupWorkspace(taskRunID, workspace string) {
+	expected, err := s.taskWorkspacePath(taskRunID)
+	if err != nil || workspace != expected {
+		log.Printf("task_runtime: refuse unsafe workspace cleanup for %q", taskRunID)
+		return
+	}
+	if err := s.validateTaskWorkspaceRoot(false); err != nil {
+		log.Printf("task_runtime: refuse workspace cleanup through invalid root for %q: %v", taskRunID, err)
+		return
+	}
+
+	info, err := os.Lstat(workspace)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+		log.Printf("task_runtime: refuse cleanup of non-private workspace %q: %v", workspace, err)
+		return
+	}
 	if err := os.RemoveAll(workspace); err != nil {
 		log.Printf("task_runtime: cleanup workspace failed for %s: %v", taskRunID, err)
 	}
 }
 
 func (s *TaskRuntimeService) createTaskWorkspace(taskRunID string) (string, error) {
-	base := s.config.WorkspaceRoot
-	if base == "" {
-		base = os.TempDir()
+	workspace, err := s.taskWorkspacePath(taskRunID)
+	if err != nil {
+		return "", err
 	}
-	workspace := filepath.Join(base, "task-workspace-"+taskRunID)
+	if err := s.validateTaskWorkspaceRoot(true); err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(workspace, 0o700); err != nil {
 		return "", err
+	}
+
+	info, err := os.Lstat(workspace)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+		return "", NewTaskError(ErrTaskScopeDenied, "任务工作目录不是私有真实目录")
 	}
 	return workspace, nil
 }

@@ -4,9 +4,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="data-management-panel">
-    <h2>数据管理</h2>
-    <p class="page-summary">按范围预检、导出和恢复数据，导入前展示组件与冲突。</p>
-
     <el-card shadow="never" class="section-card">
       <template #header><span>存储概览</span></template>
       <div v-if="storageLoading" class="storage-loading"><el-icon class="is-loading" size="20"><Loading /></el-icon></div>

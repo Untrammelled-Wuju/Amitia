@@ -1092,6 +1092,7 @@ func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
+	applyWebUIResourceCORS(w, r)
 	segs := splitPath(r.URL.Path)
 	if len(segs) < 6 {
 		writeError(w, http.StatusNotFound, "not_found", "session id and resource path required")
@@ -1163,6 +1164,14 @@ func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
+}
+
+func applyWebUIResourceCORS(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Origin") != "null" {
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Add("Vary", "Origin")
 }
 
 func (h *HTTPHandler) resolveExtensionBasePath(extensionID string) string {

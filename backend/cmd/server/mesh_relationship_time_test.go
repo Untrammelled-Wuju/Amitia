@@ -55,7 +55,7 @@ func TestRelationshipTimeRealTLSOwnerModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	core.request(t, phone, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, core, phone, policy.ModeRevision)
 	core.request(t, phone, http.MethodPut, path, payload, 409)
 	before := read()
 	if before["ownerId"] != core.core || before["state"].(map[string]any)["interactionCount"] != float64(0) || before["settings"].(map[string]any)["maxMentionSentences"] != float64(1) {

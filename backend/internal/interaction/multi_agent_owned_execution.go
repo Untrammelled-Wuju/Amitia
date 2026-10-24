@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 )
 
@@ -50,10 +51,26 @@ func (c *MultiAgentCoordinator) parentCancellationRequested(ctx context.Context,
 	if !found || parent == nil {
 		return false, ErrInteractionNotFound
 	}
-	return !parent.CancelRequestedAt.IsZero() || parent.Status == InteractionStatusCancelled || parent.Status == InteractionStatusSuperseded || parent.Status == InteractionStatusInterrupted, nil
+	if parent.Status == InteractionStatusPausing || parent.Status == InteractionStatusPaused {
+		return false, errors.New("multi_agent: parent interaction is paused; worker execution is not authorized")
+	}
+	return !parent.CancelRequestedAt.IsZero() || parent.IsTerminal(), nil
 }
 
 func (c *MultiAgentCoordinator) requireDispatchableParent(ctx context.Context, ac *activeCoordination) error {
+	if c == nil || c.goals == nil || ac == nil {
+		return errors.New("multi_agent: parent goal registry unavailable")
+	}
+	goal, found := c.goals.Get(ac.parentGoalID)
+	if !found || goal.Revision != ac.parentGoalRev {
+		return errors.New("multi_agent: parent goal missing or revision changed")
+	}
+	if err := validateDispatchableGoalStatus(goal.Status); err != nil {
+		return err
+	}
+	if err := validateCoordinationTimeBudget(c.clock.Now(), goal.ExpiresAt, ac.deadlineAt); err != nil {
+		return err
+	}
 	cancelled, err := c.parentCancellationRequested(ctx, ac)
 	if err != nil {
 		return err
@@ -78,4 +95,11 @@ func (c *MultiAgentCoordinator) stopRevokedOwnedCoordination(ctx context.Context
 	}
 	c.mu.Unlock()
 	return errors.Join(cause, c.Cancel(stopContext, string(ac.id)))
+}
+
+func validateDispatchableGoalStatus(status decision.GoalStatus) error {
+	if status != decision.GoalStatusActive && status != decision.GoalStatusPending {
+		return errors.New("multi_agent: parent goal is not active for worker dispatch: " + string(status))
+	}
+	return nil
 }

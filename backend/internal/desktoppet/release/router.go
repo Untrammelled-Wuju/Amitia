@@ -9,9 +9,6 @@ func RegisterRoutes(r *gin.RouterGroup, svc ReleaseService, guard security.Owner
 	handler := NewHandler(svc, guard)
 	g := r.Group("/desktop-pets/releases")
 	{
-		g.POST("/build", handler.BuildRelease)
-		g.GET("/operations/:operationId", handler.GetBuildOperation)
-		g.POST("/operations/:operationId/cancel", handler.CancelBuildOperation)
 		g.GET("", handler.ListReleases)
 		g.GET("/pet/:petId", handler.ListReleasesForPet)
 		g.GET("/:releaseId", handler.GetRelease)

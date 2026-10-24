@@ -138,7 +138,7 @@ func TestWorkerExecutionRejectsRevocationAndCancellation(t *testing.T) {
 	t.Run("permission-changed-during-execution", func(t *testing.T) {
 		engine, service, _, parent, _, _ := ownedWorkerFixture(t)
 		err := engine.WithExecutionScope(t.Context(), parent, func(ctx context.Context) error {
-			_, err := service.ChangeMode(ctx, "core", "a", 1, true, "role")
+			_, err := service.InitializeCoordinated(ctx, "core", "a", 1, "role")
 			return err
 		})
 		if !errors.Is(err, coordination.ErrScopeExpired) {

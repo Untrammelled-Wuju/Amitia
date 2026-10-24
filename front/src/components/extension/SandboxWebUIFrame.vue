@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, computed } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
+import { resolveApiUrl } from "@/runtime/runtime-adapter";
 import { amitiaStyleBridgePayload } from "@/ui-runtime/pluginStyleBridge";
 import { normalizeStylePageId } from "@/ui-runtime/stylePage";
 import { styleRevision, styleRules, type StyleScope } from "@/ui-runtime/styleProfile";
@@ -126,14 +127,25 @@ let activeSessionKey = "";
 let restartToken = 0;
 let restartPromise: Promise<void> | null = null;
 
-function applySession(data: SandboxSessionRecord, cacheKey: string) {
+async function resolveResourceURL(raw: string): Promise<string> {
+  const value = raw.trim();
+  if (!value) return "";
+  try {
+    return new URL(value).toString();
+  } catch {
+    return resolveApiUrl(value);
+  }
+}
+
+async function applySession(data: SandboxSessionRecord, cacheKey: string) {
+  const resolvedResourceURL = await resolveResourceURL(data.resourceUrl);
   sessionId.value = data.sessionId;
   sessionGeneration.value = data.generation;
   sessionNonce.value = data.nonce;
   sessionToken.value = data.token;
   sessionOrigin.value = data.origin;
   sessionCSP.value = data.csp;
-  resourceUrl.value = data.resourceUrl;
+  resourceUrl.value = resolvedResourceURL;
   serverCapabilities = data.capabilities;
   serverGrantedPerms = data.grantedPerms;
   serverGrantedScopes = data.grantedScopes;
@@ -160,7 +172,7 @@ async function createSession(expectedToken: number) {
           releaseSandboxSessionClaim(cacheKey);
           return;
         }
-        applySession({
+        await applySession({
           ...cached,
           generation: typeof info.data?.generation === "number" ? info.data.generation : cached.generation,
         }, cacheKey);
@@ -168,7 +180,7 @@ async function createSession(expectedToken: number) {
         return;
       } catch (e) {
         if (!isSandboxSessionMissingError(e)) {
-          applySession(cached, cacheKey);
+          await applySession(cached, cacheKey);
           loading.value = false;
           return;
         }
@@ -187,7 +199,7 @@ async function createSession(expectedToken: number) {
       releaseSandboxSessionClaim(cacheKey);
       return;
     }
-    applySession(data, cacheKey);
+    await applySession(data, cacheKey);
   } catch (e) {
     if (expectedToken !== restartToken) {
       releaseSandboxSessionClaim(sessionCacheKey.value);

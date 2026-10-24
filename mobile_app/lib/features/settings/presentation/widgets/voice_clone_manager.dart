@@ -363,7 +363,7 @@ class _VoiceCloneManagerState extends ConsumerState<VoiceCloneManager> {
           ),
           const SizedBox(height: 4),
           Text(
-            '音色元数据由 Core 统一保存，云端模式下可在不同设备之间保持一致。',
+            '音色元数据由 Core 统一保存，云端统筹模式下可在不同设备之间保持一致。',
             style: AppTypography.caption(context),
           ),
           SizedBox(height: AppSpacing.md),

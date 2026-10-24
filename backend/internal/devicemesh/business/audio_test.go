@@ -67,7 +67,7 @@ func TestOwnedAudioConfirmsOriginalAndTranscriptionBeforeReplyAndMemory(t *testi
 			engine, db, service, model := engineHarness(t)
 			owner := "a"
 			if coordinated {
-				if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 				owner = "core"
@@ -126,7 +126,7 @@ func TestOwnedAudioRejectsReplyAfterASRFailureOrCoreCutover(t *testing.T) {
 				if !change {
 					return "", errors.New("provider unavailable")
 				}
-				if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+				if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 					t.Fatal(err)
 				}
 				return "late transcription", nil

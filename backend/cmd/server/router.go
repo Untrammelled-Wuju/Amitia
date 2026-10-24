@@ -21,15 +21,11 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/delivery"
-	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/doctor"
-	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
-	"github.com/u-ai/backend/internal/desktoppet/processing"
-	"github.com/u-ai/backend/internal/desktoppet/quality"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
@@ -257,7 +253,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}); err != nil {
 			return nil, fmt.Errorf("register local mesh identity: %w", err)
 		}
-		if err := services.DeviceMesh.Coordination.InitializeCoreConsole(context.Background(), spaceID, localMeshIdentity.DeviceID.String()); err != nil {
+		if err := services.DeviceMesh.Coordination.InitializeCoreConsole(context.Background(), spaceID, localMeshIdentity.DeviceID.String(), services.RuntimeProfile == runtimeprofile.ProfileCloudCore); err != nil {
 			return nil, fmt.Errorf("initialize Core console ownership: %w", err)
 		}
 	}
@@ -599,7 +595,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
-		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx, services.PathRegistry)
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, services.Readiness)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
@@ -617,7 +612,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			workbenchbrowser.NewHandler(services.Browser).RegisterRoutes(apiGroup)
 		}
 		if services.WorkbenchTaskTracker != nil {
-			workbenchtasks.NewHandler(services.WorkbenchTaskTracker, services.MultiAgentCoordinator).WithConversationAccess(workbenchConversationAccess(services, spaceID)).RegisterRoutes(apiGroup)
+			workbenchtasks.NewHandler(services.WorkbenchTaskTracker, services.MultiAgentCoordinator).WithBudgetInspection(services.ModelUsage).WithConversationAccess(workbenchConversationAccess(services, spaceID)).RegisterRoutes(apiGroup)
 		}
 		if services.WorkspaceService != nil {
 			workspace.NewHandler(services.WorkspaceService).RegisterRoutes(apiGroup)
@@ -797,13 +792,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				PairingSvc:                pairingSvc,
 				Coordination:              services.DeviceMesh.Coordination,
 				BusinessCoordinationReady: services.DeviceMesh.BusinessCoordinationReady,
+				Coordinated:               services.RuntimeProfile == runtimeprofile.ProfileCloudCore,
 				ProviderPath:              services.DeviceMesh.LocalHandler.ProviderPath,
 				Successor: func(ctx context.Context, device string) (any, error) {
-					policy, err := services.DeviceMesh.Coordination.Get(ctx, spaceID, device)
-					if err != nil {
-						return nil, err
-					}
-					result, err := services.DeviceMesh.LocalHandler.PrepareSuccessor(ctx, device, policy.Coordinated)
+					result, err := services.DeviceMesh.LocalHandler.PrepareSuccessor(ctx, device)
 					if result == nil {
 						return nil, err
 					}
@@ -982,10 +974,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}
 		}
 
-		if err := registerCloudDesktopPetGenerationBridge(r, ctx, services, webAccessSvc); err != nil {
-			return nil, err
-		}
-
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
 			tryRegisterAndroidBridge(services.NativeBridgeRelay, bootstrap)
 			tryRegisterIOSBridge(services.NativeBridgeRelay, bootstrap)
@@ -1015,10 +1003,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		desktopPetWriteGroup := r.Group("/api")
 		desktopPetWriteGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
 		desktopPetWriteGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
-		desktoppet.RegisterDesktopPetWriteRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
-		processing.RegisterProcessingRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
-		editing.RegisterEditingRouterWithService(desktopPetWriteGroup, services.EditingService, services.OwnershipGuard, services.PathRegistry)
-		quality.RegisterQualityRouter(desktopPetWriteGroup, services.QualityService, services.OwnershipGuard)
 		installation.RegisterRoutes(desktopPetWriteGroup, services.InstallationCoordinator, services.InstallationRepo, services.OwnershipGuard)
 		release.RegisterRoutes(desktopPetWriteGroup, services.NewReleaseService, services.OwnershipGuard)
 		registerImportStagingRoutes(desktopPetWriteGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)

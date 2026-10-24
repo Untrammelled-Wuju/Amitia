@@ -44,7 +44,7 @@ func BeginDeviceManagementIntent(c *gin.Context, service *coordination.Service) 
 		}
 	}
 	if policy.DeviceID != actor.DeviceID.String() || policy.ProviderEpoch < 1 || policy.ModeRevision < 1 || policy.PermissionRevision < 1 || expectedPolicy != fmt.Sprintf("%d:%d:%d", policy.ProviderEpoch, policy.ModeRevision, policy.PermissionRevision) {
-		return reject("Core、统筹模式或权限已变化，请重新加载")
+		return reject("Core、数据归属或权限已变化，请重新加载")
 	}
 	ctx, scope, finish, err := service.Begin(c.Request.Context(), actor.SpaceID.String(), actor.DeviceID.String(), "", actor.SpaceID.String(), "", actor.RequestID)
 	if err != nil {

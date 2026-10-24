@@ -154,10 +154,14 @@ type MultiAgentRecoveryRef struct {
 	ParentGoalConversationID string                         `json:"parentGoalConversationId,omitempty"`
 	ParentGoalDescription    string                         `json:"parentGoalDescription,omitempty"`
 	Status                   string                         `json:"status"`
+	CancelRequested          bool                           `json:"cancelRequested,omitempty"`
 	Strategy                 CoordinationStrategy           `json:"strategy,omitempty"`
 	CompletionPlan           CoordinationCompletionPolicy   `json:"completionPlan,omitempty"`
 	Depth                    int                            `json:"depth,omitempty"`
 	DeadlineAt               *time.Time                     `json:"deadlineAt,omitempty"`
+	MaxToolCalls             *int                           `json:"maxToolCalls,omitempty"`
+	MaxTotalTokens           *int64                         `json:"maxTotalTokens,omitempty"`
+	MaxCostMicroUSD          *int64                         `json:"maxCostMicroUsd,omitempty"`
 	WorkspaceID              string                         `json:"workspaceId,omitempty"`
 	PermissionMode           string                         `json:"permissionMode,omitempty"`
 	WorkspaceDeviceID        string                         `json:"workspaceDeviceId,omitempty"`
@@ -348,6 +352,9 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 			writeKV("multiAgent.parentGoalDescription", d.MultiAgent.ParentGoalDescription)
 		}
 		writeKV("multiAgent.status", d.MultiAgent.Status)
+		if d.MultiAgent.CancelRequested {
+			writeKV("multiAgent.cancelRequested", "true")
+		}
 		if d.MultiAgent.Strategy != "" {
 			writeKV("multiAgent.strategy", string(d.MultiAgent.Strategy))
 		}
@@ -356,6 +363,15 @@ func (d *RecoveryDescriptor) ComputeFingerprint() {
 		}
 		if d.MultiAgent.Depth != 0 {
 			writeKVI("multiAgent.depth", int64(d.MultiAgent.Depth))
+		}
+		if d.MultiAgent.MaxToolCalls != nil {
+			writeKVI("multiAgent.maxToolCalls", int64(*d.MultiAgent.MaxToolCalls))
+		}
+		if d.MultiAgent.MaxTotalTokens != nil {
+			writeKVI("multiAgent.maxTotalTokens", *d.MultiAgent.MaxTotalTokens)
+		}
+		if d.MultiAgent.MaxCostMicroUSD != nil {
+			writeKVI("multiAgent.maxCostMicroUsd", *d.MultiAgent.MaxCostMicroUSD)
 		}
 		if d.MultiAgent.DeadlineAt != nil {
 			writeKV("multiAgent.deadlineAt", d.MultiAgent.DeadlineAt.UTC().Format(time.RFC3339Nano))

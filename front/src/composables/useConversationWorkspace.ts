@@ -38,14 +38,14 @@ function projectToMount(project: ProjectItem): WorkspaceMountSummary {
   const workspaces = Array.isArray(project.workspaces) ? project.workspaces : [];
   const primary = workspaces.find((workspace) => workspace.id === project.primaryWorkspaceId) || workspaces[0];
   return {
-    id: primary?.id || project.workspaceId,
+    id: primary?.id || project.id,
     projectId: project.id,
     name: project.name,
     kind: primary?.kind || (primary?.rootUri.startsWith("content://") ? "saf" : "local"),
-    rootUri: primary?.rootUri || project.rootUri,
+    rootUri: primary?.rootUri || project.rootUri || "",
     executionScope: project.executionScope,
     readOnly: project.readOnly || primary?.readOnly === true,
-    available: project.available && workspaces.length > 0 && !project.readOnly,
+    available: project.available && !project.readOnly,
     status: project.status,
     statusReason: project.statusReason,
   };
@@ -56,13 +56,13 @@ function projectToBinding(project: ProjectItem): ConversationWorkspaceBinding {
   const primary = workspaces.find((workspace) => workspace.id === project.primaryWorkspaceId) || workspaces[0];
   return {
     projectId: project.id,
-    workspaceId: primary?.id || project.workspaceId,
-    primaryWorkspaceId: primary?.id || project.primaryWorkspaceId,
+    workspaceId: primary?.id || project.workspaceId || project.id,
+    primaryWorkspaceId: primary?.id || project.primaryWorkspaceId || "",
     workspaces,
     deviceId: primary?.deviceId || project.deviceId || undefined,
     workspaceName: project.name,
     workspaceKind: primary?.kind || "local",
-    rootUri: primary?.rootUri || project.rootUri,
+    rootUri: primary?.rootUri || project.rootUri || "",
     executionScope: project.executionScope,
   };
 }
@@ -97,15 +97,56 @@ export function useConversationWorkspace() {
     return mount;
   }
 
-  async function moveConversationToProject(project: ProjectItem): Promise<void> {
-    const conversationId = activeConversationId.value.trim();
-    if (conversationId) throw new Error("现有对话不能手动移入或移出项目");
-    chatStore.currentProjectId = project.id;
-    currentWorkspace.value = projectToBinding(project);
+  function projectWorkspaceFromMount(mount: any): ProjectWorkspace {
+    const rootUri = String(mount.rootUri || "");
+    return {
+      id: String(mount.id),
+      deviceId: chatStore.projectIntent?.targetDeviceId || String(mount.deviceId || ""),
+      name: String(mount.name || "文件夹"),
+      kind: rootUri.startsWith("content://") ? "saf" : String(mount.kind || "local"),
+      rootUri,
+    };
   }
 
-  async function bindCurrentWorkspaceToConversation(conversationId: string): Promise<void> {
-    if (String(conversationId || "").trim()) throw new Error("现有对话不能手动移入或移出项目");
+  async function pickProjectWorkspace(): Promise<ProjectWorkspace | null> {
+    const mount = await pickWorkspaceMount();
+    return mount ? projectWorkspaceFromMount(mount) : null;
+  }
+
+  async function registerProjectWorkspaces(paths: string[]): Promise<ProjectWorkspace[]> {
+    const uniquePaths = [...new Set(paths.map((path) => String(path || "").trim()).filter(Boolean))];
+    const workspaces: ProjectWorkspace[] = [];
+    for (const path of uniquePaths) {
+      const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "文件夹";
+      const mount = await post<any>("/api/workspaces/local", { name, localRoot: path, readOnly: false });
+      if (!mount?.id || !mount?.rootUri) throw new Error(`文件夹注册失败：${name}`);
+      workspaces.push(projectWorkspaceFromMount(mount));
+    }
+    return workspaces;
+  }
+
+  async function createProjectFromWorkspaces(name: string, workspaces: ProjectWorkspace[]): Promise<ProjectItem> {
+    const title = String(name || "").trim();
+    const uniqueWorkspaces = workspaces.filter((workspace, index) =>
+      Boolean(workspace.id && workspace.rootUri)
+      && workspaces.findIndex((item) => item.id === workspace.id) === index,
+    );
+    if (!uniqueWorkspaces.length) throw new Error("请选择一个文件夹");
+    if (!title) throw new Error("项目名称不能为空");
+    const project = await chatStore.createProject({
+      name: title,
+      workspaces: uniqueWorkspaces,
+      primaryWorkspaceId: uniqueWorkspaces[0].id,
+    });
+    await refreshRecentWorkspaces();
+    return project;
+  }
+
+  async function moveConversationToProject(project: ProjectItem): Promise<void> {
+    const conversationId = activeConversationId.value.trim();
+    if (conversationId) await chatStore.moveConversation(conversationId, project.id);
+    chatStore.currentProjectId = project.id;
+    currentWorkspace.value = projectToBinding(project);
   }
 
   async function selectWorkspaceMount(mount: WorkspaceMountSummary): Promise<void> {
@@ -114,9 +155,9 @@ export function useConversationWorkspace() {
     }
     workspaceLoading.value = true;
     try {
-      const project = findProjectByWorkspace(chatStore.sidebar.projects, mount.id);
+      const project = chatStore.sidebar.projects.find((item) => item.id === mount.projectId)
+        || findProjectByWorkspace(chatStore.sidebar.projects, mount.id);
       if (!project) throw new Error("项目不存在");
-      if (activeConversationId.value.trim()) throw new Error("现有对话不能手动切换项目");
       await moveConversationToProject(project);
       await refreshRecentWorkspaces();
     } finally {
@@ -141,10 +182,10 @@ export function useConversationWorkspace() {
           workspaceId: mount.id,
           deviceId: chatStore.projectIntent?.targetDeviceId,
           rootUri: mount.rootUri,
-          workspaces: [{ id: mount.id, deviceId: chatStore.projectIntent?.targetDeviceId || "", name: mount.name || "项目", kind: mount.rootUri?.startsWith("content://") ? "saf" : "local", rootUri: mount.rootUri }],
+          workspaces: [projectWorkspaceFromMount(mount)],
           primaryWorkspaceId: mount.id,
         });
-      if (!activeConversationId.value.trim()) await moveConversationToProject(project);
+      await moveConversationToProject(project);
       await refreshRecentWorkspaces();
       return project;
     } catch (error) {
@@ -160,7 +201,7 @@ export function useConversationWorkspace() {
     const conversationId = activeConversationId.value.trim();
     workspaceLoading.value = true;
     try {
-      if (conversationId) throw new Error("现有对话不能手动移出项目");
+      if (conversationId) await chatStore.moveConversation(conversationId, "");
       currentWorkspace.value = null;
       chatStore.currentProjectId = "";
       await refreshRecentWorkspaces();
@@ -182,7 +223,7 @@ export function useConversationWorkspace() {
     const project = chatStore.sidebar.projects.find(
       (item) => item.id === normalizedProjectId,
     );
-    if (!project || project.readOnly || project.hiddenAt || !(project.workspaces || []).length) throw new Error("项目不存在、已移除或工作区不可用");
+    if (!project || project.readOnly || project.hiddenAt) throw new Error("项目不存在或已移除");
     currentWorkspace.value = projectToBinding(project);
     chatStore.currentProjectId = project.id;
     return project;
@@ -206,7 +247,7 @@ export function useConversationWorkspace() {
     conversationProjectId = "",
   ): void {
       chatStore.currentProjectId = String(conversationProjectId || "").trim();
-      const project = chatStore.sidebar.projects.find((row) => row.id === chatStore.currentProjectId);
+      const project = [...chatStore.sidebar.projects, ...(chatStore.sidebar.removedProjects || [])].find((row) => row.id === chatStore.currentProjectId);
       currentWorkspace.value = project ? projectToBinding(project) : null;
       return;
   }
@@ -224,15 +265,16 @@ export function useConversationWorkspace() {
     const mount = await pickWorkspaceMount();
     if (!mount) return null;
     if ((project.workspaces || []).some((workspace) => workspace.id === mount.id)) throw new Error("该工作区已经属于当前项目");
-    const workspace: ProjectWorkspace = { id: mount.id, deviceId: chatStore.projectIntent?.targetDeviceId || "", name: mount.name || "工作区", kind: mount.rootUri?.startsWith("content://") ? "saf" : "local", rootUri: mount.rootUri };
-    await chatStore.updateProject(project.id, { workspaces: [...(project.workspaces || []), workspace] }, project);
+    const workspace = projectWorkspaceFromMount(mount);
+    const workspaces = [...(project.workspaces || []), workspace];
+    const primaryWorkspaceId = project.primaryWorkspaceId || workspaces[0].id;
+    await chatStore.updateProject(project.id, { workspaces, primaryWorkspaceId }, project);
     return workspace;
   }
 
   async function removeWorkspaceFromProject(project: ProjectItem, workspaceId: string): Promise<void> {
-    if ((project.workspaces || []).length <= 1) throw new Error("项目至少需要保留一个工作区");
     const workspaces = (project.workspaces || []).filter((workspace) => workspace.id !== workspaceId);
-    const primaryWorkspaceId = project.primaryWorkspaceId === workspaceId ? workspaces[0].id : project.primaryWorkspaceId;
+    const primaryWorkspaceId = project.primaryWorkspaceId === workspaceId ? (workspaces[0]?.id || "") : project.primaryWorkspaceId;
     await chatStore.updateProject(project.id, { workspaces, primaryWorkspaceId }, project);
   }
 
@@ -251,9 +293,11 @@ export function useConversationWorkspace() {
     applySnapshotWorkspace,
     startDraftConversation,
     chooseWorkspaceDirectory,
+    pickProjectWorkspace,
+    registerProjectWorkspaces,
+    createProjectFromWorkspaces,
     selectWorkspaceMount,
     clearWorkspace,
-    bindCurrentWorkspaceToConversation,
     getWorkspaceRequestFields,
     addWorkspaceToProject,
     removeWorkspaceFromProject,

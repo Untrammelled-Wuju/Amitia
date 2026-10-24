@@ -57,13 +57,14 @@ type Offer struct {
 }
 
 type ClaimRequest struct {
-	OfferToken string
-	SetupCode  string
-	DeviceID   runtimeidentity.DeviceID
-	RuntimeID  runtimeidentity.RuntimeID
-	Platform   runtimeidentity.Platform
-	Label      string
-	Proof      *proof.Proof
+	OfferToken  string
+	SetupCode   string
+	DeviceID    runtimeidentity.DeviceID
+	RuntimeID   runtimeidentity.RuntimeID
+	Platform    runtimeidentity.Platform
+	Label       string
+	Proof       *proof.Proof
+	Coordinated bool
 }
 
 type ClaimResult struct {
@@ -125,19 +126,11 @@ func (s *Service) CreateOffer(ctx context.Context, creator runtimeidentity.Devic
 	return s.createOffer(ctx, creator, ttl, required, "")
 }
 
-func (s *Service) CreateSuccessorOffer(ctx context.Context, creator, target runtimeidentity.DeviceID, coordinated ...bool) (*Offer, string, error) {
+func (s *Service) CreateSuccessorOffer(ctx context.Context, creator, target runtimeidentity.DeviceID) (*Offer, string, error) {
 	if target == "" || target == creator || len(target.String()) > 512 {
 		return nil, "", ErrSelfPairing
 	}
-	offer, token, err := s.createOffer(ctx, creator, DefaultOfferTTL, true, target.String())
-	if err != nil {
-		return nil, "", err
-	}
-	enabled := len(coordinated) > 0 && coordinated[0]
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO kernel_device_pairing_successor_modes(offer_id,coordinated) VALUES(?,?)`, offer.OfferID, enabled); err != nil {
-		return nil, "", err
-	}
-	return offer, token, nil
+	return s.createOffer(ctx, creator, DefaultOfferTTL, true, target.String())
 }
 
 func (s *Service) createOffer(ctx context.Context, creator runtimeidentity.DeviceID, ttl time.Duration, required bool, target string) (*Offer, string, error) {
@@ -274,14 +267,9 @@ func (s *Service) Claim(ctx context.Context, req ClaimRequest) (*ClaimResult, er
 			}
 			return &ClaimResult{Pending: pending}, nil
 		}
-		var coordinated bool
-		if err := tx.QueryRowContext(ctx, `SELECT coordinated FROM kernel_device_pairing_successor_modes WHERE offer_id=?`, offerID).Scan(&coordinated); err == nil {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated) VALUES(?,?,?) ON CONFLICT(space_id,device_id) DO UPDATE SET coordinated=excluded.coordinated,administrator=0,mode_revision=mode_revision+1,permission_revision=permission_revision+1,selected_role=''`, s.spaceID.String(), req.DeviceID.String(), coordinated); err != nil {
-				return nil, err
-			}
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO kernel_device_coordination(space_id,device_id,coordinated) VALUES(?,?,?) ON CONFLICT(space_id,device_id) DO UPDATE SET coordinated=excluded.coordinated,administrator=0,mode_revision=mode_revision+1,permission_revision=permission_revision+1,selected_role=''`, s.spaceID.String(), req.DeviceID.String(), req.Coordinated); err != nil {
+		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_mesh_bootstrap_tickets SET status='revoked', updated_at=?
 		WHERE space_id=? AND device_id=? AND status='active'`, now.Format(time.RFC3339Nano), s.spaceID.String(), req.DeviceID.String()); err != nil {
@@ -431,7 +419,6 @@ func (s *Service) ensureSchema(ctx context.Context) error {
 		ApprovalPolicySchema,
 		ApprovalSchema,
 		OfferTargetSchema,
-		SuccessorModeSchema,
 		`CREATE TABLE IF NOT EXISTS kernel_device_pairing_offers (
 			offer_id TEXT PRIMARY KEY,
 			offer_hash TEXT NOT NULL UNIQUE,

@@ -111,7 +111,7 @@ func TestLegacyWebChatRegisteredCoreBoundary(t *testing.T) {
 	if rec := request("GET", "/api/device-mesh/v1/business/boundary-probe", "", ""); rec.Code != 204 {
 		t.Fatalf("owned group polluted %d", rec.Code)
 	}
-	policy, err := policies.ChangeMode(t.Context(), "core-space", "device", 1, true, "role")
+	policy, err := policies.InitializeCoordinated(t.Context(), "core-space", "device", 1, "role")
 	if err != nil {
 		t.Fatal(err)
 	}

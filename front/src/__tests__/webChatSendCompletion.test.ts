@@ -46,4 +46,32 @@ describe("saved reply completion", () => {
     expect(sending.value).toBe(false);
     expect(mocks.warning).toHaveBeenCalledOnce();
   });
+  it("does not interrupt a reply while tools start and complete", async () => {
+    const scope = { coreId: "core", resourceOwnerId: "owner", roleId: "role" };
+    mocks.refresh.mockResolvedValue(true);
+    mocks.data.mockResolvedValue({ executionScope: scope });
+    mocks.send.mockImplementation(async (request, onEvent) => {
+      onEvent({ type: "started", conversationId: "conversation", executionScope: scope });
+      onEvent({ type: "tool-started", conversationId: "conversation", executionScope: scope, progress: { toolCallId: "call-1", toolName: "calculate", arguments: "{\"expression\":\"1+1\"}", status: "", result: "", durationMs: 0 } });
+      onEvent({ type: "tool-completed", conversationId: "conversation", executionScope: scope, progress: { toolCallId: "call-1", toolName: "calculate", arguments: "{\"expression\":\"1+1\"}", status: "success", result: "{\"result\":2}", durationMs: 1 } });
+      onEvent({ type: "delta", conversationId: "conversation", executionScope: scope, text: "计算完成" });
+      return { requestId: request.requestId, conversationId: "conversation", executionScope: scope, reply: "计算完成", saved: true };
+    });
+    const messages = ref<any[]>([]);
+    const sending = ref(false);
+    const error = ref("");
+    const failPending = vi.fn();
+    const refresh = vi.fn();
+    window.addEventListener("amitia:owned-runtime-refresh", refresh);
+    const send = useWebChatSend(messages, ref(""), ref("role"), sending, error, ref(false), ref(null), ref(null), ref(null), ref(null), ref(null), () => {}, () => {}, ref(null), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, failPending);
+    await send.handleSend("调用工具");
+    expect(mocks.send).toHaveBeenCalledOnce();
+    expect(messages.value.find(row => row.role === "assistant")).toMatchObject({ content: "计算完成", status: "completed", saved: true });
+    expect(failPending).not.toHaveBeenCalled();
+    expect(error.value).toBe("");
+    expect(sending.value).toBe(false);
+    expect(refresh).toHaveBeenCalledOnce();
+    expect((refresh.mock.calls[0][0] as CustomEvent).detail).toEqual({ conversationId: "conversation" });
+    window.removeEventListener("amitia:owned-runtime-refresh", refresh);
+  });
 });

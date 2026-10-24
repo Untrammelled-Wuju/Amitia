@@ -5,10 +5,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="prompt-trace-page">
     <div class="page-header">
-      <div>
-        <h2>Prompt Trace</h2>
-        <p>查看真实模型请求产生的提示词注入区块与回复长度记录。</p>
-      </div>
       <el-button :loading="loading" @click="load">刷新</el-button>
     </div>
 
@@ -137,20 +133,10 @@ onMounted(load);
 }
 .page-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 16px;
   margin-bottom: 16px;
-}
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--ac-color-text-secondary);
-  font-size: var(--ac-font-size-sm);
 }
 .trace-alert {
   margin-bottom: 14px;
@@ -217,8 +203,7 @@ onMounted(load);
   overflow-wrap: anywhere;
 }
 @media (max-width: 760px) {
-  .trace-card-header,
-  .page-header {
+  .trace-card-header {
     flex-direction: column;
   }
   .trace-summary {

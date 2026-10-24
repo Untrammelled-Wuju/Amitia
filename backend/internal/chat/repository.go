@@ -71,9 +71,7 @@ func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int
 	if q.Source != "" {
 		query = query.Where("source = ?", q.Source)
 	}
-	if q.ProjectID != "" {
-		query = query.Where("project_id = ?", q.ProjectID)
-	} else if q.RecentOnly {
+	if q.RecentOnly {
 		query = query.Where("COALESCE(project_id, '') = ''")
 	}
 	if q.Keyword != "" {

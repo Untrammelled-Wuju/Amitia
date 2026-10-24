@@ -199,13 +199,6 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     subtitle: '可信设备、云端配对与撤销',
                     onTap: () => context.push(AppRoutes.settingsDevices),
                   ),
-                  _divider(),
-                  _buildNavTile(
-                    icon: Icons.hub_outlined,
-                    title: '运行模式',
-                    subtitle: '本地 Core / Cloud Core',
-                    onTap: () => context.push(AppRoutes.settingsRuntimeMode),
-                  ),
                 ]),
                 SizedBox(height: AppSpacing.md),
                 Padding(

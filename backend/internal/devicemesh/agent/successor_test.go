@@ -103,7 +103,7 @@ func TestSuccessorUsesIndependentIdentityAndResumesCandidateWithoutCredentialRep
 	if _, _, err := bCoordination.BindProvider(t.Context(), "core-b"); err != nil {
 		t.Fatal(err)
 	}
-	policy, err := bCoordination.ChangeMode(t.Context(), "core-b", aIdentity.DeviceID.String(), 1, true, "role-b")
+	policy, err := bCoordination.InitializeCoordinated(t.Context(), "core-b", aIdentity.DeviceID.String(), 1, "role-b")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,11 +162,10 @@ func TestSuccessorUsesIndependentIdentityAndResumesCandidateWithoutCredentialRep
 			t.Error("B admission request lacks its own proof")
 		}
 		var request struct {
-			DeviceID    string `json:"deviceId"`
-			Coordinated bool   `json:"coordinated"`
+			DeviceID string `json:"deviceId"`
 		}
-		if json.NewDecoder(r.Body).Decode(&request) != nil || request.DeviceID != aIdentity.DeviceID.String() || !request.Coordinated {
-			t.Error("successor target or mode changed")
+		if json.NewDecoder(r.Body).Decode(&request) != nil || request.DeviceID != aIdentity.DeviceID.String() {
+			t.Error("successor target changed")
 		}
 		offers.Add(1)
 		json.NewEncoder(w).Encode(map[string]any{"offerToken": "successor-offer", "deviceId": request.DeviceID, "approvalRequired": true, "expiresAt": time.Now().Add(time.Minute)})
@@ -246,7 +245,7 @@ func TestSuccessorUsesIndependentIdentityAndResumesCandidateWithoutCredentialRep
 		if r.URL.Path != "/api/device-mesh/v1/provider/successor" || r.Header.Get("Authorization") != "AmitiaDevice a-on-b" || r.Header.Get("X-Amitia-Device-Proof") == "" {
 			t.Error("A predecessor request identity changed")
 		}
-		result, err := b.PrepareSuccessor(r.Context(), aIdentity.DeviceID.String(), true)
+		result, err := b.PrepareSuccessor(r.Context(), aIdentity.DeviceID.String())
 		if err != nil {
 			http.Error(w, err.Error(), 503)
 			return

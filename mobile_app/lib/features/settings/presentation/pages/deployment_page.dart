@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/notification_runtime_bootstrap.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -29,8 +30,12 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   final _remoteUriController = TextEditingController();
 
   static const _modes = <(MobileDeploymentMode, IconData, String)>[
-    (MobileDeploymentMode.local, Icons.dns_outlined, '完整功能本地运行，数据不离开设备'),
-    (MobileDeploymentMode.cloud, Icons.cloud_outlined, '远程核心 + 本地设备代理'),
+    (MobileDeploymentMode.local, Icons.dns_outlined, '项目服务、数据和设备能力全部在当前设备运行'),
+    (
+      MobileDeploymentMode.cloud,
+      Icons.cloud_outlined,
+      '连接 Cloud Core，统一管理多设备数据与任务',
+    ),
   ];
 
   @override
@@ -61,7 +66,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     final currentConfig = ref.watch(mobileDeploymentConfigProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '部署模式',
+        title: '运行模式',
         showBackButton: true,
         fallbackRoute: AppRoutes.settings,
       ),
@@ -70,7 +75,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
           : ListView(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               children: [
-                _SectionLabel(text: '选择部署模式'),
+                _SectionLabel(text: '选择运行模式'),
                 SizedBox(height: AppSpacing.sm),
                 ..._modes.map(
                   (m) => Padding(
@@ -107,7 +112,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                           helperText:
                               currentConfig.mode == MobileDeploymentMode.cloud
                               ? '云端业务请求将连接此 Cloud Core；设备 Runtime 仍保留在本机'
-                              : '可先配置地址再切换云端模式；局域网地址默认使用 http',
+                              : '必须先连接 Cloud Core 并完成设备配对，才能切换',
                           border: OutlineInputBorder(
                             borderRadius: AppRadius.brSmall,
                           ),
@@ -119,11 +124,11 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                       ),
                       SizedBox(height: AppSpacing.sm),
                       AmitiaButton(
-                        label: '保存云端地址',
-                        icon: Icons.save_outlined,
+                        label: '连接并配对',
+                        icon: Icons.link,
                         isFullWidth: true,
                         isSecondary: true,
-                        onPressed: _saveRemoteUri,
+                        onPressed: _openCloudPairing,
                       ),
                     ],
                   ),
@@ -195,9 +200,9 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   String _modeDisplayName(MobileDeploymentMode mode) {
     switch (mode) {
       case MobileDeploymentMode.local:
-        return '本地';
+        return '本地模式';
       case MobileDeploymentMode.cloud:
-        return '远程';
+        return '云端统筹模式';
     }
   }
 
@@ -245,48 +250,6 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     }
   }
 
-  Future<void> _saveRemoteUri() async {
-    final normalized = _normalizedRemoteUri();
-    if (normalized == null) return;
-    final current = ref.read(mobileDeploymentConfigProvider);
-    final next = MobileDeploymentConfig(
-      mode: current.mode,
-      remoteCoreUri: normalized,
-    );
-    final notificationHandoff =
-        current.mode == MobileDeploymentMode.cloud &&
-        current.remoteCoreUri?.trim() != normalized;
-    final notificationCoordinator = ref.read(notificationCoordinatorProvider);
-    if (notificationHandoff) {
-      await notificationCoordinator
-          .revokeCurrentRegistrationForDeploymentTransition();
-    }
-    try {
-      await ref.read(mobileDeploymentConfigProvider.notifier).update(next);
-      _remoteUriController.text = normalized;
-      if (current.mode == MobileDeploymentMode.cloud) {
-        ref.invalidate(backendConnectionProvider);
-        await ref.read(mobileBackendLifecycleProvider).reconcile(next);
-      }
-    } catch (_) {
-      await ref.read(mobileDeploymentConfigProvider.notifier).update(current);
-      ref.invalidate(backendConnectionProvider);
-      try {
-        await ref.read(mobileBackendLifecycleProvider).reconcile(current);
-      } catch (_) {}
-      rethrow;
-    } finally {
-      if (notificationHandoff) {
-        notificationCoordinator.resumeRegistrationAfterDeploymentTransition();
-      }
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('云端地址已保存')));
-    }
-  }
-
   void _confirmSwitch(MobileDeploymentMode newMode) {
     final current = ref.read(mobileDeploymentConfigProvider);
     if (newMode == current.mode) return;
@@ -294,15 +257,43 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     final remoteUri = newMode == MobileDeploymentMode.cloud
         ? _normalizedRemoteUri()
         : current.remoteCoreUri;
-    if (newMode == MobileDeploymentMode.cloud && remoteUri == null) return;
+    if (newMode == MobileDeploymentMode.cloud) {
+      if (remoteUri == null) {
+        _show('请先填写 Cloud Core 地址');
+        return;
+      }
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('云端统筹需要完成设备配对'),
+          content: const Text(
+            '填写地址只会定位 Cloud Core。下一步必须验证 Core 身份、输入首设备设置码或一次性配对 Offer，并在 DeviceCredential 保存成功后才能切换。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openCloudPairing(uri: remoteUri);
+              },
+              child: const Text('去配对'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-        title: Text('切换部署模式', style: AppTypography.cardTitle(context)),
+        title: Text('切换运行模式', style: AppTypography.cardTitle(context)),
         content: Text(
-          '确定要将部署模式切换为「${_modeDisplayName(newMode)}」吗？切换后业务 Core 会重新连接，本地 Device Agent/Runtime 仍会按模式保留。',
+          '确定要切换为「${_modeDisplayName(newMode)}」吗？业务连接会重新建立，当前运行数据不迁移。',
           style: AppTypography.body(context),
         ),
         actions: [
@@ -320,6 +311,24 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
         ],
       ),
     );
+  }
+
+  void _openCloudPairing({String? uri}) {
+    final cloudUri = uri ?? _normalizedRemoteUri();
+    if (cloudUri == null) {
+      _show('请先填写 Cloud Core 地址');
+      return;
+    }
+    context.push(
+      '${AppRoutes.settingsDeviceAdd}?endpoint=${Uri.encodeQueryComponent(cloudUri)}',
+    );
+  }
+
+  void _show(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _applyModeChange(

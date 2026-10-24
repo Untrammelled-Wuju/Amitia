@@ -25,7 +25,7 @@ vi.mock("../views/extensions/api", () => ({
 }));
 
 describe("ChatInput model settings", () => {
-  it("绑定Core后即时移除已打开模型和权限配置入口", async () => {
+  it("始终显示模型和权限配置入口", async () => {
     const overlayRoot = document.createElement("div");
     overlayRoot.id = "amitia-overlay-root";
     document.body.appendChild(overlayRoot);
@@ -33,11 +33,8 @@ describe("ChatInput model settings", () => {
     setActivePinia(pinia);
     const wrapper = mount(ChatInput, { props: { models: [{ id: 1, name: "模型", modelName: "test" }], selectedModelId: 1 }, global: { plugins: [pinia, ElementPlus] } });
     try {
-      await wrapper.get(".model-effort-trigger").trigger("click");
-      await wrapper.setProps({ deviceOwned: true });
-      expect(wrapper.find(".model-effort-trigger").exists()).toBe(false);
-      expect(wrapper.find(".permission-trigger").exists()).toBe(false);
-      expect(wrapper.emitted("model-change")).toBeUndefined();
+      expect(wrapper.find(".model-effort-trigger").exists()).toBe(true);
+      expect(wrapper.find(".permission-trigger").exists()).toBe(true);
     } finally { wrapper.unmount(); }
   });
   it("switches the trailing action between voice, send and stop", async () => {

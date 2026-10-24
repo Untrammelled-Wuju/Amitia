@@ -119,7 +119,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
         _role = owned.roles.isEmpty ? '' : owned.roles.first['id'].toString();
         if (_role.isEmpty) throw StateError('请先创建可用角色后管理记忆');
       }
-      if (owned.policy?['coordinated'] == true && _historicalRoles.isEmpty) {
+      if (_historicalRoles.isEmpty) {
         _historicalRoles = await owned.historicalRoles(_role);
       }
       final historical = _source.startsWith('history:');
@@ -1210,8 +1210,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (owned.policy?['coordinated'] == true &&
-                    _kind != 'candidate')
+                if (_kind != 'candidate')
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       key: ValueKey('source/$_source'),
@@ -1258,9 +1257,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                     ),
                   ),
                 ...[
-                  if (owned.policy?['coordinated'] == true &&
-                      _kind != 'candidate')
-                    const SizedBox(width: 12),
+                  if (_kind != 'candidate') const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       key: ValueKey('view/$_memoryView/$_source'),

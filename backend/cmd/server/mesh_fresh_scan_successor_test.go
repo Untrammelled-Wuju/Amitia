@@ -20,7 +20,7 @@ func TestFreshDeviceScansAlreadyBoundProviderAndRequiresDirectCoreAdmission(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.request(t, b, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "selectedRole": "one", "expectedRevision": bPolicy.ModeRevision}, http.StatusOK)
+	ensureCoordinatedForTest(t, c, b, bPolicy.ModeRevision)
 	bPolicy, err = c.services.DeviceMesh.Coordination.Get(t.Context(), c.core, b.device.DeviceID.String())
 	if err != nil {
 		t.Fatal(err)

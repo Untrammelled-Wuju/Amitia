@@ -17,11 +17,10 @@ describe("router", () => {
     expect(route.name).toBe("catchAll");
   });
 
-  it("旧资料、设备与运行模式地址指向统一空间并保留查询参数", () => {
+  it("旧资料与设备地址指向统一空间并保留查询参数", () => {
     const legacyRoutes = [
       ["/user-settings", "/my-space/profile"],
       ["/devices", "/my-space/devices"],
-      ["/runtime-mode", "/my-space/runtime"],
       ["/my-space", "/my-space/profile"],
       ["/my-space#space-identity", "/my-space/identity"],
       ["/devices#bound-devices", "/my-space/devices"],

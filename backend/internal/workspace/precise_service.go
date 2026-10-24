@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -541,6 +542,9 @@ func (s *defaultPreciseEditingService) writeFile(ctx context.Context, workspaceI
 
 // buildFileURI constructs the full workspace URI for a file path.
 func (s *defaultPreciseEditingService) buildFileURI(workspaceID string, filePath string) string {
+	if workspaceID == "direct" && filepath.IsAbs(filePath) {
+		return filePath
+	}
 	base := MountURI(WorkspaceID(workspaceID))
 	if !strings.HasSuffix(base, "/") {
 		base += "/"
@@ -772,6 +776,10 @@ func applyUnifiedPatch(original []byte, patchText string) ([]byte, error) {
 	}
 
 	return []byte(strings.Join(result, "\n")), nil
+}
+
+func ApplyUnifiedPatch(original []byte, patchText string) ([]byte, error) {
+	return applyUnifiedPatch(original, patchText)
 }
 
 // parseHunkHeader parses a unified diff hunk header line.

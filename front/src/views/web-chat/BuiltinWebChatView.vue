@@ -18,7 +18,8 @@ SPDX-License-Identifier: AGPL-3.0-only
     <section ref="chatSurfaceRef" class="chat-surface" :class="{ 'chat-surface--sidebar': conversationSidebarVisible }" data-amitia-ui="chat.surface">
     <AutomationStatusIndicator :status="automationStatus" />
 
-    <div ref="chatHeaderRef" class="chat-header-region">
+    <Teleport to="#window-chat-slot" :disabled="!useTitlebarChrome">
+    <div ref="chatHeaderRef" class="chat-header-region" :class="{ 'is-titlebar': useTitlebarChrome }">
     <UIProviderHost
       capability="conversation.header"
       :fallback="ChatHeaderBar"
@@ -44,6 +45,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @view-summary="handleViewSummary"
     ><template #extension-actions><button type="button" class="sidebar-toggle-btn" aria-label="切换工作区" title="工作区" @click="workbench.toggleVisible()"><el-icon><GridIcon /></el-icon></button><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
     </div>
+    </Teleport>
       <div class="chat-body-wrapper">
       <ExtensionSlot
         slot-id="chat.profile_summary.panel"
@@ -74,45 +76,55 @@ SPDX-License-Identifier: AGPL-3.0-only
           @close="showMemInject = false"
         />
       </ExtensionSlot>
-      <UIProviderHost
-        capability="conversation.messages"
-        :fallback="MessagesArea"
-        :context="chatExtensionContext"
-        :actions="conversationHostActions"
-        ref="msgAreaRef"
-        :messages="messages"
-        :device-owned="owned.enabled.value"
-        :model-error="modelError"
-        :history-messages="persistedMessages"
-        :char-name="charName"
-        :char-avatar="charAvatar"
-        :character-id="characterId"
-        :sending="sending"
-        :show-scroll-btn="showScrollBtn"
-        :is-pulling="isPulling"
-        :pull-ready="pullReady"
-        :pull-loading="pullLoading"
-        :pull-text="pullText"
-        :characters="characters"
-        :notice="owned.notice.value"
-        :model-missing="modelMissing"
-        :is-offline="isOffline"
-        :import-context="importContext"
-        :show-import-detail="showImportDetail"
-        :extension-context="chatExtensionContext"
-        :provider-actions="conversationHostActions"
-        @scroll="onScroll"
-        @wheel="onWheel"
-        @touch-start="onMsgTouchStart"
-        @touch-move="onMsgTouchMove"
-        @touch-end="onMsgTouchEnd"
-        @retry="handleRetry"
-        @reply="handleSetReply"
-        @edit="handleEditMessage"
-        @close-import="importContext = null"
-        @toggle-import-detail="showImportDetail = !showImportDetail"
-        @scroll-to-bottom="scrollToBottom(true)"
-      />
+      <div class="conversation-messages-region" :aria-busy="conversationSwitching">
+        <UIProviderHost
+          capability="conversation.messages"
+          :fallback="MessagesArea"
+          :context="chatExtensionContext"
+          :actions="conversationHostActions"
+          ref="msgAreaRef"
+          :messages="messages"
+          :device-owned="owned.enabled.value"
+          :model-error="modelError"
+          :history-messages="persistedMessages"
+          :char-name="charName"
+          :char-avatar="charAvatar"
+          :character-id="characterId"
+          :sending="sending"
+          :show-scroll-btn="showScrollBtn"
+          :is-pulling="isPulling"
+          :pull-ready="pullReady"
+          :pull-loading="pullLoading"
+          :pull-text="pullText"
+          :characters="characters"
+          :notice="owned.notice.value"
+          :model-missing="modelMissing"
+          :is-offline="isOffline"
+          :import-context="importContext"
+          :show-import-detail="showImportDetail"
+          :extension-context="chatExtensionContext"
+          :provider-actions="conversationHostActions"
+          @scroll="onScroll"
+          @wheel="onWheel"
+          @touch-start="onMsgTouchStart"
+          @touch-move="onMsgTouchMove"
+          @touch-end="onMsgTouchEnd"
+          @retry="handleRetry"
+          @reply="handleSetReply"
+          @edit="handleEditMessage"
+          @close-import="importContext = null"
+          @toggle-import-detail="showImportDetail = !showImportDetail"
+          @scroll-to-bottom="scrollToBottom(true)"
+          @content-loading="handleConversationContentLoading"
+          @content-ready="handleConversationContentReady"
+        />
+        <div v-if="conversationSwitching" class="conversation-switch-loading" role="status" aria-live="polite">
+          <div class="conversation-switch-loading__content">
+            <el-icon class="is-loading conversation-switch-loading__spinner" :size="24"><LoadingIcon /></el-icon>
+            <span>正在加载对话</span>
+          </div>
+        </div>
+      </div>
       <aside v-if="hasConversationSidebar && !isSmallViewport && !workbench.visible" class="chat-sidebar-region provider-sidebar-region">
         <UIProviderHost
           capability="conversation.sidebar"
@@ -152,7 +164,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       :actions="conversationHostActions"
       ref="inputRef"
       :disabled="modelMissing"
-      :device-owned="owned.enabled.value"
       :sending="sending"
       :generating="generating"
       :is-submitting="isSubmitting"
@@ -202,7 +213,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Grid as GridIcon, Menu as MenuIcon } from "@element-plus/icons-vue";
+import { Grid as GridIcon, Loading as LoadingIcon, Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useChatStore } from "@/stores/chat";
@@ -316,6 +327,7 @@ const persistedMessages = ref<any[]>([]);
 const convId = ref(String(route.query.conversationId || ""));
 const convTitle = ref("");
 const characterId = ref("");
+const messageContentLoading = ref(false);
 watch([convId, characterId], ([id, role]) => workbench.setConversation(id, role), { immediate: true });
 const cachedDef = (() => {
   try {
@@ -363,6 +375,7 @@ const chatExtensionContext = computed(() => {
     platform: env.platform,
     host: env.host,
     os: env.os,
+    conversationLoading: conversationLoading.value,
     conversationState: sending.value ? "generating" : isOffline.value ? "offline" : "idle",
     capabilities: env.host === "desktop" ? ["browser", "desktop", "clipboard-host"] : ["browser"],
     workspace: currentWorkspace.value,
@@ -405,9 +418,11 @@ const hasConversationSidebar = computed(() => hasSidebarExtensions.value || hasE
 const hasConversationOverlay = computed(() => callActive.value || hasStatusExtensions.value || hasExternalOverlayProvider.value);
 const sidebarDrawerOpen = ref(false);
 const isSmallViewport = ref(window.innerWidth < 1024);
+const useTitlebarChrome = ref(window.innerWidth >= 900);
 
 function updateViewport() {
   isSmallViewport.value = window.innerWidth < 1024;
+  useTitlebarChrome.value = window.innerWidth >= 900;
 }
 
 const chatSurfaceRef = ref<HTMLElement>();
@@ -419,7 +434,7 @@ let chatLayoutObserver: ResizeObserver | null = null;
 function syncChatLayoutVars() {
   const surface = chatSurfaceRef.value;
   if (!surface) return;
-  const headerHeight = chatHeaderRef.value?.getBoundingClientRect().height ?? 0;
+  const headerHeight = useTitlebarChrome.value ? 0 : (chatHeaderRef.value?.getBoundingClientRect().height ?? 0);
   const composerHeight = composerRegionRef.value?.getBoundingClientRect().height ?? 0;
   surface.style.setProperty("--chat-header-h", `${Math.round(headerHeight)}px`);
   surface.style.setProperty("--chat-composer-h", `${Math.round(composerHeight)}px`);
@@ -433,6 +448,13 @@ function startChatLayoutObserver() {
   }
   syncChatLayoutVars();
 }
+
+watch(useTitlebarChrome, async () => {
+  await nextTick();
+  chatLayoutObserver?.disconnect();
+  chatLayoutObserver = null;
+  startChatLayoutObserver();
+});
 
 const msgAreaRef = ref<InstanceType<typeof MessagesArea>>();
 const inputRef = ref<InstanceType<typeof ChatInput>>();
@@ -809,6 +831,7 @@ const {
   characters,
   conversations,
   memories,
+  conversationLoading,
   showCharPicker,
   showMemories,
   selectCharacter,
@@ -829,7 +852,23 @@ const {
   hasMoreHistory,
   disconnectAndResetConversation,
   connectSSE,
+  reloadConversationSnapshot,
 );
+
+const conversationSwitching = computed(() => conversationLoading.value || messageContentLoading.value);
+
+function handleConversationContentLoading(id: string) {
+  if (String(id || "") === String(convId.value || "")) messageContentLoading.value = true;
+}
+
+function handleConversationContentReady(id: string) {
+  if (String(id || "") === String(convId.value || "")) messageContentLoading.value = false;
+}
+
+watch(() => chatStore.currentConversationId, (id) => {
+  const target = String(id || "").trim();
+  if (target && target !== String(convId.value || "")) conversationLoading.value = true;
+});
 
 const conversationHostActions: Record<string, (input?: any) => unknown | Promise<unknown>> = {
   "conversation.send": async (input) => handleSend(String(input?.text ?? input ?? ""), input?.imageBase64, input?.videoBase64),
@@ -932,7 +971,6 @@ watch(
     if (nextId === convId.value && !roleChanged) return;
     if (owned.enabled.value && sending.value) owned.stopLocal(ownedConversationSwitchNotice, true);
     convId.value = nextId;
-    convTitle.value = "新对话";
     await loadCharacterConversation();
   },
 );
@@ -989,6 +1027,7 @@ watch(isOffline, (offline) => {
 
 onMounted(async () => {
   startChatLayoutObserver();
+  window.addEventListener("resize", updateViewport);
   window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
   void loadLlmModels();
   let ownedInitialized = false;
@@ -1111,6 +1150,26 @@ function handleScopeChanged() {
 }
 .chat-surface { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
 .chat-header-region { position: absolute; top: 0; left: 0; right: 0; z-index: 4; }
+.chat-header-region.is-titlebar {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  padding: 0 6px 0 12px;
+  box-sizing: border-box;
+}
+.chat-header-region.is-titlebar :deep(.chat-header) {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  gap: 8px;
+}
+.chat-header-region.is-titlebar :deep(.header-leading) { flex: 1; }
+.chat-header-region.is-titlebar :deep(.header-actions),
+.chat-header-region.is-titlebar :deep(.header-actions *) { -webkit-app-region: no-drag; }
 .chat-status-region { position: absolute; top: var(--chat-header-h, 44px); left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
 .composer-region { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; }
 .chat-surface--sidebar .composer-region { right: min(320px, 32%); }
@@ -1133,6 +1192,31 @@ function handleScopeChanged() {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+.conversation-messages-region {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.conversation-switch-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  background: var(--chat-surface-bg);
+}
+.conversation-switch-loading__content {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.conversation-switch-loading__spinner {
+  color: var(--ac-color-primary, var(--text-secondary));
 }
 .chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); height: 100%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; flex: 0 0 auto; }
 @media (min-width: 1024px) { .chat-body-wrapper { flex-direction: row; } }

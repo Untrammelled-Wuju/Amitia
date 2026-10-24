@@ -5,10 +5,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="logs-page" data-amitia-ui="logs.page">
     <div class="page-header">
-      <div>
-        <h2 class="page-title">系统运行日志</h2>
-        <p>读取当前 Business Core 的运行日志；云端模式下这里显示 Cloud Core 日志。</p>
-      </div>
       <el-button :loading="loading" @click="refreshCurrent">刷新</el-button>
     </div>
 
@@ -175,20 +171,10 @@ onMounted(refreshCurrent);
 }
 .page-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 16px;
   margin-bottom: 14px;
-}
-.page-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--ac-color-text-secondary);
-  font-size: var(--ac-font-size-sm);
 }
 .log-toolbar,
 .file-toolbar {

@@ -73,7 +73,7 @@ func TestWorkbenchOwnedTasksCloudDeviceAndContinuationHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, 200)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	if err := json.Unmarshal(b.request(t, a, http.MethodPost, "/api/device-mesh/v1/business/messages", map[string]any{"requestId": "task-turn-core", "characterId": "one", "conversationId": "same-id", "conversationOrigin": map[string]string{"ownerId": a.device.DeviceID.String(), "id": "same-id"}, "message": "continue"}, 200), &turn); err != nil {
 		t.Fatal(err)
 	}

@@ -46,6 +46,9 @@ type modelConfigExportRecord struct {
 	MaxTokens          int     `json:"max_tokens"`
 	ContextWindow      int     `json:"context_window"`
 	MaxOutputTokens    int     `json:"max_output_tokens"`
+	BudgetRateVersion  string  `json:"budget_rate_version"`
+	BudgetInputRate    int64   `json:"budget_input_rate"`
+	BudgetOutputRate   int64   `json:"budget_output_rate"`
 	CapabilitiesJSON   string  `json:"capabilities_json"`
 	ProviderConfigJSON string  `json:"provider_config_json"`
 	TopP               float64 `json:"top_p"`
@@ -90,7 +93,7 @@ func (c *ModelConfigBackupContributor) Export(ctx context.Context, req dataporta
 	defer compW.Close()
 
 	rows, err := c.DB.WithContext(ctx).Table("model_configs").Select(
-		"id, name, api_type, protocol, base_url, model_name, temperature, max_tokens, context_window, max_output_tokens, capabilities_json, provider_config_json, top_p, timeout_seconds, retry_count, is_active, last_test_status, last_test_message, last_test_at, created_at, updated_at",
+		"id, name, api_type, protocol, base_url, model_name, temperature, max_tokens, context_window, max_output_tokens, budget_rate_version, budget_input_rate, budget_output_rate, capabilities_json, provider_config_json, top_p, timeout_seconds, retry_count, is_active, last_test_status, last_test_message, last_test_at, created_at, updated_at",
 	).Rows()
 	if err != nil {
 		return err
@@ -231,6 +234,9 @@ func (c *ModelConfigBackupContributor) restoreModelConfigLines(ctx context.Conte
 			"max_tokens":           rec.MaxTokens,
 			"context_window":       rec.ContextWindow,
 			"max_output_tokens":    rec.MaxOutputTokens,
+			"budget_rate_version":  rec.BudgetRateVersion,
+			"budget_input_rate":    rec.BudgetInputRate,
+			"budget_output_rate":   rec.BudgetOutputRate,
 			"capabilities_json":    rec.CapabilitiesJSON,
 			"provider_config_json": rec.ProviderConfigJSON,
 			"top_p":                rec.TopP,

@@ -139,7 +139,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               child: AmitiaEmptyState(
                 icon: Icons.inventory_2_outlined,
                 title: '暂无可安装桌宠发布',
-                subtitle: '先完成处理任务并生成桌宠发布。',
+                subtitle: '当前没有可安装的桌宠发布资源。',
               ),
             )
           else

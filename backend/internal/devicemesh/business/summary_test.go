@@ -57,7 +57,7 @@ func TestOwnedSummaryUsesCoreComputeAndAcknowledgedDeviceOwnerWithoutAddingMessa
 	if err != nil || len(core) != 0 {
 		t.Fatal("device summary mirrored at Core")
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := engine.GenerateSummary(t.Context(), request, 0); !errors.Is(err, coordination.ErrScopeExpired) {
@@ -145,7 +145,7 @@ func TestCoordinatedSummaryUsesDeviceHistoryAndSavesOnlyCoreContinuation(t *test
 			t.Fatal(err)
 		}
 	}
-	if _, err := service.ChangeMode(t.Context(), "core", "a", 1, true, "role"); err != nil {
+	if _, err := service.InitializeCoordinated(t.Context(), "core", "a", 1, "role"); err != nil {
 		t.Fatal(err)
 	}
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", RoleID: "role", ConversationID: "same-id", RequestID: "summary-continuation", ConversationOrigin: &ConversationOrigin{OwnerID: "a", ID: "same-id"}}

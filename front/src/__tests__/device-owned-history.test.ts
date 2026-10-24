@@ -276,6 +276,21 @@ describe("owned conversation history", () => {
     await owned.query("chat", "role", true);
     expect(mocks.get.mock.calls.at(-1)?.[1].params.cursor).toBe("new-page");
   });
+  it("keeps a conversation load when its summary loads concurrently", async () => {
+    const owned = useDeviceOwnedConversation();
+    let finishConversation!: (value: any) => void;
+    let finishSummary!: (value: any) => void;
+    mocks.get
+      .mockReturnValueOnce(new Promise((resolve) => { finishConversation = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { finishSummary = resolve; }));
+    const conversation = owned.query("meshconv1:a:chat", "role");
+    const summary = owned.conversationSummary("meshconv1:a:chat", "role");
+    finishSummary({ data: { executionScope: scope, snapshot: { ownerId: "a", resources: [{ kind: "summary", id: "chat/summary", ownerId: "a", revision: 1, body: { content: { summary: "loaded" } } }] } } });
+    expect((await summary)?.summaryText).toBe("loaded");
+    finishConversation({ data: { executionScope: scope, snapshot: { ownerId: "a", resources: [{ kind: "message", id: "message", revision: 1, body: { id: "message", role: "user", content: "visible" } }] } } });
+    expect(owned.messages(await conversation).map((message) => message.content)).toEqual(["visible"]);
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+  });
   it("blocks local fallback while the successor is awaiting approval", async () => {
     const owned = useDeviceOwnedConversation();
     mocks.transition.mockResolvedValue({ providerChangePending: true, coreId: "b", successorCoreId: "c" });

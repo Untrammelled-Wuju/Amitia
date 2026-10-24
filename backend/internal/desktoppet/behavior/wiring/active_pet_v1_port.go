@@ -9,7 +9,7 @@ import (
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
-	"github.com/u-ai/backend/internal/desktoppet/processing"
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	"github.com/u-ai/backend/log"
 )
@@ -18,7 +18,7 @@ type V1ActivePetAdapter struct {
 	installRepo    installation.Repository
 	facade         *runtimev1.RuntimeFacade
 	dataDir        string
-	manifestReader func(installPath, manifestPath string) (*processing.Manifest, error)
+	manifestReader func(installPath, manifestPath string) (*packageformat.Manifest, error)
 }
 
 func NewV1ActivePetAdapter(installRepo installation.Repository, facade *runtimev1.RuntimeFacade, dataDir string) *V1ActivePetAdapter {
@@ -244,7 +244,7 @@ func v2InstallationMatches(candidate *installation.Installation, spaceID, charac
 	return true
 }
 
-func v2ReadManifestFromDisk(installPath, manifestPath string) (*processing.Manifest, error) {
+func v2ReadManifestFromDisk(installPath, manifestPath string) (*packageformat.Manifest, error) {
 	if manifestPath == "" {
 		return nil, nil
 	}
@@ -252,7 +252,7 @@ func v2ReadManifestFromDisk(installPath, manifestPath string) (*processing.Manif
 	if err != nil {
 		return nil, err
 	}
-	var manifest processing.Manifest
+	var manifest packageformat.Manifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, err
 	}

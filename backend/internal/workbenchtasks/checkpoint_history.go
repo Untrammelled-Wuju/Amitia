@@ -60,6 +60,7 @@ func ListCheckpoints(ctx context.Context, reader RecordReader, spaceID, conversa
 		return records[i].UpdatedAt.After(records[j].UpdatedAt)
 	})
 	seen := map[string]struct{}{}
+	terminalProofReads := 0
 	for _, record := range records {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -69,7 +70,7 @@ func ListCheckpoints(ctx context.Context, reader RecordReader, spaceID, conversa
 		}
 		descriptor := record.RecoveryDescriptor
 		checkpoint := descriptor.MultiAgent
-		if checkpoint.CoordinationID != coordinationID || !validateCheckpoint(checkpoint) || (checkpoint.ParentGoalSpaceID != "" && checkpoint.ParentGoalSpaceID != spaceID) || (checkpoint.ParentGoalConversationID != "" && checkpoint.ParentGoalConversationID != conversationID) {
+		if checkpoint.CoordinationID != coordinationID || !validateCheckpoint(checkpoint) || (checkpoint.ParentGoalSpaceID != "" && checkpoint.ParentGoalSpaceID != spaceID) || (checkpoint.ParentGoalConversationID != "" && checkpoint.ParentGoalConversationID != conversationID) || (checkpoint.ParentGoalCharacterID != "" && checkpoint.ParentGoalCharacterID != record.Scope.CharacterID) || (checkpoint.OwnedScope != nil && (checkpoint.OwnedScope.SpaceID != spaceID || checkpoint.OwnedScope.RoleID != record.Scope.CharacterID)) {
 			continue
 		}
 		if descriptor.Fingerprint != "" {
@@ -83,14 +84,24 @@ func ListCheckpoints(ctx context.Context, reader RecordReader, spaceID, conversa
 			continue
 		}
 		seen[record.ID] = struct{}{}
-		point := TaskCheckpoint{UpdatedAt: record.UpdatedAt, InteractionStatus: string(record.Status), CoordinationStatus: checkpoint.Status, AssignmentCount: len(checkpoint.AssignmentRefs), ParentTerminal: record.IsTerminal(), Consistent: reconciliationReason(record, checkpoint.Status) == ""}
+		point := TaskCheckpoint{UpdatedAt: record.UpdatedAt, InteractionStatus: string(record.Status), CoordinationStatus: checkpoint.Status, AssignmentCount: len(checkpoint.AssignmentRefs), ParentTerminal: record.IsTerminal(), Consistent: reconciliationReason(record, checkpoint) == ""}
+		projection := Task{Status: checkpoint.Status, RecoveryState: "checkpoint-only", Assignments: make([]Assignment, 0, len(checkpoint.AssignmentRefs))}
 		for _, child := range checkpoint.AssignmentRefs {
+			projection.Assignments = append(projection.Assignments, Assignment{ID: child.AssignmentID, Status: child.Status})
+		}
+		if err := confirmTerminalWorkbenchChildren(ctx, reader, checkpoint, &projection, &terminalProofReads); err != nil {
+			return out, err
+		}
+		for _, child := range projection.Assignments {
 			if child.Status == "succeeded" || child.Status == "failed" || child.Status == "cancelled" {
 				point.CompletedCount++
 			}
 			if child.Status == "failed" || child.Status == "cancelled" {
 				point.FailedCount++
 			}
+		}
+		if projection.RecoveryState == "needs-reconciliation" {
+			point.Consistent = false
 		}
 		if len(out.Records) == 20 {
 			out.Truncated = true

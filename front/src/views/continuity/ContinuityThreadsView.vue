@@ -1,17 +1,7 @@
 <template>
   <div class="continuity-page">
-    <div class="page-header">
-      <div>
-        <h2>持续事项</h2>
-        <p>跨会话跟进目标、进展、下一步和等待条件。</p>
-      </div>
-      <div class="header-actions">
-        <el-button type="primary" :disabled="source !== 'current'" @click="openCreateDialog">新建事项</el-button>
-      </div>
-    </div>
-
-    <div class="toolbar" :class="{ 'has-source': mesh.coordinated.value }">
-      <div v-if="mesh.coordinated.value" class="toolbar-field">
+    <div class="toolbar has-source">
+      <div class="toolbar-field">
         <label :for="`${controlId}-source`">数据来源</label>
         <el-select :id="`${controlId}-source`" v-model="source" placeholder="事项数据来源" aria-label="事项数据来源" @change="refresh">
           <el-option label="当前数据所有者" value="current" />
@@ -35,6 +25,7 @@
         </el-select>
       </div>
       <el-button class="refresh-button" :loading="loading" @click="refresh">刷新</el-button>
+      <el-button class="create-button" type="primary" :disabled="source !== 'current'" @click="openCreateDialog">新建事项</el-button>
     </div>
     <el-alert v-if="source !== 'current'" class="page-notice" title="旧设备持续事项仅供读取，不会在当前 Core 自动恢复执行，请在原设备管理。" type="info" :closable="false" />
     <el-alert v-if="mesh.notice.value" class="page-notice" :title="mesh.notice.value" type="warning" :closable="false" />
@@ -66,6 +57,7 @@
         </div>
 	    <el-alert v-if="detail.pausedReason" :title="detail.pausedReason" type="warning" :closable="false" show-icon />
         <div v-if="!detail.readOnly" class="detail-actions">
+          <el-button v-if="canEditGoal" :disabled="saving" @click="openGoalEditor">编辑目标与下一步</el-button>
           <el-button v-if="detail.thread.status !== 'paused' && !terminal(detail.thread.status)" @click="setStatus('paused')">暂停</el-button>
           <el-button v-if="detail.thread.status === 'paused'" type="primary" :disabled="detail.lease?.state === 'unknown'" @click="setStatus('active')">恢复</el-button>
           <el-button v-if="detail.lease?.state === 'unknown'" :loading="saving" @click="confirmExecution('completed')">确认执行已完成</el-button>
@@ -114,6 +106,19 @@
         </section>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="editGoalDialog" title="编辑长期目标与下一步" width="min(560px, 92vw)" :close-on-click-modal="!saving" :show-close="!saving">
+      <p class="goal-edit-notice">更改将写入现有 Continuity Thread，并校验当前 Owner、角色和修订；执行中的事项不可编辑。</p>
+      <el-form label-position="top">
+        <el-form-item label="标题"><el-input v-model="goalEditForm.title" maxlength="4096" /></el-form-item>
+        <el-form-item label="长期目标"><el-input v-model="goalEditForm.goal" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="下一步"><el-input v-model="goalEditForm.nextAction" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="saving" @click="editGoalDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveGoalEdit">保存到长期目标</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="createDialog" title="新建持续事项" width="520px">
       <el-form label-position="top">
@@ -164,6 +169,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch, useId } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { authorizedWorkbenchRole } from "@/components/workbench/workbench-role-link";
+import { canEditGoalDocument, goalEditAuthorityKey, prepareGoalEdit, type GoalEditDocument } from "./continuity-goal-editor";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
@@ -189,6 +197,8 @@ import {
 
 const loading = ref(false);
 const mesh = useDeviceOwnedConversation();
+const route = useRoute();
+const router = useRouter();
 const controlId = useId();
 const characterId = ref("");
 const saving = ref(false);
@@ -224,6 +234,8 @@ watch(viewOptions, options => {
   if (!options.some(option => option.value === memoryView.value)) memoryView.value = options[0].value;
 }, { flush: "sync" });
 let generation = 0;
+let detailReadRequest = 0;
+let lastLinkedRole = '';
 let providerTimer: ReturnType<typeof setInterval> | undefined;
 const detailOpen = ref(false);
 const query = ref("");
@@ -231,6 +243,49 @@ const statusFilter = ref<ThreadStatus | "">("");
 const createDialog = ref(false);
 const waitDialog = ref(false);
 const createForm = reactive({ title: "", goal: "", nextAction: "" });
+const editGoalDialog = ref(false);
+const goalEditForm = reactive({ title: "", goal: "", nextAction: "" });
+let editingGoalIntent: OwnedContinuityDocument | undefined;
+let editingGoalAuthority = '';
+const canEditGoal = computed(() => !saving.value && canEditGoalDocument(
+  detailIntent.value as GoalEditDocument | undefined, mesh.coreId.value, mesh.roles.value, source.value,
+));
+function openGoalEditor() {
+  if (!canEditGoal.value || !detailIntent.value) return;
+  editingGoalIntent = detailIntent.value;
+  editingGoalAuthority = goalEditAuthorityKey(editingGoalIntent as GoalEditDocument);
+  goalEditForm.title = editingGoalIntent.thread.title;
+  goalEditForm.goal = editingGoalIntent.thread.goal || '';
+  goalEditForm.nextAction = editingGoalIntent.thread.nextAction || '';
+  editGoalDialog.value = true;
+}
+async function saveGoalEdit() {
+  const original = editingGoalIntent;
+  const before = editingGoalAuthority;
+  if (saving.value || !original || !before || !editGoalDialog.value) return;
+  try {
+    const payload = prepareGoalEdit(goalEditForm, original as GoalEditDocument);
+    const ticket = generation;
+    const selected = selectedId.value;
+    const stillCurrent = () => ticket === generation && editGoalDialog.value &&
+      selectedId.value === selected && detailIntent.value === original &&
+      goalEditAuthorityKey(detailIntent.value as GoalEditDocument | undefined) === before &&
+      canEditGoalDocument(original as GoalEditDocument, mesh.coreId.value, mesh.roles.value, source.value);
+    if (!stillCurrent()) throw new Error('目标或执行授权已变化，请重新打开详情');
+    saving.value = true;
+    try {
+      if (!await mesh.refresh() || !stillCurrent()) throw new Error('执行授权已变化，请重新打开详情');
+      await updateContinuityThread(original.thread.id, { ...payload }, original);
+      if (!stillCurrent()) return;
+      editGoalDialog.value = false;
+      editingGoalIntent = undefined;
+      editingGoalAuthority = '';
+      await reloadDetail();
+      ElMessage.success('长期目标已保存');
+    } finally { saving.value = false; }
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '目标修改失败'); }
+}
+
 const waitForm = reactive({ type: "user", description: "", dueAt: "", conditionJson: "{}", resumeHint: "" });
 
 async function confirmExecution(outcome: "completed" | "abandoned") {
@@ -267,13 +322,17 @@ async function refresh() {
   try {
     if (await mesh.refresh()) {
       const selected = source.value === "current" && memoryView.value.startsWith("role:") ? memoryView.value.slice(5) : "";
-      if (selected && mesh.roles.value.some(role => role.id === selected)) characterId.value = selected;
+      const linkedRole = route.query.characterId;
+      if (source.value === "current" && authorizedWorkbenchRole(linkedRole, mesh.roles.value, mesh.coreId.value) && (linkedRole !== lastLinkedRole || !mesh.roles.value.some(role => role.id === characterId.value))) {
+        characterId.value = linkedRole as string;
+        lastLinkedRole = linkedRole as string;
+      } else if (selected && mesh.roles.value.some(role => role.id === selected)) characterId.value = selected;
       else if (!mesh.roles.value.some((role) => role.id === characterId.value)) characterId.value = mesh.selectInitialRole() || mesh.roles.value[0]?.id || "";
       if (!characterId.value) { threads.value = []; return; }
     }
     ticket = ++generation;
     loading.value = true;
-    const roles = mesh.coordinated.value ? await mesh.historicalRoles(characterId.value) : [];
+    const roles = await mesh.historicalRoles(characterId.value);
     const items = await listContinuityThreads({ characterId: characterId.value || undefined, memoryView: source.value === "current" ? memoryView.value || undefined : undefined, historicalRoleId: source.value.startsWith("history:") ? source.value.slice(8) : undefined, q: query.value || undefined, status: statusFilter.value || undefined, limit: 100 });
     if (ticket === generation) { historicalRoles.value = roles; threads.value = items; }
   } catch (error) {
@@ -283,10 +342,14 @@ async function refresh() {
 
 async function selectThread(thread: ContinuityThread) {
   const ticket = generation;
+  const readRequest = ++detailReadRequest;
   try {
     const result = await getContinuityThread(thread.id, thread.ownedDocument);
-    if (ticket !== generation) return;
+    if (ticket !== generation || readRequest !== detailReadRequest) return;
     selectedId.value = thread.id;
+    editGoalDialog.value = false;
+    editingGoalIntent = undefined;
+    editingGoalAuthority = '';
     detail.value = result;
     detailIntent.value = result.executionScope ? result as OwnedContinuityDocument : undefined;
     detailOpen.value = true;
@@ -296,8 +359,11 @@ async function selectThread(thread: ContinuityThread) {
 async function reloadDetail() {
   if (!selectedId.value) return;
   const ticket = generation;
-  const result = await getContinuityThread(selectedId.value, detailIntent.value);
-  if (ticket !== generation) return;
+  const readRequest = ++detailReadRequest;
+  const selected = selectedId.value;
+  const original = detailIntent.value;
+  const result = await getContinuityThread(selected, original);
+  if (ticket !== generation || readRequest !== detailReadRequest || selectedId.value !== selected || detailIntent.value !== original) return;
   detail.value = result;
   detailIntent.value = result.executionScope ? result as OwnedContinuityDocument : undefined;
   await refresh();
@@ -378,9 +444,13 @@ async function openCreateDialog() {
 }
 function invalidate() {
   generation++;
+  detailReadRequest++;
   threads.value = [];
   detail.value = null;
   detailIntent.value = undefined;
+  editingGoalIntent = undefined;
+  editingGoalAuthority = '';
+  editGoalDialog.value = false;
   createIntent.value = undefined;
   detailOpen.value = false;
   createDialog.value = false;
@@ -389,8 +459,11 @@ function invalidate() {
   loading.value = false;
 }
 watch([characterId, source, memoryView, mesh.coreId, () => mesh.policy.value?.providerEpoch, () => mesh.policy.value?.modeRevision, () => mesh.policy.value?.permissionRevision], invalidate, { flush: "sync" });
+watch(() => route.query.characterId, () => { invalidate(); void refresh(); });
+watch(() => route.query.create, () => { void maybeOpenCreateFromQuery(); });
 onMounted(() => {
   void refresh();
+  void maybeOpenCreateFromQuery();
   window.addEventListener("amitia:runtime-connection-changed", invalidate);
   window.addEventListener("amitia:execution-scope-changed", invalidate);
   window.addEventListener("amitia:memory-scope-changed", refresh);
@@ -403,13 +476,18 @@ onUnmounted(() => {
   window.removeEventListener("amitia:memory-scope-changed", refresh);
   invalidate();
 });
+
+async function maybeOpenCreateFromQuery() {
+  if (String(route.query.create || "") !== "1" || createDialog.value) return;
+  const query = { ...route.query };
+  delete query.create;
+  await router.replace({ path: route.path, query, hash: route.hash });
+  await openCreateDialog();
+}
 </script>
 
 <style scoped>
 .continuity-page { max-width: 1280px; min-width: 0; margin: 0 auto; }
-.page-header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 20px; }
-.page-header h2 { margin: 0 0 6px; font-size: var(--ac-font-size-xl); font-weight: 600; line-height: 1.5; }
-.page-header p { margin: 0; color: var(--ac-color-text-secondary); font-size: var(--ac-font-size-sm); line-height: 1.6; }
 .header-actions { display: flex; align-items: flex-end; gap: 12px; min-width: 0; max-width: 100%; }
 .role-field { width: 240px; }
 .toolbar, .toolbar.has-source { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding: 16px; margin-bottom: 20px; border: 1px solid var(--ac-color-border); border-radius: var(--ac-radius-md); background: var(--ac-color-surface); }
@@ -430,13 +508,13 @@ onUnmounted(() => {
 .detail-section { margin-top: 24px; }
 .detail-section h3 { margin: 0 0 12px; }
 .event-summary { margin-top: 4px; color: var(--el-text-color-secondary); line-height: 1.5; }
+.goal-edit-notice { margin: 0 0 14px; color: var(--el-text-color-secondary); font-size: 13px; }
 @media (max-width: 1024px) {
   .toolbar-field { flex-grow: 1; }
 }
 @media (max-width: 720px) {
   .toolbar, .toolbar.has-source { flex-direction: column; align-items: stretch; gap: 12px; }
   .toolbar-field { flex: auto; }
-  .page-header { align-items: stretch; flex-direction: column; }
   .header-actions { align-items: stretch; flex-direction: column; }
   .role-field { width: 100%; }
   .toolbar-field :deep(.el-select__wrapper), .toolbar-field :deep(.el-input__wrapper), .header-actions > .el-button, .refresh-button { min-height: 44px; }

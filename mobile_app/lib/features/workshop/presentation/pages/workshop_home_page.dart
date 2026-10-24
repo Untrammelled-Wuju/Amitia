@@ -36,8 +36,8 @@ class WorkshopHomePage extends ConsumerWidget {
               _buildEntryCard(
                 context,
                 icon: Icons.pets_outlined,
-                title: '桌宠制作',
-                description: '生成自定义桌宠角色，处理动作帧、审核质量并安装到桌面',
+                title: '桌宠中心',
+                description: '管理桌宠安装、插件与运行状态',
                 onTap: () => context.push(AppRoutes.workshopPet),
               ),
             ],

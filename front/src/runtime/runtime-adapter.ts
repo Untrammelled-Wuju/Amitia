@@ -80,16 +80,7 @@ export async function getApiBaseURLForPath(path: string): Promise<string> {
     return resolveLocalRuntimeBaseURL();
   }
   if (window.amitiaDesktop && isDeviceRoleManagementPath(path) && (await getDeploymentConfig()).mode === "cloud") {
-    const runtime = await getRuntimeConnection();
-    const base = runtime.apiBaseURL;
-    const generation = roleSourceGeneration;
-    const response = await fetch(base + "/api/device-mesh/v1/coordination/me", { headers: await getBackendAuthHeaders("business"), redirect: "error" });
-    if (!response.ok) throw new Error("无法确认角色所属设备，请恢复 Core 连接后重试");
-    const payload = await response.json();
-    const policy = payload.data?.policy || payload.policy;
-    if (typeof policy?.coordinated !== "boolean") throw new Error("角色来源状态无效");
-    if (generation !== roleSourceGeneration) throw new Error("Core 已切换，请重新加载角色");
-    return !policy.coordinated ? await resolveLocalRuntimeBaseURL() : base;
+    return getApiBaseURL();
   }
   return getApiBaseURL();
 }
@@ -195,6 +186,10 @@ export async function getDeploymentConfig(): Promise<DeploymentModeConfig> {
       }
     } catch {
       // Invalid browser-local deployment config falls back to same-origin Cloud UI.
+    }
+    if ((import.meta as any).env?.DEV && (import.meta as any).env?.VITE_WEB_LOCAL_MODE === "true") {
+      cachedConfig = { mode: "local" };
+      return cachedConfig;
     }
     cachedConfig = { mode: "cloud", serverURL: normalizeHTTPBaseURL(window.location.origin) };
     return cachedConfig;

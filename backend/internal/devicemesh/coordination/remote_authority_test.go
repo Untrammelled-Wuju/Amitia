@@ -33,7 +33,7 @@ func TestRemoteAuthorityWaitsForOwnerFenceAndRejectsDelayedOldRequest(t *testing
 		return coordination.FenceSourceAuthority(ctx, db, space, device, revision)
 	})
 	changed := make(chan error, 1)
-	go func() { _, err := service.ChangeMode(t.Context(), "space", "b", 1, true, "role"); changed <- err }()
+	go func() { _, err := service.InitializeCoordinated(t.Context(), "space", "b", 1, "role"); changed <- err }()
 	<-entered
 	select {
 	case err := <-changed:
@@ -76,7 +76,7 @@ func TestUnknownRemoteCallSurvivesRestartAndCannotPretendPermissionChanged(t *te
 		t.Fatal(err)
 	}
 	restarted := coordination.NewService(db)
-	if _, err := restarted.ChangeMode(t.Context(), "space", "a", 1, true, "role"); !errors.Is(err, coordination.ErrAuthorityUnconfirmed) {
+	if _, err := restarted.InitializeCoordinated(t.Context(), "space", "a", 1, "role"); !errors.Is(err, coordination.ErrAuthorityUnconfirmed) {
 		t.Fatalf("unknown remote call ignored after restart: %v", err)
 	}
 	policy, err := restarted.Get(t.Context(), "space", "a")
@@ -89,7 +89,7 @@ func TestUnknownRemoteCallSurvivesRestartAndCannotPretendPermissionChanged(t *te
 	if err := restarted.ConfirmRemoteAuthority(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := restarted.ChangeMode(t.Context(), "space", "a", 1, true, "role"); err != nil {
+	if _, err := restarted.InitializeCoordinated(t.Context(), "space", "a", 1, "role"); err != nil {
 		t.Fatalf("confirmed call kept policy blocked: %v", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestStalePolicyRequestDoesNotFenceValidCalls(t *testing.T) {
 		t.Fatal("stale request fenced active calls")
 		return nil
 	})
-	if _, err := service.ChangeMode(t.Context(), "space", "a", 99, true, "role"); !errors.Is(err, coordination.ErrRevision) {
+	if _, err := service.InitializeCoordinated(t.Context(), "space", "a", 99, "role"); !errors.Is(err, coordination.ErrRevision) {
 		t.Fatal(err)
 	}
 	if _, err := service.SetCapabilityGrant(t.Context(), "space", "a", "b", "ai.chat", 99, true); !errors.Is(err, coordination.ErrRevision) {

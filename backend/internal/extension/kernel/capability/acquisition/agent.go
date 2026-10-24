@@ -65,25 +65,8 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 // AcquireCapability translates an AcquireInput into an AcquisitionRequest,
 // invokes the AcquisitionService.Acquire, and returns an AcquireOutput.
 func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input AcquireInput, spaceID string, execCtx *execution.ExecutionContext) (*AcquireOutput, error) {
-	if input.ResumeToken != "" {
-		if !input.UserConfirmed && !input.Approval {
-			return nil, NewAcquisitionError("approval_required", "userConfirmed=true is required to resume an approval-gated acquisition", nil)
-		}
-		result, err := b.acquisitionService.ResumeAcquire(ctx, input.ResumeToken, spaceID)
-		if err != nil {
-			return &AcquireOutput{Success: false, State: StateFailed, ResumeToken: input.ResumeToken, ErrorMessage: err.Error()}, err
-		}
-		output := &AcquireOutput{Success: result.IsReady() || result.State == StateInstalledOnly, Installed: result.Installed, Enabled: result.Enabled, Warnings: result.Warnings, State: result.State, ResumeToken: input.ResumeToken}
-		if len(result.CapabilityIDs) > 0 {
-			output.CapabilityID = string(result.CapabilityIDs[0])
-		}
-		if result.IsReady() {
-			output.InstalledAt = result.UpdatedAt.Format(time.RFC3339)
-		}
-		if result.Error != "" {
-			output.ErrorMessage = result.Error
-		}
-		return output, nil
+	if input.ResumeToken != "" || input.Approval || input.UserConfirmed {
+		return nil, NewAcquisitionError("untrusted_approval_origin", "Model-supplied approval is not a user confirmation; use the authorized execution resume flow", nil)
 	}
 
 	if input.CapabilityID == "" {
@@ -101,9 +84,7 @@ func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input Acq
 	if input.PreferredKind != "" {
 		request.PreferredKinds = []CandidateKind{normalizeCandidateKind(input.PreferredKind)}
 	}
-	yes := input.Approval || input.UserConfirmed
-
-	result, err := b.acquisitionService.Acquire(ctx, request, yes)
+	result, err := b.acquisitionService.Acquire(ctx, request, false)
 	if err != nil {
 		// If approval is required, return a structured output rather than a
 		// raw error so the agent can surface the approval request to the user.

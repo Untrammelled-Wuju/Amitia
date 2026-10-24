@@ -154,25 +154,6 @@ class DeviceMeshService {
     return result;
   }
 
-  Future<Map<String, dynamic>> changeCoordination({
-    required bool coordinated,
-    required int expectedRevision,
-    String selectedRole = '',
-    Map<String, String>? headers,
-  }) async {
-    final result = await _api.put<Map<String, dynamic>>(
-      '/api/device-mesh/v1/coordination/me',
-      headers: headers,
-      data: {
-        'coordinated': coordinated,
-        'expectedRevision': expectedRevision,
-        'selectedRole': selectedRole,
-      },
-    );
-    if (result == null) throw StateError('统筹模式更新失败');
-    return result;
-  }
-
   Future<void> grantAdministrator(
     String deviceId, {
     required bool grant,

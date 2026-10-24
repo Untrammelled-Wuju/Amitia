@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
@@ -360,110 +359,6 @@ func verifyDesktopPetProductionReader(ctx context.Context, repo installation.Rep
 		}
 		return nil
 	})
-}
-
-func executeDesktopPetEditingWriteCanary(ctx context.Context, svc editing.Service, db *gorm.DB) error {
-	if svc == nil || db == nil {
-		return errors.New("desktop pet editing write canary: production editing service/database unavailable")
-	}
-	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("space_id = ? AND client_instance_id = ?", "__migration_cutover_canary__", "migration-cutover-canary").Delete(&editing.EditSession{}).Error; err != nil {
-			return err
-		}
-		return tx.Where("space_id = ? AND id LIKE ?", "__migration_cutover_canary__", "cutover-canary-rev-%").Delete(&editing.ActionRevision{}).Error
-	}); err != nil {
-		return fmt.Errorf("desktop pet editing write canary: cleanup stale canary rows: %w", err)
-	}
-	canaryID := uuid.NewString()
-	now := time.Now().UTC().Format(time.RFC3339)
-	revision := &editing.ActionRevision{
-		ID:               "cutover-canary-rev-" + canaryID,
-		SpaceID:          "__migration_cutover_canary__",
-		ProcessingTaskID: "cutover-canary-task-" + canaryID,
-		ActionKey:        "cutover_canary",
-		RevisionNumber:   1,
-		RevisionType:     editing.RevisionTypeProcessed,
-		Status:           "ready",
-		CreatedBySpaceID: "migration-cutover-canary",
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-	if err := db.WithContext(ctx).Create(revision).Error; err != nil {
-		return fmt.Errorf("desktop pet editing write canary: create isolated prerequisite revision: %w", err)
-	}
-	binding := &editing.ActiveRevisionBinding{
-		ProcessingTaskID:       revision.ProcessingTaskID,
-		ActionKey:              revision.ActionKey,
-		RevisionID:             revision.ID,
-		BindingVersion:         1,
-		ActivatedBy:            "migration-cutover-canary",
-		Reason:                 "canary",
-		CreatedAt:              now,
-		UpdatedAt:              now,
-		SpaceID:                revision.SpaceID,
-		ActiveActionRevisionID: revision.ID,
-		BindingRevision:        1,
-		BoundReason:            "canary",
-		BoundBy:                "migration-cutover-canary",
-		BoundAt:                now,
-	}
-	if err := db.WithContext(ctx).Create(binding).Error; err != nil {
-		return fmt.Errorf("desktop pet editing write canary: create isolated prerequisite binding: %w", err)
-	}
-	var sessionID string
-	cleanup := func() error {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return db.WithContext(cleanupCtx).Transaction(func(tx *gorm.DB) error {
-			if sessionID != "" {
-				if err := tx.Where("id = ?", sessionID).Delete(&editing.EditSession{}).Error; err != nil {
-					return err
-				}
-			}
-			if err := tx.Where("processing_task_id = ? AND action_key = ?", revision.ProcessingTaskID, revision.ActionKey).Delete(&editing.ActiveRevisionBinding{}).Error; err != nil {
-				return err
-			}
-			return tx.Where("id = ?", revision.ID).Delete(&editing.ActionRevision{}).Error
-		})
-	}
-	fail := func(cause error) error {
-		if cleanupErr := cleanup(); cleanupErr != nil {
-			return errors.Join(cause, fmt.Errorf("desktop pet editing write canary cleanup failed: %w", cleanupErr))
-		}
-		return cause
-	}
-	created, err := svc.CreateSession(ctx, revision.ProcessingTaskID, revision.ActionKey, revision.SpaceID, editing.CreateSessionRequest{
-		BaseRevisionID:   revision.ID,
-		ClientInstanceID: "migration-cutover-canary",
-	})
-	if err != nil {
-		return fail(fmt.Errorf("desktop pet editing write canary: CreateSession failed: %w", err))
-	}
-	if created == nil || created.SessionID == "" || created.BaseRevisionID != revision.ID {
-		return fail(errors.New("desktop pet editing write canary: CreateSession returned incomplete result"))
-	}
-	sessionID = created.SessionID
-	loaded, err := svc.GetSession(ctx, sessionID)
-	if err != nil {
-		return fail(fmt.Errorf("desktop pet editing write canary: GetSession failed: %w", err))
-	}
-	if loaded == nil || loaded.ID != sessionID || loaded.Status != editing.SessionStatusOpen {
-		return fail(errors.New("desktop pet editing write canary: created session is not canonical/open"))
-	}
-	if err := svc.AbandonSession(ctx, sessionID, revision.SpaceID); err != nil {
-		return fail(fmt.Errorf("desktop pet editing write canary: AbandonSession failed: %w", err))
-	}
-	loaded, err = svc.GetSession(ctx, sessionID)
-	if err != nil {
-		return fail(fmt.Errorf("desktop pet editing write canary: reload abandoned session failed: %w", err))
-	}
-	if loaded == nil || loaded.Status != editing.SessionStatusAbandoned {
-		return fail(errors.New("desktop pet editing write canary: abandoned session state was not persisted"))
-	}
-	if err := cleanup(); err != nil {
-		return fmt.Errorf("desktop pet editing write canary: cleanup failed: %w", err)
-	}
-	return nil
 }
 
 func executeDesktopPetWriteCanary(ctx context.Context, coord coordinator.InstallationCoordinator, repo installation.RepositoryV2, runtimeFacade *runtimev1.RuntimeFacade) (*migrationcore.CanaryResult, error) {

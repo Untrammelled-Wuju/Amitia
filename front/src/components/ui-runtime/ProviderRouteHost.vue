@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import UIProviderHost from "./UIProviderHost.vue";
+import ChannelPluginWorkspace from "./ChannelPluginWorkspace.vue";
 import { buildProviderRouteContext } from "@/ui-runtime/routeContext";
 
 const route = useRoute();
@@ -12,11 +13,19 @@ const context = computed(() => buildProviderRouteContext(
   route.params,
   route.query,
 ));
+const isChannelPlugin = computed(() => route.path.startsWith("/channels/"));
 const EmptyFallback = { template: '<div class="ui-provider-route-unavailable">UI provider unavailable</div>' };
 </script>
 
 <template>
+  <ChannelPluginWorkspace
+    v-if="isChannelPlugin"
+    :provider-id="providerId"
+    :capability="capability"
+    :context="context"
+  />
   <UIProviderHost
+    v-else
     :capability="capability"
     :provider-id="providerId || undefined"
     :fallback="EmptyFallback"

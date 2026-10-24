@@ -123,7 +123,7 @@ func TestActualTLSWorldbookMovesToCurrentCoreAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.request(t, a, http.MethodPut, "/api/device-mesh/v1/coordination/me", map[string]any{"coordinated": true, "expectedRevision": policy.ModeRevision, "selectedRole": "one"}, http.StatusOK)
+	ensureCoordinatedForTest(t, b, a, policy.ModeRevision)
 	stale := map[string]any{
 		"requestId": uuid.NewString(), "characterId": "one", "expectedExecutionScope": view.Scope,
 		"action": "create", "rule": map[string]any{"scope": "role", "matchType": "keyword", "matchPattern": "旧设备", "matchScope": "full_context", "injectContent": "旧设备规则", "priority": 1, "enabled": true},

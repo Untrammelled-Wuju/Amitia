@@ -66,10 +66,8 @@ class ContinuityService {
     return roles;
   }
 
-  bool get coordinated => _coordination?['policy']?['coordinated'] == true;
-
   Future<List<Map<String, dynamic>>> availableHistoricalRoles() async {
-    if (!coordinated || selectedRole.isEmpty) return [];
+    if (selectedRole.isEmpty) return [];
     final history = await _api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/historical-roles',
       queryParameters: {'characterId': selectedRole},
@@ -83,11 +81,7 @@ class ContinuityService {
   Future<String> _ownedRole([String? requested]) async {
     await availableRoles();
     if (_coordination?['coordinationAvailable'] != true) {
-      throw StateError(
-        _isBound()
-            ? '绑定 Core 的持续事项服务尚未就绪'
-            : '当前持续事项服务尚未就绪',
-      );
+      throw StateError(_isBound() ? '绑定 Core 的持续事项服务尚未就绪' : '当前持续事项服务尚未就绪');
     }
     final role = requested?.isNotEmpty == true ? requested! : selectedRole;
     if (role.isEmpty || !roles.any((value) => value['id'] == role)) {

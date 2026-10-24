@@ -367,7 +367,7 @@ func (s *kernelMemoryQueryService) Query(ctx context.Context, extensionID string
 	if limit < 1 || limit > 50 {
 		limit = 10
 	}
-	result, err := s.engine.SearchOwnedMemories(ctx, business.Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID, RoleID: scope.RoleID, RequestID: scope.RequestID + "|host-memory"}, business.MemoryManagementQuery{Query: query, Mode: "keyword", Limit: limit})
+	result, err := s.engine.SearchOwnedMemories(ctx, business.Request{SpaceID: scope.SpaceID, DeviceID: scope.InitiatorDeviceID, TargetDeviceID: scope.TargetDeviceID, CoreID: scope.CoreID, RoleID: scope.RoleID, RequestID: scope.RequestID + "|host-memory"}, business.MemoryManagementQuery{Query: query, Mode: "keyword", Limit: limit, ContextUsable: true})
 	if err != nil {
 		return nil, err
 	}

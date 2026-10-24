@@ -106,6 +106,7 @@ export interface AmitiaDesktopAPI {
   selectAgentSkillDirectory(): Promise<AgentSkillDirectorySelection | null>;
   selectMCPRoot(): Promise<{ path: string; name: string } | null>;
   selectWorkspaceDirectory(): Promise<WorkspaceDirectorySelection | null>;
+  getPathForFile(file: File): string;
   openPath(path: string): Promise<void>;
   selectExtensionPackage(): Promise<ExtensionPackageSelection | null>;
   saveExtensionPackage(

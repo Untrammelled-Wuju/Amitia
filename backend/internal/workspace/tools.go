@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -1116,6 +1117,9 @@ func (d *ToolDispatcher) handlePrecisePatch(ctx context.Context, input json.RawM
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, err
 	}
+	if filepath.IsAbs(req.FilePath) {
+		req.WorkspaceID = "direct"
+	}
 	result, err := d.precise.Patch(ctx, PatchRequest{
 		WorkspaceID: req.WorkspaceID,
 		FilePath:    req.FilePath,
@@ -1173,6 +1177,9 @@ func (d *ToolDispatcher) handlePreciseReplace(ctx context.Context, input json.Ra
 	}
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, err
+	}
+	if filepath.IsAbs(req.FilePath) {
+		req.WorkspaceID = "direct"
 	}
 	result, err := d.precise.Replace(ctx, ReplaceRequest{
 		WorkspaceID:         req.WorkspaceID,

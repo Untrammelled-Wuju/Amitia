@@ -274,7 +274,7 @@ function main() {
 
   if (forcedRaceChecks || fullGoTests || goPackages.some((value) => value.includes("internal/desktoppet"))) {
     console.log("[release-prerequisites] backend: focused desktoppet race checks");
-    runGoTest(goBin, ["./internal/desktoppet/installation/...", "./internal/desktoppet/processing/..."], {
+    runGoTest(goBin, ["./internal/desktoppet/installation/..."], {
       cwd: backendRoot,
       env: backendTestEnv,
       extraArgs: [

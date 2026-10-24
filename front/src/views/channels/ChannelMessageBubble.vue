@@ -40,8 +40,8 @@
       rel="noreferrer"
     >
       <span class="file-icon">▤</span>
-      <span class="file-name">{{ item.name || '附件' }}</span>
-      <small>{{ item.mime || '文件' }}</small>
+      <span class="file-name">{{ item.name || "附件" }}</span>
+      <small>{{ item.mime || "文件" }}</small>
     </a>
     <div v-if="message.text" class="message-content">{{ message.text }}</div>
   </div>

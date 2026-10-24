@@ -77,8 +77,8 @@ func (m *chatMultiAgentRuntime) ModelTools(ctx context.Context, scope chat.Skill
 	return []tool.Tool{
 		tool.Tool{Type: "function", Function: tool.Function{
 			Name:        multiAgentDelegateTool,
-			Description: "Delegate two to four independent coding subtasks within the already authorized workspace to the existing Multi-Agent coordinator. Returns task IDs, not proof of completion. Do not dispatch a second batch until the first batch is finished.",
-			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"objectives":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","minLength":8,"maxLength":2000}},"strategy":{"type":"string","enum":["parallel","sequential"]}},"required":["objectives"]}`),
+			Description: "Delegate two to four coding subtasks within the authorized workspace. Optional dependencies is an array aligned to objectives; each row contains zero-based prerequisite objective indices, with cycles and self-dependencies forbidden. Optional deadline_minutes limits the entire coordination to 1-240 minutes. Optional max_tool_calls limits the total number of actual authorized tool invocations across all child workers (1-256); reservations are durable and uncertain effects remain charged. Optional max_total_tokens sets the parent total model-token allowance (1-100000000); the full configured context window is reserved before each model invocation, with unused tokens released only after trusted usage reporting. Calls without a configured context window are blocked when this limit is enabled. Optional max_cost_microusd limits the shared configured-rate cost allowance (millionths of USD) across children; it fails closed unless the model has an operator-maintained rate-ceiling version and input/output rates. This is NOT verification of the provider's final invoice. Returns task IDs, not proof of completion. Do not dispatch another batch until the first finishes.",
+			Parameters:  multiAgentToolParameters(`{"type":"object","properties":{"objectives":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"string","minLength":8,"maxLength":2000}},"strategy":{"type":"string","enum":["parallel","sequential"]},"dependencies":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"array","items":{"type":"integer","minimum":0,"maximum":3},"uniqueItems":true}},"deadline_minutes":{"type":"integer","minimum":1,"maximum":240},"max_tool_calls":{"type":"integer","minimum":1,"maximum":256},"max_total_tokens":{"type":"integer","minimum":1,"maximum":100000000},"max_cost_microusd":{"type":"integer","minimum":1,"maximum":100000000000}},"required":["objectives"],"additionalProperties":false}`),
 		}},
 		tool.Tool{Type: "function", Function: tool.Function{
 			Name:        multiAgentStatusTool,
@@ -183,15 +183,18 @@ func (m *chatMultiAgentRuntime) delegateOnce(ctx context.Context, input json.Raw
 	if err != nil {
 		return multiAgentToolFailure("PARENT_SCOPE_INVALID", err)
 	}
-	var request struct {
-		Objectives []string `json:"objectives"`
-		Strategy   string   `json:"strategy"`
-	}
-	if err := json.Unmarshal(input, &request); err != nil {
+	request, err := parseMultiAgentDelegateArguments(input)
+	if err != nil {
 		return multiAgentToolFailure("INVALID_INPUT", err)
 	}
 	if len(request.Objectives) < 2 || len(request.Objectives) > 4 {
 		return multiAgentToolFailure("INVALID_OBJECTIVES", fmt.Errorf("multi-agent dispatch requires two to four objectives"))
+	}
+	if err := validateMultiAgentDeadlineMinutes(request.DeadlineMinutes); err != nil {
+		return multiAgentToolFailure("INVALID_DEADLINE", err)
+	}
+	if request.Dependencies != nil && len(request.Dependencies) != len(request.Objectives) {
+		return multiAgentToolFailure("INVALID_DEPENDENCIES", fmt.Errorf("dependencies must contain one row per objective"))
 	}
 	refs := make([]interaction.AgentWorkerRef, 0, len(request.Objectives))
 	assignments := make([]interaction.AssignmentObjective, 0, len(request.Objectives))
@@ -202,7 +205,16 @@ func (m *chatMultiAgentRuntime) delegateOnce(ctx context.Context, input json.Raw
 			return multiAgentToolFailure("INVALID_OBJECTIVES", fmt.Errorf("objective %d has invalid length", i))
 		}
 		refs = append(refs, interaction.AgentWorkerRef{WorkerID: fmt.Sprintf("worker-%d", i), CharacterID: scope.CharacterID, Role: "coding_worker"})
-		assignments = append(assignments, interaction.AssignmentObjective{WorkerIndex: i, Objective: obj, ExpectedOutcome: "Deliver a verified, scoped result for this objective"})
+		assignment := interaction.AssignmentObjective{WorkerIndex: i, Objective: obj, ExpectedOutcome: "Deliver a verified, scoped result for this objective"}
+		if request.Dependencies != nil {
+			for _, predecessor := range request.Dependencies[i] {
+				if predecessor < 0 || predecessor >= len(request.Objectives) || predecessor == i {
+					return multiAgentToolFailure("INVALID_DEPENDENCIES", fmt.Errorf("invalid predecessor %d for objective %d", predecessor, i))
+				}
+				assignment.Dependencies = append(assignment.Dependencies, fmt.Sprintf("index:%d", predecessor))
+			}
+		}
+		assignments = append(assignments, assignment)
 	}
 	strategy := interaction.CoordinationParallel
 	if request.Strategy != "" {
@@ -215,11 +227,16 @@ func (m *chatMultiAgentRuntime) delegateOnce(ctx context.Context, input json.Raw
 	}
 	request.Strategy = string(strategy)
 	canonical, _ := json.Marshal(struct {
-		Objectives     []string `json:"objectives"`
-		Strategy       string   `json:"strategy"`
-		WorkspaceID    string   `json:"workspaceId"`
-		PermissionMode string   `json:"permissionMode"`
-	}{request.Objectives, request.Strategy, scope.ExecContext.WorkspaceID, scope.PermissionMode})
+		Objectives      []string `json:"objectives"`
+		Strategy        string   `json:"strategy"`
+		WorkspaceID     string   `json:"workspaceId"`
+		PermissionMode  string   `json:"permissionMode"`
+		Dependencies    [][]int  `json:"dependencies,omitempty"`
+		DeadlineMinutes *int     `json:"deadline_minutes,omitempty"`
+		MaxToolCalls    *int     `json:"max_tool_calls,omitempty"`
+		MaxTotalTokens  *int64   `json:"max_total_tokens,omitempty"`
+		MaxCostMicroUSD *int64   `json:"max_cost_microusd,omitempty"`
+	}{request.Objectives, request.Strategy, scope.ExecContext.WorkspaceID, scope.PermissionMode, request.Dependencies, request.DeadlineMinutes, request.MaxToolCalls, request.MaxTotalTokens, request.MaxCostMicroUSD})
 	digest := sha256.Sum256(canonical)
 	fingerprint := hex.EncodeToString(digest[:])
 	if parent.RecoveryDescriptor != nil && parent.RecoveryDescriptor.MultiAgent != nil {
@@ -228,6 +245,9 @@ func (m *chatMultiAgentRuntime) delegateOnce(ctx context.Context, input json.Raw
 			return multiAgentToolFailure("MULTI_AGENT_DISPATCH_CONFLICT", fmt.Errorf("parent request already has a delegation with different arguments"))
 		}
 		return multiAgentToolSuccess(map[string]any{"coordinationId": ref.CoordinationID, "status": ref.Status, "alreadyExists": true, "assignmentRefs": ref.AssignmentRefs})
+	}
+	if err := interaction.ValidateAssignmentDependencyGraph(assignments); err != nil {
+		return multiAgentToolFailure("INVALID_DEPENDENCIES", err)
 	}
 	goal := decision.NewGoal(decision.GoalCreateRequest{
 		SpaceID: scope.SpaceID, CharacterID: scope.CharacterID, ConversationID: scope.ConversationID,
@@ -242,6 +262,7 @@ func (m *chatMultiAgentRuntime) delegateOnce(ctx context.Context, input json.Raw
 		WorkerRefs: refs, Objectives: assignments, Strategy: strategy,
 		CompletionPlan: interaction.CoordinationRequireAll, WorkspaceID: workspace.WorkspaceID,
 		PermissionMode: scope.PermissionMode, DispatchFingerprint: fingerprint,
+		MaxToolCalls: request.MaxToolCalls, MaxTotalTokens: request.MaxTotalTokens, MaxCostMicroUSD: request.MaxCostMicroUSD,
 	}
 	if owned, ok := coordination.FromContext(ctx); ok {
 		if owned.SpaceID != scope.SpaceID || owned.RoleID != scope.CharacterID || owned.CoreID == "" || owned.ResourceOwnerID == "" {
@@ -264,6 +285,10 @@ func (m *chatMultiAgentRuntime) delegateOnce(ctx context.Context, input json.Raw
 		if v, ok := workspace.Metadata["workspaceRootUri"].(string); ok {
 			requestStart.WorkspaceRootURI = v
 		}
+	}
+	if request.DeadlineMinutes != nil {
+		deadline := multiAgentDeadlineFromMinutes(time.Now().UTC(), *request.DeadlineMinutes)
+		requestStart.DeadlineAt = &deadline
 	}
 	if workspace.RuntimeTarget != nil && requestStart.WorkspaceDeviceID == "" {
 		requestStart.WorkspaceDeviceID = string(workspace.RuntimeTarget.DeviceID)

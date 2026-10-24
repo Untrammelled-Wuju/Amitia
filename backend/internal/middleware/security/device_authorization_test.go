@@ -61,7 +61,7 @@ func TestPairedDeviceRequiresExplicitCurrentCoreAdministration(t *testing.T) {
 	if response := request("device"); response.Code != 403 {
 		t.Fatalf("pairing granted administration: %d %s", response.Code, response.Body.String())
 	}
-	p, err := policies.ChangeMode(t.Context(), "space", "device", 1, true, "role")
+	p, err := policies.InitializeCoordinated(t.Context(), "space", "device", 1, "role")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,25 +119,6 @@ func TestPairedDeviceRequiresExplicitCurrentCoreAdministration(t *testing.T) {
 	configurationPath = "/configuration/long"
 	if response := request("device"); response.Code != 409 || lateWrites != 0 {
 		t.Fatal("revocation did not cancel in-flight configuration")
-	}
-	configurationPath = "/configuration"
-	p, err = policies.GrantAdministrator(t.Context(), "space", "device", p.PermissionRevision, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedPolicy = ""
-	p, err = policies.ChangeMode(t.Context(), "space", "device", p.ModeRevision, false, "device-role")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response := request("device"); response.Code != 403 {
-		t.Fatalf("mode off retained administration: %d", response.Code)
-	}
-	if _, err := policies.ChangeMode(t.Context(), "space", "device", p.ModeRevision, true, "role"); err != nil {
-		t.Fatal(err)
-	}
-	if response := request("device"); response.Code != 403 {
-		t.Fatal("mode on restored old administrator")
 	}
 }
 

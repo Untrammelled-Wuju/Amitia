@@ -74,7 +74,7 @@ import ScenarioAssignment from "./components/ScenarioAssignment.vue";
 import ConfigEditDialog from "./components/ConfigEditDialog.vue";
 import TestResultDialog from "./components/TestResultDialog.vue";
 
-const modelConfig = useModelConfig({ extraFormFields: { protocol: "", supportsVision: false } });
+const modelConfig = useModelConfig({ extraFormFields: { protocol: "", supportsVision: false, budgetRateVersion: "", budgetInputRate: 0, budgetOutputRate: 0 } });
 
 const {
   configs,

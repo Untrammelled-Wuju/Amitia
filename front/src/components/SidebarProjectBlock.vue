@@ -11,6 +11,7 @@
         <span>{{ project.name }}</span>
         <small v-if="workspaces.length > 1">{{ workspaces.length }} 个工作区</small>
         <small v-if="project.readOnly">只读</small>
+        <small v-if="!workspaces.length">未添加文件夹</small>
         <small v-if="!project.available">不可用</small>
       </button>
       <button
@@ -35,15 +36,15 @@
           <el-dropdown-menu>
             <el-dropdown-item command="newChat" :disabled="!project.available || project.readOnly">新建对话</el-dropdown-item>
             <el-dropdown-item v-if="!project.readOnly" command="rename">重命名项目</el-dropdown-item>
-            <el-dropdown-item v-if="!project.readOnly" command="addWorkspace">添加文件夹工作区</el-dropdown-item>
+            <el-dropdown-item v-if="!project.readOnly" command="addWorkspace">{{ workspaces.length ? "添加子工作区" : "添加主工作区" }}</el-dropdown-item>
             <el-dropdown-item v-for="workspace in workspaces" :key="workspace.id" :command="`primary:${workspace.id}`" :disabled="workspace.id === project.primaryWorkspaceId">
-              主根：{{ workspace.name }}
+              {{ workspace.id === project.primaryWorkspaceId ? "主工作区" : "子工作区" }}：{{ workspace.name }}{{ workspace.id === project.primaryWorkspaceId ? "" : "（设为主工作区）" }}
             </el-dropdown-item>
-            <el-dropdown-item v-for="workspace in workspaces" :key="`remove:${workspace.id}`" :command="`removeWorkspace:${workspace.id}`" :disabled="workspaces.length <= 1">
+            <el-dropdown-item v-for="workspace in workspaces" :key="`remove:${workspace.id}`" :command="`removeWorkspace:${workspace.id}`">
               移除工作区：{{ workspace.name }}
             </el-dropdown-item>
             <el-dropdown-item v-if="!project.readOnly" command="pin">{{ project.pinnedAt ? "取消置顶" : "置顶" }}</el-dropdown-item>
-            <el-dropdown-item command="open" :disabled="!project.available">在资源管理器中打开主根</el-dropdown-item>
+            <el-dropdown-item command="open" :disabled="!project.available">在资源管理器中打开主工作区</el-dropdown-item>
             <el-dropdown-item v-if="!project.readOnly" command="remove" divided>从侧边栏移除</el-dropdown-item>
           </el-dropdown-menu>
         </template>
@@ -56,11 +57,13 @@
           :key="conversation.id"
           :conversation="conversation"
           :active="conversation.id === activeConversationId"
+          :projects="projects"
           compact
           @select="emit('select', $event)"
           @rename="(item, title) => emit('renameConversation', item, title)"
           @toggle-pin="emit('togglePinConversation', $event)"
           @archive="emit('archiveConversation', $event)"
+          @move="(item, projectId) => emit('moveConversation', item, projectId)"
         />
         <button
           v-if="canToggleConversations"
@@ -87,6 +90,7 @@ const props = defineProps<{
   project: ProjectItem;
   active: boolean;
   activeConversationId: string;
+  projects?: ProjectItem[];
 }>();
 
 const emit = defineEmits<{
@@ -96,6 +100,7 @@ const emit = defineEmits<{
   renameConversation: [conversation: ConversationItem, title: string];
   togglePinConversation: [conversation: ConversationItem];
   archiveConversation: [conversation: ConversationItem];
+  moveConversation: [conversation: ConversationItem, projectId: string];
 }>();
 
 const expanded = ref(false);
@@ -263,5 +268,4 @@ const {
 
 button { line-height: 1.45; }
 button:not(:disabled):focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-button:not(:disabled):not(.project-main):active { background: var(--control-active-bg); color: var(--text-primary); }
 </style>

@@ -45,6 +45,7 @@ type Request struct {
 	ReasoningEffort    string                         `json:"reasoningEffort,omitempty"`
 	ReasoningEnabled   *bool                          `json:"reasoningEnabled,omitempty"`
 	MessageStyle       string                         `json:"messageStyle,omitempty"`
+	WorkingDirectory   string                         `json:"workingDirectory,omitempty"`
 	RequestID          string                         `json:"requestId"`
 	Message            string                         `json:"message"`
 }
@@ -127,6 +128,7 @@ type Inference struct {
 	ProjectID          string
 	Workspaces         []ProjectWorkspace
 	PrimaryWorkspaceID string
+	WorkingDirectory   string
 	Snapshot           coordination.DataSnapshot
 	HistoricalSnapshot *coordination.DataSnapshot
 	Emit               func(Event) error `json:"-"`
@@ -305,6 +307,22 @@ func conversationProjectID(snapshot coordination.DataSnapshot, conversationID st
 	return ""
 }
 
+func conversationWorkingDirectory(snapshot coordination.DataSnapshot, conversationID string) string {
+	for _, row := range snapshot.Resources {
+		if row.Kind != "conversation" || row.ID != conversationID {
+			continue
+		}
+		var document struct {
+			WorkingDirectory string `json:"workingDirectory"`
+		}
+		if json.Unmarshal(row.Body, &document) != nil {
+			return ""
+		}
+		return strings.TrimSpace(document.WorkingDirectory)
+	}
+	return ""
+}
+
 func (e *Engine) resolveRunProject(ctx context.Context, scope coordination.ExecutionScope, request Request, snapshot coordination.DataSnapshot) (string, []ProjectWorkspace, string, error) {
 	if worker, ok := ctx.Value(workerContextKey{}).(workerContext); ok {
 		return "", append([]ProjectWorkspace(nil), worker.Workspaces...), worker.PrimaryID, nil
@@ -334,9 +352,6 @@ func (e *Engine) resolveRunProject(ctx context.Context, scope coordination.Execu
 	var project Project
 	if json.Unmarshal(resource.Body, &project) != nil || project.ID != projectID {
 		return "", nil, "", errors.New("项目数据格式无效")
-	}
-	if project.HiddenAt != nil {
-		return "", nil, "", errors.New("该项目已从侧边栏移除")
 	}
 	workspaces, primaryID, err := normalizeProjectWorkspaces(project.Workspaces, project.PrimaryWorkspaceID)
 	if err != nil || !projectWorkspacesBelongToDevice(workspaces, scope.TargetDeviceID) {
@@ -498,10 +513,17 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		return Response{}, err
 	}
 	request.ProjectID, request.ProjectWorkspaces, request.PrimaryWorkspaceID = projectID, workspaces, primaryWorkspaceID
+	request.WorkingDirectory = strings.TrimSpace(request.WorkingDirectory)
+	if request.WorkingDirectory == "" {
+		request.WorkingDirectory = conversationWorkingDirectory(snapshot, request.ConversationID)
+	}
+	if len(request.WorkingDirectory) > 4096 || strings.ContainsAny(request.WorkingDirectory, "\x00\r\n") {
+		return Response{}, errors.New("对话工作目录无效")
+	}
 	if err := resolveConversationSettings(&request, snapshot); err != nil {
 		return Response{}, err
 	}
-	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context, "projectId": projectID, "workspaces": workspaces, "primaryWorkspaceId": primaryWorkspaceID}
+	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "roleId": request.RoleID, "historicalRoleId": request.HistoricalRoleID, "targetDeviceId": request.TargetDeviceID, "context": request.Context, "projectId": projectID, "workspaces": workspaces, "primaryWorkspaceId": primaryWorkspaceID, "workingDirectory": request.WorkingDirectory}
 	fingerprintData["conversationSettings"] = settingsFromRequest(request)
 	fingerprintData["retryRequestId"] = request.RetryRequestID
 	if ingress, ok := IngressFromContext(ctx); ok {
@@ -543,7 +565,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 				if recorded.Response.Transcription != "" {
 					message = recorded.Response.Transcription
 				}
-				inference := Inference{Context: request.Context, Scope: recorded.Response.Scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: message}
+				inference := Inference{Context: request.Context, Scope: recorded.Response.Scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, WorkingDirectory: request.WorkingDirectory, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: message}
 				inference.Ingress = recorded.Ingress
 				return e.completeMemory(coordination.WithScope(ctx, recorded.Response.Scope), inference, fingerprint, *recorded.Response, row.Revision)
 			}
@@ -574,6 +596,9 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 	}
 	if projectID != "" {
 		conversation["projectId"] = projectID
+	}
+	if request.WorkingDirectory != "" {
+		conversation["workingDirectory"] = request.WorkingDirectory
 	}
 	if conversationRoute.Origin != nil {
 		conversation["conversationOrigin"] = conversationRoute.Origin
@@ -666,7 +691,7 @@ func (e *Engine) RunEvents(ctx context.Context, request Request, emit func(Event
 		}
 		return nil
 	}
-	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent}
+	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, WorkingDirectory: request.WorkingDirectory, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent}
 	inference.ModelConfigID, inference.ReasoningEffort, inference.ReasoningEnabled = request.ModelConfigID, request.ReasoningEffort, request.ReasoningEnabled
 	inference.MessageStyle = request.MessageStyle
 	if request.RetryRequestID != "" {

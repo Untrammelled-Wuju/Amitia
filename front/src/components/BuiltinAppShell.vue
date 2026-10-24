@@ -7,7 +7,27 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="app-body workbench" :class="{ 'is-desktop-shell': isDesktopShell() }">
       <UIProviderHost v-if="!isMobile" capability="app.navigation" :fallback="SideNav" :context="{ viewport: 'desktop' }" :username="authUsername" :avatar="authAvatar" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
 
-      <div class="app-main workspace" :class="{ 'is-desktop-shell': isDesktopShell() }">
+      <div class="app-main workspace" :class="{ 'is-desktop-shell': isDesktopShell() }" :style="workspaceSidebarStyle">
+        <SettingsSidebar v-if="workspaceSidebarVisible && isSettingsPage" />
+        <AccountSidebar v-else-if="workspaceSidebarVisible && appSectionId === 'account'" />
+        <ChannelSidebar v-else-if="workspaceSidebarVisible && appSectionId === 'channels'" />
+        <WorkspaceSidebar v-else-if="workspaceSidebarVisible && appSectionId === 'home'" />
+        <SectionSidebar v-else-if="workspaceSidebarVisible" :section-id="appSectionId" />
+        <div
+          v-if="workspaceSidebarVisible"
+          class="workspace-sidebar-resizer"
+          :class="{ 'is-resizing': workspaceSidebarResizing }"
+          role="separator"
+          aria-label="调整第二栏宽度"
+          aria-orientation="vertical"
+          :aria-valuemin="WORKSPACE_SIDEBAR_MIN_WIDTH"
+          :aria-valuemax="workspaceSidebarMaxWidth"
+          :aria-valuenow="workspaceSidebarWidth"
+          tabindex="0"
+          @pointerdown="startWorkspaceSidebarResize"
+          @keydown.left.prevent="resizeWorkspaceSidebarBy(-12)"
+          @keydown.right.prevent="resizeWorkspaceSidebarBy(12)"
+        />
         <main class="app-content workspace-surface" :class="{ 'workspace-surface--chat': isChatPage }" data-amitia-ui="app.content">
           <header v-if="isMobile" class="mobile-header" data-amitia-ui="app.header">
             <span class="mobile-title">{{ pageTitle }}</span>
@@ -47,9 +67,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, provide } from "vue";
+import { ref, computed, onMounted, onUnmounted, provide, watch, watchEffect } from "vue";
 import { useRouter } from "vue-router";
 import SideNav from "./SideNav.vue";
+import SettingsSidebar from "./SettingsSidebar.vue";
+import AccountSidebar from "./AccountSidebar.vue";
+import ChannelSidebar from "./ChannelSidebar.vue";
+import WorkspaceSidebar from "./WorkspaceSidebar.vue";
+import SectionSidebar from "./SectionSidebar.vue";
 import MobileNav from "./MobileNav.vue";
 import UIProviderHost from "./ui-runtime/UIProviderHost.vue";
 import BuiltinWorkspaceHost from "./ui-runtime/BuiltinWorkspaceHost.vue";
@@ -63,6 +88,13 @@ import { resolvePageTitle, useUINavigationRegistry } from "@/ui-runtime/navigati
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { isDesktopShell } from "../runtime/runtime-capabilities";
+import { resolveAppSection } from "@/navigation/appSections";
+import {
+  WORKSPACE_SIDEBAR_DEFAULT_WIDTH,
+  WORKSPACE_SIDEBAR_MIN_WIDTH,
+  clampWorkspaceSidebarWidth,
+  maxWorkspaceSidebarWidth,
+} from "@/navigation/workspaceSidebarWidth";
 
 const router = useRouter();
 const workbench = useWorkbenchStore();
@@ -80,8 +112,31 @@ const {
 
 const windowWidth = ref(window.innerWidth);
 const isMobile = computed(() => windowWidth.value < 768);
+const WORKSPACE_SIDEBAR_STORAGE_KEY = "uai-workspace-sidebar-width";
+function readWorkspaceSidebarWidth() {
+  const stored = Number(localStorage.getItem(WORKSPACE_SIDEBAR_STORAGE_KEY));
+  return Number.isFinite(stored) && stored > 0 ? stored : WORKSPACE_SIDEBAR_DEFAULT_WIDTH;
+}
+const workspaceSidebarPreferredWidth = ref(readWorkspaceSidebarWidth());
+const workspaceSidebarResizing = ref(false);
+const workspaceSidebarMaxWidth = computed(() => maxWorkspaceSidebarWidth(windowWidth.value));
+const workspaceSidebarWidth = computed(() => clampWorkspaceSidebarWidth(
+  workspaceSidebarPreferredWidth.value,
+  windowWidth.value,
+));
+const workspaceSidebarVisible = computed(() => !isMobile.value && !appStore.sidebarCollapsed);
+const workspaceSidebarStyle = computed<Record<string, string>>(() => ({
+  "--ac-workspace-sidebar-width": `${workspaceSidebarWidth.value}px`,
+}));
+let workspaceSidebarResizeStartX = 0;
+let workspaceSidebarResizeStartWidth = 0;
 
 const isChatPage = computed(() => router.currentRoute.value.path === "/chat");
+const isSettingsPage = computed(() => {
+  const path = router.currentRoute.value.path;
+  return path === "/settings" || path.startsWith("/settings/");
+});
+const appSectionId = computed(() => resolveAppSection(router.currentRoute.value.path));
 const isExtensionPage = computed(() => router.currentRoute.value.path.startsWith("/extension/page/"));
 const isFullHeightRoute = computed(() => router.currentRoute.value.meta.fullHeight === true || isExtensionPage.value);
 const isContentPaddingDisabled = computed(() => {
@@ -89,14 +144,18 @@ const isContentPaddingDisabled = computed(() => {
   return (
     path === "/chat" ||
     path === "/emotes" ||
-    path.startsWith("/character") ||
+    path === "/character" ||
+    path.startsWith("/character/") ||
+    path.startsWith("/characters/") ||
     isFullHeightRoute.value
   );
 });
 const isContentFullHeight = computed(() => {
   const path = router.currentRoute.value.path;
   return path === "/emotes" ||
-    path.startsWith("/character") ||
+    path === "/character" ||
+    path.startsWith("/character/") ||
+    path.startsWith("/characters/") ||
     path === "/creative-workshop/character-cards" ||
     path.startsWith("/extensions/workflows/") ||
     isFullHeightRoute.value;
@@ -115,6 +174,13 @@ const currentCharName = ref("");
 
 const authUsername = ref("");
 const appStore = useAppStore();
+watchEffect(() => {
+  document.documentElement.style.setProperty("--workspace-navigation-rail-width", "64px");
+  document.documentElement.style.setProperty(
+    "--workspace-sidebar-effective-width",
+    workspaceSidebarVisible.value ? `${workspaceSidebarWidth.value}px` : "0px",
+  );
+});
 const authAvatar = computed(() => appStore.avatar);
 const extensionUIStore = useExtensionUIStore();
 const extensionRuntimeAvailable = ref(false);
@@ -126,6 +192,48 @@ const modelClass = computed(() =>
 function handleWindowResize() {
   windowWidth.value = window.innerWidth;
 }
+
+function setWorkspaceSidebarWidth(width: number) {
+  const next = clampWorkspaceSidebarWidth(width, windowWidth.value);
+  workspaceSidebarPreferredWidth.value = next;
+  localStorage.setItem(WORKSPACE_SIDEBAR_STORAGE_KEY, String(next));
+}
+
+function startWorkspaceSidebarResize(event: PointerEvent) {
+  if (event.button !== 0 || !workspaceSidebarVisible.value) return;
+  event.preventDefault();
+  workspaceSidebarResizeStartX = event.clientX;
+  workspaceSidebarResizeStartWidth = workspaceSidebarWidth.value;
+  workspaceSidebarResizing.value = true;
+  document.documentElement.classList.add("is-resizing-workspace-sidebar");
+  window.addEventListener("pointermove", handleWorkspaceSidebarResize);
+  window.addEventListener("pointerup", stopWorkspaceSidebarResize, { once: true });
+  window.addEventListener("pointercancel", stopWorkspaceSidebarResize, { once: true });
+}
+
+function handleWorkspaceSidebarResize(event: PointerEvent) {
+  if (!workspaceSidebarResizing.value) return;
+  setWorkspaceSidebarWidth(workspaceSidebarResizeStartWidth + event.clientX - workspaceSidebarResizeStartX);
+}
+
+function stopWorkspaceSidebarResize() {
+  workspaceSidebarResizing.value = false;
+  document.documentElement.classList.remove("is-resizing-workspace-sidebar");
+  window.removeEventListener("pointermove", handleWorkspaceSidebarResize);
+  window.removeEventListener("pointerup", stopWorkspaceSidebarResize);
+  window.removeEventListener("pointercancel", stopWorkspaceSidebarResize);
+}
+
+function resizeWorkspaceSidebarBy(delta: number) {
+  setWorkspaceSidebarWidth(workspaceSidebarWidth.value + delta);
+}
+
+watch(workspaceSidebarWidth, (width) => {
+  if (width !== workspaceSidebarPreferredWidth.value) {
+    workspaceSidebarPreferredWidth.value = width;
+    localStorage.setItem(WORKSPACE_SIDEBAR_STORAGE_KEY, String(width));
+  }
+});
 
 provide("theme", theme);
 async function refreshAll() {
@@ -205,6 +313,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  document.documentElement.style.removeProperty("--workspace-navigation-rail-width");
+  document.documentElement.style.removeProperty("--workspace-sidebar-effective-width");
+  stopWorkspaceSidebarResize();
   window.removeEventListener('amitia:workbench:open', handleWorkbenchOpen);
   if (healthInterval !== null) {
     window.clearInterval(healthInterval);
@@ -237,7 +348,7 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   overflow: hidden;
   background: var(--workbench-bg);
   border-left: 1px solid var(--surface-border);
@@ -246,12 +357,51 @@ onUnmounted(() => {
 .app-main.is-desktop-shell {
   border-top: 1px solid var(--surface-border);
   border-top-left-radius: 20px;
+  overflow: hidden;
+}
+
+.workspace-sidebar-resizer {
+  position: relative;
+  z-index: 12;
+  flex: 0 0 6px;
+  width: 6px;
+  margin-left: -6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.workspace-sidebar-resizer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: transparent;
+  content: "";
+  transition: background-color 0.16s ease;
+}
+
+.workspace-sidebar-resizer:hover::after,
+.workspace-sidebar-resizer:focus-visible::after,
+.workspace-sidebar-resizer.is-resizing::after {
+  background: var(--ac-color-primary);
+}
+
+.workspace-sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+:global(html.is-resizing-workspace-sidebar),
+:global(html.is-resizing-workspace-sidebar *) {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .workbench-content-row {display:flex;flex:1;min-height:0;min-width:0;position:relative}
 .workbench-content-row .content-scroll {min-width:0;flex:1}
 .app-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;

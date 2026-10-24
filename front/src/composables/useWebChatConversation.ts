@@ -9,6 +9,8 @@ import { useChatStore } from "@/stores/chat";
 import { useConversationWorkspace } from "./useConversationWorkspace";
 import { ownedProjectReference } from "@/runtime/owned-project-reference";
 
+const minimumConversationLoadingMs = 600;
+
 export function useWebChatConversation(
   messages: Ref<any[]>,
   convId: Ref<string>,
@@ -19,7 +21,9 @@ export function useWebChatConversation(
   charAvatar: Ref<string>,
   hasMoreHistory: Ref<boolean>,
   disconnectSSE: () => void,
-  connectSSE: () => void,
+  connectSSE: (withSnapshot?: boolean) => unknown,
+  loadSnapshot?: () => Promise<boolean>,
+  minimumLoadingMs = minimumConversationLoadingMs,
 ) {
   const { get, del } = useApi();
   const owned = useDeviceOwnedConversation();
@@ -30,11 +34,22 @@ export function useWebChatConversation(
   const characters = ref<any[]>([]);
   const conversations = ref<any[]>([]);
   const memories = ref<any[]>([]);
+  const conversationLoading = ref(false);
+  let conversationLoadGeneration = 0;
 
   const webMsgCount = ref(0);
 
   const showCharPicker = ref(false);
   const showMemories = ref(false);
+
+  function knownConversationTitle(id: string): string {
+    const rows = [
+      ...chatStore.sidebar.pinned,
+      ...chatStore.sidebar.recent,
+      ...chatStore.sidebar.projects.flatMap((project) => project.conversations),
+    ];
+    return String(rows.find((conversation) => conversation.id === id)?.title || "").trim();
+  }
 
   function selectCharacter(c: any) {
     characterId.value = c.id;
@@ -68,33 +83,50 @@ export function useWebChatConversation(
 
   async function loadCharacterConversation() {
     const conversationID = String(convId.value || "").trim();
+    const generation = ++conversationLoadGeneration;
+    const loadingStartedAt = Date.now();
     disconnectSSE();
     if (!conversationID) {
+      if (generation === conversationLoadGeneration) conversationLoading.value = false;
       convTitle.value = "";
       messages.value = [];
       return;
     }
     convId.value = conversationID;
-    if (!convTitle.value) convTitle.value = "新对话";
+    const titleHint = knownConversationTitle(conversationID);
+    if (titleHint) convTitle.value = titleHint;
     messages.value = [];
     hasMoreHistory.value = true;
-    if (owned.enabled.value) {
-      const selectedRole = characterId.value;
-      const result = await owned.query(conversationID, selectedRole);
-      if (convId.value !== conversationID || characterId.value !== selectedRole) return;
-      messages.value = owned.messages(result);
-      const conversation = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body;
-      const historicalConversation = result.historicalSnapshot?.resources.find((resource) => resource.kind === "conversation")?.body;
-      const grouped = conversation || historicalConversation;
-      const owner = conversation ? result.snapshot.ownerId : result.historicalSnapshot?.ownerId;
-      applySnapshotWorkspace(null, grouped?.projectId && owner ? ownedProjectReference(owner, grouped.projectId) : "");
-      convTitle.value = conversation?.title || "历史对话";
-      hasMoreHistory.value = owned.hasMore(conversationID, characterId.value);
-      await chatStore.markConversationRead(conversationID, Number(grouped?.lastTerminalTurnSequence || 0)).catch(() => undefined);
-      connectSSE();
-      return;
+    conversationLoading.value = true;
+    try {
+      if (owned.enabled.value) {
+        const selectedRole = characterId.value;
+        const result = await owned.query(conversationID, selectedRole);
+        if (generation !== conversationLoadGeneration || convId.value !== conversationID || characterId.value !== selectedRole) return;
+        messages.value = owned.messages(result);
+        const conversation = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body;
+        const historicalConversation = result.historicalSnapshot?.resources.find((resource) => resource.kind === "conversation")?.body;
+        const grouped = conversation || historicalConversation;
+        const owner = conversation ? result.snapshot.ownerId : result.historicalSnapshot?.ownerId;
+        applySnapshotWorkspace(null, grouped?.projectId && owner ? ownedProjectReference(owner, grouped.projectId) : "");
+        convTitle.value = conversation?.title || "历史对话";
+        hasMoreHistory.value = owned.hasMore(conversationID, characterId.value);
+        await chatStore.markConversationRead(conversationID, Number(grouped?.lastTerminalTurnSequence || 0)).catch(() => undefined);
+        if (loadSnapshot) {
+          const snapshotLoaded = await loadSnapshot();
+          if (generation !== conversationLoadGeneration || convId.value !== conversationID || characterId.value !== selectedRole) return;
+          void connectSSE(!snapshotLoaded);
+        } else {
+          void connectSSE();
+        }
+        return;
+      }
+      throw new Error(owned.notice.value || "设备对话服务尚未就绪");
+    } finally {
+      const remaining = minimumLoadingMs - (Date.now() - loadingStartedAt);
+      if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+      if (generation === conversationLoadGeneration && convId.value === conversationID) conversationLoading.value = false;
     }
-    throw new Error(owned.notice.value || "设备对话服务尚未就绪");
   }
 
   async function fetchConversations() {
@@ -139,7 +171,7 @@ export function useWebChatConversation(
     try {
       if (owned.enabled.value) {
         const result = await owned.conversationSummary(id, characterId.value);
-        return String(result?.summaryText || "").trim();
+        return String(result?.summaryText || (result as any)?.summary_text || "").trim();
       }
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } catch {
@@ -151,6 +183,7 @@ export function useWebChatConversation(
     characters,
     conversations,
     memories,
+    conversationLoading,
     webMsgCount,
     showCharPicker,
     showMemories,

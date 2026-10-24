@@ -87,33 +87,6 @@ class PetReleaseService {
   final BackendServiceApi _api;
   int _keyCounter = 0;
 
-  Future<PetRelease> buildRelease({
-    required String processingTaskId,
-    required String defaultAction,
-    required List<String> includedActions,
-    String petId = '',
-  }) async {
-    if (processingTaskId.trim().isEmpty) {
-      throw ArgumentError.value(processingTaskId, 'processingTaskId');
-    }
-    if (defaultAction.trim().isEmpty || includedActions.isEmpty) {
-      throw ArgumentError('桌宠发布必须包含默认动作和至少一个动作');
-    }
-    final response = await _api.post<Map<String, dynamic>>(
-      '/api/desktop-pets/releases/build',
-      data: {
-        'processingTaskId': processingTaskId,
-        'petId': petId,
-        'defaultAction': defaultAction,
-        'includedActions': includedActions,
-        'idempotencyKey': _newKey('release'),
-      },
-    );
-    final release = response?['release'];
-    if (release is! Map) throw StateError('桌宠发布响应缺少 release');
-    return PetRelease.fromJson(Map<String, dynamic>.from(release));
-  }
-
   Future<List<PetRelease>> listReleases() async {
     final response = await _api.get<Map<String, dynamic>>(
       '/api/desktop-pets/releases',

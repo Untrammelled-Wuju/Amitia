@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/mindruntime"
 )
 
 type ownedWorkerEngine interface {
@@ -32,13 +33,24 @@ func (p *ownedWorkerEnginePort) RunWorker(ctx context.Context, scope coordinatio
 	return p.engine.RunWorker(ctx, scope, request, workspaces, primary)
 }
 
+func classifyOwnedWorkerSettlement(cancelRequested bool, response business.Response, runErr error) interaction.InteractionStatus {
+	if runErr == nil && response.Saved && !response.Partial && !response.Interrupted {
+		return interaction.InteractionStatusCompleted
+	}
+	if cancelRequested || response.Interrupted || errors.Is(runErr, business.ErrInterrupted) {
+		return interaction.InteractionStatusInterrupted
+	}
+	return interaction.InteractionStatusFailed
+}
+
 type ownedMultiAgentWorkerRunner struct {
-	engine  ownedWorkerEngine
-	tracker interaction.InteractionTracker
-	mu      sync.Mutex
-	active  map[string]context.CancelFunc
-	closed  bool
-	wg      sync.WaitGroup
+	engine     ownedWorkerEngine
+	tracker    interaction.InteractionTracker
+	usageStore *mindruntime.ModelUsageStore
+	mu         sync.Mutex
+	active     map[string]context.CancelFunc
+	closed     bool
+	wg         sync.WaitGroup
 }
 
 func newOwnedMultiAgentWorkerRunner(engine ownedWorkerEngine, tracker interaction.InteractionTracker) *ownedMultiAgentWorkerRunner {
@@ -83,6 +95,43 @@ func (r *ownedMultiAgentWorkerRunner) StartWorker(ctx context.Context, req inter
 		r.mu.Unlock()
 		return "", errors.New("multi_agent: owned worker runtime has shut down")
 	}
+	parent, err := r.verifyWorkerParent(ctx, req)
+	if err != nil {
+		r.mu.Unlock()
+		return "", err
+	}
+	var durableDeadline *time.Time
+	var ownedToolBudget *mindruntime.OwnedToolBudget
+	var ownedModelBudget *mindruntime.OwnedModelBudget
+	if parent.RecoveryDescriptor != nil && parent.RecoveryDescriptor.MultiAgent != nil {
+		ref := parent.RecoveryDescriptor.MultiAgent
+		durableDeadline = ref.DeadlineAt
+		if ref.MaxToolCalls != nil {
+			if r.usageStore == nil || *ref.MaxToolCalls < 1 || *ref.MaxToolCalls > 256 {
+				r.mu.Unlock()
+				return "", errors.New("multi_agent: durable tool-budget admission unavailable")
+			}
+			ownedToolBudget = &mindruntime.OwnedToolBudget{SpaceID: owned.SpaceID, RoleID: owned.RoleID, OwnerID: owned.ResourceOwnerID, ParentInteractionID: req.ParentInteractionID, CoordinationID: req.CoordinationID, AssignmentID: req.AssignmentID, Limit: *ref.MaxToolCalls}
+		}
+		if ref.MaxTotalTokens != nil || ref.MaxCostMicroUSD != nil {
+			if r.usageStore == nil || (ref.MaxTotalTokens != nil && (*ref.MaxTotalTokens < 1 || *ref.MaxTotalTokens > 100000000)) || (ref.MaxCostMicroUSD != nil && (*ref.MaxCostMicroUSD < 1 || *ref.MaxCostMicroUSD > 100000000000)) {
+				r.mu.Unlock()
+				return "", errors.New("multi_agent: durable token-budget admission unavailable")
+			}
+			ownedModelBudget = &mindruntime.OwnedModelBudget{SpaceID: owned.SpaceID, RoleID: owned.RoleID, OwnerID: owned.ResourceOwnerID, ParentInteractionID: req.ParentInteractionID, CoordinationID: req.CoordinationID, AssignmentID: req.AssignmentID}
+			if ref.MaxTotalTokens != nil {
+				ownedModelBudget.TokenLimit = *ref.MaxTotalTokens
+			}
+			if ref.MaxCostMicroUSD != nil {
+				ownedModelBudget.CostLimitMicroUSD = *ref.MaxCostMicroUSD
+			}
+		}
+	}
+	runDeadline, err := ownedWorkerEffectiveDeadline(time.Now().UTC(), durableDeadline)
+	if err != nil {
+		r.mu.Unlock()
+		return "", err
+	}
 	saved, _, err := interaction.RegisterInteraction(ctx, r.tracker, record)
 	if err != nil {
 		r.mu.Unlock()
@@ -98,10 +147,28 @@ func (r *ownedMultiAgentWorkerRunner) StartWorker(ctx context.Context, req inter
 	}
 	if saved.Status != interaction.InteractionStatusReceived {
 		r.mu.Unlock()
-		return childID, nil
+		if saved.IsTerminal() {
+			return childID, nil
+		}
+		return "", fmt.Errorf("multi_agent: worker %s has persisted status %s without a live executor; reconcile its existing results before resuming", childID, saved.Status)
 	}
-	runCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	runCtx, cancel := context.WithDeadline(context.Background(), runDeadline)
 	runCtx = scope.WithContext(runCtx)
+	runCtx = coordination.WithAdditionalGuard(runCtx, r.workerBudgetAdmissionGuard(childID, req, parent.RecoveryDescriptor.MultiAgent))
+	if ownedToolBudget != nil || ownedModelBudget != nil {
+		runCtx = mindruntime.WithDurableOwnedBudgetParent(runCtx, mindruntime.OwnedBudgetParentLimits{
+			ToolCalls:          snapshotOwnedWorkerBudget(parent.RecoveryDescriptor.MultiAgent).toolLimit,
+			Tokens:             snapshotOwnedWorkerBudget(parent.RecoveryDescriptor.MultiAgent).tokenLimit,
+			CostMicroUSD:       snapshotOwnedWorkerBudget(parent.RecoveryDescriptor.MultiAgent).costLimit,
+			ChildInteractionID: childID,
+		})
+	}
+	if ownedToolBudget != nil {
+		runCtx = mindruntime.WithOwnedToolBudget(runCtx, *ownedToolBudget)
+	}
+	if ownedModelBudget != nil {
+		runCtx = mindruntime.WithOwnedModelBudget(runCtx, *ownedModelBudget)
+	}
 	r.active[childID] = cancel
 	r.wg.Add(1)
 	r.mu.Unlock()
@@ -116,7 +183,7 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			if latest, found, err := r.tracker.Get(context.Background(), childID); err == nil && found && !latest.IsTerminal() {
-				_, _ = r.tracker.Fail(context.Background(), childID, latest.StatusVersion, "owned_worker_panic", fmt.Sprint(recovered))
+				_, _ = r.tracker.TransitionCAS(context.Background(), childID, latest.StatusVersion, interaction.InteractionStatusInterrupted)
 			}
 		}
 	}()
@@ -124,9 +191,32 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 	if err != nil || !found || stored == nil {
 		return
 	}
+	if !stored.CancelRequestedAt.IsZero() {
+		_ = r.cancelRecord(context.Background(), childID)
+		return
+	}
 	if _, err = r.tracker.TransitionCAS(ctx, childID, stored.StatusVersion, interaction.InteractionStatusProcessing); err != nil {
 		return
 	}
+	cancelled, probeErr := r.workerCancellationRequested(ctx, childID, req)
+	if probeErr != nil {
+		r.settleUnverifiedWorker(childID)
+		return
+	}
+	if cancelled {
+		_ = r.cancelRecord(context.Background(), childID)
+		return
+	}
+	watchDone := make(chan struct{})
+	watchStopped := make(chan struct{})
+	go func() {
+		defer close(watchStopped)
+		r.watchWorkerCancellation(ctx, cancel, childID, req, watchDone)
+	}()
+	defer func() {
+		close(watchDone)
+		<-watchStopped
+	}()
 	workspaces := []business.ProjectWorkspace(nil)
 	if req.WorkspaceID != "" {
 		workspaces = []business.ProjectWorkspace{{ID: req.WorkspaceID, DeviceID: req.WorkspaceDeviceID, Name: req.WorkspaceName, Kind: req.WorkspaceKind, RootURI: req.WorkspaceRootURI}}
@@ -136,25 +226,13 @@ func (r *ownedMultiAgentWorkerRunner) run(ctx context.Context, cancel context.Ca
 		message += "\n\n预期结果：" + req.ExpectedOutcome
 	}
 	response, runErr := r.engine.RunWorker(ctx, owned, business.Request{SpaceID: owned.SpaceID, DeviceID: owned.InitiatorDeviceID, TargetDeviceID: owned.TargetDeviceID, CoreID: owned.CoreID, RoleID: owned.RoleID, ConversationID: conversationID, RequestID: "ma-" + req.AssignmentID, Message: message, PermissionMode: req.PermissionMode}, workspaces, req.WorkspaceID)
-	latest, exists, readErr := r.tracker.Get(context.Background(), childID)
-	if readErr != nil || !exists || latest == nil || latest.IsTerminal() {
-		return
-	}
-	if ctx.Err() != nil || !latest.CancelRequestedAt.IsZero() || response.Interrupted || errors.Is(runErr, business.ErrInterrupted) {
-		_ = r.cancelRecord(context.Background(), childID)
-		return
-	}
-	if runErr == nil && (!response.Saved || response.Partial) {
-		runErr = errors.New("owned worker result was not fully committed")
-	}
-	if runErr != nil {
-		_, _ = r.tracker.Fail(context.Background(), childID, latest.StatusVersion, "owned_worker_failed", runErr.Error())
-		return
-	}
-	_, _ = r.tracker.Complete(context.Background(), childID, latest.StatusVersion, response.Text)
+	r.settleWorker(ctx, childID, req, response, runErr)
 }
 
 func (r *ownedMultiAgentWorkerRunner) CancelWorker(ctx context.Context, childID string) error {
+	if err := r.tracker.RequestCancel(ctx, childID, "owned worker cancellation requested"); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	cancel, owned := r.active[childID]
 	if owned {
@@ -162,9 +240,29 @@ func (r *ownedMultiAgentWorkerRunner) CancelWorker(ctx context.Context, childID 
 	}
 	r.mu.Unlock()
 	if owned {
-		return r.cancelRecord(ctx, childID)
+
+		return nil
 	}
-	return r.cancelRecord(ctx, childID)
+
+	return r.cancelUnstartedRecord(ctx, childID)
+}
+
+func (r *ownedMultiAgentWorkerRunner) cancelUnstartedRecord(ctx context.Context, childID string) error {
+	record, found, err := r.tracker.Get(ctx, childID)
+	if err != nil {
+		return err
+	}
+	if !found || record == nil {
+		return interaction.ErrInteractionNotFound
+	}
+	if record.IsTerminal() || record.Status != interaction.InteractionStatusReceived {
+		return nil
+	}
+	_, err = r.tracker.TransitionCAS(ctx, childID, record.StatusVersion, interaction.InteractionStatusCancelled)
+	if errors.Is(err, interaction.ErrVersionConflict) {
+		return nil
+	}
+	return err
 }
 
 func (r *ownedMultiAgentWorkerRunner) cancelRecord(ctx context.Context, childID string) error {

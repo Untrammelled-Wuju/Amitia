@@ -163,6 +163,10 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	if err := s.validateMemoryTransfer(ctx, tx, commit); err != nil {
 		return Acknowledgement{}, err
 	}
+	newContinuityBindings, err := s.newContinuityExecutionBindings(ctx, tx, commit.Mutations)
+	if err != nil {
+		return Acknowledgement{}, err
+	}
 	seenDependencies := make(map[string]bool)
 	for _, dependency := range commit.Dependencies {
 		key := dependency.Kind + "/" + dependency.ID
@@ -315,6 +319,9 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			changedMemories = append(changedMemories, mutation.ID)
 		}
 		ack.Versions[key] = revision + 1
+	}
+	if err := s.validateContinuityExecutionBindings(ctx, tx, newContinuityBindings); err != nil {
+		return Acknowledgement{}, err
 	}
 	for _, conversation := range deletedConversations {
 		if keepConversationMemories[conversation] {

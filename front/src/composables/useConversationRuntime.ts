@@ -22,6 +22,8 @@ import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 import { publishWorkbenchEvent } from "@/runtime/workbench-agent-event";
 import { ownedChatRuntimeRequest, prepareOwnedChatRequest } from "@/runtime/owned-chat-management";
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
+import { OwnedRuntimeSSEDecoder, type OwnedRuntimeSSEFrame } from "@/runtime/owned-runtime-sse";
+import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
 
 interface ConversationSnapshot {
   version: number;
@@ -69,8 +71,13 @@ export function useConversationRuntime(
   const pendingAssistantRequests = new Map<string, PendingAssistantRequest>();
   let abortController: AbortController | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+  let renderTimer: number | ReturnType<typeof setTimeout> | null = null;
   let snapshotEpoch = 0;
+  let connectionEpoch = 0;
+  let connectionTask: Promise<void> | null = null;
+  let connectionTaskId = "";
+  let streamOpen = false;
+  let recoverySnapshotRequired = false;
   let disposed = false;
 
   function syncReducerState() {
@@ -260,8 +267,15 @@ export function useConversationRuntime(
   }
 
   function scheduleProjection() {
-    if (renderTimer) return;
-    renderTimer = setTimeout(projectTurns, 24);
+    if (renderTimer !== null) return;
+    if (typeof requestAnimationFrame === "function") {
+      renderTimer = requestAnimationFrame(() => {
+        renderTimer = null;
+        projectTurns();
+      });
+      return;
+    }
+    renderTimer = setTimeout(projectTurns, 16);
   }
 
   async function applyEvent(event: AgentUIEvent) {
@@ -354,6 +368,18 @@ export function useConversationRuntime(
     projectTurns();
   }
 
+  function revokeRuntimeAuthority(id: string) {
+    disconnect();
+    recoverySnapshotRequired = true;
+    persistedMessages.value = [];
+    turnHistoryCursor.value = '';
+    hasMoreTurnHistory.value = false;
+    automationStatus.value = null;
+    clear();
+    publishApprovalState({ action: 'reset', conversationId: id });
+    window.dispatchEvent(new CustomEvent('amitia:workbench-task-revoked', { detail: { conversationId: id } }));
+  }
+
   function beginPendingAssistant(requestId: string, characterId?: string) {
     const id = String(requestId || "").trim();
     if (!id) return;
@@ -371,20 +397,22 @@ export function useConversationRuntime(
     projectTurns();
   }
 
-  async function loadSnapshot(notify = true) {
+  async function loadSnapshot(notify = true): Promise<boolean> {
     const id = String(conversationId.value || "").trim();
     const epoch = ++snapshotEpoch;
     if (!id) {
       clear();
-      return;
+      return false;
     }
     const snapshot = await ownedChatRuntimeRequest<ConversationSnapshot>("snapshot", { conversationId: id });
-    if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return;
+    if (epoch !== snapshotEpoch || id !== String(conversationId.value || "").trim()) return false;
     if (snapshot.conversation) snapshot.conversation.id = id;
     snapshot.turns = snapshot.turns?.map((turn) => ({ ...turn, conversationId: id }));
     snapshot.approvals = snapshot.approvals?.map((approval) => ({ ...approval, conversationId: id }));
     applySnapshot(snapshot);
+    window.dispatchEvent(new CustomEvent('amitia:workbench-task-resync', { detail: { conversationId: id } }));
     if (notify) await onConversationSnapshot?.(snapshot.conversation, snapshot.workspace ?? null, snapshot);
+    return epoch === snapshotEpoch && id === String(conversationId.value || "").trim();
   }
 
   async function loadOlderTurns(): Promise<boolean> {
@@ -406,12 +434,22 @@ export function useConversationRuntime(
     return true;
   }
 
+  function currentConnection(epoch: number, id: string): boolean {
+    return !disposed && connectionEpoch === epoch && id === String(conversationId.value || "").trim();
+  }
+
   async function recoverFromSnapshot() {
     disconnect();
+    const epoch = connectionEpoch;
+    const id = String(conversationId.value || "").trim();
+    recoverySnapshotRequired = true;
     try {
-      await loadSnapshot();
-    } finally {
-      if (!disposed && conversationId.value) void connect(false);
+      if (!currentConnection(epoch, id) || !await loadSnapshot()) return;
+      if (!currentConnection(epoch, id)) return;
+      recoverySnapshotRequired = false;
+      if (id) void connect(false);
+    } catch {
+      if (currentConnection(epoch, id)) scheduleReconnect();
     }
   }
 
@@ -425,55 +463,95 @@ export function useConversationRuntime(
     };
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
-      void connect(false);
+      void connect(recoverySnapshotRequired);
     }, 1500);
   }
 
-  async function consume(response: Response, signal: AbortSignal, expected: any, id: string) {
-    if (!response.body) return;
+  async function consume(response: Response, signal: AbortSignal, expected: any, id: string, canonicalId: string, epoch: number) {
+    if (!response.body) throw new Error('Runtime SSE 响应没有事件流');
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    try {
-      while (!signal.aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-        let boundary = buffer.indexOf("\n\n");
-        while (boundary >= 0) {
-          const block = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          const type = block.split("\n").find((line) => line.startsWith("event:"))?.slice(6).trim() || "";
-          const data = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-          if (type === "snapshot.required") {
-            await recoverFromSnapshot();
-            return;
-          }
-          if (type === "agent_ui_event" && data) {
-            try {
-              const event = JSON.parse(data);
-              if (!sameOwnedAuthority(expected, event.executionScope) || owned.coreId.value !== expected.coreId) throw new Error("运行事件的数据归属已变化");
-              await applyEvent({ ...event, conversationId: id } as AgentUIEvent);
-            } catch {}
-          }
-          boundary = buffer.indexOf("\n\n");
-        }
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    const frames = new OwnedRuntimeSSEDecoder();
+    async function accept(frame: OwnedRuntimeSSEFrame): Promise<boolean> {
+      if (signal.aborted || !currentConnection(epoch, id)) return false;
+      if (frame.type === 'snapshot_required') {
+        await recoverFromSnapshot();
+        return false;
       }
+      let event: AgentUIEvent;
+      try {
+        event = JSON.parse(frame.data) as AgentUIEvent;
+      } catch {
+        await recoverFromSnapshot();
+        return false;
+      }
+      const eventScope = (event as AgentUIEvent & { executionScope?: OwnedExecutionScope })?.executionScope;
+      if (!event || typeof event !== 'object' || event.version !== 1 ||
+          !Number.isSafeInteger(event.eventSequence) || event.eventSequence <= 0 ||
+          event.conversationId !== canonicalId || !eventScope ||
+          !sameOwnedAuthority(expected, eventScope) ||
+          owned.coreId.value !== expected.coreId) {
+        await recoverFromSnapshot();
+        return false;
+      }
+      await applyEvent({ ...event, conversationId: id });
+      return !signal.aborted && currentConnection(epoch, id);
+    }
+    try {
+      while (!signal.aborted && currentConnection(epoch, id)) {
+        const { done, value } = await reader.read();
+        if (signal.aborted || !currentConnection(epoch, id)) break;
+        const decoded = done ? frames.push(decoder.decode()).concat(frames.finish()) : frames.push(decoder.decode(value, { stream: true }));
+        for (const frame of decoded) {
+          if (!await accept(frame)) return;
+        }
+        if (done) break;
+      }
+    } catch {
+      if (!signal.aborted && currentConnection(epoch, id)) await recoverFromSnapshot();
     } finally {
       reader.releaseLock();
     }
   }
 
-  async function connect(withSnapshot = true) {
-    disconnect();
+  function connect(withSnapshot = true): Promise<void> {
     const id = String(conversationId.value || "").trim();
-    if (!id || disposed) return;
+    if (!id || disposed) return Promise.resolve();
+    if (connectionTask) {
+      if (connectionTaskId === id) return connectionTask;
+      disconnect();
+    }
+    const task = establishConnection(id, withSnapshot).finally(() => {
+      if (connectionTask !== task) return;
+      connectionTask = null;
+      connectionTaskId = "";
+      streamOpen = false;
+    });
+    connectionTask = task;
+    connectionTaskId = id;
+    return task;
+  }
+
+  async function establishConnection(id: string, withSnapshot: boolean) {
+    const epoch = connectionEpoch;
     try {
-      if (withSnapshot) await loadSnapshot();
-      if (id !== String(conversationId.value || "")) return;
+      if (withSnapshot || recoverySnapshotRequired) {
+        recoverySnapshotRequired = true;
+        if (!await loadSnapshot() || !currentConnection(epoch, id)) return;
+        recoverySnapshotRequired = false;
+      }
+      if (!currentConnection(epoch, id)) return;
       const captured = snapshotEpoch;
       const path = "/api/device-mesh/v1/business/chat-runtime/events";
-      const { payload, expected } = await prepareOwnedChatRequest({ conversationId: id, afterSequence: lastEventSequence.value });
+      const afterSequence = lastEventSequence.value;
+      const { payload, expected } = await prepareOwnedChatRequest({ conversationId: id, afterSequence });
+      const canonicalId = String(payload.conversationId || id).trim();
+      if (!currentConnection(epoch, id) || captured !== snapshotEpoch) return;
+      if (owned.coreId.value !== expected.coreId) {
+        recoverySnapshotRequired = true;
+        scheduleReconnect();
+        return;
+      }
       const controller = new AbortController();
       abortController = controller;
       const [url, init] = await Promise.all([
@@ -482,26 +560,48 @@ export function useConversationRuntime(
           headers: {
             Accept: "text/event-stream",
             "Content-Type": "application/json",
-            ...(lastEventSequence.value > 0 ? { "Last-Event-ID": String(lastEventSequence.value) } : {}),
+            ...(afterSequence > 0 ? { "Last-Event-ID": String(afterSequence) } : {}),
           },
           signal: controller.signal,
           method: "POST",
           body: JSON.stringify(payload),
         }),
       ]);
-      if (captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) return;
+      if (!currentConnection(epoch, id) || captured !== snapshotEpoch || controller.signal.aborted) return;
       const response = await fetch(url, init);
-      if (captured !== snapshotEpoch || controller.signal.aborted || id !== String(conversationId.value || "")) { await response.body?.cancel(); return; }
-      if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error(`HTTP ${response.status}`);
-      await consume(response, controller.signal, expected, id);
-      if (!controller.signal.aborted) scheduleReconnect();
-    } catch {
+      if (!currentConnection(epoch, id) || captured !== snapshotEpoch || controller.signal.aborted) { await response.body?.cancel(); return; }
+      if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
+        await response.body?.cancel();
+        if (!currentConnection(epoch, id) || controller.signal.aborted) return;
+        if (response.status === 401 || response.status === 403) {
+          revokeRuntimeAuthority(id);
+          return;
+        }
+        if (response.status === 404 || response.status === 409 || response.ok) recoverySnapshotRequired = true;
+        throw new Error(`HTTP ${response.status}`);
+      }
+      streamOpen = true;
+      window.dispatchEvent(new CustomEvent('amitia:workbench-task-resync', { detail: { conversationId: id } }));
+      await consume(response, controller.signal, expected, id, canonicalId, epoch);
+      if (!controller.signal.aborted && currentConnection(epoch, id)) scheduleReconnect();
+    } catch (cause: any) {
+      if (!currentConnection(epoch, id)) return;
+      const status = Number(cause?.response?.status || cause?.status);
+      if (status === 401 || status === 403) {
+        revokeRuntimeAuthority(id);
+        return;
+      }
+      if ([404, 409].includes(status)) recoverySnapshotRequired = true;
       scheduleReconnect();
     }
   }
 
   function disconnect() {
+    connectionEpoch++;
     snapshotEpoch++;
+    connectionTask = null;
+    connectionTaskId = "";
+    streamOpen = false;
     automationStatus.value = null;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -518,17 +618,28 @@ export function useConversationRuntime(
     automationStatus.value = null;
     disconnect();
     window.removeEventListener("amitia:owned-runtime-refresh", refreshRuntime);
+    window.removeEventListener("amitia:runtime-connection-changed", invalidateRuntimeAuthority);
+    window.removeEventListener("amitia:execution-scope-changed", invalidateRuntimeAuthority);
     if (renderTimer) {
-      clearTimeout(renderTimer);
+      if (typeof requestAnimationFrame === "function") cancelAnimationFrame(renderTimer as number);
+      else clearTimeout(renderTimer as ReturnType<typeof setTimeout>);
       renderTimer = null;
     }
   }
 
   function refreshRuntime(event: Event) {
-    if ((event as CustomEvent).detail?.conversationId === conversationId.value) void connect();
+    if ((event as CustomEvent).detail?.conversationId !== conversationId.value) return;
+    if (streamOpen || connectionTask) return;
+    void connect();
+  }
+
+  function invalidateRuntimeAuthority() {
+    if (!disposed && conversationId.value) revokeRuntimeAuthority(conversationId.value);
   }
 
   window.addEventListener("amitia:owned-runtime-refresh", refreshRuntime);
+  window.addEventListener("amitia:runtime-connection-changed", invalidateRuntimeAuthority);
+  window.addEventListener("amitia:execution-scope-changed", invalidateRuntimeAuthority);
 
   watch(persistedMessages, scheduleProjection, { deep: true });
   projectTurns();
