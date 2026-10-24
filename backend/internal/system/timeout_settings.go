@@ -31,6 +31,8 @@ func (s *service) UpdateTimeoutSettings(settings timeoutpolicy.Settings) error {
 }
 
 func (s *service) UpdateTimeoutSettingsContext(ctx context.Context, settings timeoutpolicy.Settings) error {
+	s.taskPolicyMu.Lock()
+	defer s.taskPolicyMu.Unlock()
 	if err := timeoutpolicy.Validate(settings); err != nil {
 		return err
 	}

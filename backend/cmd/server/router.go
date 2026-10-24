@@ -176,6 +176,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	})
 
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
+	if services.KernelContainer != nil {
+		if err := systemSvc.AttachTaskRuntime(services.KernelContainer.TaskRuntimeService); err != nil {
+			return nil, fmt.Errorf("initialize task maintenance policy: %w", err)
+		}
+	}
 	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.MemoryConsumers)
 	if services.KernelContainer != nil {
 		systemHandler.SetApprovalBroker(services.KernelContainer.ApprovalBroker)
@@ -587,7 +592,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.DeviceMesh != nil {
 			systemRouterOptions = append(systemRouterOptions, system.WithSafetyCoordination(services.DeviceMesh.Coordination))
 		}
-		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, channelAccess, systemRouterOptions...)
+		system.RegisterSystemRouter(apiGroup, ctx, systemSvc, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.MemoryConsumers, services.Temporal, services.DataPortability, services.Artifact.Service, channelAccess, systemRouterOptions...)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
 		registerMeshRealtimePublicRoutes(r, services)

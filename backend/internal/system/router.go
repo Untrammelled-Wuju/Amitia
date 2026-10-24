@@ -34,8 +34,10 @@ func WithSafetyCoordination(coordinator *coordination.Service) SystemRouterOptio
 	}
 }
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, channelAccess ChannelAvailability, options ...SystemRouterOption) {
-	svc := NewService(ctx, runtimeprofile.Profile(""))
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memoryConsumer business.MemoryConsumerPort, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service, channelAccess ChannelAvailability, options ...SystemRouterOption) {
+	if svc == nil {
+		panic("system router requires the canonical system service")
+	}
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memoryConsumer)
 	for _, option := range options {
 		if option != nil {
@@ -91,11 +93,11 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/runtime/cleanup-temp", sharedCoreAdminOnly(), handler.CleanupTemp)
 	r.POST("/runtime/mode/validate", sharedCoreAdminOnly(), handler.ValidateMode)
 	r.POST("/runtime/rotate-logs", sharedCoreAdminOnly(), handler.RotateLogs)
-	r.GET("/runtime/long-running/config", sharedCoreAdminOnly(), handler.LongRunningConfig)
+	r.GET("/runtime/tasks/config", sharedCoreAdminOnly(), handler.TaskMaintenanceConfig)
 	r.GET("/runtime/timeout/config", sharedCoreAdminOnly(), handler.TimeoutSettings)
 	r.PUT("/runtime/timeout/config", sharedCoreAdminOnly(), handler.UpdateTimeoutSettings)
-	r.PUT("/runtime/long-running/config", sharedCoreAdminOnly(), handler.UpdateLongRunningConfig)
-	r.GET("/runtime/long-running/status", sharedCoreAdminOnly(), handler.LongRunningStatus)
+	r.PUT("/runtime/tasks/config", sharedCoreAdminOnly(), handler.UpdateTaskMaintenanceConfig)
+	r.GET("/runtime/tasks/status", sharedCoreAdminOnly(), handler.TaskMaintenanceStatus)
 	r.PUT("/runtime/mode", sharedCoreAdminOnly(), handler.UpdateRuntimeMode)
 	r.GET("/runtime/mode", sharedCoreAdminOnly(), handler.GetRuntimeMode)
 	r.GET("/runtime/status", sharedCoreAdminOnly(), handler.RuntimeStatus)

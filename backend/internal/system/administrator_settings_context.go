@@ -59,12 +59,6 @@ func (s *service) AdministratorSettingsContext(ctx context.Context, operation st
 				settings["public_base_url"] = strings.TrimSpace(value)
 			}
 		}
-	case "long-running":
-		for input, key := range map[string]string{"maxTasks": "long_running_max_tasks", "timeoutMinutes": "long_running_timeout"} {
-			if value, ok := body[input]; ok {
-				settings[key] = strconv.Itoa(toInt(value))
-			}
-		}
 	case "update":
 		setBool("autoCheck", "auto_update")
 	case "setup-finish", "onboarding-complete":
@@ -121,8 +115,6 @@ func (s *service) AdministratorSettingsContext(ctx context.Context, operation st
 			port = endpoint.Port
 		}
 		return map[string]interface{}{"mode": mode, "deployMode": mode, "runtimeProfile": s.runtimeProfile.String(), "host": host, "port": port, "web": map[string]interface{}{"enabled": true, "publicBaseUrl": text("public_base_url", ""), "requireAuth": text("require_auth", "true") != "false"}, "storage": map[string]interface{}{"dataDir": s.dataDir}, "requiresRestart": true}, nil
-	case "long-running":
-		return map[string]interface{}{"maxTasks": toInt(text("long_running_max_tasks", "5")), "timeoutMinutes": toInt(text("long_running_timeout", "30"))}, nil
 	case "update":
 		return map[string]interface{}{"autoCheck": text("auto_update", "true") != "false", "channel": "stable", "lastCheckAt": nil}, nil
 	case "setup-finish":

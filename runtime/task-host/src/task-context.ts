@@ -7,7 +7,7 @@ import type {
   TaskArtifactOptions,
   TaskStorageClient,
   TaskHostClient,
-} from "@amitia/plugin-sdk";
+} from "@amitia/plugin-sdk/tasks";
 import type { RpcClient } from "./rpc.js";
 import { CheckpointClient } from "./checkpoint.js";
 import { ProgressClient } from "./progress.js";

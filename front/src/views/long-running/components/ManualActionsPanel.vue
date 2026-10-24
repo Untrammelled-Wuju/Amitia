@@ -67,7 +67,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
+import { useCoreConfigurationAccess } from "@/composables/useCoreConfigurationAccess";
 import { cleanupTempApi, rotateLogsApi, checkDbIntegrityApi } from "../api";
 import { fmtBytes } from "../utils";
 
@@ -75,6 +76,9 @@ const emit = defineEmits<{
   actionCompleted: [];
 }>();
 
+const access = useCoreConfigurationAccess();
+let loadedContext = "";
+onMounted(async () => { try { loadedContext = await access.requireAccess(); } catch {} });
 const cleanupLoading = ref(false);
 const rotateLoading = ref(false);
 const dbCheckLoading = ref(false);
@@ -88,7 +92,9 @@ async function runCleanup() {
   cleanupLoading.value = true;
   actionResult.value = null;
   try {
-    const result = await cleanupTempApi();
+    const context = await access.requireAccess(loadedContext);
+    const result = await cleanupTempApi(context);
+    await access.requireAccess(context);
     actionResult.value = {
       message: `清理完成: 删除 ${result.deleted} 个文件`,
       type: "success",
@@ -106,7 +112,9 @@ async function runLogRotate() {
   rotateLoading.value = true;
   actionResult.value = null;
   try {
-    const result = await rotateLogsApi();
+    const context = await access.requireAccess(loadedContext);
+    const result = await rotateLogsApi(context);
+    await access.requireAccess(context);
     actionResult.value = {
       message:
         result.rotated.length > 0
@@ -130,7 +138,9 @@ async function runDbCheck() {
   dbCheckLoading.value = true;
   actionResult.value = null;
   try {
-    const result = await checkDbIntegrityApi();
+    const context = await access.requireAccess(loadedContext);
+    const result = await checkDbIntegrityApi(context);
+    await access.requireAccess(context);
     actionResult.value = {
       message:
         result.ok && result.errors.length === 0

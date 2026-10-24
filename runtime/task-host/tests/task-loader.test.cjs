@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const tempRoot = fs.realpathSync(os.tmpdir());
 const { pathToFileURL, fileURLToPath } = require('node:url');
 const { registerHooks } = require('node:module');
 const { createHash } = require('node:crypto');
@@ -37,7 +38,7 @@ function treeHash(root) {
 }
 
 test('loads only the exact pinned CommonJS and ESM entry bytes', async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-loader-'));
+  const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-loader-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const { loadTaskHandler } = await loader;
   for (const [extension, source] of [
@@ -55,7 +56,7 @@ test('loads only the exact pinned CommonJS and ESM entry bytes', async t => {
 });
 
 test('a file replacement during import cannot replace the already verified source', async t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-loader-race-'));
+  const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-loader-race-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const { loadTaskHandler } = await loader;
   const entry = path.join(root, 'task.mjs');
@@ -80,7 +81,7 @@ test('a file replacement during import cannot replace the already verified sourc
 test('bundle pin validates static and dynamic CommonJS and ESM dependencies', async t => {
   const { loadTaskHandler } = await loader;
   for (const extension of ['cjs', 'mjs']) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-'));
+    const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const source = extension === 'cjs' ? "module.exports=async()=>({success:true,output:require('./dependency.cjs')});" : "export default async()=>({success:true,output:(await import('./dependency.mjs')).default});";
     const dependency = path.join(root, 'dependency.' + extension);
@@ -97,7 +98,7 @@ test('bundle pin validates static and dynamic CommonJS and ESM dependencies', as
 
 test('dependency replacement after entry import is refused before execution', async t => {
   const { loadTaskHandler } = await loader;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-change-'));
+  const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-change-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = "export default async()=>({success:true,output:(await import('./late.mjs')).default});";
   const entry = path.join(root, 'task.mjs');
@@ -112,8 +113,8 @@ test('dependency replacement after entry import is refused before execution', as
 test('bundle modules cannot import files outside the pinned tree or newly added files', async t => {
   const { loadTaskHandler } = await loader;
   for (const outside of [true, false]) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-boundary-'));
-    const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-foreign-'));
+    const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-boundary-'));
+    const foreign = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-foreign-'));
     t.after(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(foreign, { recursive: true, force: true }); });
     const dependency = path.join(outside ? foreign : root, 'extra.mjs');
     const source = `export default async()=>({success:true,output:(await import(${JSON.stringify(pathToFileURL(dependency).href)})).default});`;
@@ -127,7 +128,7 @@ test('bundle modules cannot import files outside the pinned tree or newly added 
 
 test('dependency loader executes the same bytes it verifies during an import race', async t => {
   const { loadTaskHandler } = await loader;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-load-race-'));
+  const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-load-race-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const entry = path.join(root, 'task.mjs');
   const dependency = path.join(root, 'dependency.mjs');
@@ -145,8 +146,8 @@ test('dependency loader executes the same bytes it verifies during an import rac
 
 test('an already cached external module cannot bypass the bundle boundary', async t => {
   const { loadTaskHandler } = await loader;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-cached-'));
-  const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-cached-foreign-'));
+  const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-cached-'));
+  const foreign = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-cached-foreign-'));
   t.after(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(foreign, { recursive: true, force: true }); });
   const dependency = path.join(foreign, 'cached.cjs');
   fs.writeFileSync(dependency, "module.exports='cached';");
@@ -160,8 +161,8 @@ test('an already cached external module cannot bypass the bundle boundary', asyn
 
 test('a directory link inserted after bundle verification cannot escape pinned modules', async t => {
   const { loadTaskHandler } = await loader;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-link-'));
-  const foreign = fs.mkdtempSync(path.join(os.tmpdir(), 'amitia-bundle-link-foreign-'));
+  const root = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-link-'));
+  const foreign = fs.mkdtempSync(path.join(tempRoot, 'amitia-bundle-link-foreign-'));
   t.after(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(foreign, { recursive: true, force: true }); });
   const modules = path.join(root, 'modules');
   fs.mkdirSync(modules);

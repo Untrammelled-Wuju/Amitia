@@ -1,4 +1,4 @@
-import type { TaskCheckpointClient, TaskCheckpoint } from "@amitia/plugin-sdk";
+import type { TaskCheckpointClient, TaskCheckpoint } from "@amitia/plugin-sdk/tasks";
 import type { RpcClient } from "./rpc.js";
 
 export class CheckpointClient implements TaskCheckpointClient {

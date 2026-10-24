@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -72,18 +73,19 @@ func (q *TaskQueue) GetEntry(ctx context.Context, taskRunID string) (*TaskQueueE
 
 type ConcurrencyLimiter struct {
 	store            TaskStore
-	globalMax        int
+	globalMax        atomic.Int64
 	perExtensionMax  int
 	perDefinitionMax int
 }
 
 func NewConcurrencyLimiter(store TaskStore, cfg TaskRuntimeConfig) *ConcurrencyLimiter {
-	return &ConcurrencyLimiter{
+	limiter := &ConcurrencyLimiter{
 		store:            store,
-		globalMax:        cfg.GlobalMaxConcurrent,
 		perExtensionMax:  cfg.PerExtensionMaxConcurrent,
 		perDefinitionMax: cfg.PerDefinitionMaxConcurrent,
 	}
+	limiter.globalMax.Store(int64(cfg.GlobalMaxConcurrent))
+	return limiter
 }
 
 func (l *ConcurrencyLimiter) CanStart(ctx context.Context, run *TaskRun) (bool, string, error) {
@@ -91,7 +93,7 @@ func (l *ConcurrencyLimiter) CanStart(ctx context.Context, run *TaskRun) (bool, 
 	if err != nil {
 		return false, "", err
 	}
-	if global >= l.globalMax {
+	if global >= int(l.globalMax.Load()) {
 		return false, "global_concurrency_limit", nil
 	}
 	extCount, err := l.store.CountActiveByExtension(ctx, run.ExtensionID)

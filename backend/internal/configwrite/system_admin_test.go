@@ -18,7 +18,7 @@ func configurationAdministratorRouter(db *gorm.DB) *gin.Engine {
 	router.PUT("/audit", handler.UpdateAuditSettings)
 	router.PUT("/security", handler.UpdateSecurityAccessConfig)
 	router.PUT("/runtime", handler.UpdateRuntimeMode)
-	router.PUT("/long-running", handler.UpdateLongRunningConfig)
+	router.PUT("/long-running", handler.UpdateTaskMaintenanceConfig)
 	router.PUT("/update", handler.UpdateConfig_Update)
 	router.PUT("/timeout", handler.UpdateTimeoutSettings)
 	router.POST("/setup/finish", handler.SetupFinish)

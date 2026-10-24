@@ -57,18 +57,6 @@ func (h *Handler) ValidateMode(c *gin.Context) { util.SuccessResponse(c, h.servi
 
 func (h *Handler) RotateLogs(c *gin.Context) { h.administratorAction(c, "logs-rotate", "") }
 
-func (h *Handler) LongRunningConfig(c *gin.Context) {
-	util.SuccessResponse(c, h.service.GetLongRunningConfig())
-}
-
-func (h *Handler) UpdateLongRunningConfig(c *gin.Context) {
-	h.updateAdministratorSettings(c, "long-running", true)
-}
-
-func (h *Handler) LongRunningStatus(c *gin.Context) {
-	util.SuccessResponse(c, h.service.GetLongRunningStatus())
-}
-
 func (h *Handler) GetRuntimeMode(c *gin.Context) { util.SuccessResponse(c, h.service.GetRuntimeMode()) }
 
 func (h *Handler) UpdateRuntimeMode(c *gin.Context) {

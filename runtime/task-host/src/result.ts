@@ -1,4 +1,4 @@
-import type { TaskResult, TaskArtifact } from "@amitia/plugin-sdk";
+import type { TaskResult, TaskArtifact } from "@amitia/plugin-sdk/tasks";
 import type { RpcClient } from "./rpc.js";
 
 const INLINE_JSON_LIMIT = 64 * 1024;

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import * as nodeModule from "node:module";
-import type { TaskHandler } from "@amitia/plugin-sdk";
+import type { TaskHandler } from "@amitia/plugin-sdk/tasks";
 
 type ModuleLoadResult = { format: string; source?: string | ArrayBufferView | null; shortCircuit?: boolean };
 type ModuleLoadNext = (url: string, context: unknown) => ModuleLoadResult;

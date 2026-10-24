@@ -1,4 +1,4 @@
-import type { TaskProgressClient, TaskProgressReport } from "@amitia/plugin-sdk";
+import type { TaskProgressClient, TaskProgressReport } from "@amitia/plugin-sdk/tasks";
 import type { RpcClient } from "./rpc.js";
 
 const THROTTLE_INTERVAL_MS = 200;

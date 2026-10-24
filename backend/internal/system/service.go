@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
+	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
@@ -52,8 +53,10 @@ type Service interface {
 	GetLogsPromptTraces(limit int) map[string]interface{}
 	GetLogsRecent(limit int) map[string]interface{}
 	GetLogsRecentErrors(limit int) map[string]interface{}
-	GetLongRunningConfig() map[string]interface{}
-	GetLongRunningStatus() map[string]interface{}
+	AttachTaskRuntime(*task_runtime.TaskRuntimeService) error
+	TaskMaintenanceConfig(context.Context) (TaskMaintenanceConfig, error)
+	UpdateTaskMaintenanceConfig(context.Context, TaskMaintenanceUpdate) (TaskMaintenanceConfig, error)
+	TaskMaintenanceStatus(context.Context) (task_runtime.MaintenanceStatus, error)
 	GetMaintenanceStatus() map[string]interface{}
 	GetPrivacyScanResult(id string) map[string]interface{}
 	GetReleaseCheckHistory() map[string]interface{}
@@ -99,7 +102,6 @@ type Service interface {
 	ToolRoute(body map[string]interface{}) map[string]interface{}
 	UpdateAppConfig(body map[string]interface{}) map[string]interface{}
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
-	UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{}
 	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
 	UpdateRuntimeMode(body map[string]interface{}) map[string]interface{}
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}
@@ -112,6 +114,8 @@ type Service interface {
 }
 
 type service struct {
+	taskRuntime          *task_runtime.TaskRuntimeService
+	taskPolicyMu         sync.Mutex
 	usageStore           *mindruntime.ModelUsageStore
 	memoryConsumer       business.MemoryConsumerPort
 	db                   *gorm.DB

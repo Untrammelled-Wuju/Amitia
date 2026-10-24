@@ -23,43 +23,55 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
       <div class="lr-stat-card">
         <div class="lr-stat-label">活跃任务数</div>
-        <div class="lr-stat-value">{{ status.tasks?.length ?? 0 }}</div>
+        <div class="lr-stat-value">{{ status.activeCount }}</div>
       </div>
       <div class="lr-stat-card">
         <div class="lr-stat-label">最后活动</div>
         <div class="lr-stat-value lr-sm">
           {{
-            status.tasks?.length > 0 ? fmtTime(status.tasks[0].updated_at) : "-"
+            status.tasks?.length > 0 ? fmtTime(status.tasks[0].updatedAt) : "-"
           }}
         </div>
       </div>
     </div>
+    <div v-if="status">本机任务进程：{{ status.localProcessCount }}<span v-if="status.truncated"> · 最近任务列表已截断</span></div>
     <div
       v-if="status && status.tasks && status.tasks.length > 0"
       class="lr-task-list"
     >
-      <div class="lr-task-list-title">任务列表</div>
+      <div class="lr-task-list-title">最近任务（最多 50 项）</div>
       <div v-for="task in status.tasks" :key="task.id" class="lr-task-row">
-        <span class="lr-task-title">{{ task.title || "未命名任务" }}</span>
-        <span class="lr-task-time">{{ fmtTime(task.updated_at) }}</span>
+        <span class="lr-task-title">{{ task.title || task.id }} · {{ task.status }} · {{ task.placement }}</span>
+        <span class="lr-task-time">{{ fmtTime(task.updatedAt) }}</span>
       </div>
     </div>
   </el-card>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { fetchStatusApi, type LongRunningStatus } from "../api";
+import { ref, onMounted, watch } from "vue";
+import { ElMessage } from "element-plus";
+import { useCoreConfigurationAccess } from "@/composables/useCoreConfigurationAccess";
+import { fetchStatusApi, type TaskMaintenanceStatus } from "../api";
 import { fmtTime } from "../utils";
 
-const status = ref<LongRunningStatus | null>(null);
+const access = useCoreConfigurationAccess();
+let loadedContext = "";
+watch(access.contextKey, (value) => { if (loadedContext && value !== loadedContext) status.value = null; });
+const status = ref<TaskMaintenanceStatus | null>(null);
 const loading = ref(false);
 
 async function refresh() {
   loading.value = true;
   try {
-    status.value = await fetchStatusApi();
-  } catch {
+    const context = await access.requireAccess();
+    const value = await fetchStatusApi(context);
+    await access.requireAccess(context);
+    loadedContext = context;
+    status.value = value;
+  } catch (error) {
+    status.value = null;
+    ElMessage.error(error instanceof Error ? error.message : "任务状态加载失败");
   } finally {
     loading.value = false;
   }

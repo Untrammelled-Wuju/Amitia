@@ -1,4 +1,4 @@
-import type { TaskInput, TaskResult, TaskCheckpoint } from "@amitia/plugin-sdk";
+import type { TaskInput, TaskResult, TaskCheckpoint } from "@amitia/plugin-sdk/tasks";
 import { StdioRpcTransport, RpcClient } from "./rpc.js";
 import { createTaskContext, type TaskContextBundle } from "./task-context.js";
 import { loadTaskHandler } from "./task-loader.js";

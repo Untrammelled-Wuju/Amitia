@@ -5,9 +5,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <el-card shadow="never" class="section-card">
     <template #header><span class="section-title">配置</span></template>
-    <div class="lr-config-form">
+    <el-alert v-if="error" :title="error" type="error" :closable="false" />
+    <el-button v-if="!config" @click="loadConfig">重新加载配置</el-button>
+    <div v-if="config" class="lr-config-form">
       <div class="lr-cfg-row">
-        <span class="lr-cfg-label">最大任务数</span>
+        <span class="lr-cfg-label">最大并发任务数</span>
         <el-input-number
           v-model="config.maxTasks"
           :min="1"
@@ -16,14 +18,11 @@ SPDX-License-Identifier: AGPL-3.0-only
         />
       </div>
       <div class="lr-cfg-row">
-        <span class="lr-cfg-label">超时时间 (分钟)</span>
-        <el-input-number
-          v-model="config.timeoutMinutes"
-          :min="5"
-          :max="120"
-          size="small"
-        />
+        <span class="lr-cfg-label">统一超时（秒）</span>
+        <el-input-number v-model="config.timeout.seconds" :min="30" :max="1800" :step="30" :disabled="config.timeout.disabled" size="small" />
+        <el-switch v-model="config.timeout.disabled" active-text="禁用超时" />
       </div>
+      <div>并发限制适用于当前服务实例；降低限制不终止已运行任务。统一超时同时用于其他操作，新建任务采用新策略。</div>
       <div class="lr-cfg-actions">
         <el-button
           type="primary"
@@ -38,34 +37,44 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { fetchConfigApi, saveConfigApi, type LongRunningConfig } from "../api";
+import { useCoreConfigurationAccess } from "@/composables/useCoreConfigurationAccess";
+import { fetchConfigApi, saveConfigApi, type TaskMaintenanceConfig } from "../api";
 
-const config = ref<LongRunningConfig>({
-  maxTasks: 5,
-  timeoutMinutes: 30,
-});
+const access = useCoreConfigurationAccess();
+let loadedContext = "";
+watch(access.contextKey, (value) => { if (loadedContext && value !== loadedContext) { config.value = null; error.value = "Core 或权限已变化，请重新加载配置"; } });
+const config = ref<TaskMaintenanceConfig | null>(null);
 const saving = ref(false);
+const error = ref("");
 
 async function loadConfig() {
+  error.value = "";
+  config.value = null;
   try {
-    const data = await fetchConfigApi();
+    const context = await access.requireAccess();
+    const data = await fetchConfigApi(context);
+    await access.requireAccess(context);
+    loadedContext = context;
     if (data) {
       config.value = data;
     }
-  } catch {}
+  } catch (reason) { error.value = reason instanceof Error ? reason.message : "加载配置失败"; }
 }
 
 async function handleSave() {
   saving.value = true;
   try {
-    await saveConfigApi({
-      maxTasks: config.value.maxTasks,
-      timeoutMinutes: config.value.timeoutMinutes,
-    });
-    ElMessage.success("配置已保存");
-  } catch {
+    if (!config.value) return;
+    const context = await access.requireAccess(loadedContext);
+    const saved = await saveConfigApi(config.value, context);
+    await access.requireAccess(context);
+    config.value = saved;
+    ElMessage.success("执行器已应用配置");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "保存失败，请重新加载配置");
+    await loadConfig();
   } finally {
     saving.value = false;
   }

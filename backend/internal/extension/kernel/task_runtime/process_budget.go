@@ -32,7 +32,7 @@ func (s *TaskRuntimeService) reserveTaskProcess(ctx context.Context, definition 
 	if declared := definition.ResourceLimits.MaxConcurrentTasks; declared > 0 && declared < limit {
 		limit = declared
 	}
-	if s.processBudget.total >= s.config.GlobalMaxConcurrent || s.processBudget.extensions[extension] >= s.config.PerExtensionMaxConcurrent || s.processBudget.definitions[key] >= limit {
+	if s.processBudget.total >= s.MaxConcurrent() || s.processBudget.extensions[extension] >= s.config.PerExtensionMaxConcurrent || s.processBudget.definitions[key] >= limit {
 		return nil, ErrTaskProcessCapacity
 	}
 	if s.processBudget.extensions == nil {

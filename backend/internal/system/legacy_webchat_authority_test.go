@@ -64,7 +64,7 @@ func TestLegacyWebChatRegisteredCoreBoundary(t *testing.T) {
 			authenticate(c)
 		}
 	})
-	RegisterSystemRouter(router.Group("/api"), &app.AppContext{DB: db}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	RegisterSystemRouter(router.Group("/api"), &app.AppContext{DB: db}, NewService(&app.AppContext{DB: db}, ""), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	router.GET("/api/device-mesh/v1/business/boundary-probe", func(c *gin.Context) { c.Status(204) })
 	request := func(method, path, core, stamp string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader("{"))

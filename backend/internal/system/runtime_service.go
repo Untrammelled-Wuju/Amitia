@@ -187,34 +187,3 @@ func (s *service) ValidateMode() map[string]interface{} {
 func (s *service) RunNow() map[string]interface{} {
 	return map[string]interface{}{"started": true, "startedAt": time.Now().Format(time.DateTime)}
 }
-
-func (s *service) GetLongRunningStatus() map[string]interface{} {
-	var tasks []map[string]interface{}
-	s.db.Raw("SELECT c.id, c.title, COALESCE((SELECT character_id FROM messages m WHERE m.conversation_id = c.id AND m.character_id <> '' ORDER BY m.sequence DESC LIMIT 1), '') AS character_id, c.updated_at FROM conversations c WHERE c.channel = 'long_running' ORDER BY c.updated_at DESC LIMIT 10").Scan(&tasks)
-	if tasks == nil {
-		tasks = []map[string]interface{}{}
-	}
-	return map[string]interface{}{"running": len(tasks) > 0, "tasks": tasks}
-}
-
-func (s *service) GetLongRunningConfig() map[string]interface{} {
-	maxT := s.getAppSetting("long_running_max_tasks")
-	if maxT == "" {
-		maxT = "5"
-	}
-	timeout := s.getAppSetting("long_running_timeout")
-	if timeout == "" {
-		timeout = "30"
-	}
-	return map[string]interface{}{"maxTasks": toInt(maxT), "timeoutMinutes": toInt(timeout)}
-}
-
-func (s *service) UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{} {
-	if v, ok := body["maxTasks"]; ok {
-		s.setAppSetting("long_running_max_tasks", fmt.Sprintf("%d", toInt(v)))
-	}
-	if v, ok := body["timeoutMinutes"]; ok {
-		s.setAppSetting("long_running_timeout", fmt.Sprintf("%d", toInt(v)))
-	}
-	return s.GetLongRunningConfig()
-}
