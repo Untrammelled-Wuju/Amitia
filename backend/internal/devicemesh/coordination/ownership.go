@@ -96,7 +96,7 @@ func payloadHash(payload []byte) string {
 
 func validKind(kind string) bool {
 	switch kind {
-	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "emotion", "checkpoint", "tool-result", "project", "worldbook", RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:
+	case "conversation", "message", "summary", "memory", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", "emotion", "checkpoint", "tool-result", "project", "worldbook", "group-round", "group-delivery", "group-invitation", RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:
 		return true
 	default:
 		return false
@@ -325,7 +325,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	}
 	for _, conversation := range deletedConversations {
 		if keepConversationMemories[conversation] {
-			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind IN ('message','summary','working','checkpoint','tool-result') AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND kind IN ('message','summary','working','checkpoint','tool-result','group-round','group-delivery','group-invitation') AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.conversationId')=? AND (role_id=? OR kind IN ('checkpoint','group-round','group-delivery','group-invitation'))`, s.ownerID, conversation, StorageRole(scope, "message")); err != nil {
 				return Acknowledgement{}, err
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE kernel_device_owned_resources SET deleted=1,body='null',revision=revision+1 WHERE owner_id=? AND role_id=? AND kind='checkpoint' AND deleted=0 AND json_extract(CAST(body AS TEXT),'$.mutations[0].body.conversationId')=?`, s.ownerID, scope.RoleID, conversation); err != nil {
@@ -536,6 +536,20 @@ func (s *OwnershipStore) ListPage(ctx context.Context, kind, role string, query 
 			arguments = append(arguments, query.RequestID)
 		}
 	case "message", "summary", "working":
+		if query.ConversationID == "" {
+			return []Resource{}, "", nil
+		}
+		statement += ` AND json_extract(CAST(body AS TEXT),'$.conversationId')=?`
+		arguments = append(arguments, query.ConversationID)
+		if query.ResourceID != "" {
+			statement += ` AND resource_id=?`
+			arguments = append(arguments, query.ResourceID)
+		}
+		if kind == "message" && query.GroupVisibilityStart > 0 {
+			statement += ` AND CAST(json_extract(CAST(body AS TEXT),'$.sequence') AS INTEGER)>=?`
+			arguments = append(arguments, query.GroupVisibilityStart)
+		}
+	case "group-round", "group-delivery", "group-invitation":
 		if query.ConversationID == "" {
 			return []Resource{}, "", nil
 		}

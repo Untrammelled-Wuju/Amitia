@@ -13,6 +13,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/widgets/profile_avatar.dart';
 
 class CharacterCreatePage extends ConsumerStatefulWidget {
@@ -49,10 +50,11 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
       final authority = await ref.read(characterServiceProvider).authority();
       if (mounted) setState(() => _roleAuthority = authority);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('无法确认角色归属：$error')));
+      }
     }
   }
 
@@ -110,6 +112,12 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
       if (character == null || character.id.isEmpty) {
         throw StateError('角色创建结果为空，请确认服务连接后重试');
       }
+      try {
+        await svc.setActive(
+          character.id,
+          roleAuthority: character.roleAuthority,
+        );
+      } catch (_) {}
       String? avatarError;
       final avatarFile = _avatarFile;
       if (avatarFile != null) {
@@ -127,7 +135,14 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         }
       }
       if (mounted) {
+        ref.read(currentCharacterIdProvider.notifier).state = character.id;
         ref.invalidate(characterListProvider);
+        try {
+          await ref.read(chatServiceProvider).owned.refresh();
+        } catch (_) {}
+        ref.invalidate(conversationListProvider);
+        ref.invalidate(conversationSidebarProvider);
+        if (!mounted) return;
         final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
         messenger.showSnackBar(

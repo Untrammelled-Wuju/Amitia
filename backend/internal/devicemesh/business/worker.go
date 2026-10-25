@@ -27,7 +27,7 @@ func (e *Engine) WithExecutionScope(ctx context.Context, expected coordination.E
 		return err
 	}
 	scope.RoleRevision = role.Revision
-	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, ""); err != nil {
 		return err
 	}
 	if expected.ContinuityRoleID != "" {

@@ -12,8 +12,9 @@ import 'default_runtime_status_projection.dart';
 import 'runtime_status_projection.dart';
 import 'runtime_status_snapshot.dart';
 
-final runtimeStatusProjectionProvider =
-    Provider<RuntimeStatusProjection>((ref) {
+final runtimeStatusProjectionProvider = Provider<RuntimeStatusProjection>((
+  ref,
+) {
   final bridge = ref.watch(runtimeBridgeProvider);
   final connectionSource = ref.watch(backendConnectionSourceProvider);
   final mode = ref.watch(mobileDeploymentConfigProvider).mode;
@@ -34,8 +35,9 @@ final runtimeStatusProjectionProvider =
   return projection;
 });
 
-final runtimeStatusSnapshotProvider =
-    StreamProvider<RuntimeStatusSnapshot>((ref) {
+final runtimeStatusSnapshotProvider = StreamProvider<RuntimeStatusSnapshot>((
+  ref,
+) {
   final projection = ref.watch(runtimeStatusProjectionProvider);
   return projection.snapshots.distinct();
 });
@@ -50,6 +52,7 @@ class _TransportStateSourceImpl implements TransportStateSource {
   final bool _usesDeviceLocalTransport;
   final StreamController<TransportStateSnapshot> _controller =
       StreamController<TransportStateSnapshot>.broadcast();
+  TransportStateSnapshot _current = TransportStateSnapshot.initial();
   bool _closed = false;
 
   _TransportStateSourceImpl(this._ref, MobileDeploymentMode mode)
@@ -57,31 +60,33 @@ class _TransportStateSourceImpl implements TransportStateSource {
     final transportProvider = _usesDeviceLocalTransport
         ? deviceLocalBackendTransportProvider
         : backendTransportProvider;
-    _ref.listen<AsyncValue<BackendTransportState>>(
-      transportProvider,
-      (previous, next) {
-        next.when(
-          data: (state) {
-            _controller.add(_mapTransportState(state));
-          },
-          loading: () {
-            _controller.add(const TransportStateSnapshot(
-              generation: 0,
-              httpState: BackendHttpState.idle,
-              webSocketState: BackendWebSocketState.idle,
-            ));
-          },
-          error: (_, __) {
-            _controller.add(const TransportStateSnapshot(
-              generation: 0,
-              httpState: BackendHttpState.unavailable,
-              webSocketState: BackendWebSocketState.disconnected,
-            ));
-          },
-        );
-      },
-      fireImmediately: true,
-    );
+    _ref.listen<AsyncValue<BackendTransportState>>(transportProvider, (
+      previous,
+      next,
+    ) {
+      next.when(
+        data: (state) {
+          _current = _mapTransportState(state);
+          _controller.add(_current);
+        },
+        loading: () {
+          _current = const TransportStateSnapshot(
+            generation: 0,
+            httpState: BackendHttpState.idle,
+            webSocketState: BackendWebSocketState.idle,
+          );
+          _controller.add(_current);
+        },
+        error: (_, __) {
+          _current = const TransportStateSnapshot(
+            generation: 0,
+            httpState: BackendHttpState.unavailable,
+            webSocketState: BackendWebSocketState.disconnected,
+          );
+          _controller.add(_current);
+        },
+      );
+    }, fireImmediately: true);
   }
 
   TransportStateSnapshot _mapTransportState(BackendTransportState state) {
@@ -117,24 +122,7 @@ class _TransportStateSourceImpl implements TransportStateSource {
   Stream<TransportStateSnapshot> get snapshots => _controller.stream;
 
   @override
-  TransportStateSnapshot get current {
-    final transportAsync = _usesDeviceLocalTransport
-        ? _ref.read(deviceLocalBackendTransportProvider)
-        : _ref.read(backendTransportProvider);
-    return transportAsync.when(
-      data: (state) => _mapTransportState(state),
-      loading: () => const TransportStateSnapshot(
-        generation: 0,
-        httpState: BackendHttpState.idle,
-        webSocketState: BackendWebSocketState.idle,
-      ),
-      error: (_, __) => const TransportStateSnapshot(
-        generation: 0,
-        httpState: BackendHttpState.unavailable,
-        webSocketState: BackendWebSocketState.disconnected,
-      ),
-    );
-  }
+  TransportStateSnapshot get current => _current;
 
   Future<void> close() async {
     if (_closed) return;

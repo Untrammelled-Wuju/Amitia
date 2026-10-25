@@ -22,6 +22,7 @@ type Role struct {
 type DataQuery struct {
 	IncludeDisabled        bool                   `json:"includeDisabled,omitempty"`
 	ChatRuntime            *OwnedChatRuntimeQuery `json:"chatRuntime,omitempty"`
+	GroupVisibilityStart   int64                  `json:"groupVisibilityStart,omitempty"`
 	Management             bool                   `json:"management,omitempty"`
 	RuntimeTurns           bool                   `json:"runtimeTurns,omitempty"`
 	QueuedChats            bool                   `json:"queuedChats,omitempty"`
@@ -41,6 +42,7 @@ type DataQuery struct {
 	Limit                  int                    `json:"limit,omitempty"`
 	HistoricalRoleID       string                 `json:"historicalRoleId,omitempty"`
 	ListConversations      bool                   `json:"listConversations,omitempty"`
+	GroupState             *GroupState            `json:"-"`
 }
 
 type RoleCatalogPort interface {
@@ -68,6 +70,8 @@ const OwnedConversationSearchPredicate = ` AND (instr(lower(COALESCE(json_extrac
 type DataSnapshot struct {
 	RuntimeContext map[string]json.RawMessage `json:"runtimeContext,omitempty"`
 	NextCursors    map[string]string          `json:"nextCursors,omitempty"`
+	Group          *GroupState                `json:"group,omitempty"`
+	GroupRoles     map[string]string          `json:"groupRoles,omitempty"`
 	OwnerID        string                     `json:"ownerId"`
 	Role           Role                       `json:"role"`
 	Resources      []Resource                 `json:"resources"`
@@ -162,7 +166,8 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 		key := resource.Kind + "/" + resource.ID
 		validWorldbookRole := resource.Kind == "worldbook" && (resource.RoleID == scope.RoleID || resource.RoleID == GlobalWorldbookRole)
 		legacyReadOnly := resource.Origin == "legacy" && resource.ReadOnly && resource.Revision == 0
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 && !legacyReadOnly || !json.Valid(resource.Body) || seen[key] {
+		validGroupRole := snapshot.GroupRoles != nil && GroupConversationKind(resource.Kind) && snapshot.GroupRoles[GroupResourceConversationID(resource)] == resource.RoleID
+		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !validGroupRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 && !legacyReadOnly || !json.Valid(resource.Body) || seen[key] {
 			return fmt.Errorf("%w: 无效上下文记录", ErrWrongOwner)
 		}
 		seen[key] = true

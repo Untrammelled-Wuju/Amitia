@@ -154,22 +154,20 @@ func (e *Engine) ExportMemoryArchive(ctx context.Context, request Request, role 
 		}
 		current := scope
 		current.RoleID, current.RoleRevision, current.MemoryViewAll = actor.ID, actor.Revision, false
-		for _, partition := range []string{actor.ID, coordination.GlobalMemoryRole} {
-			current.MemoryRoleID = partition
-			for _, kind := range []string{"memory", "fact", "episodic", "profile", "graph", "vector", "working", "summary", "checkpoint"} {
-				snapshot, err := e.memoryManagementSnapshot(coordination.WithScope(ctx, current), current, kind, "")
-				if err != nil {
-					return MemoryArchive{}, err
+		current.MemoryRoleID = actor.ID
+		for _, kind := range []string{"memory", "fact", "episodic", "profile", "graph", "vector", "working", "summary", "checkpoint"} {
+			snapshot, err := e.memoryManagementSnapshot(coordination.WithScope(ctx, current), current, kind, "")
+			if err != nil {
+				return MemoryArchive{}, err
+			}
+			for _, resource := range snapshot.Resources {
+				if kind == "checkpoint" && !strings.HasPrefix(resource.ID, "memory-candidate/") {
+					continue
 				}
-				for _, resource := range snapshot.Resources {
-					if kind == "checkpoint" && !strings.HasPrefix(resource.ID, "memory-candidate/") {
-						continue
-					}
-					key := kind + "/" + resource.ID
-					if !seen[key] {
-						seen[key] = true
-						archive.Entries = append(archive.Entries, MemoryConsumerEntry{Resource: resource, Scope: current})
-					}
+				key := kind + "/" + resource.ID
+				if !seen[key] {
+					seen[key] = true
+					archive.Entries = append(archive.Entries, MemoryConsumerEntry{Resource: resource, Scope: current})
 				}
 			}
 		}

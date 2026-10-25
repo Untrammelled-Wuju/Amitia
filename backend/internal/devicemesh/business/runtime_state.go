@@ -179,7 +179,7 @@ func (e *Engine) ApplyRuntimeState(ctx context.Context, request Request, effect 
 		return err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
-	if err := coordination.ResolveMemoryScope(&scope, role, request.MemoryView); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, request.MemoryView); err != nil {
 		return err
 	}
 	scope.TurnID, scope.ExecutionID = request.RequestID+"/turn", request.RequestID+"/execution"

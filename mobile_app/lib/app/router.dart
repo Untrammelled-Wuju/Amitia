@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,8 +10,6 @@ import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_provider_host.dart';
 import '../core/ui_runtime/ui_route_registry.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
-import '../core/widgets/amitia_drawer.dart';
-import '../core/widgets/amitia_scaffold.dart';
 import '../core/widgets/application_background.dart';
 import '../features/error/presentation/pages/not_found_page.dart';
 import '../features/onboarding/presentation/pages/onboarding_page.dart';
@@ -23,87 +20,18 @@ import 'route_transitions.dart';
 
 final appNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'app-shell');
 
-class AppShell extends ConsumerStatefulWidget {
+class AppShell extends ConsumerWidget {
   final Widget child;
   final String currentRoute;
 
   const AppShell({super.key, required this.child, required this.currentRoute});
 
   @override
-  ConsumerState<AppShell> createState() => _AppShellState();
-}
-
-class _AppShellState extends ConsumerState<AppShell> {
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
-  DateTime? _lastBackPress;
-  bool _diagnosticLogged = false;
-
-  @override
-  void didUpdateWidget(AppShell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentRoute != widget.currentRoute) {
-      _lastBackPress = null;
-    }
-  }
-
-  void _handleChatBack() {
-    final now = DateTime.now();
-    if (_lastBackPress != null &&
-        now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
-      _lastBackPress = null;
-      SystemNavigator.pop();
-      return;
-    }
-    _lastBackPress = now;
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('再按一次退出应用'),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_diagnosticLogged) {
-      _diagnosticLogged = true;
-      debugPrint('[diag] AppShell route=${widget.currentRoute}');
-    }
-    final isChatRoute = widget.currentRoute == AppRoutes.chat;
-    final router = GoRouter.of(context);
-    return PopScope(
-      canPop: !isChatRoute && router.canPop(),
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        if (isChatRoute) {
-          _handleChatBack();
-        } else {
-          router.go(AppRoutes.chat);
-        }
-      },
-      child: ShellDrawerScope(
-        openDrawer: () {
-          FocusManager.instance.primaryFocus?.unfocus();
-          _scaffoldKey.currentState?.openDrawer();
-        },
-        child: Scaffold(
-          key: _scaffoldKey,
-          resizeToAvoidBottomInset: true,
-          drawer: UIProviderHost(
-            capability: UICapability.appNavigation,
-            context: {'route': widget.currentRoute, 'surface': 'drawer'},
-            fallback: AmitiaDrawer(currentRoute: widget.currentRoute),
-          ),
-          body: UIProviderHost(
-            capability: UICapability.appWorkspace,
-            context: {'route': widget.currentRoute},
-            fallback: widget.child,
-          ),
-        ),
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    return UIProviderHost(
+      capability: UICapability.appWorkspace,
+      context: {'route': currentRoute},
+      fallback: child,
     );
   }
 }
@@ -117,7 +45,7 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
       return null;
     },
     routes: <RouteBase>[
-      GoRoute(path: '/', redirect: (context, state) => AppRoutes.chat),
+      GoRoute(path: '/', redirect: (context, state) => AppRoutes.conversations),
       GoRoute(
         path: '/onboarding',
         pageBuilder: (context, state) => slideFadePage(
@@ -202,7 +130,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   );
   return GoRouter.routingConfig(
     routingConfig: routingConfig,
-    initialLocation: AppRoutes.chat,
+    initialLocation: AppRoutes.conversations,
     navigatorKey: appNavigatorKey,
     errorBuilder: (context, state) =>
         NotFoundPage(attemptedPath: state.uri.toString()),

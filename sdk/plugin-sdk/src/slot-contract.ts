@@ -3,7 +3,7 @@
  *
  * Amitia intentionally keeps a superset of the DeepSeek Harness slot model:
  * the DSH-style typed composition chain is the core, while schema UI,
- * sandboxed web UI, provider profiles and legacy host surfaces remain valid
+ * same-page client modules, provider profiles and host surfaces remain valid
  * higher-level capabilities.
  */
 export type UISlotScope = "root" | "session-maybe" | "session";

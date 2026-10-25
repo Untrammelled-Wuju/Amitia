@@ -6,14 +6,13 @@ import (
 	"testing"
 )
 
-func TestMemoryScopeDefaultAndConversationIsolation(t *testing.T) {
+func TestMemoryScopeDefaultsToCharacterAndKeepsConversationIsolation(t *testing.T) {
 	scope := coordination.ExecutionScope{RoleID: "role"}
-	role := coordination.Role{ID: "role", Profile: json.RawMessage(`{}`)}
-	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"memory", "fact", "episodic", "vector", "graph", "continuity", "profile"} {
-		if coordination.StorageRole(scope, kind) != coordination.GlobalMemoryRole {
+		if coordination.StorageRole(scope, kind) != "role" {
 			t.Fatalf("kind=%s", kind)
 		}
 	}
@@ -22,22 +21,32 @@ func TestMemoryScopeDefaultAndConversationIsolation(t *testing.T) {
 			t.Fatalf("conversation isolation: %s", kind)
 		}
 	}
-	role.Profile = json.RawMessage(`{"globalMemoryEnabled":false}`)
-	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
-		t.Fatal(err)
+	if err := coordination.ResolveMemoryScope(&scope, "global"); err == nil {
+		t.Fatal("global memory view must be rejected")
 	}
-	if coordination.StorageRole(scope, "memory") != "role" || coordination.StorageRole(scope, "profile") != coordination.GlobalMemoryRole {
-		t.Fatal("private memory must retain global profiles")
+	if err := coordination.ResolveMemoryScope(&scope, "role:other"); err != nil || coordination.StorageRole(scope, "profile") != "other" {
+		t.Fatal("explicit role view must scope every memory kind")
 	}
-	if err := coordination.ResolveMemoryScope(&scope, role, "global"); err != nil || coordination.StorageRole(scope, "memory") != coordination.GlobalMemoryRole {
-		t.Fatal("explicit management view must not follow role default")
+}
+
+func TestGroupConversationRoleOnlyOverridesSharedChatResources(t *testing.T) {
+	scope := coordination.ExecutionScope{RoleID: "speaker-b", ConversationRoleID: "storage-a", MemoryRoleID: "speaker-b"}
+	for _, kind := range []string{"conversation", "message", "summary", "group-round", "group-delivery", "group-invitation"} {
+		if coordination.StorageRole(scope, kind) != "storage-a" {
+			t.Fatalf("群聊共享资源应使用会话角色: %s", kind)
+		}
+	}
+	for _, kind := range []string{"memory", "fact", "checkpoint", "tool-result", "working", "project"} {
+		if coordination.StorageRole(scope, kind) != "speaker-b" {
+			t.Fatalf("角色私有资源不得跨角色存储: %s", kind)
+		}
 	}
 }
 
 func TestMemoryScopeAllViewKeepsOriginalPartitionsAndPaging(t *testing.T) {
 	db, _ := setup(t)
 	store := coordination.NewOwnershipStore(db, "a")
-	for index, role := range []string{"one", "two", coordination.GlobalMemoryRole} {
+	for index, role := range []string{"one", "two", "three"} {
 		scope := coordination.ExecutionScope{RoleID: role, ResourceOwnerID: "a", RequestID: role}
 		mutation := coordination.Mutation{Kind: "memory", ID: role, RoleID: role, Body: json.RawMessage(`{"content":{"value":"tea"}}`)}
 		if _, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{mutation}}); err != nil {
@@ -80,10 +89,10 @@ func TestMemoryScopeTransferMovesCompleteProjectionChainAndCanDemote(t *testing.
 	moved := append([]coordination.Mutation(nil), seed...)
 	for i := range moved {
 		moved[i].ExpectedRevision = 1
-		moved[i].RoleID = coordination.GlobalMemoryRole
+		moved[i].RoleID = "target-role"
 	}
 	scope.RequestID = "promote"
-	commit := coordination.Commit{Scope: scope, MemoryTransfer: &coordination.MemoryTransfer{Kind: "memory", ID: "m", ToRoleID: coordination.GlobalMemoryRole}, Mutations: moved}
+	commit := coordination.Commit{Scope: scope, MemoryTransfer: &coordination.MemoryTransfer{Kind: "memory", ID: "m", ToRoleID: "target-role", TargetRoleRevision: 1}, Mutations: moved}
 	ack, err := store.Apply(t.Context(), commit)
 	if err != nil {
 		t.Fatal(err)
@@ -98,16 +107,16 @@ func TestMemoryScopeTransferMovesCompleteProjectionChainAndCanDemote(t *testing.
 	if err != nil || len(old) != 0 {
 		t.Fatal("source partition must not retain copies")
 	}
-	scope.MemoryRoleID = coordination.GlobalMemoryRole
+	scope.MemoryRoleID = "target-role"
 	scope.RequestID = "demote"
 	for i := range moved {
 		moved[i].ExpectedRevision = 2
-		moved[i].RoleID = "target-role"
+		moved[i].RoleID = "third-role"
 	}
-	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, MemoryTransfer: &coordination.MemoryTransfer{Kind: "memory", ID: "m", ToRoleID: "target-role", TargetRoleRevision: 1}, Mutations: moved}); err != nil {
+	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, MemoryTransfer: &coordination.MemoryTransfer{Kind: "memory", ID: "m", ToRoleID: "third-role", TargetRoleRevision: 1}, Mutations: moved}); err != nil {
 		t.Fatal(err)
 	}
-	target, err := store.List(t.Context(), "memory", "target-role", false)
+	target, err := store.List(t.Context(), "memory", "third-role", false)
 	if err != nil || len(target) != 1 || target[0].ID != "m" {
 		t.Fatal("demotion must preserve record identity")
 	}
@@ -124,10 +133,10 @@ func TestMemoryScopeTransferRejectsPartialChainsAndContentChanges(t *testing.T) 
 	moved := append([]coordination.Mutation(nil), seed...)
 	for i := range moved {
 		moved[i].ExpectedRevision = 1
-		moved[i].RoleID = coordination.GlobalMemoryRole
+		moved[i].RoleID = "third-role"
 	}
 	scope.RequestID = "partial"
-	transfer := &coordination.MemoryTransfer{Kind: "memory", ID: "m", ToRoleID: coordination.GlobalMemoryRole}
+	transfer := &coordination.MemoryTransfer{Kind: "memory", ID: "m", ToRoleID: "third-role", TargetRoleRevision: 1}
 	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, MemoryTransfer: transfer, Mutations: moved[:1]}); err == nil {
 		t.Fatal("partial projection migration accepted")
 	}
@@ -154,7 +163,7 @@ func TestMemoryScopeContinuityRejectsRunningAndUnknownLeases(t *testing.T) {
 			}
 			changed, _ := json.Marshal(map[string]any{"thread": map[string]any{"revision": 2, "characterId": "role"}, "lease": map[string]any{"state": state}})
 			scope.RequestID = "transfer"
-			_, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, MemoryTransfer: &coordination.MemoryTransfer{Kind: "continuity", ID: "task", ToRoleID: coordination.GlobalMemoryRole}, Mutations: []coordination.Mutation{{Kind: "continuity", ID: "task", RoleID: coordination.GlobalMemoryRole, ExpectedRevision: 1, Body: changed}}})
+			_, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, MemoryTransfer: &coordination.MemoryTransfer{Kind: "continuity", ID: "task", ToRoleID: "other", TargetRoleRevision: 1}, Mutations: []coordination.Mutation{{Kind: "continuity", ID: "task", RoleID: "other", ExpectedRevision: 1, Body: changed}}})
 			if err == nil {
 				t.Fatal("live or uncertain execution partition changed")
 			}

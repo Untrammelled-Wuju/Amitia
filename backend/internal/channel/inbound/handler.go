@@ -27,6 +27,10 @@ type UnifiedEntryHandler interface {
 	Handle(ctx context.Context, req *interaction.UnifiedEntryRequest) (*interaction.OrchestrationResult, error)
 }
 
+type UnifiedEntryScopeResolver interface {
+	ResolveScope(ctx context.Context, req *interaction.UnifiedEntryRequest) (interaction.ScopeResolution, error)
+}
+
 type InboundRequest struct {
 	ChannelID        string  `json:"channelId"`
 	AccountID        string  `json:"accountId,omitempty"`
@@ -103,6 +107,22 @@ func (h *InboundHandler) Handle(c *gin.Context) {
 
 	entryRequest := buildUnifiedEntryRequest(extensionID, moduleID, normalized)
 	ctx := c.Request.Context()
+	if resolver, ok := h.entry.(UnifiedEntryScopeResolver); ok {
+		resolution, resolveErr := resolver.ResolveScope(ctx, entryRequest)
+		if resolveErr != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"code": http.StatusUnprocessableEntity, "msg": resolveErr.Error()})
+			return
+		}
+		if resolution.Scope.SpaceID != "" {
+			entryRequest.SpaceID = resolution.Scope.SpaceID
+		}
+		if resolution.Scope.CharacterID != "" {
+			entryRequest.CharacterID = resolution.Scope.CharacterID
+		}
+		if resolution.Scope.ConversationID != "" {
+			entryRequest.ConversationID = resolution.Scope.ConversationID
+		}
+	}
 	if h.owner != nil {
 		ctx, err = h.owner(ctx, extensionID, moduleID, normalized.ChannelID)
 		if err != nil {

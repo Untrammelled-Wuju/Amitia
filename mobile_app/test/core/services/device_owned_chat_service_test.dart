@@ -192,6 +192,121 @@ Stream<List<int>> bytes(List<Map<String, dynamic>> events) {
 }
 
 void main() {
+  test('群聊流按投递身份接收多个角色并校验最终保存确认', () async {
+    final first = {
+      ...scope(),
+      'requestId': 'request/reply/a',
+      'conversationRoleId': 'role-a',
+    };
+    final second = {
+      ...scope(),
+      'roleId': 'role-b',
+      'requestId': 'request/reply/b',
+      'conversationRoleId': 'role-a',
+    };
+    final events = await decodeOwnedGroupChatStream(
+      bytes([
+        {
+          'type': 'started',
+          'conversationId': 'chat',
+          'groupRoundId': 'round',
+          'deliveryId': 'delivery-a',
+          'executionScope': first,
+        },
+        {
+          'type': 'delta',
+          'conversationId': 'chat',
+          'groupRoundId': 'round',
+          'deliveryId': 'delivery-a',
+          'executionScope': first,
+          'text': 'A',
+        },
+        {
+          'type': 'started',
+          'conversationId': 'chat',
+          'groupRoundId': 'round',
+          'deliveryId': 'delivery-b',
+          'executionScope': second,
+        },
+        {
+          'type': 'delta',
+          'conversationId': 'chat',
+          'groupRoundId': 'round',
+          'deliveryId': 'delivery-b',
+          'executionScope': second,
+          'text': 'B',
+        },
+        {
+          'type': 'group.completed',
+          'data': {
+            'conversationId': 'chat',
+            'requestId': 'request',
+            'groupRoundId': 'round',
+            'saved': true,
+            'deliveries': [
+              {
+                'requestId': 'request/reply/a',
+                'executionScope': first,
+                'saved': true,
+                'deliveryId': 'delivery-a',
+              },
+              {
+                'requestId': 'request/reply/b',
+                'executionScope': second,
+                'saved': true,
+                'deliveryId': 'delivery-b',
+              },
+            ],
+          },
+        },
+      ]),
+      'request',
+    ).toList();
+    expect(events.map((event) => event['type']), [
+      'started',
+      'delta',
+      'started',
+      'delta',
+      'group.completed',
+    ]);
+  });
+
+  test('群聊流拒绝复用其他投递的执行范围', () async {
+    final first = {
+      ...scope(),
+      'requestId': 'request/reply/a',
+      'conversationRoleId': 'role-a',
+    };
+    final foreign = {
+      ...first,
+      'roleId': 'role-b',
+      'requestId': 'request/reply/b',
+    };
+    await expectLater(
+      decodeOwnedGroupChatStream(
+        bytes([
+          {
+            'type': 'started',
+            'conversationId': 'chat',
+            'groupRoundId': 'round',
+            'deliveryId': 'delivery-a',
+            'executionScope': first,
+          },
+          {
+            'type': 'delta',
+            'conversationId': 'chat',
+            'groupRoundId': 'round',
+            'deliveryId': 'delivery-a',
+            'executionScope': foreign,
+            'text': '越权',
+          },
+        ]),
+        'request',
+      ).toList(),
+      throwsStateError,
+    );
+  });
+
   test('阶段结束事件校验归属，正文结束不能代替保存确认', () async {
     final phases = [
       {'type': 'started', 'executionScope': scope()},

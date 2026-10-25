@@ -11,6 +11,8 @@ void main() {
     expect(source, isNot(contains("'扩展能力'")));
     expect(source, contains("label: '工作流'"));
     expect(source, contains("label: 'Agent Skill'"));
+    expect(source, contains("'暂无已安装插件'"));
+    expect(source, isNot(contains("'浏览扩展包'")));
     expect(source, isNot(contains("label: '执行记录'")));
     expect(source, isNot(contains("label: '兼容 Skill'")));
     expect(source, isNot(contains("tooltip: '刷新'")));
@@ -95,9 +97,7 @@ void main() {
 
     expect(
       source,
-      contains(
-        "title: _searchVisible ? '搜索 Agent Skill' : 'Agent Skills'",
-      ),
+      contains("title: _searchVisible ? '搜索 Agent Skill' : 'Agent Skills'"),
     );
     expect(source, contains("tooltip: '搜索'"));
     expect(source, contains("tooltip: '导入 Agent Skill'"));

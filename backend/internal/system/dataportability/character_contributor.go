@@ -27,7 +27,6 @@ func (c *CharacterContributor) ComponentIDs() []string { return []string{"charac
 type characterExportRecord struct {
 	ID                  string  `json:"id"`
 	SpaceID             string  `json:"spaceId"`
-	GlobalMemoryEnabled bool    `json:"globalMemoryEnabled"`
 	Name                string  `json:"name"`
 	Avatar              string  `json:"avatar"`
 	Identity            string  `json:"identity"`
@@ -243,7 +242,6 @@ func (c *CharacterContributor) RestoreCharacters(ctx context.Context, in BackupR
 
 			updates := map[string]interface{}{
 				"space_id":              rec.SpaceID,
-				"global_memory_enabled": rec.GlobalMemoryEnabled,
 				"name":                  rec.Name,
 				"avatar":                rec.Avatar,
 				"identity":              rec.Identity,

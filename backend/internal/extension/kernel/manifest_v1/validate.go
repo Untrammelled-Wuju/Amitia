@@ -107,7 +107,7 @@ func validateSchemaValue(value any, schema map[string]any, path string, report *
 			}
 		}
 	}
-	switch t := schema["type"].(string); t {
+	switch t, _ := schema["type"].(string); t {
 	case "object":
 		obj, ok := value.(map[string]any)
 		if !ok {

@@ -181,7 +181,7 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 		Placement:          definition.Placement,
 		ProviderID:         providerID,
 		ProviderInstanceID: instanceID,
-		RemoteDevice:       definition.Placement == ProviderPlacementDevice,
+		RemoteDevice:       definition.Placement == ProviderPlacementDevice && !usesInProcessAdapter(binding.RuntimeType),
 	}
 
 	if instance.RuntimeInstanceID != "" {
@@ -204,7 +204,7 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 		route.RuntimeID = target.RuntimeID
 	}
 
-	if definition.Placement == ProviderPlacementDevice {
+	if definition.Placement == ProviderPlacementDevice && !usesInProcessAdapter(binding.RuntimeType) {
 		sessionID, ok := r.resolveDeviceSession(ctx, route.SpaceID, route.DeviceID, route.RuntimeID)
 		if !ok || sessionID == "" {
 			return RuntimeExecutionRoute{}, ErrProviderExecutionTargetInvalid

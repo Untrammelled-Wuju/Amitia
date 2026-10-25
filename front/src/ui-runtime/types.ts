@@ -23,6 +23,7 @@ export type UIProviderCapability =
   | "settings.section"
   | "extension.center"
   | "extension.page"
+  | "workspace.tab"
   | "ui.theme"
   | "ui.tokens"
   | "ui.icons"
@@ -35,6 +36,7 @@ export const UI_PROVIDER_CAPABILITIES: readonly UIProviderCapability[] = [
   "conversation.drawer", "channel.presentation",
   "character.shell", "character.detail", "memory.shell", "memory.detail",
   "settings.shell", "settings.section", "extension.center", "extension.page",
+  "workspace.tab",
   "ui.theme", "ui.tokens", "ui.icons", "ui.components",
 ] as const;
 
@@ -50,16 +52,21 @@ export type UIProviderEntryType =
   | "declarative"
   | "web_module"
   | "schema_renderer"
-  | "web_restricted"
-  | "web_isolated";
+  | "client_module"
+  | "external_web_ui";
 
 export interface UIProviderEntry {
   contributionId?: string;
   type: UIProviderEntryType;
   path?: string;
   schemaPath?: string;
+  stylePath?: string;
   exportName?: string;
   contentHash?: string;
+  styleHash?: string;
+  moduleToken?: string;
+  url?: string;
+  allowedOrigins?: string[];
 }
 
 export interface UIDeviceRequirements {

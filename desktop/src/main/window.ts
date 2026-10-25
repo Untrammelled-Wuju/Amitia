@@ -7,6 +7,7 @@ import { get as httpGet } from "node:http";
 import { APP_PROTOCOL_ORIGIN } from "./app-protocol";
 import { windowChromeOptions } from "./window-chrome";
 import { IPC_CHANNELS } from "../shared/ipc";
+import { attachExternalWebUIHost } from "./external-web-ui";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const MAIN_RENDERER_LOAD_TIMEOUT_MS = 15000;
@@ -82,8 +83,10 @@ export function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      webviewTag: true,
     },
   });
+  attachExternalWebUIHost(win);
 
   const sendWindowState = () => {
     if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
@@ -205,7 +208,6 @@ function isAllowedNavigation(url: string): boolean {
     : false;
   return (
     url.startsWith(`${APP_PROTOCOL_ORIGIN}/`) ||
-    url.startsWith("amitia-extension://") ||
     devServerAllowed
   );
 }

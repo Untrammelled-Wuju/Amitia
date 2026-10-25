@@ -1,9 +1,7 @@
 const crypto = require("crypto");
 
 const STATE_KEY = "emote-state";
-const VECTOR_COLLECTION = "emotes";
 const MAX_SEND_RECORDS = 5000;
-const MIN_SIMILARITY = 0.35;
 const FILE_WRITE_CHUNK_CHARS = 256 * 1024;
 const MAX_IMPORT_FILE_BYTES = 32 * 1024 * 1024;
 
@@ -36,10 +34,6 @@ function number(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function boolInt(value) {
-  return value ? 1 : 0;
-}
-
 function safeSegment(value, fallback = "item") {
   const normalized = text(value).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
   return normalized || fallback;
@@ -63,12 +57,8 @@ function normalizeKeywords(values) {
 function defaultSettings() {
   return {
     enabled: true,
-    baseProbability: 0.1,
-    maxProbability: 0.3,
     maxPerHour: 5,
-    minReplyGap: 3,
     sameEmoteCooldownMinutes: 30,
-    allowEmoteOnly: false,
   };
 }
 
@@ -108,8 +98,6 @@ function normalizeEmote(value) {
     enabled: value && value.enabled === false ? false : true,
     aiEnabled: Boolean(value && value.aiEnabled),
     groupIds: Array.isArray(value && value.groupIds) ? value.groupIds.map(text).filter(Boolean) : [],
-    vectorStatus: text(value && value.vectorStatus) || "disabled",
-    vectorError: text(value && value.vectorError),
     createdAt: text(value && value.createdAt) || nowISO(),
     updatedAt: text(value && value.updatedAt) || nowISO(),
   };
@@ -136,7 +124,11 @@ function normalizeState(value) {
     version: 1,
     emotes: Array.isArray(value.emotes) ? value.emotes.map(normalizeEmote) : [],
     groups: Array.isArray(value.groups) ? value.groups.map(normalizeGroup).sort((a, b) => a.sortOrder - b.sortOrder) : [],
-    settings: { ...base.settings, ...rawSettings },
+    settings: {
+      enabled: rawSettings.enabled !== false,
+      maxPerHour: Math.max(0, Math.trunc(number(rawSettings.maxPerHour, base.settings.maxPerHour))),
+      sameEmoteCooldownMinutes: Math.max(0, Math.trunc(number(rawSettings.sameEmoteCooldownMinutes, base.settings.sameEmoteCooldownMinutes))),
+    },
     sendRecords: Array.isArray(value.sendRecords) ? value.sendRecords.slice(0, MAX_SEND_RECORDS) : [],
     updatedAt: text(value && value.updatedAt) || nowISO(),
   };
@@ -268,83 +260,11 @@ function hourlyLimitReached(state, characterId, limit) {
   const cutoff = Date.now() - 60 * 60 * 1000;
   const count = state.sendRecords.filter((record) =>
     record.characterId === characterId &&
-    record.triggerType === "ai_random" &&
+    (record.triggerType === "ai_random" || record.triggerType === "ai_tool") &&
     record.hit === true &&
     Date.parse(record.createdAt || "") >= cutoff
   ).length;
   return count >= limit;
-}
-
-function replyGapBlocked(records, conversationId, characterId, gap) {
-  if (gap <= 0) return false;
-  const last = records.find((record) =>
-    record.conversationId === conversationId &&
-    record.characterId === characterId &&
-    record.hit === true
-  );
-  return Boolean(last && number(last.replyCountAfter, gap) < gap);
-}
-
-function weightedSelect(items, random = Math.random) {
-  const eligible = items.filter((item) => item.score >= MIN_SIMILARITY).slice(0, 5);
-  if (!eligible.length) return null;
-  const total = eligible.reduce((sum, item) => sum + item.score, 0);
-  if (total <= 0) return null;
-  let sample = random() * total;
-  for (const item of eligible) {
-    sample -= item.score;
-    if (sample < 0) return item;
-  }
-  return eligible[eligible.length - 1];
-}
-
-function contextFactor(userMessage, reply, source) {
-  if (["system", "tool", "error"].includes(source)) return 0;
-  const length = Array.from(reply || "").length;
-  if (length > 500) return 0.2;
-  if (length > 240) return 0.3;
-  if (String(userMessage || "").includes("[表情") || String(userMessage || "").includes("表情包")) return 1.3;
-  if (length <= 60) return 1.2;
-  return 1;
-}
-
-function finalProbability(base, maxValue, factor) {
-  return Math.max(0, Math.min(number(maxValue), number(base) * number(factor, 1)));
-}
-
-function suppressedContext(source, reply) {
-  if (["system", "tool", "error"].includes(source)) return true;
-  const lower = String(reply || "").toLowerCase();
-  return ["报错", "错误", "失败", "安全提示", "风险", "正式通知", "系统通知", "紧急", "报警", "急救", "验证码", "密码", "error:", "warning:", "traceback", "stack trace"]
-    .some((marker) => lower.includes(marker));
-}
-
-async function syncVector(host, item) {
-  if (!item.aiEnabled || !item.enabled || !item.meaning) {
-    try {
-      await host.call("host.vector.delete", {
-        collection: VECTOR_COLLECTION,
-        ids: [item.id],
-      });
-    } catch {}
-    return "disabled";
-  }
-  try {
-    await host.call("host.vector.upsert", {
-      collection: VECTOR_COLLECTION,
-      points: [{
-        id: item.id,
-        text: `名称：${item.name}\n含义：${item.meaning}\n关键词：${item.keywords.join("、")}`,
-        payload: {
-          enabled: "true",
-          ai_enabled: "true",
-        },
-      }],
-    });
-    return "ready";
-  } catch (error) {
-    return `failed:${error instanceof Error ? error.message : String(error)}`;
-  }
 }
 
 function filterList(state, payload) {
@@ -378,6 +298,62 @@ function filterList(state, payload) {
     page,
     pageSize,
   };
+}
+
+async function sendEmote(host, payload, triggerType = "manual", enforceLimits = false) {
+  const snapshot = await readState(host);
+  const state = snapshot.state;
+  if (enforceLimits && !state.settings.enabled) throw new Error("表情发送已关闭");
+  const item = findEmote(state, text(payload.emoteId));
+  if (!item || !item.enabled) throw new Error("表情不存在");
+  const characterId = text(payload.characterId);
+  const conversationId = text(payload.conversationId);
+  if (enforceLimits && inCooldown(state, item, characterId, state.settings.sameEmoteCooldownMinutes)) {
+    throw new Error("该表情仍在冷却中");
+  }
+  if (enforceLimits && hourlyLimitReached(state, characterId, state.settings.maxPerHour)) {
+    throw new Error("本小时表情发送次数已达上限");
+  }
+  const assetUrl = item.assetUrl || await resourceLink(host, item.filePath);
+  const fallbackUrl = item.fallbackUrl || await resourceLink(host, item.fallbackPath);
+  const result = await host.call("host.conversation.message.append", {
+    spaceId: text(payload.spaceId),
+    conversationId,
+    characterId,
+    channel: text(payload.channel) || "web",
+    role: "user",
+    source: "extension:com.amitia/emote",
+    replyToMessageId: text(payload.replyToMessageId) || undefined,
+    requestId: text(payload.requestId) || `emote-${triggerType}-${crypto.randomUUID()}`,
+    parts: [{
+      type: "image",
+      extensionType: "emote",
+      url: assetUrl,
+      fallbackUrl,
+      altText: `[表情：${item.name}]`,
+      mimeType: item.mimeType,
+      width: item.width,
+      height: item.height,
+      isAnimated: item.isAnimated,
+    }],
+  });
+  await mutateState(host, (next) => {
+    next.sendRecords.unshift({
+      id: crypto.randomUUID(),
+      emoteId: item.id,
+      characterId,
+      conversationId,
+      responseId: text(payload.requestId),
+      triggerType,
+      hit: true,
+      reason: text(payload.reason),
+      createdAt: nowISO(),
+      messageId: Array.isArray(result && result.messageIds) ? result.messageIds[0] : "",
+    });
+    next.sendRecords = next.sendRecords.slice(0, MAX_SEND_RECORDS);
+    return next;
+  });
+  return result;
 }
 
 async function command(host, input) {
@@ -494,7 +470,6 @@ async function command(host, input) {
             enabled: true,
             aiEnabled: false,
             groupIds: [],
-            vectorStatus: "disabled",
             createdAt: now,
             updatedAt: now,
           });
@@ -698,7 +673,6 @@ async function command(host, input) {
           enabled: true,
           aiEnabled: Boolean(payload.aiEnabled && text(payload.meaning)),
           groupIds: Array.isArray(payload.groupIds) ? payload.groupIds.map(text) : [],
-          vectorStatus: "disabled",
           createdAt: now,
           updatedAt: now,
         });
@@ -710,9 +684,6 @@ async function command(host, input) {
         for (const path of Object.values(session.paths)) await deleteResource(host, path);
         return { status: "duplicate", emoteId: duplicate.id };
       }
-      const vectorStatus = await syncVector(host, created);
-      created.vectorStatus = vectorStatus.startsWith("failed:") ? "failed" : vectorStatus;
-      created.vectorError = vectorStatus.startsWith("failed:") ? vectorStatus.slice(7) : "";
       created.assetUrl = await resourceLink(host, created.filePath);
       created.thumbnailUrl = await resourceLink(host, created.thumbnailPath);
       created.fallbackUrl = await resourceLink(host, created.fallbackPath);
@@ -740,9 +711,6 @@ async function command(host, input) {
         item.updatedAt = nowISO();
         return state;
       });
-      const vectorStatus = await syncVector(host, item);
-      item.vectorStatus = vectorStatus.startsWith("failed:") ? "failed" : vectorStatus;
-      item.vectorError = vectorStatus.startsWith("failed:") ? vectorStatus.slice(7) : "";
       await mutateState(host, (state) => {
         const index = state.emotes.findIndex((value) => value.id === id);
         if (index >= 0) state.emotes[index] = item;
@@ -764,7 +732,6 @@ async function command(host, input) {
         }
         return state;
       });
-      await Promise.all(selected.map((item) => syncVector(host, item)));
       return { updated: selected.length };
     }
     case "emotes.delete": {
@@ -777,7 +744,6 @@ async function command(host, input) {
         return state;
       });
       for (const item of removed) {
-        await host.call("host.vector.delete", { collection: VECTOR_COLLECTION, ids: [item.id] }).catch(() => {});
         await deleteResource(host, item.filePath);
         await deleteResource(host, item.thumbnailPath);
         await deleteResource(host, item.fallbackPath);
@@ -785,148 +751,64 @@ async function command(host, input) {
       return { deleted: removed.length };
     }
     case "emotes.send": {
-      const snapshot = await readState(host);
-      const item = findEmote(snapshot.state, text(payload.emoteId));
-      if (!item || !item.enabled) throw new Error("表情不存在");
-      const assetUrl = item.assetUrl || await resourceLink(host, item.filePath);
-      const fallbackUrl = item.fallbackUrl || await resourceLink(host, item.fallbackPath);
-      const result = await host.call("host.conversation.message.append", {
-        conversationId: text(payload.conversationId),
-        characterId: text(payload.characterId),
-        channel: text(payload.channel) || "web",
-        role: "user",
-        source: "extension:com.amitia/emote",
-        replyToMessageId: text(payload.replyToMessageId) || undefined,
-        requestId: `emote-manual-${crypto.randomUUID()}`,
-        parts: [{
-          type: "image",
-          extensionType: "emote",
-          url: assetUrl,
-          fallbackUrl,
-          altText: `[表情：${item.name}]`,
-          mimeType: item.mimeType,
-          width: item.width,
-          height: item.height,
-          isAnimated: item.isAnimated,
-        }],
-      });
-      await mutateState(host, (state) => {
-        state.sendRecords.unshift({
-          id: crypto.randomUUID(),
-          emoteId: item.id,
-          characterId: text(payload.characterId),
-          conversationId: text(payload.conversationId),
-          triggerType: "manual",
-          hit: true,
-          createdAt: nowISO(),
-          messageId: Array.isArray(result && result.messageIds) ? result.messageIds[0] : "",
-        });
-        state.sendRecords = state.sendRecords.slice(0, MAX_SEND_RECORDS);
-        return state;
-      });
-      return result;
+      return sendEmote(host, payload, "manual", false);
     }
     default:
       throw new Error(`未知表情包操作: ${action}`);
   }
 }
 
-async function output(host, input) {
-  const event = input && typeof input === "object" ? input : {};
-  const characterId = text(event.characterId);
-  const conversationId = text(event.conversationId);
-  if (!characterId || !conversationId) return { outputs: [] };
+async function ai(host, input) {
+  const action = text(input && input.action);
+  const payload = input && typeof input === "object" ? input : {};
+  const invocationContext = payload.__amitiaContext && typeof payload.__amitiaContext === "object" ? payload.__amitiaContext : {};
   const snapshot = await readState(host);
   const state = snapshot.state;
-  const settings = state.settings;
-  const reply = text(event.reply);
-  const emoteOnly = !reply && settings.allowEmoteOnly;
-  if (!settings.enabled || (!reply && !emoteOnly) || event.forceVoice || suppressedContext(event.source, reply)) {
-    return { outputs: [] };
-  }
-  if (!state.emotes.some((item) => emoteAvailable(item))) {
-    return { outputs: [] };
-  }
-  if (hourlyLimitReached(state, characterId, settings.maxPerHour)) return { outputs: [] };
-  if (replyGapBlocked(state.sendRecords, conversationId, characterId, settings.minReplyGap)) {
-    return { outputs: [] };
-  }
-  const probability = finalProbability(
-    settings.baseProbability,
-    settings.maxProbability,
-    contextFactor(event.userMessage, reply, event.source)
-  );
-  const sample = Math.random();
-  if (sample >= probability) return { outputs: [] };
-  let results = [];
-  try {
-    const search = await host.call("host.vector.search", {
-      collection: VECTOR_COLLECTION,
-      query: `${text(event.userMessage)}\n${reply}`,
-      limit: 10,
-      filter: { enabled: "true", ai_enabled: "true" },
-    });
-    results = Array.isArray(search && search.items) ? search.items : [];
-  } catch {}
-  const candidates = [];
-  for (const result of results) {
-    const item = findEmote(state, text(result.id));
-    if (!emoteAvailable(item)) continue;
-    if (inCooldown(state, item, characterId, settings.sameEmoteCooldownMinutes)) continue;
-    candidates.push({ item, score: number(result.score) });
-  }
-  const selected = weightedSelect(candidates);
-  if (!selected || selected.score < MIN_SIMILARITY) return { outputs: [] };
-  const item = selected.item;
-  const assetUrl = item.assetUrl || await resourceLink(host, item.filePath);
-  const fallbackUrl = item.fallbackUrl || await resourceLink(host, item.fallbackPath);
-  const placement = "after_text";
-  await mutateState(host, (next) => {
-    next.sendRecords.unshift({
-      id: crypto.randomUUID(),
-      emoteId: item.id,
-      characterId,
-      conversationId,
-      responseId: text(event.requestId),
-      triggerType: "ai_random",
-      probability,
-      sample,
-      score: selected.score,
-      hit: true,
-      placement,
-      createdAt: nowISO(),
-    });
-    next.sendRecords = next.sendRecords.slice(0, MAX_SEND_RECORDS);
-    return next;
-  });
-  return {
-    outputs: [{
-      outputId: text(event.requestId) || crypto.randomUUID(),
-      extensionId: "com.amitia/emote",
-      placement,
-      part: {
-        type: "image",
-        extensionType: "emote",
-        url: assetUrl,
-        fallbackUrl,
-        altText: `[表情：${item.name}]`,
+  const characterId = text(payload.characterId) || text(invocationContext.characterId);
+  if (action === "list") {
+    const groups = new Map(state.groups.map((group) => [group.id, group.name]));
+    return {
+      emotes: state.emotes.filter(emoteAvailable).map((item) => ({
+        id: item.id,
+        name: item.name,
+        meaning: item.meaning,
+        keywords: item.keywords,
+        groups: item.groupIds.map((id) => groups.get(id)).filter(Boolean),
         mimeType: item.mimeType,
         width: item.width,
         height: item.height,
         isAnimated: item.isAnimated,
-        metadata: {
-          emoteId: item.id,
-          score: selected.score,
-        },
-      },
-    }],
-  };
+        sendableNow: !inCooldown(state, item, characterId, state.settings.sameEmoteCooldownMinutes),
+      })),
+      settings: state.settings,
+    };
+  }
+  if (action === "send") {
+    const emoteId = text(payload.emoteId);
+    const item = findEmote(state, emoteId);
+    if (!emoteAvailable(item)) throw new Error("表情不存在、未启用或未开放给 AI");
+    const result = await sendEmote(host, {
+      ...payload,
+      characterId,
+      spaceId: text(payload.spaceId) || text(invocationContext.spaceId),
+      conversationId: text(payload.conversationId) || text(invocationContext.conversationId),
+      channel: text(payload.channel) || text(invocationContext.channel),
+      requestId: text(payload.requestId) || text(invocationContext.operationId),
+    }, "ai_tool", true);
+    return {
+      status: "sent",
+      emoteId,
+      name: item.name,
+      messageIds: result && Array.isArray(result.messageIds) ? result.messageIds : [],
+    };
+  }
+  throw new Error(`未知 AI 表情操作: ${action}`);
 }
 
 const emoteExtension = {
   async activate(context) {
     context.handlers.bindTool("command", (input) => enqueueCommand(() => command(context.host, input)));
-    context.handlers.bindTool("output", (input) => output(context.host, input));
+    context.handlers.bindTool("ai", (input) => enqueueCommand(() => ai(context.host, input)));
   },
   async deactivate() {
     uploadSessions.clear();

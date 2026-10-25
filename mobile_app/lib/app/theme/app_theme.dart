@@ -82,8 +82,11 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: colors.accentPrimary, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 15),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 14),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colors.textPrimary,
@@ -115,7 +118,9 @@ class AppTheme {
           return colors.textTertiary;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return colors.accentPrimary;
+          if (states.contains(WidgetState.selected)) {
+            return colors.accentPrimary;
+          }
           return colors.borderPrimary;
         }),
         trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
@@ -205,8 +210,11 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: colors.accentPrimary, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 15),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 14),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colors.surfaceSecondary,
@@ -238,7 +246,9 @@ class AppTheme {
           return colors.textTertiary;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return colors.accentPrimary;
+          if (states.contains(WidgetState.selected)) {
+            return colors.accentPrimary;
+          }
           return colors.borderPrimary;
         }),
         trackOutlineColor: WidgetStateProperty.all(Colors.transparent),

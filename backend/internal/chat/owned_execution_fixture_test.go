@@ -94,7 +94,7 @@ func newOwnedExecutionFixture(t *testing.T) *ownedExecutionFixture {
 	sqlModelDB, _ := modelDB.DB()
 	t.Cleanup(func() { _ = sqlModelDB.Close() })
 	model := &service{repo: NewRepository(app.NewAppContext(modelDB, nil)), db: modelDB}
-	port := &ownedExecutionData{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"测试角色","identity":"伙伴","globalMemoryEnabled":false}`)}}
+	port := &ownedExecutionData{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"测试角色","identity":"伙伴"}`)}}
 	return &ownedExecutionFixture{engine: business.NewEngine(coordination.NewService(db), port, ownedExecutionModel{model}), model: model, db: db, port: port}
 }
 

@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/jsonrpc"
@@ -26,6 +28,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	secretpkg "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/platform/process"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type HostState string
@@ -75,12 +78,14 @@ type PluginHost struct {
 	workDir         string
 	env             []string
 	networkDisabled bool
+	hostAccess      PluginHostAccess
 	expectedNonce   string
 	cmd             *exec.Cmd
 	stdin           io.WriteCloser
 	stdoutPipe      io.ReadCloser
 	stderrPipe      io.ReadCloser
 	pid             int
+	processTree     process.ProcessTreeHandle
 	procCtx         context.Context
 	procCancel      context.CancelFunc
 	writeMu         sync.Mutex
@@ -89,6 +94,8 @@ type PluginHost struct {
 	writerErr       error
 	pending         map[string]chan *jsonrpc.Response
 	pendingMu       sync.Mutex
+	invocations     map[string]hostInvocationContext
+	invocationsMu   sync.Mutex
 	reqCounter      int64
 	done            chan struct{}
 	closeOnce       sync.Once
@@ -115,12 +122,27 @@ type PluginHostConfig struct {
 	HostAPI              host_api.Gateway
 	Env                  []string
 	NetworkDisabled      bool
+	HostAccess           PluginHostAccess
+}
+
+type PluginHostAccess struct {
+	FilesystemMode    string
+	FilesystemRoots   []string
+	FilesystemRootMap map[string]string
+	NetworkMode       string
+	ProcessMode       string
+	MaxProcesses      int
 }
 
 type AllowedContribution struct {
 	ContributionID string
 	EntryType      string
 	EntryName      string
+}
+
+type hostInvocationContext struct {
+	ctx     context.Context
+	context capability.ToolInvocationContext
 }
 
 func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
@@ -169,11 +191,13 @@ func NewPluginHost(cfg PluginHostConfig) (*PluginHost, error) {
 		workDir:             cfg.WorkingDirectory,
 		env:                 cfg.Env,
 		networkDisabled:     cfg.NetworkDisabled,
+		hostAccess:          cfg.HostAccess,
 		handlers:            NewHandlerRegistry(cfg.AllowedContributions),
 		dispatcher:          NewInvocationDispatcher(cfg.BootstrapSpec.ResourceLimits),
 		watchdog:            NewWatchdog(cfg.InstanceID),
 		shutdownCoordinator: NewShutdownCoordinator(),
 		pending:             make(map[string]chan *jsonrpc.Response),
+		invocations:         make(map[string]hostInvocationContext),
 		outbound:            make(chan []byte, pluginHostOutboundQueueSize),
 		done:                make(chan struct{}),
 	}
@@ -330,7 +354,7 @@ func (h *PluginHost) executeBootstrapStep(ctx context.Context, stepName string) 
 
 func (h *PluginHost) startProcess(ctx context.Context) error {
 	procCtx, procCancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(procCtx, h.nodePath, h.pluginHostPath)
+	cmd := exec.CommandContext(procCtx, h.nodePath, h.nodeLaunchArgs()...)
 	if h.workDir != "" {
 		cmd.Dir = h.workDir
 	}
@@ -353,7 +377,13 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 		return fmt.Errorf("create stderr pipe: %w", err)
 	}
 
-	if err := cmd.Start(); err != nil {
+	process.ConfigureProcess(cmd)
+	limits := process.ResourceLimits{}
+	if h.hostAccess.MaxProcesses > 0 {
+		limits.MaxProcesses = uint32(h.hostAccess.MaxProcesses + 1)
+	}
+	tree, err := process.StartProcessTreeWithLimits(cmd, limits)
+	if err != nil {
 		procCancel()
 		return fmt.Errorf("start subprocess: %w", err)
 	}
@@ -364,6 +394,7 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 	h.stdoutPipe = stdoutPipe
 	h.stderrPipe = stderrPipe
 	h.pid = cmd.Process.Pid
+	h.processTree = tree
 	h.procCtx = procCtx
 	h.procCancel = procCancel
 	h.mu.Unlock()
@@ -377,6 +408,39 @@ func (h *PluginHost) startProcess(ctx context.Context) error {
 	}()
 
 	return nil
+}
+
+func (h *PluginHost) nodeLaunchArgs() []string {
+	args := []string{"--permission"}
+	seenRead := map[string]struct{}{}
+	addRead := func(root string) {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			return
+		}
+		if _, exists := seenRead[root]; exists {
+			return
+		}
+		seenRead[root] = struct{}{}
+		args = append(args, "--allow-fs-read="+root)
+	}
+	addRead(filepath.Dir(h.pluginHostPath))
+	if h.spec.Entry != "" {
+		addRead(filepath.Dir(h.spec.Entry))
+	}
+	mode := strings.ToLower(strings.TrimSpace(h.hostAccess.FilesystemMode))
+	if mode == "read" || mode == "read_write" {
+		for _, root := range h.hostAccess.FilesystemRoots {
+			addRead(root)
+			if mode == "read_write" {
+				args = append(args, "--allow-fs-write="+root)
+			}
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(h.hostAccess.ProcessMode), "direct") {
+		args = append(args, "--allow-child-process")
+	}
+	return append(args, h.pluginHostPath)
 }
 
 // startWriter decouples stdout reading from stdin writing. A dedicated
@@ -435,13 +499,18 @@ func (h *PluginHost) terminateProcess(reason string) {
 	h.mu.RLock()
 	proc := h.cmd
 	cancel := h.procCancel
+	tree := h.processTree
 	h.mu.RUnlock()
 
 	if reason != "" {
 		fmt.Fprintf(os.Stderr, "[js-runtime:%s] terminating runtime: %s\n", h.instanceID, reason)
 	}
 	if proc != nil && proc.Process != nil {
-		_ = proc.Process.Kill()
+		if tree != 0 {
+			_ = process.TerminateProcessTree(proc.Process.Pid, tree)
+		} else {
+			_ = proc.Process.Kill()
+		}
 	}
 	if cancel != nil {
 		cancel()
@@ -460,6 +529,15 @@ func (h *PluginHost) buildProcessEnvironment() []string {
 	if h.networkDisabled {
 		env.Set("AMITIA_NETWORK_DISABLED", "1")
 	}
+	env.Set("AMITIA_HOST_ACCESS_VERSION", "1")
+	env.Set("AMITIA_HOST_FILESYSTEM_MODE", defaultHostAccessMode(h.hostAccess.FilesystemMode, "none"))
+	env.Set("AMITIA_HOST_FILESYSTEM_ROOTS", strings.Join(h.hostAccess.FilesystemRoots, string(os.PathListSeparator)))
+	if encoded, err := json.Marshal(h.hostAccess.FilesystemRootMap); err == nil {
+		env.Set("AMITIA_HOST_FILESYSTEM_ROOTS_JSON", string(encoded))
+	}
+	env.Set("AMITIA_HOST_NETWORK_MODE", defaultHostAccessMode(h.hostAccess.NetworkMode, "none"))
+	env.Set("AMITIA_HOST_PROCESS_MODE", defaultHostAccessMode(h.hostAccess.ProcessMode, "none"))
+	env.Set("AMITIA_HOST_PROCESS_LIMIT", fmt.Sprintf("%d", h.hostAccess.MaxProcesses))
 
 	for _, e := range h.env {
 		parts := strings.SplitN(e, "=", 2)
@@ -469,6 +547,14 @@ func (h *PluginHost) buildProcessEnvironment() []string {
 	}
 
 	return env.Build()
+}
+
+func defaultHostAccessMode(value, fallback string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func (h *PluginHost) readLoop() {
@@ -638,6 +724,28 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 		_ = h.writeMessage(resp)
 		return
 	}
+	h.invocationsMu.Lock()
+	invocationContext, hasInvocationContext := h.invocations[p.InvocationID]
+	h.invocationsMu.Unlock()
+	callCtx := procCtx
+	if hasInvocationContext {
+		if invocationContext.ctx != nil {
+			callCtx = invocationContext.ctx
+		}
+		callCtx = withHostInvocationActor(callCtx, invocationContext.context)
+		if p.ScopeSnapshotID == "" {
+			p.ScopeSnapshotID = invocationContext.context.ScopeSnapshotID
+		}
+		if p.PermissionSnapshotID == "" {
+			p.PermissionSnapshotID = invocationContext.context.PermissionSnapshotID
+		}
+		if p.InvocationID == "" {
+			p.InvocationID = invocationContext.context.InvocationID
+		}
+		if p.TraceID == "" {
+			p.TraceID = invocationContext.context.TraceID
+		}
+	}
 
 	identity := runtime_supervisor.RuntimeIdentity{
 		InstanceID:  h.instanceID,
@@ -646,6 +754,18 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 	}
 
 	executionContext := p.ExecutionContext.Normalize()
+	if hasInvocationContext {
+		executionContext.Placement = permission.ExecutionPlacement(invocationContext.context.ExecutionTarget.Placement)
+		executionContext.SpaceID = invocationContext.context.ExecutionTarget.SpaceID
+		executionContext.DeviceID = invocationContext.context.ExecutionTarget.DeviceID
+		executionContext.RuntimeID = invocationContext.context.ExecutionTarget.RuntimeID
+		executionContext.RuntimeSessionID = invocationContext.context.ExecutionTarget.RuntimeSessionID
+		executionContext.ProviderID = invocationContext.context.ExecutionTarget.ProviderID
+		executionContext.ProviderInstanceID = invocationContext.context.ExecutionTarget.ProviderInstanceID
+		executionContext.ExtensionID = invocationContext.context.ExtensionID
+		executionContext.ModuleID = invocationContext.context.ModuleID
+		executionContext.Source = string(invocationContext.context.Source)
+	}
 	if executionContext.ExtensionID == "" {
 		executionContext.ExtensionID = h.extensionID
 	}
@@ -669,9 +789,10 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 		ExecutionContext:     executionContext,
 	}
 
-	result := gateway.Call(procCtx, callReq)
+	result := gateway.Call(callCtx, callReq)
 
 	if result.Error != nil {
+		fmt.Fprintf(os.Stderr, "[host-api] method=%s invocation=%s error=%s: %s\n", p.Method, p.InvocationID, result.Error.Code, result.Error.Message)
 		resp := jsonrpc.EncodeErrorResponse(req.ID, jsonrpc.InternalError(fmt.Sprintf("host.call: %s: %s", result.Error.Code, result.Error.Message)))
 		_ = h.writeMessage(resp)
 		return
@@ -684,6 +805,35 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 		return
 	}
 	_ = h.writeMessage(resp)
+}
+
+func withHostInvocationActor(ctx context.Context, invocation capability.ToolInvocationContext) context.Context {
+	target := invocation.ExecutionTarget
+	spaceID := target.SpaceID
+	if spaceID == "" {
+		spaceID = runtimeidentity.ParseSpaceID(invocation.SpaceID)
+	}
+	if spaceID != "" || invocation.CharacterID != "" || invocation.ConversationID != "" {
+		ctx = host_api.WithScopeContext(ctx, host_api.ScopeContext{
+			SpaceID:        spaceID.String(),
+			CharacterID:    invocation.CharacterID,
+			ConversationID: invocation.ConversationID,
+		})
+	}
+	if actor, ok := auth.FromContext(ctx); ok && actor != nil {
+		return ctx
+	}
+	if spaceID == "" || target.DeviceID == "" {
+		return ctx
+	}
+	return auth.WithActor(ctx, &auth.ActorContext{
+		PrincipalType:    auth.PrincipalTrustedDevice,
+		SpaceID:          spaceID,
+		DeviceID:         target.DeviceID,
+		RuntimeID:        target.RuntimeID,
+		SessionID:        invocation.SessionID,
+		RuntimeSessionID: target.RuntimeSessionID,
+	})
 }
 
 func (h *PluginHost) deliverResponse(resp *jsonrpc.Response) {
@@ -774,8 +924,22 @@ func (h *PluginHost) waitForReady(ctx context.Context) error {
 }
 
 func (h *PluginHost) sendRequest(ctx context.Context, method string, params interface{}) (*jsonrpc.Response, error) {
+	return h.sendRequestWithInvocation(ctx, method, params, nil)
+}
+
+func (h *PluginHost) sendRequestWithInvocation(ctx context.Context, method string, params interface{}, invocation *capability.ToolInvocationContext) (*jsonrpc.Response, error) {
 	id := atomic.AddInt64(&h.reqCounter, 1)
 	reqID := jsonrpc.NewStringID(fmt.Sprintf("host-%d", id))
+	if invocation != nil {
+		h.invocationsMu.Lock()
+		h.invocations[reqID.String()] = hostInvocationContext{ctx: ctx, context: *invocation}
+		h.invocationsMu.Unlock()
+		defer func() {
+			h.invocationsMu.Lock()
+			delete(h.invocations, reqID.String())
+			h.invocationsMu.Unlock()
+		}()
+	}
 	req, err := jsonrpc.EncodeRequest(reqID, method, params)
 	if err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
@@ -851,6 +1015,10 @@ func (h *PluginHost) writeMessage(msg interface{}) error {
 }
 
 func (h *PluginHost) Invoke(ctx context.Context, contributionID string, input interface{}) (interface{}, error) {
+	return h.InvokeWithContext(ctx, contributionID, input, capability.ToolInvocationContext{})
+}
+
+func (h *PluginHost) InvokeWithContext(ctx context.Context, contributionID string, input interface{}, invocation capability.ToolInvocationContext) (interface{}, error) {
 	if h.State() != HostStateReady {
 		return nil, errors.New("javascript_main: host not ready")
 	}
@@ -863,7 +1031,7 @@ func (h *PluginHost) Invoke(ctx context.Context, contributionID string, input in
 	}
 	callCtx, cancel := timeoutpolicy.WithTimeout(ctx, timeout)
 	defer cancel()
-	resp, err := h.sendRequest(callCtx, "runtime.invoke", params)
+	resp, err := h.sendRequestWithInvocation(callCtx, "runtime.invoke", params, &invocation)
 	if err != nil {
 		return nil, err
 	}
@@ -957,12 +1125,17 @@ func (h *PluginHost) cleanupProcess() {
 	h.writeMu.Unlock()
 	h.mu.Lock()
 	procCancel := h.procCancel
+	tree := h.processTree
 	h.cmd = nil
 	h.stdoutPipe = nil
 	h.stderrPipe = nil
 	h.pid = 0
+	h.processTree = 0
 	h.procCancel = nil
 	h.mu.Unlock()
+	if tree != 0 {
+		process.CloseProcessTree(tree)
+	}
 	if procCancel != nil {
 		procCancel()
 	}

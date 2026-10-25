@@ -750,7 +750,7 @@ func TestValidateClientRuntimePackageDefinitionRejectsInvalidChildSlotScope(t *t
 	}
 }
 
-func TestValidateClientRuntimePackageDefinitionAcceptsSandboxedClientCodeWithoutSchemaSource(t *testing.T) {
+func TestValidateClientRuntimePackageDefinitionRejectsClientCodeWithoutSchemaSource(t *testing.T) {
 	pkg := map[string]interface{}{
 		"id":      "sandbox-demo",
 		"version": "1.0.0",
@@ -768,27 +768,8 @@ func TestValidateClientRuntimePackageDefinitionAcceptsSandboxedClientCodeWithout
 			},
 		},
 	}
-	if err := validateClientRuntimePackageDefinition(pkg); err != nil {
-		t.Fatalf("sandboxed clientCode should be accepted: %v", err)
-	}
-}
-
-func TestValidateClientRuntimePackageDefinitionRejectsUnboundedSandboxedClientCode(t *testing.T) {
-	pkg := map[string]interface{}{
-		"id":      "sandbox-too-large",
-		"version": "1.0.0",
-		"contributions": []interface{}{
-			map[string]interface{}{
-				"slotId": "chat.sidebar.panel",
-				"key":    "sandbox-panel",
-				"clientCode": map[string]interface{}{
-					"script": strings.Repeat("x", maxClientRuntimeScriptBytes+1),
-				},
-			},
-		},
-	}
-	if err := validateClientRuntimePackageDefinition(pkg); err == nil || !strings.Contains(err.Error(), "script exceeds") {
-		t.Fatalf("oversized sandbox script validation error = %v", err)
+	if err := validateClientRuntimePackageDefinition(pkg); err == nil || !strings.Contains(err.Error(), "clientCode is not supported") {
+		t.Fatalf("clientCode validation error = %v", err)
 	}
 }
 

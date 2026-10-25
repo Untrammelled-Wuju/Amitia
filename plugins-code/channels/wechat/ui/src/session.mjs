@@ -35,6 +35,21 @@ export function statusLabel(status) {
   }[status] || "未连接";
 }
 
+export function createHostBridge(actions, navigate) {
+  return {
+    ready: async () => {},
+    invokeAction: async (action, input = {}) => {
+      const invoke = actions?.[action];
+      if (typeof invoke !== "function") throw new Error(`宿主未提供操作：${action}`);
+      return invoke(input);
+    },
+    navigate: async (target, type) => {
+      if (typeof navigate !== "function") throw new Error("当前宿主不支持页面跳转");
+      return navigate(target, type);
+    },
+  };
+}
+
 export function createChannelClient(bridge, { now = Date.now } = {}) {
   if (!bridge || typeof bridge.invokeAction !== "function") throw new Error("插件连接尚未就绪，请关闭页面后重新打开");
   const calls = [];

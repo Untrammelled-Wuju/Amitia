@@ -41,6 +41,10 @@ class ChatMessage {
   final int? sourceRevision;
   final String renderId;
   final String characterId;
+  final String characterName;
+  final String characterAvatar;
+  final String groupRoundId;
+  final String deliveryId;
   final MessageRole role;
   final MessageType type;
   final String content;
@@ -77,6 +81,10 @@ class ChatMessage {
     this.sourceRevision,
     String? renderId,
     this.characterId = '',
+    this.characterName = '',
+    this.characterAvatar = '',
+    this.groupRoundId = '',
+    this.deliveryId = '',
     required this.role,
     required this.type,
     required this.content,

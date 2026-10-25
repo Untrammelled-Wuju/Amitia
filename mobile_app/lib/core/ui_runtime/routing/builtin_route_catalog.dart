@@ -6,6 +6,7 @@ import '../../../features/chat/presentation/pages/chat_page.dart';
 import '../../../features/chat/presentation/pages/realtime_call_page.dart';
 import '../../../features/settings/presentation/pages/notification_settings_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
+import '../../../features/conversations/presentation/pages/conversation_search_page.dart';
 import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
@@ -28,6 +29,7 @@ import '../../../features/continuity/presentation/pages/continuity_page.dart';
 import '../../../features/continuity/presentation/pages/continuity_detail_page.dart';
 import '../../../features/chat_logs/presentation/pages/chat_logs_page.dart';
 import '../../../features/chat_import/presentation/pages/chat_import_page.dart';
+import '../../../features/channels/presentation/pages/channel_messages_page.dart';
 import '../../../features/extensions/presentation/pages/extension_center_page.dart';
 import '../../../features/extensions/presentation/pages/extension_packages_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_list_page.dart';
@@ -47,6 +49,9 @@ import '../../../features/workshop/presentation/pages/pet_installations_page.dar
 import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../../features/characters/presentation/pages/character_create_page.dart';
 import '../../../features/settings/presentation/pages/settings_page.dart';
+import '../../../features/tasks/presentation/pages/task_hub_page.dart';
+import '../../../features/memory/presentation/pages/memory_hub_page.dart';
+import '../../../features/profile/presentation/pages/profile_hub_page.dart';
 import '../../../features/settings/presentation/pages/model_settings_page.dart';
 import '../../../features/settings/presentation/pages/search_api_settings_page.dart';
 import '../../../features/settings/presentation/pages/appearance_settings_page.dart';
@@ -97,11 +102,71 @@ import '../../../features/developer/presentation/pages/dev_console_page.dart';
 import '../../../features/developer/presentation/pages/migrations_page.dart';
 import '../../../features/developer/presentation/pages/dev_mode_page.dart';
 import '../../../core/widgets/plugin_unavailable_page.dart';
+import '../../../core/widgets/main_tab_scaffold.dart';
 
 /// All built-in business routes live in this catalog instead of the app
 /// bootstrap router. The router only owns recovery/authentication boundaries,
 /// the shell, and extension supplied routes.
 List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
+  StatefulShellRoute.indexedStack(
+    builder: (context, state, navigationShell) =>
+        MainTabScaffold(navigationShell: navigationShell),
+    branches: <StatefulShellBranch>[
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: AppRoutes.conversations,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ConversationListPage()),
+          ),
+        ],
+      ),
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: AppRoutes.tasks,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: TaskHubPage()),
+          ),
+        ],
+      ),
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: AppRoutes.memoryHub,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: MemoryHubPage()),
+          ),
+        ],
+      ),
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: AppRoutes.extensions,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ExtensionCenterPage()),
+          ),
+        ],
+      ),
+      StatefulShellBranch(
+        routes: <RouteBase>[
+          GoRoute(
+            path: AppRoutes.me,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ProfileHubPage()),
+          ),
+        ],
+      ),
+    ],
+  ),
+  GoRoute(
+    path: AppRoutes.conversationSearch,
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: const ConversationSearchPage(),
+    ),
+  ),
   GoRoute(
     path: '/settings/category/:categoryId',
     pageBuilder: (context, state) => slideFadePage(
@@ -142,11 +207,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         ownedInvitation: state.uri.queryParameters['owned'] == '1',
       ),
     ),
-  ),
-  GoRoute(
-    path: '/conversations',
-    pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const ConversationListPage()),
   ),
   GoRoute(path: '/dashboard', redirect: (_, _) => AppRoutes.settingsOverview),
   GoRoute(
@@ -329,6 +389,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     ),
   ),
   GoRoute(
+    path: AppRoutes.channelMessages,
+    pageBuilder: (context, state) => slideFadePage(
+      context: context,
+      state: state,
+      child: const ChannelMessagesPage(),
+    ),
+  ),
+  GoRoute(
     path: '/emotes',
     pageBuilder: (context, state) => drawerSlideFadePage(
       state: state,
@@ -348,11 +416,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     path: '/chat-import',
     pageBuilder: (context, state) =>
         drawerSlideFadePage(state: state, child: const ChatImportPage()),
-  ),
-  GoRoute(
-    path: '/extensions',
-    pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const ExtensionCenterPage()),
   ),
   GoRoute(
     path: '/extensions/packages',

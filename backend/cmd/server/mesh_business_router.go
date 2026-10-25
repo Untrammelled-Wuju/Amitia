@@ -32,6 +32,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 	registerMeshRuntimeStateRouter(mesh, services, coreID)
 	registerMeshRelationshipTimeRouter(mesh, services, coreID)
 	registerMeshChatManagementRouter(mesh, services, coreID)
+	registerMeshGroupChatRouter(mesh, services, coreID)
 	registerMeshChatRuntimeRouter(mesh, services, coreID)
 	registerMeshTaskOwnerRouter(mesh, services)
 	registerMeshTaskSubmissionRouter(mesh, services, coreID)
@@ -479,6 +480,33 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				c.Writer.Flush()
 				return nil
 			}
+		}
+		if request.Group != nil || len(request.Mentions) > 0 {
+			if request.Group == nil {
+				request.Group = &business.GroupMessageOptions{}
+			}
+			groupResponse, groupErr := services.OwnedBusiness.RunGroupEvents(messageContext, request, emit)
+			if groupErr != nil {
+				if streaming && c.Writer.Written() {
+					c.SSEvent("message", gin.H{"type": "failed", "message": groupErr.Error()})
+					c.Writer.Flush()
+					return
+				}
+				status := http.StatusConflict
+				if errors.Is(groupErr, coordination.ErrCapabilityGrant) {
+					status = http.StatusForbidden
+				}
+				c.JSON(status, gin.H{"code": "mesh.group_failed", "message": groupErr.Error()})
+				return
+			}
+			if streaming {
+				c.Header("Cache-Control", "no-store")
+				c.SSEvent("message", gin.H{"type": "group.completed", "data": groupResponse})
+				c.Writer.Flush()
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 200, "data": groupResponse})
+			return
 		}
 		response, err := services.OwnedBusiness.RunEvents(messageContext, request, emit)
 		if err == nil && response.Saved && services.ContinuityOwner != nil && threadID != "" {

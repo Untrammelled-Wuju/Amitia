@@ -24,6 +24,7 @@ const _protectedRouteNamespaces = <String>{
   '/usage-boundary',
   AppRoutes.chat,
   AppRoutes.conversations,
+  AppRoutes.conversationSearch,
   AppRoutes.dashboard,
   AppRoutes.characters,
   AppRoutes.agent,

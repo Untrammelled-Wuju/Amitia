@@ -226,7 +226,7 @@ func (e *Engine) GenerateSummary(ctx context.Context, request Request, expectedR
 	}
 	defer finish()
 	scope.RoleRevision = first.Scope.RoleRevision
-	if err := coordination.ResolveMemoryScope(&scope, first.Snapshot.Role, request.MemoryView); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, request.MemoryView); err != nil {
 		return SummaryResponse{}, err
 	}
 	if summaryAuthority(scope) != summaryAuthority(first.Scope) {
@@ -283,7 +283,7 @@ func (e *Engine) GenerateSummary(ctx context.Context, request Request, expectedR
 	}
 	actual := int64(0)
 	if current != nil {
-		if current.ID != resourceID || current.OwnerID != scope.ResourceOwnerID || current.RoleID != scope.RoleID {
+		if current.ID != resourceID || current.OwnerID != scope.ResourceOwnerID || current.RoleID != coordination.StorageRole(scope, "summary") {
 			return SummaryResponse{}, coordination.ErrWrongOwner
 		}
 		actual = current.Revision
@@ -304,7 +304,7 @@ func (e *Engine) GenerateSummary(ctx context.Context, request Request, expectedR
 	}
 	conversationRevision := int64(0)
 	if conversation != nil {
-		if conversation.Deleted || conversation.OwnerID != scope.ResourceOwnerID || conversation.RoleID != scope.RoleID {
+		if conversation.Deleted || conversation.OwnerID != scope.ResourceOwnerID || conversation.RoleID != coordination.StorageRole(scope, "conversation") {
 			return SummaryResponse{}, coordination.ErrWrongOwner
 		}
 		conversationRevision = conversation.Revision
@@ -355,11 +355,11 @@ func (e *Engine) GenerateSummary(ctx context.Context, request Request, expectedR
 	resultScope.RequestID += "|summary-result"
 	response := SummaryResponse{Text: text, ConversationID: route.CurrentID, ResourceID: resourceID, Revision: expectedRevision + 1, OwnerID: scope.ResourceOwnerID, Scope: scope, Saved: true, Acknowledgement: coordination.Acknowledgement{RequestID: resultScope.RequestID, OwnerID: scope.ResourceOwnerID, Versions: map[string]int64{"summary/" + resourceID: expectedRevision + 1, "checkpoint/" + receiptID: 2}}}
 	commit := coordination.Commit{Scope: resultScope, Dependencies: dependencies, Mutations: []coordination.Mutation{
-		{Kind: "summary", ID: resourceID, RoleID: scope.RoleID, ExpectedRevision: expectedRevision, Body: body(map[string]any{"conversationId": route.CurrentID, "content": map[string]string{"summary": text}, "sourceMessages": messagesToSummarySources(messages), "updatedAt": time.Now().UTC().Format(time.RFC3339Nano), "executionScope": scope})},
+		{Kind: "summary", ID: resourceID, RoleID: coordination.StorageRole(scope, "summary"), ExpectedRevision: expectedRevision, Body: body(map[string]any{"conversationId": route.CurrentID, "content": map[string]string{"summary": text}, "sourceMessages": messagesToSummarySources(messages), "updatedAt": time.Now().UTC().Format(time.RFC3339Nano), "executionScope": scope})},
 		{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, ExpectedRevision: 1, Body: body(summaryReceipt{Hash: fingerprint, Status: "completed", RoleRevision: scope.RoleRevision, Response: &response})},
 	}}
 	if conversation == nil {
-		commit.Mutations = append(commit.Mutations, coordination.Mutation{Kind: "conversation", ID: route.CurrentID, RoleID: scope.RoleID, Body: body(map[string]any{"id": route.CurrentID, "conversationId": route.CurrentID, "title": "历史对话", "characterId": scope.RoleID, "ownerId": scope.ResourceOwnerID, "conversationOrigin": route.Origin, "createdAt": time.Now().UTC().Format(time.RFC3339Nano)})})
+		commit.Mutations = append(commit.Mutations, coordination.Mutation{Kind: "conversation", ID: route.CurrentID, RoleID: coordination.StorageRole(scope, "conversation"), Body: body(map[string]any{"id": route.CurrentID, "conversationId": route.CurrentID, "title": "历史对话", "characterId": scope.RoleID, "ownerId": scope.ResourceOwnerID, "conversationOrigin": route.Origin, "createdAt": time.Now().UTC().Format(time.RFC3339Nano)})})
 	}
 	ack, err := e.commit(ctx, commit)
 	if err != nil {

@@ -48,6 +48,7 @@ type CreateHostRequest struct {
 	ResourceLimits       runtime.ResourceLimits
 	Env                  []string
 	NetworkDisabled      bool
+	HostAccess           PluginHostAccess
 	NodePath             string
 	PluginHostPath       string
 	WorkingDirectory     string
@@ -131,6 +132,7 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 		HostAPI:              gateway,
 		Env:                  req.Env,
 		NetworkDisabled:      req.NetworkDisabled,
+		HostAccess:           req.HostAccess,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("javascript_main: create host failed: %w", err)

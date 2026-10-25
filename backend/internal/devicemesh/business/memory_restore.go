@@ -29,9 +29,6 @@ func (e *Engine) RestoreMemoryArchive(ctx context.Context, request Request, inpu
 		return err
 	}
 	remapRole := func(id string) string {
-		if id == coordination.GlobalMemoryRole {
-			return id
-		}
 		if input.IdentityMap != nil {
 			if target, ok := input.IdentityMap.GetCharacter(id); ok {
 				return target

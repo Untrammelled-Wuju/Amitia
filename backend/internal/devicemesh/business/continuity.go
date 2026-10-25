@@ -124,13 +124,11 @@ func (e *Engine) continuityAuthority(ctx context.Context, request Request) (cont
 	if request.ExpectedScope != nil {
 		if request.ExpectedScope.MemoryViewAll {
 			view = "all"
-		} else if request.ExpectedScope.MemoryRoleID == coordination.GlobalMemoryRole {
-			view = "global"
 		} else if request.ExpectedScope.MemoryRoleID != "" {
 			view = "role:" + request.ExpectedScope.MemoryRoleID
 		}
 	}
-	if err := coordination.ResolveMemoryScope(&scope, role, view); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, view); err != nil {
 		finish()
 		return ctx, scope, func() {}, err
 	}
@@ -749,7 +747,7 @@ func (e *Engine) PresentManagedContinuity(ctx context.Context, document OwnedCon
 		return PresentContinuity(document, scope, time.Now())
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
-	_ = coordination.ResolveMemoryScope(&scope, role, "")
+	_ = coordination.ResolveMemoryScope(&scope, "")
 	scope.ContinuityRoleID = partition
 	document.MemoryPartition = partition
 	document.ReadOnly = false

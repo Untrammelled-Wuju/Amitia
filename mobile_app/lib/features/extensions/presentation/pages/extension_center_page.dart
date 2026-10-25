@@ -9,7 +9,10 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/extension_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
+import '../../../../core/ui_runtime/ui_navigation_registry.dart';
+import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 final installedExtensionViewProvider =
@@ -26,9 +29,9 @@ class ExtensionCenterPage extends ConsumerWidget {
     final viewAsync = ref.watch(installedExtensionViewProvider);
 
     return AmitiaScaffold(
+      handlesSystemBack: false,
       appBar: AmitiaAppBar(
-        title: '扩展中心',
-        navigation: AmitiaAppBarNavigation.back,
+        title: '插件',
         actions: [
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 180),
@@ -55,38 +58,96 @@ class ExtensionCenterPage extends ConsumerWidget {
     WidgetRef ref,
     ExtensionCenterView view,
   ) {
+    final navigationItems = UINavigationRegistry.resolve(
+      ref.watch(uiRuntimeProvider).valueOrNull,
+    ).where((item) => !item.builtin).toList(growable: false);
     return ListView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.xs,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       children: [
-        Column(
-          children: [
-            _CenterEntry(
-              label: '扩展包',
-              icon: Icons.inventory_2_outlined,
-              onTap: () => context.push(AppRoutes.extensionsPackages),
-            ),
-            _CenterEntry(
-              label: 'MCP',
-              icon: Icons.hub_outlined,
-              onTap: () => context.push(AppRoutes.extensionsMcp),
-            ),
-            _CenterEntry(
-              label: '工作流',
-              icon: Icons.account_tree_outlined,
-              onTap: () => context.push(AppRoutes.workshopWorkflows),
-            ),
-            _CenterEntry(
-              label: 'Agent Skill',
-              icon: Icons.auto_awesome_outlined,
-              onTap: () => context.push(AppRoutes.extensionsAgentSkills),
-            ),
-          ],
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: context.surfacePrimary,
+            borderRadius: AppRadius.brMedium,
+            border: Border.all(color: context.borderPrimary, width: 0.5),
+          ),
+          child: Column(
+            children: [
+              _CenterEntry(
+                label: '扩展包',
+                icon: Icons.inventory_2_outlined,
+                onTap: () => context.push(AppRoutes.extensionsPackages),
+                showDivider: true,
+              ),
+              _CenterEntry(
+                label: 'MCP',
+                icon: Icons.hub_outlined,
+                onTap: () => context.push(AppRoutes.extensionsMcp),
+                showDivider: true,
+              ),
+              _CenterEntry(
+                label: '工作流',
+                icon: Icons.account_tree_outlined,
+                onTap: () => context.push(AppRoutes.workshopWorkflows),
+                showDivider: true,
+              ),
+              _CenterEntry(
+                label: 'Agent Skill',
+                icon: Icons.auto_awesome_outlined,
+                onTap: () => context.push(AppRoutes.extensionsAgentSkills),
+              ),
+            ],
+          ),
         ),
+        if (navigationItems.isNotEmpty) ...[
+          SizedBox(height: AppSpacing.lg),
+          Text('扩展入口', style: AppTypography.sectionTitle(context)),
+          SizedBox(height: AppSpacing.sm),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: context.surfacePrimary,
+              borderRadius: AppRadius.brMedium,
+              border: Border.all(color: context.borderPrimary, width: 0.5),
+            ),
+            child: Column(
+              children: [
+                for (var index = 0; index < navigationItems.length; index++)
+                  _CenterEntry(
+                    label: navigationItems[index].label,
+                    icon: navigationItems[index].icon,
+                    onTap: () => context.push(navigationItems[index].route),
+                    showDivider: index < navigationItems.length - 1,
+                  ),
+              ],
+            ),
+          ),
+        ],
+        if (view.all.isEmpty) ...[
+          SizedBox(height: AppSpacing.lg),
+          Text('已安装', style: AppTypography.label(context)),
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            child: Center(
+              child: Text(
+                '暂无已安装插件',
+                style: AppTypography.caption(
+                  context,
+                ).copyWith(color: context.textTertiary),
+              ),
+            ),
+          ),
+        ],
         if (view.updates.isNotEmpty) ...[
           SizedBox(height: AppSpacing.lg),
           Text(
             '可更新 (${view.updates.length})',
-            style: AppTypography.pageTitle(context).copyWith(fontSize: 16),
+            style: AppTypography.sectionTitle(context),
           ),
           SizedBox(height: AppSpacing.sm),
           ...view.updates.map(
@@ -112,7 +173,7 @@ class ExtensionCenterPage extends ConsumerWidget {
           SizedBox(height: AppSpacing.lg),
           Text(
             '需要处理 (${view.needsAction.length})',
-            style: AppTypography.pageTitle(context).copyWith(fontSize: 16),
+            style: AppTypography.sectionTitle(context),
           ),
           SizedBox(height: AppSpacing.sm),
           ...view.needsAction.map(
@@ -135,10 +196,7 @@ class ExtensionCenterPage extends ConsumerWidget {
           ),
         ],
         if (view.installed.isNotEmpty) ...[
-          Text(
-            '已安装',
-            style: AppTypography.pageTitle(context).copyWith(fontSize: 16),
-          ),
+          Text('已安装', style: AppTypography.sectionTitle(context)),
           SizedBox(height: AppSpacing.sm),
           ...view.installed.map(
             (card) => AmitiaExtensionCard(
@@ -160,10 +218,7 @@ class ExtensionCenterPage extends ConsumerWidget {
         ],
         if (view.discover.isNotEmpty) ...[
           SizedBox(height: AppSpacing.lg),
-          Text(
-            '发现',
-            style: AppTypography.pageTitle(context).copyWith(fontSize: 16),
-          ),
+          Text('发现', style: AppTypography.sectionTitle(context)),
           SizedBox(height: AppSpacing.sm),
           ...view.discover.map(
             (card) => AmitiaExtensionCard(
@@ -189,11 +244,13 @@ class _CenterEntry extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+  final bool showDivider;
 
   const _CenterEntry({
     required this.label,
     required this.icon,
     required this.onTap,
+    this.showDivider = false,
   });
 
   @override
@@ -202,46 +259,35 @@ class _CenterEntry extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: AppRadius.brMedium,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 68),
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: context.surfaceSecondary,
-            borderRadius: AppRadius.brMedium,
-            border: Border.all(color: context.borderPrimary, width: 0.6),
+            border: showDivider
+                ? Border(
+                    bottom: BorderSide(
+                      color: context.borderSecondary,
+                      width: 0.5,
+                    ),
+                  )
+                : null,
           ),
           child: Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: context.accentSoft,
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Icon(icon, size: 21, color: context.accentPrimary),
-              ),
-              const SizedBox(width: 14),
+              AmitiaIcon.adaptive(icon, size: 20, color: context.textSecondary),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,
-                  style: AppTypography.cardTitle(context),
+                  style: AppTypography.body(
+                    context,
+                  ).copyWith(fontSize: 14, fontWeight: FontWeight.w400),
                 ),
               ),
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: context.surfacePrimary,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 17,
-                  color: context.accentPrimary,
-                ),
+              AmitiaIcon(
+                AmitiaIconGlyph.chevronRight,
+                size: 18,
+                color: context.textTertiary,
               ),
             ],
           ),
@@ -293,7 +339,11 @@ class AmitiaExtensionCard extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, size: 22, color: context.accentPrimary),
+            child: AmitiaIcon.adaptive(
+              icon,
+              size: 20,
+              color: context.textSecondary,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(

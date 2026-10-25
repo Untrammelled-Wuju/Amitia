@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/log"
 )
 
 func (r *meshOwnedToolRuntime) validateLifecycle(ctx context.Context, inference business.Inference) error {
@@ -78,7 +79,8 @@ func (r *meshOwnedToolRuntime) PlanOwnedOutputs(ctx context.Context, inference b
 			return nil, err
 		}
 		if result.Error != nil || !strings.EqualFold(result.Status, "SUCCESS") {
-			return nil, errors.New("消息输出规划能力执行失败")
+			log.Warn("owned message output provider skipped", "provider", provider.ID, "status", result.Status, "error", result.Error)
+			continue
 		}
 		if len(result.Output) == 0 {
 			continue
@@ -88,7 +90,8 @@ func (r *meshOwnedToolRuntime) PlanOwnedOutputs(ctx context.Context, inference b
 		}
 		if err := json.Unmarshal(result.Output, &envelope); err != nil {
 			if err := json.Unmarshal(result.Output, &envelope.Outputs); err != nil {
-				return nil, errors.New("消息输出规划结果格式无效")
+				log.Warn("owned message output provider returned invalid output", "provider", provider.ID, "error", err, "output", string(result.Output))
+				continue
 			}
 		}
 		for _, output := range envelope.Outputs {
@@ -109,6 +112,11 @@ func (r *meshOwnedToolRuntime) OwnedReplyCommitted(ctx context.Context, inferenc
 		return err
 	}
 	r.services.KernelContainer.ToolFacade.AfterReplyContext(ctx, ownedToolScope(inference, ""), kernel.ReplyView{MessageID: messageID, CharacterID: inference.Scope.RoleID, ConversationID: inference.ConversationID, Channel: "device-mesh", Content: generation.Text, CreatedAt: time.Now().UTC()})
+	if inference.Group != nil {
+		if err := r.services.OwnedBusiness.AcceptGroupInvitations(ctx, inference, messageID, r.takeGroupInvites(inference.Scope.ExecutionID)); err != nil {
+			return err
+		}
+	}
 	return r.validateLifecycle(ctx, inference)
 }
 

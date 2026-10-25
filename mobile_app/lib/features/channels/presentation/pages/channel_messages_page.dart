@@ -15,6 +15,7 @@ import '../../../../core/ui_runtime/ui_message_renderer_registry.dart';
 import '../../../../core/ui_runtime/ui_provider_host.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/compact_empty_state.dart';
 
 class ChannelMessagesPage extends ConsumerStatefulWidget {
   const ChannelMessagesPage({super.key});
@@ -33,18 +34,6 @@ class _ChannelMessagesPageState extends ConsumerState<ChannelMessagesPage> {
   void initState() {
     super.initState();
     _load();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _ensureChannelEntryAvailable();
-    });
-  }
-
-  Future<void> _ensureChannelEntryAvailable() async {
-    await ref.read(uiRuntimeProvider.notifier).ensureLoaded();
-    if (!mounted) return;
-    final snapshot = ref.read(uiRuntimeProvider).valueOrNull;
-    if (ChannelPresentationRegistry.resolve(snapshot).isEmpty) {
-      context.go(AppRoutes.chat);
-    }
   }
 
   Future<void> _load() async {
@@ -69,14 +58,6 @@ class _ChannelMessagesPageState extends ConsumerState<ChannelMessagesPage> {
   @override
   Widget build(BuildContext context) {
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
-    ref.listen(uiRuntimeProvider, (_, next) {
-      final nextSnapshot = next.valueOrNull;
-      if (mounted &&
-          nextSnapshot != null &&
-          ChannelPresentationRegistry.resolve(nextSnapshot).isEmpty) {
-        context.go(AppRoutes.chat);
-      }
-    });
     final presentations = ChannelPresentationRegistry.resolve(snapshot);
     final presentationsByChannel = <String, ChannelPresentationDescriptor>{
       for (final item in presentations) item.channelId: item,
@@ -88,7 +69,21 @@ class _ChannelMessagesPageState extends ConsumerState<ChannelMessagesPage> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error.isNotEmpty
-            ? Center(child: Text(_error))
+            ? _error.contains('没有可用角色')
+                  ? ListView(
+                      padding: EdgeInsets.all(AppSpacing.pagePadding),
+                      children: [
+                        CompactEmptyState(
+                          icon: Icons.person_add_alt_1_outlined,
+                          title: '暂无渠道消息',
+                          message: '创建角色并接入渠道后，渠道消息会显示在这里。',
+                          actionLabel: '创建角色',
+                          onAction: () =>
+                              context.push(AppRoutes.charactersCreate),
+                        ),
+                      ],
+                    )
+                  : Center(child: Text(_error))
             : _conversations.isEmpty
             ? const Center(child: Text('暂无渠道消息'))
             : ListView.separated(
@@ -260,7 +255,8 @@ class _ChannelMessageBubble extends StatelessWidget {
     final videoUrl = message.videoUrl.trim();
     final audioUrl = message.audioUrl.trim();
     final content = message.content.trim();
-    final hasMedia = imageUrl.isNotEmpty || videoUrl.isNotEmpty || audioUrl.isNotEmpty;
+    final hasMedia =
+        imageUrl.isNotEmpty || videoUrl.isNotEmpty || audioUrl.isNotEmpty;
     final placeholder = RegExp(r'^\[(图片|视频|语音|音频|文件)\]$').hasMatch(content);
     return Container(
       constraints: const BoxConstraints(maxWidth: 320),
@@ -287,10 +283,7 @@ class _ChannelMessageBubble extends StatelessWidget {
                 const Icon(Icons.play_circle_outline, size: 18),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(
-                    '视频消息',
-                    style: AppTypography.body(context),
-                  ),
+                  child: Text('视频消息', style: AppTypography.body(context)),
                 ),
               ],
             ),
@@ -326,7 +319,8 @@ class _ChannelMessageBubble extends StatelessWidget {
       return Image.network(
         url,
         fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => Text('图片加载失败', style: AppTypography.label(context)),
+        errorBuilder: (_, _, _) =>
+            Text('图片加载失败', style: AppTypography.label(context)),
       );
     }
     final separator = url.indexOf(',');
@@ -338,7 +332,8 @@ class _ChannelMessageBubble extends StatelessWidget {
       return Image.memory(
         bytes,
         fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => Text('图片解码失败', style: AppTypography.label(context)),
+        errorBuilder: (_, _, _) =>
+            Text('图片解码失败', style: AppTypography.label(context)),
       );
     } catch (_) {
       return Text('图片解码失败', style: AppTypography.label(context));

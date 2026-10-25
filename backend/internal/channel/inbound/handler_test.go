@@ -37,6 +37,20 @@ func (e *captureUnifiedEntry) Handle(_ context.Context, request *interaction.Uni
 	}, nil
 }
 
+type scopeCaptureUnifiedEntry struct {
+	captureUnifiedEntry
+}
+
+func (e *scopeCaptureUnifiedEntry) ResolveScope(_ context.Context, _ *interaction.UnifiedEntryRequest) (interaction.ScopeResolution, error) {
+	return interaction.ScopeResolution{
+		Scope: interaction.InteractionScope{
+			SpaceID:     "space-1",
+			CharacterID: "default-character",
+		},
+		Confidence: interaction.ScopeConfidenceUnboundExplicit,
+	}, nil
+}
+
 func TestInboundHandlerRoutesGenericTextMessage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	entry := &captureUnifiedEntry{}
@@ -107,6 +121,41 @@ func TestInboundHandlerMapsMediaMessage(t *testing.T) {
 	}
 	if entry.request.AudioUrl != "https://example.invalid/voice.ogg" || !entry.request.VoiceMessage {
 		t.Fatalf("unexpected media request: %#v", entry.request)
+	}
+}
+
+func TestInboundHandlerResolvesDefaultCharacterBeforeEntry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	entry := &scopeCaptureUnifiedEntry{}
+	router := gin.New()
+	RegisterInboundRouter(router, staticProviderDefinitionSource{
+		definitions: []*capability.CapabilityProviderDefinition{
+			{
+				ExtensionID:  "com.amitia/channel-qq-personal",
+				ModuleID:     "qq-personal-service",
+				CapabilityID: inboundProviderCapability,
+				Metadata:     map[string]any{"channelId": "qq_personal"},
+			},
+		},
+	}, entry)
+
+	response := performInboundRequest(t, router, "com.amitia/channel-qq-personal", "qq-personal-service", map[string]any{
+		"channelId":      "qq_personal",
+		"accountId":      "2743073290",
+		"conversationId": "conv-qq-personal-group-20002",
+		"peerId":         "20002",
+		"messageId":      "message-3",
+		"contentType":    "text",
+		"text":           "hello",
+	})
+	if response.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d: %s", response.Code, response.Body.String())
+	}
+	if entry.request.SpaceID != "space-1" || entry.request.CharacterID != "default-character" {
+		t.Fatalf("scope was not resolved: %#v", entry.request)
+	}
+	if entry.request.ConversationID != "conv-qq-personal-group-20002" {
+		t.Fatalf("conversation id changed: %s", entry.request.ConversationID)
 	}
 }
 

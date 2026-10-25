@@ -260,6 +260,7 @@ func DefaultMigrations() []Migration {
 		SafetyGovernanceMigration(),
 		ModelBudgetRatesMigration(),
 		RuntimeModelBudgetMigration(),
+		RemoveGlobalMemoryStorageMigration(),
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/u-ai/backend/internal/timeoutpolicy"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -1040,10 +1039,6 @@ const (
 	maxClientRuntimeContributions     = 128
 	maxClientRuntimeConversationNodes = 64
 	maxClientRuntimeChildSlots        = 64
-	maxClientRuntimeHTMLBytes         = 64 * 1024
-	maxClientRuntimeCSSBytes          = 64 * 1024
-	maxClientRuntimeScriptBytes       = 128 * 1024
-	maxClientRuntimeSandboxHeight     = 2400
 )
 
 func validateClientRuntimePackageDefinition(pkg map[string]interface{}) error {
@@ -1064,23 +1059,21 @@ func validateClientRuntimePackageDefinition(pkg map[string]interface{}) error {
 	}
 	declaredChildren := make(map[string]struct{})
 	for index, item := range contributions {
+		if item["clientCode"] != nil {
+			return fmt.Errorf("client runtime contribution %d clientCode is not supported", index)
+		}
 		slotID := runtimeMapString(item, "slotId", "slot_id")
 		key := runtimeMapString(item, "key")
 		sourceExtensionID := runtimeMapString(item, "sourceExtensionId", "source_extension_id")
 		sourceContributionID := runtimeMapString(item, "sourceContributionId", "source_contribution_id")
-		clientCode, hasClientCode, codeErr := validateClientRuntimeSandboxCode(item["clientCode"])
-		if codeErr != nil {
-			return fmt.Errorf("client runtime contribution %d clientCode: %w", index, codeErr)
-		}
-		_ = clientCode
 		if slotID == "" || key == "" {
 			return fmt.Errorf("client runtime contribution %d requires slotId/key", index)
 		}
 		if (sourceExtensionID == "") != (sourceContributionID == "") {
 			return fmt.Errorf("client runtime contribution %d requires both sourceExtensionId and sourceContributionId", index)
 		}
-		if sourceExtensionID == "" && !hasClientCode {
-			return fmt.Errorf("client runtime contribution %d requires a published schema source or clientCode", index)
+		if sourceExtensionID == "" {
+			return fmt.Errorf("client runtime contribution %d requires a published schema source", index)
 		}
 		children, err := runtimeObjectSlice(item["children"])
 		if err != nil {
@@ -1130,72 +1123,6 @@ func validateClientRuntimePackageDefinition(pkg map[string]interface{}) error {
 		}
 	}
 	return nil
-}
-
-func validateClientRuntimeSandboxCode(value interface{}) (map[string]interface{}, bool, error) {
-	if value == nil {
-		return nil, false, nil
-	}
-	code, ok := value.(map[string]interface{})
-	if !ok {
-		return nil, false, fmt.Errorf("must be an object")
-	}
-	html := runtimeMapString(code, "html")
-	css := runtimeMapString(code, "css")
-	script := runtimeMapString(code, "script")
-	if html == "" && css == "" && script == "" {
-		return nil, false, fmt.Errorf("requires html, css, or script")
-	}
-	if len([]byte(html)) > maxClientRuntimeHTMLBytes {
-		return nil, false, fmt.Errorf("html exceeds %d bytes", maxClientRuntimeHTMLBytes)
-	}
-	if len([]byte(css)) > maxClientRuntimeCSSBytes {
-		return nil, false, fmt.Errorf("css exceeds %d bytes", maxClientRuntimeCSSBytes)
-	}
-	if len([]byte(script)) > maxClientRuntimeScriptBytes {
-		return nil, false, fmt.Errorf("script exceeds %d bytes", maxClientRuntimeScriptBytes)
-	}
-	minHeight, minSet, err := runtimeOptionalPositiveInt(code["minHeight"], 32, 1200)
-	if err != nil {
-		return nil, false, fmt.Errorf("minHeight: %w", err)
-	}
-	maxHeight, maxSet, err := runtimeOptionalPositiveInt(code["maxHeight"], 32, maxClientRuntimeSandboxHeight)
-	if err != nil {
-		return nil, false, fmt.Errorf("maxHeight: %w", err)
-	}
-	if minSet && maxSet && maxHeight < minHeight {
-		return nil, false, fmt.Errorf("maxHeight must be greater than or equal to minHeight")
-	}
-	return code, true, nil
-}
-
-func runtimeOptionalPositiveInt(value interface{}, minimum, maximum int) (int, bool, error) {
-	if value == nil {
-		return 0, false, nil
-	}
-	var numeric float64
-	switch typed := value.(type) {
-	case float64:
-		numeric = typed
-	case float32:
-		numeric = float64(typed)
-	case int:
-		numeric = float64(typed)
-	case int64:
-		numeric = float64(typed)
-	case json.Number:
-		parsed, err := typed.Float64()
-		if err != nil {
-			return 0, false, fmt.Errorf("must be numeric")
-		}
-		numeric = parsed
-	default:
-		return 0, false, fmt.Errorf("must be numeric")
-	}
-	if math.Trunc(numeric) != numeric || numeric < float64(minimum) || numeric > float64(maximum) {
-		return 0, false, fmt.Errorf("must be an integer between %d and %d", minimum, maximum)
-	}
-	return int(numeric), true, nil
 }
 
 func runtimeObjectSlice(value interface{}) ([]map[string]interface{}, error) {

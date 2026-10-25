@@ -27,8 +27,8 @@ func TestSchemaHandlerUsesRendererAndPreservesOwnership(t *testing.T) {
 		{"message_renderer", ui_contribution.UIContributionMessageRenderer, ui_contribution.SandboxSchemaRenderer, ui_contribution.SandboxSchemaRenderer, "ui/message.json", "com.amitia%2Femote", true, 200, true},
 		{"panel", ui_contribution.UIContributionPanel, ui_contribution.SandboxSchemaRenderer, ui_contribution.SandboxSchemaRenderer, "ui/panel.json", "com.amitia%2Femote", true, 200, true},
 		{"wrong_extension", ui_contribution.UIContributionComposerAction, ui_contribution.SandboxSchemaRenderer, ui_contribution.SandboxSchemaRenderer, "ui/composer.json", "com.other%2Fplugin", true, 404, false},
-		{"web_entry", ui_contribution.UIContributionComposerAction, ui_contribution.SandboxWebRestricted, ui_contribution.SandboxSchemaRenderer, "ui/composer.json", "com.amitia%2Femote", true, 404, false},
-		{"web_sandbox", ui_contribution.UIContributionComposerAction, ui_contribution.SandboxSchemaRenderer, ui_contribution.SandboxWebRestricted, "ui/composer.json", "com.amitia%2Femote", true, 404, false},
+		{"client_entry", ui_contribution.UIContributionComposerAction, ui_contribution.SandboxClientModule, ui_contribution.SandboxSchemaRenderer, "ui/composer.json", "com.amitia%2Femote", true, 404, false},
+		{"client_sandbox", ui_contribution.UIContributionComposerAction, ui_contribution.SandboxSchemaRenderer, ui_contribution.SandboxClientModule, "ui/composer.json", "com.amitia%2Femote", true, 404, false},
 		{"missing_schema_path", ui_contribution.UIContributionSchemaPage, ui_contribution.SandboxSchemaRenderer, ui_contribution.SandboxSchemaRenderer, "", "com.amitia%2Femote", true, 404, false},
 		{"schema_not_loaded", ui_contribution.UIContributionComposerAction, ui_contribution.SandboxSchemaRenderer, ui_contribution.SandboxSchemaRenderer, "ui/composer.json", "com.amitia%2Femote", false, 404, true},
 	} {

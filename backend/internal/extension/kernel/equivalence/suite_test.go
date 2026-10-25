@@ -25,7 +25,6 @@ func TestEquivalenceSuite(t *testing.T) {
 	uiCheckIDs := map[string]bool{
 		"ui.slots":                 false,
 		"ui.schema":                false,
-		"ui.sandbox":               false,
 		"ui.page_host":             false,
 		"ui.ordering":              false,
 		"desktop.extension_points": false,

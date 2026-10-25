@@ -95,6 +95,33 @@ func TestOwnedLocalWorkspaceUsesCoreProvider(t *testing.T) {
 	}
 }
 
+func TestOwnedLocalJavaScriptPluginUsesLocalDeviceProvider(t *testing.T) {
+	for _, runtime := range []capability.RuntimeType{capability.RuntimeTypeJavaScript, capability.RuntimeTypePluginJS} {
+		t.Run(string(runtime), func(t *testing.T) {
+			resolver := &ownedTargetResolver{result: capability.CapabilityResolution{
+				Provider:         capability.CapabilityProviderDefinition{ID: "local-plugin-provider"},
+				ProviderInstance: capability.CapabilityProviderInstance{ID: "local-plugin-instance"},
+				ExecutionTarget:  capability.InvocationExecutionTarget{Placement: "device", SpaceID: "realm", DeviceID: "local-device"},
+			}}
+			facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "local-device"}
+			scope := InvocationScope{SpaceID: "realm", ExecContext: &execution.ExecutionContext{
+				RuntimeTarget: &execution.RuntimeTarget{Placement: "device", DeviceID: "local-device"},
+				Metadata:      map[string]any{"ownedDeviceTarget": true},
+			}}
+			definition := capability.ToolDefinition{
+				ID:           "com.example/plugin/ai",
+				CapabilityID: "com.example/plugin/ai",
+				ExtensionID:  "com.example/plugin",
+				Runtime:      capability.RuntimeBinding{RuntimeType: runtime, Metadata: map[string]any{"modulePlacement": "device"}},
+			}
+			resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
+			if resolved.target.Placement != "device" || resolved.target.DeviceID != "local-device" || resolver.request.RequiredPlacement != capability.ProviderPlacementDevice || resolver.request.RequiredDeviceID != "local-device" || resolver.request.AllowCore {
+				t.Fatalf("local %s plugin did not use local device provider: resolved=%+v request=%+v", runtime, resolved, resolver.request)
+			}
+		})
+	}
+}
+
 func TestOwnedDirectBuiltinSkipsCapabilityRecovery(t *testing.T) {
 	resolver := &ownedTargetResolver{}
 	facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "local-device"}
@@ -109,5 +136,23 @@ func TestOwnedDirectBuiltinSkipsCapabilityRecovery(t *testing.T) {
 	resolved := facade.resolveExecutionTarget(context.Background(), definition, scope)
 	if !resolved.target.IsZero() || resolved.missingCapability != "" || resolver.calls != 0 {
 		t.Fatalf("direct builtin unexpectedly required a provider: %+v calls=%d", resolved, resolver.calls)
+	}
+}
+
+func TestLocalJavaScriptToolFallsBackToRegisteredRuntime(t *testing.T) {
+	for _, runtime := range []capability.RuntimeType{capability.RuntimeTypeJavaScript, capability.RuntimeTypePluginJS} {
+		resolver := &ownedTargetResolver{err: capability.ErrNoAvailableProvider}
+		facade := &ToolFacade{capabilityResolver: resolver, localDeviceID: "local-device"}
+		definition := capability.ToolDefinition{
+			ID:           "com.example/plugin/ai",
+			CapabilityID: "com.example/plugin/ai",
+			ExtensionID:  "com.example/plugin",
+			ModuleID:     "plugin-runtime",
+			Runtime:      capability.RuntimeBinding{RuntimeType: runtime, HandlerName: "ai"},
+		}
+		resolved := facade.resolveExecutionTarget(context.Background(), definition, InvocationScope{SpaceID: "realm"})
+		if !resolved.target.IsZero() || resolved.missingCapability != "" || resolver.calls != 1 {
+			t.Fatalf("local %s tool did not fall back to registered runtime: %+v calls=%d", runtime, resolved, resolver.calls)
+		}
 	}
 }

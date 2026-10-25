@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_motion.dart';
 import '../ui_runtime/mobile_style_runtime.dart';
+import 'amitia_icons.dart';
 
 enum AmitiaPopupMenuHorizontalAnchor { start, center, end }
 
@@ -223,7 +224,8 @@ class _AmitiaPopupMenuButtonState<T> extends State<AmitiaPopupMenuButton<T>> {
             tooltip: widget.tooltip,
             onPressed: widget.enabled ? _showMenu : null,
             padding: widget.padding,
-            icon: widget.icon ?? const Icon(Icons.more_vert),
+            icon:
+                widget.icon ?? const AmitiaIcon(AmitiaIconGlyph.more, size: 20),
           );
     return KeyedSubtree(
       key: _anchorKey,
@@ -514,7 +516,11 @@ class _AmitiaPopupMenuPanel<T> extends StatelessWidget {
             AnimatedOpacity(
               opacity: entry.checked ? 1 : 0,
               duration: AppMotion.quick,
-              child: Icon(Icons.check, size: 18, color: context.accentPrimary),
+              child: AmitiaIcon(
+                AmitiaIconGlyph.check,
+                size: 18,
+                color: context.accentPrimary,
+              ),
             ),
           ],
         ),

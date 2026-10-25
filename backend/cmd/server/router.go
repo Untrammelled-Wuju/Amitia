@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	goruntime "runtime"
+	runtimedebug "runtime/debug"
 	"strings"
 	"time"
 
@@ -124,7 +125,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	r := withRequestContextFallback(gin.Default())
+	r := withRequestContextFallback(gin.New())
+	r.Use(requestCredentialRedaction(), gin.Logger(), requestPanicRecovery())
 	r.Use(middleware.TraceMiddleware())
 	r.Use(timeoutpolicy.Headers())
 	r.Use(security.CorsMiddleware(security.CorsConfig{
@@ -605,6 +607,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
+		extension.RegisterPublicUIModuleRouter(r.Group("/api/public/extensions"), services.Extension)
 		if services.Artifact != nil && services.Artifact.Handler != nil {
 			services.Artifact.Handler.Register(apiGroup)
 		}
@@ -1028,6 +1031,32 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
 	return r, nil
+}
+
+func requestPanicRecovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				_, _ = fmt.Fprintf(gin.DefaultErrorWriter, "\n[Recovery] panic on %s: %v\n%s", c.Request.URL.Path, recovered, runtimedebug.Stack())
+				c.AbortWithStatus(http.StatusInternalServerError)
+			}
+		}()
+		c.Next()
+	}
+}
+
+func requestCredentialRedaction() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if strings.Contains(c.Request.URL.Path, "/ui/provider-module/") {
+			query := c.Request.URL.Query()
+			if token := strings.TrimSpace(query.Get("accessToken")); token != "" {
+				query.Del("accessToken")
+				c.Request.URL.RawQuery = query.Encode()
+				c.Request.Header.Set("X-Amitia-Module-Access", token)
+			}
+		}
+		c.Next()
+	}
 }
 
 type packageImportAdapter struct {

@@ -19,7 +19,7 @@ import '../../../../core/realtime/realtime_voice_activity_detector.dart';
 import '../../../../core/realtime/realtime_visual_bridge.dart';
 import '../../../../core/ui_runtime/mobile_style_runtime.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/services/device_owned_realtime_service.dart';
 import '../../../../core/services/owned_realtime_invitation.dart';

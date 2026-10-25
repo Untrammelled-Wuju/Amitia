@@ -12,7 +12,7 @@ import (
 
 func (e *Engine) prepareMemoryMutations(ctx context.Context, scope coordination.ExecutionScope, conversation string, derived []DerivedMemory, snapshot *coordination.DataSnapshot) ([]coordination.Mutation, error) {
 	derived = append([]DerivedMemory(nil), derived...)
-	derived = partitionMemoryDerived(scope, derived)
+	derived = partitionMemoryDerived(derived)
 	protected := map[string]bool{}
 	for _, row := range snapshot.Resources {
 		if row.Kind != "memory" || row.Deleted {
@@ -134,7 +134,7 @@ func (e *Engine) prepareMemoryMutations(ctx context.Context, scope coordination.
 	return memoryMutations(scope, conversation, derived, *snapshot)
 }
 
-func partitionMemoryDerived(scope coordination.ExecutionScope, input []DerivedMemory) []DerivedMemory {
+func partitionMemoryDerived(input []DerivedMemory) []DerivedMemory {
 	result := append([]DerivedMemory(nil), input...)
 	mapped := map[string]string{}
 	for index, item := range result {
@@ -167,14 +167,6 @@ func partitionMemoryDerived(scope coordination.ExecutionScope, input []DerivedMe
 			attribute = strings.TrimPrefix(item.Key, category+"/")
 		}
 		key := category + "/" + attribute
-		if scope.MemoryRoleID != coordination.GlobalMemoryRole {
-			result[index].Kind = "fact"
-			key = "角色画像/" + key
-			content["profileCategory"] = body(category)
-			if MemoryText(content, "memoryType") == "" {
-				content["memoryType"] = body("profile")
-			}
-		}
 		mapped[item.Key] = key
 		result[index].Key, result[index].Body = key, body(content)
 	}
@@ -184,9 +176,6 @@ func partitionMemoryDerived(scope coordination.ExecutionScope, input []DerivedMe
 		}
 		if key, ok := mapped[item.Key]; ok && item.SourceKind == "profile" {
 			result[index].Key = key
-			if scope.MemoryRoleID != coordination.GlobalMemoryRole {
-				result[index].SourceKind = "fact"
-			}
 		}
 	}
 	return result

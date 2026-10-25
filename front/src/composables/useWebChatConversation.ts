@@ -8,6 +8,7 @@ import { useDeviceOwnedConversation } from "./useDeviceOwnedConversation";
 import { useChatStore } from "@/stores/chat";
 import { useConversationWorkspace } from "./useConversationWorkspace";
 import { ownedProjectReference } from "@/runtime/owned-project-reference";
+import type { OwnedGroupState } from "@/runtime/device-owned-chat";
 
 const minimumConversationLoadingMs = 600;
 
@@ -33,6 +34,7 @@ export function useWebChatConversation(
 
   const characters = ref<any[]>([]);
   const conversations = ref<any[]>([]);
+  const group = ref<OwnedGroupState | null>(null);
   const memories = ref<any[]>([]);
   const conversationLoading = ref(false);
   let conversationLoadGeneration = 0;
@@ -87,6 +89,7 @@ export function useWebChatConversation(
     }
     selectCharacter(c);
     if (owned.enabled.value) { owned.stopLocal("调用角色已切换，原回复已中断，将使用新角色开始对话"); disconnectSSE(); convId.value = ""; messages.value = []; convTitle.value = ""; }
+    group.value = null;
     showCharPicker.value = false;
     ElMessage.success("已切换角色: " + c.name);
     await fetchConversations();
@@ -102,6 +105,7 @@ export function useWebChatConversation(
       if (generation === conversationLoadGeneration) conversationLoading.value = false;
       convTitle.value = "";
       messages.value = [];
+      group.value = null;
       return;
     }
     convId.value = conversationID;
@@ -116,6 +120,7 @@ export function useWebChatConversation(
         const result = await owned.query(conversationID, selectedRole);
         if (generation !== conversationLoadGeneration || convId.value !== conversationID || characterId.value !== selectedRole) return;
         messages.value = owned.messages(result);
+        group.value = result.snapshot.group || null;
         const conversation = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body;
         const historicalConversation = result.historicalSnapshot?.resources.find((resource) => resource.kind === "conversation")?.body;
         const grouped = conversation || historicalConversation;
@@ -194,6 +199,7 @@ export function useWebChatConversation(
   return {
     characters,
     conversations,
+    group,
     memories,
     conversationLoading,
     webMsgCount,

@@ -7,23 +7,19 @@ vi.mock("../components/extension/SchemaUIRenderer.vue", () => ({
   __esModule: true,
   default: { name: "SchemaUIRenderer", template: "<div>Schema 内容</div>" },
 }));
-vi.mock("../components/extension/SandboxWebUIFrame.vue", () => ({
-  __esModule: true,
-  default: { name: "SandboxWebUIFrame", template: "<div>Web 内容</div>" },
-}));
-
 function contribution(kind: string): UIContributionSummary {
   return {
     contributionId: "emote-page", extensionId: "com.amitia/emote", moduleId: "emote-ui",
     kind, title: "表情包管理", slotId: "provider.page.provider", contractVersion: 1,
     generation: 1, ordering: 0, visible: true, effective: true, enabled: true,
-    runtimeReady: true, sandbox: kind === "web_page" ? "web_restricted" : "schema_renderer",
+    runtimeReady: true, sandbox: kind === "web_page" ? "client_module" : "schema_renderer",
     schemaPath: "desktop/index.schema.json", entryPath: "desktop/index.html",
   };
 }
 
 describe("插件页面公共适配", () => {
-  it.each(["schema_page", "web_page"])("%s 通过 Provider 直出时仍有标题和页面容器", async (kind) => {
+  it("Schema 页面通过 Provider 直出时仍有标题和页面容器", async () => {
+    const kind = "schema_page";
     const wrapper = mount(ExtensionContributionRenderer, {
       props: { contribution: contribution(kind), context: {}, slotId: "provider.page.provider" },
     });
@@ -55,17 +51,4 @@ describe("插件页面公共适配", () => {
     }
   });
 
-  it("渠道插件页面直接渲染内容，不增加固定标题", async () => {
-    const wrapper = mount(ExtensionContributionRenderer, {
-      props: { contribution: contribution("web_page"), context: {}, slotId: "provider.page.provider", frameless: true },
-    });
-    try {
-      await flushPromises();
-      expect(wrapper.find(".plugin-page-frame").exists()).toBe(false);
-      expect(wrapper.findAll("h2")).toHaveLength(0);
-      expect(wrapper.text()).toContain("Web 内容");
-    } finally {
-      wrapper.unmount();
-    }
-  });
 });

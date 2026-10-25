@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-type JavaScriptCallFunc func(ctx context.Context, extensionID string, moduleID string, handlerName string, input json.RawMessage) (json.RawMessage, error)
+type JavaScriptCallFunc func(ctx context.Context, extensionID string, moduleID string, handlerName string, input json.RawMessage, invocation ToolInvocationContext) (json.RawMessage, error)
 type JavaScriptHealthFunc func(ctx context.Context, extensionID string, moduleID string) HealthStatus
 
 type JavaScriptRuntimeAdapter struct {
@@ -53,7 +53,7 @@ func (a *JavaScriptRuntimeAdapter) Execute(
 		}
 	}
 
-	output, err := a.caller(ctx, extID, modID, binding.HandlerName, input)
+	output, err := a.caller(ctx, extID, modID, binding.HandlerName, withJavaScriptInvocationContext(input, invocation), invocation)
 	if err != nil {
 		code := ErrorCodeExecutionFailed
 		switch {
@@ -83,6 +83,33 @@ func (a *JavaScriptRuntimeAdapter) Execute(
 			{Type: ToolContentText, Text: string(output)},
 		},
 	}
+}
+
+func withJavaScriptInvocationContext(input json.RawMessage, invocation ToolInvocationContext) json.RawMessage {
+	var value map[string]any
+	if err := json.Unmarshal(input, &value); err != nil || value == nil {
+		return input
+	}
+	value["__amitiaContext"] = map[string]any{
+		"invocationId":         invocation.InvocationID,
+		"spaceId":              invocation.SpaceID,
+		"characterId":          invocation.CharacterID,
+		"conversationId":       invocation.ConversationID,
+		"channel":              invocation.Channel,
+		"sessionId":            invocation.SessionID,
+		"extensionId":          invocation.ExtensionID,
+		"moduleId":             invocation.ModuleID,
+		"traceId":              invocation.TraceID,
+		"operationId":          invocation.OperationID,
+		"scopeSnapshotId":      invocation.ScopeSnapshotID,
+		"permissionSnapshotId": invocation.PermissionSnapshotID,
+		"executionTarget":      invocation.ExecutionTarget,
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return input
+	}
+	return encoded
 }
 
 func (a *JavaScriptRuntimeAdapter) Health(ctx context.Context, binding RuntimeBinding) HealthStatus {

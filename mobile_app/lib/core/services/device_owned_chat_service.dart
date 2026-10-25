@@ -31,6 +31,7 @@ const _preSendScopeFields = [
 ];
 const _authorityFields = [
   ..._preSendScopeFields,
+  'conversationRoleId',
   'memoryRoleId',
   'memoryViewAll',
   'continuityRoleId',
@@ -199,6 +200,216 @@ Stream<Map<String, dynamic>> decodeOwnedChatStream(
   }
   if (buffer.trim().isNotEmpty || !terminal || !saved)
     throw StateError('回复连接已断开，结果尚未确认；不会自动重新发送');
+}
+
+class OwnedGroupMember {
+  const OwnedGroupMember({
+    required this.memberId,
+    required this.characterId,
+    required this.roleOwnerId,
+    required this.characterName,
+    required this.characterAvatar,
+    required this.status,
+    required this.orderIndex,
+    required this.joinedSequence,
+    required this.historyStartSequence,
+    required this.leftSequence,
+    required this.characterRevision,
+  });
+
+  factory OwnedGroupMember.fromJson(Map<String, dynamic> json) {
+    return OwnedGroupMember(
+      memberId: (json['memberId'] ?? '').toString(),
+      characterId: (json['characterId'] ?? '').toString(),
+      roleOwnerId: (json['roleOwnerId'] ?? '').toString(),
+      characterName: (json['characterName'] ?? '').toString(),
+      characterAvatar: (json['characterAvatar'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      orderIndex: (json['orderIndex'] as num?)?.toInt() ?? 0,
+      joinedSequence: (json['joinedSequence'] as num?)?.toInt() ?? 0,
+      historyStartSequence:
+          (json['historyStartSequence'] as num?)?.toInt() ?? 0,
+      leftSequence: (json['leftSequence'] as num?)?.toInt() ?? 0,
+      characterRevision: (json['characterRevision'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String memberId;
+  final String characterId;
+  final String roleOwnerId;
+  final String characterName;
+  final String characterAvatar;
+  final String status;
+  final int orderIndex;
+  final int joinedSequence;
+  final int historyStartSequence;
+  final int leftSequence;
+  final int characterRevision;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'memberId': memberId,
+    'characterId': characterId,
+    'roleOwnerId': roleOwnerId,
+  };
+}
+
+class OwnedGroupState {
+  const OwnedGroupState({
+    required this.conversationId,
+    required this.conversationRoleId,
+    required this.roleOwnerId,
+    required this.title,
+    required this.membershipRevision,
+    required this.settingsRevision,
+    required this.allowCharacterMentions,
+    required this.maxAutoReplies,
+    required this.members,
+  });
+
+  factory OwnedGroupState.fromJson(Map<String, dynamic> json) {
+    final settings = json['groupSettings'] is Map
+        ? Map<String, dynamic>.from(json['groupSettings'] as Map)
+        : const <String, dynamic>{};
+    return OwnedGroupState(
+      conversationId: (json['conversationId'] ?? '').toString(),
+      conversationRoleId: (json['conversationRoleId'] ?? '').toString(),
+      roleOwnerId: (json['roleOwnerId'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      membershipRevision: (json['membershipRevision'] as num?)?.toInt() ?? 1,
+      settingsRevision: (json['settingsRevision'] as num?)?.toInt() ?? 1,
+      allowCharacterMentions: settings['allowCharacterMentions'] == true,
+      maxAutoReplies: (settings['maxAutoReplies'] as num?)?.toInt() ?? 6,
+      members: (json['members'] as List? ?? [])
+          .whereType<Map>()
+          .map(
+            (row) => OwnedGroupMember.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  final String conversationId;
+  final String conversationRoleId;
+  final String roleOwnerId;
+  final String title;
+  final int membershipRevision;
+  final int settingsRevision;
+  final bool allowCharacterMentions;
+  final int maxAutoReplies;
+  final List<OwnedGroupMember> members;
+
+  List<OwnedGroupMember> get activeMembers {
+    final result =
+        members
+            .where((member) => member.status == 'active')
+            .toList(growable: true)
+          ..sort((left, right) => left.orderIndex.compareTo(right.orderIndex));
+    return result;
+  }
+}
+
+Stream<Map<String, dynamic>> decodeOwnedGroupChatStream(
+  Stream<List<int>> source,
+  String requestId,
+) async* {
+  var buffer = '';
+  var total = 0;
+  var terminal = false;
+  var completed = false;
+  String? roundId;
+  String? conversationId;
+  final deliveryScopes = <String, String>{};
+  await for (final chunk in source.transform(utf8.decoder)) {
+    total += utf8.encode(chunk).length;
+    if (total > 8 * 1024 * 1024) throw StateError('群聊数据超出接收上限');
+    buffer += chunk;
+    while (true) {
+      final boundary = RegExp(r'\r?\n\r?\n').firstMatch(buffer);
+      if (boundary == null) break;
+      final frame = buffer.substring(0, boundary.start);
+      buffer = buffer.substring(boundary.end);
+      final lines = frame
+          .split(RegExp(r'\r?\n'))
+          .where((line) => line.startsWith('data:'))
+          .map((line) => line.substring(5).trimLeft())
+          .toList();
+      if (lines.isEmpty) continue;
+      if (terminal) throw StateError('群聊结束后仍收到数据，已拦截');
+      final raw = jsonDecode(lines.join('\n'));
+      if (raw is! Map) throw StateError('群聊事件格式无效');
+      final event = Map<String, dynamic>.from(raw);
+      final type = event['type'];
+      if (type == 'group.completed') {
+        final data = event['data'];
+        if (data is! Map ||
+            data['saved'] != true ||
+            data['requestId'] != requestId ||
+            data['deliveries'] is! List) {
+          throw StateError('群聊结果尚未确认保存');
+        }
+        completed = true;
+        terminal = true;
+        yield event;
+        continue;
+      }
+      if (type == 'failed' || type == 'interrupted') {
+        terminal = true;
+        yield event;
+        throw StateError((event['message'] ?? '当前群聊已中断').toString());
+      }
+      final currentRound = (event['groupRoundId'] ?? '').toString();
+      if (currentRound.isNotEmpty) {
+        if (roundId != null && roundId != currentRound) {
+          throw StateError('群聊轮次归属已变化');
+        }
+        roundId = currentRound;
+      }
+      final currentConversation = (event['conversationId'] ?? '').toString();
+      if (currentConversation.isNotEmpty) {
+        if (conversationId != null && conversationId != currentConversation) {
+          throw StateError('群聊会话归属已变化');
+        }
+        conversationId = currentConversation;
+      }
+      if (type == 'started') {
+        final deliveryId = (event['deliveryId'] ?? '').toString();
+        final scope = event['executionScope'];
+        if (deliveryId.isEmpty || scope is! Map) {
+          throw StateError('群成员回复缺少投递身份');
+        }
+        final request = (scope['requestId'] ?? '').toString();
+        deliveryScopes[deliveryId] = _scopeStamp(
+          Map<String, dynamic>.from(scope),
+          request,
+        );
+      } else if (const {
+        'delta',
+        'transcribed',
+        'task',
+        'reasoning-completed',
+        'output-completed',
+      }.contains(type)) {
+        final deliveryId = (event['deliveryId'] ?? '').toString();
+        final scope = event['executionScope'];
+        final expected = deliveryScopes[deliveryId];
+        if (scope is! Map || expected == null) {
+          throw StateError('群成员流事件缺少投递身份');
+        }
+        final current = _scopeStamp(
+          Map<String, dynamic>.from(scope),
+          (scope['requestId'] ?? '').toString(),
+        );
+        if (current != expected) {
+          throw StateError('群成员流事件与投递身份不一致');
+        }
+      }
+      yield event;
+    }
+    if (buffer.length > 512 * 1024) throw StateError('群聊事件超出接收上限');
+  }
+  if (buffer.trim().isNotEmpty || !terminal || !completed) {
+    throw StateError('群聊连接已断开，结果尚未确认；不会自动重新发送');
+  }
 }
 
 class DeviceOwnedChatService {
@@ -376,6 +587,9 @@ class DeviceOwnedChatService {
     return roles.single['id'].toString();
   }
 
+  String _localRequestId() =>
+      'group-${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 32)}';
+
   String _historyKey(
     String conversationId,
     String role, [
@@ -435,6 +649,7 @@ class DeviceOwnedChatService {
         'resourceOwnerId',
         'roleId',
         'roleRevision',
+        'conversationRoleId',
       ].map((field) => scope[field]).toList(),
     );
     if (older && _historyScopes[key] != scopeStamp)
@@ -1391,6 +1606,300 @@ class DeviceOwnedChatService {
         older: true,
         keyword: keyword,
       );
+    }
+  }
+
+  Map<String, dynamic> _ownedResponseData(dynamic response) {
+    if (response is Map && response['code'] == 200 && response['data'] is Map) {
+      return Map<String, dynamic>.from(response['data'] as Map);
+    }
+    if (response is Map) return Map<String, dynamic>.from(response);
+    throw StateError('群聊管理响应格式无效');
+  }
+
+  Future<OwnedGroupState?> groupState(
+    String conversationId, {
+    String? characterId,
+  }) async {
+    final id =
+        parseConversationReference(conversationId)?['id']?.toString() ??
+        conversationId;
+    if (id.trim().isEmpty) return null;
+    final role = selectRole(characterId);
+    final result = await query(id, characterId: role);
+    final snapshot = result['snapshot'];
+    if (snapshot is Map && snapshot['group'] is Map) {
+      return OwnedGroupState.fromJson(
+        Map<String, dynamic>.from(snapshot['group'] as Map),
+      );
+    }
+    return null;
+  }
+
+  Future<OwnedGroupState> inviteGroupMembers(
+    String conversationId, {
+    required String characterId,
+    required int expectedMembershipRevision,
+    required List<Map<String, dynamic>> members,
+  }) async {
+    final origin = parseConversationReference(conversationId);
+    final response = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/conversations/${Uri.encodeComponent(origin?['id']?.toString() ?? conversationId)}/members',
+      data: {
+        'requestId': _localRequestId(),
+        'characterId': characterId,
+        'expectedMembershipRevision': expectedMembershipRevision,
+        'members': members,
+      },
+    );
+    final data = _ownedResponseData(response);
+    if (data['saved'] != true || data['group'] is! Map) {
+      throw StateError('群成员尚未获得数据所有者确认');
+    }
+    revision++;
+    _resources.clear();
+    return OwnedGroupState.fromJson(
+      Map<String, dynamic>.from(data['group'] as Map),
+    );
+  }
+
+  Future<OwnedGroupState> createGroupConversation({
+    required String characterId,
+    required List<Map<String, dynamic>> members,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/conversations/group',
+      data: {
+        'requestId': _localRequestId(),
+        'characterId': characterId,
+        'members': members,
+      },
+    );
+    final data = _ownedResponseData(response);
+    final group = data['group'];
+    final acknowledgement = data['acknowledgement'];
+    if (data['saved'] != true ||
+        group is! Map ||
+        acknowledgement is! Map ||
+        (acknowledgement['ownerId'] ?? '').toString().isEmpty) {
+      throw StateError('群聊尚未获得数据所有者确认');
+    }
+    revision++;
+    _resources.clear();
+    final parsed = OwnedGroupState.fromJson(Map<String, dynamic>.from(group));
+    return OwnedGroupState(
+      conversationId: conversationReference({
+        'ownerId': acknowledgement['ownerId'],
+        'id': parsed.conversationId,
+      }),
+      conversationRoleId: parsed.conversationRoleId,
+      roleOwnerId: parsed.roleOwnerId,
+      title: parsed.title,
+      membershipRevision: parsed.membershipRevision,
+      settingsRevision: parsed.settingsRevision,
+      allowCharacterMentions: parsed.allowCharacterMentions,
+      maxAutoReplies: parsed.maxAutoReplies,
+      members: parsed.members,
+    );
+  }
+
+  Future<OwnedGroupState> removeGroupMember(
+    String conversationId, {
+    required String characterId,
+    required String memberId,
+    required int expectedMembershipRevision,
+  }) async {
+    final origin = parseConversationReference(conversationId);
+    final response = await _api.deleteWithResponse<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/conversations/${Uri.encodeComponent(origin?['id']?.toString() ?? conversationId)}/members/${Uri.encodeComponent(memberId)}',
+      data: {
+        'requestId': _localRequestId(),
+        'characterId': characterId,
+        'expectedMembershipRevision': expectedMembershipRevision,
+      },
+    );
+    final data = _ownedResponseData(response);
+    if (data['saved'] != true || data['group'] is! Map) {
+      throw StateError('群成员变更尚未获得数据所有者确认');
+    }
+    revision++;
+    _resources.clear();
+    return OwnedGroupState.fromJson(
+      Map<String, dynamic>.from(data['group'] as Map),
+    );
+  }
+
+  Future<OwnedGroupState> updateGroupSettings(
+    String conversationId, {
+    required String characterId,
+    required int expectedSettingsRevision,
+    String? name,
+    bool? allowCharacterMentions,
+    int? maxAutoReplies,
+  }) async {
+    final origin = parseConversationReference(conversationId);
+    final response = await _api.patch<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/conversations/${Uri.encodeComponent(origin?['id']?.toString() ?? conversationId)}/group-settings',
+      data: {
+        'requestId': _localRequestId(),
+        'characterId': characterId,
+        'expectedSettingsRevision': expectedSettingsRevision,
+        if (name != null) 'name': name,
+        if (allowCharacterMentions != null)
+          'allowCharacterMentions': allowCharacterMentions,
+        if (maxAutoReplies != null) 'maxAutoReplies': maxAutoReplies,
+      },
+    );
+    final data = _ownedResponseData(response);
+    if (data['saved'] != true || data['group'] is! Map) {
+      throw StateError('群设置尚未获得数据所有者确认');
+    }
+    revision++;
+    _resources.clear();
+    return OwnedGroupState.fromJson(
+      Map<String, dynamic>.from(data['group'] as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> requestGroupReplies(
+    String conversationId, {
+    required String characterId,
+    required String sourceMessageId,
+    required List<Map<String, dynamic>> members,
+  }) async {
+    final origin = parseConversationReference(conversationId);
+    final response = await _api.post<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/conversations/${Uri.encodeComponent(origin?['id']?.toString() ?? conversationId)}/reply-requests',
+      data: {
+        'requestId': _localRequestId(),
+        'characterId': characterId,
+        'sourceMessageId': sourceMessageId,
+        'members': members,
+      },
+    );
+    final data = _ownedResponseData(response);
+    if (data['saved'] != true) {
+      throw StateError('点名回复尚未获得数据所有者确认');
+    }
+    revision++;
+    _resources.clear();
+    return data;
+  }
+
+  Stream<Map<String, dynamic>> sendGroup({
+    required String requestId,
+    required String message,
+    required String conversationId,
+    required String characterId,
+    required OwnedGroupState group,
+    required List<Map<String, dynamic>> mentions,
+    int? modelConfigId,
+    String? reasoningEffort,
+    bool? reasoningEnabled,
+    String? permissionMode,
+    String? messageStyle,
+    Map<String, dynamic>? context,
+    List<Map<String, dynamic>>? attachments,
+  }) async* {
+    if (_active != null || !enabled) throw StateError('当前回复尚未结束或设备服务尚未就绪');
+    final origin = parseConversationReference(conversationId);
+    final role = selectRole(characterId);
+    final view = await query(conversationId, characterId: role);
+    final expectedScope = Map<String, dynamic>.from(
+      view['executionScope'] as Map,
+    );
+    if (_preSendScopeFields.any((key) => expectedScope[key] == null) ||
+        (expectedScope['conversationRoleId'] ?? '').toString().isEmpty) {
+      throw StateError('发送前无法确认群聊角色、权限与数据归属');
+    }
+    final token = CancelToken();
+    final captured = revision;
+    _active = token;
+    _requestId = requestId;
+    try {
+      final stream = await _api.postStream(
+        '/api/device-mesh/v1/business/messages',
+        data: {
+          'requestId': requestId,
+          'message': message,
+          'characterId': role,
+          if (modelConfigId != null) 'modelConfigId': modelConfigId,
+          if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
+          if (reasoningEnabled != null) 'reasoningEnabled': reasoningEnabled,
+          if (permissionMode != null) 'permissionMode': permissionMode,
+          if (messageStyle != null) 'messageStyle': messageStyle,
+          'expectedExecutionScope': expectedScope,
+          if (origin != null) 'conversationId': origin['id'],
+          if (origin != null) 'conversationOrigin': origin,
+          if (context != null)
+            'context': {
+              ...context,
+              if (origin != null) 'conversationId': origin['id'],
+            },
+          if (attachments != null) 'attachments': attachments,
+          'mentions': mentions,
+          'group': {
+            'expectedMembershipRevision': group.membershipRevision,
+            'expectedSettingsRevision': group.settingsRevision,
+          },
+        },
+        headers: {'Accept': 'text/event-stream'},
+        cancelToken: token,
+      );
+      await for (final event in decodeOwnedGroupChatStream(stream, requestId)) {
+        if (captured != revision || token.isCancelled)
+          throw StateError('服务状态已变化，迟到群聊已拦截');
+        final result = event['data'];
+        if (event['type'] == 'group.completed' && result is Map) {
+          final deliveries = (result['deliveries'] as List? ?? [])
+              .whereType<Map>()
+              .map((row) {
+                final delivery = Map<String, dynamic>.from(row);
+                final scope = delivery['executionScope'];
+                final id = (delivery['conversationId'] ?? conversationId)
+                    .toString();
+                if (scope is Map) {
+                  final reference = conversationReference(
+                    origin ?? {'ownerId': scope['resourceOwnerId'], 'id': id},
+                  );
+                  delivery['sourceConversationId'] = id;
+                  delivery['conversationId'] = reference;
+                }
+                return delivery;
+              })
+              .toList(growable: false);
+          yield {
+            ...event,
+            'data': {
+              ...Map<String, dynamic>.from(result),
+              'conversationId': conversationReference(
+                origin ??
+                    {
+                      'ownerId': expectedScope['resourceOwnerId'],
+                      'id': result['conversationId'] ?? conversationId,
+                    },
+              ),
+              'deliveries': deliveries,
+            },
+          };
+          continue;
+        }
+        final id = (event['conversationId'] ?? '').toString();
+        if (id.isNotEmpty && origin != null) {
+          yield {
+            ...event,
+            'sourceConversationId': id,
+            'conversationId': conversationReference(origin),
+          };
+          continue;
+        }
+        yield event;
+      }
+    } finally {
+      if (identical(_active, token)) {
+        _active = null;
+        _requestId = '';
+      }
     }
   }
 

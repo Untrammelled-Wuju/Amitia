@@ -19,6 +19,8 @@ type HTTPProviderOptions struct {
 	SendPath          string
 	ImagePath         string
 	VoicePath         string
+	VideoPath         string
+	FilePath          string
 	StatusPath        string
 	ConnectPath       string
 	DisconnectPath    string
@@ -39,6 +41,8 @@ type HTTPProvider struct {
 	sendPath          string
 	imagePath         string
 	voicePath         string
+	videoPath         string
+	filePath          string
 	statusPath        string
 	connectPath       string
 	disconnectPath    string
@@ -62,6 +66,8 @@ func NewHTTPProvider(options HTTPProviderOptions) *HTTPProvider {
 		sendPath:          defaultPath(options.SendPath, "/api/send"),
 		imagePath:         defaultPath(options.ImagePath, "/api/send-image"),
 		voicePath:         defaultPath(options.VoicePath, "/api/send-voice"),
+		videoPath:         defaultPath(options.VideoPath, "/api/send-video"),
+		filePath:          defaultPath(options.FilePath, "/api/send-file"),
 		statusPath:        defaultPath(options.StatusPath, "/api/status"),
 		connectPath:       defaultPath(options.ConnectPath, "/api/connect"),
 		disconnectPath:    defaultPath(options.DisconnectPath, "/api/disconnect"),
@@ -230,19 +236,55 @@ func (p *HTTPProvider) Send(ctx context.Context, request SendRequest) (SendResul
 	if request.ConversationID != "" {
 		body["conversationId"] = request.ConversationID
 	}
-	path := p.sendPath
-	if request.ContentType == "image" {
-		var payload map[string]any
+	payload := map[string]any{}
+	if len(request.Payload) > 0 {
 		_ = json.Unmarshal(request.Payload, &payload)
+	}
+	for source, target := range map[string]string{
+		"content":          "content",
+		"originalPath":     "assetUrl",
+		"fallbackPath":     "fallbackUrl",
+		"mimeType":         "mimeType",
+		"altText":          "altText",
+		"messageId":        "messageId",
+		"replyToMessageId": "replyToMessageId",
+	} {
+		if value, ok := payload[source]; ok && value != nil {
+			body[target] = value
+		}
+	}
+	if strings.TrimSpace(request.Text) == "" {
+		if content, ok := payload["content"].(string); ok {
+			body["text"] = content
+		}
+	}
+	path := p.sendPath
+	switch request.ContentType {
+	case "", "text":
+	case "image":
 		asset := payload["originalPath"]
 		if p.useFallbackImage {
 			asset = payload["fallbackPath"]
 		}
 		body["assetUrl"] = asset
-		body["fallbackUrl"] = payload["fallbackPath"]
+		if asset == nil || strings.TrimSpace(fmt.Sprint(asset)) == "" {
+			return SendResult{}, fmt.Errorf("channel %s: image asset is required", p.definition.ID)
+		}
 		path = p.imagePath
-	} else if request.ContentType == "voice" {
+	case "voice":
 		path = p.voicePath
+	case "video":
+		if strings.TrimSpace(fmt.Sprint(body["assetUrl"])) == "" {
+			return SendResult{}, fmt.Errorf("channel %s: video asset is required", p.definition.ID)
+		}
+		path = p.videoPath
+	case "file":
+		if strings.TrimSpace(fmt.Sprint(body["assetUrl"])) == "" {
+			return SendResult{}, fmt.Errorf("channel %s: file asset is required", p.definition.ID)
+		}
+		path = p.filePath
+	default:
+		return SendResult{}, fmt.Errorf("channel %s: unsupported content type %s", p.definition.ID, request.ContentType)
 	}
 	if err := p.postWithHeaders(ctx, path, body, nil, p.idempotencyHeaders(request)); err != nil {
 		return SendResult{}, err

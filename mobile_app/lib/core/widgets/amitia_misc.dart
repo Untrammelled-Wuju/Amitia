@@ -6,6 +6,7 @@ import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../ui_runtime/mobile_style_runtime.dart';
 import 'amitia_button.dart';
+import 'amitia_icons.dart';
 
 export 'amitia_button.dart';
 export 'amitia_dialogs.dart';
@@ -109,7 +110,7 @@ class AmitiaEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _StateViewport(
       children: [
-        Icon(icon, size: iconSize, color: context.textTertiary),
+        AmitiaIcon.adaptive(icon, size: iconSize, color: context.textTertiary),
         SizedBox(height: AppSpacing.md),
         Text(
           title,
@@ -177,7 +178,7 @@ class AmitiaErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _StateViewport(
       children: [
-        Icon(Icons.error_outline, size: 48, color: context.error),
+        AmitiaIcon(AmitiaIconGlyph.warning, size: 48, color: context.error),
         SizedBox(height: AppSpacing.md),
         Text(
           message,

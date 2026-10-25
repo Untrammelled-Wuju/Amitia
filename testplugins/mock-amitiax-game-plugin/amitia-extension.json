@@ -46,7 +46,18 @@
       "type": "javascript",
       "runtime": {
         "type": "javascript",
-        "entryPoint": "dist/index.js"
+        "entryPoint": "dist/index.js",
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
       },
       "contributions": [
         {
@@ -214,7 +225,18 @@
       "type": "javascript",
       "runtime": {
         "type": "javascript",
-        "entryPoint": "dist/support.js"
+        "entryPoint": "dist/support.js",
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
+        }
       },
       "contributions": [],
       "placement": "device"

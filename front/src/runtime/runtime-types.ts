@@ -94,6 +94,20 @@ export interface RuntimeEndpoint {
   compatibilityBaseURL?: string;
 }
 
+export interface ExternalWebUIAcquireRequest {
+  providerId: string;
+  extensionId: string;
+  url: string;
+  allowedOrigins: string[];
+  storageKey: string;
+  persistent: boolean;
+}
+
+export interface ExternalWebUIAcquireResult {
+  lease: string;
+  partition: string;
+}
+
 export interface AmitiaDesktopAPI {
   getEnvironment(): Promise<DesktopEnvironment>;
   getDeploymentConfig(): Promise<DeploymentModeConfig>;
@@ -187,6 +201,9 @@ export interface AmitiaDesktopAPI {
   deprovisionMesh(): Promise<{ ok: boolean }>;
   onUINavigate(callback: (target: string) => void): () => void;
   onUIStyleCommand(callback: (data: string) => void): () => void;
+  acquireExternalWebUI?(request: ExternalWebUIAcquireRequest): Promise<ExternalWebUIAcquireResult>;
+  releaseExternalWebUI?(lease: string): Promise<void>;
+  clearExternalWebUI?(request: ExternalWebUIAcquireRequest): Promise<void>;
 }
 
 export interface RuntimeConnection {

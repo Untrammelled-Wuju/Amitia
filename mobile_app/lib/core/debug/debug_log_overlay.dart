@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'debug_log_service.dart';
 import '../widgets/log_folder_button.dart';
 
+const bool debugLogOverlayEnabled = bool.fromEnvironment(
+  'AMITIA_DEBUG_OVERLAY',
+);
+
 class DebugLogOverlay extends ConsumerStatefulWidget {
   const DebugLogOverlay({super.key});
 

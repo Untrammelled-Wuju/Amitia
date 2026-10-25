@@ -58,7 +58,8 @@ func (c *Container) registerServiceModuleDefinitions(ctx context.Context, extID 
 		if module.Runtime == nil || module.Runtime.Type != domain.RuntimeTypeService {
 			continue
 		}
-		serviceDefinition, buildErr := buildServiceModuleRuntimeDefinition(definition, module, bundlePath, nodeEnv.NodeBinary)
+		pluginDataPath := filepath.Join(c.ExtRoot, "plugin-data", safePluginDataID(string(extID)))
+		serviceDefinition, buildErr := buildServiceModuleRuntimeDefinition(definition, module, bundlePath, pluginDataPath, nodeEnv.NodeBinary)
 		if buildErr != nil {
 			return fmt.Errorf("build service definition %s: %w", module.ID, buildErr)
 		}
@@ -87,7 +88,7 @@ func (c *Container) registerServiceRuntimeDefinition(definition *trusted_service
 	return nil
 }
 
-func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, module domain.ModuleDefinition, bundlePath, nodePath string) (*trusted_service.ServiceRuntimeDefinition, error) {
+func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, module domain.ModuleDefinition, bundlePath, pluginDataPath, nodePath string) (*trusted_service.ServiceRuntimeDefinition, error) {
 	if module.Runtime == nil || module.Runtime.Type != domain.RuntimeTypeService {
 		return nil, fmt.Errorf("module is not a service runtime")
 	}
@@ -125,6 +126,41 @@ func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, m
 	envTemplate := map[string]string{
 		"AMITIA_NATIVE_COMPANIONS_VERSION": "1",
 		"AMITIA_NATIVE_COMPANIONS":         string(companionJSON),
+		"AMITIA_HOST_ACCESS_VERSION":       "1",
+		"AMITIA_PLUGIN_DATA_DIR":           pluginDataPath,
+		"AMITIA_HOST_FILESYSTEM_MODE":      "none",
+		"AMITIA_HOST_FILESYSTEM_ROOTS":     "",
+		"AMITIA_HOST_NETWORK_MODE":         "none",
+		"AMITIA_HOST_PROCESS_MODE":         "none",
+		"AMITIA_HOST_PROCESS_LIMIT":        "0",
+	}
+	if module.Runtime.HostAccess.Filesystem.Mode != "" {
+		envTemplate["AMITIA_HOST_FILESYSTEM_MODE"] = module.Runtime.HostAccess.Filesystem.Mode
+	}
+	rootMap := map[string]string{}
+	filesystemRoots := make([]string, 0, len(module.Runtime.HostAccess.Filesystem.Roots))
+	for _, root := range module.Runtime.HostAccess.Filesystem.Roots {
+		switch strings.ToLower(strings.TrimSpace(root)) {
+		case "package":
+			rootMap["package"] = bundlePath
+			filesystemRoots = append(filesystemRoots, bundlePath)
+		case "plugin_data":
+			rootMap["plugin_data"] = pluginDataPath
+			filesystemRoots = append(filesystemRoots, pluginDataPath)
+		}
+	}
+	envTemplate["AMITIA_HOST_FILESYSTEM_ROOTS"] = strings.Join(filesystemRoots, string(os.PathListSeparator))
+	if encodedRoots, marshalErr := json.Marshal(rootMap); marshalErr == nil {
+		envTemplate["AMITIA_HOST_FILESYSTEM_ROOTS_JSON"] = string(encodedRoots)
+	}
+	if module.Runtime.HostAccess.Network.Mode != "" {
+		envTemplate["AMITIA_HOST_NETWORK_MODE"] = module.Runtime.HostAccess.Network.Mode
+	}
+	if module.Runtime.HostAccess.Process.Mode != "" {
+		envTemplate["AMITIA_HOST_PROCESS_MODE"] = module.Runtime.HostAccess.Process.Mode
+	}
+	if module.Runtime.HostAccess.Process.MaxProcesses > 0 {
+		envTemplate["AMITIA_HOST_PROCESS_LIMIT"] = strconv.Itoa(module.Runtime.HostAccess.Process.MaxProcesses)
 	}
 	for key, value := range dynamicChannelPortEnv(module) {
 		envTemplate[key] = value
@@ -137,6 +173,17 @@ func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, m
 	case string(trusted_service.TrustLevelTrusted):
 	default:
 		return nil, fmt.Errorf("publisher trust %q is insufficient for a service runtime", extension.Publisher.TrustLevel)
+	}
+	if err := os.MkdirAll(pluginDataPath, 0o700); err != nil {
+		return nil, fmt.Errorf("create plugin data directory: %w", err)
+	}
+	networkMode := strings.ToLower(strings.TrimSpace(module.Runtime.HostAccess.Network.Mode))
+	if networkMode == "" {
+		networkMode = "none"
+	}
+	maxSubprocesses := module.Runtime.MaxSubprocesses
+	if strings.EqualFold(strings.TrimSpace(module.Runtime.HostAccess.Process.Mode), "direct") && module.Runtime.HostAccess.Process.MaxProcesses > 0 {
+		maxSubprocesses = module.Runtime.HostAccess.Process.MaxProcesses
 	}
 	return &trusted_service.ServiceRuntimeDefinition{
 		ServiceID:   string(runtime_supervisor.BuildRuntimeDefinitionID(string(extension.ID), moduleID, domain.RuntimeTypeService)),
@@ -186,14 +233,17 @@ func buildServiceModuleRuntimeDefinition(extension domain.ExtensionDefinition, m
 		},
 		Limits: trusted_service.ServiceResourceLimits{
 			MaxMemoryMB:     module.Runtime.Memory / (1024 * 1024),
-			MaxSubprocesses: module.Runtime.MaxSubprocesses,
+			MaxSubprocesses: maxSubprocesses,
 		},
 		Network: trusted_service.ServiceNetworkPolicy{
-			Mode:         "loopback",
-			LoopbackOnly: true,
+			Mode: networkMode,
 		},
 		DefinitionVersion: 1,
 	}, nil
+}
+
+func safePluginDataID(value string) string {
+	return strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(value)
 }
 
 func dynamicChannelPortEnv(module domain.ModuleDefinition) map[string]string {

@@ -1,7 +1,9 @@
-import { defineAsyncComponent, markRaw, type Component } from "vue";
+import { defineAsyncComponent, defineComponent, h, markRaw, onUnmounted, type Component } from "vue";
+import { getRuntimeConnection } from "@/runtime/runtime-adapter";
 import type { UIProviderDefinition, UIProviderEntry, UIProviderResolveContext } from "./types";
 
 const trustedModuleCache = new Map<string, Component>();
+const trustedStyleRefs = new Map<string, { count: number; link: HTMLLinkElement }>();
 
 export function selectProviderEntry(provider: UIProviderDefinition, platform: string): UIProviderEntry | null {
   if (["windows", "macos", "linux"].includes(platform)) {
@@ -68,9 +70,48 @@ export function canLoadTrustedWebModule(provider: UIProviderDefinition, entry: U
   return ["system", "official", "trusted", "user_trusted", "verified"].includes((provider.trustLevel ?? "").toLowerCase());
 }
 
-function providerModuleURL(provider: UIProviderDefinition, path: string): string {
+let providerModuleBaseURL = "";
+
+async function resolveProviderModuleBaseURL(): Promise<string> {
+  if (providerModuleBaseURL) return providerModuleBaseURL;
+  const connection = await getRuntimeConnection();
+  providerModuleBaseURL = connection.apiBaseURL.replace(/\/+$/, "");
+  return providerModuleBaseURL;
+}
+
+async function providerModuleURL(provider: UIProviderDefinition, path: string, integrity?: string, moduleToken?: string): Promise<string> {
   const clean = path.replace(/^\/+/, "");
-  return `/api/extensions/ui/provider-module/${encodeURIComponent(provider.providerId)}/${clean}`;
+  const query = new URLSearchParams();
+  query.set("generation", String(provider.generation ?? 0));
+  if (integrity?.trim()) query.set("integrity", integrity.trim());
+  if (moduleToken?.trim()) query.set("accessToken", moduleToken.trim());
+  const base = await resolveProviderModuleBaseURL();
+  return `${base}/api/public/extensions/ui/provider-module/${encodeURIComponent(provider.providerId)}/${clean}?${query.toString()}`;
+}
+
+async function acquireTrustedStyle(provider: UIProviderDefinition, path: string, integrity?: string, moduleToken?: string): Promise<() => void> {
+  const url = await providerModuleURL(provider, path, integrity, moduleToken);
+  const existing = trustedStyleRefs.get(url);
+  if (existing) {
+    existing.count += 1;
+    return () => releaseTrustedStyle(url);
+  }
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = url;
+  link.dataset.uiProvider = provider.providerId;
+  document.head.append(link);
+  trustedStyleRefs.set(url, { count: 1, link });
+  return () => releaseTrustedStyle(url);
+}
+
+function releaseTrustedStyle(url: string): void {
+  const entry = trustedStyleRefs.get(url);
+  if (!entry) return;
+  entry.count -= 1;
+  if (entry.count > 0) return;
+  entry.link.remove();
+  trustedStyleRefs.delete(url);
 }
 
 export function trustedWebModuleExport(
@@ -84,7 +125,7 @@ export function trustedWebModuleExport(
   const cached = trustedModuleCache.get(key);
   if (cached) return cached;
   const component = markRaw(defineAsyncComponent(async () => {
-    const mod = await import(/* @vite-ignore */ providerModuleURL(provider, entry.path!));
+    const mod = await import(/* @vite-ignore */ await providerModuleURL(provider, entry.path!, entry.contentHash, entry.moduleToken));
     const exported = mod[name] ?? mod.default?.[name] ?? mod.components?.[name] ?? mod.icons?.[name];
     if (!exported) throw new Error(`UI provider ${provider.providerId} module does not export ${name}`);
     return exported;
@@ -95,15 +136,58 @@ export function trustedWebModuleExport(
 
 export function trustedWebModule(provider: UIProviderDefinition, entry: UIProviderEntry): Component | null {
   if (!canLoadTrustedWebModule(provider, entry) || !entry.path) return null;
-  const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:${entry.exportName ?? "default"}`;
+  const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:${entry.stylePath ?? ""}:${entry.exportName ?? "default"}`;
   const cached = trustedModuleCache.get(key);
   if (cached) return cached;
-  const component = markRaw(defineAsyncComponent(async () => {
-    const mod = await import(/* @vite-ignore */ providerModuleURL(provider, entry.path!));
+  const moduleComponent = defineAsyncComponent(async () => {
+    const mod = await import(/* @vite-ignore */ await providerModuleURL(provider, entry.path!, entry.contentHash, entry.moduleToken));
     const exported = entry.exportName ? mod[entry.exportName] : (mod.default ?? mod);
     if (!exported) throw new Error(`UI provider ${provider.providerId} module does not export ${entry.exportName ?? "default"}`);
     return exported;
+  });
+  const component = markRaw(defineComponent({
+    name: `TrustedUIProvider-${provider.providerId}`,
+    inheritAttrs: false,
+    setup(_, { attrs, slots }) {
+      let release: (() => void) | null = null;
+      let disposed = false;
+      if (entry.stylePath) {
+        void acquireTrustedStyle(provider, entry.stylePath, entry.styleHash, entry.moduleToken).then((releaseStyle) => {
+          if (disposed) releaseStyle();
+          else release = releaseStyle;
+        });
+      }
+      onUnmounted(() => {
+        disposed = true;
+        release?.();
+      });
+      return () => h(
+        "div",
+        {
+          class: "ui-provider-module",
+          "data-ui-provider-id": provider.providerId,
+          "data-ui-provider-generation": provider.generation ?? 0,
+        },
+        [h(moduleComponent, attrs, slots)],
+      );
+    },
   }));
   trustedModuleCache.set(key, component);
   return component;
+}
+
+export async function prewarmTrustedWebModule(provider: UIProviderDefinition, entry: UIProviderEntry): Promise<void> {
+  if (!canLoadTrustedWebModule(provider, entry) || !entry.path) return;
+  if (entry.stylePath && typeof document !== "undefined") {
+    const url = await providerModuleURL(provider, entry.stylePath, entry.styleHash, entry.moduleToken);
+    if (!document.querySelector(`link[data-ui-provider="${provider.providerId}"][href="${url}"]`)) {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "style";
+      link.href = url;
+      link.dataset.uiProvider = provider.providerId;
+      document.head.append(link);
+    }
+  }
+  await import(/* @vite-ignore */ await providerModuleURL(provider, entry.path, entry.contentHash, entry.moduleToken));
 }

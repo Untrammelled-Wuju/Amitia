@@ -11,6 +11,7 @@ import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAtt
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
+import type { OwnedGroupChatResponse, OwnedGroupMention } from "@/runtime/device-owned-chat";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -37,6 +38,7 @@ export function useWebChatSend(
   activeTurnId?: Ref<string>,
   beginPendingAssistant?: (requestId: string, characterId?: string) => void,
   failPendingAssistant?: (requestId: string) => void,
+  groupMentions?: Ref<OwnedGroupMention[]>,
 ) {
   const owned = useDeviceOwnedConversation();
   const { messageStyle } = useChatAppearancePreference();
@@ -156,7 +158,6 @@ export function useWebChatSend(
       replyToRole: replyTarget?.value?.role || undefined,
       replyToExcerpt: replyTarget?.value?.content || undefined,
     });
-    beginPendingAssistant?.(requestEnvelope.requestId, originalRole);
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
@@ -166,7 +167,7 @@ export function useWebChatSend(
       if (await owned.refresh()) {
         if (!originalRole) throw new Error("请选择调用角色后发送消息");
         const prepared = await owned.data("working", originalRole);
-        const expectedExecutionScope = prepared.executionScope;
+        let expectedExecutionScope = prepared.executionScope;
         if (expectedExecutionScope.roleId !== originalRole || convId.value !== originalConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原消息未发送");
         if (finalAudioUrl) throw new Error("请重新录制语音，以便当前数据所有者保存原始音频");
 				let video: OwnedAttachment | undefined;
@@ -191,6 +192,107 @@ export function useWebChatSend(
           const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(originalReply.fullContent))), (value) => value.toString(16).padStart(2, "0")).join("");
           quote = { ownerId: originalReply.ownerId, characterId: originalReply.characterId, conversationId: source?.id || originalReply.sourceConversationId, messageId: originalReply.id, expectedRevision: originalReply.sourceRevision, contentHash, expectedExecutionScope: originalReply.executionScope };
         }
+        const group = originalConversation ? await owned.groupState(originalConversation, originalRole) : null;
+        if (group) {
+          const groupView = await owned.query(originalConversation, originalRole);
+          expectedExecutionScope = groupView.executionScope;
+          if (!sameOwnedAuthority(originalReply?.executionScope || expectedExecutionScope, expectedExecutionScope) && originalReply) throw new Error("引用消息的群会话权限已变化，请重新选择");
+          const activeMentions = (groupMentions?.value || []).filter((mention) => {
+            const member = group.members.find((item) => item.memberId === mention.memberId && item.status === "active");
+            return Boolean(member && sendContent.includes(`@${member.characterName}`));
+          });
+          let response: OwnedGroupChatResponse | undefined;
+          response = await owned.sendGroup({
+            requestId: requestEnvelope.requestId,
+            conversationId: originalConversation,
+            characterId: expectedExecutionScope.roleId,
+            permissionMode: permissionMode?.value || undefined,
+            modelConfigId: modelConfigId?.value,
+            reasoningEffort: reasoningEffort?.value,
+            reasoningEnabled: reasoningEnabled?.value,
+            messageStyle: messageStyle.value,
+            expectedExecutionScope,
+            message: sendContent,
+            attachments,
+            mentions: activeMentions,
+            group: {
+              expectedMembershipRevision: group.membershipRevision,
+              expectedSettingsRevision: group.settingsRevision,
+              ...(replyTarget?.value?.id ? { replyToMessageId: replyTarget.value.id } : {}),
+            },
+          }, (event) => {
+            if (convId.value !== activeConversation || characterId.value !== originalRole) return;
+            if (event.type === "started" && event.executionScope && event.deliveryId) {
+              const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId);
+              if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: `${requestEnvelope.requestId}/user`, ownerId: event.executionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: event.executionScope, conversationId: event.conversationId, sourceConversationId: event.conversationId };
+              const assistantId = `${event.executionScope.requestId}/assistant`;
+              const existing = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
+              const assistant = { id: assistantId, uiKey: `group-delivery:${event.deliveryId}`, ownerId: event.executionScope.resourceOwnerId, requestId: event.executionScope.requestId, role: "assistant", content: "", reasoningContent: "", status: "streaming", reasoningComplete: false, outputComplete: false, createdAt: new Date().toISOString(), characterId: event.characterId, characterName: event.characterName, characterAvatar: event.characterAvatar, conversationId: event.conversationId, sourceConversationId: event.conversationId, executionScope: event.executionScope, groupRoundId: event.groupRoundId, deliveryId: event.deliveryId };
+              if (existing >= 0) messages.value[existing] = { ...messages.value[existing], ...assistant };
+              else messages.value.push(assistant);
+            }
+            if (event.type === "delta" && event.deliveryId) {
+              const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
+              if (index >= 0) {
+                const field = event.reasoning ? "reasoningContent" : "content";
+                messages.value[index] = { ...messages.value[index], [field]: (messages.value[index][field] || "") + (event.text || ""), reasoningComplete: !event.reasoning, outputComplete: false };
+              }
+            }
+            if (event.type === "reasoning-completed" && event.deliveryId) {
+              const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
+              if (index >= 0) messages.value[index] = { ...messages.value[index], reasoningComplete: true };
+            }
+            if (event.type === "output-completed" && event.deliveryId) {
+              const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
+              if (index >= 0) messages.value[index] = { ...messages.value[index], reasoningComplete: true, outputComplete: true };
+            }
+            scrollToBottom(true);
+          });
+          if (convId.value !== activeConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，群聊回复已丢弃");
+          const userIndex = messages.value.findIndex((message) => message.id === userMsgLocalId || message.id === `${requestEnvelope.requestId}/user`);
+          if (userIndex >= 0) messages.value[userIndex] = { ...messages.value[userIndex], id: response.userMessageId, ownerId: expectedExecutionScope.resourceOwnerId, sourceRevision: 1, status: "completed", executionScope: expectedExecutionScope, conversationId: response.conversationId, sourceConversationId: parseConversationReference(response.conversationId)?.id || response.conversationId };
+          for (const delivery of response.deliveries) {
+            const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${delivery.deliveryId}`);
+            const assistant = {
+              id: `${delivery.requestId}/assistant`,
+              uiKey: `group-delivery:${delivery.deliveryId}`,
+              ownerId: delivery.executionScope.resourceOwnerId,
+              sourceRevision: delivery.saved ? 1 : undefined,
+              requestId: delivery.requestId,
+              role: "assistant",
+              content: delivery.reply,
+              reasoningContent: delivery.reasoning,
+              citationSnapshot: delivery.citationSnapshot || [],
+              status: "completed",
+              conversationId: response.conversationId,
+              sourceConversationId: parseConversationReference(response.conversationId)?.id || response.conversationId,
+              characterId: delivery.executionScope.roleId,
+              characterName: delivery.characterName,
+              characterAvatar: delivery.characterAvatar,
+              executionScope: delivery.executionScope,
+              groupRoundId: response.groupRoundId,
+              deliveryId: delivery.deliveryId,
+              saved: delivery.saved,
+              memoryStatus: delivery.memoryStatus,
+              createdAt: new Date().toISOString(),
+            };
+            if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
+            else messages.value.push(assistant);
+          }
+          if (groupMentions) groupMentions.value = [];
+          convId.value = response.conversationId;
+          sending.value = false;
+          if (response.status === "completed_with_errors") modelError.value = "部分群成员回复失败，可在成员面板查看后重新点名";
+          notifyDesktopPetChatState("assistant_finished", requestEnvelope.requestId);
+          if (replyTarget) replyTarget.value = null;
+          try {
+            await onConversationCreated?.(response.conversationId);
+          } catch {
+            if (convId.value === response.conversationId && characterId.value === originalRole) ElMessage.warning("群消息已保存，会话列表刷新失败，请稍后刷新");
+          }
+          return;
+        }
+        beginPendingAssistant?.(requestEnvelope.requestId, originalRole);
         const response = await owned.send({ requestId: requestEnvelope.requestId, conversationId: convId.value || undefined, ...(draftProjectId ? { projectId: draftProjectId } : {}), characterId: expectedExecutionScope.roleId, permissionMode: permissionMode?.value || undefined, modelConfigId: modelConfigId?.value, reasoningEffort: reasoningEffort?.value, reasoningEnabled: reasoningEnabled?.value, messageStyle: messageStyle.value, expectedExecutionScope, message: sendContent, context, attachments, quote }, (event) => {
           if (convId.value !== activeConversation || characterId.value !== originalRole) return;
           if (event.type === "started") {

@@ -127,7 +127,7 @@ func TestKindDefaultSandbox(t *testing.T) {
 		expected UISandboxType
 	}{
 		{UIContributionSchemaPage, SandboxSchemaRenderer},
-		{UIContributionWebPage, SandboxWebRestricted},
+		{UIContributionWebPage, SandboxClientModule},
 		{UIContributionAction, SandboxHostNative},
 		{UIContributionMenuItem, SandboxHostNative},
 		{UIContributionStatusItem, SandboxHostNative},

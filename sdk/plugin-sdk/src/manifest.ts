@@ -66,10 +66,25 @@ export interface ModuleDeclaration {
     memory?: number;
     permissions?: string[];
     capabilities?: Record<string, boolean>;
+    hostAccess?: RuntimeHostAccess;
     env?: Record<string, string>;
   };
   contributions?: ManifestContribution[];
   dependencies?: ManifestDependency[];
+}
+
+export interface RuntimeHostAccess {
+  filesystem?: {
+    mode?: "none" | "read" | "read_write";
+    roots?: Array<"package" | "plugin_data">;
+  };
+  network?: {
+    mode?: "none" | "host";
+  };
+  process?: {
+    mode?: "none" | "direct";
+    maxProcesses?: number;
+  };
 }
 
 export interface ManifestContribution {
@@ -165,18 +180,23 @@ export type UIProviderCapability =
   | "conversation.message_renderer" | "conversation.sidebar" | "conversation.composer" | "conversation.overlay"
   | "character.shell" | "character.detail" | "memory.shell" | "memory.detail"
   | "settings.shell" | "settings.section" | "extension.center" | "extension.page"
+  | "workspace.tab"
   | "ui.theme" | "ui.tokens" | "ui.icons" | "ui.components";
 
 export type UIProviderEntryType =
-  | "builtin_native" | "declarative" | "web_module" | "schema_renderer" | "web_restricted" | "web_isolated";
+  | "builtin_native" | "declarative" | "web_module" | "schema_renderer" | "external_web_ui";
 
 export interface UIProviderEntry {
   contributionId?: string;
   type: UIProviderEntryType;
   path?: string;
   schemaPath?: string;
+  stylePath?: string;
   exportName?: string;
   contentHash?: string;
+  styleHash?: string;
+  url?: string;
+  allowedOrigins?: string[];
 }
 
 export interface UINavigationItemDefinition {
@@ -337,7 +357,7 @@ export interface UIContributionDefinition {
   scopeRule?: ScopeRule;
   ordering?: number;
   group?: string;
-  sandbox?: "host_native" | "schema_renderer" | "web_restricted" | "web_isolated";
+  sandbox?: "host_native" | "schema_renderer" | "client_module";
 }
 
 export interface JSONSchema {

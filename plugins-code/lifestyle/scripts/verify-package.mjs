@@ -64,13 +64,7 @@ function main() {
     "integrity/content-tree.json",
     "modules/lifestyle-runtime/package.json",
     "modules/lifestyle-runtime/dist/index.js",
-    "modules/lifestyle-ui/desktop/index.html",
-    "modules/lifestyle-ui/desktop/app.js",
-    "modules/lifestyle-ui/desktop/styles.css",
     "modules/lifestyle-ui/desktop/schema.json",
-    "modules/lifestyle-ui/mobile/index.html",
-    "modules/lifestyle-ui/mobile/app.js",
-    "modules/lifestyle-ui/mobile/styles.css",
     "modules/lifestyle-ui/mobile/schema.json",
   ];
   for (const path of required) {

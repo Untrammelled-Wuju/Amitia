@@ -10,6 +10,9 @@ import 'package:amitia_app/core/backend_transport/state/backend_transport_state.
 import 'package:amitia_app/core/runtime/runtime_bridge_provider.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_snapshot.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
+import 'package:amitia_app/core/runtime/backend/mobile_backend_providers.dart';
+import 'package:amitia_app/core/runtime/backend/mobile_deployment_config_repository.dart';
+import 'package:amitia_app/core/runtime/backend/mobile_deployment_mode.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_provider.dart';
 
 import 'fakes/fake_runtime_bridge.dart';
@@ -129,10 +132,55 @@ void main() {
       expect(status.generation, 12);
       expect(status.httpAvailable, true);
     });
+
+    test('initialization survives deployment dependency changes', () async {
+      final connectionSource = FakeBackendConnectionSource()
+        ..setAvailability(const BackendConnectionUnavailable());
+      final bridge = FakeRuntimeBridge();
+      final repository = _MemoryDeploymentConfigRepository();
+      final container = ProviderContainer(
+        overrides: [
+          runtimeBridgeProvider.overrideWithValue(bridge),
+          backendConnectionSourceProvider.overrideWithValue(connectionSource),
+          mobileDeploymentConfigRepositoryProvider.overrideWithValue(
+            repository,
+          ),
+          deviceLocalBackendTransportProvider.overrideWith(
+            _UnavailableTransportNotifier.new,
+          ),
+          backendTransportProvider.overrideWith(
+            _UnavailableBackendTransportNotifier.new,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final subscription = container.listen(
+        runtimeStatusProjectionProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
+
+      await container
+          .read(mobileDeploymentConfigProvider.notifier)
+          .update(
+            const MobileDeploymentConfig(mode: MobileDeploymentMode.cloud),
+          );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(
+        () => container.read(runtimeStatusProjectionProvider),
+        returnsNormally,
+      );
+    });
   });
 }
 
-Future<void> _waitForGeneration(ProviderContainer container, int generation) async {
+Future<void> _waitForGeneration(
+  ProviderContainer container,
+  int generation,
+) async {
   for (var attempt = 0; attempt < 50; attempt++) {
     if (container.read(runtimeStatusCurrentProvider).generation == generation) {
       return;
@@ -141,23 +189,46 @@ Future<void> _waitForGeneration(ProviderContainer container, int generation) asy
   }
 }
 
-class _AvailableTransportNotifier11 extends DeviceLocalBackendTransportNotifier {
+class _AvailableTransportNotifier11
+    extends DeviceLocalBackendTransportNotifier {
   @override
   Future<BackendTransportState> build() async {
     return const TransportAvailable(generation: 11);
   }
 }
 
-class _AvailableTransportNotifier12 extends DeviceLocalBackendTransportNotifier {
+class _AvailableTransportNotifier12
+    extends DeviceLocalBackendTransportNotifier {
   @override
   Future<BackendTransportState> build() async {
     return const TransportAvailable(generation: 12);
   }
 }
 
-class _UnavailableTransportNotifier extends DeviceLocalBackendTransportNotifier {
+class _UnavailableTransportNotifier
+    extends DeviceLocalBackendTransportNotifier {
   @override
   Future<BackendTransportState> build() async {
     return const TransportUnavailable();
+  }
+}
+
+class _UnavailableBackendTransportNotifier extends BackendTransportNotifier {
+  @override
+  Future<BackendTransportState> build() async {
+    return const TransportUnavailable();
+  }
+}
+
+class _MemoryDeploymentConfigRepository
+    implements MobileDeploymentConfigRepository {
+  MobileDeploymentConfig _config = MobileDeploymentConfig.local;
+
+  @override
+  Future<MobileDeploymentConfig> load() async => _config;
+
+  @override
+  Future<void> save(MobileDeploymentConfig config) async {
+    _config = config;
   }
 }

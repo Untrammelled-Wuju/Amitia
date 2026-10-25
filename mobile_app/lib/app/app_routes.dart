@@ -1,6 +1,10 @@
 abstract final class AppRoutes {
   static const chat = '/chat';
   static const conversations = '/conversations';
+  static const conversationSearch = '/conversations/search';
+  static const tasks = '/tasks';
+  static const memoryHub = '/memory-hub';
+  static const me = '/me';
   static const dashboard = '/dashboard';
   static const channels = '/channels';
   static const characters = '/characters';

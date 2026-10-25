@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_update/app_update_providers.dart';
@@ -225,7 +224,7 @@ class _BootstrapInitializingWidget extends StatelessWidget {
       home: Stack(
         children: [
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-          if (kDebugMode) const DebugLogOverlay(),
+          if (debugLogOverlayEnabled) const DebugLogOverlay(),
         ],
       ),
     );
@@ -321,7 +320,7 @@ class _BootstrapInstallRequiredWidgetState
               ),
             ),
           ),
-          if (kDebugMode) const DebugLogOverlay(),
+          if (debugLogOverlayEnabled) const DebugLogOverlay(),
         ],
       ),
     );
@@ -357,7 +356,7 @@ class _BootstrapFailedWidget extends StatelessWidget {
               ),
             ),
           ),
-          if (kDebugMode) const DebugLogOverlay(),
+          if (debugLogOverlayEnabled) const DebugLogOverlay(),
         ],
       ),
     );
@@ -374,7 +373,7 @@ class _BootstrapUnavailableWidget extends StatelessWidget {
       home: Stack(
         children: [
           const Scaffold(body: Center(child: Text('Runtime unavailable'))),
-          if (kDebugMode) const DebugLogOverlay(),
+          if (debugLogOverlayEnabled) const DebugLogOverlay(),
         ],
       ),
     );
@@ -393,7 +392,7 @@ class _BootstrapErrorWidget extends StatelessWidget {
           const Scaffold(
             body: Center(child: Text('Failed to initialize runtime')),
           ),
-          if (kDebugMode) const DebugLogOverlay(),
+          if (debugLogOverlayEnabled) const DebugLogOverlay(),
         ],
       ),
     );
@@ -577,7 +576,7 @@ class AmitiaApp extends ConsumerWidget {
                           if (child case final Widget currentChild)
                             currentChild,
                           const McpInteractionGuard(),
-                          if (kDebugMode) const DebugLogOverlay(),
+                          if (debugLogOverlayEnabled) const DebugLogOverlay(),
                         ],
                       ),
                     ),

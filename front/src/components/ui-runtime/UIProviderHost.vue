@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onErrorCaptured, onMounted, ref, shallowRef, watch, type Component } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { apiClient } from "@/composables/useApi";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ExtensionContributionRenderer from "@/components/extension/ExtensionContributionRenderer.vue";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
@@ -23,6 +24,7 @@ const props = defineProps<{
 
 const store = useExtensionUIStore();
 const route = useRoute();
+const router = useRouter();
 const env = resolveHostEnvironment();
 const loadError = shallowRef<string | null>(null);
 const activeRef = shallowRef<any>(null);
@@ -71,6 +73,7 @@ const mode = computed(() => provider.value?.mode ?? "replace");
 const mergedContext = computed<Record<string, unknown>>(() => {
   const identity = resolveRouteIdentity(
     (props.context?.routeParams as Record<string, unknown> | undefined) ?? route.params,
+    route.fullPath,
   );
   return {
     route: route.fullPath,
@@ -102,6 +105,34 @@ const mergedContext = computed<Record<string, unknown>>(() => {
     },
   };
 });
+const providerActions = computed<Record<string, (input?: unknown) => unknown | Promise<unknown>>>(() => {
+  const actions = { ...(props.actions ?? {}) };
+  const contribution = sourceContribution.value;
+  if (!contribution) return actions;
+  for (const action of contribution.actions ?? []) {
+    if (actions[action.actionId]) continue;
+    actions[action.actionId] = async (input?: unknown) => {
+      const response = await apiClient.post(
+        `/api/extension/action/${encodeURIComponent(contribution.contributionId)}/${encodeURIComponent(action.actionId)}`,
+        { context: mergedContext.value, input: input ?? {} },
+      );
+      const data = response.data as Record<string, unknown> | undefined;
+      if (data?.ok === false) {
+        const error = data.error as Record<string, unknown> | string | undefined;
+        throw new Error(typeof error === "string" ? error : String(error?.message ?? "插件操作失败"));
+      }
+      return data?.result ?? data;
+    };
+  }
+  return actions;
+});
+const navigateProvider = (target: string, type?: string) => {
+  if (type === "external") {
+    window.open(target, "_blank", "noopener,noreferrer");
+    return;
+  }
+  void router.push(target);
+};
 
 const surfaceSlotId = computed(() => providerSlotId(props.capability));
 const rootEl = computed(() => activeRef.value?.rootEl ?? activeRef.value?.$el ?? slotBoundaryRef.value?.rootEl ?? slotBoundaryRef.value?.$el ?? null);
@@ -179,7 +210,8 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
       v-bind="$attrs"
       :ui-context="mergedContext"
       :provider="provider"
-      :ui-actions="actions"
+      :ui-actions="providerActions"
+      :ui-navigate="navigateProvider"
       @error="advanceFallback"
     />
     <ExtensionContributionRenderer
@@ -202,7 +234,8 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     v-bind="$attrs"
     :ui-context="mergedContext"
     :provider="provider"
-    :ui-actions="actions"
+    :ui-actions="providerActions"
+    :ui-navigate="navigateProvider"
     @error="advanceFallback"
   >
     <template v-for="(_, name) in $slots" #[name]="slotProps">
@@ -233,6 +266,10 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
 }
 .ui-provider-compose-stack > * {
   grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+}
+.ui-provider-module {
   min-width: 0;
   min-height: 0;
 }

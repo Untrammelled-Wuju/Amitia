@@ -35,6 +35,13 @@ class WorkshopHomePage extends ConsumerWidget {
               ),
               _buildEntryCard(
                 context,
+                icon: Icons.account_tree_outlined,
+                title: '工作流',
+                description: '创建和管理自动化工作流及其运行配置',
+                onTap: () => context.push(AppRoutes.workshopWorkflows),
+              ),
+              _buildEntryCard(
+                context,
                 icon: Icons.pets_outlined,
                 title: '桌宠中心',
                 description: '管理桌宠安装、插件与运行状态',

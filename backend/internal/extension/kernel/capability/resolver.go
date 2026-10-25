@@ -170,6 +170,12 @@ func (r *Resolver) probeBindingReady(def CapabilityProviderDefinition) bool {
 func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request CapabilityResolutionRequest) ([]CapabilityProviderDefinition, []CandidateRejection) {
 	var filtered []CapabilityProviderDefinition
 	var rejections []CandidateRejection
+	allowCore := request.AllowCore
+	allowDevice := request.AllowDevice
+	if !allowCore && !allowDevice {
+		allowCore = r.policy.AllowCore
+		allowDevice = r.policy.AllowDevice
+	}
 
 	for i := range defs {
 		def := defs[i]
@@ -180,14 +186,14 @@ func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request 
 			})
 			continue
 		}
-		if !r.policy.AllowCore && def.Placement == ProviderPlacementCore {
+		if !allowCore && def.Placement == ProviderPlacementCore {
 			rejections = append(rejections, CandidateRejection{
 				ProviderID: def.ID,
 				Reason:     RejectionPlacementNotAllowed,
 			})
 			continue
 		}
-		if !r.policy.AllowDevice && def.Placement == ProviderPlacementDevice {
+		if !allowDevice && def.Placement == ProviderPlacementDevice {
 			rejections = append(rejections, CandidateRejection{
 				ProviderID: def.ID,
 				Reason:     RejectionPlacementNotAllowed,
@@ -324,7 +330,7 @@ func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinitio
 				}
 			}
 
-			if inst.DeviceID != "" && r.availability != nil {
+			if inst.DeviceID != "" && r.availability != nil && !usesInProcessAdapter(def.Runtime.RuntimeType) {
 				offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
 				if err == nil && offline {
 					rejections = append(rejections, CandidateRejection{
@@ -336,7 +342,7 @@ func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinitio
 				}
 			}
 
-			if inst.RuntimeID != "" && r.availability != nil {
+			if inst.RuntimeID != "" && r.availability != nil && !usesInProcessAdapter(def.Runtime.RuntimeType) {
 				online, err := r.availability.IsRuntimeOnline(context.Background(), inst.RuntimeID)
 				if err != nil || !online {
 					rejections = append(rejections, CandidateRejection{

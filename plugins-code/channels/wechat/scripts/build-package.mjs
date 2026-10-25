@@ -3,6 +3,9 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildChannelPackage } from "../../scripts/build-channel-package.mjs";
+import { prepareClientUI } from "../../scripts/prepare-client-ui.mjs";
+import { clientCssPlugin } from "../../scripts/client-css-scope.mjs";
+import { hostVueModulePlugin } from "../../scripts/host-vue-module.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const projectRoot = path.resolve(root, "../../..");
@@ -28,9 +31,16 @@ const { build: buildRuntime } = createRequire(path.join(viteRoot, "package.json"
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "amitia-extension.json"), "utf8"));
 
 fs.rmSync(stagingRoot, { recursive: true, force: true });
-fs.mkdirSync(stagingRoot, { recursive: true });
-fs.cpSync(path.join(root, "package-sources", "1.0.14", "modules"), path.join(stagingRoot, "modules"), { recursive: true });
-fs.cpSync(path.join(root, "package-sources", "1.0.14", "assets"), path.join(stagingRoot, "assets"), { recursive: true });
+fs.mkdirSync(path.join(stagingRoot, "modules", "wechat-channel-service"), { recursive: true });
+fs.mkdirSync(path.join(stagingRoot, "modules", "wechat-channel-ui", "desktop"), { recursive: true });
+fs.mkdirSync(path.join(stagingRoot, "modules", "wechat-channel-ui", "mobile"), { recursive: true });
+fs.copyFileSync(path.join(root, "runtime", "launcher.mjs"), path.join(stagingRoot, "modules", "wechat-channel-service", "launcher.mjs"));
+fs.writeFileSync(
+  path.join(stagingRoot, "modules", "wechat-channel-service", "package.json"),
+  `${JSON.stringify({ name: "@tencent-weixin/openclaw-weixin", version: "2.4.6", ilink_appid: "bot", type: "module" }, null, 2)}\n`,
+);
+fs.copyFileSync(path.join(uiRoot, "mobile", "schema.json"), path.join(stagingRoot, "modules", "wechat-channel-ui", "mobile", "schema.json"));
+fs.copyFileSync(path.join(uiRoot, "mobile", "messages.schema.json"), path.join(stagingRoot, "modules", "wechat-channel-ui", "mobile", "messages.schema.json"));
 
 await buildRuntime({
   entryPoints: [path.join(root, "runtime/src/index.ts")],
@@ -47,29 +57,31 @@ await build({
   root: uiRoot,
   base: "./",
   publicDir: false,
-  plugins: [vue()],
+  plugins: [hostVueModulePlugin(dependency("vue/dist/vue.runtime.esm-bundler.js", frontendRequire)), vue()],
+  css: {
+    postcss: {
+      plugins: [clientCssPlugin("wechat-page-provider")],
+    },
+  },
   define: {
     "process.env.NODE_ENV": '"production"',
   },
   resolve: {
     alias: {
-      vue: dependency("vue/dist/vue.runtime.esm-bundler.js", frontendRequire),
       qrcode: dependency("qrcode/lib/browser.js", runtimeRequire),
     },
-    dedupe: ["vue"],
   },
   build: {
     outDir: path.join(stagingRoot, "modules", "wechat-channel-ui", "desktop"),
     emptyOutDir: true,
     lib: {
       entry: path.join(uiRoot, "src/main.mjs"),
-      name: "AmitiaWechatUI",
-      formats: ["iife"],
-      fileName: () => "app.js",
+      formats: ["es"],
+      fileName: () => "index.mjs",
     },
     rollupOptions: {
       output: {
-        entryFileNames: "app.js",
+        entryFileNames: "index.mjs",
         chunkFileNames: "chunks/[name]-[hash].js",
         assetFileNames: (asset) => asset.name?.endsWith(".css") ? "styles.css" : "assets/[name]-[hash][extname]",
       },
@@ -77,16 +89,15 @@ await build({
   },
 });
 
-fs.copyFileSync(path.join(uiRoot, "index.html"), path.join(stagingRoot, "modules", "wechat-channel-ui", "desktop", "index.html"));
-
 const sourceRoot = path.join(stagingRoot, "assets", "source", "ui");
 fs.mkdirSync(sourceRoot, { recursive: true });
-for (const file of ["index.html", "package.json", "src", "tests"]) {
+for (const file of ["package.json", "src", "tests"]) {
   fs.cpSync(path.join(uiRoot, file), path.join(sourceRoot, file), { recursive: true });
 }
 for (const file of ["package.json", "pnpm-lock.yaml", "tsconfig.json", "src"]) {
   fs.cpSync(path.join(root, "runtime", file), path.join(stagingRoot, "assets/source/runtime", file), { recursive: true });
 }
+prepareClientUI({ manifest, stagingRoot, moduleId: "wechat-channel-ui", contributionId: "wechat-page" });
 fs.writeFileSync(path.join(stagingRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 const result = buildChannelPackage(stagingRoot, path.join(projectRoot, "plugin"));
 console.log(JSON.stringify(result));

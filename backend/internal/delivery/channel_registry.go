@@ -102,9 +102,7 @@ func (a *pluginChannelAdapter) Deliver(intent DeliveryIntent) error {
 		ContentType:    intent.ContentType,
 		Payload:        json.RawMessage(intent.Payload),
 		IdempotencyKey: intent.ID,
-	}
-	if intent.ContentType == "text" {
-		request.Text = extractContentFromPayload(intent.Payload)
+		Text:           extractContentFromPayload(intent.Payload),
 	}
 	_, err := a.provider.Send(context.Background(), request)
 	return err

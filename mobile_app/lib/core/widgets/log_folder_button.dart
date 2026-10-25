@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_routes.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
+import 'amitia_icons.dart';
 import 'amitia_misc.dart';
 import 'amitia_scaffold.dart';
 
@@ -16,11 +17,14 @@ class LogFolderButton extends StatelessWidget {
   const LogFolderButton({super.key});
 
   @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: '打开文件夹',
-    icon: const Icon(Icons.folder_open_outlined),
-    onPressed: () => openLogFolder(context),
-  );
+  Widget build(BuildContext context) {
+    if (Navigator.maybeOf(context) == null) return const SizedBox.shrink();
+    return IconButton(
+      tooltip: '打开文件夹',
+      icon: const AmitiaIcon(AmitiaIconGlyph.folder),
+      onPressed: () => openLogFolder(context),
+    );
+  }
 }
 
 class LogFolderPage extends ConsumerStatefulWidget {
@@ -120,7 +124,7 @@ class _LogFolderPageState extends ConsumerState<LogFolderPage> {
       actions: [
         IconButton(
           tooltip: '刷新',
-          icon: const Icon(Icons.refresh),
+          icon: const AmitiaIcon(AmitiaIconGlyph.refresh),
           onPressed: _load,
         ),
       ],

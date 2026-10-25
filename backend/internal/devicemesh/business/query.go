@@ -57,8 +57,23 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 		return QueryResult{}, err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
-	if err := coordination.ResolveMemoryScope(&scope, role, request.MemoryView); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, request.MemoryView); err != nil {
 		return QueryResult{}, err
+	}
+	if query.ConversationID != "" {
+		if port, ok := e.data.(coordination.GroupStatePort); ok {
+			group, groupErr := port.GroupState(ctx, scope, query.ConversationID)
+			if groupErr != nil {
+				return QueryResult{}, groupErr
+			}
+			if group.IsGroup() {
+				scope.ConversationRoleID = group.ConversationRoleID
+				query.GroupState = &group
+				if member, found := group.ActiveMember(scope.RoleID); found {
+					query.GroupVisibilityStart = member.HistoryStart
+				}
+			}
+		}
 	}
 	if scope.MemoryViewAll && !query.Management {
 		return QueryResult{}, coordination.ErrWrongOwner
@@ -66,7 +81,7 @@ func (e *Engine) Query(ctx context.Context, request Request, query coordination.
 	if query.ResourceKind == "continuity" {
 		partition := coordination.StorageRole(scope, "continuity")
 		all := scope.MemoryViewAll
-		if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+		if err := coordination.ResolveMemoryScope(&scope, ""); err != nil {
 			return QueryResult{}, err
 		}
 		scope.ContinuityRoleID = partition

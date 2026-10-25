@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -20,6 +21,7 @@ func buildModuleInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, ru
 		Env:           runtimeDef.Env,
 		Permissions:   runtimeDef.Permissions,
 		Capabilities:  runtimeDef.Capabilities,
+		HostAccess:    runtimeDef.HostAccess,
 		Restart:       runtime_supervisor.RestartOnCrash,
 		MaxRestarts:   3,
 		RestartWindow: 60 * time.Second,
@@ -32,6 +34,9 @@ func buildModuleInstanceSpec(extID domain.ExtensionID, modID domain.ModuleID, ru
 	}
 	if spec.WorkerCount <= 0 {
 		spec.WorkerCount = 1
+	}
+	if strings.EqualFold(runtimeDef.HostAccess.Process.Mode, "direct") {
+		spec.Limits.MaxProcesses = runtimeDef.HostAccess.Process.MaxProcesses + 1
 	}
 	return spec
 }

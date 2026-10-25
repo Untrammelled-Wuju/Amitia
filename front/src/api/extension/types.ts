@@ -42,11 +42,6 @@ export interface BackendUIContributionDispatch {
 
 export interface BackendUISandboxPolicy {
   type: string;
-  csp?: string;
-  allowed_origins?: string[];
-  enable_scripts?: boolean;
-  allow_forms?: boolean;
-  allow_popups?: boolean;
   max_memory_mb?: number;
 }
 

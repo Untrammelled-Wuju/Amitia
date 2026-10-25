@@ -102,7 +102,20 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 		if !ok {
 			return coordination.ErrWrongOwner
 		}
-		unlock := e.lock("append-conversation\x00" + scope.ResourceOwnerID + "\x00" + scope.RoleID + "\x00" + appendRequest.ConversationID)
+		if port, ok := e.data.(coordination.GroupStatePort); ok {
+			group, groupErr := port.GroupState(current, scope, appendRequest.ConversationID)
+			if groupErr != nil {
+				return groupErr
+			}
+			if group.IsGroup() {
+				if _, active := group.ActiveMember(scope.RoleID); !active {
+					return coordination.ErrWrongOwner
+				}
+				scope.ConversationRoleID = group.ConversationRoleID
+				current = coordination.WithScope(current, scope)
+			}
+		}
+		unlock := e.lock("append-conversation\x00" + scope.ResourceOwnerID + "\x00" + appendRequest.ConversationID)
 		defer unlock()
 		port, ok := e.data.(coordination.ResourcePort)
 		if !ok {
@@ -146,7 +159,7 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 		if err := json.Unmarshal(conversation.Body, &document); err != nil {
 			return err
 		}
-		if document["characterId"] != nil && document["characterId"] != scope.RoleID {
+		if document["characterId"] != nil && document["characterId"] != coordination.StorageRole(scope, "conversation") {
 			return coordination.ErrWrongOwner
 		}
 		channel, _ := document["channel"].(string)
@@ -207,7 +220,7 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 			case "video":
 				message["videoUrl"] = part.URL
 			}
-			mutations = append(mutations, coordination.Mutation{Kind: "message", ID: id, RoleID: scope.RoleID, Body: body(message)})
+			mutations = append(mutations, coordination.Mutation{Kind: "message", ID: id, RoleID: coordination.StorageRole(scope, "message"), Body: body(message)})
 			result.MessageIDs = append(result.MessageIDs, id)
 			result.Sequences = append(result.Sequences, sequence+int64(i))
 			result.LastSequence = sequence + int64(i)
@@ -222,7 +235,7 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 			}
 		}
 		document["lastMessageSequence"], document["updatedAt"] = result.LastSequence, now
-		mutations = append(mutations, coordination.Mutation{Kind: "conversation", ID: conversation.ID, RoleID: scope.RoleID, ExpectedRevision: conversation.Revision, Body: body(document)}, coordination.Mutation{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: body(map[string]any{"hash": hash, "result": result})})
+		mutations = append(mutations, coordination.Mutation{Kind: "conversation", ID: conversation.ID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: conversation.Revision, Body: body(document)}, coordination.Mutation{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: body(map[string]any{"hash": hash, "result": result})})
 		if appendRequest.Role == "assistant" && channel != "web" && channel != "voice" && channel != "device-mesh" && peer != "" {
 			deliveryScope := scope
 			deliveryScope.RequestID = request.RequestID

@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { RpcConnection, JsonRpcMessage } from "./rpc";
 import { bootstrap, BootstrapSpec } from "./bootstrap";
-import { HandlerRegistry, InvocationContext } from "./handler-registry";
+import { activeInvocation, HandlerRegistry, InvocationContext } from "./handler-registry";
 import { getState, setState, shutdown, onShutdown } from "./shutdown";
 import { LoadedExtension } from "./module-loader";
 import { applyNetworkDisabledPolicy } from "./network-policy";
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
         };
 
         try {
-          const result = await handler(input, invocation);
+          const result = await activeInvocation.run(invocation, () => handler(input, invocation));
           rpc.sendResult(message.id as string | number, result);
         } catch (e) {
           rpc.sendError(message.id as string | number, -32603, (e as Error).message || "Internal error");

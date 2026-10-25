@@ -1,13 +1,11 @@
 package ui_handler
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -23,7 +21,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
-	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -56,36 +53,31 @@ type ResourceLinkResolver interface {
 }
 
 type HTTPHandler struct {
-	uiHost                         *ui_contribution.UIHost
-	slotRegistry                   *extension_slots.SlotRegistry
-	pageHost                       *extension_page_host.PageHost
-	sandboxHost                    *sandbox_webui.Host
-	providerRegistry               *ui_provider.Registry
-	providerContext                func(*http.Request, string) ui_provider.ResolveContext
-	providerBroadcaster            func(string, map[string]interface{})
-	authorizer                     *permission.UISessionAuthorizer
-	schemaLookup                   func(extensionID, contributionID string) (json.RawMessage, bool)
-	scopeSnapshotCreator           func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
-	contextualScopeSnapshotCreator func(context.Context, string, string, int64, string, string) (string, error)
-	dialogResolver                 DialogResolver
-	clientRuntimeResolver          ClientRuntimeCommandResolver
-	clipboardResolver              ClipboardResolver
-	hostRegistry                   *host_registry.HostRegistry
-	extRoot                        string
-	resourceLinks                  ResourceLinkResolver
+	uiHost                *ui_contribution.UIHost
+	slotRegistry          *extension_slots.SlotRegistry
+	pageHost              *extension_page_host.PageHost
+	providerRegistry      *ui_provider.Registry
+	providerContext       func(*http.Request, string) ui_provider.ResolveContext
+	providerBroadcaster   func(string, map[string]interface{})
+	authorizer            *permission.UISessionAuthorizer
+	schemaLookup          func(extensionID, contributionID string) (json.RawMessage, bool)
+	dialogResolver        DialogResolver
+	clientRuntimeResolver ClientRuntimeCommandResolver
+	clipboardResolver     ClipboardResolver
+	hostRegistry          *host_registry.HostRegistry
+	extRoot               string
+	resourceLinks         ResourceLinkResolver
 }
 
 func NewHTTPHandler(
 	uiHost *ui_contribution.UIHost,
 	slotRegistry *extension_slots.SlotRegistry,
 	pageHost *extension_page_host.PageHost,
-	sandboxHost *sandbox_webui.Host,
 ) *HTTPHandler {
 	return &HTTPHandler{
 		uiHost:       uiHost,
 		slotRegistry: slotRegistry,
 		pageHost:     pageHost,
-		sandboxHost:  sandboxHost,
 	}
 }
 
@@ -118,14 +110,6 @@ func (h *HTTPHandler) SetExtensionRoot(root string) {
 
 func (h *HTTPHandler) SetSchemaLookup(fn func(extensionID, contributionID string) (json.RawMessage, bool)) {
 	h.schemaLookup = fn
-}
-
-func (h *HTTPHandler) SetScopeSnapshotCreator(fn func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)) {
-	h.scopeSnapshotCreator = fn
-}
-
-func (h *HTTPHandler) SetContextualScopeSnapshotCreator(fn func(context.Context, string, string, int64, string, string) (string, error)) {
-	h.contextualScopeSnapshotCreator = fn
 }
 
 func (h *HTTPHandler) SetDialogResolver(r DialogResolver) {
@@ -164,12 +148,6 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/", h.handleExtensionScoped)
 	mux.HandleFunc("/api/extension/schema/", h.handleSchema)
 	mux.HandleFunc("/api/extensions/ui/schema/", h.handleSchema)
-	mux.HandleFunc("/api/extension/webui/session", h.handleWebUISessionCollection)
-	mux.HandleFunc("/api/extension/webui/session/", h.handleWebUISessionItem)
-	mux.HandleFunc("/api/extension/webui/bridge/", h.handleWebUIBridge)
-	mux.HandleFunc("/api/extension/webui/preload/", h.handleWebUIPreload)
-	mux.HandleFunc("/api/extension/webui/resource/", h.handleWebUIResource)
-	mux.HandleFunc("/api/extension/webui/stats", h.handleWebUIStats)
 	mux.HandleFunc("/api/extension/resources/", h.handleResourceLink)
 	mux.HandleFunc("/api/extension/action/", h.handleAction)
 	mux.HandleFunc("/api/extension/composer/action/", h.handleComposerAction)
@@ -181,6 +159,11 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/host-session", h.handleHostSession)
 	mux.HandleFunc("/api/extensions/ui/host-session/heartbeat", h.handleHostSessionHeartbeat)
 	mux.HandleFunc("/api/extensions/ui/host-session/disconnect", h.handleHostSessionDisconnect)
+}
+
+func (h *HTTPHandler) RegisterPublicModuleRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/ui/provider-module/", h.handleProviderModuleResource)
+	mux.HandleFunc("/api/public/extensions/ui/provider-module/", h.handleProviderModuleResource)
 }
 
 func (h *HTTPHandler) handleResourceLink(w http.ResponseWriter, r *http.Request) {
@@ -317,10 +300,10 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		}
 		resolveContext := h.resolveProviderContext(r, platform)
 		providerSnapshot := h.providerRegistry.SnapshotWithContext(r.Context(), resolveContext)
-		payload["providers"] = providerSnapshot.Providers
+		payload["providers"] = signProviderModuleCapabilityList(providerSnapshot.Providers)
 		payload["profile"] = providerSnapshot.Profile
 		payload["profileLayers"] = providerSnapshot.ProfileLayers
-		payload["resolved"] = providerSnapshot.Resolved
+		payload["resolved"] = signResolvedProviderModules(providerSnapshot.Resolved)
 		payload["providerContext"] = providerSnapshot.Context
 		payload["providerVersion"] = providerSnapshot.Version
 	}
@@ -334,7 +317,7 @@ func (h *HTTPHandler) handleProviders(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, map[string]any{"providers": h.providerRegistry.List()})
+		writeJSON(w, http.StatusOK, map[string]any{"providers": signProviderModuleCapabilityList(h.providerRegistry.List())})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
@@ -359,7 +342,9 @@ func (h *HTTPHandler) handleProviderResolve(w http.ResponseWriter, r *http.Reque
 		platform = "web"
 	}
 	resolveContext := h.resolveProviderContext(r, platform)
-	writeJSON(w, http.StatusOK, h.providerRegistry.ResolveWithContext(r.Context(), capability, resolveContext))
+	resolution := h.providerRegistry.ResolveWithContext(r.Context(), capability, resolveContext)
+	resolution.Provider = signProviderModuleCapabilities(resolution.Provider)
+	writeJSON(w, http.StatusOK, resolution)
 }
 
 func trustedModuleProvider(p *ui_provider.ProviderDefinition) bool {
@@ -383,8 +368,13 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusServiceUnavailable, "ui_provider_registry_unavailable", "ui provider registry unavailable")
 		return
 	}
-	const prefix = "/api/extensions/ui/provider-module/"
-	rest := strings.TrimPrefix(r.URL.Path, prefix)
+	const marker = "/ui/provider-module/"
+	markerIndex := strings.Index(r.URL.Path, marker)
+	if markerIndex < 0 {
+		writeError(w, http.StatusNotFound, "provider_module_not_found", "provider module route not found")
+		return
+	}
+	rest := r.URL.Path[markerIndex+len(marker):]
 	parts := strings.SplitN(rest, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		writeError(w, http.StatusNotFound, "provider_module_not_found", "provider id and resource path required")
@@ -397,12 +387,16 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusForbidden, "provider_module_forbidden", "trusted web module provider required")
 		return
 	}
+	if !validProviderModuleCapability(providerID, r.Header.Get("X-Amitia-Module-Access")) {
+		writeError(w, http.StatusForbidden, "provider_module_capability_invalid", "provider module capability is invalid or expired")
+		return
+	}
 	basePath := h.resolveExtensionBasePath(provider.ExtensionID)
 	if basePath == "" {
 		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
 		return
 	}
-	cleanPath, err := sandbox_webui.NewProtocolHandler().SanitizePath(basePath, resourcePath)
+	cleanPath, err := sanitizeUIModulePath(basePath, resourcePath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_path", err.Error())
 		return
@@ -413,8 +407,8 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusNotFound, "provider_module_resource_not_found", "provider module resource not found")
 		return
 	}
-	mime := sandbox_webui.LookupMIME(cleanPath)
-	if mime == "" || !sandbox_webui.IsMIMEAllowed(mime) {
+	mime := uiModuleMIME(cleanPath)
+	if mime == "" {
 		writeError(w, http.StatusUnsupportedMediaType, "mime_not_allowed", "mime type not allowed")
 		return
 	}
@@ -428,19 +422,28 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 	// execute a module that drifted after package verification. Relative support
 	// modules remain covered by the extension package content-tree integrity.
 	for _, entry := range provider.Entries {
-		if entry.Type != ui_provider.EntryWebModule || strings.TrimPrefix(entry.Path, "/") != cleanPath || strings.TrimSpace(entry.ContentHash) == "" {
+		if entry.Type != ui_provider.EntryWebModule {
+			continue
+		}
+		expected := ""
+		if strings.TrimPrefix(entry.Path, "/") == cleanPath {
+			expected = entry.ContentHash
+		} else if strings.TrimSpace(entry.StylePath) != "" && strings.TrimPrefix(entry.StylePath, "/") == cleanPath {
+			expected = entry.StyleHash
+		}
+		if strings.TrimSpace(expected) == "" {
 			continue
 		}
 		sum := sha256.Sum256(content)
 		actual := "sha256:" + hex.EncodeToString(sum[:])
-		expected := strings.ToLower(strings.TrimSpace(entry.ContentHash))
-		if expected != strings.ToLower(actual) {
+		if strings.ToLower(strings.TrimSpace(expected)) != strings.ToLower(actual) {
 			writeError(w, http.StatusConflict, "provider_module_integrity_mismatch", "provider module content hash mismatch")
 			return
 		}
 	}
 	w.Header().Set("Content-Type", mime)
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Cache-Control", "public, max-age=3600, immutable")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusOK)
@@ -864,452 +867,6 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "schema_not_loaded", "schema resource is not loaded")
 }
 
-func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		return
-	}
-	actorSpaceID := ""
-	actorDeviceID := strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
-	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-		actorSpaceID = actor.SpaceID.String()
-	}
-	var req struct {
-		ContributionID string                      `json:"contributionId"`
-		Surface        string                      `json:"surface"`
-		SurfaceRole    string                      `json:"surfaceRole"`
-		Host           string                      `json:"host"`
-		OS             string                      `json:"os"`
-		Platform       string                      `json:"platform"`
-		CharacterID    string                      `json:"characterId"`
-		ConversationID string                      `json:"conversationId"`
-		UIContext      map[string]any              `json:"uiContext"`
-		Theme          sandbox_webui.ThemeSnapshot `json:"theme"`
-		Locale         string                      `json:"locale"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
-		return
-	}
-	def, err := h.uiHost.GetContribution(ui_contribution.ContributionID(req.ContributionID))
-	if err != nil || def == nil {
-		writeError(w, http.StatusNotFound, "contribution_not_found", "web ui contribution not found")
-		return
-	}
-	if def.Sandbox.Type != ui_contribution.SandboxWebRestricted && def.Sandbox.Type != ui_contribution.SandboxWebIsolated {
-		writeError(w, http.StatusBadRequest, "sandbox_invalid", "contribution is not a web ui")
-		return
-	}
-	if req.Surface == "" {
-		req.Surface = "web"
-	}
-	if h.authorizer == nil {
-		writeError(w, http.StatusInternalServerError, "authorizer_not_configured", "session authorizer not configured (fail-closed)")
-		return
-	}
-	auth, err := h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
-	if err != nil {
-		writeError(w, http.StatusForbidden, "permission_denied", err.Error())
-		return
-	}
-	if auth.ExtensionID != string(def.ExtensionID) || auth.ModuleID != string(def.ModuleID) || auth.Generation != def.Integrity.Generation {
-		writeError(w, http.StatusInternalServerError, "auth_identity_mismatch", "authorizer identity does not match contribution")
-		return
-	}
-	sandbox := sandbox_webui.SandboxType(def.Sandbox.Type)
-	basePath := h.resolveExtensionBasePath(string(def.ExtensionID))
-	if basePath == "" {
-		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
-		return
-	}
-	var scopeSnapshotID string
-	if h.contextualScopeSnapshotCreator != nil {
-		var err error
-		scopeSnapshotID, err = h.contextualScopeSnapshotCreator(r.Context(), string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, req.CharacterID, req.ConversationID)
-		if err != nil {
-			writeError(w, http.StatusForbidden, "scope_snapshot_failed", err.Error())
-			return
-		}
-	} else if h.scopeSnapshotCreator != nil {
-		var err error
-		scopeSnapshotID, err = h.scopeSnapshotCreator(string(def.ExtensionID), string(def.ModuleID), def.Integrity.Generation, req.CharacterID, req.ConversationID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "scope_snapshot_failed", err.Error())
-			return
-		}
-	}
-	sreq := sandbox_webui.CreateSessionRequest{
-		ContributionID:     string(def.ContributionID),
-		ExtensionID:        string(def.ExtensionID),
-		ModuleID:           string(def.ModuleID),
-		Generation:         def.Integrity.Generation,
-		SlotID:             def.Slot.SlotID,
-		Sandbox:            sandbox,
-		CSP:                sandbox_webui.RestrictedCSP,
-		AllowedActions:     contributionActionIDs(def),
-		AllowedDataSources: contributionDataSourceIDs(def),
-		Theme:              req.Theme,
-		Locale:             req.Locale,
-		BasePath:           basePath,
-		EntryPath:          def.Entry.Path,
-		EnableScripts:      def.Sandbox.EnableScripts,
-		Surface:            req.Surface,
-		SurfaceRole:        req.SurfaceRole,
-		Host:               req.Host,
-		OS:                 req.OS,
-		Platform:           req.Platform,
-		CharacterID:        req.CharacterID,
-		ConversationID:     req.ConversationID,
-		UIContext:          req.UIContext,
-		GrantedPerms:       auth.GrantedPerms,
-		GrantedScopes:      auth.GrantedScopes,
-		ScopeSnapshotID:    scopeSnapshotID,
-	}
-	sreq.SpaceID = actorSpaceID
-	sreq.DeviceID = actorDeviceID
-	result, err := h.sandboxHost.CreateSession(sreq)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "webui_session_create_failed", err.Error())
-		return
-	}
-	resourceURL := fmt.Sprintf("/api/extension/webui/resource/%s/%s", result.SessionID, def.Entry.Path)
-	capabilities := []string{"browser"}
-	if req.Host == "desktop" {
-		capabilities = append(capabilities, "desktop")
-	}
-	if req.CharacterID != "" {
-		capabilities = append(capabilities, "character")
-	}
-	if req.ConversationID != "" {
-		capabilities = append(capabilities, "conversation")
-	}
-	for _, perm := range auth.GrantedPerms {
-		if perm != "" {
-			capabilities = append(capabilities, "perm:"+perm)
-		}
-	}
-	for _, scope := range auth.GrantedScopes {
-		if scope != "" {
-			capabilities = append(capabilities, "scope:"+scope)
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"sessionId":     result.SessionID,
-		"generation":    def.Integrity.Generation,
-		"entryUrl":      result.EntryURL,
-		"resourceUrl":   resourceURL,
-		"origin":        result.Origin,
-		"nonce":         result.Nonce,
-		"token":         result.Token,
-		"csp":           result.CSP,
-		"capabilities":  capabilities,
-		"grantedPerms":  auth.GrantedPerms,
-		"grantedScopes": auth.GrantedScopes,
-	})
-}
-
-func (h *HTTPHandler) handleWebUISessionItem(w http.ResponseWriter, r *http.Request) {
-	segs := splitPath(r.URL.Path)
-	if len(segs) < 5 {
-		writeError(w, http.StatusNotFound, "not_found", "session id required")
-		return
-	}
-	sessionID := segs[4]
-	if len(segs) == 5 {
-		switch r.Method {
-		case http.MethodDelete:
-			if err := h.sandboxHost.CloseSession(sessionID, "api_request"); err != nil {
-				if !errors.Is(err, sandbox_webui.ErrSessionNotFound) {
-					writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
-					return
-				}
-			}
-			writeJSON(w, http.StatusOK, map[string]any{"closed": true, "sessionId": sessionID})
-		case http.MethodGet:
-			info, err := h.sandboxHost.GetSessionInfo(sessionID)
-			if err != nil {
-				writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
-				return
-			}
-			writeJSON(w, http.StatusOK, info)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		}
-		return
-	}
-	if len(segs) == 6 && segs[5] == "preload" {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-			return
-		}
-		script, err := h.sandboxHost.GetPreloadScript(sessionID)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "preload_failed", err.Error())
-			return
-		}
-		w.Header().Set("Content-Type", "application/javascript")
-		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(script))
-		return
-	}
-	writeError(w, http.StatusNotFound, "not_found", "unknown path")
-}
-
-func (h *HTTPHandler) handleWebUIPreload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		return
-	}
-	segs := splitPath(r.URL.Path)
-	if len(segs) < 5 {
-		writeError(w, http.StatusNotFound, "not_found", "session id required")
-		return
-	}
-	sessionID := segs[4]
-	script, err := h.sandboxHost.GetPreloadScript(sessionID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "preload_failed", err.Error())
-		return
-	}
-	w.Header().Set("Content-Type", "application/javascript")
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(script))
-}
-
-func (h *HTTPHandler) handleWebUIStats(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		return
-	}
-	stats := h.sandboxHost.GetStats()
-	writeJSON(w, http.StatusOK, stats)
-}
-
-func (h *HTTPHandler) handleWebUIResource(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		return
-	}
-	applyWebUIResourceCORS(w, r)
-	segs := splitPath(r.URL.Path)
-	if len(segs) < 6 {
-		writeError(w, http.StatusNotFound, "not_found", "session id and resource path required")
-		return
-	}
-	sessionID := segs[4]
-	resourcePath := strings.Join(segs[5:], "/")
-	if resourcePath == "" {
-		resourcePath = "index.html"
-	}
-	sess, err := h.sandboxHost.GetSession(sessionID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
-		return
-	}
-	if resourcePath == "__bridge__/bridge.js" {
-		script, err := h.sandboxHost.GetPreloadScript(sessionID)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "bridge_not_found", err.Error())
-			return
-		}
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Content-Security-Policy", sess.CSP)
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(script))
-		return
-	}
-	basePath := h.resolveExtensionBasePath(sess.ExtensionID)
-	if basePath == "" {
-		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
-		return
-	}
-	cleanPath, err := sandbox_webui.NewProtocolHandler().SanitizePath(basePath, resourcePath)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_path", err.Error())
-		return
-	}
-	fullPath := filepath.Join(basePath, cleanPath)
-	info, err := os.Stat(fullPath)
-	if err != nil || info.IsDir() {
-		writeError(w, http.StatusNotFound, "resource_not_found", "resource not found")
-		return
-	}
-	mime := sandbox_webui.LookupMIME(cleanPath)
-	if mime == "" {
-		writeError(w, http.StatusUnsupportedMediaType, "mime_not_allowed", "mime type not allowed")
-		return
-	}
-	if !sandbox_webui.IsMIMEAllowed(mime) {
-		writeError(w, http.StatusUnsupportedMediaType, "mime_not_allowed", "mime type not allowed")
-		return
-	}
-	content, err := os.ReadFile(fullPath)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "read_failed", err.Error())
-		return
-	}
-	if strings.HasSuffix(cleanPath, ".html") || strings.HasSuffix(cleanPath, ".htm") {
-		content = injectBridgeScript(content, sess.CSP, sessionID)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Security-Policy", sess.CSP)
-	} else {
-		w.Header().Set("Content-Type", mime)
-	}
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(content)
-}
-
-func applyWebUIResourceCORS(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Origin") != "null" {
-		return
-	}
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Vary", "Origin")
-}
-
-func (h *HTTPHandler) resolveExtensionBasePath(extensionID string) string {
-	if h.extRoot == "" || extensionID == "" {
-		return ""
-	}
-	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
-	installationsRoot := filepath.Join(h.extRoot, "installations", safeID)
-	if currentData, err := os.ReadFile(filepath.Join(installationsRoot, "current.json")); err == nil {
-		var current struct {
-			GenerationID string `json:"generationID"`
-		}
-		if json.Unmarshal(currentData, &current) == nil && current.GenerationID != "" {
-			candidate := filepath.Join(installationsRoot, "generations", current.GenerationID)
-			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
-				return candidate
-			}
-		}
-	}
-	installedRoot := filepath.Join(h.extRoot, "installed", safeID)
-	entries, err := os.ReadDir(installedRoot)
-	if err != nil {
-		return ""
-	}
-	for i := len(entries) - 1; i >= 0; i-- {
-		if !entries[i].IsDir() {
-			continue
-		}
-		versionDir := filepath.Join(installedRoot, entries[i].Name())
-		subEntries, err := os.ReadDir(versionDir)
-		if err != nil {
-			continue
-		}
-		for _, sub := range subEntries {
-			if !sub.IsDir() {
-				continue
-			}
-			candidate := filepath.Join(versionDir, sub.Name())
-			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
-				return candidate
-			}
-		}
-	}
-	return ""
-}
-
-func injectBridgeScript(html []byte, csp, sessionID string) []byte {
-	htmlStr := string(html)
-	if csp == "" {
-		csp = sandbox_webui.DefaultCSP
-	}
-	cspMeta := fmt.Sprintf(`<meta http-equiv="Content-Security-Policy" content="%s">`, csp)
-	scriptTag := fmt.Sprintf(`<script src="/api/extension/webui/resource/%s/__bridge__/bridge.js"></script>`, sessionID)
-	if idx := strings.LastIndex(htmlStr, "</head>"); idx >= 0 {
-		htmlStr = htmlStr[:idx] + cspMeta + "\n" + scriptTag + "\n" + htmlStr[idx:]
-	} else if idx := strings.LastIndex(htmlStr, "</body>"); idx >= 0 {
-		htmlStr = htmlStr[:idx] + cspMeta + "\n" + scriptTag + "\n" + htmlStr[idx:]
-	} else {
-		htmlStr = cspMeta + "\n" + scriptTag + "\n" + htmlStr
-	}
-	return []byte(htmlStr)
-}
-
-func (h *HTTPHandler) handleWebUIBridge(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		return
-	}
-	segs := splitPath(r.URL.Path)
-	if len(segs) < 5 {
-		writeError(w, http.StatusNotFound, "not_found", "session id required")
-		return
-	}
-	sessionID := segs[4]
-	sess, err := h.sandboxHost.GetSession(sessionID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
-		return
-	}
-	if sess.SpaceID == "" || sess.DeviceID == "" {
-		bindSpaceID := ""
-		bindDeviceID := ""
-		if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
-			bindSpaceID = actor.SpaceID.String()
-			bindDeviceID = actor.DeviceID.String()
-		}
-		if bindDeviceID == "" {
-			bindDeviceID = strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
-		}
-		if bindSpaceID != "" || bindDeviceID != "" {
-			if sess.BindIdentityIfNeeded(bindSpaceID, bindDeviceID) {
-				log.Printf("[ui-action] bridge identity backfill: session=%s user=%q device=%q", sessionID, sess.SpaceID, sess.DeviceID)
-			}
-		}
-	}
-	var msg sandbox_webui.BridgeMessage
-	if err := decodeJSON(r, &msg); err != nil {
-		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
-		return
-	}
-	msg.Session = sessionID
-	if err := sandbox_webui.ValidateBridgeMessage(&msg, sess); err != nil {
-		writeError(w, http.StatusForbidden, "bridge_invalid", err.Error())
-		return
-	}
-	bridge := h.sandboxHost.GetBridge()
-	if bridge == nil {
-		writeError(w, http.StatusInternalServerError, "bridge_unavailable", "bridge not initialized")
-		return
-	}
-	result, err := bridge.HandleMessage(r.Context(), sandbox_webui.InvokeRequest{
-		SessionID: sessionID,
-		Message:   msg,
-	})
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok":     false,
-			"method": msg.Method,
-			"id":     msg.ID,
-			"error":  err.Error(),
-		})
-		return
-	}
-	response := map[string]any{
-		"ok":     true,
-		"method": msg.Method,
-		"id":     msg.ID,
-	}
-	if result.Output != nil {
-		response["output"] = json.RawMessage(result.Output)
-	}
-	if result.Error != "" {
-		response["ok"] = false
-		response["error"] = result.Error
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
 func (h *HTTPHandler) handleAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -1717,6 +1274,9 @@ func (h *HTTPHandler) handleClipboardResponse(w http.ResponseWriter, r *http.Req
 
 func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID string, ctxMap map[string]any, input json.RawMessage) ui_contribution.BridgeResponse {
 	sessionID, _ := ctxMap["sessionId"].(string)
+	if strings.TrimSpace(sessionID) == "" {
+		return h.invokeHostGuardedAction(r, contributionID, actionID, ctxMap, input)
+	}
 	origin, _ := ctxMap["origin"].(string)
 	contractVersion := 0
 	switch v := ctxMap["contractVersion"].(type) {
@@ -1754,6 +1314,50 @@ func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID str
 	return h.uiHost.Bridge().Handle(r.Context(), msg)
 }
 
+func (h *HTTPHandler) invokeHostGuardedAction(r *http.Request, contributionID, actionID string, ctxMap map[string]any, input json.RawMessage) ui_contribution.BridgeResponse {
+	if h.uiHost == nil || h.authorizer == nil {
+		return ui_contribution.BridgeResponse{OK: false, Error: ui_contribution.NewUIError(ui_contribution.UIErrRuntimeUnavailable, "host action guard unavailable", nil)}
+	}
+	def, err := h.uiHost.GetContribution(ui_contribution.ContributionID(contributionID))
+	if err != nil {
+		return ui_contribution.BridgeResponse{OK: false, Error: ui_contribution.NewUIError(ui_contribution.UIErrRuntimeUnavailable, err.Error(), nil)}
+	}
+	characterID := mapString(ctxMap, "characterId")
+	conversationID := mapString(ctxMap, "conversationId")
+	sessionAuth, err := h.authorizer.AuthorizeSession(r.Context(), def, characterID, conversationID)
+	if err != nil {
+		return ui_contribution.BridgeResponse{OK: false, Error: ui_contribution.NewUIError(ui_contribution.UIErrPermissionDenied, err.Error(), nil)}
+	}
+	sess, err := h.uiHost.Bridge().CreateSession(def, "amitia-host", sessionAuth.GrantedScopes, sessionAuth.GrantedPerms, "same-page", characterID, conversationID, time.Minute)
+	if err != nil {
+		return ui_contribution.BridgeResponse{OK: false, Error: ui_contribution.NewUIError(ui_contribution.UIErrRuntimeUnavailable, err.Error(), nil)}
+	}
+	defer h.uiHost.Bridge().RevokeSession(sess.SessionID)
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		_ = h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.SpaceID.String(), strings.TrimSpace(actor.DeviceID.String()))
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"action_id": actionID,
+		"input":     input,
+	})
+	return h.uiHost.Bridge().Handle(r.Context(), ui_contribution.BridgeMessage{
+		Method:          ui_contribution.BridgeUIActionInvoke,
+		SessionID:       sess.SessionID,
+		ContributionID:  contributionID,
+		Origin:          sess.Origin,
+		ContractVersion: sess.ContractVersion,
+		Token:           sess.Token,
+		Generation:      sess.Generation,
+		Nonce:           uuid.NewString(),
+		Payload:         payload,
+	})
+}
+
+func mapString(values map[string]any, key string) string {
+	value, _ := values[key].(string)
+	return strings.TrimSpace(value)
+}
+
 type bridgeSessionResponse struct {
 	SessionID       string    `json:"sessionId"`
 	ContributionID  string    `json:"contributionId"`
@@ -1767,25 +1371,6 @@ type bridgeSessionResponse struct {
 	CreatedAt       time.Time `json:"createdAt"`
 	ExpiresAt       time.Time `json:"expiresAt"`
 	Token           string    `json:"token"`
-}
-
-func contributionActionIDs(def *ui_contribution.UIContributionDefinition) []string {
-	ids := make([]string, 0, len(def.Actions))
-	for _, action := range def.Actions {
-		ids = append(ids, action.ActionID)
-	}
-	return ids
-}
-
-func contributionDataSourceIDs(def *ui_contribution.UIContributionDefinition) []string {
-	if def == nil || len(def.DataSources) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(def.DataSources))
-	for _, ds := range def.DataSources {
-		ids = append(ids, ds.SourceID)
-	}
-	return ids
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

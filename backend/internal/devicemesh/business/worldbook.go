@@ -207,7 +207,7 @@ func (e *Engine) worldbookScope(ctx context.Context, request Request, input Worl
 		return ctx, scope, func() {}, err
 	}
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
-	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, ""); err != nil {
 		finish()
 		return ctx, scope, func() {}, err
 	}

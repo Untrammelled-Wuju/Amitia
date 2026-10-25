@@ -1,3 +1,6 @@
 /runtime/llbot/
 /data/
 *.log
+/runtime/node_modules/
+/runtime/dist/
+/.build/

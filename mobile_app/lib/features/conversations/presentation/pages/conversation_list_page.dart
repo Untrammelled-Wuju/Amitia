@@ -7,10 +7,15 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/compact_empty_state.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
+import '../../../chat/presentation/widgets/group_chat_invite_sheet.dart';
 import '../../../chat/runtime/conversation_runtime_controller.dart';
+import '../widgets/conversation_list_tile.dart';
 
 class ConversationListPage extends ConsumerStatefulWidget {
   const ConversationListPage({super.key});
@@ -21,66 +26,85 @@ class ConversationListPage extends ConsumerStatefulWidget {
 }
 
 class _ConversationListPageState extends ConsumerState<ConversationListPage> {
-  final _searchController = TextEditingController();
-  String _searchQuery = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+  void _startNewChat() {
+    ref.read(conversationRuntimeControllerProvider).startDraft();
+    ref.read(activeConversationIdProvider.notifier).state = '';
+    context.push(AppRoutes.chat);
   }
 
-  Map<String, List<ConversationDto>> _groupConversations(
-    List<ConversationDto> conversations,
-  ) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-
-    final todayList = <ConversationDto>[];
-    final yesterdayList = <ConversationDto>[];
-    final earlier = <ConversationDto>[];
-
-    for (final conv in conversations) {
-      final updatedAt = DateTime.tryParse(conv.updatedAt) ?? now;
-      final convDate = DateTime(updatedAt.year, updatedAt.month, updatedAt.day);
-      if (convDate == today) {
-        todayList.add(conv);
-      } else if (convDate == yesterday) {
-        yesterdayList.add(conv);
-      } else {
-        earlier.add(conv);
+  Future<void> _startNewGroupChat() async {
+    late final List<CharacterDto> characters;
+    try {
+      characters = await ref.read(characterListProvider.future);
+    } catch (error) {
+      if (mounted) {
+        amitiaSnackBar(context, '角色加载失败：$error');
       }
+      return;
     }
-
-    final groups = <String, List<ConversationDto>>{};
-    if (todayList.isNotEmpty) groups['今天'] = todayList;
-    if (yesterdayList.isNotEmpty) groups['昨天'] = yesterdayList;
-    if (earlier.isNotEmpty) groups['更早'] = earlier;
-    return groups;
-  }
-
-  String _formatTime(String updatedAt) {
-    final time = DateTime.tryParse(updatedAt);
-    if (time == null) return '';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final convDate = DateTime(time.year, time.month, time.day);
-    if (convDate == today) {
-      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    } else if (convDate == today.subtract(const Duration(days: 1))) {
-      return '昨天';
-    } else {
-      return '${time.month}/${time.day}';
-    }
+    if (!mounted) return;
+    final result = await createGroupChatWithInvites(
+      context,
+      ref,
+      characters: characters,
+    );
+    if (result == null || !mounted) return;
+    await context.push(
+      '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(result.group.conversationId)}&characterId=${Uri.encodeQueryComponent(result.baseRoleId)}',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final conversationsAsync = ref.watch(conversationListProvider);
+    final charactersById = <String, CharacterDto>{
+      for (final character
+          in ref.watch(characterListProvider).valueOrNull ??
+              const <CharacterDto>[])
+        if (character.id.isNotEmpty) character.id: character,
+    };
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '对话', showBackButton: true),
+      handlesSystemBack: false,
+      appBar: AmitiaAppBar(
+        title: '消息',
+        leading: const SizedBox.shrink(),
+        leadingWidth: 0,
+        actions: [
+          PopupMenuButton<_MessageCreateAction>(
+            key: const ValueKey('message-create-button'),
+            tooltip: '新建',
+            icon: const AmitiaIcon(AmitiaIconGlyph.add, size: 21),
+            onSelected: (action) {
+              switch (action) {
+                case _MessageCreateAction.chat:
+                  _startNewChat();
+                case _MessageCreateAction.group:
+                  _startNewGroupChat();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _MessageCreateAction.chat,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: AmitiaIcon(AmitiaIconGlyph.newChat),
+                  title: Text('新对话'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _MessageCreateAction.group,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: AmitiaIcon(AmitiaIconGlyph.newGroup),
+                  title: Text('新群聊'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -91,35 +115,42 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
             child: Row(
               children: [
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: context.surfacePrimary,
-                      borderRadius: AppRadius.brMedium,
-                      border: Border.all(
-                        color: context.borderPrimary,
-                        width: 0.5,
+                  child: Material(
+                    key: const ValueKey('message-search-field'),
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => context.push(AppRoutes.conversationSearch),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Ink(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: context.surfacePrimary,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: context.borderPrimary,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AmitiaIcon(
+                              AmitiaIconGlyph.search,
+                              size: 17,
+                              color: context.textTertiary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '搜索',
+                              style: AppTypography.bodySmall(
+                                context,
+                              ).copyWith(color: context.textTertiary),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: AmitiaSearchField(
-                      controller: _searchController,
-                      hintText: '搜索对话',
-                      onChanged: (v) => setState(() => _searchQuery = v),
-                    ),
                   ),
-                ),
-                SizedBox(width: AppSpacing.sm),
-                AmitiaIconButton(
-                  icon: Icons.add_comment_outlined,
-                  backgroundColor: context.accentPrimary,
-                  color: Colors.white,
-                  onPressed: () {
-                    ref
-                        .read(conversationRuntimeControllerProvider)
-                        .startDraft();
-                    ref.read(activeConversationIdProvider.notifier).state = '';
-                    context.go(AppRoutes.chat);
-                  },
                 ),
               ],
             ),
@@ -127,44 +158,71 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
           Expanded(
             child: conversationsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+              error: (err, _) {
+                if (err.toString().contains('没有可用角色')) {
+                  return ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      AppSpacing.xs,
+                      AppSpacing.pagePadding,
+                      AppSpacing.lg,
+                    ),
                     children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: context.textSecondary,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                        style: AppTypography.body(
-                          context,
-                        ).copyWith(color: context.error),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      AmitiaButton(
-                        label: '重试',
-                        onPressed: () =>
-                            ref.invalidate(conversationListProvider),
+                      CompactEmptyState(
+                        icon: Icons.person_add_alt_1_outlined,
+                        title: '还没有可用角色',
+                        message: '创建角色后即可开始聊天和创建群聊。',
+                        actionLabel: '创建角色',
+                        onAction: () =>
+                            context.push(AppRoutes.charactersCreate),
                       ),
                     ],
+                  );
+                }
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AmitiaIcon(
+                          AmitiaIconGlyph.warning,
+                          size: 48,
+                          color: context.textSecondary,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                          style: AppTypography.body(
+                            context,
+                          ).copyWith(color: context.error),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        AmitiaButton(
+                          label: '重试',
+                          onPressed: () =>
+                              ref.invalidate(conversationListProvider),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
               data: (conversations) {
-                final filtered = _searchQuery.isEmpty
-                    ? conversations
-                    : conversations.where((c) {
-                        return c.title.toLowerCase().contains(
-                          _searchQuery.toLowerCase(),
-                        );
-                      }).toList();
-                final groups = _groupConversations(filtered);
+                final filtered = List<ConversationDto>.of(conversations);
+                filtered.sort((a, b) {
+                  final aPinned = a.pinnedAt.trim().isNotEmpty;
+                  final bPinned = b.pinnedAt.trim().isNotEmpty;
+                  if (aPinned != bPinned) return aPinned ? -1 : 1;
+                  final aTime =
+                      DateTime.tryParse(a.updatedAt) ??
+                      DateTime.fromMillisecondsSinceEpoch(0);
+                  final bTime =
+                      DateTime.tryParse(b.updatedAt) ??
+                      DateTime.fromMillisecondsSinceEpoch(0);
+                  return bTime.compareTo(aTime);
+                });
                 if (filtered.isEmpty) {
                   return AmitiaEmptyState(
                     icon: Icons.chat_bubble_outline,
@@ -172,39 +230,25 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                     subtitle: '试试其他关键词，或者新建一个对话',
                   );
                 }
-                return ListView(
+                return ListView.builder(
                   padding: EdgeInsets.only(bottom: AppSpacing.lg),
-                  children: groups.entries.map((entry) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            AppSpacing.pagePadding,
-                            AppSpacing.md,
-                            AppSpacing.pagePadding,
-                            AppSpacing.xs,
-                          ),
-                          child: Text(
-                            entry.key,
-                            style: AppTypography.label(context),
-                          ),
-                        ),
-                        ...entry.value.map(
-                          (conv) => _ConversationItem(
-                            conversation: conv,
-                            timeText: _formatTime(conv.updatedAt),
-                            onTap: () {
-                              final uri =
-                                  '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conv.id)}';
-                              context.go(uri);
-                            },
-                            onMore: () => _showActionsSheet(conv),
-                          ),
-                        ),
-                      ],
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final conversation = filtered[index];
+                    return ConversationListTile(
+                      key: ValueKey('conversation-${conversation.id}'),
+                      conversation: conversation,
+                      character: charactersById[conversation.characterId],
+                      timeText: formatConversationTime(conversation.updatedAt),
+                      showDivider: index < filtered.length - 1,
+                      onTap: () {
+                        final uri =
+                            '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conversation.id)}';
+                        context.push(uri);
+                      },
+                      onLongPress: () => _showActionsSheet(conversation),
                     );
-                  }).toList(),
+                  },
                 );
               },
             ),
@@ -318,102 +362,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
   }
 }
 
-class _ConversationItem extends StatelessWidget {
-  final ConversationDto conversation;
-  final String timeText;
-  final VoidCallback onTap;
-  final VoidCallback onMore;
-
-  const _ConversationItem({
-    required this.conversation,
-    required this.timeText,
-    required this.onTap,
-    required this.onMore,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onMore,
-      child: Container(
-        margin: EdgeInsets.symmetric(
-          horizontal: AppSpacing.pagePadding,
-          vertical: 3,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: context.surfacePrimary,
-          borderRadius: AppRadius.brMedium,
-          border: Border.all(color: context.borderPrimary, width: 0.5),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: context.accentPrimary,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  conversation.title.isNotEmpty ? conversation.title[0] : '?',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Flexible(
-                    child: Text(
-                      conversation.title,
-                      style: AppTypography.body(
-                        context,
-                      ).copyWith(fontWeight: FontWeight.w500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${conversation.messageCount} 条消息',
-                    style: AppTypography.caption(context),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(timeText, style: AppTypography.label(context)),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: onMore,
-                  child: Icon(
-                    Icons.more_horiz,
-                    size: 18,
-                    color: context.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+enum _MessageCreateAction { chat, group }
 
 class _SheetActionItem extends StatelessWidget {
   final IconData icon;
@@ -439,7 +388,11 @@ class _SheetActionItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
           children: [
-            Icon(icon, size: 22, color: iconColor ?? context.textSecondary),
+            AmitiaIcon.adaptive(
+              icon,
+              size: 22,
+              color: iconColor ?? context.textSecondary,
+            ),
             const SizedBox(width: 16),
             Text(
               label,

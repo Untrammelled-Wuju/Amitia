@@ -21,7 +21,7 @@ func (s *OwnershipStore) validateMemoryTransfer(ctx context.Context, tx *sql.Tx,
 	if transfer.Kind != "memory" && transfer.Kind != "continuity" || transfer.ID == "" || transfer.ToRoleID == "" || transfer.ToRoleID == StorageRole(commit.Scope, transfer.Kind) || commit.LeaseProof != nil {
 		return ErrWrongOwner
 	}
-	if transfer.ToRoleID != GlobalMemoryRole && transfer.TargetRoleRevision < 1 {
+	if transfer.TargetRoleRevision < 1 {
 		return ErrWrongOwner
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT kind,resource_id,role_id,revision,source_id,CAST(body AS BLOB) FROM kernel_device_owned_resources WHERE owner_id=? AND deleted=0 AND ((kind=? AND resource_id=?) OR (?='memory' AND source_id=? AND kind IN ('fact','episodic','vector','graph')))`, s.ownerID, transfer.Kind, transfer.ID, transfer.Kind, transfer.ID)

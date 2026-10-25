@@ -150,36 +150,6 @@ function main() {
   rmSync(outputFile, { force: true });
   copyFileSync(join(packageRoot, "src", "index.mjs"), join(stagingRoot, "modules", "emote-runtime", "dist", "index.js"));
   writeFileSync(join(stagingRoot, "modules", "emote-runtime", "package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`);
-  const desktopUiFiles = [
-    "index.html",
-    "index.js",
-    "styles.css",
-    "composer.html",
-    "composer.js",
-    "composer.css",
-    "message.html",
-    "message.js",
-    "message.css",
-  ];
-  const mobileUiFiles = [
-    "index.html",
-    "styles.css",
-    "composer.html",
-    "composer.css",
-    "message.html",
-    "message.css",
-    "shell.js",
-  ];
-  const mobileScriptFiles = ["index.js", "composer.js", "message.js"];
-  for (const file of desktopUiFiles) {
-    copyFileSync(join(packageRoot, "ui", file), join(stagingRoot, "modules", "emote-ui", "desktop", file));
-  }
-  for (const file of mobileUiFiles) {
-    copyFileSync(join(packageRoot, "ui", "mobile", file), join(stagingRoot, "modules", "emote-ui", "mobile", file));
-  }
-  for (const file of mobileScriptFiles) {
-    copyFileSync(join(packageRoot, "ui", file), join(stagingRoot, "modules", "emote-ui", "mobile", file));
-  }
   for (const target of ["desktop", "mobile"]) {
     const schemas = [
       [`${target}-index.json`, "index.schema.json"],

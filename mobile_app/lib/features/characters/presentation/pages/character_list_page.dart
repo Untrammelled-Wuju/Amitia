@@ -13,7 +13,8 @@ import '../../../../core/backend_connection/backend_connection_availability.dart
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/widgets/amitia_character_card.dart';
+import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/role_authority.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';

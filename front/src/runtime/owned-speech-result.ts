@@ -1,6 +1,6 @@
 import type { OwnedExecutionScope } from "./device-owned-chat";
 
-export const ownedAuthorityFields: Array<keyof OwnedExecutionScope> = ["authorizationRealm", "spaceId", "initiatorDeviceId", "targetDeviceId", "coreId", "providerEpoch", "coordinated", "modeRevision", "permissionRevision", "targetPermissionRevision", "targetProviderEpoch", "roleId", "roleRevision", "roleOwnerId", "resourceOwnerId"];
+export const ownedAuthorityFields: Array<keyof OwnedExecutionScope> = ["authorizationRealm", "conversationRoleId", "spaceId", "initiatorDeviceId", "targetDeviceId", "coreId", "providerEpoch", "coordinated", "modeRevision", "permissionRevision", "targetPermissionRevision", "targetProviderEpoch", "roleId", "roleRevision", "roleOwnerId", "resourceOwnerId"];
 export const sameOwnedAuthority = (left: OwnedExecutionScope, right: OwnedExecutionScope) => ownedAuthorityFields.every((key) => left?.[key] === right?.[key]);
 
 export async function validateOwnedSpeechResult(result: any, requestId: string, expected: OwnedExecutionScope): Promise<Uint8Array> {

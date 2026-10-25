@@ -249,9 +249,6 @@ func (e *Engine) memoryDeletionProgress(ctx context.Context, scope coordination.
 func (e *Engine) MemoryDeletionState(ctx context.Context, request Request, address MemoryDeletionAddress) (MemoryDeletionStatus, error) {
 	request.RoleID = address.RoleID
 	request.MemoryView = "role:" + address.Partition
-	if address.Partition == coordination.GlobalMemoryRole {
-		request.MemoryView = "global"
-	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return MemoryDeletionStatus{}, err

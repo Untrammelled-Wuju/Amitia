@@ -178,6 +178,15 @@ const api = {
     return () =>
       ipcRenderer.removeListener(IPC_CHANNELS.uiStyleCommand, listener);
   },
+  acquireExternalWebUI(request: unknown): Promise<unknown> {
+    return ipcRenderer.invoke(IPC_CHANNELS.externalWebUIAcquire, request);
+  },
+  releaseExternalWebUI(lease: string): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.externalWebUIRelease, lease);
+  },
+  clearExternalWebUI(request: unknown): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.externalWebUIClear, request);
+  },
   onRuntimeStatusChanged(
     callback: (status: RuntimeStatus) => void,
   ): () => void {

@@ -8,7 +8,7 @@
     "description": {
       "default": "提供表情包管理、AI 表情选择、聊天发送和消息渲染。"
     },
-    "version": "1.0.27",
+    "version": "1.1.4",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -44,10 +44,19 @@
         "default": "表情包运行时"
       },
       "description": {
-        "default": "管理插件自有表情数据、资源、向量和发送决策。"
+        "default": "管理插件自有表情数据、资源和发送决策。"
       },
       "type": "javascript",
       "placement": "device",
+      "deviceRequirements": {
+        "platforms": [
+          "windows",
+          "linux",
+          "macos",
+          "android",
+          "ios"
+        ]
+      },
       "runtime": {
         "type": "javascript",
         "entryPoint": "dist/index.js",
@@ -57,8 +66,28 @@
         "capabilities": {
           "network": false,
           "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
         }
       },
+      "providedCapabilities": [
+        {
+          "id": "com.amitia/emote/ai",
+          "version": "1.0.0",
+          "metadata": {
+            "toolId": "com.amitia/emote/ai"
+          }
+        }
+      ],
       "contributions": [
         {
           "id": "emote-command",
@@ -74,10 +103,7 @@
             "storage.state.write",
             "resource.read",
             "resource.write",
-            "message.append",
-            "vector.read",
-            "vector.write",
-            "character.read"
+            "message.append"
           ],
           "spec": {
             "toolId": "com.amitia/emote/command",
@@ -145,47 +171,71 @@
           }
         },
         {
-          "id": "emote-output",
+          "id": "emote-ai",
           "kind": "tool",
           "name": {
-            "default": "表情包回复输出"
+            "default": "AI 表情选择"
           },
           "description": {
-            "default": "根据回复上下文规划通用媒体消息。"
+            "default": "回复适合使用表情时，先调用 action=list 获取可用表情的 id、名称、含义和关键词，由模型根据当前语境自主选择最合适的表情，再调用 action=send 发送。"
           },
           "requiredPermissions": [
             "storage.state.read",
             "storage.state.write",
             "resource.read",
             "resource.write",
-            "vector.read"
+            "message.append"
           ],
           "spec": {
-            "toolId": "com.amitia/emote/output",
-            "handlerName": "output",
+            "toolId": "com.amitia/emote/ai",
+            "modelName": "emote",
+            "handlerName": "ai",
             "inputSchema": {
               "type": "object",
-              "additionalProperties": true
-            },
-            "outputSchema": {
-              "type": "object",
+              "required": [
+                "action"
+              ],
               "properties": {
-                "outputs": {
-                  "type": "array"
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "list",
+                    "send"
+                  ]
+                },
+                "emoteId": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "characterId": {
+                  "type": "string"
+                },
+                "conversationId": {
+                  "type": "string"
+                },
+                "channel": {
+                  "type": "string"
+                },
+                "replyToMessageId": {
+                  "type": "string"
+                },
+                "requestId": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false
             },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
             "riskLevel": "medium",
             "sideEffect": "write",
-            "internal": true,
-            "metadata": {
-              "amitia.message.outputs": true,
-              "amitia.message.priority": 100
-            },
             "runtime": {
               "runtimeType": "javascript",
-              "handlerName": "output"
+              "handlerName": "ai"
             }
           }
         }
@@ -694,24 +744,6 @@
       "reason": "把用户选择的表情作为通用图片消息写入当前聊天。",
       "required": true,
       "scope": "conversation"
-    },
-    {
-      "name": "character.read",
-      "reason": "读取当前角色信息以匹配角色专属表情。",
-      "required": true,
-      "scope": "global"
-    },
-    {
-      "name": "vector.read",
-      "reason": "在插件自有向量集合中搜索合适的表情。",
-      "required": true,
-      "scope": "extension"
-    },
-    {
-      "name": "vector.write",
-      "reason": "维护插件自有表情向量。",
-      "required": true,
-      "scope": "extension"
     },
     {
       "name": "tool.invoke",

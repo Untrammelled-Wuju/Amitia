@@ -89,6 +89,86 @@ func (p *meshLocalDataPort) ListOwnedRoleCatalog(ctx context.Context, scope coor
 	return result, err
 }
 
+func (p *meshLocalDataPort) GroupState(ctx context.Context, scope coordination.ExecutionScope, conversationID string) (coordination.GroupState, error) {
+	if strings.TrimSpace(conversationID) == "" || scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID || scope.RoleID == "" {
+		return coordination.GroupState{}, coordination.ErrWrongOwner
+	}
+	resource, err := p.store.Get(ctx, "conversation", conversationID)
+	if err != nil {
+		return coordination.GroupState{}, err
+	}
+	if resource == nil || resource.Deleted || resource.OwnerID != p.ownerID {
+		return coordination.GroupState{}, nil
+	}
+	state := coordination.GroupState{ConversationID: conversationID, ConversationRoleID: resource.RoleID, ConversationRevision: resource.Revision, RoleOwnerID: p.ownerID, ConversationType: "single", MembershipRevision: 1, SettingsRevision: 1}
+	if err := json.Unmarshal(resource.Body, &state); err != nil {
+		return coordination.GroupState{}, coordination.ErrWrongOwner
+	}
+	state.ConversationID = conversationID
+	state.ConversationRoleID = resource.RoleID
+	state.ConversationRevision = resource.Revision
+	state.RoleOwnerID = p.ownerID
+	if state.ConversationType == "" {
+		state.ConversationType = "single"
+	}
+	if state.MembershipRevision < 1 {
+		state.MembershipRevision = 1
+	}
+	if state.SettingsRevision < 1 {
+		state.SettingsRevision = 1
+	}
+	if state.Settings.MaxAutoReplies < 0 || state.Settings.MaxAutoReplies > coordination.GroupDefaultAutoReplies {
+		state.Settings.MaxAutoReplies = coordination.GroupDefaultAutoReplies
+	}
+	if !state.IsGroup() {
+		if scope.RoleID != resource.RoleID {
+			return coordination.GroupState{}, coordination.ErrWrongOwner
+		}
+		return state, state.Validate()
+	}
+	if _, ok := state.ActiveMember(scope.RoleID); !ok {
+		return coordination.GroupState{}, coordination.ErrWrongOwner
+	}
+	return state, state.Validate()
+}
+
+func (p *meshLocalDataPort) GroupConversations(ctx context.Context, scope coordination.ExecutionScope) ([]coordination.Resource, map[string]string, error) {
+	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID || scope.RoleID == "" {
+		return nil, nil, coordination.ErrWrongOwner
+	}
+	rows, err := p.services.KernelContainer.DeviceRegistry.Database().QueryContext(ctx, `SELECT resource_id,role_id,revision,body FROM kernel_device_owned_resources WHERE owner_id=? AND kind='conversation' AND deleted=0 ORDER BY updated_at DESC,resource_id DESC LIMIT 4096`, p.ownerID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	resources := make([]coordination.Resource, 0)
+	roles := make(map[string]string)
+	for rows.Next() {
+		var resource coordination.Resource
+		var body []byte
+		if err := rows.Scan(&resource.ID, &resource.RoleID, &resource.Revision, &body); err != nil {
+			return nil, nil, err
+		}
+		resource.OwnerID = p.ownerID
+		resource.Kind = "conversation"
+		resource.Body = json.RawMessage(body)
+		var state coordination.GroupState
+		if json.Unmarshal(resource.Body, &state) != nil || state.ConversationType != "group" {
+			continue
+		}
+		state.RoleOwnerID = p.ownerID
+		if _, ok := state.ActiveMember(scope.RoleID); !ok {
+			continue
+		}
+		resources = append(resources, resource)
+		roles[resource.ID] = resource.RoleID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return resources, roles, nil
+}
+
 func (p *meshLocalDataPort) roleCatalogLocked(ctx context.Context, scope coordination.ExecutionScope, includeDisabled bool) ([]coordination.Role, error) {
 	if scope.RoleOwnerID != p.ownerID || scope.ResourceOwnerID != p.ownerID {
 		return nil, coordination.ErrWrongOwner
@@ -188,9 +268,28 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 	if scope.ResourceOwnerID != p.ownerID || scope.RoleOwnerID != p.ownerID || scope.RoleID != role.ID || role.Revision != scope.RoleRevision {
 		return coordination.DataSnapshot{}, coordination.ErrWrongOwner
 	}
-	snapshot := coordination.DataSnapshot{OwnerID: p.ownerID, Role: role, Resources: make([]coordination.Resource, 0), NextCursors: make(map[string]string)}
+	if query.ConversationID != "" {
+		group, err := p.GroupState(ctx, scope, query.ConversationID)
+		if err != nil {
+			return coordination.DataSnapshot{}, err
+		}
+		if group.IsGroup() {
+			scope.ConversationRoleID = group.ConversationRoleID
+			query.GroupVisibilityStart = 0
+			if member, ok := group.ActiveMember(scope.RoleID); ok {
+				query.GroupVisibilityStart = member.HistoryStart
+			}
+			snapshotGroup := group
+			snapshotGroup.Members = append([]coordination.GroupMember(nil), group.Members...)
+			query.GroupState = &snapshotGroup
+		}
+	}
+	snapshot := coordination.DataSnapshot{OwnerID: p.ownerID, Role: role, Resources: make([]coordination.Resource, 0), NextCursors: make(map[string]string), Group: query.GroupState, GroupRoles: make(map[string]string)}
+	if snapshot.Group != nil {
+		snapshot.GroupRoles[snapshot.Group.ConversationID] = snapshot.Group.ConversationRoleID
+	}
 	usableMemories := make(map[string]bool)
-	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", business.EmotionSnapshotKind, "checkpoint", "project", "tool-result", "worldbook", coordination.RuntimeStateKindPsyche, coordination.RuntimeStateKindRelationship, coordination.RuntimeStateKindNeeds} {
+	for _, kind := range []string{"memory", "conversation", "message", "summary", "working", "profile", "episodic", "fact", "vector", "graph", "continuity", business.EmotionSnapshotKind, "checkpoint", "project", "tool-result", "worldbook", "group-round", "group-delivery", "group-invitation", coordination.RuntimeStateKindPsyche, coordination.RuntimeStateKindRelationship, coordination.RuntimeStateKindNeeds} {
 		if kind == "tool-result" && !query.RuntimeTurns {
 			continue
 		}
@@ -262,9 +361,6 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 						return snapshot, err
 					}
 					expectedSourceRole := coordination.StorageRole(scope, "memory")
-					if kind == "profile" {
-						expectedSourceRole = coordination.GlobalMemoryRole
-					}
 					usableMemories[resource.SourceID] = source != nil && !source.Deleted && source.RoleID == expectedSourceRole && coordination.ResourceUsable(source.Body, time.Now())
 					if usableMemories[resource.SourceID] && source.RoleID == coordination.StorageRole(scope, "memory") {
 						alreadyPresent := false
@@ -307,7 +403,10 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 			if kind == "conversation" && !query.ListConversations && resource.ID != query.ConversationID {
 				continue
 			}
-			if kind == "message" || kind == "summary" || kind == "working" {
+			if kind == "summary" && query.GroupVisibilityStart > 0 {
+				continue
+			}
+			if kind == "message" || kind == "summary" || kind == "working" || kind == "group-round" || kind == "group-delivery" || kind == "group-invitation" {
 				var location struct {
 					ConversationID string `json:"conversationId"`
 				}
@@ -319,6 +418,23 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 				}
 			}
 			snapshot.Resources = append(snapshot.Resources, resource)
+		}
+	}
+	if query.ListConversations {
+		groupResources, groupRoles, err := p.GroupConversations(ctx, scope)
+		if err != nil {
+			return snapshot, err
+		}
+		seen := make(map[string]bool)
+		for _, resource := range snapshot.Resources {
+			seen[resource.Kind+"/"+resource.ID] = true
+		}
+		for _, resource := range groupResources {
+			if seen[resource.Kind+"/"+resource.ID] {
+				continue
+			}
+			snapshot.Resources = append(snapshot.Resources, resource)
+			snapshot.GroupRoles[resource.ID] = groupRoles[resource.ID]
 		}
 	}
 	if (query.ResourceKind == "" || query.ResourceKind == "worldbook") && scope.WorldbookRoleID != coordination.GlobalWorldbookRole {
@@ -785,7 +901,7 @@ func (p *meshLocalDataPort) Commit(ctx context.Context, commit coordination.Comm
 	if role.Revision != commit.Scope.RoleRevision {
 		return coordination.Acknowledgement{}, coordination.ErrScopeExpired
 	}
-	if commit.MemoryTransfer != nil && commit.MemoryTransfer.ToRoleID != coordination.GlobalMemoryRole {
+	if commit.MemoryTransfer != nil {
 		target, err := coordination.ResolveRole(commit.MemoryTransfer.ToRoleID, roles)
 		if err != nil || target.Revision != commit.MemoryTransfer.TargetRoleRevision {
 			return coordination.Acknowledgement{}, coordination.ErrScopeExpired

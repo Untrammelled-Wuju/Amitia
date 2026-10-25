@@ -5,7 +5,6 @@ import { Fold, Expand } from "@element-plus/icons-vue";
 import { fetchContributions } from "@/api/extension";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import SchemaUIRenderer from "./SchemaUIRenderer.vue";
-import SandboxWebUIFrame from "./SandboxWebUIFrame.vue";
 
 interface ChatSidebarItem {
   contribution: UIContributionSummary;
@@ -73,11 +72,11 @@ function openAll() {
   }
 }
 
-function getRendererType(contribution: UIContributionSummary): "schema-ui" | "web-ui" {
+function getRendererType(contribution: UIContributionSummary): "schema-ui" | "unsupported" {
   if (contribution.schemaPath || contribution.sandbox === "schema_renderer") {
     return "schema-ui";
   }
-  return "web-ui";
+  return "unsupported";
 }
 
 let resizeState: { startX: number; startWidth: number } | null = null;
@@ -149,12 +148,7 @@ onBeforeUnmount(() => {
               :context="context ?? {}"
               :slot-id="slotId"
             />
-            <SandboxWebUIFrame
-              v-else
-              :contribution="item.contribution"
-              :context="context ?? {}"
-              :slot-id="slotId"
-            />
+            <div v-else class="chat-sidebar-host__empty">该侧边栏需要 provider 客户端入口</div>
           </div>
         </div>
       </div>

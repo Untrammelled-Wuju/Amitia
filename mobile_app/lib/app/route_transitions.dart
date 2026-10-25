@@ -96,13 +96,26 @@ CustomTransitionPage<T> chatRootPage<T>({
   return CustomTransitionPage<T>(
     key: state.pageKey,
     child: child,
-    transitionDuration: Duration.zero,
-    reverseTransitionDuration: Duration.zero,
+    transitionDuration: AppMotion.panel,
+    reverseTransitionDuration: AppMotion.standard,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       if (MediaQuery.maybeOf(context)?.disableAnimations == true) return child;
+      final incomingAnimation = CurvedAnimation(
+        parent: animation,
+        curve: AppMotion.enterCurve,
+        reverseCurve: AppMotion.exitCurve,
+      );
+      final slide = Tween<Offset>(
+        begin: const Offset(1.0, 0.0),
+        end: Offset.zero,
+      ).animate(incomingAnimation);
+      final page = FadeTransition(
+        opacity: incomingAnimation,
+        child: SlideTransition(position: slide, child: child),
+      );
       return backTargetTransition(
         secondaryAnimation: secondaryAnimation,
-        child: child,
+        child: page,
       );
     },
   );

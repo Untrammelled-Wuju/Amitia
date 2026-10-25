@@ -122,4 +122,51 @@ func TestProviderDefinitionsHonorRuntimeOverride(t *testing.T) {
 	if len(definitions) != 1 || definitions[0].Runtime.RuntimeType != RuntimeTypeWorkspace || definitions[0].Runtime.HandlerName != "workspace.manage" {
 		t.Fatalf("unexpected provider definition: %+v", definitions)
 	}
+	if definitions[0].Runtime.Metadata["extensionId"] != "com.amitia.builtin.workspace" || definitions[0].Runtime.Metadata["moduleId"] != "workspace-runtime" {
+		t.Fatalf("runtime identity metadata missing: %+v", definitions[0].Runtime.Metadata)
+	}
+}
+
+func TestProviderInstanceReconcilerTreatsPluginJavaScriptAsInProcess(t *testing.T) {
+	registry := NewProviderRegistry()
+	adapters := NewRuntimeAdapterRegistry()
+	adapters.Register(RuntimeTypePluginJS, NewJavaScriptRuntimeAdapter(nil, func(context.Context, string, string) HealthStatus {
+		return HealthReady
+	}))
+	reconciler := NewProviderInstanceReconcilerWithAdapters(nil, registry, runtimeidentity.Identity{
+		SpaceID:   "realm",
+		DeviceID:  "local-device",
+		RuntimeID: "local-runtime",
+	}, adapters)
+	definition := domain.ExtensionDefinition{
+		ID: "com.example/plugin",
+		Modules: []domain.ModuleDefinition{{
+			ID:          "plugin-runtime",
+			ExtensionID: "com.example/plugin",
+			Type:        domain.ModuleTypeJavaScript,
+			Runtime: &domain.RuntimeDefinition{
+				Type:       domain.RuntimeTypeJavaScript,
+				EntryPoint: "dist/index.js",
+			},
+			ProvidedCapabilities: []domain.ProvidedCapability{{ID: "com.example/plugin/ai", Version: "1.0.0"}},
+			Placement:            domain.ModulePlacementDevice,
+			DeviceRequirements:   &domain.DeviceRequirements{Platforms: []string{"macos"}},
+		}},
+	}
+	definitions, err := ProviderDefinitionsFromExtension(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, providerDefinition := range definitions {
+		if err := registry.RegisterDefinition(providerDefinition); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := reconciler.ActivateExtension(definition, nil); err != nil {
+		t.Fatal(err)
+	}
+	instances := registry.ListInstancesByCapability("com.example/plugin/ai")
+	if len(instances) != 1 || !instances[0].IsExecutable() {
+		t.Fatalf("expected executable plugin javascript instance, got %+v", instances)
+	}
 }

@@ -9,38 +9,37 @@ export interface LoadedExtension {
 }
 
 const FORBIDDEN_BUILTINS: Set<string> = new Set([
-  "child_process",
-  "cluster",
-  "dgram",
-  "dns",
   "electron",
-  "fs",
-  "fs/promises",
-  "http",
-  "https",
-  "net",
-  "os",
-  "readline",
-  "tls",
   "v8",
   "vm",
+]);
+
+const PROCESS_BUILTINS: Set<string> = new Set([
+  "child_process",
+  "cluster",
+  "os",
+  "readline",
   "worker_threads",
 ]);
 
 const NETWORK_BUILTINS: Set<string> = new Set([
-  "child_process",
-  "cluster",
   "dgram",
   "dns",
   "http",
   "https",
-  "module",
   "net",
   "tls",
 ]);
 
+const FILESYSTEM_BUILTINS: Set<string> = new Set([
+  "fs",
+  "fs/promises",
+]);
+
 export interface ModuleLoadOptions {
   networkDisabled?: boolean;
+  filesystemDisabled?: boolean;
+  processDisabled?: boolean;
 }
 
 function builtinName(request: string): string {
@@ -56,6 +55,12 @@ function isForbiddenRequest(request: string, extensionRoot: string, options: Mod
   }
   const name = builtinName(request);
   if (FORBIDDEN_BUILTINS.has(name)) {
+    return true;
+  }
+  if (options.filesystemDisabled && FILESYSTEM_BUILTINS.has(name)) {
+    return true;
+  }
+  if (options.processDisabled && PROCESS_BUILTINS.has(name)) {
     return true;
   }
   if (options.networkDisabled && NETWORK_BUILTINS.has(name)) {
@@ -109,6 +114,9 @@ export function loadExtension(entryPath: string, options: ModuleLoadOptions = {}
     };
 
     const content = fs.readFileSync(absoluteEntry, "utf-8");
+    if (options.networkDisabled && /\bimport\s*\(/.test(content)) {
+      throw new Error("Dynamic import is not allowed when network access is disabled");
+    }
     (mod as any)._compile(content, absoluteEntry);
 
     if (!captured && mod.exports) {

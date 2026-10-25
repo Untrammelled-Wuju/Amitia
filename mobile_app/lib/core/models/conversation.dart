@@ -9,6 +9,7 @@ class ConversationDto {
   final String channel;
   final String source;
   final int messageCount;
+  final String lastMessage;
   final String pinnedAt;
   final String archivedAt;
   final String createdAt;
@@ -33,6 +34,7 @@ class ConversationDto {
     this.channel = '',
     this.source = '',
     this.messageCount = 0,
+    this.lastMessage = '',
     this.pinnedAt = '',
     this.archivedAt = '',
     this.createdAt = '',
@@ -62,7 +64,17 @@ class ConversationDto {
       title: json['title'] as String? ?? '',
       channel: json['channel'] as String? ?? '',
       source: json['source'] as String? ?? '',
-      messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
+      messageCount:
+          ((json['messageCount'] ?? json['lastMessageSequence']) as num?)
+              ?.toInt() ??
+          0,
+      lastMessage:
+          (json['lastMessage'] ??
+                  json['lastMessagePreview'] ??
+                  json['preview'] ??
+                  json['lastContent'] ??
+                  '')
+              .toString(),
       pinnedAt: (json['pinnedAt'] ?? '').toString(),
       archivedAt: (json['archivedAt'] ?? '').toString(),
       createdAt: json['createdAt'] as String? ?? '',
@@ -75,7 +87,11 @@ class ConversationDto {
       hasUnread: json['hasUnread'] == true,
       modelConfigId: (json['modelConfigId'] as num?)?.toInt() ?? 0,
       reasoningEffort: (json['reasoningEffort'] ?? '').toString(),
-      reasoningEnabled: (json['reasoningEnabled'] as num?)?.toInt() ?? -1,
+      reasoningEnabled: switch (json['reasoningEnabled']) {
+        final num value => value.toInt(),
+        final bool value => value ? 1 : 0,
+        _ => -1,
+      },
       permissionMode: (json['permissionMode'] ?? 'request_approval').toString(),
     );
   }
@@ -93,6 +109,10 @@ class MessageDto {
   final int? sourceRevision;
   final String conversationId;
   final String characterId;
+  final String characterName;
+  final String characterAvatar;
+  final String groupRoundId;
+  final String deliveryId;
   final String role;
   final String content;
   final String reasoningContent;
@@ -128,6 +148,10 @@ class MessageDto {
     this.sourceRevision,
     required this.conversationId,
     this.characterId = '',
+    this.characterName = '',
+    this.characterAvatar = '',
+    this.groupRoundId = '',
+    this.deliveryId = '',
     required this.role,
     required this.content,
     this.reasoningContent = '',
@@ -171,6 +195,10 @@ class MessageDto {
       sourceRevision: (json['sourceRevision'] as num?)?.toInt(),
       conversationId: (json['conversationId'] ?? '').toString(),
       characterId: (json['characterId'] ?? '').toString(),
+      characterName: (json['characterName'] ?? '').toString(),
+      characterAvatar: (json['characterAvatar'] ?? '').toString(),
+      groupRoundId: (json['groupRoundId'] ?? '').toString(),
+      deliveryId: (json['deliveryId'] ?? '').toString(),
       role: json['role'] as String? ?? '',
       content: json['content'] as String? ?? '',
       reasoningContent: json['reasoningContent'] as String? ?? '',
@@ -194,9 +222,9 @@ class MessageDto {
       replyToExcerpt: json['replyToExcerpt'] as String?,
       citationSnapshot: json['citationSnapshot'] is List
           ? (json['citationSnapshot'] as List)
-              .whereType<Map>()
-              .map((entry) => Map<String, dynamic>.from(entry))
-              .toList(growable: false)
+                .whereType<Map>()
+                .map((entry) => Map<String, dynamic>.from(entry))
+                .toList(growable: false)
           : const <Map<String, dynamic>>[],
     );
   }
@@ -279,9 +307,9 @@ class AssistantTurnItemDto {
       messageId: (json['messageId'] ?? '').toString(),
       citationSnapshot: json['citationSnapshot'] is List
           ? (json['citationSnapshot'] as List)
-              .whereType<Map>()
-              .map((entry) => Map<String, dynamic>.from(entry))
-              .toList(growable: false)
+                .whereType<Map>()
+                .map((entry) => Map<String, dynamic>.from(entry))
+                .toList(growable: false)
           : const <Map<String, dynamic>>[],
       citationSnapshotProvided: json.containsKey('citationSnapshot'),
       createdAt: (json['createdAt'] ?? '').toString(),

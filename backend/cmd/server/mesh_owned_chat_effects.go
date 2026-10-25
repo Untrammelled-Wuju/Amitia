@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/business"
@@ -38,9 +39,12 @@ func (p *meshLocalDataPort) CommitOwnedChatEffects(ctx context.Context, scope co
 			return coordination.ValidateSourceAuthority(current, db, scope)
 		})
 	}
-	return p.WithSourceRole(ctx, scope, func() error {
+	if err := p.WithSourceRole(ctx, scope, func() error {
 		return coordination.CommitCurrent(ctx, func() error { return p.commitOwnedChatEffectsLocked(ctx, scope, request) })
-	})
+	}); err != nil {
+		return fmt.Errorf("群聊回复后处理失败: %w", err)
+	}
+	return nil
 }
 
 func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, scope coordination.ExecutionScope, request coordination.OwnedChatEffectsRequest) error {
@@ -52,7 +56,7 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		if err != nil {
 			return err
 		}
-		if message != nil && !message.Deleted && message.RoleID == scope.RoleID {
+		if message != nil && !message.Deleted && message.RoleID == coordination.StorageRole(scope, "message") {
 			checkpoint, err := p.store.Get(ctx, "checkpoint", "turn/"+request.RequestID)
 			if err != nil {
 				return err
@@ -90,8 +94,8 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 	if err != nil {
 		return err
 	}
-	if resource == nil || resource.Deleted || resource.RoleID != scope.RoleID {
-		return coordination.ErrWrongOwner
+	if resource == nil || resource.Deleted || resource.RoleID != coordination.StorageRole(scope, "message") {
+		return fmt.Errorf("assistant resource: %w", coordination.ErrWrongOwner)
 	}
 	var assistant struct {
 		ConversationID string `json:"conversationId"`
@@ -103,14 +107,18 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		return err
 	}
 	if assistant.Role != "assistant" || assistant.ConversationID != request.ConversationID || assistant.RequestID != request.RequestID {
-		return coordination.ErrWrongOwner
+		return fmt.Errorf("assistant identity: %w", coordination.ErrWrongOwner)
 	}
-	userResource, err := p.store.Get(ctx, "message", request.RequestID+"/user")
+	userMessageID := request.UserMessageID
+	if userMessageID == "" {
+		userMessageID = request.RequestID + "/user"
+	}
+	userResource, err := p.store.Get(ctx, "message", userMessageID)
 	if err != nil {
 		return err
 	}
-	if userResource == nil || userResource.Deleted || userResource.RoleID != scope.RoleID {
-		return coordination.ErrWrongOwner
+	if userResource == nil || userResource.Deleted || userResource.RoleID != coordination.StorageRole(scope, "message") {
+		return fmt.Errorf("user resource: %w", coordination.ErrWrongOwner)
 	}
 	var current struct {
 		Content        string `json:"content"`
@@ -122,8 +130,8 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 	if err := json.Unmarshal(userResource.Body, &current); err != nil {
 		return err
 	}
-	if current.RequestID != request.RequestID || current.ConversationID != request.ConversationID || current.Role != "user" {
-		return coordination.ErrWrongOwner
+	if (request.GroupRoundID == "" && current.RequestID != request.RequestID) || current.ConversationID != request.ConversationID || current.Role != "user" {
+		return fmt.Errorf("user identity: %w", coordination.ErrWrongOwner)
 	}
 	currentAt, err := time.Parse(time.RFC3339Nano, current.CreatedAt)
 	if err != nil {
@@ -136,7 +144,7 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		}
 	}
 	var previousBody []byte
-	err = p.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='message' AND deleted=0 AND json_extract(body,'$.conversationId')=? AND json_extract(body,'$.role')='user' AND json_extract(body,'$.createdAt')<? ORDER BY json_extract(body,'$.createdAt') DESC LIMIT 1`, p.ownerID, scope.RoleID, request.ConversationID, current.CreatedAt).Scan(&previousBody)
+	err = p.services.KernelContainer.DeviceRegistry.Database().QueryRowContext(ctx, `SELECT body FROM kernel_device_owned_resources WHERE owner_id=? AND role_id=? AND kind='message' AND deleted=0 AND json_extract(body,'$.conversationId')=? AND json_extract(body,'$.role')='user' AND json_extract(body,'$.createdAt')<? ORDER BY json_extract(body,'$.createdAt') DESC LIMIT 1`, p.ownerID, coordination.StorageRole(scope, "message"), request.ConversationID, current.CreatedAt).Scan(&previousBody)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -169,32 +177,37 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 		if err != nil {
 			return err
 		}
-		if psycheResource == nil || psycheResource.Deleted || psycheResource.RoleID != scope.RoleID {
+		if psycheResource != nil && psycheResource.Deleted {
+			psycheResource = nil
+		}
+		if psycheResource != nil && psycheResource.RoleID != scope.RoleID {
 			return coordination.ErrWrongOwner
 		}
-		var currentPsyche interaction.PsycheState
-		if err := json.Unmarshal(psycheResource.Body, &currentPsyche); err != nil {
-			return err
-		}
-		enabled, threshold, err := ownedMoodDetectionSettings(ctx, p.services.DB)
-		if err != nil {
-			return err
-		}
-		encoded, err := json.Marshal(map[string]any{"hash": fingerprint})
-		if err != nil {
-			return err
-		}
-		phaseScope := scope
-		phaseScope.RequestID += "|effects-mood"
-		mutations := []coordination.Mutation{{Kind: "checkpoint", ID: receiptID + "/mood", RoleID: scope.RoleID, Body: encoded}}
-		if enabled {
-			snapshot := buildOwnedEmotionSnapshot(scope, request, previous, currentAt, currentPsyche, threshold)
-			if snapshot.Confidence >= threshold {
-				mutations = append(mutations, coordination.Mutation{Kind: business.EmotionSnapshotKind, ID: snapshot.ID, RoleID: scope.RoleID, Body: ownedEmotionSnapshotBody(snapshot)})
+		if psycheResource != nil {
+			var currentPsyche interaction.PsycheState
+			if err := json.Unmarshal(psycheResource.Body, &currentPsyche); err != nil {
+				return err
 			}
-		}
-		if _, err := p.store.Apply(ctx, coordination.Commit{Scope: phaseScope, Mutations: mutations}); err != nil {
-			return err
+			enabled, threshold, err := ownedMoodDetectionSettings(ctx, p.services.DB)
+			if err != nil {
+				return err
+			}
+			encoded, err := json.Marshal(map[string]any{"hash": fingerprint})
+			if err != nil {
+				return err
+			}
+			phaseScope := scope
+			phaseScope.RequestID += "|effects-mood"
+			mutations := []coordination.Mutation{{Kind: "checkpoint", ID: receiptID + "/mood", RoleID: scope.RoleID, Body: encoded}}
+			if enabled {
+				snapshot := buildOwnedEmotionSnapshot(scope, request, previous, currentAt, currentPsyche, threshold)
+				if snapshot.Confidence >= threshold {
+					mutations = append(mutations, coordination.Mutation{Kind: business.EmotionSnapshotKind, ID: snapshot.ID, RoleID: scope.RoleID, Body: ownedEmotionSnapshotBody(snapshot)})
+				}
+			}
+			if _, err := p.store.Apply(ctx, coordination.Commit{Scope: phaseScope, Mutations: mutations}); err != nil {
+				return err
+			}
 		}
 	}
 	encoded, err := json.Marshal(map[string]any{"hash": fingerprint})

@@ -262,21 +262,6 @@
                   ]
                 },
                 {
-                  "id": "mobile-emote-settings-gap",
-                  "type": "field",
-                  "props": {
-                    "label": "回复间隔",
-                    "variant": "number"
-                  },
-                  "bindings": [
-                    {
-                      "path": "settings.minReplyGap",
-                      "source": "form",
-                      "default": 3
-                    }
-                  ]
-                },
-                {
                   "id": "mobile-emote-settings-hour",
                   "type": "field",
                   "props": {
@@ -306,7 +291,6 @@
                         "action": "settings.save",
                         "payload": {
                           "enabled": "$form.settings.enabled",
-                          "minReplyGap": "$form.settings.minReplyGap",
                           "maxPerHour": "$form.settings.maxPerHour"
                         }
                       },

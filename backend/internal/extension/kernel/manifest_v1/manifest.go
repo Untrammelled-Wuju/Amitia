@@ -94,18 +94,62 @@ type ModulePolicies struct {
 }
 
 type RuntimeMeta struct {
-	Type             string                `json:"type"`
-	ServiceID        string                `json:"serviceId,omitempty"`
-	EntryPoint       string                `json:"entryPoint,omitempty"`
-	WorkerCount      int                   `json:"workerCount,omitempty"`
-	Timeout          string                `json:"timeout,omitempty"`
-	Memory           int64                 `json:"memory,omitempty"`
-	CPUPercent       int                   `json:"cpuPercent,omitempty"`
-	MaxSubprocesses  int                   `json:"maxSubprocesses,omitempty"`
-	Permissions      []string              `json:"permissions,omitempty"`
-	Capabilities     map[string]bool       `json:"capabilities,omitempty"`
-	Env              map[string]string     `json:"env,omitempty"`
-	NativeCompanions []NativeCompanionMeta `json:"nativeCompanions,omitempty"`
+	Type             string                 `json:"type"`
+	ServiceID        string                 `json:"serviceId,omitempty"`
+	EntryPoint       string                 `json:"entryPoint,omitempty"`
+	WorkerCount      int                    `json:"workerCount,omitempty"`
+	Timeout          string                 `json:"timeout,omitempty"`
+	Memory           int64                  `json:"memory,omitempty"`
+	CPUPercent       int                    `json:"cpuPercent,omitempty"`
+	MaxSubprocesses  int                    `json:"maxSubprocesses,omitempty"`
+	Permissions      []string               `json:"permissions,omitempty"`
+	Capabilities     map[string]bool        `json:"capabilities,omitempty"`
+	Env              map[string]string      `json:"env,omitempty"`
+	HostAccess       *RuntimeHostAccessMeta `json:"hostAccess,omitempty"`
+	NativeCompanions []NativeCompanionMeta  `json:"nativeCompanions,omitempty"`
+}
+
+type RuntimeHostAccessMeta struct {
+	Filesystem *RuntimeFilesystemAccessMeta `json:"filesystem,omitempty"`
+	Network    *RuntimeNetworkAccessMeta    `json:"network,omitempty"`
+	Process    *RuntimeProcessAccessMeta    `json:"process,omitempty"`
+}
+
+type RuntimeFilesystemAccessMeta struct {
+	Mode  string   `json:"mode,omitempty"`
+	Roots []string `json:"roots,omitempty"`
+}
+
+type RuntimeNetworkAccessMeta struct {
+	Mode string `json:"mode,omitempty"`
+}
+
+type RuntimeProcessAccessMeta struct {
+	Mode         string `json:"mode,omitempty"`
+	MaxProcesses int    `json:"maxProcesses,omitempty"`
+}
+
+func (h *RuntimeHostAccessMeta) ToDomain() domain.RuntimeHostAccess {
+	if h == nil {
+		return domain.RuntimeHostAccess{}
+	}
+	out := domain.RuntimeHostAccess{}
+	if h.Filesystem != nil {
+		out.Filesystem = domain.RuntimeFilesystemAccess{
+			Mode:  strings.TrimSpace(h.Filesystem.Mode),
+			Roots: append([]string(nil), h.Filesystem.Roots...),
+		}
+	}
+	if h.Network != nil {
+		out.Network = domain.RuntimeNetworkAccess{Mode: strings.TrimSpace(h.Network.Mode)}
+	}
+	if h.Process != nil {
+		out.Process = domain.RuntimeProcessAccess{
+			Mode:         strings.TrimSpace(h.Process.Mode),
+			MaxProcesses: h.Process.MaxProcesses,
+		}
+	}
+	return out
 }
 
 type NativeCompanionMeta struct {
@@ -465,6 +509,10 @@ func (m Manifest) Validate() ValidationReport {
 			if mod.Runtime.MaxSubprocesses < 0 {
 				report.AddError(path+".runtime.maxSubprocesses", "invalid_limit", "maxSubprocesses must be non-negative")
 			}
+			validateRuntimeHostAccess(mod.Runtime.HostAccess, path+".runtime.hostAccess", &report)
+			if runtimeHostAccessEnabled(mod.Runtime.HostAccess) && !trustedHostAccessPublisher(m.Publisher.TrustLevel) {
+				report.AddError(path+".runtime.hostAccess", "untrusted_publisher", "host access requires an official, trusted or user_trusted publisher")
+			}
 		}
 		for j, c := range mod.Contributions {
 			cpath := fmt.Sprintf("%s.contributions[%d]", path, j)
@@ -552,6 +600,83 @@ func (m Manifest) Validate() ValidationReport {
 	}
 	checkMetadataSize(m.Extension.Metadata, "extension.metadata", &report)
 	return report
+}
+
+func runtimeHostAccessEnabled(access *RuntimeHostAccessMeta) bool {
+	if access == nil {
+		return false
+	}
+	if access.Filesystem != nil {
+		mode := strings.ToLower(strings.TrimSpace(access.Filesystem.Mode))
+		if mode == "read" || mode == "read_write" {
+			return true
+		}
+	}
+	if access.Network != nil && strings.EqualFold(strings.TrimSpace(access.Network.Mode), "host") {
+		return true
+	}
+	return access.Process != nil && strings.EqualFold(strings.TrimSpace(access.Process.Mode), "direct")
+}
+
+func trustedHostAccessPublisher(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "official", "trusted", "user_trusted":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateRuntimeHostAccess(access *RuntimeHostAccessMeta, path string, report *ValidationReport) {
+	if access == nil {
+		return
+	}
+	if access.Filesystem != nil {
+		mode := strings.ToLower(strings.TrimSpace(access.Filesystem.Mode))
+		switch mode {
+		case "", "none", "read", "read_write":
+		default:
+			report.AddError(path+".filesystem.mode", "invalid_mode", "filesystem mode must be none, read or read_write")
+		}
+		seen := map[string]struct{}{}
+		for index, raw := range access.Filesystem.Roots {
+			root := strings.ToLower(strings.TrimSpace(raw))
+			switch root {
+			case "package", "plugin_data":
+			default:
+				report.AddError(fmt.Sprintf("%s.filesystem.roots[%d]", path, index), "invalid_root", "filesystem root must be package or plugin_data")
+			}
+			if _, exists := seen[root]; exists {
+				report.AddError(fmt.Sprintf("%s.filesystem.roots[%d]", path, index), "duplicate_root", "filesystem roots must be unique")
+			}
+			seen[root] = struct{}{}
+		}
+		if mode == "read" || mode == "read_write" {
+			if len(access.Filesystem.Roots) == 0 {
+				report.AddError(path+".filesystem.roots", "missing_roots", "filesystem access requires at least one root")
+			}
+		}
+	}
+	if access.Network != nil {
+		switch strings.ToLower(strings.TrimSpace(access.Network.Mode)) {
+		case "none", "host":
+		default:
+			report.AddError(path+".network.mode", "invalid_mode", "network mode must be none or host")
+		}
+	}
+	if access.Process != nil {
+		switch strings.ToLower(strings.TrimSpace(access.Process.Mode)) {
+		case "none", "direct":
+		default:
+			report.AddError(path+".process.mode", "invalid_mode", "process mode must be none or direct")
+		}
+		if access.Process.MaxProcesses < 0 {
+			report.AddError(path+".process.maxProcesses", "invalid_limit", "maxProcesses must be non-negative")
+		}
+		if strings.EqualFold(strings.TrimSpace(access.Process.Mode), "direct") && access.Process.MaxProcesses <= 0 {
+			report.AddError(path+".process.maxProcesses", "missing_limit", "direct process access requires maxProcesses")
+		}
+	}
 }
 
 func validateUIPlatformIsolation(m Manifest, report *ValidationReport) {
@@ -852,6 +977,7 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 			Permissions:      m.Runtime.Permissions,
 			Capabilities:     m.Runtime.Capabilities,
 			Env:              m.Runtime.Env,
+			HostAccess:       m.Runtime.HostAccess.ToDomain(),
 			NativeCompanions: nativeCompanions,
 		}
 		runtime = &rd

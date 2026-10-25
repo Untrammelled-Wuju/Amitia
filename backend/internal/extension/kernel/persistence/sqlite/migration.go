@@ -1333,94 +1333,6 @@ var schemaMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_dev_sessions_ws_id ON kernel_dev_sessions(workspace_id)`,
 
-	`CREATE TABLE IF NOT EXISTS extension_webui_sessions (
-		session_id TEXT PRIMARY KEY,
-		contribution_id TEXT NOT NULL,
-		extension_id TEXT NOT NULL,
-		module_id TEXT NOT NULL,
-		generation INTEGER NOT NULL,
-		slot_id TEXT NOT NULL,
-		origin TEXT NOT NULL,
-		nonce TEXT NOT NULL,
-		state TEXT NOT NULL DEFAULT 'creating',
-		sandbox_type TEXT NOT NULL DEFAULT 'web_restricted',
-		csp TEXT,
-		allowed_actions TEXT,
-		allowed_data_sources TEXT,
-		theme_json TEXT,
-		locale TEXT,
-		created_at DATETIME NOT NULL,
-		ready_at DATETIME,
-		last_active_at DATETIME NOT NULL,
-		expires_at DATETIME NOT NULL,
-		closed_at DATETIME
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_sessions_ext_id ON extension_webui_sessions(extension_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_sessions_state ON extension_webui_sessions(state)`,
-
-	`CREATE TABLE IF NOT EXISTS extension_webui_audit_logs (
-		id TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL,
-		extension_id TEXT NOT NULL,
-		method TEXT NOT NULL,
-		success INTEGER NOT NULL DEFAULT 0,
-		error TEXT,
-		bytes_in INTEGER NOT NULL DEFAULT 0,
-		bytes_out INTEGER NOT NULL DEFAULT 0,
-		created_at DATETIME NOT NULL
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_audit_session ON extension_webui_audit_logs(session_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_audit_ext ON extension_webui_audit_logs(extension_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_audit_created ON extension_webui_audit_logs(created_at)`,
-
-	`CREATE TABLE IF NOT EXISTS extension_webui_resource_handles (
-		handle_id TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL,
-		path TEXT NOT NULL,
-		mime TEXT NOT NULL,
-		size INTEGER NOT NULL DEFAULT 0,
-		read_only INTEGER NOT NULL DEFAULT 1,
-		consumed INTEGER NOT NULL DEFAULT 0,
-		created_at DATETIME NOT NULL,
-		expires_at DATETIME NOT NULL
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_rh_session ON extension_webui_resource_handles(session_id)`,
-
-	`CREATE TABLE IF NOT EXISTS extension_webui_subscriptions (
-		subscription_id TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL,
-		data_source_id TEXT NOT NULL,
-		active INTEGER NOT NULL DEFAULT 1,
-		rate_per_minute INTEGER NOT NULL DEFAULT 10,
-		last_payload TEXT,
-		last_update DATETIME,
-		created_at DATETIME NOT NULL
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_sub_session ON extension_webui_subscriptions(session_id)`,
-
-	`CREATE TABLE IF NOT EXISTS extension_webui_csp_violations (
-		id TEXT PRIMARY KEY,
-		session_id TEXT,
-		extension_id TEXT,
-		violation TEXT NOT NULL,
-		document_uri TEXT,
-		line_number INTEGER,
-		column_number INTEGER,
-		source_file TEXT,
-		created_at DATETIME NOT NULL
-	)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_csp_session ON extension_webui_csp_violations(session_id)`,
-	`CREATE INDEX IF NOT EXISTS idx_ext_webui_csp_created ON extension_webui_csp_violations(created_at)`,
-
-	`CREATE TABLE IF NOT EXISTS extension_webui_circuit_breakers (
-		session_id TEXT PRIMARY KEY,
-		state TEXT NOT NULL DEFAULT 'closed',
-		failure_count INTEGER NOT NULL DEFAULT 0,
-		last_failure DATETIME,
-		cooldown_seconds INTEGER NOT NULL DEFAULT 60,
-		updated_at DATETIME NOT NULL
-	)`,
-
 	`CREATE TABLE IF NOT EXISTS extension_kv_state (
 		extension_id TEXT NOT NULL,
 		module_id TEXT NOT NULL,
@@ -2576,6 +2488,9 @@ var schemaMigrations = []string{
 		updated_at TEXT NOT NULL,
 		PRIMARY KEY (owner_space_id, skill_id)
 	)`,
+	`DELETE FROM kernel_device_owned_resources WHERE role_id='@global-memory'`,
+	`DELETE FROM kernel_device_owned_projections WHERE NOT EXISTS (SELECT 1 FROM kernel_device_owned_resources r WHERE r.owner_id=kernel_device_owned_projections.owner_id AND r.kind=kernel_device_owned_projections.kind AND r.resource_id=kernel_device_owned_projections.resource_id)`,
+	`DELETE FROM kernel_device_owned_projection_locations WHERE NOT EXISTS (SELECT 1 FROM kernel_device_owned_resources r WHERE r.owner_id=kernel_device_owned_projection_locations.owner_id AND r.kind=kernel_device_owned_projection_locations.kind AND r.resource_id=kernel_device_owned_projection_locations.resource_id)`,
 }
 
 type dbExecutor interface {

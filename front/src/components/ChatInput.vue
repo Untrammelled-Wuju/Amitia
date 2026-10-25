@@ -1516,7 +1516,7 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleGlobalComposerKey, true);
 });
 
-defineExpose({ focus, setText, clear: clearText });
+defineExpose({ focus, setText, insertText: insertComposerText, clear: clearText });
 </script>
 
 <style scoped>

@@ -19,6 +19,17 @@
       >
         消息统计
       </button>
+      <button
+        v-for="tab in workspaceTabs"
+        :key="tab.key"
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === tab.tabId"
+        :class="{ active: activeTab === tab.tabId }"
+        @click="selectTab(tab.tabId)"
+      >
+        {{ tab.label }}
+      </button>
     </header>
 
     <div v-show="activeTab === 'plugin'" class="channel-plugin-content" data-amitia-ui="channels.plugin-page">
@@ -36,19 +47,32 @@
       :channel-id="channelId"
       class="channel-host-messages"
     />
+
+    <template v-for="tab in workspaceTabs" :key="tab.key">
+      <WorkspaceTabHost
+        v-if="activeTab === tab.tabId || (tab.keepMounted && visitedTabs.has(tab.tabId))"
+        v-show="activeTab === tab.tabId"
+        :tab="tab"
+        :context="workspaceContext"
+        class="channel-workspace-extension"
+        :data-workspace-tab-id="tab.tabId"
+      />
+    </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import UIProviderHost from "./UIProviderHost.vue";
 import type { UIProviderCapability } from "@/ui-runtime/types";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { collectChannelPluginNavigationItems } from "@/ui-runtime/navigationRegistry";
 import ChannelHostMessagesPanel from "@/views/channels/ChannelHostMessagesPanel.vue";
+import WorkspaceTabHost from "./WorkspaceTabHost.vue";
+import { collectWorkspaceTabs } from "@/ui-runtime/workspaceTabs";
 
-defineProps<{
+const props = defineProps<{
   providerId: string;
   capability: UIProviderCapability;
   context: Record<string, unknown>;
@@ -58,24 +82,53 @@ const DefaultFallback = { template: '<div class="channel-plugin-unavailable">渠
 const route = useRoute();
 const router = useRouter();
 const store = useExtensionUIStore();
-const activeTab = ref(route.query.tab === "messages" ? "messages" : "plugin");
+const activeTab = ref("plugin");
+const visitedTabs = reactive(new Set<string>(["plugin"]));
 
 const pluginItem = computed(() => collectChannelPluginNavigationItems(store).find(
   (item) => route.path === item.route || route.path.startsWith(`${item.route}/`),
 ));
 const channelId = computed(() => pluginItem.value?.channelId || "");
+const workspaceContext = computed<Record<string, unknown>>(() => ({
+  ...props.context,
+  channelId: channelId.value,
+  channelExtensionId: pluginItem.value?.extensionId || "",
+}));
+const workspaceTabs = computed(() => collectWorkspaceTabs(
+  store,
+  "channel.workspace",
+  workspaceContext.value,
+  route.path,
+));
+const validTabIds = computed(() => new Set([
+  "plugin",
+  "messages",
+  ...workspaceTabs.value.map((tab) => tab.tabId),
+]));
+function validTab(tab: unknown): string {
+  const value = String(tab || "");
+  return validTabIds.value.has(value) ? value : "plugin";
+}
 
-function selectTab(tab: "plugin" | "messages") {
+function selectTab(tab: string) {
   activeTab.value = tab;
   void router.replace({
     path: route.path,
-    query: { ...route.query, tab: tab === "messages" ? "messages" : undefined },
+    query: { ...route.query, tab: tab === "plugin" ? undefined : tab },
     hash: route.hash,
   });
 }
 
 watch(() => route.query.tab, (tab) => {
-  activeTab.value = tab === "messages" ? "messages" : "plugin";
+  activeTab.value = validTab(tab);
+}, { immediate: true });
+
+watch(activeTab, (tab) => {
+  visitedTabs.add(tab);
+}, { immediate: true });
+
+watch(workspaceTabs, () => {
+  if (!validTabIds.value.has(activeTab.value)) selectTab("plugin");
 });
 </script>
 
@@ -88,6 +141,7 @@ watch(() => route.query.tab, (tab) => {
 .channel-plugin-tabs button:focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
 .channel-plugin-content { min-height: 0; flex: 1; overflow: hidden; }
 .channel-host-messages { min-height: 0; flex: 1; }
+.channel-workspace-extension { min-height: 0; flex: 1; }
 .channel-plugin-unavailable { padding: 24px; color: var(--text-secondary); }
 @media (max-width: 720px) {
   .channel-plugin-tabs { padding-left: 10px; padding-right: 10px; }

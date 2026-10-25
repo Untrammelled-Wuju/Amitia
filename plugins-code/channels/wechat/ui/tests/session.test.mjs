@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createChannelClient, loginCode, statusLabel, unwrapResult } from "../src/session.mjs";
+import { createChannelClient, createHostBridge, loginCode, statusLabel, unwrapResult } from "../src/session.mjs";
 
 test("unwraps channel responses and preserves service failures", () => {
   assert.deepEqual(unwrapResult({ success: true, data: { data: { status: "connected" } } }), { status: "connected" });
@@ -26,6 +26,14 @@ test("uses the existing host action contract and passes channel ownership", asyn
   assert.equal(statusLabel("qr_ready"), "等待微信扫码");
 });
 
+test("maps the same-page host guard onto the channel action contract", async () => {
+  const calls = [];
+  const bridge = createHostBridge({ status: async (input) => { calls.push(input); return { status: "connected" }; } }, null);
+  assert.deepEqual(await bridge.invokeAction("status", { channelId: "wechat" }), { status: "connected" });
+  assert.deepEqual(calls, [{ channelId: "wechat" }]);
+  await assert.rejects(bridge.invokeAction("missing", {}), /宿主未提供操作/);
+});
+
 test("coalesces status refreshes and stays below the bridge action budget", async () => {
   let time = 0;
   let count = 0;
@@ -41,7 +49,7 @@ test("coalesces status refreshes and stays below the bridge action budget", asyn
 test("backs off on host rate limits without issuing repeated requests", async () => {
   let time = 0;
   let count = 0;
-  const client = createChannelClient({ invokeAction: async () => { count++; if (count === 1) throw new Error("sandbox_webui: bridge rate limited"); return { status: "connected" }; } }, { now: () => time });
+  const client = createChannelClient({ invokeAction: async () => { count++; if (count === 1) throw new Error("host bridge rate limited"); return { status: "connected" }; } }, { now: () => time });
   await assert.rejects(client("status"), /稍后再试/);
   assert.equal(client.nextPollDelay(true), 60000);
   time = 5000;

@@ -194,7 +194,7 @@ func init() {
 		Type: "function",
 		Function: tool.Function{
 			Name:        "uiagent.client_runtime",
-			Description: "Inspect and control the session-owned UI runtime using immutable packages. Packages may compose published Schema UI/conversation projections or provide browser-only clientCode executed inside an isolated iframe sandbox with scripts enabled but no same-origin, network, host DOM, or host runtime privileges. Trusted host JavaScript is not accepted by this tool. Production activation requires user approval for the exact package version unless the user explicitly grants future-version approval for that plugin.",
+			Description: "Inspect and control the session-owned UI runtime using immutable packages. Declarative packages compose published Schema UI and conversation projections. Executable UI plugins use same-page client modules loaded by the host. Production activation requires user approval for the exact package version unless the user explicitly grants future-version approval for that plugin.",
 			Parameters: tool.Parameters{
 				Type: "object",
 				Properties: map[string]tool.Property{
@@ -205,7 +205,7 @@ func init() {
 					},
 					"package": {
 						Type:        "object",
-						Description: "Client package for define. Must contain id/version. Contributions may reference published Schema UI sources or provide sandboxed clientCode {html,css,script,minHeight,maxHeight}; conversation nodes may reference published projections.",
+						Description: "Client package for define. Must contain id/version. Contributions reference published Schema UI sources; conversation nodes reference published projections.",
 					},
 					"id":      {Type: "string", Description: "Client package id for run/stop/rollback/undefine."},
 					"version": {Type: "string", Description: "Optional package version for run/undefine."},

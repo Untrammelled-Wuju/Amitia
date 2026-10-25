@@ -12,6 +12,8 @@
   --wechat-surface: var(--amitia-bg-surface, var(--ac-color-surface, #ffffff));
 }
 * { box-sizing: border-box; }
+:root[data-amitia-theme="light"] { color-scheme: light; }
+:root[data-amitia-theme="dark"] { color-scheme: dark; }
 html, body, #app { width: 100%; min-height: 100%; margin: 0; }
 body { overflow-x: hidden; }
 button { font: inherit; cursor: pointer; border: 1px solid var(--wechat-border); border-radius: 8px; padding: 8px 14px; background: var(--wechat-surface); color: inherit; min-height: 40px; }

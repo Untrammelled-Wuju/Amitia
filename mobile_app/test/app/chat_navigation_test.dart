@@ -1,253 +1,302 @@
-import 'package:amitia_app/app/app.dart';
+import 'package:amitia_app/app/app_routes.dart';
 import 'package:amitia_app/core/models/character.dart';
+import 'package:amitia_app/core/models/conversation.dart';
+import 'package:amitia_app/core/models/memory.dart';
+import 'package:amitia_app/core/models/reminder.dart';
 import 'package:amitia_app/core/services/providers.dart';
-import 'package:amitia_app/core/widgets/amitia_drawer.dart';
-import 'package:amitia_app/features/agent/presentation/pages/agent_page.dart';
-import 'package:amitia_app/features/chat/presentation/pages/chat_page.dart';
+import 'package:amitia_app/core/services/memory_service.dart';
+import 'package:amitia_app/core/ui_runtime/routing/builtin_route_catalog.dart';
+import 'package:amitia_app/core/widgets/amitia_icons.dart';
+import 'package:amitia_app/core/widgets/main_tab_scaffold.dart';
+import 'package:amitia_app/features/conversations/presentation/pages/conversation_list_page.dart';
+import 'package:amitia_app/features/conversations/presentation/pages/conversation_search_page.dart';
+import 'package:amitia_app/features/memory/presentation/pages/memory_hub_page.dart';
+import 'package:amitia_app/features/profile/presentation/pages/profile_hub_page.dart';
+import 'package:amitia_app/features/tasks/presentation/pages/task_hub_page.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
-ProviderContainer _createTestContainer() {
-  final container = ProviderContainer(
-    overrides: [
-      characterListProvider.overrideWith((ref) async {
-        return [
-          CharacterDto(
-            id: 'c1',
-            name: 'TestCharacter',
-            avatar: '',
-            identity: '',
-            personality: '',
-            speakingStyle: '',
-            description: '',
-            status: '',
-            isActive: 1,
-            createdAt: '',
-          ),
-        ];
-      }),
+List<CharacterDto> _characters() => [
+  CharacterDto(
+    id: 'c1',
+    name: '小夏',
+    avatar: '',
+    identity: '',
+    personality: '',
+    speakingStyle: '',
+    description: '',
+    status: '',
+    isActive: 1,
+    createdAt: '',
+  ),
+  CharacterDto(
+    id: 'c2',
+    name: '小林',
+    avatar: '',
+    identity: '',
+    personality: '',
+    speakingStyle: '',
+    description: '',
+    status: '',
+    isActive: 1,
+    createdAt: '',
+  ),
+];
+
+GoRouter _router() {
+  return GoRouter(
+    initialLocation: AppRoutes.conversations,
+    routes: [
+      ...buildBuiltinBusinessRoutes(),
+      GoRoute(
+        path: '/test-detail',
+        builder: (context, state) =>
+            const Scaffold(body: Center(child: Text('详情页'))),
+      ),
     ],
   );
-  return container;
+}
+
+Widget _app(
+  GoRouter router, {
+  List<ConversationDto> conversations = const <ConversationDto>[],
+  List<ReminderDto> tasks = const <ReminderDto>[],
+  List<MemoryDto> memories = const <MemoryDto>[],
+}) {
+  return ProviderScope(
+    overrides: [
+      conversationListProvider.overrideWith((ref) async => conversations),
+      characterListProvider.overrideWith((ref) async => _characters()),
+      currentSpaceProfileProvider.overrideWith((ref) async => null),
+      reminderListProvider.overrideWith((ref) async => tasks),
+      recentMemoryPageProvider.overrideWith((ref, cursor) async {
+        final start = int.tryParse(cursor) ?? 0;
+        final page = memories.skip(start).take(10).toList(growable: false);
+        final next = start + page.length;
+        return MemoryPage(
+          items: page,
+          nextCursor: next < memories.length ? '$next' : '',
+        );
+      }),
+    ],
+    child: MaterialApp.router(routerConfig: router),
+  );
 }
 
 void main() {
-  testWidgets(
-    'chat composer uses one scaffold inset owner without a final jump',
-    (tester) async {
-      tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(400, 800);
-      tester.view.viewPadding = const FakeViewPadding(bottom: 24);
-      tester.view.padding = const FakeViewPadding(bottom: 24);
-      tester.view.viewInsets = FakeViewPadding.zero;
-      addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetViewPadding);
-      addTearDown(tester.view.resetPadding);
-      addTearDown(tester.view.resetViewInsets);
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            startupStageProvider.overrideWith((ref) async => 'ready'),
-            characterListProvider.overrideWith((ref) async {
-              return [
-                CharacterDto(
-                  id: 'c1',
-                  name: 'TestCharacter',
-                  avatar: '',
-                  identity: '',
-                  personality: '',
-                  speakingStyle: '',
-                  description: '',
-                  status: '',
-                  isActive: 1,
-                  createdAt: '',
-                ),
-              ];
-            }),
-          ],
-          child: const AmitiaApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final composerSurface = find.byKey(
-        const ValueKey('chat-composer-surface'),
-      );
-      final scaffolds = tester.widgetList<Scaffold>(find.byType(Scaffold));
-      expect(
-        scaffolds.where((widget) => widget.resizeToAvoidBottomInset == true),
-        hasLength(1),
-      );
-      expect(
-        scaffolds.where((widget) => widget.resizeToAvoidBottomInset == false),
-        hasLength(1),
-      );
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
-
-      tester.view.viewInsets = const FakeViewPadding(bottom: 8);
-      tester.view.padding = const FakeViewPadding(bottom: 16);
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
-
-      tester.view.viewInsets = const FakeViewPadding(bottom: 20);
-      tester.view.padding = const FakeViewPadding(bottom: 4);
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
-
-      tester.view.viewInsets = const FakeViewPadding(bottom: 60);
-      tester.view.padding = FakeViewPadding.zero;
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(730, 0.01));
-
-      tester.view.viewInsets = const FakeViewPadding(bottom: 120);
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(670, 0.01));
-
-      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(530, 0.01));
-
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(530, 0.01));
-
-      tester.view.viewInsets = const FakeViewPadding(bottom: 120);
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(670, 0.01));
-
-      tester.view.viewInsets = const FakeViewPadding(bottom: 20);
-      tester.view.padding = const FakeViewPadding(bottom: 4);
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
-
-      tester.view.viewInsets = FakeViewPadding.zero;
-      tester.view.padding = const FakeViewPadding(bottom: 24);
-      await tester.pump();
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
-
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(tester.getBottomRight(composerSurface).dy, closeTo(766, 0.01));
-    },
-  );
-
-  testWidgets('drawer destination overlays chat and back reveals chat root', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          startupStageProvider.overrideWith((ref) async => 'ready'),
-          characterListProvider.overrideWith((ref) async {
-            return [
-              CharacterDto(
-                id: 'c1',
-                name: 'TestCharacter',
-                avatar: '',
-                identity: '',
-                personality: '',
-                speakingStyle: '',
-                description: '',
-                status: '',
-                isActive: 1,
-                createdAt: '',
-              ),
-            ];
-          }),
-        ],
-        child: const AmitiaApp(),
-      ),
-    );
+  testWidgets('五个底部入口可以切换', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(500, 1200);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(_app(_router()));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ChatPage), findsOneWidget);
+    expect(find.byType(ConversationListPage), findsOneWidget);
+    expect(find.byType(MainTabScaffold), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-消息')), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-任务')), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-记忆')), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-插件')), findsOneWidget);
+    expect(find.byKey(const ValueKey('main-tab-我的')), findsOneWidget);
+    expect(find.byKey(const ValueKey('message-search-field')), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.tap(find.byKey(const ValueKey('main-tab-任务')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('任务'));
+    expect(find.byType(TaskHubPage), findsOneWidget);
+    expect(find.text('主动任务'), findsOneWidget);
+    expect(find.text('持续事项'), findsOneWidget);
+    expect(find.text('提醒、计划与定时任务'), findsNothing);
+    expect(find.text('长期跟踪和跨对话进展'), findsNothing);
+    expect(find.text('暂无任务'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-记忆')));
     await tester.pumpAndSettle();
+    expect(find.byType(MemoryHubPage), findsOneWidget);
+    for (final label in ['知识库', '记忆总览', '情景记忆', '记忆图谱', '时间线']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('用户画像'), findsOneWidget);
+    expect(find.text('世界书'), findsOneWidget);
+    expect(find.text('全部长期记忆'), findsNothing);
+    expect(find.text('关系与概念连接'), findsNothing);
+    expect(find.text('暂无最近记忆'), findsOneWidget);
 
-    expect(find.byType(AgentPage), findsOneWidget);
-    expect(find.byIcon(Icons.menu_rounded), findsNothing);
-    expect(find.byType(AmitiaDrawer), findsNothing);
-
-    final exitingRoute = ModalRoute.of(tester.element(find.byType(AgentPage)))!;
-    final targetRoute = ModalRoute.of(
-      tester.element(find.byType(ChatPage, skipOffstage: false)),
-    )!;
-
-    await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 110));
-
-    expect(exitingRoute.animation!.value, inExclusiveRange(0, 1));
-    expect(targetRoute.secondaryAnimation!.value, inExclusiveRange(0, 1));
-    expect(tester.getTopLeft(find.byType(AgentPage)).dx, greaterThan(0));
-    expect(
-      tester.getTopLeft(find.byType(ChatPage, skipOffstage: false)).dx,
-      lessThan(0),
-    );
-
+    await tester.tap(find.byKey(const ValueKey('main-tab-我的')));
     await tester.pumpAndSettle();
+    expect(find.byType(ProfileHubPage), findsOneWidget);
+    expect(find.text('我的空间'), findsOneWidget);
+    for (final label in ['角色', '创意工坊', '游戏模式', '渠道接入', '设置']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('管理和切换对话角色'), findsNothing);
+    expect(find.text('角色卡、工作流与桌宠'), findsNothing);
 
-    expect(find.byType(ChatPage), findsOneWidget);
-    expect(find.byType(AgentPage), findsNothing);
-    expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
-    final shellScaffold = find.byWidgetPredicate(
-      (widget) => widget is Scaffold && widget.drawer is AmitiaDrawer,
-    );
-    expect(shellScaffold, findsOneWidget);
-    expect(tester.state<ScaffoldState>(shellScaffold).isDrawerOpen, isFalse);
+    await tester.tap(find.byKey(const ValueKey('main-tab-消息')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ConversationListPage), findsOneWidget);
   });
 
-  testWidgets('system back from drawer destination reveals chat root', (
-    tester,
-  ) async {
+  testWidgets('任务和记忆预览支持向下滚动加载更多', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(500, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final tasks = <ReminderDto>[
+      for (var index = 1; index <= 12; index++)
+        ReminderDto(
+          id: 'task-$index',
+          title: '计划任务 $index',
+          enabled: 1,
+          localRemindAt: DateTime.now()
+              .add(Duration(hours: index))
+              .toIso8601String(),
+        ),
+    ];
+    final memories = <MemoryDto>[
+      for (var index = 1; index <= 12; index++)
+        MemoryDto(
+          id: 'memory-$index',
+          key: '最近记忆 $index',
+          value: '记忆内容 $index',
+          updatedAt: DateTime.now()
+              .subtract(Duration(minutes: index))
+              .toIso8601String(),
+        ),
+    ];
+
+    await tester.pumpWidget(_app(_router(), tasks: tasks, memories: memories));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-任务')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('planned-task-task-10')), findsOneWidget);
+    expect(find.byKey(const ValueKey('planned-task-task-11')), findsNothing);
+
+    final taskList = find.descendant(
+      of: find.byType(TaskHubPage),
+      matching: find.byType(ListView),
+    );
+    await tester.drag(taskList, const Offset(0, -900));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('planned-task-task-11')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-记忆')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('recent-memory-memory-10')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('recent-memory-memory-11')), findsNothing);
+
+    final memoryList = find.descendant(
+      of: find.byType(MemoryHubPage),
+      matching: find.byType(ListView),
+    );
+    await tester.drag(memoryList, const Offset(0, -1200));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('recent-memory-memory-11')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('消息页加号提供新对话和新群聊', (tester) async {
+    await tester.pumpWidget(_app(_router()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('message-create-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('新对话'), findsOneWidget);
+    expect(find.text('新群聊'), findsOneWidget);
+
+    await tester.tap(find.text('新群聊'));
+    await tester.pumpAndSettle();
+    expect(find.text('新建群聊'), findsOneWidget);
+    expect(find.text('默认发言角色'), findsOneWidget);
+    expect(find.text('邀请角色 (0)'), findsOneWidget);
+    expect(find.text('小夏'), findsWidgets);
+    expect(find.text('小林'), findsWidgets);
+  });
+
+  testWidgets('消息列表采用无日期分组的 QQ 式行布局', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(500, 1200);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final conversation = ConversationDto(
+      id: 'c1',
+      characterId: 'c1',
+      title: '小夏',
+      messageCount: 1,
+      updatedAt: DateTime.now().toIso8601String(),
+    );
+
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          startupStageProvider.overrideWith((ref) async => 'ready'),
-          characterListProvider.overrideWith((ref) async {
-            return [
-              CharacterDto(
-                id: 'c1',
-                name: 'TestCharacter',
-                avatar: '',
-                identity: '',
-                personality: '',
-                speakingStyle: '',
-                description: '',
-                status: '',
-                isActive: 1,
-                createdAt: '',
-              ),
-            ];
-          }),
-        ],
-        child: const AmitiaApp(),
-      ),
+      _app(_router(), conversations: <ConversationDto>[conversation]),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.menu_rounded));
+    expect(find.byKey(const ValueKey('conversation-c1')), findsOneWidget);
+    expect(find.text('今天'), findsNothing);
+    expect(find.text('昨天'), findsNothing);
+    expect(find.text('更早'), findsNothing);
+    expect(find.text('1 条消息'), findsOneWidget);
+    expect(
+      tester.getSize(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is AmitiaIcon && widget.glyph == AmitiaIconGlyph.search,
+        ),
+      ),
+      const Size.square(17),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('message-search-field')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('任务'));
+    expect(find.byType(ConversationSearchPage), findsOneWidget);
+    expect(find.byType(MainTabScaffold), findsNothing);
+
+    await tester.enterText(find.byType(TextField), '小夏');
+    await tester.pump();
+    expect(find.byKey(const ValueKey('search-result-c1')), findsOneWidget);
+  });
+
+  testWidgets('二级页面隐藏底栏，返回后恢复根页面', (tester) async {
+    final router = _router();
+    await tester.pumpWidget(_app(router));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AgentPage), findsOneWidget);
+    router.push('/test-detail');
+    await tester.pumpAndSettle();
+    expect(find.text('详情页'), findsOneWidget);
+    expect(find.byType(MainTabScaffold), findsNothing);
+
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(ConversationListPage), findsOneWidget);
+    expect(find.byType(MainTabScaffold), findsOneWidget);
+  });
+
+  testWidgets('非消息根页面按系统返回键回到消息', (tester) async {
+    await tester.pumpWidget(_app(_router()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-任务')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TaskHubPage), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(find.byType(ChatPage), findsOneWidget);
-    expect(find.byType(AgentPage), findsNothing);
+    expect(find.byType(ConversationListPage), findsOneWidget);
+    expect(find.byType(TaskHubPage), findsNothing);
   });
 
-  testWidgets('chat root exits only after two consecutive system backs', (
-    tester,
-  ) async {
+  testWidgets('消息根页面连续两次返回才退出应用', (tester) async {
     var exitCalls = 0;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
@@ -265,42 +314,16 @@ void main() {
       );
     });
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          startupStageProvider.overrideWith((ref) async => 'ready'),
-          characterListProvider.overrideWith((ref) async {
-            return [
-              CharacterDto(
-                id: 'c1',
-                name: 'TestCharacter',
-                avatar: '',
-                identity: '',
-                personality: '',
-                speakingStyle: '',
-                description: '',
-                status: '',
-                isActive: 1,
-                createdAt: '',
-              ),
-            ];
-          }),
-        ],
-        child: const AmitiaApp(),
-      ),
-    );
+    await tester.pumpWidget(_app(_router()));
     await tester.pumpAndSettle();
 
     await tester.binding.handlePopRoute();
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(find.byType(ChatPage), findsOneWidget);
+    await tester.pump();
     expect(exitCalls, 0);
     expect(find.text('再按一次退出应用'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pump();
-
     expect(exitCalls, 1);
   });
 }

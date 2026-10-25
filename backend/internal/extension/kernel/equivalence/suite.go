@@ -9,7 +9,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/desktop_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
-	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 )
@@ -154,16 +153,6 @@ func (s *Suite) registerUITests() {
 			return ResultRegressed, nil, fmt.Errorf("schema_ui: NewValidator returned nil")
 		}
 		return ResultImproved, []Evidence{{Kind: "ui", Content: "schema_ui.NewValidator 实例化成功,验证器可用"}}, nil
-	})
-	s.register(CategoryUIContribution, "ui.sandbox", "SandboxWebUI Host 可用", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
-		h := sandbox_webui.NewHost()
-		if h == nil {
-			return ResultRegressed, nil, fmt.Errorf("sandbox_webui: NewHost returned nil")
-		}
-		if h.IsClosed() {
-			return ResultRegressed, nil, fmt.Errorf("sandbox_webui: host closed after creation")
-		}
-		return ResultImproved, []Evidence{{Kind: "ui", Content: "sandbox_webui.NewHost 实例化成功,Host 未关闭"}}, nil
 	})
 	s.register(CategoryUIContribution, "ui.page_host", "ExtensionPageHost 可用", func(ctx context.Context) (EquivalenceResult, []Evidence, error) {
 		reg := extension_page_host.NewPageRegistry()

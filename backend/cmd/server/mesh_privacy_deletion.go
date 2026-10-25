@@ -193,7 +193,7 @@ func privacyDeletionSelection(records []ownedChatManagementRecord, target coordi
 		if row.Kind != "memory" {
 			continue
 		}
-		linked := target.Kind == "character" && (row.RoleID == target.RoleID || row.RoleID == coordination.GlobalMemoryRole)
+		linked := target.Kind == "character" && row.RoleID == target.RoleID
 		if target.Kind == "conversation" {
 			linked = chatManagementString(row.Body, "conversationId") == target.ID
 		}
@@ -209,11 +209,6 @@ func privacyDeletionSelection(records []ownedChatManagementRecord, target coordi
 	result := []privacyDeletionReference{}
 	for _, row := range records {
 		originalRole := row.RoleID
-		if originalRole == coordination.GlobalMemoryRole {
-			if metadata, ok := row.Body["executionScope"].(map[string]any); ok {
-				originalRole = chatManagementString(metadata, "roleId")
-			}
-		}
 		if originalRole != target.RoleID {
 			continue
 		}

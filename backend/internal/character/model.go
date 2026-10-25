@@ -5,7 +5,6 @@ package character
 import "encoding/json"
 
 type Character struct {
-	GlobalMemoryEnabled bool    `gorm:"column:global_memory_enabled;not null" json:"globalMemoryEnabled"`
 	RoleAuthority       string  `gorm:"-" json:"roleAuthority,omitempty"`
 	ID                  string  `gorm:"column:id;primaryKey" json:"id"`
 	SpaceID             string  `gorm:"column:space_id;not null;index" json:"-"`
@@ -68,7 +67,6 @@ type CharacterTemplate struct {
 func (CharacterTemplate) TableName() string { return "character_templates" }
 
 type CreateCharacterRequest struct {
-	GlobalMemoryEnabled *bool           `json:"globalMemoryEnabled"`
 	VoiceConfigID       string          `json:"voiceConfigId"`
 	VoiceType           string          `json:"voiceType"`
 	VoiceSpeed          float64         `json:"voiceSpeed"`
@@ -101,7 +99,6 @@ type CreateCharacterRequest struct {
 }
 
 type UpdateCharacterRequest struct {
-	GlobalMemoryEnabled *bool            `json:"globalMemoryEnabled"`
 	IsDefault           *bool            `json:"isDefault"`
 	Name                *string          `json:"name"`
 	Identity            *string          `json:"identity"`
@@ -151,7 +148,6 @@ type RoleProfileResponse struct {
 }
 
 type RoleRuntimeProfile struct {
-	GlobalMemoryEnabled bool                   `json:"globalMemoryEnabled"`
 	CharacterID         string                 `json:"characterId"`
 	Name                string                 `json:"name"`
 	Identity            string                 `json:"identity"`

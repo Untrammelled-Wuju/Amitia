@@ -22,15 +22,11 @@ const renderer = computed(() => {
   switch (surfaceKind.value) {
     case "host_runtime":
       return defineAsyncComponent(() => import("./HostRuntimeContribution.vue"));
-    case "web_composer":
-      return defineAsyncComponent(() => import("./WebComposerActionProxy.vue"));
     case "schema":
       if (props.contribution.kind === "composer_action" && props.slotId === "chat.composer.action") {
         return defineAsyncComponent(() => import("./SchemaComposerActionProxy.vue"));
       }
       return defineAsyncComponent({ loader: () => import("./SchemaUIRenderer.vue"), loadingComponent: ExtensionLoadingOverlay, delay: 0 });
-    case "web":
-      return defineAsyncComponent({ loader: () => import("./SandboxWebUIFrame.vue"), loadingComponent: ExtensionLoadingOverlay, delay: 0 });
     case "native":
       return defineAsyncComponent(() => import("./HostNativeAction.vue"));
     case "none":

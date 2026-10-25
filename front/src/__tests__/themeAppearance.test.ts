@@ -67,12 +67,4 @@ describe("default appearance", () => {
     expect(style.getPropertyValue("--tp-text-on-secondary")).toBe("#000000");
   });
 
-  it("passes the current accent to sandbox theme tokens after a color change", async () => {
-    const { useTheme } = await import("../composables/useTheme");
-    const { buildSandboxThemeTokens } = await import("../components/extension/sandboxSessionCache");
-    const theme = useTheme();
-    expect(buildSandboxThemeTokens()["--amitia-color-accent"]).toBe("#0A84FF");
-    theme.setAccentColor("#52B788");
-    expect(buildSandboxThemeTokens()["--amitia-color-accent"]).toBe("#52B788");
-  });
 });

@@ -9,7 +9,7 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/notification_runtime_bootstrap.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';

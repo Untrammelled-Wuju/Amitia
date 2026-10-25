@@ -6,21 +6,14 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 )
 
-type hostAPIScopeContextKey struct{}
-
-type HostAPIScopeContext struct {
-	SpaceID        string
-	CharacterID    string
-	ConversationID string
-}
+type HostAPIScopeContext = host_api.ScopeContext
 
 func WithHostAPIScope(ctx context.Context, sc HostAPIScopeContext) context.Context {
-	return context.WithValue(ctx, hostAPIScopeContextKey{}, sc)
+	return host_api.WithScopeContext(ctx, sc)
 }
 
 func GetHostAPIScope(ctx context.Context) HostAPIScopeContext {
-	sc, _ := ctx.Value(hostAPIScopeContextKey{}).(HostAPIScopeContext)
-	return sc
+	return host_api.GetScopeContext(ctx)
 }
 
 func resolveHostAPIScope(ctx context.Context, store host_api.ScopeSnapshotStore, snapshotID string) context.Context {

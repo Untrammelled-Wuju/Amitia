@@ -48,6 +48,7 @@ def main():
     parser.add_argument("--base-package", required=True)
     parser.add_argument("--backend", required=True)
     parser.add_argument("--plugin-host", required=True)
+    parser.add_argument("--task-host")
     parser.add_argument("--surrealdb", required=True)
     parser.add_argument("--surrealdb-version", default="2.3.8")
     parser.add_argument("--source-commit", required=True)
@@ -60,10 +61,13 @@ def main():
     if len(source_commit) != 40 or any(ch not in "0123456789abcdef" for ch in source_commit):
         raise RuntimeError("source commit must be a 40-character git revision")
     plugin_host = Path(args.plugin_host).resolve()
+    task_host = Path(args.task_host).resolve() if args.task_host else None
     required = [base_package, Path(args.backend), Path(args.surrealdb)]
     missing = [str(path) for path in required if not path.is_file()]
     if not plugin_host.is_dir():
         missing.append(str(plugin_host))
+    if task_host is not None and not task_host.is_dir():
+        missing.append(str(task_host))
     if missing:
         raise RuntimeError("missing input: " + ", ".join(missing))
 
@@ -99,6 +103,12 @@ def main():
             shutil.rmtree(plugin_host_target)
         shutil.copytree(plugin_host / "dist", plugin_host_target / "dist")
         copy_file(plugin_host / "package.json", plugin_host_target / "package.json")
+        if task_host is not None:
+            task_host_target = runtime_root / "task-host"
+            if task_host_target.exists():
+                shutil.rmtree(task_host_target)
+            shutil.copytree(task_host / "dist", task_host_target / "dist")
+            copy_file(task_host / "package.json", task_host_target / "package.json")
 
         for relative in [
             "backend/amitia-server",
@@ -171,6 +181,7 @@ def main():
         component_index = json.loads(component_index_path.read_text(encoding="utf-8"))
         backend_hash = digest(Path(args.backend))
         plugin_host_hash = digest(plugin_host / "dist" / "index.js")
+        task_host_hash = digest(task_host / "dist" / "index.js") if task_host is not None else ""
         plugin_host_tree_hash = ""
         plugin_host_record = plugin_host / "plugin-host-frozen-record.json"
         if plugin_host_record.is_file():
@@ -184,6 +195,8 @@ def main():
             if component.get("id") == "runtime.plugin-host":
                 component["sha256"] = plugin_host_hash
                 component["treeSha256"] = plugin_host_tree_hash
+            if task_host is not None and component.get("id") == "runtime.task-host":
+                component["sha256"] = task_host_hash
         legacy_channel_components = {"runtime.sidecar", "runtime.qq-sidecar"}
         surreal_components = [
             item
@@ -217,6 +230,9 @@ def main():
             plugin_host_lock = lock_components.get("pluginHost")
             if isinstance(plugin_host_lock, dict) and plugin_host_tree_hash:
                 plugin_host_lock["treeSha256"] = plugin_host_tree_hash
+            task_host_lock = lock_components.get("taskHost")
+            if isinstance(task_host_lock, dict) and task_host_hash:
+                task_host_lock["sha256"] = task_host_hash
             lock_components["surrealdb"] = {
                 "componentId": "runtime.surrealdb",
                 "version": args.surrealdb_version,

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:amitia_app/core/widgets/profile_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,21 +30,5 @@ void main() {
     );
 
     expect(find.text('我'), findsOneWidget);
-  });
-
-  test('drawer profile row opens settings without avatar upload', () {
-    final source = File(
-      'lib/core/widgets/amitia_drawer.dart',
-    ).readAsStringSync();
-
-    expect(source, contains('onTap: onSettingsTap'));
-    expect(source, isNot(contains('onAvatarTap')));
-    expect(source, isNot(contains('showEditBadge: true')));
-    expect(source, contains('width: 36'));
-    expect(source, contains('size: 17'));
-    expect(source, contains("number('iconSize', 19)"));
-    expect(source, contains('fontSize: 14.5'));
-    expect(source, contains("number('outerPaddingY', 0)"));
-    expect(source, contains("number('paddingY', 8)"));
   });
 }

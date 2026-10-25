@@ -1,3 +1,7 @@
+declare const require: (id: string) => any;
+
+const { AsyncLocalStorage } = require("node:async_hooks");
+
 export interface InvocationContext {
   invocationId: string;
   isCanceled: boolean;
@@ -5,6 +9,8 @@ export interface InvocationContext {
 }
 
 export type ToolHandler = (input: any, invocation: InvocationContext) => Promise<any>;
+
+export const activeInvocation = new AsyncLocalStorage();
 
 export class HandlerRegistry {
   private tools: Map<string, ToolHandler> = new Map();

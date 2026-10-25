@@ -14,6 +14,22 @@ describe("provider route context", () => {
       .toBe("explicit-role");
   });
 
+  it("recovers the character id from a catch-all path match", () => {
+    expect(resolveRouteIdentity({
+      pathMatch: ["characters", "role-catch-all", "life-rules"],
+    })).toEqual({
+      characterId: "role-catch-all",
+      conversationId: "",
+    });
+  });
+
+  it("recovers the character id from the provider full path", () => {
+    expect(resolveRouteIdentity(
+      { pathMatch: ["characters", "role-path", "life-rules"] },
+      "/characters/role-path/life-rules?tab=overview",
+    ).characterId).toBe("role-path");
+  });
+
   it("builds provider context with both route params and canonical identity", () => {
     expect(buildProviderRouteContext("/characters/role-1/active-task", { id: "role-1" }, { tab: "rules" }))
       .toMatchObject({

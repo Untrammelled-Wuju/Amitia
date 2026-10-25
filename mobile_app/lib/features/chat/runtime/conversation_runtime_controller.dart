@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/device_owned_attachments.dart';
+import '../../../core/services/device_owned_chat_service.dart';
 import '../../../core/services/device_owned_realtime_service.dart';
 import '../../../core/services/owned_quote_reference.dart';
 import '../../../core/services/providers.dart';
@@ -46,6 +47,7 @@ class ConversationRuntimeController extends ChangeNotifier {
   final Map<String, Map<String, dynamic>> _pendingApprovals =
       <String, Map<String, dynamic>>{};
   String? _conversationId;
+  String _conversationTitle = '';
   String? _characterId;
   ConversationWorkspaceDto? _workspace;
   bool _sending = false;
@@ -71,11 +73,17 @@ class ConversationRuntimeController extends ChangeNotifier {
   String _ownedRequestId = '';
   String _conversationCoreId = '';
   Map<String, dynamic>? _realtimeScope;
+  OwnedGroupState? _group;
+  List<Map<String, dynamic>> _groupMentions = <Map<String, dynamic>>[];
 
   Map<String, dynamic>? get realtimeScope => _realtimeScope;
+  OwnedGroupState? get group => _group;
+  List<Map<String, dynamic>> get groupMentions =>
+      List<Map<String, dynamic>>.unmodifiable(_groupMentions);
 
   List<ChatMessage> get messages => _messages.messages;
   String? get conversationId => _conversationId;
+  String get conversationTitle => _conversationTitle;
   ConversationWorkspaceDto? get workspace => _workspace;
   bool get sending => _sending;
   Object? get lastError => _lastError;
@@ -108,6 +116,142 @@ class ConversationRuntimeController extends ChangeNotifier {
   void setCharacterId(String? characterId) {
     final value = characterId?.trim() ?? '';
     _characterId = value.isEmpty ? null : value;
+  }
+
+  void setGroupMentions(List<Map<String, dynamic>> mentions) {
+    _groupMentions = mentions
+        .map((mention) => Map<String, dynamic>.from(mention))
+        .toList(growable: false);
+    notifyListeners();
+  }
+
+  Future<OwnedGroupState?> refreshGroup() async {
+    final id = _conversationId?.trim() ?? '';
+    if (id.isEmpty) {
+      _group = null;
+      notifyListeners();
+      return null;
+    }
+    _group = await _chatService.owned.groupState(id, characterId: _characterId);
+    notifyListeners();
+    return _group;
+  }
+
+  Future<OwnedGroupState> inviteGroupMembers(
+    List<Map<String, dynamic>> members,
+  ) async {
+    final id = _conversationId?.trim() ?? '';
+    final role = _characterId?.trim() ?? '';
+    if (id.isEmpty || role.isEmpty) {
+      throw StateError('请先发送一条消息建立会话');
+    }
+    _group = await _chatService.owned.inviteGroupMembers(
+      id,
+      characterId: role,
+      expectedMembershipRevision: _group?.membershipRevision ?? 0,
+      members: members,
+    );
+    notifyListeners();
+    return _group!;
+  }
+
+  Future<OwnedGroupState> createGroupConversation(
+    String baseRoleId,
+    List<String> invitedRoleIds,
+  ) async {
+    if (baseRoleId.trim().isEmpty || invitedRoleIds.isEmpty) {
+      throw StateError('请选择默认发言角色和至少一个邀请角色');
+    }
+    final group = await _chatService.owned.createGroupConversation(
+      characterId: baseRoleId,
+      members: invitedRoleIds
+          .where((id) => id != baseRoleId)
+          .map(
+            (id) => <String, dynamic>{'characterId': id, 'shareHistory': false},
+          )
+          .toList(growable: false),
+    );
+    _group = group;
+    _groupMentions = <Map<String, dynamic>>[];
+    _characterId = baseRoleId;
+    _conversationId = group.conversationId;
+    _conversationTitle = group.title;
+    _messages.clear();
+    _lastError = null;
+    _sending = false;
+    _conversationUpdateEpoch++;
+    notifyListeners();
+    return group;
+  }
+
+  Future<OwnedGroupState> removeGroupMember(OwnedGroupMember member) async {
+    final id = _conversationId?.trim() ?? '';
+    final role = _characterId?.trim() ?? '';
+    if (id.isEmpty || role.isEmpty || _group == null) {
+      throw StateError('请先打开一个有效群聊');
+    }
+    _group = await _chatService.owned.removeGroupMember(
+      id,
+      characterId: role,
+      memberId: member.memberId,
+      expectedMembershipRevision: _group!.membershipRevision,
+    );
+    _groupMentions = _groupMentions
+        .where((mention) => mention['memberId']?.toString() != member.memberId)
+        .toList(growable: false);
+    notifyListeners();
+    return _group!;
+  }
+
+  Future<OwnedGroupState> updateGroupMentionsEnabled(bool enabled) async {
+    final id = _conversationId?.trim() ?? '';
+    final role = _characterId?.trim() ?? '';
+    if (id.isEmpty || role.isEmpty || _group == null) {
+      throw StateError('请先打开一个有效群聊');
+    }
+    _group = await _chatService.owned.updateGroupSettings(
+      id,
+      characterId: role,
+      expectedSettingsRevision: _group!.settingsRevision,
+      allowCharacterMentions: enabled,
+    );
+    notifyListeners();
+    return _group!;
+  }
+
+  Future<OwnedGroupState> renameGroup(String name) async {
+    final id = _conversationId?.trim() ?? '';
+    final role = _characterId?.trim() ?? '';
+    if (id.isEmpty || role.isEmpty || _group == null) {
+      throw StateError('请先打开一个有效群聊');
+    }
+    _group = await _chatService.owned.updateGroupSettings(
+      id,
+      characterId: role,
+      expectedSettingsRevision: _group!.settingsRevision,
+      name: name,
+    );
+    _conversationTitle = _group!.title;
+    notifyListeners();
+    return _group!;
+  }
+
+  Future<void> requestGroupReply(
+    OwnedGroupMember member, {
+    required String sourceMessageId,
+  }) async {
+    final id = _conversationId?.trim() ?? '';
+    final role = _characterId?.trim() ?? '';
+    if (id.isEmpty || role.isEmpty || sourceMessageId.isEmpty) {
+      throw StateError('请先发送内容后再点名角色');
+    }
+    await _chatService.owned.requestGroupReplies(
+      id,
+      characterId: role,
+      sourceMessageId: sourceMessageId,
+      members: [member.toJson()],
+    );
+    await openConversation(id, characterId: role);
   }
 
   void setWorkspace(ConversationWorkspaceDto? workspace) {
@@ -430,6 +574,16 @@ class ConversationRuntimeController extends ChangeNotifier {
       message = '[文件] ${localMessage.fileName}';
     }
     final requestId = _localId('mobile-');
+    if (_group != null && (_conversationId?.trim().isNotEmpty ?? false)) {
+      await _sendOwnedGroup(
+        localMessage,
+        requestId: requestId,
+        message: message,
+        attachments: attachments,
+        quotedMessage: quotedMessage,
+      );
+      return;
+    }
     final wasDraft = (_conversationId ?? '').isEmpty;
     final previousContext =
         _conversationCoreId.isNotEmpty &&
@@ -684,6 +838,249 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
+  Future<void> _sendOwnedGroup(
+    ChatMessage localMessage, {
+    required String requestId,
+    required String message,
+    required List<Map<String, dynamic>> attachments,
+    ChatMessage? quotedMessage,
+  }) async {
+    final conversationId = _conversationId?.trim() ?? '';
+    final group = _group;
+    final role = _characterId?.trim() ?? '';
+    if (conversationId.isEmpty || group == null || role.isEmpty) {
+      throw StateError('群聊状态尚未就绪');
+    }
+    final pending = _cloneMessage(
+      localMessage,
+      id: '$requestId/user',
+      renderId: requestId,
+      sequence: _nextLocalSequence(),
+      status: MessageStatus.sending,
+    );
+    _messages.upsert(pending);
+    _sending = true;
+    _ownedRequestId = requestId;
+    _lastError = null;
+    final mentions = _groupMentions
+        .where((mention) {
+          final member = group.activeMembers
+              .where((item) => item.memberId == mention['memberId'])
+              .firstOrNull;
+          return member != null && message.contains('@${member.characterName}');
+        })
+        .toList(growable: false);
+    var completed = false;
+    String sourceConversationId = conversationId;
+    Map<String, dynamic> expectedScope = <String, dynamic>{};
+    try {
+      await _appearancePreferences?.init();
+      await for (final event in _chatService.owned.sendGroup(
+        requestId: requestId,
+        message: message,
+        conversationId: conversationId,
+        characterId: role,
+        group: group,
+        mentions: mentions,
+        context: null,
+        modelConfigId: _modelConfigId,
+        reasoningEffort: _reasoningEffort,
+        reasoningEnabled: _reasoningEnabled,
+        permissionMode: _permissionMode,
+        messageStyle: _appearancePreferences?.messageStyle.name ?? 'flow',
+        attachments: attachments,
+      )) {
+        if (_disposed || _ownedRequestId != requestId) break;
+        final type = event['type'];
+        if (event['sourceConversationId'] is String) {
+          sourceConversationId = event['sourceConversationId'] as String;
+        }
+        if (type == 'started') {
+          final scope = event['executionScope'];
+          if (scope is! Map) continue;
+          expectedScope = Map<String, dynamic>.from(scope);
+          _realtimeScope = Map.unmodifiable(expectedScope);
+          final deliveryId = (event['deliveryId'] ?? '').toString();
+          final childRequestId = (scope['requestId'] ?? '').toString();
+          if (deliveryId.isEmpty || childRequestId.isEmpty) continue;
+          final currentUser = _messages.findById(pending.id, sourceOwnerId: '');
+          if (currentUser != null) {
+            _messages.upsert(
+              _cloneMessage(
+                currentUser,
+                status: MessageStatus.delivered,
+                sourceOwnerId: scope['resourceOwnerId'].toString(),
+                sourceConversationId: sourceConversationId,
+                sourceScope: expectedScope,
+                sourceRevision: 1,
+              ),
+            );
+          }
+          final assistantId = '$childRequestId/assistant';
+          _messages.upsert(
+            ChatMessage(
+              id: assistantId,
+              sourceOwnerId: (scope['resourceOwnerId'] ?? '').toString(),
+              sourceConversationId: sourceConversationId,
+              sourceScope: expectedScope,
+              renderId: 'group-delivery:$deliveryId',
+              characterId: (event['characterId'] ?? '').toString(),
+              characterName: (event['characterName'] ?? '').toString(),
+              characterAvatar: (event['characterAvatar'] ?? '').toString(),
+              groupRoundId: (event['groupRoundId'] ?? '').toString(),
+              deliveryId: deliveryId,
+              role: MessageRole.assistant,
+              type: MessageType.text,
+              content: '',
+              time: DateTime.now(),
+              sequence: _nextLocalSequence(),
+              status: MessageStatus.streaming,
+            ),
+          );
+          _connectEventStream(sourceConversationId);
+          notifyListeners();
+        } else if (type == 'delta') {
+          final deliveryId = (event['deliveryId'] ?? '').toString();
+          final current = _messages.messages
+              .where((item) => item.deliveryId == deliveryId)
+              .firstOrNull;
+          if (current == null) continue;
+          final reasoning = event['reasoning'] == true;
+          _messages.upsert(
+            _cloneMessage(
+              current,
+              content: reasoning
+                  ? current.content
+                  : current.content + (event['text'] ?? '').toString(),
+              status: MessageStatus.streaming,
+            ),
+          );
+          final reasoningText = reasoning
+              ? current.reasoningContent + (event['text'] ?? '').toString()
+              : current.reasoningContent;
+          final updated = _messages.messages
+              .where((item) => item.deliveryId == deliveryId)
+              .firstOrNull;
+          if (updated != null) {
+            _messages.upsert(
+              ChatMessage(
+                id: updated.id,
+                sourceOwnerId: updated.sourceOwnerId,
+                sourceConversationId: updated.sourceConversationId,
+                sourceScope: updated.sourceScope,
+                renderId: updated.renderId,
+                characterId: updated.characterId,
+                characterName: updated.characterName,
+                characterAvatar: updated.characterAvatar,
+                groupRoundId: updated.groupRoundId,
+                deliveryId: updated.deliveryId,
+                role: updated.role,
+                type: updated.type,
+                content: updated.content,
+                reasoningContent: reasoningText,
+                reasoningComplete: !reasoning,
+                time: updated.time,
+                sequence: updated.sequence,
+                status: MessageStatus.streaming,
+              ),
+            );
+          }
+          notifyListeners();
+        } else if (type == 'group.completed') {
+          final result = event['data'];
+          if (result is! Map) continue;
+          final response = Map<String, dynamic>.from(result);
+          final responseConversation =
+              (response['conversationId'] ?? sourceConversationId).toString();
+          _conversationId = responseConversation;
+          sourceConversationId = responseConversation;
+          final userMessageId = (response['userMessageId'] ?? '').toString();
+          final currentUser = _messages.messages
+              .where(
+                (item) => item.id == pending.id || item.id == '$requestId/user',
+              )
+              .firstOrNull;
+          if (currentUser != null && userMessageId.isNotEmpty) {
+            _messages.upsert(
+              _cloneMessage(
+                currentUser,
+                id: userMessageId,
+                status: MessageStatus.delivered,
+                sourceOwnerId: (expectedScope['resourceOwnerId'] ?? '')
+                    .toString(),
+                sourceConversationId: sourceConversationId,
+                sourceRevision: 1,
+              ),
+            );
+          }
+          for (final raw
+              in (response['deliveries'] as List? ?? []).whereType<Map>()) {
+            final delivery = Map<String, dynamic>.from(raw);
+            final deliveryId = (delivery['deliveryId'] ?? '').toString();
+            final scope = delivery['executionScope'];
+            if (deliveryId.isEmpty || scope is! Map) continue;
+            final existing = _messages.messages
+                .where((item) => item.deliveryId == deliveryId)
+                .firstOrNull;
+            final message = ChatMessage(
+              id: '${(delivery['requestId'] ?? '').toString()}/assistant',
+              sourceOwnerId: (scope['resourceOwnerId'] ?? '').toString(),
+              sourceConversationId: sourceConversationId,
+              sourceScope: Map<String, dynamic>.from(scope),
+              sourceRevision: delivery['saved'] == true ? 1 : null,
+              renderId: 'group-delivery:$deliveryId',
+              characterId: (scope['roleId'] ?? '').toString(),
+              characterName: (delivery['characterName'] ?? '').toString(),
+              characterAvatar: (delivery['characterAvatar'] ?? '').toString(),
+              groupRoundId: (delivery['groupRoundId'] ?? '').toString(),
+              deliveryId: deliveryId,
+              role: MessageRole.assistant,
+              type: MessageType.text,
+              content: (delivery['reply'] ?? '').toString(),
+              reasoningContent: (delivery['reasoning'] ?? '').toString(),
+              reasoningComplete: true,
+              outputComplete: true,
+              time: existing?.time ?? DateTime.now(),
+              sequence: existing?.sequence ?? _nextLocalSequence(),
+              status: MessageStatus.delivered,
+              citationSnapshot: (delivery['citationSnapshot'] as List? ?? [])
+                  .whereType<Map>()
+                  .map((row) => Map<String, dynamic>.from(row))
+                  .toList(growable: false),
+            );
+            _messages.upsert(message);
+          }
+          _groupMentions = <Map<String, dynamic>>[];
+          completed = true;
+          notifyListeners();
+        }
+      }
+    } catch (error) {
+      if (!_disposed && !completed) {
+        _lastError = error;
+        final current =
+            _messages.findById(
+              pending.id,
+              sourceOwnerId: (expectedScope['resourceOwnerId'] ?? '')
+                  .toString(),
+            ) ??
+            _messages.findById(pending.id, sourceOwnerId: '');
+        if (current != null) {
+          _messages.upsert(_cloneMessage(current, status: MessageStatus.error));
+        }
+      }
+    } finally {
+      if (_ownedRequestId == requestId) {
+        _ownedRequestId = '';
+        if (!_disposed) {
+          _sending = false;
+          if (completed) _conversationUpdateEpoch++;
+          notifyListeners();
+        }
+      }
+    }
+  }
+
   Future<void> _refreshSnapshot(String conversationId) async {
     if (_loadingSnapshot || _disposed || _conversationId != conversationId) {
       return;
@@ -706,6 +1103,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     final conversation = snapshot.conversation;
     if (conversation != null) {
       _conversationId = conversation.id;
+      _conversationTitle = conversation.title;
       _modelConfigId = conversation.modelConfigId;
       _reasoningEffort = conversation.reasoningEffort.trim().isEmpty
           ? 'high'
@@ -1024,6 +1422,10 @@ class ConversationRuntimeController extends ChangeNotifier {
           ? _assistantRenderId(dto.requestId)
           : dto.requestId.trim(),
       characterId: dto.characterId,
+      characterName: dto.characterName,
+      characterAvatar: dto.characterAvatar,
+      groupRoundId: dto.groupRoundId,
+      deliveryId: dto.deliveryId,
       role: role,
       type: type,
       content: dto.content,
@@ -1322,6 +1724,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (_conversationId != id) {
       _disconnectRuntime();
       _conversationId = id;
+      _conversationTitle = '';
       _messages.clear();
       _agentReducer.reset(
         turns: const <AssistantTurnDto>[],
@@ -1339,6 +1742,13 @@ class ConversationRuntimeController extends ChangeNotifier {
           characterId: _characterId,
         );
         if (_disposed || _conversationId != id) return;
+        final snapshotData = result['snapshot'];
+        _group = snapshotData is Map && snapshotData['group'] is Map
+            ? OwnedGroupState.fromJson(
+                Map<String, dynamic>.from(snapshotData['group'] as Map),
+              )
+            : null;
+        _groupMentions = <Map<String, dynamic>>[];
         _messages.clear();
         for (final message in _chatService.owned.messages(result)) {
           _messages.upsert(_messageFromDto(message));
@@ -1395,6 +1805,7 @@ class ConversationRuntimeController extends ChangeNotifier {
       }
       _disconnectRuntime();
       _conversationId = conversation.id;
+      _conversationTitle = conversation.title;
       _characterId = characterId;
       _messages.clear();
       _agentReducer.reset(
@@ -1445,6 +1856,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _disconnectRuntime();
     _draftEpoch++;
     _conversationId = null;
+    _conversationTitle = '';
     _messages.clear();
     _agentReducer.reset(
       turns: const <AssistantTurnDto>[],
@@ -1480,6 +1892,10 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? sourceOwnerId,
     String? sourceConversationId,
     String? characterId,
+    String? characterName,
+    String? characterAvatar,
+    String? groupRoundId,
+    String? deliveryId,
     Map<String, dynamic>? sourceScope,
     int? sourceRevision,
     String? id,
@@ -1499,6 +1915,10 @@ class ConversationRuntimeController extends ChangeNotifier {
       sourceRevision: sourceRevision ?? message.sourceRevision,
       renderId: renderId ?? message.renderId,
       characterId: characterId ?? message.characterId,
+      characterName: characterName ?? message.characterName,
+      characterAvatar: characterAvatar ?? message.characterAvatar,
+      groupRoundId: groupRoundId ?? message.groupRoundId,
+      deliveryId: deliveryId ?? message.deliveryId,
       role: message.role,
       type: message.type,
       content: content ?? message.content,

@@ -7,6 +7,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_typography.dart';
+import 'amitia_icons.dart';
 
 const int _maxAvatarBytes = 3 * 1024 * 1024;
 
@@ -160,8 +161,8 @@ class ProfileAvatar extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: context.surfacePrimary, width: 2),
                 ),
-                child: Icon(
-                  Icons.photo_camera_outlined,
+                child: AmitiaIcon(
+                  AmitiaIconGlyph.image,
                   size: badgeSize * 0.58,
                   color: Colors.white,
                 ),
@@ -251,7 +252,7 @@ class _AvatarOptionTile extends StatelessWidget {
                         : context.accentSoft,
                     borderRadius: AppRadius.brSmall,
                   ),
-                  child: Icon(
+                  child: AmitiaIcon.adaptive(
                     icon,
                     size: 20,
                     color: isDestructive

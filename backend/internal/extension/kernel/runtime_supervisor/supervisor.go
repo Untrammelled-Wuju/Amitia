@@ -162,6 +162,7 @@ func (s *DefaultSupervisor) startInstance(ctx context.Context, factory RuntimeFa
 		circuit:    CircuitClosed,
 		startedAt:  &now,
 		limits:     request.Spec.Limits,
+		spec:       request.Spec,
 		definition: request.DefinitionID,
 		generation: request.Spec.Generation,
 	}
@@ -457,14 +458,7 @@ func (s *DefaultSupervisor) Restart(ctx context.Context, instanceID string) erro
 		s.mu.RUnlock()
 		return ErrInstanceNotFound
 	}
-	spec := InstanceSpec{
-		RuntimeType: entry.identity.RuntimeType,
-		ExtensionID: entry.identity.ExtensionID,
-		ModuleID:    entry.identity.ModuleID,
-		Generation:  entry.generation,
-		Strategy:    StrategySingletonPerModule,
-		Limits:      entry.limits,
-	}
+	spec := entry.spec
 	defID := entry.definition
 	s.mu.RUnlock()
 	result := s.restartInstance(ctx, instanceID, ReconcileRequest{

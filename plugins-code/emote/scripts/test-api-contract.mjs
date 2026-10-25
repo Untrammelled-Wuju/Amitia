@@ -30,19 +30,15 @@ function check(name, condition, detail = "") {
   }
 }
 
-function makeHost(options = {}) {
+function makeHost() {
   const store = new Map();
   const tools = new Map();
   const resources = new Map();
   const handles = new Map();
-  const calls = { vectorUpsert: [], vectorDelete: [], resourceDelete: [], messageAppend: [] };
+  const calls = { resourceDelete: [], messageAppend: [] };
   let version = 0;
-  let vectorSearchHandler = options.vectorSearch || (() => ({ items: [] }));
   const host = {
     calls,
-    setVectorSearch(handler) {
-      vectorSearchHandler = handler;
-    },
     async call(method, params) {
       if (method === "host.state.get") {
         return { found: store.has(params.key), value: store.get(params.key), version };
@@ -88,15 +84,6 @@ function makeHost(options = {}) {
         resources.delete(params.path);
         calls.resourceDelete.push(params.path);
         return { deleted: true };
-      }
-      if (method === "host.vector.upsert") {
-        calls.vectorUpsert.push(params);
-        return { upserted: params.points.length };
-      }
-      if (method === "host.vector.search") return vectorSearchHandler(params);
-      if (method === "host.vector.delete") {
-        calls.vectorDelete.push(params);
-        return { deleted: params.ids.length };
       }
       if (method === "host.conversation.message.append") {
         calls.messageAppend.push(params);
@@ -155,13 +142,6 @@ async function uploadEmote(tools, host, { name, meaning, keywords = [], aiEnable
   });
 }
 
-async function maxProbability(tools) {
-  await tools.get("command")({
-    action: "settings.save",
-    payload: { baseProbability: 1, maxProbability: 1, minReplyGap: 0, maxPerHour: 999, sameEmoteCooldownMinutes: 0 },
-  });
-}
-
 console.log("\n[1] 添加表情包（upload.begin → chunk → complete）");
 {
   const env = makeHost();
@@ -172,7 +152,7 @@ console.log("\n[1] 添加表情包（upload.begin → chunk → complete）");
   check("含义正确存储", result.item?.meaning === "表达开心与友好");
   check("关键词已规范化", Array.isArray(result.item?.keywords) && result.item.keywords.join(",") === "开心,笑");
   check("默认全角色可用", result.item?.enabled === true && result.item?.aiEnabled === true);
-  check("向量已同步 ready", result.item?.vectorStatus === "ready");
+  check("不再产生向量状态字段", !("vectorStatus" in result.item) && !("vectorError" in result.item));
   check("assetUrl 已生成", String(result.item?.assetUrl).includes("/api/extension/resources/"));
   check("无 roleScope/characterIds 字段", !("roleScope" in result.item) && !("characterIds" in result.item));
 
@@ -185,94 +165,73 @@ console.log("\n[1] 添加表情包（upload.begin → chunk → complete）");
   check("去重后仍只有 1 条", afterDup.items.length === 1);
 }
 
-console.log("\n[2] AI 抉择发送表情（output）");
+console.log("\n[2] AI 直接获取参数并自主发送");
 {
   const env = makeHost();
   const tools = await activate(env);
   const smile = await uploadEmote(tools, env.host, { name: "微笑", meaning: "表达开心与友好", keywords: ["开心", "笑"], content: Buffer.from("smile-png") });
-  const cry = await uploadEmote(tools, env.host, { name: "流泪", meaning: "表达伤心难过", keywords: ["难过", "哭"], content: Buffer.from("cry-png") });
-  await maxProbability(tools);
-  env.host.setVectorSearch(() => ({ items: [{ id: smile.item.id, score: 0.9 }] }));
+  const hidden = await uploadEmote(tools, env.host, { name: "隐藏", meaning: "不应提供给 AI", keywords: ["隐藏"], aiEnabled: false, content: Buffer.from("hidden-png") });
+  await tools.get("command")({ action: "settings.save", payload: { maxPerHour: 10, sameEmoteCooldownMinutes: 0 } });
 
-  const result = await tools.get("output")({
+  const catalog = await tools.get("ai")({ action: "list", characterId: "char-1" });
+  check("AI 工具可读取表情参数", catalog.emotes.length === 1 && catalog.emotes[0].id === smile.item.id);
+  check("参数包含名称含义关键词", catalog.emotes[0].name === "微笑" && catalog.emotes[0].meaning === "表达开心与友好" && catalog.emotes[0].keywords.join(",") === "开心,笑");
+  check("AI 未启用表情不会暴露", !catalog.emotes.some((item) => item.id === hidden.item.id));
+
+  const sent = await tools.get("ai")({
+    action: "send",
+    emoteId: smile.item.id,
     characterId: "char-1",
     conversationId: "conv-1",
-    reply: "今天真的太开心啦",
-    userMessage: "哈哈",
-    source: "ai",
-    requestId: "req-1",
+    channel: "qq_personal",
+    reason: "当前语境适合微笑",
+    requestId: "req-ai-1",
   });
-  check("AI 抉择输出 1 条", result.outputs.length === 1);
-  const part = result.outputs[0]?.part;
-  check("输出为 image 类型且 extensionType=emote", part?.type === "image" && part?.extensionType === "emote");
-  check("altText 包含表情名", part?.altText === "[表情：微笑]" || part?.altText === "[表情：流泪]");
-  check("placement 为 after_text", result.outputs[0]?.placement === "after_text");
-  check("sendRecords 已记录 ai_random", env.host.getState().sendRecords.some((r) => r.triggerType === "ai_random" && r.hit === true));
+  check("AI 自主发送返回 message id", sent.status === "sent" && sent.messageIds[0] === "message-1");
+  const append = env.host.calls.messageAppend.at(-1);
+  check("发送内容为标准 emote image", append.parts[0].type === "image" && append.parts[0].extensionType === "emote");
+  check("AI 发送记录使用 ai_tool", env.host.getState().sendRecords.some((record) => record.triggerType === "ai_tool" && record.reason === "当前语境适合微笑"));
 
-  const suppressed = await tools.get("output")({
-    characterId: "char-1",
-    conversationId: "conv-1",
-    reply: "操作失败了，出现错误",
-    source: "ai",
+  const contextual = await tools.get("ai")({
+    action: "send",
+    emoteId: smile.item.id,
+    __amitiaContext: {
+      characterId: "char-context",
+      conversationId: "conv-context",
+      channel: "qq_personal",
+      spaceId: "space-context",
+      operationId: "op-context",
+    },
   });
-  check("负面语境（错误/失败）被抑制", suppressed.outputs.length === 0);
+  const contextualAppend = env.host.calls.messageAppend.at(-1);
+  check("AI 发送自动继承宿主会话上下文", contextual.status === "sent" && contextualAppend.conversationId === "conv-context" && contextualAppend.channel === "qq_personal" && contextualAppend.characterId === "char-context" && contextualAppend.spaceId === "space-context");
 
-  env.host.setVectorSearch(() => ({ items: [{ id: smile.item.id, score: 0.2 }] }));
-  const lowScore = await tools.get("output")({
-    characterId: "char-1",
-    conversationId: "conv-1",
-    reply: "这是一条普通回复",
-    source: "ai",
-  });
-  check("向量低分候选被拒（<0.35）", lowScore.outputs.length === 0);
-
-  env.host.setVectorSearch(() => ({ items: [{ id: smile.item.id, score: 0.9 }] }));
   await tools.get("command")({ action: "settings.save", payload: { sameEmoteCooldownMinutes: 30 } });
-  const cooldownBlocked = await tools.get("output")({
-    characterId: "char-1",
-    conversationId: "conv-1",
-    reply: "又一条开心回复",
-    lines: ["又一条开心回复"],
-    source: "ai",
-  });
-  check("同一表情冷却期内不重复发送（默认 30 分钟）", cooldownBlocked.outputs.length === 0);
-
-  const otherCharacter = await tools.get("output")({
-    characterId: "char-2",
-    conversationId: "conv-1",
-    reply: "另一角色的开心回复",
-    lines: ["另一角色的开心回复"],
-    source: "ai",
-  });
-  check("冷却按角色隔离，其他角色仍可发送", otherCharacter.outputs.length === 1);
-}
-
-console.log("\n[3] AI 抉择约束（频率/开关/概率）");
-{
-  const env = makeHost();
-  const tools = await activate(env);
-  const uploaded = [];
-  for (const [index] of Array.from({ length: 6 }).entries()) {
-    uploaded.push(await uploadEmote(tools, env.host, { name: `表情${index}`, meaning: `第${index}个表情`, content: Buffer.from(`emote-${index}`) }));
+  let cooldownError = "";
+  try {
+    await tools.get("ai")({ action: "send", emoteId: smile.item.id, characterId: "char-1", conversationId: "conv-1" });
+  } catch (error) {
+    cooldownError = error.message;
   }
-  env.host.setVectorSearch(() => ({ items: uploaded.map((item) => ({ id: item.item.id, score: 0.9 })) }));
-  await maxProbability(tools);
-  await tools.get("command")({ action: "settings.save", payload: { maxPerHour: 2 } });
+  check("AI 发送遵守同表情冷却", cooldownError === "该表情仍在冷却中");
 
-  await tools.get("output")({ characterId: "c1", conversationId: "cv1", reply: "一", lines: ["一"], source: "ai" });
-  await tools.get("output")({ characterId: "c1", conversationId: "cv1", reply: "二", lines: ["二"], source: "ai" });
-  const third = await tools.get("output")({ characterId: "c1", conversationId: "cv1", reply: "三", lines: ["三"], source: "ai" });
-  check("maxPerHour=2 时第 3 次被限制", third.outputs.length === 0);
-  check("前两次确实已发送并计数", env.host.getState().sendRecords.filter((record) => record.characterId === "c1" && record.triggerType === "ai_random").length === 2);
+  await tools.get("command")({ action: "settings.save", payload: { sameEmoteCooldownMinutes: 0, maxPerHour: 1 } });
+  let limitError = "";
+  try {
+    await tools.get("ai")({ action: "send", emoteId: smile.item.id, characterId: "char-1", conversationId: "conv-1" });
+  } catch (error) {
+    limitError = error.message;
+  }
+  check("AI 发送遵守每小时上限", limitError === "本小时表情发送次数已达上限");
 
   await tools.get("command")({ action: "settings.save", payload: { enabled: false } });
-  const disabled = await tools.get("output")({ characterId: "c2", conversationId: "cv2", reply: "四", lines: ["四"], source: "ai" });
-  check("总开关关闭后不发送", disabled.outputs.length === 0);
-  await tools.get("command")({ action: "settings.save", payload: { enabled: true } });
-
-  await tools.get("command")({ action: "settings.save", payload: { baseProbability: 0, maxProbability: 0 } });
-  const zeroProb = await tools.get("output")({ characterId: "c2", conversationId: "cv2", reply: "五", lines: ["五"], source: "ai" });
-  check("概率为 0 时不发送", zeroProb.outputs.length === 0);
+  let disabledError = "";
+  try {
+    await tools.get("ai")({ action: "send", emoteId: smile.item.id, characterId: "char-2", conversationId: "conv-2" });
+  } catch (error) {
+    disabledError = error.message;
+  }
+  check("AI 发送遵守总开关", disabledError === "表情发送已关闭");
 }
 
 console.log("\n[4] 编辑 / 批量 / 手动发送");
@@ -348,8 +307,6 @@ console.log("\n[6] 删除表情包");
   const g = await tools.get("command")({ action: "groups.create", payload: { name: "组" } });
   const e1 = await uploadEmote(tools, env.host, { name: "待删1", meaning: "删除测试", keywords: [], content: Buffer.from("delete-me") });
   const e2 = await uploadEmote(tools, env.host, { name: "保留", meaning: "保留测试", keywords: [], content: Buffer.from("keep-me") });
-  env.host.calls.vectorUpsert.length = 0;
-
   await tools.get("command")({ action: "emotes.send", payload: { emoteId: e1.item.id, characterId: "c1", conversationId: "cv1" } });
   check("删除前 sendRecords 有记录", env.host.getState().sendRecords.length === 1);
 
@@ -358,7 +315,6 @@ console.log("\n[6] 删除表情包");
 
   const list = await tools.get("command")({ action: "emotes.list", payload: {} });
   check("删除后列表只剩保留项", list.items.length === 1 && list.items[0].id === e2.item.id);
-  check("向量点被删除", env.host.calls.vectorDelete.some((call) => call.ids.includes(e1.item.id)));
   check("原文件/缩略图/降级图资源全部删除", env.host.calls.resourceDelete.length >= 3);
   check("sendRecords 同步清理", env.host.getState().sendRecords.length === 0);
 

@@ -95,7 +95,34 @@ const manifestSchema = `{
               "maxSubprocesses": {"type": "integer", "minimum": 0},
               "permissions": {"type": "array", "items": {"type": "string"}},
               "capabilities": {"type": "object", "additionalProperties": {"type": "boolean"}},
-              "env": {"type": "object"}
+              "env": {"type": "object"},
+              "hostAccess": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "filesystem": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "mode": {"type": "string", "enum": ["none", "read", "read_write"]},
+                      "roots": {"type": "array", "uniqueItems": true, "items": {"enum": ["package", "plugin_data"]}}
+                    }
+                  },
+                  "network": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {"mode": {"type": "string", "enum": ["none", "host"]}}
+                  },
+                  "process": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "mode": {"type": "string", "enum": ["none", "direct"]},
+                      "maxProcesses": {"type": "integer", "minimum": 0}
+                    }
+                  }
+                }
+              }
             }
           },
           "contributions": {

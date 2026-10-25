@@ -266,16 +266,22 @@ class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
 class AmitiaTypographyTokens extends ThemeExtension<AmitiaTypographyTokens> {
   const AmitiaTypographyTokens.readable()
     : this(
-        pageTitleSize: 20,
-        pageLargeTitleSize: 30,
-        sectionTitleSize: 18,
-        cardTitleSize: 17,
-        bodySize: 16,
-        bodySmallSize: 14,
-        captionSize: 13,
-        labelSize: 13,
-        statusLabelSize: 12,
-        buttonSize: 16,
+        pageTitleSize: 18,
+        pageLargeTitleSize: 24,
+        sectionTitleSize: 16,
+        cardTitleSize: 15,
+        bodySize: 14,
+        bodySmallSize: 13,
+        captionSize: 12,
+        labelSize: 12,
+        statusLabelSize: 11,
+        buttonSize: 14,
+        pageTitleWeight: 500,
+        sectionTitleWeight: 400,
+        cardTitleWeight: 400,
+        bodyWeight: 400,
+        labelWeight: 400,
+        buttonWeight: 500,
       );
 
   const AmitiaTypographyTokens({

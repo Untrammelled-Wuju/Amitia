@@ -60,7 +60,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
-	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
@@ -1726,56 +1725,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		}
 		_ = uiHost.RegisterContribution(def)
 	}
-	sandboxHost := sandbox_webui.NewHost()
-	sandboxHost.SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
-		invocationID := fmt.Sprintf("sandbox-sess-%d", time.Now().UnixNano())
-		scopes := []scope.ScopeRef{
-			scope.NewExtensionScope(extensionID),
-			scope.NewModuleScope(extensionID, moduleID),
-			scope.NewInvocationScope(invocationID),
-			scope.NewSessionScope(invocationID),
-		}
-		if characterID != "" {
-			scopes = append(scopes, scope.NewCharacterScope(characterID))
-		}
-		if conversationID != "" {
-			scopes = append(scopes, scope.NewConversationScope(conversationID))
-		}
-		snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
-		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
-			return "", err
-		}
-		return snapshot.SnapshotID, nil
-	})
-	sandboxHost.SetPermissionSnapshotFactory(func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error) {
-		snap := permission.NewPermissionSnapshot(permission.PermissionSnapshotRequest{
-			SessionID:      sessionID,
-			ExtensionID:    extensionID,
-			ModuleID:       moduleID,
-			Generation:     generation,
-			CharacterID:    characterID,
-			ConversationID: conversationID,
-			GrantedPerms:   grantedPerms,
-			Lifetime:       time.Until(expiresAt),
-		})
-		if err := snap.ValidateGrantedPerms(permIDValidator); err != nil {
-			return "", err
-		}
-		if err := permSnapshotStore.SaveSnapshot(context.Background(), snap); err != nil {
-			return "", err
-		}
-		return snap.SnapshotID, nil
-	})
-	sandboxHost.SetSnapshotReleaser(func(scopeSnapshotID, permissionSnapshotID string) error {
-		ctx := context.Background()
-		if scopeSnapshotID != "" {
-			_ = scopeStore.DeleteSnapshot(ctx, scopeSnapshotID)
-		}
-		if permissionSnapshotID != "" {
-			_ = permSnapshotStore.DeleteSnapshot(ctx, permissionSnapshotID)
-		}
-		return nil
-	})
 	hostCmdRegistry := NewHostCommandRegistry()
 	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
 		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
@@ -1784,36 +1733,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: setup channel host commands: %w", err)
 	}
 	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, toolRegistry, scopeManager, newUIActionSnapshotDeriver(scopeStore, permSnapshotStore, permIDValidator))
-	sandboxDispatcher := buildSandboxActionDispatcher(sandboxActionDispatcherDeps{
-		getSession: sandboxHost.GetSession,
-		getContribution: func(contributionID string) (*ui_contribution.UIContributionDefinition, error) {
-			return uiHost.GetContribution(ui_contribution.ContributionID(contributionID))
-		},
-		executeAction: actionExecutor.Execute,
-	})
 	dataSourceProvider := NewUIDataSourceProvider(hostAPIGateway)
-	sandboxDataProvider := sandbox_webui.NewBridgeDataSourceProviderWithHandler(func(ctx context.Context, sessionID, sourceID string, params json.RawMessage) (json.RawMessage, error) {
-		session, err := sandboxHost.GetSession(sessionID)
-		if err != nil {
-			return nil, fmt.Errorf("sandbox: session not found: %w", err)
-		}
-		if !session.IsDataSourceAllowed(sourceID) {
-			return nil, fmt.Errorf("sandbox: data source %s not allowed for session %s", sourceID, sessionID)
-		}
-		return dataSourceProvider.Query(ctx, sessionID, session.ExtensionID, session.ModuleID, sourceID, session.ScopeSnapshotID, session.PermissionSnapshotID, params)
-	})
-	sandboxNavigator := sandbox_webui.NewBridgeNavigator(func(ctx context.Context, sessionID, target string) error {
-		session, err := sandboxHost.GetSession(sessionID)
-		if err != nil {
-			return fmt.Errorf("sandbox: session not found: %w", err)
-		}
-		if !sandbox_webui.IsNavigationTargetAllowed(target, session) {
-			return fmt.Errorf("sandbox: navigation to %s denied", target)
-		}
-		return nil
-	})
-	sandboxBridge := sandbox_webui.NewBridge(sandboxHost, sandboxDispatcher, sandboxDataProvider, sandboxNavigator)
-	sandboxHost.SetBridge(sandboxBridge)
 	uiHost.Bridge().SetHandlers(
 		func(ctx context.Context, session *ui_contribution.BridgeSession, action *ui_contribution.UIActionDefinition, invocation ui_contribution.UIActionInvocation) (json.RawMessage, error) {
 			return actionExecutor.Execute(ctx, UIActionExecContext{
@@ -1959,46 +1879,26 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		PermissionRepository:   permRepo,
 		ResourceRepository:     resourceRepo,
 
-		PackageSecurity:        packageSec,
-		PackageRepository:      packageRepo,
-		PackageArtifactStore:   packageArtifactStore,
-		PackageGenerationStore: packageGenerationStore,
-		PackageTrustRepository: packageTrustRepo,
-		UserDataSnapshotStore:  userDataSnapshotStore,
-		ResourceSnapshotStore:  resourceSnapshotStore,
-		PackageSnapshotRepo:    packageSnapshotRepo,
-		LifecycleManager:       lifecycleMgr,
-		ContributionRegistry:   contribRegistry,
-		ContributionInstaller:  typedInstaller,
-		DependencyResolver:     dependencyResolver,
-		RuntimeSupervisor:      supervisor,
-		ExecutionKernel:        executionKernel,
-		ApprovalBroker:         approvalBroker,
-		SecretBroker:           kernelSecretBroker,
-		HostAPIGateway:         hostAPIGateway,
-		PermissionBroker:       permBroker,
-		PermissionDefinitions:  permDefRegistry,
-		ScopeManager:           scopeManager,
-		ScopeSnapshotCreator: func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
-			invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
-			scopes := []scope.ScopeRef{
-				scope.NewExtensionScope(extensionID),
-				scope.NewModuleScope(extensionID, moduleID),
-				scope.NewInvocationScope(invocationID),
-				scope.NewSessionScope(invocationID),
-			}
-			if characterID != "" {
-				scopes = append(scopes, scope.NewCharacterScope(characterID))
-			}
-			if conversationID != "" {
-				scopes = append(scopes, scope.NewConversationScope(conversationID))
-			}
-			snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
-			if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
-				return "", err
-			}
-			return snapshot.SnapshotID, nil
-		},
+		PackageSecurity:           packageSec,
+		PackageRepository:         packageRepo,
+		PackageArtifactStore:      packageArtifactStore,
+		PackageGenerationStore:    packageGenerationStore,
+		PackageTrustRepository:    packageTrustRepo,
+		UserDataSnapshotStore:     userDataSnapshotStore,
+		ResourceSnapshotStore:     resourceSnapshotStore,
+		PackageSnapshotRepo:       packageSnapshotRepo,
+		LifecycleManager:          lifecycleMgr,
+		ContributionRegistry:      contribRegistry,
+		ContributionInstaller:     typedInstaller,
+		DependencyResolver:        dependencyResolver,
+		RuntimeSupervisor:         supervisor,
+		ExecutionKernel:           executionKernel,
+		ApprovalBroker:            approvalBroker,
+		SecretBroker:              kernelSecretBroker,
+		HostAPIGateway:            hostAPIGateway,
+		PermissionBroker:          permBroker,
+		PermissionDefinitions:     permDefRegistry,
+		ScopeManager:              scopeManager,
 		AgentSkillCatalog:         agentSkillCatalog,
 		AgentSkillRuntime:         agentSkillRuntime,
 		AcquisitionSkillPort:      canonicalSkillPort,
@@ -2059,7 +1959,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		SchemaValidator:     schemaValidator,
 		SchemaCompilerCache: schemaCache,
 		SchemaRegistry:      schemaRegistry,
-		SandboxHost:         sandboxHost,
 		OrderingEngine:      orderingEngine,
 		UIProviderRegistry:  uiProviderRegistry,
 		ExtRoot:             b.extRoot,

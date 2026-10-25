@@ -1,6 +1,15 @@
 import '../backend_transport/backend_service_api.dart';
 import '../models/memory.dart';
 
+class MemoryPage {
+  const MemoryPage({required this.items, required this.nextCursor});
+
+  final List<MemoryDto> items;
+  final String nextCursor;
+
+  bool get hasMore => nextCursor.isNotEmpty;
+}
+
 class MemoryService {
   final BackendServiceApi _api;
   MemoryService(this._api);
@@ -83,6 +92,65 @@ class MemoryService {
     final offset = (page - 1) * pageSize;
     if (offset >= rows.length) return [];
     return rows.sublist(offset, target > rows.length ? rows.length : target);
+  }
+
+  Future<MemoryPage> listPage({
+    String cursor = '',
+    int limit = 10,
+    String? characterId,
+    String? sort,
+  }) async {
+    if (limit < 1) throw ArgumentError('记忆分页参数无效');
+    final response = await _api.get<Map<String, dynamic>>(
+      '/api/device-mesh/v1/business/memories',
+      queryParameters: {
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+        'query': '',
+        'mode': 'keyword',
+        'memoryView': 'all',
+        if (sort != null && sort.isNotEmpty) 'sort': sort,
+        'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    if (response == null || response['resources'] is! List)
+      throw StateError('记忆服务返回无效数据');
+    final rows = <MemoryDto>[];
+    for (final resource in (response['resources'] as List).whereType<Map>()) {
+      if (resource['kind'] != 'memory' || resource['body'] is! Map)
+        throw StateError('记忆资源类型无效');
+      final body = Map<String, dynamic>.from(resource['body'] as Map);
+      final content = body['content'];
+      final metadata = content is Map
+          ? Map<String, dynamic>.from(content)
+          : <String, dynamic>{'value': content ?? ''};
+      rows.add(
+        MemoryDto.fromJson({
+          ...metadata,
+          ...body,
+          'id': resource['id'],
+          'characterId': resource['roleId'],
+          'scope': resource['roleId'] == '@global-memory'
+              ? 'user'
+              : 'character',
+          'value':
+              metadata['value'] ??
+              metadata['text'] ??
+              metadata['summary'] ??
+              '',
+          'updatedAt': resource['updatedAt'] ?? '',
+          'memoryStrength': body['effectiveStrength'] ?? body['memoryStrength'],
+          'retentionLevel':
+              body['effectiveRetentionLevel'] ?? body['retentionLevel'],
+          'decayState': body['effectiveDecayState'] ?? body['decayState'],
+        }),
+      );
+    }
+    return MemoryPage(
+      items: List<MemoryDto>.unmodifiable(rows),
+      nextCursor: (response['nextCursor'] ?? '').toString(),
+    );
   }
 
   Future<List<MemoryCandidateDto>> listCandidates({String? characterId}) async {

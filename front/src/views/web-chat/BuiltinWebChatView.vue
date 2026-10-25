@@ -35,6 +35,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       :show-mem-inject="showMemInject"
       :call-active="callActive"
       :has-summary="!!convSummary"
+      :is-group="Boolean(group)"
+      :group-members="group?.members?.filter((member) => member.status === 'active') || []"
       @clear="handleClear"
       @view-memories="handleViewMemories"
       @toggle-char-picker="showCharPicker = true"
@@ -43,6 +45,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-call="handleEndCall"
       @start-call="handleStartCall"
       @view-summary="handleViewSummary"
+      @manage-group="showGroupMembers = true"
     ><template #extension-actions><button type="button" class="sidebar-toggle-btn" aria-label="切换工作区" title="工作区" @click="workbench.toggleVisible()"><el-icon><GridIcon /></el-icon></button><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
     </div>
     </Teleport>
@@ -157,7 +160,12 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
     <div class="chat-scroll-fade chat-scroll-fade--top" aria-hidden="true"></div>
     <div class="chat-scroll-fade chat-scroll-fade--bottom" aria-hidden="true"></div>
-    <div ref="composerRegionRef" class="composer-region" data-amitia-ui="chat.composer"><UIProviderHost
+    <div ref="composerRegionRef" class="composer-region" data-amitia-ui="chat.composer">
+      <div v-if="group" class="group-composer-members" aria-label="群成员点名">
+        <button v-for="member in activeGroupMembers" :key="member.memberId" type="button" @click="insertGroupMention(member)">@{{ member.characterName }}</button>
+        <button type="button" class="mention-all" @click="insertAllGroupMentions">@所有成员</button>
+      </div>
+      <UIProviderHost
       capability="conversation.composer"
       :fallback="ChatInput"
       :context="chatExtensionContext"
@@ -197,6 +205,18 @@ SPDX-License-Identifier: AGPL-3.0-only
       :characters="characters"
       :character-id="characterId"
       @select="handleSwitchChar"
+    />
+
+    <GroupMemberPanel
+      v-model:visible="showGroupMembers"
+      :group="group"
+      :characters="characters"
+      :role-id="characterId"
+      :conversation-id="convId"
+      :reply-source-message-id="lastUserMessageId"
+      @changed="handleGroupChanged"
+      @mention="insertGroupMention"
+      @replied="handleGroupReplied"
     />
 
     <DeviceOwnedMemoryPanel v-model:visible="showMemories" :character-id="characterId" :conversation-id="convId" />
@@ -239,6 +259,7 @@ import MessagesArea from "../../components/MessagesArea.vue";
 import ChatInput from "../../components/ChatInput.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import DeviceOwnedMemoryPanel from "../../components/DeviceOwnedMemoryPanel.vue";
+import GroupMemberPanel from "../../components/GroupMemberPanel.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
@@ -253,6 +274,7 @@ import BuiltinConversationOverlay from "@/components/ui-runtime/BuiltinConversat
 import { provideConversationUIContext, readonlyMessages } from "@/ui-runtime/conversationContext";
 import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
 import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
+import type { OwnedGroupMember, OwnedGroupMention, OwnedGroupState } from "@/runtime/device-owned-chat";
 
 const router = useRouter();
 const route = useRoute();
@@ -327,6 +349,8 @@ const persistedMessages = ref<any[]>([]);
 const convId = ref(String(route.query.conversationId || ""));
 const convTitle = ref("");
 const characterId = ref("");
+const showGroupMembers = ref(false);
+const groupMentions = ref<OwnedGroupMention[]>([]);
 const messageContentLoading = ref(false);
 watch([convId, characterId], ([id, role]) => workbench.setConversation(id, role), { immediate: true });
 const cachedDef = (() => {
@@ -825,11 +849,13 @@ const {
   activeTurnId,
   beginPendingAssistant,
   failPendingAssistant,
+  groupMentions,
 );
 
 const {
   characters,
   conversations,
+  group,
   memories,
   conversationLoading,
   showCharPicker,
@@ -854,6 +880,8 @@ const {
   connectSSE,
   reloadConversationSnapshot,
 );
+const activeGroupMembers = computed<OwnedGroupMember[]>(() => (group.value?.members || []).filter((member) => member.status === "active").sort((left, right) => left.orderIndex - right.orderIndex));
+const lastUserMessageId = computed(() => [...persistedMessages.value].reverse().find((message) => message.role === "user" && message.id && !String(message.id).startsWith("client:"))?.id || "");
 
 const conversationSwitching = computed(() => conversationLoading.value || messageContentLoading.value);
 
@@ -995,6 +1023,30 @@ watch(showSummaryDrawer, (visible) => {
 
 function handleViewSummary() {
   showSummaryDrawer.value = true;
+}
+
+function insertGroupMention(member: OwnedGroupMember) {
+  inputRef.value?.insertText?.(`@${member.characterName} `);
+  if (!groupMentions.value.some((mention) => mention.memberId === member.memberId)) {
+    groupMentions.value = [...groupMentions.value, { memberId: member.memberId, characterId: member.characterId, roleOwnerId: member.roleOwnerId }];
+  }
+  inputRef.value?.focus?.();
+}
+
+function insertAllGroupMentions() {
+  inputRef.value?.insertText?.("@所有成员 ");
+  groupMentions.value = activeGroupMembers.value.map((member) => ({ memberId: member.memberId, characterId: member.characterId, roleOwnerId: member.roleOwnerId }));
+  inputRef.value?.focus?.();
+}
+
+function handleGroupChanged(next: OwnedGroupState) {
+  group.value = next;
+  convTitle.value = next.title || convTitle.value;
+}
+
+async function handleGroupReplied() {
+  await loadCharacterConversation();
+  await fetchConversations();
 }
 
 provideConversationUIContext({
@@ -1172,6 +1224,11 @@ function handleScopeChanged() {
 .chat-header-region.is-titlebar :deep(.header-actions *) { -webkit-app-region: no-drag; }
 .chat-status-region { position: absolute; top: var(--chat-header-h, 44px); left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
 .composer-region { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; }
+.group-composer-members { display: flex; gap: 6px; padding: 0 14px 6px; overflow-x: auto; scrollbar-width: none; }
+.group-composer-members::-webkit-scrollbar { display: none; }
+.group-composer-members button { flex: 0 0 auto; min-height: 26px; padding: 2px 9px; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--bg-surface, var(--chat-surface-bg)); color: var(--text-secondary); cursor: pointer; font-size: 11px; }
+.group-composer-members button:hover, .group-composer-members button:focus-visible { border-color: var(--ac-color-primary); color: var(--text-primary); outline: none; }
+.group-composer-members .mention-all { color: var(--ac-color-primary); }
 .chat-surface--sidebar .composer-region { right: min(320px, 32%); }
 .chat-scroll-fade { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: none; }
 .chat-scroll-fade--top { top: 0; height: var(--chat-header-h, 44px); background: linear-gradient(to bottom, color-mix(in srgb, var(--chat-surface-bg) 96%, transparent), color-mix(in srgb, var(--chat-surface-bg) 0%, transparent)); }

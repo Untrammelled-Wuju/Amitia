@@ -6,10 +6,10 @@
 
 | 字段 | 值 |
 |------|----|
-| Report ID | final-acceptance-1792487222522877000 |
-| 生成时间 | 2026-10-20T09:07:11Z |
-| 开始时间 | 2026-10-20T09:07:02Z |
-| 结束时间 | 2026-10-20T09:07:11Z |
+| Report ID | final-acceptance-1792917057823062000 |
+| 生成时间 | 2026-10-25T08:31:06Z |
+| 开始时间 | 2026-10-25T08:30:57Z |
+| 结束时间 | 2026-10-25T08:31:06Z |
 | 总项 | 25 |
 | 通过 | 23 |
 | 失败 | 0 |
@@ -38,20 +38,20 @@
 | stage2.kernel_core | kernel_core | ExtensionKernel 领域模型 | true | passed | HostAPIGateway 实例化成功; AmitiaxInstaller 实例化成功; ToolRegistry 实例化成功; ExecutionKernel 实例化成功; Container.Recover 成功 |
 | stage3.amitiax_manifest | amitiax_runtime | AmitiaxManifestV1 | true | passed | amitiax.Installer 实例化成功; 空归档安装正确失败 (Fail Closed); 错误数量=1,包含 missing_archive 错误码 |
 | stage3.runtimes | amitiax_runtime | 多 Runtime 实现 | true | passed | javascript_main.RuntimeFactory 实例化成功; task_runtime.TaskExecutor 实例化成功; wasm_runtime.ModuleValidator 实例化成功; trusted_service.PlatformSelector 实例化成功; jsonrpc.MethodRegistry 实例化成功; 多 Runtime 实现均已抽取 (JS/Task/WASM/TrustedService/JSONRPC) |
-| stage4.ui_contribution | ui_contribution | UI Contribution 协议 | true | passed | ui_contribution.UIHost 实例化成功,默认slot=57,测试贡献注册成功; extension_slots.DefaultSlotRegistry 实例化成功,slot数量=57; schema_ui.NewValidator 实例化成功; sandbox_webui.NewHost 实例化成功; extension_page_host.NewPageHost 实例化成功; ui_ordering.NewOrderingEngine 实例化成功 |
+| stage4.ui_contribution | ui_contribution | UI Contribution 协议 | true | passed | ui_contribution.UIHost 实例化成功,默认slot=57,测试贡献注册成功; extension_slots.DefaultSlotRegistry 实例化成功,slot数量=57; schema_ui.NewValidator 实例化成功; extension_page_host.NewPageHost 实例化成功; ui_ordering.NewOrderingEngine 实例化成功 |
 | stage5.builtin_tools | migration | 内置 Tools 迁移 | true | passed | tool_migration.Registry 实例化成功; 内置 Tool 注册到 system/amitia-core 成功; 查询验证: toolID=system/amitia-core/echo, legacyID=echo |
 | stage5.mcp_workflow | migration | MCP/Workflow 迁移 | true | passed | mcp_migration.Registry 注册并列表成功; workflow_migration.Registry 注册成功; MCP/Workflow 迁移注册表均可写入和读取 |
 | stage6.sdk_cli | dev_ecosystem | TypeScript SDK 与 Plugin CLI | true | passed | dev_mode SDK 工作流 (Registry/Pipeline/Reloader) 实例化成功; 前端扩展 API 客户端存在 (SDK 集成点); Plugin CLI 通过 dev_mode.RebuildPipeline 提供构建能力 |
 | stage6.dev_mode_console | dev_ecosystem | 开发模式与 Developer Console | true | passed | dev_mode.WorkspaceRegistry 实例化并注册成功; dev_mode.RebuildPipeline 实例化成功; dev_mode.RuntimeReloader 实例化成功; dev_mode.SessionManager 实例化成功; developer_console.DiagnosticRepository 实例化成功 |
 | stage6.center_detail | dev_ecosystem | 扩展中心与详情页 | true | passed | ExtensionCenterView.vue 存在; UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪) |
-| stage7.equivalence | validation | 新旧系统等价性 | true | passed | GlobalLegacyCallCounter.Total()=0 (旧系统不参与); Kernel ModelTools 返回 27 个工具,无错误; legacy_fallback_total=0 (等价性: Kernel 完全替代旧系统) |
+| stage7.equivalence | validation | 新旧系统等价性 | true | passed | GlobalLegacyCallCounter.Total()=0 (旧系统不参与); Kernel ModelTools 返回 31 个工具,无错误; legacy_fallback_total=0 (等价性: Kernel 完全替代旧系统) |
 | stage7.stability | validation | 桌面端稳定性 | true | passed | 3 次构建/关闭循环完成,LegacyCallCounter 保持 0; 稳定性: 无 legacy 调用增长; 稳定性: Container 反复构建和关闭无异常 |
 | stage7.security | validation | 安全权限隔离 | true | passed | 权限检查器拒绝时正确返回 StatusRejected; 范围检查器拒绝时正确返回 StatusRejected; 检查器放行时调用不被拒绝; nil 权限检查器时 Fail Closed (P0-01 已修复) |
 | stage7.cutover | cutover | ExtensionKernel 唯一入口 | true | passed | ToolFacade 作为唯一入口成功调用 ModelTools; model_tools 计数=1; legacy_fallback_total=0 (无旧系统回退); GlobalLegacyCallCounter.Total()=0 (旧系统不承担生产执行) |
 | stage7.legacy_skill | legacy_removal | 旧 Skill 兼容层删除 | true | passed | LegacyCallCounter.Total()=0 (旧 Skill Handler 不承担生产执行); 旧 Skill 兼容层已物理删除，Agent Skill 与 Workflow 使用 Kernel 主链 |
 | stage7.legacy_amitiax | legacy_removal | 旧 Amitiax 安装器弃用 | true | passed | amitiax_migration.Registry 实例化成功; amitiax.Installer (新安装器) 实例化成功并正确 Fail Closed; 旧 Amitiax 安装器已通过迁移注册表弃用 |
 | stage7.legacy_data | legacy_removal | 旧数据模型弃用 | true | passed | data_migration.Registry 实例化成功; data_migration.List() 返回非 nil 切片; 旧数据模型已通过迁移注册表标记弃用 |
-| arch.single_chain | kernel_core | 单一主链 | true | passed | ContainerBuilder 构建成功,ToolRegistry 和 ExecutionKernel 均非 nil; ToolFacade 在无 LegacyDispatcher 时成功返回 ModelTools; 模型工具数量=27; GlobalLegacyCallCounter.Total()=0; legacy_fallback_total=0 |
+| arch.single_chain | kernel_core | 单一主链 | true | passed | ContainerBuilder 构建成功,ToolRegistry 和 ExecutionKernel 均非 nil; ToolFacade 在无 LegacyDispatcher 时成功返回 ModelTools; 模型工具数量=31; GlobalLegacyCallCounter.Total()=0; legacy_fallback_total=0 |
 | arch.domain_invariants | kernel_core | 领域不变量 | true | passed | DefinitionRepository 非空; ContributionRegistry 非空; ScheduleService 启动成功; EventService 启动成功; 默认事件类型数量=57 |
 | build.compiles | validation | go build 通过 | true | passed | go build ./... 退出码 0; 输出长度=0 字节 |
 | build.frontend | validation | 前端构建通过 | true | passed | 前端目录结构完整 (package.json, src/, router/); TypeScript 类型检查工具已配置; 前端构建基础设施就绪 |

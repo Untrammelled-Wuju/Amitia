@@ -1,11 +1,9 @@
 package coordination
 
 import (
-	"encoding/json"
 	"strings"
 )
 
-const GlobalMemoryRole = "@global-memory"
 const AllMemoryRole = "@all-memory"
 const GlobalWorldbookRole = "@global-worldbook"
 
@@ -31,13 +29,16 @@ func RuntimeStateKind(kind string) bool {
 
 func MemoryKind(kind string) bool {
 	switch kind {
-	case "memory", "fact", "vector", "graph", "episodic", "continuity":
+	case "memory", "fact", "vector", "graph", "episodic", "continuity", "profile":
 		return true
 	}
 	return false
 }
 
 func StorageRole(scope ExecutionScope, kind string) string {
+	if scope.ConversationRoleID != "" && GroupConversationKind(kind) {
+		return scope.ConversationRoleID
+	}
 	if kind == "continuity" && scope.ContinuityRoleID != "" {
 		return scope.ContinuityRoleID
 	}
@@ -46,9 +47,6 @@ func StorageRole(scope ExecutionScope, kind string) string {
 	}
 	if scope.MemoryRoleID == "" {
 		return scope.RoleID
-	}
-	if kind == "profile" {
-		return GlobalMemoryRole
 	}
 	if MemoryKind(kind) {
 		return scope.MemoryRoleID
@@ -63,24 +61,11 @@ func ResolveWorldbookScope(scope *ExecutionScope, global bool) {
 	}
 }
 
-func ResolveMemoryScope(scope *ExecutionScope, role Role, view string) error {
-	var profile struct {
-		Global *bool `json:"globalMemoryEnabled"`
-	}
-	if err := json.Unmarshal(role.Profile, &profile); err != nil {
-		return ErrWrongOwner
-	}
+func ResolveMemoryScope(scope *ExecutionScope, view string) error {
 	scope.MemoryRoleID = scope.RoleID
-	if profile.Global == nil || *profile.Global {
-		scope.MemoryRoleID = GlobalMemoryRole
-	}
 	scope.MemoryViewAll = view == "all"
 	switch view {
-	case "", "all":
-	case "global":
-		scope.MemoryRoleID = GlobalMemoryRole
-	case "character":
-		scope.MemoryRoleID = scope.RoleID
+	case "", "all", "character":
 	default:
 		if !strings.HasPrefix(view, "role:") || len(view) > 517 || len(view) <= 5 || strings.ContainsAny(view, "\x00\r\n") || strings.HasPrefix(strings.TrimPrefix(view, "role:"), "@") {
 			return ErrWrongOwner

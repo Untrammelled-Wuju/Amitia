@@ -1,13 +1,6 @@
 import { markRaw, shallowRef, type Component } from "vue";
 import type { UIContributionSnapshot, SlotSnapshot } from "@/stores/extensionUI";
 import ClientRuntimeSchemaContribution from "@/components/extension/ClientRuntimeSchemaContribution.vue";
-import DynamicClientSandboxContribution from "@/components/extension/DynamicClientSandboxContribution.vue";
-import {
-  DYNAMIC_CLIENT_CSS_LIMIT,
-  DYNAMIC_CLIENT_HTML_LIMIT,
-  DYNAMIC_CLIENT_SCRIPT_LIMIT,
-  type DynamicClientSandboxCode,
-} from "@/ui-runtime/dynamicClientSandbox";
 import {
   registerProgrammaticConversationNodeDefinition,
   listProgrammaticConversationNodeDefinitions,
@@ -1208,7 +1201,6 @@ export interface BrowserDeclarativeClientContribution {
   match?: BrowserDeclarativeMatchRule[];
   sourceExtensionId?: string;
   sourceContributionId?: string;
-  clientCode?: DynamicClientSandboxCode;
   title?: string;
   kind?: string;
   ordering?: number;
@@ -1452,11 +1444,10 @@ export class BrowserClientPluginRuntime {
       atomicUpdate: true,
       setup: async (ctx) => {
         for (const contribution of normalized.contributions ?? []) {
-          const component = contribution.clientCode ? DynamicClientSandboxContribution : ClientRuntimeSchemaContribution;
           await ctx.slots.observe(contribution.slotId, () => ctx.slots.registerLegacy(
             contribution.slotId,
             contribution.key,
-            component,
+            ClientRuntimeSchemaContribution,
             {
               ordering: contribution.ordering ?? 0,
               priority: contribution.priority ?? 0,
@@ -1464,17 +1455,12 @@ export class BrowserClientPluginRuntime {
               cellId: contribution.cellId ?? contribution.key,
               select: (owner) => matchesDeclarativeOwner(owner, contribution.match) ? { owner } : null,
               children: contribution.children ?? [],
-              props: contribution.clientCode
-                ? {
-                    clientCode: contribution.clientCode,
-                    title: contribution.title ?? normalized.description ?? "Dynamic UI",
-                  }
-                : {
-                    sourceExtensionId: contribution.sourceExtensionId,
-                    sourceContributionId: contribution.sourceContributionId,
-                    title: contribution.title ?? normalized.description ?? "Dynamic UI",
-                    kind: contribution.kind ?? "panel",
-                  },
+              props: {
+                sourceExtensionId: contribution.sourceExtensionId,
+                sourceContributionId: contribution.sourceContributionId,
+                title: contribution.title ?? normalized.description ?? "Dynamic UI",
+                kind: contribution.kind ?? "panel",
+              },
             },
           ));
         }
@@ -1834,14 +1820,16 @@ function normalizeDeclarativePackage(spec: BrowserDeclarativeClientPackage): Bro
   const version = spec.version?.trim();
   if (!id || !version) throw new Error("declarative client package id and version are required");
   const contributions = (spec.contributions ?? []).map((item) => {
+    if (Object.prototype.hasOwnProperty.call(item, "clientCode")) {
+      throw new Error(`client package ${id}@${version} contribution ${item.key || "?"} clientCode is not supported`);
+    }
     const slotId = item.slotId?.trim();
     const key = item.key?.trim();
     const sourceExtensionId = item.sourceExtensionId?.trim();
     const sourceContributionId = item.sourceContributionId?.trim();
-    const clientCode = normalizeDynamicClientCode(item.clientCode);
     const hasSchemaSource = !!sourceExtensionId && !!sourceContributionId;
-    if (!slotId || !key || (!hasSchemaSource && !clientCode)) {
-      throw new Error(`client package ${id}@${version} contribution ${key || "?"} requires a published schema source or clientCode`);
+    if (!slotId || !key || !hasSchemaSource) {
+      throw new Error(`client package ${id}@${version} contribution ${key || "?"} requires a published schema source`);
     }
     if ((sourceExtensionId && !sourceContributionId) || (!sourceExtensionId && sourceContributionId)) {
       throw new Error(`client package ${id}@${version} contribution ${key} requires both sourceExtensionId and sourceContributionId`);
@@ -1856,7 +1844,6 @@ function normalizeDeclarativePackage(spec: BrowserDeclarativeClientPackage): Bro
       match: normalizeDeclarativeMatch(item.match),
       sourceExtensionId: sourceExtensionId || undefined,
       sourceContributionId: sourceContributionId || undefined,
-      clientCode,
       ordering: Number.isFinite(item.ordering) ? Number(item.ordering) : 0,
       priority: Number.isFinite(item.priority) ? Number(item.priority) : 0,
       children,
@@ -1913,32 +1900,6 @@ function matchesDeclarativeOwner(owner: Record<string, unknown>, rules?: readonl
       default: return false;
     }
   });
-}
-
-function normalizeDynamicClientCode(value: DynamicClientSandboxCode | undefined): DynamicClientSandboxCode | undefined {
-  if (!value) return undefined;
-  const html = typeof value.html === "string" ? value.html : "";
-  const css = typeof value.css === "string" ? value.css : "";
-  const script = typeof value.script === "string" ? value.script : "";
-  if (!html && !css && !script) throw new Error("clientCode requires html, css, or script");
-  if (html.length > DYNAMIC_CLIENT_HTML_LIMIT) throw new Error(`clientCode.html exceeds ${DYNAMIC_CLIENT_HTML_LIMIT} characters`);
-  if (css.length > DYNAMIC_CLIENT_CSS_LIMIT) throw new Error(`clientCode.css exceeds ${DYNAMIC_CLIENT_CSS_LIMIT} characters`);
-  if (script.length > DYNAMIC_CLIENT_SCRIPT_LIMIT) throw new Error(`clientCode.script exceeds ${DYNAMIC_CLIENT_SCRIPT_LIMIT} characters`);
-  const minHeight = normalizeDynamicClientHeight(value.minHeight, 32, 1200);
-  const maxHeight = normalizeDynamicClientHeight(value.maxHeight, minHeight ?? 32, 2400);
-  if (minHeight !== undefined && maxHeight !== undefined && maxHeight < minHeight) {
-    throw new Error("clientCode.maxHeight must be greater than or equal to minHeight");
-  }
-  return { html, css, script, ...(minHeight !== undefined ? { minHeight } : {}), ...(maxHeight !== undefined ? { maxHeight } : {}) };
-}
-
-function normalizeDynamicClientHeight(value: unknown, minimum: number, maximum: number): number | undefined {
-  if (value === undefined || value === null) return undefined;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < minimum || numeric > maximum) {
-    throw new Error(`dynamic client height must be between ${minimum} and ${maximum}`);
-  }
-  return Math.round(numeric);
 }
 
 function declarativeConversationNodeDefinition(

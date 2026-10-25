@@ -22,6 +22,7 @@ import { useExtensionUIStore } from "./stores/extensionUI";
 import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
 import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
 import { installSecureRandomUUID } from "./runtime/secure-random";
+import "./ui-runtime/hostVueRuntime";
 
 installSecureRandomUUID();
 
@@ -94,8 +95,6 @@ async function bootstrap() {
   app.mount("#app");
   // There is no product-account gate. In Cloud browser mode the lightweight
   // Web access gate is already resolved before private extension UI boots.
-  void import("./components/extension/WebComposerActionProxy.vue");
-  void import("./components/extension/SandboxWebUIFrame.vue");
 }
 
 void bootstrap();

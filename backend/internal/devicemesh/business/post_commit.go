@@ -18,6 +18,10 @@ func (e *Engine) finishOwnedEffects(ctx context.Context, inference Inference, ge
 		return nil
 	}
 	request := coordination.OwnedChatEffectsRequest{ConversationID: inference.ConversationID, RequestID: inference.Scope.RequestID, MessageID: inference.Scope.RequestID + "/assistant", Source: "manual"}
+	if inference.PreparedReply != nil {
+		request.UserMessageID = inference.PreparedReply.UserMessageID
+		request.GroupRoundID = inference.PreparedReply.GroupRoundID
+	}
 	if inference.Ingress != nil {
 		request.ThreadID, request.Source = inference.Ingress.ThreadID, inference.Ingress.Source
 		request.Channel, request.PeerID, request.IsInternal = inference.Ingress.Channel, inference.Ingress.PeerID, inference.Ingress.IsInternal

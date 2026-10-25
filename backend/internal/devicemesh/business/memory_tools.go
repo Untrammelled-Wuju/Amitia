@@ -100,9 +100,6 @@ func (e *Engine) MemoryTool(ctx context.Context, request Request, name string, a
 }
 
 func (e *Engine) saveMemoryTool(ctx context.Context, request Request, name string, args map[string]interface{}) (MemoryToolResponse, error) {
-	if name == "save_profile" {
-		request.MemoryView = "global"
-	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return MemoryToolResponse{}, err

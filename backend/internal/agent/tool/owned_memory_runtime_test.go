@@ -45,7 +45,7 @@ func newToolMemoryTestRuntime(t *testing.T, space string) *toolMemoryTestRuntime
 func (p *toolMemoryTestRuntime) Roles(context.Context, coordination.ExecutionScope) ([]coordination.Role, error) {
 	roles := []coordination.Role{}
 	for _, id := range []string{"char-a", "char-b", "char-profile-a", "char-profile-b", "char-memory", "char-invalid", "char-cancel", "char-audit", "char-force", "char-1", "char-2"} {
-		roles = append(roles, coordination.Role{ID: id, Revision: 1, Profile: json.RawMessage(`{"globalMemoryEnabled":false}`)})
+		roles = append(roles, coordination.Role{ID: id, Revision: 1, Profile: json.RawMessage(`{}`)})
 	}
 	return roles, nil
 }

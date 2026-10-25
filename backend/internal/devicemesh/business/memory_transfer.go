@@ -24,21 +24,18 @@ func (e *Engine) TransferMemory(ctx context.Context, request Request, input Memo
 	if input.ID == "" || !coordination.MemoryKind(input.Kind) {
 		return coordination.Acknowledgement{}, coordination.ErrWrongOwner
 	}
-	target := coordination.GlobalMemoryRole
-	targetRevision := int64(0)
-	if input.TargetScope == "character" {
-		roles, err := e.data.Roles(ctx, scope)
-		if err != nil {
-			return coordination.Acknowledgement{}, err
-		}
-		role, err := coordination.ResolveRole(input.TargetRoleID, roles)
-		if err != nil {
-			return coordination.Acknowledgement{}, err
-		}
-		target, targetRevision = role.ID, role.Revision
-	} else if input.TargetScope != "global" {
+	if input.TargetScope != "character" || input.TargetRoleID == "" {
 		return coordination.Acknowledgement{}, coordination.ErrWrongOwner
 	}
+	roles, err := e.data.Roles(ctx, scope)
+	if err != nil {
+		return coordination.Acknowledgement{}, err
+	}
+	role, err := coordination.ResolveRole(input.TargetRoleID, roles)
+	if err != nil {
+		return coordination.Acknowledgement{}, err
+	}
+	target, targetRevision := role.ID, role.Revision
 	if input.ExpectedRevision < 1 {
 		return coordination.Acknowledgement{}, coordination.ErrResourceVersion
 	}

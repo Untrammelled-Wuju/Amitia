@@ -70,8 +70,7 @@ defineProps<{ title: string; description?: string }>();
   min-height: 0;
   font-size: inherit;
 }
-.plugin-page-frame__content :deep(.schema-ui-renderer.is-loading),
-.plugin-page-frame__content :deep(.sandbox-webui-frame.is-loading) {
+.plugin-page-frame__content :deep(.schema-ui-renderer.is-loading) {
   position: static;
   min-height: 0;
 }

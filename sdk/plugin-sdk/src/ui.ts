@@ -698,6 +698,36 @@ export function defineUIProvider(definition: UIProviderDefinition): UIProviderDe
 function assertUIProviderMetadata(definition: UIProviderDefinition): void {
   const metadata = definition.metadata;
   if (!metadata) return;
+  if (definition.capability === "workspace.tab") {
+    const workspace = typeof metadata.workspace === "string" ? metadata.workspace.trim() : "";
+    const tabId = typeof metadata.tabId === "string" ? metadata.tabId.trim() : "";
+    const title = typeof metadata.title === "string" ? metadata.title.trim() : "";
+    if (!workspace || !tabId || !title) {
+      throw new ValidationError("workspace.tab metadata requires workspace, tabId and title");
+    }
+    if (!/^[a-z0-9_.-]{1,128}$/.test(tabId)) {
+      throw new ValidationError("workspace.tab tabId must be a safe lowercase identifier");
+    }
+    if (metadata.routePrefix !== undefined && (typeof metadata.routePrefix !== "string" || !metadata.routePrefix.startsWith("/") || metadata.routePrefix === "/")) {
+      throw new ValidationError("workspace.tab routePrefix must be an absolute route");
+    }
+    if (metadata.storage !== undefined && metadata.storage !== "session" && metadata.storage !== "persistent") {
+      throw new ValidationError("workspace.tab storage must be session or persistent");
+    }
+    if (metadata.keepMounted !== undefined && typeof metadata.keepMounted !== "boolean") {
+      throw new ValidationError("workspace.tab keepMounted must be a boolean");
+    }
+    if (metadata.contextMatch !== undefined) {
+      if (!metadata.contextMatch || typeof metadata.contextMatch !== "object" || Array.isArray(metadata.contextMatch)) {
+        throw new ValidationError("workspace.tab contextMatch must be an object");
+      }
+      for (const [key, value] of Object.entries(metadata.contextMatch)) {
+        if (!key.trim() || (typeof value !== "string" && !(Array.isArray(value) && value.every((item) => typeof item === "string")))) {
+          throw new ValidationError("workspace.tab contextMatch values must be strings or string arrays");
+        }
+      }
+    }
+  }
   if (definition.capability === "route.registry" && metadata.routes !== undefined) {
     if (!Array.isArray(metadata.routes)) throw new ValidationError("route.registry metadata.routes must be an array");
     for (const route of metadata.routes) {
@@ -763,20 +793,56 @@ function assertUIProviderEntry(
     case "web_module": {
       const platformKey = platform.trim().toLowerCase();
       if (["android", "ios", "mobile", "*"].includes(platformKey) || platformKey.startsWith("flutter_")) {
-        throw new ValidationError(`web_module cannot target Flutter/mobile/wildcard entry ${platform}; use schema_renderer or sandbox web and reserve web_module for web/Electron hosts`);
+        throw new ValidationError(`web_module cannot target Flutter/mobile/wildcard entry ${platform}; use schema_renderer and reserve web_module for web/Electron hosts`);
       }
       if (!entry.path?.trim()) throw new ValidationError(`web_module path required for ${platform}`);
+      if (!entry.contentHash?.trim()) throw new ValidationError(`web_module contentHash required for ${platform}`);
+      if (entry.stylePath && !entry.styleHash?.trim()) throw new ValidationError(`web_module styleHash required for ${platform}`);
+      return;
+    }
+    case "external_web_ui": {
+      if (capability !== "workspace.tab") {
+        throw new ValidationError("external_web_ui is only supported for workspace.tab");
+      }
+      let target: URL;
+      try {
+        target = new URL(entry.url ?? "");
+      } catch {
+        throw new ValidationError(`external_web_ui url must be an HTTP(S) URL without credentials for ${platform}`);
+      }
+      if (!["http:", "https:"].includes(target.protocol) || target.username || target.password) {
+        throw new ValidationError(`external_web_ui url must be an HTTP(S) URL without credentials for ${platform}`);
+      }
+      if (!entry.allowedOrigins?.length) {
+        throw new ValidationError(`external_web_ui allowedOrigins required for ${platform}`);
+      }
+      for (const rawOrigin of entry.allowedOrigins) {
+        let origin: URL;
+        try {
+          origin = new URL(rawOrigin);
+        } catch {
+          throw new ValidationError(`external_web_ui allowedOrigins contains an invalid origin for ${platform}`);
+        }
+        if (
+          !["http:", "https:"].includes(origin.protocol)
+          || !origin.host
+          || origin.pathname !== "/"
+          || origin.search
+          || origin.hash
+          || origin.username
+          || origin.password
+        ) {
+          throw new ValidationError(`external_web_ui allowedOrigins contains an invalid origin for ${platform}`);
+        }
+      }
+      if (!entry.allowedOrigins.includes(target.origin)) {
+        throw new ValidationError(`external_web_ui url origin must be listed in allowedOrigins for ${platform}`);
+      }
       return;
     }
     case "schema_renderer":
       if (!entry.contributionId?.trim()) {
         throw new ValidationError(`schema_renderer contributionId required for ${platform}`);
-      }
-      return;
-    case "web_restricted":
-    case "web_isolated":
-      if (!entry.contributionId?.trim()) {
-        throw new ValidationError(`${entry.type} contributionId required for ${platform}`);
       }
       return;
     default:

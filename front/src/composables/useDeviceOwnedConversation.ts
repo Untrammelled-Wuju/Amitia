@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 import { apiClient } from "./useApi";
 import { getDeploymentConfig, getNativeProviderTransition } from "@/runtime/runtime-adapter";
-import { streamOwnedChat, type OwnedChatEvent, type OwnedChatRequest, type OwnedExecutionScope } from "@/runtime/device-owned-chat";
+import { streamOwnedChat, streamOwnedGroupChat, type OwnedChatEvent, type OwnedChatRequest, type OwnedExecutionScope, type OwnedGroupChatRequest, type OwnedGroupChatResponse, type OwnedGroupDelivery, type OwnedGroupState } from "@/runtime/device-owned-chat";
 import { ownedImageURL, ownedAudioURL, ownedMessageText, ownedAttachmentURL } from "@/runtime/device-owned-attachments";
 import { conversationReference, parseConversationReference, ownedConversationRow, type OwnedConversationOrigin } from "@/runtime/device-owned-conversation-reference";
 import { createOwnedConversationExport } from "@/runtime/device-owned-export";
@@ -20,7 +20,7 @@ export interface OwnedProjectWorkspace { id: string; deviceId: string; name: str
 export interface OwnedProject { id: string; title: string; workspaces: OwnedProjectWorkspace[]; primaryWorkspaceId: string; hiddenAt?: string | null; revision: number; ownerId: string; roleId: string; readOnly: boolean; createdAt: string; updatedAt: string; pinnedAt?: string | null; executionScope: OwnedExecutionScope }
 interface MeshPolicy { coordinated: boolean; modeRevision: number; providerEpoch: number; permissionRevision: number; selectedRole: string }
 interface MeshResource { kind: string; id: string; roleId: string; ownerId: string; revision: number; deleted: boolean; origin?: string; readOnly?: boolean; body: any; executionScope?: OwnedExecutionScope }
-interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string> }
+interface MeshSnapshot { ownerId: string; resources: MeshResource[]; nextCursors?: Record<string, string>; group?: OwnedGroupState | null }
 interface MeshQueryResult { conversationReference?: string; conversationOrigin?: OwnedConversationOrigin; executionScope: OwnedExecutionScope; snapshot: MeshSnapshot; historicalSnapshot?: MeshSnapshot; historicalConversations?: any[]; nextHistoricalListCursor?: string; deliveryFailures?: Array<{ ownerId: string; requestId: string; conversationId?: string; errorCode: string; failedAt: string }> }
 
 const enabled = ref(false);
@@ -256,7 +256,7 @@ export function useDeviceOwnedConversation() {
     const params = { characterId, ...(keyword ? { keyword } : {}), ...(origin ? { conversationOwnerId: origin.ownerId } : {}), ...(older ? { resourceKind: kind, ...cursors } : {}) };
     const result = unwrap<MeshQueryResult>(await apiClient.get(path, { params }));
     if (captured !== revision || historyRequests.get(ticketKey) !== ticket) throw new Error("服务状态或加载请求已变化，旧上下文已丢弃");
-    const scope = JSON.stringify([result.executionScope.spaceId, result.executionScope.initiatorDeviceId, result.executionScope.targetDeviceId, result.executionScope.coreId, result.executionScope.providerEpoch, result.executionScope.targetProviderEpoch, result.executionScope.coordinated, result.executionScope.modeRevision, result.executionScope.permissionRevision, result.executionScope.targetPermissionRevision, result.executionScope.roleOwnerId, result.executionScope.resourceOwnerId, result.executionScope.roleId, result.executionScope.roleRevision]);
+    const scope = JSON.stringify([result.executionScope.spaceId, result.executionScope.initiatorDeviceId, result.executionScope.targetDeviceId, result.executionScope.coreId, result.executionScope.providerEpoch, result.executionScope.targetProviderEpoch, result.executionScope.coordinated, result.executionScope.modeRevision, result.executionScope.permissionRevision, result.executionScope.targetPermissionRevision, result.executionScope.roleOwnerId, result.executionScope.resourceOwnerId, result.executionScope.roleId, result.executionScope.roleRevision, result.executionScope.conversationRoleId]);
     if (older && previous?.scope !== scope) throw new Error("服务或角色已变化，请重新加载当前对话");
     const next: Record<string, string> = {};
     for (const [parameter, snapshot, cursorKind] of [
@@ -529,6 +529,121 @@ export function useDeviceOwnedConversation() {
     }
   }
 
+  async function groupState(conversationId: string, characterId: string): Promise<OwnedGroupState | null> {
+    const id = parseConversationReference(conversationId)?.id || conversationId;
+    if (!id || !characterId) return null;
+    const result = await query(id, characterId);
+    if (result.snapshot.group) return result.snapshot.group;
+    const conversation = result.snapshot.resources.find((resource) => resource.kind === "conversation")?.body;
+    if (conversation?.conversationType !== "group") return null;
+    return {
+      conversationId: id,
+      conversationRoleId: String(conversation.conversationRoleId || conversation.characterId || ""),
+      roleOwnerId: String(conversation.roleOwnerId || result.executionScope.roleOwnerId),
+      title: String(conversation.title || ""),
+      conversationType: "group",
+      membershipRevision: Number(conversation.membershipRevision || 1),
+      settingsRevision: Number(conversation.settingsRevision || 1),
+      lastMessageSequence: Number(conversation.lastMessageSequence || 0),
+      groupSettings: {
+        allowCharacterMentions: conversation.groupSettings?.allowCharacterMentions === true,
+        maxAutoReplies: Number(conversation.groupSettings?.maxAutoReplies || 6),
+      },
+      members: Array.isArray(conversation.members) ? conversation.members : [],
+    };
+  }
+
+  async function sendGroup(request: OwnedGroupChatRequest, onEvent: (event: OwnedChatEvent) => void): Promise<OwnedGroupChatResponse> {
+    if (activeController) throw new Error("当前回复尚未结束");
+    if (!enabled.value) throw new Error("设备对话服务尚未就绪");
+    const origin = parseConversationReference(request.conversationId || "");
+    const controller = new AbortController();
+    activeController = controller;
+    activeRequest = request.requestId;
+    const captured = revision;
+    const wireRequest = origin ? { ...request, conversationId: origin.id, conversationOrigin: origin } : request;
+    try {
+      const response = await streamOwnedGroupChat(wireRequest, controller.signal, (event) => {
+        if (captured !== revision) return;
+        onEvent(event);
+      });
+      if (captured !== revision) throw new Error("服务状态已变化，迟到群聊已拦截");
+      const reference = conversationReference(origin || { ownerId: response.deliveries[0]?.executionScope.resourceOwnerId || roleOwnerId.value, id: response.conversationId });
+      return { ...response, conversationId: reference };
+    } finally {
+      if (activeController === controller) {
+        activeController = null;
+        activeRequest = "";
+      }
+    }
+  }
+
+  async function inviteGroupMembers(conversationId: string, characterId: string, members: Array<{ characterId: string; shareHistory: boolean }>, expectedMembershipRevision: number) {
+    const origin = parseConversationReference(conversationId);
+    const requestId = crypto.randomUUID();
+    const result = unwrap<{ group: OwnedGroupState; saved: boolean }>(await apiClient.post(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/members`, { requestId, characterId, members, expectedMembershipRevision, ...(origin ? { conversationOrigin: origin } : {}) }));
+    if (!result.saved) throw new Error("群成员尚未获得数据所有者确认");
+    invalidateWithoutInterrupt();
+    return result.group;
+  }
+
+  async function createGroupConversation(characterId: string, members: Array<{ characterId: string; shareHistory: boolean }>) {
+    if (!enabled.value) throw new Error("设备对话服务尚未就绪");
+    if (!characterId || members.length === 0) throw new Error("请选择当前发言角色和至少一个邀请角色");
+    const requestId = crypto.randomUUID();
+    const result = unwrap<{ group: OwnedGroupState; acknowledgement: { ownerId: string }; saved: boolean }>(await apiClient.post("/api/device-mesh/v1/business/conversations/group", { requestId, characterId, members }));
+    if (!result.saved || !result.group?.conversationId || !result.acknowledgement?.ownerId) throw new Error("群聊尚未获得数据所有者确认");
+    invalidateWithoutInterrupt();
+    return {
+      ...result.group,
+      conversationId: conversationReference({ ownerId: result.acknowledgement.ownerId, id: result.group.conversationId }),
+    };
+  }
+
+  async function removeGroupMember(conversationId: string, characterId: string, memberId: string, expectedMembershipRevision: number) {
+    const origin = parseConversationReference(conversationId);
+    const requestId = crypto.randomUUID();
+    const result = unwrap<{ group: OwnedGroupState; saved: boolean }>(await apiClient.delete(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/members/${encodeURIComponent(memberId)}`, { data: { requestId, characterId, expectedMembershipRevision } }));
+    if (!result.saved) throw new Error("群成员变更尚未获得数据所有者确认");
+    invalidateWithoutInterrupt();
+    return result.group;
+  }
+
+  async function updateGroupSettings(conversationId: string, characterId: string, expectedSettingsRevision: number, changes: { name?: string; allowCharacterMentions?: boolean; maxAutoReplies?: number; memberOrder?: string[] }) {
+    const origin = parseConversationReference(conversationId);
+    const requestId = crypto.randomUUID();
+    const result = unwrap<{ group: OwnedGroupState; saved: boolean }>(await apiClient.patch(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/group-settings`, { requestId, characterId, expectedSettingsRevision, ...changes }));
+    if (!result.saved) throw new Error("群设置尚未获得数据所有者确认");
+    invalidateWithoutInterrupt();
+    return result.group;
+  }
+
+  async function requestGroupReplies(conversationId: string, characterId: string, sourceMessageId: string, members: Array<{ memberId: string; characterId: string; roleOwnerId?: string }>) {
+    const origin = parseConversationReference(conversationId);
+    const requestId = crypto.randomUUID();
+    const result = unwrap<OwnedGroupChatResponse>(await apiClient.post(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/reply-requests`, { requestId, characterId, sourceMessageId, members }));
+    if (!result.saved) throw new Error("点名回复尚未获得数据所有者确认");
+    invalidateWithoutInterrupt();
+    return result;
+  }
+
+  async function retryGroupDelivery(conversationId: string, characterId: string, roundId: string, deliveryId: string) {
+    const origin = parseConversationReference(conversationId);
+    const requestId = crypto.randomUUID();
+    const result = unwrap<OwnedGroupChatResponse>(await apiClient.post(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/group-rounds/${encodeURIComponent(roundId)}/retry`, { requestId, characterId, deliveryId }));
+    if (!result.saved) throw new Error("群成员重试尚未获得数据所有者确认");
+    invalidateWithoutInterrupt();
+    return result;
+  }
+
+  async function failedGroupDeliveries(conversationId: string, characterId: string): Promise<OwnedGroupDelivery[]> {
+    const result = await query(conversationId, characterId);
+    const rounds = result.snapshot.resources.filter((resource) => resource.kind === "group-round" && resource.body && !resource.deleted).sort((left, right) => String(right.body.updatedAt || "").localeCompare(String(left.body.updatedAt || "")));
+    const latest = rounds[0]?.body;
+    if (!latest || !Array.isArray(latest.deliveries)) return [];
+    return latest.deliveries.filter((delivery: OwnedGroupDelivery) => delivery.status === "failed");
+  }
+
   async function interrupt() {
     if (!activeRequest) return;
     await apiClient.post(`/api/device-mesh/v1/business/messages/${encodeURIComponent(activeRequest)}/interrupt`);
@@ -587,5 +702,5 @@ export function useDeviceOwnedConversation() {
     if (captured !== revision || result.saved !== true || result.project?.id !== `project-${identity}` || result.project?.primaryWorkspaceId !== primaryWorkspaceId || result.executionScope?.requestId !== requestId || authorityStamp(result.executionScope) !== authorityStamp(expected) || result.acknowledgement?.ownerId !== expected.resourceOwnerId || result.acknowledgement?.requestId !== requestId || result.acknowledgement?.versions?.[`project/${result.project.id}`] !== 1 || result.acknowledgement?.versions?.[`checkpoint/project/${requestId}`] !== 1) throw new Error("项目尚未获得数据所有者保存确认");
     return { ...result.project, ownerId: expected.resourceOwnerId, roleId: expected.roleId, readOnly: false, revision: 1, executionScope: result.executionScope } as OwnedProject;
   }
-  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, interrupt, stopLocal, previousSummary, projects, createProject };
+  return { enabled, roles, coreId, roleOwnerId, policy, notice, refresh, markUnavailable, selectInitialRole, query, data, historicalRoles, projections, hasMore, conversations, allMessages, exportConversation, conversationSummary, editConversationSummary, prepareSummaryGeneration, generateConversationSummary, edit, messages, send, groupState, sendGroup, createGroupConversation, inviteGroupMembers, removeGroupMember, updateGroupSettings, requestGroupReplies, retryGroupDelivery, failedGroupDeliveries, interrupt, stopLocal, previousSummary, projects, createProject };
 }

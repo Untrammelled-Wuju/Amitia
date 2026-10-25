@@ -3,8 +3,8 @@ import * as path from "node:path";
 import type { CliCommand, CliContext, CliCommandResult, CliReport } from "../types.js";
 import { EXIT_CODES } from "../exit-codes.js";
 
-const FORBIDDEN_BUILTINS = ["child_process", "fs", "net", "http", "https", "os", "path"];
-const FORBIDDEN_GLOBALS = ["require", "process", "global", "Buffer"];
+const FORBIDDEN_BUILTINS: string[] = [];
+const FORBIDDEN_GLOBALS = ["global"];
 const SECRET_PATTERNS = [
   /(?:api[_-]?key|secret|token|password|credential|private[_-]?key)\s*[:=]\s*["'][^"']+["']/i,
 ];

@@ -441,42 +441,6 @@
                       ]
                     },
                     {
-                      "id": "emote-settings-base",
-                      "type": "slider",
-                      "props": {
-                        "label": "基础概率",
-                        "min": 0,
-                        "max": 1,
-                        "step": 0.01,
-                        "showInput": true
-                      },
-                      "bindings": [
-                        {
-                          "path": "settings.baseProbability",
-                          "source": "form",
-                          "default": 0.1
-                        }
-                      ]
-                    },
-                    {
-                      "id": "emote-settings-max",
-                      "type": "slider",
-                      "props": {
-                        "label": "最大概率",
-                        "min": 0,
-                        "max": 1,
-                        "step": 0.01,
-                        "showInput": true
-                      },
-                      "bindings": [
-                        {
-                          "path": "settings.maxProbability",
-                          "source": "form",
-                          "default": 0.3
-                        }
-                      ]
-                    },
-                    {
                       "id": "emote-settings-hour",
                       "type": "field",
                       "props": {
@@ -488,21 +452,6 @@
                           "path": "settings.maxPerHour",
                           "source": "form",
                           "default": 5
-                        }
-                      ]
-                    },
-                    {
-                      "id": "emote-settings-gap",
-                      "type": "field",
-                      "props": {
-                        "label": "回复间隔",
-                        "variant": "number"
-                      },
-                      "bindings": [
-                        {
-                          "path": "settings.minReplyGap",
-                          "source": "form",
-                          "default": 3
                         }
                       ]
                     },
@@ -522,20 +471,6 @@
                       ]
                     },
                     {
-                      "id": "emote-settings-only",
-                      "type": "switch",
-                      "props": {
-                        "activeText": "允许仅发送表情"
-                      },
-                      "bindings": [
-                        {
-                          "path": "settings.allowEmoteOnly",
-                          "source": "form",
-                          "default": false
-                        }
-                      ]
-                    },
-                    {
                       "id": "emote-settings-save",
                       "type": "button",
                       "props": {
@@ -550,12 +485,8 @@
                             "action": "settings.save",
                             "payload": {
                               "enabled": "$form.settings.enabled",
-                              "baseProbability": "$form.settings.baseProbability",
-                              "maxProbability": "$form.settings.maxProbability",
                               "maxPerHour": "$form.settings.maxPerHour",
-                              "minReplyGap": "$form.settings.minReplyGap",
-                              "sameEmoteCooldownMinutes": "$form.settings.sameEmoteCooldownMinutes",
-                              "allowEmoteOnly": "$form.settings.allowEmoteOnly"
+                              "sameEmoteCooldownMinutes": "$form.settings.sameEmoteCooldownMinutes"
                             }
                           },
                           "statePath": "dashboard"

@@ -54,9 +54,6 @@ const host = {
       resources.delete(params.path);
       return { deleted: true };
     }
-    if (method === "host.vector.upsert") return { upserted: params.points.length };
-    if (method === "host.vector.search") return { items: [] };
-    if (method === "host.vector.delete") return { deleted: params.ids.length };
     if (method === "host.character.list") return { items: [] };
     if (method === "host.conversation.message.append") return { messageIds: ["message-1"], sequences: [1], deliveryGroupId: "response-1", lastSequence: 1 };
     throw new Error(`unexpected host method: ${method}`);
@@ -73,6 +70,6 @@ const groups = await tools.get("command")({ action: "groups.create", payload: { 
 if (!groups || !groups.id) throw new Error("group command failed");
 const listed = await tools.get("command")({ action: "groups.list", payload: {} });
 if (listed.length !== 1 || listed[0].name !== "测试分组") throw new Error("group state failed");
-const output = await tools.get("output")({ characterId: "char-1", conversationId: "conv-1", reply: "你好", lines: ["你好"], source: "manual" });
-if (!Array.isArray(output.outputs)) throw new Error("output contract failed");
+const catalog = await tools.get("ai")({ action: "list", characterId: "char-1" });
+if (!Array.isArray(catalog.emotes)) throw new Error("ai catalog contract failed");
 console.log("runtime=ok");

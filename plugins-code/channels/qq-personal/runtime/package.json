@@ -1,0 +1,25 @@
+{
+  "name": "@amitia/qq-personal-sidecar",
+  "version": "0.1.14",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx --test src/*.test.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.0",
+    "fastify": "^4.29.0",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.0"
+  },
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@11.17.0"
+}

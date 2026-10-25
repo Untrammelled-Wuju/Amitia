@@ -556,7 +556,28 @@ type RuntimeDefinition struct {
 	Permissions      []string                    `json:"permissions,omitempty"`
 	Capabilities     map[string]bool             `json:"capabilities,omitempty"`
 	Env              map[string]string           `json:"env,omitempty"`
+	HostAccess       RuntimeHostAccess           `json:"hostAccess,omitempty"`
 	NativeCompanions []NativeCompanionDefinition `json:"nativeCompanions,omitempty"`
+}
+
+type RuntimeHostAccess struct {
+	Filesystem RuntimeFilesystemAccess `json:"filesystem,omitempty"`
+	Network    RuntimeNetworkAccess    `json:"network,omitempty"`
+	Process    RuntimeProcessAccess    `json:"process,omitempty"`
+}
+
+type RuntimeFilesystemAccess struct {
+	Mode  string   `json:"mode,omitempty"`
+	Roots []string `json:"roots,omitempty"`
+}
+
+type RuntimeNetworkAccess struct {
+	Mode string `json:"mode,omitempty"`
+}
+
+type RuntimeProcessAccess struct {
+	Mode         string `json:"mode,omitempty"`
+	MaxProcesses int    `json:"maxProcesses,omitempty"`
 }
 
 type NativeCompanionDefinition struct {

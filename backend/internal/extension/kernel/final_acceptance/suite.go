@@ -26,7 +26,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/jsonrpc"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp_migration"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
-	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
@@ -286,7 +285,7 @@ func DefaultSuite() *Suite {
 		{ItemID: "stage2.kernel_core", Stage: StageKernelCore, Title: "ExtensionKernel 领域模型", Required: true, Description: "第21-28步：ExtensionKernel、Lifecycle、Contribution、Dependency、Runtime、HostAPI、Storage、Secret、Event、Hook"},
 		{ItemID: "stage3.amitiax_manifest", Stage: StageAmitiaxRuntime, Title: "AmitiaxManifestV1", Required: true, Description: "第29-34步：Manifest v1、多模块包、解析器、安装事务、签名、更新回滚"},
 		{ItemID: "stage3.runtimes", Stage: StageAmitiaxRuntime, Title: "多 Runtime 实现", Required: true, Description: "第35-40步：JSMain、Task、JSONRPC、TrustedService、WASM"},
-		{ItemID: "stage4.ui_contribution", Stage: StageUIContribution, Title: "UI Contribution 协议", Required: true, Description: "第41-48步：UIContribution、SchemaUI、SandboxWebUI、Slots、PageHost、ChatUI、Desktop、UIOrdering"},
+		{ItemID: "stage4.ui_contribution", Stage: StageUIContribution, Title: "UI Contribution 协议", Required: true, Description: "第41-48步：UIContribution、SchemaUI、ClientModule、Slots、PageHost、ChatUI、Desktop、UIOrdering"},
 		{ItemID: "stage5.builtin_tools", Stage: StageMigration, Title: "内置 Tools 迁移", Required: true, Description: "第49步：内置 Tool 迁移到 system/amitia-core"},
 		{ItemID: "stage5.mcp_workflow", Stage: StageMigration, Title: "MCP/Workflow 迁移", Required: true, Description: "第51-52步：MCP、Workflows 迁移"},
 		{ItemID: "stage6.sdk_cli", Stage: StageDevEcosystem, Title: "TypeScript SDK 与 Plugin CLI", Required: true, Description: "第56-57步：Plugin SDK、Plugin CLI"},
@@ -401,11 +400,6 @@ func verifyUIContribution(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("schema_ui: NewValidator returned nil")
 	}
 
-	webHost := sandbox_webui.NewHost()
-	if webHost == nil {
-		return nil, fmt.Errorf("sandbox_webui: NewHost returned nil")
-	}
-
 	pageReg := extension_page_host.NewPageRegistry()
 	sessionMgr := extension_page_host.NewSessionManager()
 	pageHost := extension_page_host.NewPageHost(pageReg, sessionMgr)
@@ -422,7 +416,6 @@ func verifyUIContribution(ctx context.Context) ([]string, error) {
 		fmt.Sprintf("ui_contribution.UIHost 实例化成功,默认slot=%d,测试贡献注册成功", len(ui_contribution.DefaultSlots)),
 		fmt.Sprintf("extension_slots.DefaultSlotRegistry 实例化成功,slot数量=%d", len(defaultSlots)),
 		"schema_ui.NewValidator 实例化成功",
-		"sandbox_webui.NewHost 实例化成功",
 		"extension_page_host.NewPageHost 实例化成功",
 		"ui_ordering.NewOrderingEngine 实例化成功",
 	}, nil

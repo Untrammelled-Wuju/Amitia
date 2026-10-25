@@ -27,6 +27,7 @@ export interface OwnedExecutionScope {
   requestId: string;
   turnId: string;
   executionId: string;
+  conversationRoleId?: string;
 }
 
 export interface OwnedChatResponse {
@@ -46,6 +47,10 @@ export interface OwnedChatResponse {
   interrupted?: boolean;
   memoryStatus: string;
   memoryError?: string;
+  groupRoundId?: string;
+  deliveryId?: string;
+  characterName?: string;
+  characterAvatar?: string;
 }
 
 export interface OwnedChatToolProgress {
@@ -60,7 +65,7 @@ export interface OwnedChatToolProgress {
 }
 
 export interface OwnedChatEvent {
-  type: "started" | "transcribed" | "delta" | "task" | "tool-started" | "tool-completed" | "reasoning-completed" | "output-completed" | "completed" | "interrupted" | "failed";
+  type: "started" | "transcribed" | "delta" | "task" | "tool-started" | "tool-completed" | "reasoning-completed" | "output-completed" | "group.delivery.started" | "group.round.completed" | "group.completed" | "completed" | "interrupted" | "failed";
   task?: { coordinationId: string; status: string };
   progress?: OwnedChatToolProgress;
   executionScope?: OwnedExecutionScope;
@@ -69,6 +74,89 @@ export interface OwnedChatEvent {
   reasoning?: boolean;
   message?: string;
   data?: OwnedChatResponse;
+  groupRoundId?: string;
+  deliveryId?: string;
+  deliveryIndex?: number;
+  characterId?: string;
+  characterName?: string;
+  characterAvatar?: string;
+  roleOwnerId?: string;
+}
+
+export interface OwnedGroupMember {
+  memberId: string;
+  characterId: string;
+  roleOwnerId: string;
+  characterName: string;
+  characterAvatar?: string;
+  status: "active" | "left";
+  orderIndex: number;
+  joinedSequence: number;
+  historyStartSequence: number;
+  leftSequence?: number;
+  characterRevision: number;
+}
+
+export interface OwnedGroupSettings {
+  allowCharacterMentions: boolean;
+  maxAutoReplies: number;
+}
+
+export interface OwnedGroupState {
+  conversationId: string;
+  conversationRoleId: string;
+  roleOwnerId: string;
+  title: string;
+  conversationType: "single" | "group";
+  membershipRevision: number;
+  settingsRevision: number;
+  lastMessageSequence: number;
+  groupSettings: OwnedGroupSettings;
+  members: OwnedGroupMember[];
+}
+
+export interface OwnedGroupMention {
+  memberId: string;
+  characterId: string;
+  roleOwnerId?: string;
+}
+
+export interface OwnedGroupDelivery {
+  deliveryId: string;
+  groupRoundId: string;
+  childRequestId: string;
+  memberId: string;
+  characterId: string;
+  roleOwnerId: string;
+  characterName: string;
+  characterAvatar?: string;
+  orderIndex: number;
+  source: string;
+  status: "queued" | "starting" | "running" | "completed" | "failed" | "cancelled";
+  error?: string;
+  messageId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OwnedGroupChatResponse {
+  conversationId: string;
+  requestId: string;
+  groupRoundId: string;
+  status: string;
+  userMessageId: string;
+  deliveries: OwnedChatResponse[];
+  saved: boolean;
+}
+
+export interface OwnedGroupChatRequest extends Omit<OwnedChatRequest, "characterId"> {
+  characterId: string;
+  group: {
+    expectedMembershipRevision: number;
+    expectedSettingsRevision: number;
+    replyToMessageId?: string;
+  };
+  mentions: OwnedGroupMention[];
 }
 
 export interface OwnedChatRequest {
@@ -99,6 +187,7 @@ function scopeFingerprint(scope: OwnedExecutionScope): string {
     scope.providerEpoch, scope.coordinated, scope.modeRevision, scope.permissionRevision,
     scope.targetPermissionRevision, scope.targetProviderEpoch, scope.roleId, scope.roleRevision,
     scope.roleOwnerId, scope.resourceOwnerId, scope.requestId, scope.turnId, scope.executionId,
+    scope.conversationRoleId,
   ]);
 }
 
@@ -249,4 +338,90 @@ export async function streamOwnedChat(request: OwnedChatRequest, signal: AbortSi
     throw new Error(error?.message || error?.msg || `设备对话服务不可用 (${response.status})`);
   }
   return consumeOwnedChatStream(response.body, request.requestId, onEvent, request.expectedExecutionScope);
+}
+
+export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signal: AbortSignal, onEvent: (event: OwnedChatEvent) => void): Promise<OwnedGroupChatResponse> {
+  const path = "/api/device-mesh/v1/business/messages";
+  const url = await resolveApiUrl(path);
+  const init = await createAuthenticatedFetchInit(path, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify(request),
+  });
+  const response = await fetch(url, init);
+  if (!response.ok || !response.body || !response.headers.get("Content-Type")?.includes("text/event-stream")) {
+    const error = await response.json().catch(() => null);
+    throw new Error(error?.message || error?.msg || `群聊服务不可用 (${response.status})`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let buffered = "";
+  let totalBytes = 0;
+  let roundId = "";
+  let conversationId = "";
+  let terminal = false;
+  let completed: OwnedGroupChatResponse | undefined;
+  const scopes = new Map<string, string>();
+  const processFrame = (frame: string) => {
+    const lines = frame.split(/\r?\n/).filter((line) => line.startsWith("data:"));
+    if (!lines.length) return;
+    if (terminal) throw new Error("群聊结束后仍收到数据，已拦截");
+    const event = JSON.parse(lines.map((line) => line.slice(5).trimStart()).join("\n")) as OwnedChatEvent;
+    if (event.type === "completed") return;
+    if (event.type === "group.completed") {
+      const data = event.data as unknown as OwnedGroupChatResponse;
+      if (!data || data.saved !== true || data.requestId !== request.requestId || !data.groupRoundId || !Array.isArray(data.deliveries)) throw new Error("群聊结果尚未确认保存");
+      completed = data;
+      terminal = true;
+      onEvent(event);
+      return;
+    }
+    if (event.type === "failed" || event.type === "interrupted") {
+      terminal = true;
+      onEvent(event);
+      throw new Error(event.message || "当前群聊已中断");
+    }
+    if (event.groupRoundId) {
+      if (roundId && roundId !== event.groupRoundId) throw new Error("群聊轮次归属已变化");
+      roundId = event.groupRoundId;
+    }
+    if (event.conversationId) {
+      if (conversationId && conversationId !== event.conversationId) throw new Error("群聊会话归属已变化");
+      conversationId = event.conversationId;
+    }
+    if (event.type === "started") {
+      if (!event.deliveryId || !event.executionScope) throw new Error("群成员回复缺少投递身份");
+      const scope = validateScope(event.executionScope, event.executionScope.requestId);
+      scopes.set(event.deliveryId, scopeFingerprint(scope));
+    } else if (event.type === "delta" || event.type === "transcribed" || event.type === "task" || event.type === "tool-started" || event.type === "tool-completed" || event.type === "reasoning-completed" || event.type === "output-completed") {
+      if (!event.deliveryId || !event.executionScope || !scopes.get(event.deliveryId) || scopes.get(event.deliveryId) !== scopeFingerprint(validateScope(event.executionScope, event.executionScope.requestId))) throw new Error("群成员流事件与投递身份不一致");
+    }
+    onEvent(event);
+  };
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (value) {
+        totalBytes += value.byteLength;
+        if (totalBytes > 8 * 1024 * 1024) throw new Error("群聊数据超出接收上限");
+        buffered += decoder.decode(value, { stream: true });
+      }
+      if (done) buffered += decoder.decode();
+      for (;;) {
+        const match = /\r?\n\r?\n/.exec(buffered);
+        if (!match || match.index === undefined) break;
+        const frame = buffered.slice(0, match.index);
+        buffered = buffered.slice(match.index + match[0].length);
+        processFrame(frame);
+      }
+      if (buffered.length > 512 * 1024) throw new Error("群聊事件超出接收上限");
+      if (done) break;
+    }
+    if (buffered.trim() || !terminal || !completed) throw new Error("群聊连接已断开，结果尚未确认；不会自动重新发送");
+    return completed;
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
 }

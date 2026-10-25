@@ -381,7 +381,7 @@ func (e *Engine) ManageOwnedMemory(ctx context.Context, request Request, input M
 	if !ok {
 		return MemoryManagementResponse{}, errors.New("数据所有者不支持记忆管理")
 	}
-	if scope.MemoryRoleID != "" && scope.MemoryRoleID != coordination.GlobalMemoryRole {
+	if scope.MemoryRoleID != "" {
 		roles, err := e.data.Roles(ctx, scope)
 		if err != nil {
 			return MemoryManagementResponse{}, err

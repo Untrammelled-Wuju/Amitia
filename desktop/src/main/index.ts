@@ -20,7 +20,6 @@ import {
 } from "./core-manager";
 import { ensureAmitiaDataDir, getAmitiaDataDir, isDevMode } from "./path-manager";
 import { ensureDesktopInstanceID } from "./desktop-identity";
-import { registerExtensionProtocol } from "./protocol";
 import { registerAppProtocol } from "./app-protocol";
 import { registerUpdateManager, waitForStartupCheck } from "./update-manager";
 import { ipcMain } from "electron";
@@ -336,8 +335,6 @@ async function enterMainApp(): Promise<void> {
   app.setLoginItemSettings({ openAtLogin: autoLaunch });
   registerUpdateManager(mainWindow, { prepareForInstall: prepareForUpdateInstall });
   void waitForStartupCheck();
-
-  registerExtensionProtocol(join(getAmitiaDataDir(), "data", "extensions-v2"));
 
   console.log(`[AmitiaDesktop] Deployment Mode: ${currentConfig.mode}`);
   if (currentConfig.mode === "cloud") {

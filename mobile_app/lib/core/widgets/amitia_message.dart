@@ -13,6 +13,7 @@ import '../../features/conversation/rendering/amitia_message_view.dart';
 import '../../features/conversation/rendering/amrp.dart';
 import '../ui_runtime/mobile_style_runtime.dart';
 import 'amitia_button.dart';
+import 'amitia_icons.dart';
 import 'amitia_misc.dart';
 import 'user_message_surface.dart';
 import 'conversation_media_image.dart';
@@ -546,7 +547,7 @@ class _UserMessageMenuLabel extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: context.textSecondary),
+        AmitiaIcon.adaptive(icon, color: context.textSecondary),
         const SizedBox(width: 10),
         Text(label),
       ],
@@ -1596,7 +1597,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     _controller.addListener(_syncControllerText);
     _inputFocusNode.onKeyEvent = _handleComposerKey;
     _inputFocusNode.addListener(_syncInputFocus);
-    unawaited(_loadAgentSkills());
   }
 
   void _syncInputFocus() {
@@ -2185,7 +2185,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                       ),
                       IconButton(
                         onPressed: () => Navigator.pop(sheetContext),
-                        icon: const Icon(Icons.close),
+                        icon: const AmitiaIcon(AmitiaIconGlyph.close),
                       ),
                     ],
                   ),
@@ -2253,7 +2253,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         color: color.withValues(alpha: 0.12),
         borderRadius: AppRadius.brSmall,
       ),
-      child: Icon(icon, size: 20, color: color),
+      child: AmitiaIcon.adaptive(icon, size: 20, color: color),
     );
   }
 
@@ -2348,15 +2348,18 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
               const SizedBox(height: 10),
               ListTile(
                 shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
-                leading: Icon(
-                  Icons.lock_outline_rounded,
+                leading: AmitiaIcon(
+                  AmitiaIconGlyph.lock,
                   color: context.textPrimary,
                 ),
                 title: const Text('请求批准'),
                 subtitle: const Text('敏感工具执行前需要你批准'),
                 trailing: fullAccess
                     ? null
-                    : Icon(Icons.check_rounded, color: context.accentPrimary),
+                    : AmitiaIcon(
+                        AmitiaIconGlyph.check,
+                        color: context.accentPrimary,
+                      ),
                 onTap: () {
                   widget.onPermissionChanged?.call('request_approval');
                   Navigator.pop(sheetContext);
@@ -2364,14 +2367,17 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
               ),
               ListTile(
                 shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
-                leading: Icon(
-                  Icons.lock_open_rounded,
+                leading: AmitiaIcon(
+                  AmitiaIconGlyph.unlock,
                   color: fullAccess ? context.warning : context.textPrimary,
                 ),
                 title: const Text('完全访问'),
                 subtitle: const Text('自动放行当前会话中可批准的工具操作'),
                 trailing: fullAccess
-                    ? Icon(Icons.check_rounded, color: context.accentPrimary)
+                    ? AmitiaIcon(
+                        AmitiaIconGlyph.check,
+                        color: context.accentPrimary,
+                      )
                     : null,
                 onTap: () {
                   widget.onPermissionChanged?.call('full_access');
@@ -2906,8 +2912,8 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
                                     ),
                                   ),
                                   alignment: Alignment.center,
-                                  child: Icon(
-                                    Icons.arrow_upward_rounded,
+                                  child: AmitiaIcon(
+                                    AmitiaIconGlyph.send,
                                     size: 18,
                                     color:
                                         sendStyle.color('foregroundColor') ??
@@ -3754,7 +3760,7 @@ class _ComposerRoundButton extends StatelessWidget {
                   borderRadius: radius ?? BorderRadius.circular(15.5),
                 ),
           alignment: Alignment.center,
-          child: Icon(icon, size: iconSize, color: color),
+          child: AmitiaIcon.adaptive(icon, size: iconSize, color: color),
         ),
       ),
     );
@@ -3781,7 +3787,7 @@ class _ComposerTool extends StatelessWidget {
         height: 52,
         child: Row(
           children: [
-            Icon(icon, size: 22, color: context.textPrimary),
+            AmitiaIcon.adaptive(icon, size: 22, color: context.textPrimary),
             const SizedBox(width: 16),
             Text(label, style: AppTypography.body(context)),
           ],

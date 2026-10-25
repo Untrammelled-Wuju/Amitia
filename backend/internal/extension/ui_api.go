@@ -22,6 +22,22 @@ func NewUIAPI(runtime *Runtime) *UIAPI {
 	return &UIAPI{runtime: runtime}
 }
 
+func RegisterPublicUIModuleRouter(group *gin.RouterGroup, runtime *Runtime) {
+	if group == nil || runtime == nil || runtime.Kernel == nil {
+		return
+	}
+	container := runtime.Kernel.Container()
+	if container == nil || container.UIProviderRegistry == nil {
+		return
+	}
+	handler := ui_handler.NewHTTPHandler(nil, nil, nil)
+	handler.SetExtensionRoot(container.ExtRoot)
+	handler.SetProviderRegistry(container.UIProviderRegistry)
+	mux := http.NewServeMux()
+	handler.RegisterPublicModuleRoutes(mux)
+	group.Any("/ui/provider-module/*modulePath", gin.WrapH(mux))
+}
+
 func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.RouterGroup) {
 	if api.runtime == nil || api.runtime.Kernel == nil {
 		return
@@ -38,7 +54,6 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		container.UIHost,
 		container.SlotRegistry,
 		container.PageHost,
-		container.SandboxHost,
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
 	if container.ResourceLinks != nil {
@@ -129,13 +144,6 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 
 	if container.PermissionBroker != nil && container.ScopeManager != nil {
 		handler.SetAuthorizer(permission.NewUISessionAuthorizer(container.PermissionBroker, container.ScopeManager))
-	}
-
-	if container.ScopeSnapshotCreator != nil {
-		handler.SetScopeSnapshotCreator(container.ScopeSnapshotCreator)
-	}
-	if container.ContextualScopeSnapshotCreator != nil {
-		handler.SetContextualScopeSnapshotCreator(container.ContextualScopeSnapshotCreator)
 	}
 
 	if container.SchemaRegistry != nil {

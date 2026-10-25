@@ -584,6 +584,7 @@ void main() {
     await controller.openConversation('conversation-1');
 
     expect(controller.conversationId, 'conversation-1');
+    expect(controller.conversationTitle, '测试会话');
     expect(controller.messages, isEmpty);
     expect(controller.activeTurnId, isEmpty);
 

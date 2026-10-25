@@ -1,7 +1,14 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import QRCode from "qrcode";
-import { createChannelClient, loginCode, statusLabel } from "./session.mjs";
+import { createChannelClient, createHostBridge, loginCode, statusLabel } from "./session.mjs";
+
+const props = defineProps({
+  uiContext: { type: Object, default: () => ({}) },
+  provider: { type: Object, default: null },
+  uiActions: { type: Object, default: () => ({}) },
+  uiNavigate: { type: Function, default: null },
+});
 
 const detail = ref({ status: "idle" });
 const ready = ref(false);
@@ -122,8 +129,8 @@ async function initialize() {
   if (busy.value) return;
   error.value = "";
   try {
-    const bridge = window.amitiaUI;
-    if (typeof bridge?.ready === "function") await bridge.ready();
+    const bridge = createHostBridge(props.uiActions, props.uiNavigate);
+    await bridge.ready();
     if (disposed) return;
     invoke = createChannelClient(bridge);
     ready.value = true;

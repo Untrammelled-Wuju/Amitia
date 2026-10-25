@@ -119,6 +119,22 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 			inst.RuntimeID = r.runtimeIdent.RuntimeID
 		}
 
+		if err := inst.Validate(); err != nil {
+			return activated, fmt.Errorf(
+				"activate: invalid instance %s provider=%s capability=%s placement=%s space=%s device=%s runtime=%s health=%s availability=%s: %w",
+				inst.ID,
+				inst.ProviderID,
+				inst.CapabilityID,
+				inst.Placement,
+				inst.SpaceID,
+				inst.DeviceID,
+				inst.RuntimeID,
+				inst.Health,
+				inst.Availability,
+				err,
+			)
+		}
+
 		if r.lifecycle != nil {
 			if err := r.lifecycle.RegisterInstance(inst); err != nil {
 				return activated, fmt.Errorf("activate: register instance %s: %w", instanceID, err)
@@ -137,7 +153,7 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 
 func usesInProcessAdapter(runtimeType RuntimeType) bool {
 	switch runtimeType {
-	case RuntimeTypeBuiltin, RuntimeTypeWorkspace, RuntimeTypeInternal:
+	case RuntimeTypeBuiltin, RuntimeTypeWorkspace, RuntimeTypeInternal, RuntimeTypeJavaScript, RuntimeTypePluginJS:
 		return true
 	default:
 		return false

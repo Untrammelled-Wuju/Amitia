@@ -3,7 +3,6 @@ import '../../../../core/settings/chat_input_preferences.dart';
 import '../../../../core/settings/chat_appearance_preferences.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -20,9 +19,11 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/widgets/character_avatar.dart';
+import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_transport/backend_service_api.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
@@ -30,10 +31,11 @@ import '../../../../core/realtime/realtime_audio_bridge.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/chat_service.dart';
 import '../../../../core/services/device_owned_attachments.dart';
+import '../../../../core/services/device_owned_chat_service.dart';
 import '../../../../core/services/workspace_service.dart';
+import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
-import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
 import '../../../../core/models/memory.dart';
@@ -87,7 +89,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   List<ChatMessage>? _cachedMessagesForContext;
   Map<String, FutureOr<dynamic> Function(dynamic)>? _cachedProviderActions;
   String _cachedProviderActionsCharacterId = '';
-  Timer? _conversationEventRefreshTimer;
+  Timer? _conversationCollectionRefreshTimer;
   ChatMessage? _replyTarget;
   List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
   bool _workspaceBusy = false;
@@ -201,7 +203,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (conversationId.isEmpty) {
       _prepareDraftRuntime(widget.initialProjectId);
       await _openDraftWorkspace(widget.initialProjectId);
-      await _refreshRecentWorkspaces();
       return;
     }
     final characterId = widget.initialCharacterId?.trim() ?? '';
@@ -212,7 +213,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       conversationId,
       characterId: characterId.isEmpty ? null : characterId,
     );
-    await _refreshRecentWorkspaces();
   }
 
   void _onRuntimeChanged() {
@@ -225,33 +225,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final conversationId = _runtime.conversationId?.trim() ?? '';
     if (_runtime.conversationUpdateEpoch != _lastConversationUpdateEpoch) {
       _lastConversationUpdateEpoch = _runtime.conversationUpdateEpoch;
-      ref.invalidate(conversationListProvider);
-      ref.invalidate(conversationSidebarProvider);
-      ref.read(conversationCollectionRevisionProvider.notifier).state++;
+      _scheduleConversationCollectionRefresh();
     }
     if (conversationId.isNotEmpty &&
         conversationId != _lastSidebarConversationId) {
-      ref.invalidate(conversationListProvider);
-      ref.invalidate(conversationSidebarProvider);
-      ref.read(conversationCollectionRevisionProvider.notifier).state++;
+      _scheduleConversationCollectionRefresh();
       _autoFollowOutput = true;
     }
     _lastSidebarConversationId = conversationId;
     ref.read(activeConversationIdProvider.notifier).state = conversationId;
     unawaited(_syncComposerDraft());
     _syncCreatedConversationRoute(conversationId);
-    _conversationEventRefreshTimer?.cancel();
-    if (conversationId.isNotEmpty) {
-      _conversationEventRefreshTimer = Timer(
-        const Duration(milliseconds: 350),
-        () {
-          if (!mounted) return;
-          ref.invalidate(conversationUIEventWindowProvider(conversationId));
-        },
-      );
-    }
     setState(() {});
     _scrollToBottom();
+  }
+
+  void _scheduleConversationCollectionRefresh() {
+    _conversationCollectionRefreshTimer?.cancel();
+    _conversationCollectionRefreshTimer = Timer(
+      const Duration(milliseconds: 420),
+      () {
+        if (!mounted) return;
+        ref.invalidate(conversationListProvider);
+        ref.invalidate(conversationSidebarProvider);
+        ref.read(conversationCollectionRevisionProvider.notifier).state++;
+      },
+    );
   }
 
   void _handleDraftReset() {
@@ -470,7 +469,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _composerDraftTimer?.cancel();
     unawaited(_persistComposerDraftNow(_activeComposerDraftKey));
     _composerController.removeListener(_handleComposerChanged);
-    _conversationEventRefreshTimer?.cancel();
+    _conversationCollectionRefreshTimer?.cancel();
     unawaited(_voiceInputSubscription?.cancel());
     unawaited(_realtimeAudio.stopCapture());
     _runtime.removeListener(_onRuntimeChanged);
@@ -955,6 +954,256 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       quotedMessage: reply,
       replyToExcerpt: reply == null ? null : _replyExcerpt(reply),
     );
+  }
+
+  void _insertGroupMention(OwnedGroupMember member) {
+    final selection = _composerController.selection;
+    final start = selection.start < 0
+        ? _composerController.text.length
+        : selection.start;
+    final end = selection.end < 0 ? start : selection.end;
+    final value = '@${member.characterName} ';
+    _composerController.value = TextEditingValue(
+      text: _composerController.text.replaceRange(start, end, value),
+      selection: TextSelection.collapsed(offset: start + value.length),
+    );
+    final mentions = <Map<String, dynamic>>[
+      ..._runtime.groupMentions.where(
+        (mention) => mention['memberId'] != member.memberId,
+      ),
+      member.toJson(),
+    ];
+    _runtime.setGroupMentions(mentions);
+  }
+
+  Future<void> _showGroupManager(
+    List<CharacterDto> characters,
+    String characterId,
+  ) async {
+    final selected = <String>{};
+    var shareHistory = false;
+    var busy = false;
+    final nameController = TextEditingController(
+      text: _runtime.group?.title ?? '',
+    );
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final group = _runtime.group;
+          final members = group?.activeMembers ?? const <OwnedGroupMember>[];
+          final memberIds = members.map((member) => member.characterId).toSet();
+          final available = characters
+              .where(
+                (character) =>
+                    character.id != characterId &&
+                    !memberIds.contains(character.id),
+              )
+              .toList(growable: false);
+          final replySource = _runtime.messages
+              .where(
+                (message) =>
+                    message.role == MessageRole.user &&
+                    message.status != MessageStatus.sending &&
+                    message.status != MessageStatus.error &&
+                    !message.id.startsWith('client:'),
+              )
+              .lastOrNull;
+          Future<void> run(Future<void> Function() operation) async {
+            setSheetState(() => busy = true);
+            try {
+              await operation();
+              setSheetState(() {});
+            } catch (error) {
+              if (mounted) {
+                ScaffoldMessenger.of(
+                  this.context,
+                ).showSnackBar(SnackBar(content: Text(error.toString())));
+              }
+            } finally {
+              if (mounted) setSheetState(() => busy = false);
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              18,
+              20,
+              MediaQuery.viewInsetsOf(context).bottom + 24,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    group?.title.trim().isNotEmpty == true
+                        ? group!.title
+                        : '多角色群聊',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  if (group != null)
+                    TextField(
+                      controller: nameController,
+                      enabled: !busy,
+                      maxLength: 128,
+                      decoration: InputDecoration(
+                        labelText: '群聊名称',
+                        suffixIcon: IconButton(
+                          tooltip: '保存名称',
+                          onPressed: busy
+                              ? null
+                              : () => run(() async {
+                                  await _runtime.renameGroup(
+                                    nameController.text.trim(),
+                                  );
+                                }),
+                          icon: const Icon(Icons.check),
+                        ),
+                      ),
+                    ),
+                  Text(
+                    group == null ? '邀请角色后沿用当前会话' : '${members.length} 位角色',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 16),
+                  for (final member in members)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundImage: member.characterAvatar.isEmpty
+                            ? null
+                            : NetworkImage(member.characterAvatar),
+                        child: member.characterAvatar.isEmpty
+                            ? Text(
+                                member.characterName.characters.firstOrNull ??
+                                    '?',
+                              )
+                            : null,
+                      ),
+                      title: Text(member.characterName),
+                      subtitle: Text(
+                        member.historyStartSequence > 0 ? '仅可见加入后历史' : '可见完整历史',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: '点名',
+                            onPressed: () {
+                              _insertGroupMention(member);
+                              Navigator.pop(sheetContext);
+                            },
+                            icon: const Icon(Icons.alternate_email),
+                          ),
+                          if (replySource != null)
+                            IconButton(
+                              tooltip: '让 TA 回复最近消息',
+                              onPressed: busy
+                                  ? null
+                                  : () => run(() async {
+                                      await _runtime.requestGroupReply(
+                                        member,
+                                        sourceMessageId: replySource.id,
+                                      );
+                                    }),
+                              icon: const Icon(Icons.forum_outlined),
+                            ),
+                          if (members.length > 1)
+                            IconButton(
+                              tooltip: '移除',
+                              onPressed: busy
+                                  ? null
+                                  : () => run(() async {
+                                      await _runtime.removeGroupMember(member);
+                                    }),
+                              icon: const Icon(Icons.person_remove_outlined),
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (group != null) ...[
+                    const Divider(),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('允许角色互相 @'),
+                      subtitle: const Text('角色可在回复完成后邀请另一位成员接话'),
+                      value: group.allowCharacterMentions,
+                      onChanged: busy
+                          ? null
+                          : (value) => run(() async {
+                              await _runtime.updateGroupMentionsEnabled(value);
+                            }),
+                    ),
+                  ],
+                  const Divider(),
+                  Text('邀请角色', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  for (final character in available)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: selected.contains(character.id),
+                      onChanged: busy
+                          ? null
+                          : (value) {
+                              setSheetState(() {
+                                if (value == true) {
+                                  selected.add(character.id);
+                                } else {
+                                  selected.remove(character.id);
+                                }
+                              });
+                            },
+                      title: Text(character.name),
+                      secondary: CircleAvatar(
+                        backgroundImage: character.avatar.trim().isEmpty
+                            ? null
+                            : NetworkImage(character.avatar),
+                        child: character.avatar.trim().isEmpty
+                            ? Text(character.name.characters.firstOrNull ?? '?')
+                            : null,
+                      ),
+                    ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: shareHistory,
+                    onChanged: busy
+                        ? null
+                        : (value) =>
+                              setSheetState(() => shareHistory = value == true),
+                    title: const Text('允许新成员查看加入前历史'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: busy || selected.isEmpty
+                        ? null
+                        : () => run(() async {
+                            await _runtime.inviteGroupMembers(
+                              selected
+                                  .map(
+                                    (id) => <String, dynamic>{
+                                      'characterId': id,
+                                      'shareHistory': shareHistory,
+                                    },
+                                  )
+                                  .toList(growable: false),
+                            );
+                            selected.clear();
+                          }),
+                    child: Text(group == null ? '创建群聊' : '邀请角色'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    nameController.dispose();
   }
 
   String _composerDraftKey() {
@@ -2215,13 +2464,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
-  void _openDrawer(BuildContext context) {
-    final scope = ShellDrawerScope.of(context);
-    if (scope != null) {
-      scope.openDrawer();
-      return;
+  void _goBack(BuildContext context) {
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go(AppRoutes.conversations);
     }
-    Scaffold.of(context).openDrawer();
   }
 
   Map<String, dynamic> _providerMessage(ChatMessage message) =>
@@ -2287,7 +2536,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             context.go(AppRoutes.chat);
             return null;
           },
-          ConversationUIAction.openDrawer: (_) => _openDrawer(context),
+          ConversationUIAction.openDrawer: (_) => _goBack(context),
           ConversationUIAction.clear: (_) => _clearCurrentConversation(),
           ConversationUIAction.reply: (input) {
             final id = input is Map
@@ -2342,14 +2591,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<void>>(nativeBridgeRelayClientProvider, (
-      previous,
-      next,
-    ) {
-      if (next is AsyncData && previous is! AsyncData && mounted) {
-        unawaited(_refreshRecentWorkspaces());
-      }
-    });
     if (!_diagnosticLogged) {
       _diagnosticLogged = true;
       debugPrint(
@@ -2525,14 +2766,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ]),
       contributions: projectionContributions,
     );
+    final messageIndexById = <String, int>{
+      for (var index = 0; index < visibleMessages.length; index++)
+        visibleMessages[index].id: index,
+    };
     final flowItems =
         <_MobileChatFlowItem>[
           for (final message in visibleMessages)
             _MobileChatFlowItem.message(
               message: message,
-              messageIndex: _runtime.messages.indexWhere(
-                (candidate) => candidate.id == message.id,
-              ),
+              messageIndex: messageIndexById[message.id] ?? -1,
               timestamp: message.time,
             ),
           for (final node in conversationNodes) _MobileChatFlowItem.node(node),
@@ -2597,11 +2840,50 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final showHistoryLoader =
         _runtime.hasMoreHistory || _runtime.isLoadingOlderMessages;
     final workspaceName = _runtime.workspace?.workspaceName.trim() ?? '';
+    final currentConversationTitle =
+        _runtime.conversationTitle.trim().isNotEmpty
+        ? _runtime.conversationTitle.trim()
+        : _runtime.group?.title.trim().isNotEmpty == true
+        ? _runtime.group!.title.trim()
+        : characterName.isNotEmpty
+        ? characterName
+        : '新对话';
 
     final conversationComposer = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (conversationId.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+            child: Row(
+              children: [
+                for (final member
+                    in _runtime.group?.activeMembers ??
+                        const <OwnedGroupMember>[])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                      avatar: CircleAvatar(
+                        backgroundImage: member.characterAvatar.isEmpty
+                            ? null
+                            : NetworkImage(member.characterAvatar),
+                        child: member.characterAvatar.isEmpty
+                            ? Text(
+                                member.characterName.characters.firstOrNull ??
+                                    '?',
+                                style: const TextStyle(fontSize: 10),
+                              )
+                            : null,
+                      ),
+                      label: Text('@${member.characterName}'),
+                      onPressed: () => _insertGroupMention(member),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         UIProviderHost(
           capability: UICapability.conversationComposer,
           context: providerContext,
@@ -2656,7 +2938,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 onPickImage: _pickAndSendImage,
                 onPickVideo: _pickAndSendVideo,
                 onSendCode: _onSendCode,
-                onLoadAgentSkills: () => _loadAgentSkills(),
+                onLoadAgentSkills: _loadAgentSkills,
                 onStartVoiceRecording: _startRecordedVoice,
                 onFinishVoiceRecording: _finishRecordedVoice,
                 onCancelVoiceRecording: _cancelRecordedVoice,
@@ -2849,10 +3131,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                               )
                                               .firstOrNull;
                                           final messageCharacterName =
-                                              messageCharacter?.name
-                                                      .trim()
-                                                      .isNotEmpty ==
-                                                  true
+                                              message.characterName
+                                                  .trim()
+                                                  .isNotEmpty
+                                              ? message.characterName.trim()
+                                              : messageCharacter?.name
+                                                        .trim()
+                                                        .isNotEmpty ==
+                                                    true
                                               ? messageCharacter!.name.trim()
                                               : message.characterId
                                                     .trim()
@@ -2907,12 +3193,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                                       ? characterId
                                                       : message.characterId),
                                               avatarUrl:
-                                                  messageCharacter?.avatar ??
-                                                  (message.characterId
-                                                          .trim()
-                                                          .isEmpty
-                                                      ? character?.avatar ?? ''
-                                                      : ''),
+                                                  message.characterAvatar
+                                                      .trim()
+                                                      .isNotEmpty
+                                                  ? message.characterAvatar
+                                                  : messageCharacter?.avatar ??
+                                                        (message.characterId
+                                                                .trim()
+                                                                .isEmpty
+                                                            ? character
+                                                                      ?.avatar ??
+                                                                  ''
+                                                            : ''),
                                               characterName:
                                                   messageCharacterName,
                                               userInitial: userInitial,
@@ -3107,7 +3399,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               context: providerContext,
               actions: providerActions,
               fallback: _ChatTopBar(
-                onOpenDrawer: () => _openDrawer(context),
+                onBack: () => _goBack(context),
+                title: currentConversationTitle,
+                currentRoleId: characterId,
+                currentRoleName: characterName,
+                currentRoleAvatar: character?.avatar ?? '',
+                isGroup: _runtime.group != null,
+                groupMembers:
+                    _runtime.group?.activeMembers ?? const <OwnedGroupMember>[],
+                onManageMembers: () =>
+                    _showGroupManager(characters, characterId),
                 onOpenWorkbench: () => showModalBottomSheet<void>(
                   context: context,
                   isScrollControlled: true,
@@ -3620,17 +3921,31 @@ class _ChatScrollFade extends StatelessWidget {
 }
 
 class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
-  final VoidCallback onOpenDrawer;
+  final VoidCallback onBack;
+  final VoidCallback onManageMembers;
   final VoidCallback onOpenWorkbench;
   final ValueChanged<String> onCallSelected;
   final ValueChanged<int> onMoreSelected;
+  final String title;
+  final String currentRoleId;
+  final String currentRoleName;
+  final String currentRoleAvatar;
+  final List<OwnedGroupMember> groupMembers;
+  final bool isGroup;
   final Widget? extensionActions;
 
   const _ChatTopBar({
-    required this.onOpenDrawer,
+    required this.onBack,
+    required this.onManageMembers,
     required this.onOpenWorkbench,
     required this.onCallSelected,
     required this.onMoreSelected,
+    required this.title,
+    required this.currentRoleId,
+    required this.currentRoleName,
+    required this.currentRoleAvatar,
+    required this.groupMembers,
+    required this.isGroup,
     this.extensionActions,
   });
 
@@ -3639,10 +3954,6 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final platform = Theme.of(context).platform;
-    final isApplePlatform =
-        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
-
     return SafeArea(
       bottom: false,
       child: Padding(
@@ -3650,113 +3961,141 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
         child: Row(
           children: [
             Tooltip(
-              message: '打开侧边栏',
+              message: '返回',
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: onOpenDrawer,
-                child: _ChatTopBarButton(
-                  icon: isApplePlatform
-                      ? CupertinoIcons.line_horizontal_3
-                      : Icons.menu_rounded,
+                onTap: onBack,
+                child: const _ChatTopBarButton(
+                  icon: AmitiaIconGlyph.back,
                   size: 44,
-                  iconSize: 22,
+                  iconSize: 20,
                 ),
               ),
             ),
-            const Spacer(),
-            Tooltip(
-              message: '工作区',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onOpenWorkbench,
-                child: const _ChatTopBarButton(
-                  icon: Icons.space_dashboard_outlined,
-                  size: 44,
-                  iconSize: 22,
-                ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.body(
+                        context,
+                      ).copyWith(fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _ChatHeaderAvatars(
+                    isGroup: isGroup,
+                    members: groupMembers,
+                    roleId: currentRoleId,
+                    roleName: currentRoleName,
+                    roleAvatar: currentRoleAvatar,
+                  ),
+                ],
               ),
             ),
             if (extensionActions != null) ...[
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 180),
+                constraints: const BoxConstraints(maxWidth: 120),
                 child: extensionActions!,
               ),
               const SizedBox(width: 8),
             ],
             AmitiaPopupMenuButton<String>(
-              tooltip: '发起通话',
-              menuWidth: 190,
+              tooltip: '更多',
+              menuWidth: 220,
               itemVerticalPadding: 0,
               itemFontSize: 14.5,
               itemIconSize: 18,
               itemHorizontalPadding: 14,
               itemHorizontalMargin: 0,
               itemMinHeight: 46,
-              onSelected: onCallSelected,
-              itemBuilder: (context) => const [
+              onSelected: (action) {
+                switch (action) {
+                  case 'member':
+                    onManageMembers();
+                  case 'workspace':
+                    onOpenWorkbench();
+                  case 'video':
+                    onCallSelected('video');
+                  case 'voice':
+                    onCallSelected('voice');
+                  case 'screen':
+                    onCallSelected('screen');
+                  case 'export':
+                    onMoreSelected(0);
+                  case 'profile':
+                    onMoreSelected(1);
+                  case 'memory':
+                    onMoreSelected(2);
+                  case 'clear':
+                    onMoreSelected(3);
+                }
+              },
+              itemBuilder: (context) => [
                 PopupMenuItem(
+                  value: 'member',
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.group_add_outlined,
+                    label: isGroup ? '管理群成员' : '添加角色',
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'workspace',
+                  child: _ChatPopupMenuLabel(
+                    icon: Icons.space_dashboard_outlined,
+                    label: '工作区',
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
                   value: 'video',
                   child: _ChatPopupMenuLabel(
                     icon: Icons.videocam_outlined,
                     label: '视频通话',
                   ),
                 ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: 'voice',
                   child: _ChatPopupMenuLabel(
                     icon: Icons.phone_in_talk_outlined,
                     label: '语音通话',
                   ),
                 ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: 'screen',
                   child: _ChatPopupMenuLabel(
                     icon: Icons.screen_share_outlined,
                     label: '屏幕通话',
                   ),
                 ),
-              ],
-              child: const _ChatTopBarButton(
-                icon: Icons.phone_in_talk_outlined,
-                size: 44,
-                iconSize: 18,
-              ),
-            ),
-            const SizedBox(width: 8),
-            AmitiaPopupMenuButton<int>(
-              tooltip: '当前对话详情',
-              menuWidth: 190,
-              itemVerticalPadding: 0,
-              itemFontSize: 14.5,
-              itemIconSize: 18,
-              itemHorizontalPadding: 14,
-              itemHorizontalMargin: 0,
-              itemMinHeight: 46,
-              onSelected: onMoreSelected,
-              itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: 0,
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'export',
                   child: _ChatPopupMenuLabel(
                     icon: Icons.file_download_outlined,
                     label: '导出聊天记录',
                   ),
                 ),
-                PopupMenuItem(
-                  value: 1,
+                const PopupMenuItem(
+                  value: 'profile',
                   child: _ChatPopupMenuLabel(
                     icon: Icons.badge_outlined,
                     label: '用户画像摘要',
                   ),
                 ),
-                PopupMenuItem(
-                  value: 2,
+                const PopupMenuItem(
+                  value: 'memory',
                   child: _ChatPopupMenuLabel(
                     icon: Icons.psychology_alt_outlined,
                     label: '记忆上下文',
                   ),
                 ),
-                PopupMenuItem(
-                  value: 3,
+                const PopupMenuItem(
+                  value: 'clear',
                   child: _ChatPopupMenuLabel(
                     icon: Icons.cleaning_services_outlined,
                     label: '清空聊天记录',
@@ -3764,15 +4103,129 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ],
               child: _ChatTopBarButton(
-                icon: isApplePlatform
-                    ? CupertinoIcons.ellipsis
-                    : Icons.more_horiz,
+                icon: AmitiaIconGlyph.more,
                 size: 44,
                 iconSize: 22,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ChatHeaderAvatars extends StatelessWidget {
+  const _ChatHeaderAvatars({
+    required this.isGroup,
+    required this.members,
+    required this.roleId,
+    required this.roleName,
+    required this.roleAvatar,
+  });
+
+  final bool isGroup;
+  final List<OwnedGroupMember> members;
+  final String roleId;
+  final String roleName;
+  final String roleAvatar;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isGroup || members.isEmpty) {
+      if (roleName.trim().isEmpty) return const SizedBox.shrink();
+      return Semantics(
+        image: true,
+        label: '当前角色 ${roleName.trim()}',
+        child: _ChatHeaderAvatar(
+          characterId: roleId,
+          name: roleName,
+          avatar: roleAvatar,
+          size: 24,
+        ),
+      );
+    }
+    final visibleMembers = members.take(3).toList(growable: false);
+    final remaining = members.length - visibleMembers.length;
+    final width = remaining > 0
+        ? visibleMembers.length * 14.0 + 22
+        : 24 + (visibleMembers.length - 1) * 14.0;
+    return Semantics(
+      image: true,
+      label: '参与角色 ${members.length} 位',
+      child: SizedBox(
+        width: width,
+        height: 24,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (var index = 0; index < visibleMembers.length; index++)
+              Positioned(
+                left: index * 14,
+                child: _ChatHeaderAvatar(
+                  characterId: visibleMembers[index].characterId,
+                  name: visibleMembers[index].characterName,
+                  avatar: visibleMembers[index].characterAvatar,
+                  size: 24,
+                ),
+              ),
+            if (remaining > 0)
+              Positioned(
+                left: visibleMembers.length * 14,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: context.surfaceSecondary,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: context.surfacePrimary,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    '+$remaining',
+                    style: AppTypography.label(context).copyWith(fontSize: 8),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatHeaderAvatar extends StatelessWidget {
+  const _ChatHeaderAvatar({
+    required this.characterId,
+    required this.name,
+    required this.avatar,
+    required this.size,
+  });
+
+  final String characterId;
+  final String name;
+  final String avatar;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        shape: BoxShape.circle,
+      ),
+      child: CharacterAvatar(
+        characterId: characterId,
+        avatar: avatar,
+        initial: name,
+        size: size - 3,
+        color: context.accentPrimary,
       ),
     );
   }
@@ -3788,7 +4241,7 @@ class _ChatPopupMenuLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: context.textSecondary),
+        AmitiaIcon.adaptive(icon, size: 18, color: context.textSecondary),
         const SizedBox(width: 12),
         Text(label),
       ],
@@ -3797,7 +4250,7 @@ class _ChatPopupMenuLabel extends StatelessWidget {
 }
 
 class _ChatTopBarButton extends StatelessWidget {
-  final IconData icon;
+  final AmitiaIconGlyph icon;
   final double size;
   final double iconSize;
 
@@ -3813,7 +4266,7 @@ class _ChatTopBarButton extends StatelessWidget {
       width: size,
       height: size,
       child: Center(
-        child: Icon(icon, size: iconSize, color: context.textPrimary),
+        child: AmitiaIcon(icon, size: iconSize, color: context.textPrimary),
       ),
     );
   }

@@ -125,6 +125,7 @@ type InstanceSpec struct {
 	Env              map[string]string
 	Permissions      []string
 	Capabilities     map[string]bool
+	HostAccess       domain.RuntimeHostAccess
 	Restart          RestartPolicy
 	MaxRestarts      int
 	RestartWindow    time.Duration
@@ -237,6 +238,7 @@ type instanceEntry struct {
 	stoppedAt   *time.Time
 	restarts    int
 	limits      ResourceLimits
+	spec        InstanceSpec
 	definition  DefinitionID
 	generation  int64
 	lastError   string

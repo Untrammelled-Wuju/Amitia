@@ -24,6 +24,8 @@ type meshOwnedToolRuntime struct {
 	services *AppServices
 	native   *chatMultiAgentRuntime
 	parentMu sync.Mutex
+	inviteMu sync.Mutex
+	invites  map[string][]business.GroupInviteProposal
 }
 
 type ownedToolResultDocument struct {
@@ -139,6 +141,9 @@ func (r *meshOwnedToolRuntime) Tools(ctx context.Context, inference business.Inf
 	if r.native != nil {
 		allowed = append(allowed, r.native.ModelTools(ctx, r.nativeScope(ctx, inference))...)
 	}
+	if inference.Group != nil && inference.Group.State.Settings.AllowCharacterMentions && len(inference.Group.State.Members) > 1 {
+		allowed = append(allowed, tool.Tool{Type: "function", Function: tool.Function{Name: business.GroupInviteReplyTool, Description: "邀请当前群聊中的另一位有效角色查看已保存的公开回复并接话。仅能邀请已有成员，不能邀请群外角色或修改群设置。", Parameters: tool.Parameters{Type: "object", Properties: map[string]tool.Property{"memberId": {Type: "string", Description: "当前群成员列表中要邀请的成员编号"}}, Required: []string{"memberId"}}}})
+	}
 	return allowed, nil
 }
 
@@ -151,6 +156,9 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 			executionErr = errors.Join(executionErr, err)
 		}
 	}()
+	if name == business.GroupInviteReplyTool {
+		return r.executeGroupInvite(inference, call, input)
+	}
 	if isChatMultiAgentTool(name) {
 		if r.native == nil || inference.InternalWorker {
 			return chat.ToolResult{}, coordination.ErrWrongOwner
@@ -174,6 +182,68 @@ func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.I
 		return chat.ToolResult{}, err
 	}
 	return r.executeDefinition(ctx, inference, call, input, definition)
+}
+
+func (r *meshOwnedToolRuntime) executeGroupInvite(inference business.Inference, call string, input json.RawMessage) (chat.ToolResult, error) {
+	if inference.Group == nil || !inference.Group.State.Settings.AllowCharacterMentions {
+		return chat.ToolResult{}, errors.New("当前会话未允许角色互相邀请")
+	}
+	var payload struct {
+		MemberID string `json:"memberId"`
+	}
+	if json.Unmarshal(input, &payload) != nil || strings.TrimSpace(payload.MemberID) == "" {
+		result := chat.ToolResult{Status: "FAILED", Error: &chat.ToolError{Code: "INVALID_ARGUMENTS", Message: "成员编号无效"}, VisibleText: "邀请失败：成员编号无效"}
+		encoded, _ := json.Marshal(map[string]any{"status": "rejected", "message": "成员编号无效"})
+		result.Output = encoded
+		return result, nil
+	}
+	member, ok := inference.Group.State.MemberByID(strings.TrimSpace(payload.MemberID))
+	if !ok || member.CharacterID == inference.Scope.RoleID {
+		result := chat.ToolResult{Status: "FAILED", Error: &chat.ToolError{Code: "GROUP_TARGET_INVALID", Message: "目标不是有效群成员"}, VisibleText: "邀请失败：目标不是有效群成员"}
+		encoded, _ := json.Marshal(map[string]any{"status": "rejected", "message": "目标不是有效群成员"})
+		result.Output = encoded
+		return result, nil
+	}
+	proposal := business.GroupInviteProposal{InvitationID: call, TargetMemberID: member.MemberID, TargetCharacterID: member.CharacterID, TargetCharacterName: member.CharacterName}
+	r.inviteMu.Lock()
+	if r.invites == nil {
+		r.invites = make(map[string][]business.GroupInviteProposal)
+	}
+	current := r.invites[inference.Scope.ExecutionID]
+	for _, existing := range current {
+		if existing.TargetMemberID == proposal.TargetMemberID {
+			r.inviteMu.Unlock()
+			encoded, _ := json.Marshal(map[string]any{"status": business.GroupInvitationAccepted, "memberId": member.MemberID, "characterId": member.CharacterID, "characterName": member.CharacterName})
+			return chat.ToolResult{Status: "SUCCESS", Output: encoded, VisibleText: "已邀请" + member.CharacterName + "接话"}, nil
+		}
+	}
+	if len(current) >= 3 {
+		r.inviteMu.Unlock()
+		result := chat.ToolResult{Status: "FAILED", Error: &chat.ToolError{Code: "GROUP_INVITE_LIMIT", Message: "单次回复最多邀请 3 位角色"}, VisibleText: "邀请失败：单次回复最多邀请 3 位角色"}
+		encoded, _ := json.Marshal(map[string]any{"status": "rejected", "message": "单次回复最多邀请 3 位角色"})
+		result.Output = encoded
+		return result, nil
+	}
+	r.invites[inference.Scope.ExecutionID] = append(current, proposal)
+	if len(r.invites) > 256 {
+		for key := range r.invites {
+			if key != inference.Scope.ExecutionID {
+				delete(r.invites, key)
+				break
+			}
+		}
+	}
+	r.inviteMu.Unlock()
+	encoded, _ := json.Marshal(map[string]any{"status": business.GroupInvitationAccepted, "memberId": member.MemberID, "characterId": member.CharacterID, "characterName": member.CharacterName})
+	return chat.ToolResult{Status: "SUCCESS", Output: encoded, VisibleText: "已邀请" + member.CharacterName + "接话"}, nil
+}
+
+func (r *meshOwnedToolRuntime) takeGroupInvites(executionID string) []business.GroupInviteProposal {
+	r.inviteMu.Lock()
+	defer r.inviteMu.Unlock()
+	proposals := append([]business.GroupInviteProposal(nil), r.invites[executionID]...)
+	delete(r.invites, executionID)
+	return proposals
 }
 
 func emitOwnedToolEvent(inference business.Inference, eventType, call, name string, input json.RawMessage, result chat.ToolResult, executionErr error) error {

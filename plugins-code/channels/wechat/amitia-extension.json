@@ -9,7 +9,7 @@
     "description": {
       "default": "通过 OpenClaw 微信协议接入微信消息。"
     },
-    "version": "1.0.19",
+    "version": "1.0.22",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -52,7 +52,23 @@
         "entryPoint": "launcher.mjs",
         "timeout": "30s",
         "memory": 536870912,
-        "maxSubprocesses": 1
+        "maxSubprocesses": 1,
+        "hostAccess": {
+          "filesystem": {
+            "mode": "read_write",
+            "roots": [
+              "package",
+              "plugin_data"
+            ]
+          },
+          "network": {
+            "mode": "host"
+          },
+          "process": {
+            "mode": "direct",
+            "maxProcesses": 1
+          }
+        }
       },
       "placement": "device",
       "providedCapabilities": [
@@ -175,9 +191,9 @@
               }
             },
             "entry": {
-              "content_hash": "sha256-oNVcbEn5unkjbKLgbi5xkCGKGTgHeNUJtSzdIwVxrJo=",
-              "path": "modules/wechat-channel-ui/desktop/index.html",
-              "type": "web_restricted"
+              "content_hash": "pending",
+              "path": "modules/wechat-channel-ui/desktop/index.mjs",
+              "type": "client_module"
             },
             "extension_id": "com.amitia/channel-wechat",
             "integrity": {
@@ -186,8 +202,7 @@
             "kind": "web_page",
             "module_id": "wechat-channel-ui",
             "sandbox": {
-              "enable_scripts": true,
-              "type": "web_restricted"
+              "type": "client_module"
             },
             "slot": {
               "contract_version": 1,
@@ -423,15 +438,27 @@
             "entries": {
               "electron_linux": {
                 "contributionId": "wechat-page",
-                "type": "web_restricted"
+                "type": "web_module",
+                "path": "modules/wechat-channel-ui/desktop/index.mjs",
+                "stylePath": "modules/wechat-channel-ui/desktop/styles.css",
+                "contentHash": "pending",
+                "styleHash": "pending"
               },
               "electron_macos": {
                 "contributionId": "wechat-page",
-                "type": "web_restricted"
+                "type": "web_module",
+                "path": "modules/wechat-channel-ui/desktop/index.mjs",
+                "stylePath": "modules/wechat-channel-ui/desktop/styles.css",
+                "contentHash": "pending",
+                "styleHash": "pending"
               },
               "electron_windows": {
                 "contributionId": "wechat-page",
-                "type": "web_restricted"
+                "type": "web_module",
+                "path": "modules/wechat-channel-ui/desktop/index.mjs",
+                "stylePath": "modules/wechat-channel-ui/desktop/styles.css",
+                "contentHash": "pending",
+                "styleHash": "pending"
               },
               "mobile": {
                 "contributionId": "wechat-mobile-page",
@@ -439,7 +466,11 @@
               },
               "web": {
                 "contributionId": "wechat-page",
-                "type": "web_restricted"
+                "type": "web_module",
+                "path": "modules/wechat-channel-ui/desktop/index.mjs",
+                "stylePath": "modules/wechat-channel-ui/desktop/styles.css",
+                "contentHash": "pending",
+                "styleHash": "pending"
               }
             },
             "metadata": {
@@ -511,7 +542,7 @@
     "autoUpdate": true,
     "backgroundTasks": true,
     "networkAccess": true,
-    "sandbox": true
+    "sandbox": false
   },
   "integrity": {
     "algorithm": "sha256",

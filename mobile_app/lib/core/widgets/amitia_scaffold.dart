@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/app_routes.dart';
 import '../../app/theme/app_colors.dart';
@@ -8,24 +9,9 @@ import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
 import '../ui_runtime/mobile_style_runtime.dart';
 import 'application_background.dart';
+import 'amitia_icons.dart';
 
-enum AmitiaAppBarNavigation { drawer, back, none }
-
-class ShellDrawerScope extends InheritedWidget {
-  final VoidCallback openDrawer;
-  const ShellDrawerScope({
-    super.key,
-    required this.openDrawer,
-    required super.child,
-  });
-  static ShellDrawerScope? of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<ShellDrawerScope>();
-  }
-
-  @override
-  bool updateShouldNotify(ShellDrawerScope oldWidget) =>
-      openDrawer != oldWidget.openDrawer;
-}
+enum AmitiaAppBarNavigation { back, none }
 
 class AmitiaScaffold extends StatefulWidget {
   final Widget? body;
@@ -35,6 +21,7 @@ class AmitiaScaffold extends StatefulWidget {
   final Widget? drawer;
   final Color? backgroundColor;
   final bool resizeToAvoidBottomInset;
+  final bool handlesSystemBack;
 
   const AmitiaScaffold({
     super.key,
@@ -45,6 +32,7 @@ class AmitiaScaffold extends StatefulWidget {
     this.drawer,
     this.backgroundColor,
     this.resizeToAvoidBottomInset = true,
+    this.handlesSystemBack = true,
   });
 
   @override
@@ -74,52 +62,67 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
     final pageStyle = context.amitiaStyleFor(pageTarget);
     final shellStyle = context.amitiaStyleFor('app.shell');
     final isChatPage = currentLocation == AppRoutes.chat;
+    final isMainTabPage = <String>{
+      AppRoutes.conversations,
+      AppRoutes.tasks,
+      AppRoutes.memoryHub,
+      AppRoutes.extensions,
+      AppRoutes.me,
+    }.contains(currentLocation);
     final isTopLevelPage =
         currentLocation == '/onboarding' || currentLocation == '/privacy';
     final canPop = router.canPop();
 
+    final content = AmitiaStyleTarget(
+      target: pageTarget,
+      child: AmitiaStyleTarget(
+        target: 'app.shell',
+        child: Scaffold(
+          body: widget.body,
+          appBar: widget.appBar,
+          floatingActionButton: widget.floatingActionButton,
+          bottomNavigationBar: widget.bottomNavigationBar,
+          drawer: widget.drawer,
+          backgroundColor:
+              widget.backgroundColor ??
+              pageStyle.color('backgroundColor') ??
+              shellStyle.color('backgroundColor') ??
+              (BackgroundSurfaceScope.isActive(context)
+                  ? Colors.transparent
+                  : context.backgroundPrimary),
+          resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
+        ),
+      ),
+    );
+    if (!widget.handlesSystemBack) return content;
     return PopScope(
       canPop: canPop,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (canPop) return;
-        if (isChatPage || isTopLevelPage) {
+        if (isMainTabPage) {
+          if (currentLocation != AppRoutes.conversations) {
+            router.go(AppRoutes.conversations);
+            return;
+          }
+        }
+        if (isChatPage || isTopLevelPage || isMainTabPage) {
           final now = DateTime.now();
           if (_lastBackPress != null &&
               now.difference(_lastBackPress!) < const Duration(seconds: 2)) {
             _lastBackPress = null;
-            Navigator.of(context).maybePop();
+            SystemNavigator.pop();
           } else {
             _lastBackPress = now;
             _showToast('再按一次退出应用');
           }
         } else if (currentLocation != '/') {
-          router.go(AppRoutes.chat);
+          router.go(AppRoutes.conversations);
         } else {
           Navigator.of(context).maybePop();
         }
       },
-      child: AmitiaStyleTarget(
-        target: pageTarget,
-        child: AmitiaStyleTarget(
-          target: 'app.shell',
-          child: Scaffold(
-            body: widget.body,
-            appBar: widget.appBar,
-            floatingActionButton: widget.floatingActionButton,
-            bottomNavigationBar: widget.bottomNavigationBar,
-            drawer: widget.drawer,
-            backgroundColor:
-                widget.backgroundColor ??
-                pageStyle.color('backgroundColor') ??
-                shellStyle.color('backgroundColor') ??
-                (BackgroundSurfaceScope.isActive(context)
-                    ? Colors.transparent
-                    : context.backgroundPrimary),
-            resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
-          ),
-        ),
-      ),
+      child: content,
     );
   }
 }
@@ -133,6 +136,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final AmitiaAppBarNavigation navigation;
   final bool centerTitle;
   final double elevation;
+  final double? leadingWidth;
   final String fallbackRoute;
   final PreferredSizeWidget? bottom;
 
@@ -146,7 +150,8 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.navigation = AmitiaAppBarNavigation.none,
     this.centerTitle = false,
     this.elevation = 0,
-    this.fallbackRoute = AppRoutes.chat,
+    this.leadingWidth,
+    this.fallbackRoute = AppRoutes.conversations,
     this.bottom,
   });
 
@@ -158,36 +163,39 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final router = GoRouter.maybeOf(context);
+    final canPop = router?.canPop() ?? Navigator.of(context).canPop();
     Widget? effectiveLeading = leading;
     if (effectiveLeading == null) {
       if (navigation == AmitiaAppBarNavigation.back || showBackButton) {
         effectiveLeading = IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          icon: const AmitiaIcon(AmitiaIconGlyph.back, size: 19),
           tooltip: '返回',
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           onPressed: () {
-            final router = GoRouter.of(context);
-            if (router.canPop()) {
+            if (router == null) {
+              Navigator.of(context).maybePop();
+            } else if (canPop) {
               router.pop();
             } else {
               router.go(fallbackRoute);
             }
           },
         );
-      } else if (navigation == AmitiaAppBarNavigation.drawer ||
-          (navigation == AmitiaAppBarNavigation.none &&
-              !showBackButton &&
-              ShellDrawerScope.of(context) != null)) {
+      } else if (navigation == AmitiaAppBarNavigation.none &&
+          !showBackButton &&
+          canPop) {
         effectiveLeading = IconButton(
-          icon: const Icon(Icons.menu, size: 20),
-          tooltip: '打开导航',
+          icon: const AmitiaIcon(AmitiaIconGlyph.back, size: 19),
+          tooltip: '返回',
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           onPressed: () {
-            final scope = ShellDrawerScope.of(context);
-            if (scope != null) {
-              scope.openDrawer();
+            if (router == null) {
+              Navigator.of(context).maybePop();
+            } else if (canPop) {
+              router.pop();
             } else {
-              Scaffold.of(context).openDrawer();
+              router.go(fallbackRoute);
             }
           },
         );
@@ -208,6 +216,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
               : null),
       actions: actions,
       leading: effectiveLeading,
+      leadingWidth: leadingWidth,
       centerTitle: centerTitle,
       elevation: elevation,
       scrolledUnderElevation: 0,

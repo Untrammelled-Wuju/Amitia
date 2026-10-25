@@ -39,7 +39,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
-	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
@@ -89,42 +88,40 @@ type Container struct {
 	PermissionRepository   sqlite.PermissionRepository
 	ResourceRepository     sqlite.ResourceRepository
 
-	PackageSecurity                *package_security.PackageSecurityService
-	PackageRepository              *PackageRepository
-	PackageArtifactStore           *PackageArtifactStore
-	PackageGenerationStore         *PackageGenerationStore
-	ArtifactMaintenance            *PackageArtifactMaintenance
-	PackageTrustRepository         *PackageTrustRepository
-	UserDataSnapshotStore          *UserDataSnapshotStore
-	ResourceSnapshotStore          *ResourceSnapshotStore
-	PackageSnapshotRepo            *PackageSnapshotRepository
-	LifecycleManager               *lifecycle_manager.Manager
-	ContributionRegistry           *contribution.ContributionRegistry
-	ContributionInstaller          *TypedContributionInstaller
-	DependencyResolver             dependency.Resolver
-	RuntimeSupervisor              runtime_supervisor.Supervisor
-	ExecutionKernel                *execution.ExecutionPipeline
-	ApprovalBroker                 *execution.ApprovalBroker
-	SecretBroker                   *secret.Broker
-	HostAPIGateway                 *host_api.DefaultGateway
-	PermissionBroker               permission.PermissionBroker
-	PermissionDefinitions          *permission.PermissionDefinitionRegistry
-	ScopeManager                   scope.ScopeManager
-	ScopeSnapshotCreator           func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
-	ContextualScopeSnapshotCreator func(context.Context, string, string, int64, string, string) (string, error)
-	AgentSkillCatalog              *agent_skill.AgentSkillCatalog
-	AgentSkillRuntime              *AgentSkillRuntime
-	AcquisitionSkillPort           *canonicalSkillInstallBridge
-	WorkflowRegistry               *workflow.WorkflowRegistry
-	WorkflowExecutor               *workflow.WorkflowExecutor
-	WorkflowTriggerManager         *workflow.TriggerManager
-	WorkflowDefRepo                *sqlite.WorkflowDefinitionRepository
-	WorkflowInstallationRepo       *sqlite.WorkflowInstallationRepository
-	WorkflowDeviceCatalogRepo      *sqlite.WorkflowDeviceCatalogRepository
-	WorkflowExecRepo               *sqlite.WorkflowExecutionRepository
-	WorkflowModelGenerator         WorkshopModelGenerator
-	EnablementService              *enablement.EnablementService
-	EnablementResolver             enablement.EffectiveStateResolver
+	PackageSecurity           *package_security.PackageSecurityService
+	PackageRepository         *PackageRepository
+	PackageArtifactStore      *PackageArtifactStore
+	PackageGenerationStore    *PackageGenerationStore
+	ArtifactMaintenance       *PackageArtifactMaintenance
+	PackageTrustRepository    *PackageTrustRepository
+	UserDataSnapshotStore     *UserDataSnapshotStore
+	ResourceSnapshotStore     *ResourceSnapshotStore
+	PackageSnapshotRepo       *PackageSnapshotRepository
+	LifecycleManager          *lifecycle_manager.Manager
+	ContributionRegistry      *contribution.ContributionRegistry
+	ContributionInstaller     *TypedContributionInstaller
+	DependencyResolver        dependency.Resolver
+	RuntimeSupervisor         runtime_supervisor.Supervisor
+	ExecutionKernel           *execution.ExecutionPipeline
+	ApprovalBroker            *execution.ApprovalBroker
+	SecretBroker              *secret.Broker
+	HostAPIGateway            *host_api.DefaultGateway
+	PermissionBroker          permission.PermissionBroker
+	PermissionDefinitions     *permission.PermissionDefinitionRegistry
+	ScopeManager              scope.ScopeManager
+	AgentSkillCatalog         *agent_skill.AgentSkillCatalog
+	AgentSkillRuntime         *AgentSkillRuntime
+	AcquisitionSkillPort      *canonicalSkillInstallBridge
+	WorkflowRegistry          *workflow.WorkflowRegistry
+	WorkflowExecutor          *workflow.WorkflowExecutor
+	WorkflowTriggerManager    *workflow.TriggerManager
+	WorkflowDefRepo           *sqlite.WorkflowDefinitionRepository
+	WorkflowInstallationRepo  *sqlite.WorkflowInstallationRepository
+	WorkflowDeviceCatalogRepo *sqlite.WorkflowDeviceCatalogRepository
+	WorkflowExecRepo          *sqlite.WorkflowExecutionRepository
+	WorkflowModelGenerator    WorkshopModelGenerator
+	EnablementService         *enablement.EnablementService
+	EnablementResolver        enablement.EffectiveStateResolver
 
 	ToolRegistry    *capability.ToolRegistry
 	AdapterRegistry *capability.RuntimeAdapterRegistry
@@ -160,20 +157,20 @@ type Container struct {
 	JSRuntimeFactory         *javascript_main.RuntimeFactory
 	EventDeliveryAdapter     *javascript_main.EventDeliveryAdapter
 
-	UIHost              *ui_contribution.UIHost
-	UIHostNotifier      *SSEUIHostNotifier
-	ClipboardHostBridge *BridgeClipboardHost
-	UIContributionRepo  *sqlite.SQLiteUIContributionRepository
-	SlotRegistry        *extension_slots.SlotRegistry
-	PageHost            *extension_page_host.PageHost
-	SchemaValidator     *schema_ui.Validator
-	SchemaCompilerCache *schema_ui.CompilerCache
-	SchemaRegistry      *schema_ui.SchemaRegistry
-	SandboxHost         *sandbox_webui.Host
-	OrderingEngine      *ui_ordering.OrderingEngine
-	UIProviderRegistry  *ui_provider.Registry
-	ExtRoot             string
-	ResourceLinks       *ResourceLinkManager
+	UIHost                         *ui_contribution.UIHost
+	UIHostNotifier                 *SSEUIHostNotifier
+	ClipboardHostBridge            *BridgeClipboardHost
+	UIContributionRepo             *sqlite.SQLiteUIContributionRepository
+	SlotRegistry                   *extension_slots.SlotRegistry
+	PageHost                       *extension_page_host.PageHost
+	SchemaValidator                *schema_ui.Validator
+	SchemaCompilerCache            *schema_ui.CompilerCache
+	SchemaRegistry                 *schema_ui.SchemaRegistry
+	OrderingEngine                 *ui_ordering.OrderingEngine
+	UIProviderRegistry             *ui_provider.Registry
+	ExtRoot                        string
+	ResourceLinks                  *ResourceLinkManager
+	ContextualScopeSnapshotCreator func(context.Context, string, string, int64, string, string) (string, error)
 
 	DesktopHost              *desktop.DesktopHost
 	DesktopAPI               *desktop.DesktopAPI

@@ -57,29 +57,11 @@ function main() {
     "modules/emote-runtime/package.json",
     "modules/emote-runtime/dist/index.js",
     "modules/emote-ui/package.json",
-    "modules/emote-ui/desktop/index.html",
-    "modules/emote-ui/desktop/index.js",
-    "modules/emote-ui/desktop/styles.css",
     "modules/emote-ui/desktop/index.schema.json",
-    "modules/emote-ui/desktop/composer.html",
-    "modules/emote-ui/desktop/composer.js",
-    "modules/emote-ui/desktop/composer.css",
     "modules/emote-ui/desktop/composer.schema.json",
-    "modules/emote-ui/desktop/message.html",
-    "modules/emote-ui/desktop/message.js",
-    "modules/emote-ui/desktop/message.css",
     "modules/emote-ui/desktop/message.schema.json",
-    "modules/emote-ui/mobile/index.html",
-    "modules/emote-ui/mobile/index.js",
-    "modules/emote-ui/mobile/styles.css",
     "modules/emote-ui/mobile/index.schema.json",
-    "modules/emote-ui/mobile/composer.html",
-    "modules/emote-ui/mobile/composer.js",
-    "modules/emote-ui/mobile/composer.css",
     "modules/emote-ui/mobile/composer.schema.json",
-    "modules/emote-ui/mobile/message.html",
-    "modules/emote-ui/mobile/message.js",
-    "modules/emote-ui/mobile/message.css",
     "modules/emote-ui/mobile/message.schema.json",
   ];
   for (const path of required) {
@@ -92,8 +74,16 @@ function main() {
     }
   }
   const contributions = manifest.modules?.flatMap((module) => module.contributions || []) || [];
-  if (!contributions.some((item) => item.spec?.metadata?.["amitia.message.outputs"] === true)) {
-    throw new Error("message output provider contribution missing");
+  const aiTool = contributions.find((item) => item.spec?.toolId === "com.amitia/emote/ai");
+  if (!aiTool || aiTool.spec?.modelName !== "emote" || aiTool.spec?.internal === true) {
+    throw new Error("model-visible emote AI tool missing");
+  }
+  const runtimeModule = manifest.modules?.find((module) => module.id === "emote-runtime");
+  if (!runtimeModule?.providedCapabilities?.some((capability) => capability.id === "com.amitia/emote/ai")) {
+    throw new Error("emote AI capability declaration missing");
+  }
+  if (JSON.stringify(manifest).includes("vector.")) {
+    throw new Error("emote package must not depend on vector services");
   }
   if (!contributions.some((item) => item.spec?.entry?.schema_path === "modules/emote-ui/desktop/composer.schema.json")) {
     throw new Error("composer contribution missing");
@@ -118,14 +108,6 @@ function main() {
     }
     if (contribution.spec.entry.type !== "schema_renderer") {
       throw new Error(`schema renderer missing for ${contribution.id}`);
-    }
-  }
-  for (const target of ["desktop", "mobile"]) {
-    for (const file of ["index.html", "composer.html", "message.html"]) {
-      const html = entries.get(`modules/emote-ui/${target}/${file}`).toString("utf8");
-      if (/<style[\s>]/i.test(html) || /<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) {
-        throw new Error(`inline CSP resource found: ${target}/${file}`);
-      }
     }
   }
   const payload = [...entries.entries()].filter(([name]) =>

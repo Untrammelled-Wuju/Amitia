@@ -2,13 +2,35 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function resolveRouteIdentity(params: Record<string, unknown> | null | undefined): {
+function routePathSegments(fullPath: unknown): string[] {
+  const normalized = text(fullPath).split(/[?#]/, 1)[0] ?? "";
+  return normalized.split("/").filter(Boolean);
+}
+
+function characterIdFromSegments(segments: string[]): string {
+  const index = segments.indexOf("characters");
+  return index >= 0 ? text(segments[index + 1]) : "";
+}
+
+export function resolveRouteIdentity(
+  params: Record<string, unknown> | null | undefined,
+  fullPath?: string,
+): {
   characterId: string;
   conversationId: string;
 } {
+  const pathMatch = Array.isArray(params?.pathMatch)
+    ? params.pathMatch.map((value) => text(value)).filter(Boolean)
+    : [];
+  const pathSegments = routePathSegments(fullPath);
   return {
-    characterId: text(params?.characterId) || text(params?.id),
-    conversationId: text(params?.conversationId),
+    characterId: text(params?.characterId)
+      || text(params?.id)
+      || characterIdFromSegments(pathMatch)
+      || characterIdFromSegments(pathSegments),
+    conversationId: text(params?.conversationId)
+      || text(params?.conversation)
+      || text(params?.conversation_id),
   };
 }
 
@@ -22,7 +44,7 @@ export function buildProviderRouteContext(
     route: fullPath,
     routeParams: params,
     routeQuery: query,
-    ...resolveRouteIdentity(params),
+    ...resolveRouteIdentity(params, fullPath),
     ...extras,
   };
 }

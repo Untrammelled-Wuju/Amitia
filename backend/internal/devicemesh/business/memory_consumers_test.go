@@ -185,7 +185,7 @@ func TestOwnedMemoryConsumersPinnedMemorySurvivesAutomaticExtraction(t *testing.
 		t.Fatal(err)
 	}
 	defer finish()
-	snapshot := coordination.DataSnapshot{OwnerID: "a", Role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"globalMemoryEnabled":false}`)}}
+	snapshot := coordination.DataSnapshot{OwnerID: "a", Role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{}`)}}
 	mutations, err := e.prepareMemoryMutations(ctx, scope, "chat", []DerivedMemory{{Kind: "fact", Key: "名字", Body: body(map[string]interface{}{"value": "模型猜测的名字"})}}, &snapshot)
 	if err != nil || len(mutations) != 0 {
 		t.Fatalf("fixed memory overwritten: %v %v", mutations, err)
@@ -275,13 +275,13 @@ func TestOwnedMemoryPrivateProfileExtractionDoesNotPublishGlobalProfile(t *testi
 	if _, err := e.commit(ctx, coordination.Commit{Scope: scope, Mutations: mutations}); err != nil {
 		t.Fatal(err)
 	}
-	profiles, err := coordination.NewOwnershipStore(db, "a").List(t.Context(), "profile", coordination.GlobalMemoryRole, false)
-	if err != nil || len(profiles) != 0 {
-		t.Fatalf("private profile published globally: %v %v", profiles, err)
+	profiles, err := coordination.NewOwnershipStore(db, "a").List(t.Context(), "profile", "role", false)
+	if err != nil || len(profiles) != 1 || !strings.Contains(string(profiles[0].Body), "私密信息") {
+		t.Fatalf("role profile lost: %v %v", profiles, err)
 	}
 	memories, err := coordination.NewOwnershipStore(db, "a").List(t.Context(), "memory", "role", false)
-	if err != nil || len(memories) != 1 || !strings.Contains(string(memories[0].Body), "私密信息") {
-		t.Fatalf("private profile lost: %v %v", memories, err)
+	if err != nil || len(memories) != 0 {
+		t.Fatalf("profile duplicated as memory: %v %v", memories, err)
 	}
 }
 

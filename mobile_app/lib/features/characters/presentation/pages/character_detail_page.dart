@@ -17,7 +17,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/character_avatar.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/settings/current_character_provider.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/memory.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';

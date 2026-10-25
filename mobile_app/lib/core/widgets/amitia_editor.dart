@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_typography.dart';
 import '../ui_runtime/mobile_style_runtime.dart';
+import 'amitia_icons.dart';
 
 Future<T?> showAmitiaEditor<T>(
   BuildContext context, {
@@ -36,7 +37,7 @@ Future<T?> showAmitiaEditor<T>(
               leading: IconButton(
                 tooltip: '关闭',
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
+                icon: const AmitiaIcon(AmitiaIconGlyph.close),
               ),
             ),
             body: padding == null

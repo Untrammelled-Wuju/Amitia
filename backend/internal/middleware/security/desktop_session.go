@@ -38,13 +38,13 @@ const (
 )
 
 type RotationJournal struct {
-	ID          string     `gorm:"primaryKey;column:id"`
-	OldVersion  string     `gorm:"column:old_version;not null"`
-	NewVersion  string     `gorm:"column:new_version;not null"`
-	Stage       string     `gorm:"column:stage;not null"`
-	CreatedAt   time.Time  `gorm:"column:created_at;not null"`
-	UpdatedAt   time.Time  `gorm:"column:updated_at;not null"`
-	CompletedAt *time.Time `gorm:"column:completed_at"`
+	ID          string    `gorm:"primaryKey;column:id"`
+	OldVersion  string    `gorm:"column:old_version;not null"`
+	NewVersion  string    `gorm:"column:new_version;not null"`
+	Stage       string    `gorm:"column:stage;not null"`
+	CreatedAt   time.Time `gorm:"column:created_at;not null"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;not null"`
+	CompletedAt time.Time `gorm:"column:completed_at;not null"`
 }
 
 func (RotationJournal) TableName() string {
@@ -298,7 +298,7 @@ func (s *DesktopSessionService) RevokeSession(sessionToken string) error {
 
 func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 	actor := GetActor(c)
-	if actor == nil || !actor.IsLocalTrusted || actor.AuthMethod != AuthMethodLocalToken {
+	if actor == nil || !actor.IsLocalTrusted || (actor.AuthMethod != AuthMethodLocalToken && actor.AuthMethod != AuthMethodLocalAdminToken) {
 		c.JSON(403, gin.H{"code": 403, "msg": "forbidden"})
 		return
 	}
@@ -374,7 +374,7 @@ func (s *DesktopSessionService) RotateToken(c *gin.Context) {
 	now := time.Now().UTC()
 	journal.Stage = RotationStageCompleted
 	journal.UpdatedAt = now
-	journal.CompletedAt = &now
+	journal.CompletedAt = now
 	_ = s.db.Model(journal).Updates(map[string]interface{}{
 		"stage":        RotationStageCompleted,
 		"updated_at":   now,

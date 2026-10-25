@@ -174,22 +174,6 @@ function main() {
     join(stagingRoot, "modules", "lifestyle-runtime", "package.json"),
     `${JSON.stringify({ type: "module" }, null, 2)}\n`,
   );
-  for (const file of ["index.html", "app.js", "styles.css"]) {
-    copyFileSync(
-      join(packageRoot, "src", "ui", file),
-      join(stagingRoot, "modules", "lifestyle-ui", "desktop", file),
-    );
-  }
-  for (const file of ["index.html", "styles.css", "shell.js"]) {
-    copyFileSync(
-      join(packageRoot, "src", "ui", "mobile", file),
-      join(stagingRoot, "modules", "lifestyle-ui", "mobile", file),
-    );
-  }
-  copyFileSync(
-    join(packageRoot, "src", "ui", "app.js"),
-    join(stagingRoot, "modules", "lifestyle-ui", "mobile", "app.js"),
-  );
   if (existsSync(join(packageRoot, "ui", "schema", "desktop.json"))) {
     copyFileSync(
       join(packageRoot, "ui", "schema", "desktop.json"),

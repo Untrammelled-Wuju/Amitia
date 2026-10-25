@@ -53,7 +53,6 @@ func FinalGateMetricNames() []string {
 		"legacy_tool_execute_calls",
 		"legacy_mcp_execute_calls",
 		"duplicate_contribution_registrations",
-		"orphan_sandbox_sessions",
 		"audit_incomplete_operations",
 		"lifecycle_requires_recovery",
 		"new_package_legacy_read_calls",
@@ -114,7 +113,6 @@ func (p *FinalGateProbe) Evaluate(ctx context.Context) *FinalGateReport {
 	p.probeDuplicateScheduleRuns(ctx, report)
 	p.probeFailedCleanupResources(ctx, report)
 	p.probeCandidateStates(ctx, report)
-	p.probeOrphanSandboxSessions(ctx, report)
 	p.probeLifecycleRecovery(ctx, report)
 	p.probeAuditIncomplete(ctx, report)
 	p.probePackageReleaseGate(ctx, report)
@@ -638,44 +636,6 @@ func (p *FinalGateProbe) probeCandidateStates(ctx context.Context, report *Final
 			}
 		}
 	}
-}
-
-func (p *FinalGateProbe) probeOrphanSandboxSessions(ctx context.Context, report *FinalGateReport) {
-	if p.container == nil || p.container.SandboxHost == nil {
-		report.Errors = append(report.Errors, "orphan_sandbox_sessions: dependency not injected (SandboxHost is nil)")
-		report.Metrics["orphan_sandbox_sessions"] = -1
-		return
-	}
-	if p.container.InstallationRepository == nil {
-		report.Errors = append(report.Errors, "orphan_sandbox_sessions: dependency not injected (InstallationRepository is nil)")
-		report.Metrics["orphan_sandbox_sessions"] = -1
-		return
-	}
-	sessions := p.container.SandboxHost.ListSessions()
-	insts, err := p.container.InstallationRepository.ListInstallations(ctx)
-	if err != nil {
-		report.Errors = append(report.Errors, fmt.Sprintf("orphan_sandbox_sessions: installations query failed: %v", err))
-		report.Metrics["orphan_sandbox_sessions"] = -1
-		return
-	}
-	installedExts := make(map[string]bool)
-	for _, inst := range insts {
-		if inst.InstallationState == domain.InstallationStateInstalled {
-			installedExts[string(inst.ExtensionID)] = true
-		}
-	}
-	var orphanCount int64
-	for _, s := range sessions {
-		if !installedExts[s.ExtensionID] {
-			orphanCount++
-			report.Details = append(report.Details, FinalGateIssue{
-				Metric: "orphan_sandbox_sessions",
-				Count:  1,
-				Detail: fmt.Sprintf("sessionID=%s extensionID=%s moduleID=%s state=%s sandbox=%s (extension uninstalled)", s.SessionID, s.ExtensionID, s.ModuleID, s.State, s.Sandbox),
-			})
-		}
-	}
-	report.Metrics["orphan_sandbox_sessions"] = orphanCount
 }
 
 func (p *FinalGateProbe) probeLifecycleRecovery(ctx context.Context, report *FinalGateReport) {

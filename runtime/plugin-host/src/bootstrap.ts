@@ -23,6 +23,8 @@ export async function bootstrap(
   const context = createRuntimeContext(rpc, registry);
   const extension = loadExtension(spec.entry, {
     networkDisabled: process.env.AMITIA_NETWORK_DISABLED === "1",
+    filesystemDisabled: process.env.AMITIA_HOST_FILESYSTEM_MODE !== "read" && process.env.AMITIA_HOST_FILESYSTEM_MODE !== "read_write",
+    processDisabled: process.env.AMITIA_HOST_PROCESS_MODE !== "direct",
   });
   if (typeof extension.activate !== "function") {
     throw new Error(

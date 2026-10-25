@@ -27,12 +27,9 @@ void main() {
     }
   });
 
-  test('settings options are slightly larger than the sidebar menu', () {
+  test('settings options keep the compact navigation style', () {
     final settingsSource = File(
       'lib/features/settings/presentation/pages/settings_page.dart',
-    ).readAsStringSync();
-    final drawerSource = File(
-      'lib/core/widgets/amitia_drawer.dart',
     ).readAsStringSync();
 
     expect(settingsSource, contains('_settingsOptionFontSize = 16'));
@@ -42,9 +39,9 @@ void main() {
       settingsSource,
       contains('Icon(item.icon, size: 17, color: context.accentPrimary)'),
     );
-    expect(drawerSource, contains('fontSize: 14.5'));
     expect(settingsSource, isNot(contains("title: '主题设置'")));
     expect(settingsSource, isNot(contains("title: '个人空间'")));
+    expect(settingsSource, isNot(contains('我的空间')));
     expect(settingsSource, isNot(contains('_DevModeToggle')));
     expect(settingsSource, isNot(contains('subtitle:')));
     expect(settingsSource, isNot(contains('Switch.adaptive')));

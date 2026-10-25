@@ -7,7 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/settings/developer_mode_provider.dart';
 import 'toolbox_log_page.dart';
 import 'toolbox_prompt_trace_page.dart';
 import 'toolbox_runtime_status_page.dart';
@@ -24,28 +24,69 @@ class ToolboxPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDev = ref.watch(isDeveloperModeProvider);
     final tools = <(IconData, String, String, VoidCallback)>[
-      (Icons.folder_outlined, '文件浏览', '浏览设备文件系统',
-          () => context.push(AppRoutes.toolboxFileBrowser)),
-      (Icons.work_outline, '工作区', '管理你的工作空间',
-          () => context.push(AppRoutes.toolboxWorkspace)),
-      (Icons.task_alt, '任务日志', '查看 Agent 任务记录',
-          () => context.push(AppRoutes.toolboxTaskLog)),
-      (Icons.terminal, '运行日志', '系统运行日志',
-          () => context.push(AppRoutes.toolboxLog)),
-      (Icons.code, 'Prompt Trace', '提示词调用追踪',
-          () => context.push(AppRoutes.toolboxPromptTrace)),
-      (Icons.memory, 'Runtime 状态', '运行时组件健康',
-          () => context.push(AppRoutes.toolboxRuntimeStatus)),
-      (Icons.storage, '数据库状态', '查看数据库健康状态',
-          () => context.push(AppRoutes.toolboxDatabaseStatus)),
-      (Icons.devices, '设备状态', '设备信息与资源',
-          () => context.push(AppRoutes.toolboxDeviceStatus)),
+      (
+        Icons.folder_outlined,
+        '文件浏览',
+        '浏览设备文件系统',
+        () => context.push(AppRoutes.toolboxFileBrowser),
+      ),
+      (
+        Icons.work_outline,
+        '工作区',
+        '管理你的工作空间',
+        () => context.push(AppRoutes.toolboxWorkspace),
+      ),
+      (
+        Icons.task_alt,
+        '任务日志',
+        '查看 Agent 任务记录',
+        () => context.push(AppRoutes.toolboxTaskLog),
+      ),
+      (
+        Icons.terminal,
+        '运行日志',
+        '系统运行日志',
+        () => context.push(AppRoutes.toolboxLog),
+      ),
+      (
+        Icons.code,
+        'Prompt Trace',
+        '提示词调用追踪',
+        () => context.push(AppRoutes.toolboxPromptTrace),
+      ),
+      (
+        Icons.memory,
+        'Runtime 状态',
+        '运行时组件健康',
+        () => context.push(AppRoutes.toolboxRuntimeStatus),
+      ),
+      (
+        Icons.storage,
+        '数据库状态',
+        '查看数据库健康状态',
+        () => context.push(AppRoutes.toolboxDatabaseStatus),
+      ),
+      (
+        Icons.devices,
+        '设备状态',
+        '设备信息与资源',
+        () => context.push(AppRoutes.toolboxDeviceStatus),
+      ),
       if (isDev)
-        (Icons.developer_mode, '开发者选项', '高级调试选项', () => context.push(AppRoutes.developer)),
+        (
+          Icons.developer_mode,
+          '开发者选项',
+          '高级调试选项',
+          () => context.push(AppRoutes.developer),
+        ),
     ];
 
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '工具箱', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      appBar: AmitiaAppBar(
+        title: '工具箱',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
       body: Padding(
         padding: EdgeInsets.all(AppSpacing.pagePadding),
         child: GridView.builder(

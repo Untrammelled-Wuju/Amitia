@@ -157,6 +157,33 @@ func (rt *Runtime) Roles(ctx context.Context, scope coordination.ExecutionScope)
 	return roles, nil
 }
 
+func (rt *Runtime) GroupState(ctx context.Context, scope coordination.ExecutionScope, conversationID string) (coordination.GroupState, error) {
+	if err := rt.validateDataRoute(ctx, scope); err != nil {
+		return coordination.GroupState{}, err
+	}
+	var port coordination.DataPort
+	if scope.Coordinated {
+		port = rt.CoreDataPort
+	} else if scope.TargetDeviceID == rt.LocalDeviceID {
+		port = rt.LocalDeviceDataPort
+	}
+	if port != nil {
+		reader, ok := port.(coordination.GroupStatePort)
+		if !ok {
+			return coordination.GroupState{}, coordination.ErrWrongOwner
+		}
+		return reader.GroupState(ctx, scope, conversationID)
+	}
+	var result coordination.GroupState
+	if err := rt.callOwnedData(ctx, scope, "group-state", coordination.DataQuery{ConversationID: conversationID}, &result); err != nil {
+		return coordination.GroupState{}, err
+	}
+	if result.ConversationID != "" && (result.ConversationID != conversationID || result.RoleOwnerID != scope.RoleOwnerID) {
+		return coordination.GroupState{}, coordination.ErrWrongOwner
+	}
+	return result, nil
+}
+
 func (rt *Runtime) ListOwnedRoleCatalog(ctx context.Context, scope coordination.ExecutionScope, includeDisabled bool) ([]coordination.Role, error) {
 	if err := rt.validateDataRoute(ctx, scope); err != nil {
 		return nil, err

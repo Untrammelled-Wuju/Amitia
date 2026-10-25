@@ -10,7 +10,7 @@ import (
 )
 
 func TestNativeMultiAgentTaskAuthorityIsIndependentOfParentContinuityLease(t *testing.T) {
-	parent := coordination.ExecutionScope{SpaceID: "core", CoreID: "core", AuthorizationRealm: "core", ResourceOwnerID: "device", RoleOwnerID: "device", RoleID: "role", RoleRevision: 4, InitiatorDeviceID: "device", TargetDeviceID: "device", ProviderEpoch: 3, TargetProviderEpoch: 3, ModeRevision: 2, PermissionRevision: 6, TargetPermissionRevision: 6, ContinuityRoleID: "thread-partition", MemoryRoleID: "@global-memory", RequestID: "request", TurnID: "turn", ExecutionID: "execution"}
+	parent := coordination.ExecutionScope{SpaceID: "core", CoreID: "core", AuthorizationRealm: "core", ResourceOwnerID: "device", RoleOwnerID: "device", RoleID: "role", RoleRevision: 4, InitiatorDeviceID: "device", TargetDeviceID: "device", ProviderEpoch: 3, TargetProviderEpoch: 3, ModeRevision: 2, PermissionRevision: 6, TargetPermissionRevision: 6, ContinuityRoleID: "thread-partition", MemoryRoleID: "role", RequestID: "request", TurnID: "turn", ExecutionID: "execution"}
 	task := ownedTaskExecutionScope(parent)
 	if task.ContinuityRoleID != "" || parent.ContinuityRoleID != "thread-partition" {
 		t.Fatal("task changed parent lease partition")

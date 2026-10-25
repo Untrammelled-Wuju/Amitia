@@ -5,6 +5,7 @@ import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
 import '../ui_runtime/mobile_style_runtime.dart';
+import 'amitia_icons.dart';
 import 'amitia_visual_scope.dart';
 
 class AmitiaButton extends StatelessWidget {
@@ -155,7 +156,7 @@ class AmitiaButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: iconSize),
+                AmitiaIcon.adaptive(icon!, size: iconSize, color: fgColor),
                 SizedBox(width: gap),
               ],
               Flexible(
@@ -199,7 +200,7 @@ class AmitiaButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: iconSize, color: fgColor),
+              AmitiaIcon.adaptive(icon!, size: iconSize, color: fgColor),
               SizedBox(width: gap),
             ],
             Text(
@@ -268,7 +269,8 @@ class AmitiaIconButton extends StatelessWidget {
     final resolvedRadius =
         style.borderRadius('borderRadius') ??
         BorderRadius.circular(number('radius', buttonSize / 2));
-    final resolvedIconSize = style.number('iconSize') ?? number('iconSize', size);
+    final resolvedIconSize =
+        style.number('iconSize') ?? number('iconSize', size);
     final resolvedPadding = style.edgeInsets('padding');
     if (!AmitiaVisualScope.preservesComposer(context)) {
       final targetSize = resolvedButtonSize.clamp(48.0, double.infinity);
@@ -286,15 +288,16 @@ class AmitiaIconButton extends StatelessWidget {
           disabledForegroundColor: context.textDisabled,
           shape: RoundedRectangleBorder(borderRadius: resolvedRadius),
         ),
-        icon: Icon(icon, size: resolvedIconSize),
+        icon: AmitiaIcon.adaptive(
+          icon,
+          size: resolvedIconSize,
+          color: resolvedForeground,
+        ),
       );
       final opacity = style.number('opacity');
       return opacity == null
           ? button
-          : Opacity(
-              opacity: opacity.clamp(0.0, 1.0).toDouble(),
-              child: button,
-            );
+          : Opacity(opacity: opacity.clamp(0.0, 1.0).toDouble(), child: button);
     }
     final btn = GestureDetector(
       onTap: onPressed,
@@ -315,7 +318,7 @@ class AmitiaIconButton extends StatelessWidget {
                   )
                 : null,
           ),
-          child: Icon(
+          child: AmitiaIcon.adaptive(
             icon,
             size: resolvedIconSize,
             color: resolvedForeground,
@@ -326,10 +329,7 @@ class AmitiaIconButton extends StatelessWidget {
     final opacity = style.number('opacity');
     return opacity == null
         ? btn
-        : Opacity(
-            opacity: opacity.clamp(0.0, 1.0).toDouble(),
-            child: btn,
-          );
+        : Opacity(opacity: opacity.clamp(0.0, 1.0).toDouble(), child: btn);
   }
 }
 
@@ -540,7 +540,7 @@ class AmitiaSearchField extends StatelessWidget {
     final field = ConstrainedBox(
       constraints: BoxConstraints(
         minHeight:
-            style.number('height') ?? number('height', number('minHeight', 48)),
+            style.number('height') ?? number('height', number('minHeight', 40)),
       ),
       child: TextField(
         controller: controller,
@@ -549,14 +549,31 @@ class AmitiaSearchField extends StatelessWidget {
         cursorColor: style.color('foregroundColor'),
         style: textStyle,
         decoration: InputDecoration(
-          hintText: hintText,
           hintStyle: style
               .applyTextStyle(TextStyle(color: placeholderColor, fontSize: 14))
               .copyWith(color: placeholderColor),
-          prefixIcon: Icon(
-            Icons.search,
-            size: number('iconSize', context.uiIcons.medium),
-            color: style.color('iconColor') ?? context.textTertiary,
+          hint: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AmitiaIcon(
+                AmitiaIconGlyph.search,
+                size: number('iconSize', 17),
+                color: style.color('iconColor') ?? context.textTertiary,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  hintText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: style
+                      .applyTextStyle(
+                        TextStyle(color: placeholderColor, fontSize: 14),
+                      )
+                      .copyWith(color: placeholderColor),
+                ),
+              ),
+            ],
           ),
           isDense: true,
           filled: background != null,
@@ -718,7 +735,7 @@ class ConduitStyleToolbarButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onPressed,
         child: ConduitStyleToolbarSurface(
-          child: Icon(
+          child: AmitiaIcon.adaptive(
             icon,
             size: iconSize,
             color: isDark ? const Color(0xFFECECEC) : const Color(0xFF000000),

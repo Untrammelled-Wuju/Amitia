@@ -6,11 +6,10 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/profile_avatar.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/settings/appearance_preferences.dart';
+import '../../../../core/settings/developer_mode_provider.dart';
 import '../../../../shared/models/models.dart';
 import '../../../../core/settings/settings_navigation.dart';
 
@@ -28,7 +27,12 @@ class SettingsCategoryPage extends ConsumerWidget {
       appearanceSummary: '',
       isDeveloperMode: ref.watch(isDeveloperModeProvider),
     );
-    final group = categories.where((category) => category.id == categoryId).firstOrNull?.group ?? categories.first.group;
+    final group =
+        categories
+            .where((category) => category.id == categoryId)
+            .firstOrNull
+            ?.group ??
+        categories.first.group;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: group.title,
@@ -85,18 +89,20 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: _buildUserInfoCard(context, ref),
+          _SettingGroup(
+            group: categories
+                .firstWhere((category) => category.id == 'appearance')
+                .group,
           ),
-          SizedBox(height: AppSpacing.md),
-          _SettingGroup(group: categories.firstWhere((category) => category.id == 'appearance').group),
           SizedBox(height: AppSpacing.sectionGap),
           _SettingGroup(
             group: SettingGroup(
               title: '功能与管理',
               items: [
-                for (final category in categories.where((category) => category.id != 'appearance' && category.id != 'about'))
+                for (final category in categories.where(
+                  (category) =>
+                      category.id != 'appearance' && category.id != 'about',
+                ))
                   SettingItem(
                     title: category.group.title,
                     icon: category.icon,
@@ -107,104 +113,16 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
           SizedBox(height: AppSpacing.sectionGap),
-          _SettingGroup(group: categories.firstWhere((category) => category.id == 'about').group),
+          _SettingGroup(
+            group: categories
+                .firstWhere((category) => category.id == 'about')
+                .group,
+          ),
           SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
   }
-}
-
-Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
-  final profileAsync = ref.watch(currentSpaceProfileProvider);
-  return profileAsync.when(
-    data: (profile) {
-      final displayName = (profile?.displayName ?? '').trim().isEmpty
-          ? '我的空间'
-          : profile!.displayName.trim();
-      final initial = displayName.characters.first;
-      final spaceId = (profile?.spaceId ?? '').trim();
-      return GestureDetector(
-        onTap: () => context.push(AppRoutes.settingsUser),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: context.surfacePrimary,
-            borderRadius: AppRadius.brMedium,
-          ),
-          child: Row(
-            children: [
-              ProfileAvatar(
-                avatar: profile?.avatar ?? '',
-                initial: initial,
-                size: 44,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      displayName,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: context.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      spaceId.isEmpty ? '本地个人空间' : spaceId,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: context.textTertiary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
-            ],
-          ),
-        ),
-      );
-    },
-    loading: () => Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.surfacePrimary,
-        borderRadius: AppRadius.brMedium,
-      ),
-      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-    ),
-    error: (_, __) => GestureDetector(
-      onTap: () => context.push(AppRoutes.settingsUser),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: context.surfacePrimary,
-          borderRadius: AppRadius.brMedium,
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.person_outline, color: context.textTertiary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                '个人空间资料暂不可用',
-                style: AppTypography.body(context).copyWith(fontSize: 17),
-              ),
-            ),
-            Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 class _SettingGroup extends StatelessWidget {

@@ -404,13 +404,6 @@ const flowItems = computed<FlowItem[]>(() => {
 
 function resolveCharacter(characterId: unknown) {
   const id = String(characterId || "").trim();
-  if (!id || props.deviceOwned) {
-    return {
-      id: props.characterId,
-      name: props.charName || "未知角色",
-      avatar: props.charAvatar,
-    };
-  }
   const character = props.characters?.find(
     (item: any) => String(item?.id || "") === id,
   );
@@ -419,6 +412,13 @@ function resolveCharacter(characterId: unknown) {
       id,
       name: String(character.name || "未知角色"),
       avatar: String(character.avatar || ""),
+    };
+  }
+  if (!id) {
+    return {
+      id: props.characterId,
+      name: props.charName || "未知角色",
+      avatar: props.charAvatar,
     };
   }
   if (id === props.characterId) {
@@ -436,11 +436,11 @@ function messageCharacterId(msg: any) {
 }
 
 function messageCharacterName(msg: any) {
-  return resolveCharacter(getMessageCharacterId(msg)).name;
+  return String(msg?.characterName || "").trim() || resolveCharacter(getMessageCharacterId(msg)).name;
 }
 
 function messageCharacterAvatar(msg: any) {
-  return resolveCharacter(getMessageCharacterId(msg)).avatar;
+  return String(msg?.characterAvatar || "").trim() || resolveCharacter(getMessageCharacterId(msg)).avatar;
 }
 
 function roleSwitchName(characterId: unknown) {

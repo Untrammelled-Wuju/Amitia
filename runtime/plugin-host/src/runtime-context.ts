@@ -1,4 +1,4 @@
-import { HandlerRegistry, ToolHandler, InvocationContext } from "./handler-registry";
+import { activeInvocation, HandlerRegistry, ToolHandler, InvocationContext } from "./handler-registry";
 import { RpcConnection } from "./rpc";
 
 export interface ExtensionHandlers {
@@ -35,6 +35,7 @@ export function createRuntimeContext(rpc: RpcConnection, registry: HandlerRegist
           method,
           version: 1,
           input: params ?? {},
+          invocationId: activeInvocation.getStore()?.invocationId ?? "",
         });
       },
     },

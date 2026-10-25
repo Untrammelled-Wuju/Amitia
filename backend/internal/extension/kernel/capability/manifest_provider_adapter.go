@@ -79,6 +79,8 @@ func runtimeBindingFromManifestModule(mod domain.ModuleDefinition) RuntimeBindin
 			metadata[k] = v
 		}
 	}
+	metadata["extensionId"] = string(mod.ExtensionID)
+	metadata["moduleId"] = string(mod.ID)
 	return RuntimeBinding{
 		RuntimeType: rt,
 		RuntimeID:   string(mod.ID),

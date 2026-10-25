@@ -8,8 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type KernelAPI struct {
@@ -35,6 +37,7 @@ func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel.POST("/extensions/pause", api.pause)
 	kernel.POST("/extensions/permissions", api.updateExtensionPermission)
 	kernel.GET("/status", api.status)
+	kernel.POST("/capabilities/resolve", api.resolveCapability)
 	api.registerAgentSkillRoutes(group)
 }
 
@@ -105,12 +108,129 @@ func (api *KernelAPI) status(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"ready": false})
 		return
 	}
+	type toolStatus struct {
+		ID        string `json:"id"`
+		ModelName string `json:"modelName"`
+		Extension string `json:"extensionId"`
+		Module    string `json:"moduleId"`
+		Enabled   bool   `json:"enabled"`
+		Internal  bool   `json:"internal"`
+	}
+	type providerInstanceView struct {
+		ID           string `json:"id"`
+		Placement    string `json:"placement"`
+		SpaceID      string `json:"spaceId"`
+		DeviceID     string `json:"deviceId"`
+		RuntimeID    string `json:"runtimeId"`
+		Health       string `json:"health"`
+		Availability string `json:"availability"`
+		Executable   bool   `json:"executable"`
+	}
+	type providerStatus struct {
+		ID           string                 `json:"id"`
+		CapabilityID string                 `json:"capabilityId"`
+		ExtensionID  string                 `json:"extensionId"`
+		ModuleID     string                 `json:"moduleId"`
+		Placement    string                 `json:"placement"`
+		RuntimeType  string                 `json:"runtimeType"`
+		Instances    []providerInstanceView `json:"instances"`
+	}
+	tools := make([]toolStatus, 0)
+	if container.ToolRegistry != nil {
+		for _, tool := range container.ToolRegistry.List(c.Request.Context(), capability.ToolFilter{}) {
+			tools = append(tools, toolStatus{
+				ID:        string(tool.ID),
+				ModelName: tool.ModelName,
+				Extension: tool.ExtensionID,
+				Module:    tool.ModuleID,
+				Enabled:   tool.Enabled,
+				Internal:  tool.Internal,
+			})
+		}
+	}
+	providers := make([]providerStatus, 0)
+	if container.CapabilityProviders != nil {
+		for _, provider := range container.CapabilityProviders.SnapshotDefinitions() {
+			if provider == nil {
+				continue
+			}
+			instanceViews := make([]providerInstanceView, 0)
+			for _, instance := range container.CapabilityProviders.ListInstancesByProvider(provider.ID) {
+				if instance == nil {
+					continue
+				}
+				instanceViews = append(instanceViews, providerInstanceView{
+					ID:           string(instance.ID),
+					Placement:    string(instance.Placement),
+					SpaceID:      instance.SpaceID.String(),
+					DeviceID:     instance.DeviceID.String(),
+					RuntimeID:    instance.RuntimeID.String(),
+					Health:       string(instance.Health),
+					Availability: string(instance.Availability),
+					Executable:   instance.IsExecutable(),
+				})
+			}
+			providers = append(providers, providerStatus{
+				ID:           string(provider.ID),
+				CapabilityID: string(provider.CapabilityID),
+				ExtensionID:  provider.ExtensionID,
+				ModuleID:     provider.ModuleID,
+				Placement:    string(provider.Placement),
+				RuntimeType:  string(provider.Runtime.RuntimeType),
+				Instances:    instanceViews,
+			})
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"ready": true,
-		"root":  api.runtime.Kernel.Root(),
-		"count": len(api.runtime.Kernel.List()),
-		"time":  time.Now().UTC().Format(time.RFC3339),
+		"ready":     true,
+		"root":      api.runtime.Kernel.Root(),
+		"count":     len(api.runtime.Kernel.List()),
+		"tools":     tools,
+		"providers": providers,
+		"time":      time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+func (api *KernelAPI) resolveCapability(c *gin.Context) {
+	if api.runtime == nil || api.runtime.Kernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
+		return
+	}
+	container := api.runtime.Kernel.Container()
+	if container == nil || container.CapabilityService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "capability service unavailable"})
+		return
+	}
+	var input struct {
+		CapabilityID      string `json:"capabilityId" binding:"required"`
+		ExtensionID       string `json:"extensionId"`
+		ModuleID          string `json:"moduleId"`
+		SpaceID           string `json:"spaceId"`
+		RequiredPlacement string `json:"requiredPlacement"`
+		RequiredDeviceID  string `json:"requiredDeviceId"`
+		AllowCore         bool   `json:"allowCore"`
+		AllowDevice       bool   `json:"allowDevice"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	request := capability.CapabilityResolutionRequest{
+		CapabilityID:      capability.ParseCapabilityID(input.CapabilityID),
+		ExtensionID:       input.ExtensionID,
+		ModuleID:          input.ModuleID,
+		SpaceID:           runtimeidentity.SpaceID(input.SpaceID),
+		RequiredPlacement: capability.ProviderPlacement(input.RequiredPlacement),
+		RequiredDeviceID:  runtimeidentity.DeviceID(input.RequiredDeviceID),
+		AllowCore:         input.AllowCore,
+		AllowDevice:       input.AllowDevice,
+	}
+	result, err := container.CapabilityService.Resolve(request)
+	response := gin.H{"resolution": result}
+	if err != nil {
+		response["error"] = err.Error()
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (api *KernelAPI) listExtensions(c *gin.Context) {

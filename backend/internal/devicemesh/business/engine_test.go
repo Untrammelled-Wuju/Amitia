@@ -87,7 +87,7 @@ func engineHarness(t *testing.T) (*Engine, *sql.DB, *coordination.Service, *test
 	}
 	service := coordination.NewService(db)
 	model := &testModel{}
-	data := testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"device-role","globalMemoryEnabled":false}`)}}
+	data := testDataPort{db: db, role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{"characterId":"role","name":"device-role"}`)}}
 	return NewEngine(service, data, model), db, service, model
 }
 

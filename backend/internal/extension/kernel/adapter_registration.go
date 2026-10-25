@@ -312,7 +312,7 @@ func encodeGray(img *image.Gray) []byte {
 }
 
 func makeJSCallFunc(factory *javascript_main.RuntimeFactory) capability.JavaScriptCallFunc {
-	return func(ctx context.Context, extensionID string, moduleID string, handlerName string, input json.RawMessage) (json.RawMessage, error) {
+	return func(ctx context.Context, extensionID string, moduleID string, handlerName string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
 		if factory == nil {
 			return nil, fmt.Errorf("javascript runtime factory not configured")
 		}
@@ -328,7 +328,7 @@ func makeJSCallFunc(factory *javascript_main.RuntimeFactory) capability.JavaScri
 			}
 		}
 
-		result, err := host.Invoke(ctx, handlerName, inputValue)
+		result, err := host.InvokeWithContext(ctx, handlerName, inputValue, invocation)
 		if err != nil {
 			return nil, err
 		}

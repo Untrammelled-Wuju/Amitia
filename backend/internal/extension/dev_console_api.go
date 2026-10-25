@@ -2,6 +2,7 @@ package extension
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,5 +30,8 @@ func (api *DevConsoleAPI) RegisterRoutes(group *gin.RouterGroup) {
 	mux := http.NewServeMux()
 	container.DevConsoleHandler.Register(mux)
 
-	group.Any("/dev-console/*consolePath", gin.WrapH(mux))
+	group.Any("/dev-console/*consolePath", gin.WrapH(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = "/api/dev-console" + strings.TrimPrefix(r.URL.Path, "/api/extensions/dev-console")
+		mux.ServeHTTP(w, r)
+	})))
 }

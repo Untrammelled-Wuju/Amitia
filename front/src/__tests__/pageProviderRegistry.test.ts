@@ -10,7 +10,7 @@ function provider(input: Partial<UIProviderDefinition> & Pick<UIProviderDefiniti
     capability: input.capability,
     mode: input.mode ?? "replace",
     priority: input.priority ?? 0,
-    entries: input.entries ?? { web: { type: "web_restricted", contributionId: "test-page" } },
+    entries: input.entries ?? { web: { type: "web_module", path: "modules/test/index.mjs", contentHash: "pending" } },
     enabled: input.enabled ?? true,
     builtin: input.builtin ?? false,
     placement: input.placement ?? "any",

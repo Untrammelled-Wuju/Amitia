@@ -8,7 +8,7 @@
     "description": {
       "default": "管理角色生活场景、作息、工作、事件、日程和生活状态。"
     },
-    "version": "1.0.11",
+    "version": "1.0.12",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -59,6 +59,17 @@
         "capabilities": {
           "network": false,
           "filesystem": false
+        },
+        "hostAccess": {
+          "filesystem": {
+            "mode": "none"
+          },
+          "network": {
+            "mode": "none"
+          },
+          "process": {
+            "mode": "none"
+          }
         }
       },
       "contributions": [

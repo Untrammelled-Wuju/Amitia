@@ -82,6 +82,10 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 		return nil, fmt.Errorf("javascript_main: resolve plugin host: %w", err)
 	}
 	entryPoint := resolveExtensionEntryPoint(f.extensionRoot, string(spec.ExtensionID), string(spec.ModuleID), spec.EntryPoint)
+	hostAccess, err := f.resolveHostAccess(spec, entryPoint)
+	if err != nil {
+		return nil, err
+	}
 
 	req := CreateHostRequest{
 		ExtensionID:      string(spec.ExtensionID),
@@ -99,6 +103,8 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 			SingleCallTimeout:  spec.Limits.MaxExecutionTime.String(),
 			MaxOpenHandles:     spec.Limits.MaxOpenFiles,
 		},
+		NetworkDisabled: !strings.EqualFold(hostAccess.NetworkMode, "host"),
+		HostAccess:      hostAccess,
 	}
 
 	host, err := f.factory.Create(ctx, req)
@@ -109,11 +115,71 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 	return &managedPluginHost{factory: f.factory, host: host}, nil
 }
 
+func (f *SupervisorFactory) resolveHostAccess(spec runtime_supervisor.InstanceSpec, entryPoint string) (PluginHostAccess, error) {
+	hostAccess := PluginHostAccess{
+		FilesystemMode:    "none",
+		FilesystemRootMap: make(map[string]string),
+		NetworkMode:       "none",
+		ProcessMode:       "none",
+	}
+	if spec.HostAccess.Filesystem.Mode != "" {
+		hostAccess.FilesystemMode = strings.ToLower(strings.TrimSpace(spec.HostAccess.Filesystem.Mode))
+	}
+	if spec.HostAccess.Network.Mode != "" {
+		hostAccess.NetworkMode = strings.ToLower(strings.TrimSpace(spec.HostAccess.Network.Mode))
+	}
+	if spec.HostAccess.Process.Mode != "" {
+		hostAccess.ProcessMode = strings.ToLower(strings.TrimSpace(spec.HostAccess.Process.Mode))
+	}
+	if spec.HostAccess.Process.MaxProcesses > 0 {
+		hostAccess.MaxProcesses = spec.HostAccess.Process.MaxProcesses
+	} else if hostAccess.ProcessMode == "direct" && spec.Limits.MaxProcesses > 0 {
+		hostAccess.MaxProcesses = spec.Limits.MaxProcesses
+	}
+	rootMap := map[string]string{
+		"package":     resolveHostPackageRoot(entryPoint, string(spec.ModuleID)),
+		"plugin_data": filepath.Join(f.extensionRoot, "plugin-data", safeExtensionPath(string(spec.ExtensionID))),
+	}
+	for _, root := range spec.HostAccess.Filesystem.Roots {
+		root = strings.ToLower(strings.TrimSpace(root))
+		resolved := rootMap[root]
+		if resolved == "" {
+			continue
+		}
+		if root == "plugin_data" {
+			if err := os.MkdirAll(resolved, 0o700); err != nil {
+				return PluginHostAccess{}, fmt.Errorf("javascript_main: create plugin data directory: %w", err)
+			}
+		}
+		hostAccess.FilesystemRoots = append(hostAccess.FilesystemRoots, resolved)
+		hostAccess.FilesystemRootMap[root] = resolved
+	}
+	return hostAccess, nil
+}
+
+func resolveHostPackageRoot(entryPoint, moduleID string) string {
+	moduleRoot := filepath.Dir(entryPoint)
+	for current := moduleRoot; ; current = filepath.Dir(current) {
+		if filepath.Base(current) == moduleID {
+			return filepath.Dir(current)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+	}
+	return moduleRoot
+}
+
+func safeExtensionPath(value string) string {
+	return strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(value)
+}
+
 func resolveExtensionEntryPoint(extensionRoot, extensionID, moduleID, entryPoint string) string {
 	if extensionRoot == "" || extensionID == "" || moduleID == "" || entryPoint == "" || filepath.IsAbs(entryPoint) {
 		return entryPoint
 	}
-	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	safeID := safeExtensionPath(extensionID)
 	installationsRoot := filepath.Join(extensionRoot, "installations", safeID)
 	if currentData, err := os.ReadFile(filepath.Join(installationsRoot, "current.json")); err == nil {
 		var current struct {

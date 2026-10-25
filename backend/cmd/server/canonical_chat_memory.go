@@ -158,9 +158,6 @@ func (p *ownedMemoryConsumers) DeleteMemoryIntent(ctx context.Context, id, selec
 		entry.Scope = target.ExecutionScope
 		request.RequestID = requestID
 		request.MemoryView = "role:" + target.RoleID
-		if target.RoleID == coordination.GlobalMemoryRole {
-			request.MemoryView = "global"
-		}
 		return p.runtime.engine.DeleteOwnedMemory(ctx, request, entry, selection)
 	}
 	return business.MemoryDeletionStatus{}, coordination.ErrResourceVersion

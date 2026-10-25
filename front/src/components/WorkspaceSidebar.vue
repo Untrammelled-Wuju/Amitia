@@ -14,6 +14,16 @@
       </button>
       <button
         type="button"
+        class="workspace-new-group"
+        aria-label="新建群聊"
+        title="新建群聊"
+        @click="handleNewGroupChat"
+      >
+        <el-icon><ChatDotRound /></el-icon>
+        <span>新群聊</span>
+      </button>
+      <button
+        type="button"
         class="workspace-search"
         aria-label="搜索"
         title="搜索"
@@ -182,6 +192,12 @@
         <el-button type="primary" :loading="projectCreating" :disabled="projectCreating || projectSelectingFolder" @click="handleCreateProject">创建项目</el-button>
       </template>
     </el-dialog>
+    <NewGroupChatDialog
+      v-model:visible="newGroupDialogVisible"
+      :characters="owned.roles.value"
+      :default-role-id="newGroupDefaultRoleId"
+      @created="handleGroupCreated"
+    />
     <SearchModal ref="searchModal" />
   </aside>
 </template>
@@ -189,11 +205,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { FolderOpened, Plus, Search } from "@element-plus/icons-vue";
+import { ChatDotRound, FolderOpened, Plus, Search } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useChatStore, type ConversationItem, type ProjectItem, type ProjectWorkspace } from "@/stores/chat";
 import { useApi } from "@/composables/useApi";
 import NewConversationIcon from "@/components/icons/NewConversationIcon.vue";
+import NewGroupChatDialog from "@/components/NewGroupChatDialog.vue";
+import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
+import type { OwnedGroupState } from "@/runtime/device-owned-chat";
 import { useConversationDisclosure } from "@/composables/useConversationDisclosure";
 import { useConversationWorkspace } from "@/composables/useConversationWorkspace";
 import SearchModal from "./SearchModal.vue";
@@ -203,6 +222,7 @@ import SidebarProjectBlock from "./SidebarProjectBlock.vue";
 const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
+const owned = useDeviceOwnedConversation();
 const { get } = useApi();
 const {
   startDraftConversation,
@@ -216,6 +236,7 @@ const {
 } = useConversationWorkspace();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const projectDialogOpen = ref(false);
+const newGroupDialogVisible = ref(false);
 const projectCreating = ref(false);
 const projectSelectingFolder = ref(false);
 const projectDraftName = ref("");
@@ -224,6 +245,7 @@ const projectNameInitialized = ref(false);
 const projectDragActive = ref(false);
 const projectDragDepth = ref(0);
 const activeConversationId = computed(() => String(route.query.conversationId || ""));
+const newGroupDefaultRoleId = computed(() => String(route.query.characterId || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || owned.selectInitialRole()));
 const {
   visible: visibleRecentConversations,
   hasMore: hasMoreRecentConversations,
@@ -271,6 +293,25 @@ function syncConversationActivityPolling() {
 async function handleNewChat() {
   await startDraftConversation();
   await router.push({ path: "/chat" });
+}
+
+async function handleNewGroupChat() {
+  try {
+    if (!(await owned.refresh())) throw new Error("设备对话服务尚未就绪");
+    if (owned.roles.value.length < 2) {
+      ElMessage.warning("至少需要两个可用角色才能创建群聊");
+      return;
+    }
+    newGroupDialogVisible.value = true;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "无法准备新建群聊");
+  }
+}
+
+async function handleGroupCreated(group: OwnedGroupState, baseRoleId: string) {
+  chatStore.setConversationId(group.conversationId);
+  await chatStore.fetchSidebar().catch(() => undefined);
+  await router.push({ path: "/chat", query: { conversationId: group.conversationId, characterId: baseRoleId } });
 }
 
 async function handleSelectConversation(conversation: ConversationItem) {
@@ -580,6 +621,10 @@ watch(hasGeneratingConversations, syncConversationActivityPolling, { immediate: 
 .workspace-new-chat span { min-width: 0; overflow: hidden; font-size: var(--ac-font-size-sm); text-overflow: ellipsis; white-space: nowrap; }
 .workspace-new-chat .el-icon { flex: 0 0 auto; font-size: 16px; }
 .workspace-new-chat:hover { color: var(--text-primary); }
+.workspace-new-group { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 36px; flex: 0 0 auto; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--ac-color-primary) 24%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--ac-color-primary) 8%, var(--surface-bg-elevated)); color: var(--ac-color-primary); cursor: pointer; font: inherit; font-size: 11px; }
+.workspace-new-group:hover, .workspace-new-group:focus-visible { border-color: color-mix(in srgb, var(--ac-color-primary) 55%, transparent); color: var(--text-primary); outline: none; }
+.workspace-new-group .el-icon { font-size: 15px; }
+@media (max-width: 760px) { .workspace-new-group span { display: none; } .workspace-new-group { width: 36px; padding: 0; } }
 .workspace-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 6px 8px 8px; }
 .thread-sidebar { display: flex; flex-direction: column; padding: 2px 0 8px; }
 .section-caption { padding: 0 9px 5px; color: var(--text-muted); font-size: var(--ac-font-size-xs); font-weight: 550; }

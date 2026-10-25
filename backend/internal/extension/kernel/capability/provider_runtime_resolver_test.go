@@ -62,3 +62,44 @@ func TestProviderRuntimeExecutionResolverUsesToolRuntimeBinding(t *testing.T) {
 		t.Fatalf("tool runtime metadata was not merged: %+v", route.Binding.Metadata)
 	}
 }
+
+func TestProviderRuntimeExecutionResolverExecutesInProcessDeviceRuntimeWithoutRemoteSession(t *testing.T) {
+	definition := CapabilityProviderDefinition{
+		ID:           "plugin-provider",
+		CapabilityID: "com.example/plugin/ai",
+		Placement:    ProviderPlacementDevice,
+		Runtime:      RuntimeBinding{RuntimeType: RuntimeTypePluginJS, HandlerName: "ai"},
+	}
+	instance := CapabilityProviderInstance{
+		ID:                "plugin-instance",
+		ProviderID:        definition.ID,
+		CapabilityID:      definition.CapabilityID,
+		Placement:         ProviderPlacementDevice,
+		SpaceID:           "realm",
+		DeviceID:          "local-device",
+		RuntimeID:         "kernel-runtime",
+		RuntimeInstanceID: "plugin-runtime-instance",
+		Health:            HealthReady,
+		Availability:      ProviderAvailabilityAvailable,
+	}
+	resolver := NewProviderRuntimeExecutionResolver(staticProviderExecutionLookup{definition: definition, instance: instance})
+	route, err := resolver.ResolveRuntimeExecution(context.Background(), ToolDefinition{
+		CapabilityID: definition.CapabilityID,
+		Runtime:      RuntimeBinding{RuntimeType: RuntimeTypePluginJS, HandlerName: "ai"},
+	}, ToolInvocationContext{
+		ExecutionTarget: InvocationExecutionTarget{
+			Placement:          "device",
+			SpaceID:            "realm",
+			DeviceID:           "local-device",
+			RuntimeID:          "kernel-runtime",
+			ProviderID:         string(definition.ID),
+			ProviderInstanceID: string(instance.ID),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if route.RemoteDevice || route.RuntimeSessionID != "" || route.ProviderRuntimeInstanceID != instance.RuntimeInstanceID {
+		t.Fatalf("in-process device runtime was routed as remote: %+v", route)
+	}
+}

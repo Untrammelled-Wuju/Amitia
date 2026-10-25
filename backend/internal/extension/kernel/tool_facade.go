@@ -912,11 +912,19 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 				return resolvedExecution{missingCapability: capID, resolutionCode: "CAPABILITY_DEVICE_TARGET_REQUIRED", resolutionDetail: "设备能力缺少明确的目标设备"}
 			}
 			if targetIsLocal {
-				req.RequiredPlacement = capability.ProviderPlacementCore
-				req.PreferredPlacement = capability.ProviderPlacementCore
-				req.RequiredDeviceID = ""
-				req.PreferredDeviceID = ""
-				req.AllowDevice = false
+				if def.Runtime.RuntimeType == capability.RuntimeTypeJavaScript || def.Runtime.RuntimeType == capability.RuntimeTypePluginJS {
+					req.RequiredPlacement = capability.ProviderPlacementDevice
+					req.PreferredPlacement = capability.ProviderPlacementDevice
+					req.RequiredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+					req.PreferredDeviceID = scope.ExecContext.RuntimeTarget.DeviceID
+					req.AllowCore = false
+				} else {
+					req.RequiredPlacement = capability.ProviderPlacementCore
+					req.PreferredPlacement = capability.ProviderPlacementCore
+					req.RequiredDeviceID = ""
+					req.PreferredDeviceID = ""
+					req.AllowDevice = false
+				}
 			} else {
 				req.RequiredPlacement = capability.ProviderPlacementDevice
 				req.PreferredPlacement = capability.ProviderPlacementDevice
@@ -936,6 +944,9 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	}
 	result, err := f.capabilityResolver.Resolve(req)
 	if err != nil || !result.HasResult() {
+		if !owned && (def.Runtime.RuntimeType == capability.RuntimeTypeJavaScript || def.Runtime.RuntimeType == capability.RuntimeTypePluginJS) {
+			return resolvedExecution{}
+		}
 		code := "CAPABILITY_NO_AVAILABLE_PROVIDER"
 		for _, reason := range result.ReasonCodes {
 			if reason == string(capability.ResolutionFailureCapabilityNotRegistered) {

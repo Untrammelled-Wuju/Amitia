@@ -1156,7 +1156,6 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		return installOp{}, fmt.Errorf("ui contribution identity does not match manifest contribution")
 	}
 	uiDef.Integrity.Generation = generation
-	i.promoteAdjacentSchema(&uiDef)
 
 	hostRuntimeID := strings.TrimSpace(uiDef.Entry.RuntimeID)
 	hostRuntime := hostRuntimeID != "" && (uiDef.Entry.Type == ui_contribution.SandboxHostNative || uiDef.Sandbox.Type == ui_contribution.SandboxHostNative)
@@ -1169,7 +1168,17 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		}
 	}
 
-	hasPage := !hostRuntime && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage)
+	isClientModule := uiDef.Entry.Type == ui_contribution.SandboxClientModule || uiDef.Sandbox.Type == ui_contribution.SandboxClientModule
+	if isClientModule {
+		relativePath := filepath.Clean(filepath.FromSlash(strings.TrimSpace(uiDef.Entry.Path)))
+		if relativePath == "." || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
+			return installOp{}, fmt.Errorf("client module contribution %s requires a safe entry.path", uiDef.ContributionID)
+		}
+		if strings.TrimSpace(uiDef.Entry.ContentHash) == "" {
+			return installOp{}, fmt.Errorf("client module contribution %s requires entry.content_hash", uiDef.ContributionID)
+		}
+	}
+	hasPage := !hostRuntime && (uiDef.Kind == ui_contribution.UIContributionSchemaPage || (uiDef.Kind == ui_contribution.UIContributionWebPage && uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer))
 	hasSchema := !hostRuntime && (uiDef.Entry.SchemaPath != "" || uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer)
 	if hasSchema && uiDef.Entry.SchemaPath == "" {
 		return installOp{}, fmt.Errorf("schema ui contribution %s requires entry.schema_path", uiDef.ContributionID)
@@ -1243,42 +1252,6 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 			}
 		},
 	}, nil
-}
-
-func (i *TypedContributionInstaller) promoteAdjacentSchema(uiDef *ui_contribution.UIContributionDefinition) {
-	if uiDef == nil || uiDef.Kind != ui_contribution.UIContributionWebPage {
-		return
-	}
-	if uiDef.Entry.SchemaPath != "" || strings.TrimSpace(uiDef.Entry.Path) == "" {
-		return
-	}
-	if uiDef.Entry.Type != ui_contribution.SandboxWebRestricted && uiDef.Entry.Type != ui_contribution.SandboxWebIsolated {
-		return
-	}
-	basePath := resolveExtensionBundlePath(i.container.ExtRoot, string(uiDef.ExtensionID))
-	if basePath == "" {
-		return
-	}
-	relativePath := filepath.Clean(filepath.FromSlash(uiDef.Entry.Path))
-	if strings.HasPrefix(relativePath, "..") || filepath.IsAbs(relativePath) {
-		return
-	}
-	extension := filepath.Ext(relativePath)
-	if extension == "" {
-		return
-	}
-	schemaPath := strings.TrimSuffix(relativePath, extension) + ".schema.json"
-	fullPath := filepath.Join(basePath, schemaPath)
-	info, err := os.Stat(fullPath)
-	if err != nil || info.IsDir() {
-		return
-	}
-	uiDef.Kind = ui_contribution.UIContributionSchemaPage
-	uiDef.Entry.Type = ui_contribution.SandboxSchemaRenderer
-	uiDef.Entry.SchemaPath = filepath.ToSlash(schemaPath)
-	uiDef.Sandbox.Type = ui_contribution.SandboxSchemaRenderer
-	uiDef.Sandbox.EnableScripts = false
-	uiDef.Visibility = ui_contribution.UIVisibilityRule{Platforms: []string{"windows", "linux", "macos"}}
 }
 
 func (i *TypedContributionInstaller) buildDesktopContributionOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, uiDef ui_contribution.UIContributionDefinition, generation int64) (installOp, error) {
@@ -1628,39 +1601,32 @@ func (i *TypedContributionInstaller) activateUIProvider(ctx context.Context, con
 			})
 		}
 	}
-	if _, ok := i.container.UIProviderRegistry.Get(string(contrib.ID)); !ok {
-		defData, _ := json.Marshal(contrib.Definition)
-		var def ui_provider.ProviderDefinition
-		if err := json.Unmarshal(defData, &def); err != nil {
-			return fmt.Errorf("unmarshal ui provider for activate: %w", err)
-		}
-		if def.ProviderID == "" {
-			def.ProviderID = string(contrib.ID)
-		}
-		if def.ExtensionID == "" {
-			def.ExtensionID = string(contrib.ExtensionID)
-		}
-		if def.ModuleID == "" {
-			def.ModuleID = string(contrib.ModuleID)
-		}
-		if def.ProviderID != string(contrib.ID) || def.ExtensionID != string(contrib.ExtensionID) || def.ModuleID != string(contrib.ModuleID) {
-			return fmt.Errorf("ui provider identity does not match manifest contribution")
-		}
-		if contrib.RuntimeBinding != nil {
-			def.Generation = contrib.RuntimeBinding.Generation
-		}
-		def.Enabled = true
-		i.enrichUIProviderPlacement(ctx, contrib, &def)
-		if err := def.Validate(); err != nil {
-			return err
-		}
-		if err := i.container.UIProviderRegistry.Register(def); err != nil {
-			return err
-		}
-		broadcast()
-		return nil
+	defData, _ := json.Marshal(contrib.Definition)
+	var def ui_provider.ProviderDefinition
+	if err := json.Unmarshal(defData, &def); err != nil {
+		return fmt.Errorf("unmarshal ui provider for activate: %w", err)
 	}
-	if err := i.container.UIProviderRegistry.SetEnabled(string(contrib.ID), true); err != nil {
+	if def.ProviderID == "" {
+		def.ProviderID = string(contrib.ID)
+	}
+	if def.ExtensionID == "" {
+		def.ExtensionID = string(contrib.ExtensionID)
+	}
+	if def.ModuleID == "" {
+		def.ModuleID = string(contrib.ModuleID)
+	}
+	if def.ProviderID != string(contrib.ID) || def.ExtensionID != string(contrib.ExtensionID) || def.ModuleID != string(contrib.ModuleID) {
+		return fmt.Errorf("ui provider identity does not match manifest contribution")
+	}
+	if contrib.RuntimeBinding != nil {
+		def.Generation = contrib.RuntimeBinding.Generation
+	}
+	def.Enabled = true
+	i.enrichUIProviderPlacement(ctx, contrib, &def)
+	if err := def.Validate(); err != nil {
+		return err
+	}
+	if err := i.container.UIProviderRegistry.Register(def); err != nil {
 		return err
 	}
 	broadcast()

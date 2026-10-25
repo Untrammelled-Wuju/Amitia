@@ -74,6 +74,8 @@ func (r *PluginChannelProviderRegistry) Provider(channelID string) (*basechannel
 		SendPath:          stringValue(transport["sendPath"]),
 		ImagePath:         stringValue(transport["imagePath"]),
 		VoicePath:         stringValue(transport["voicePath"]),
+		VideoPath:         stringValue(transport["videoPath"]),
+		FilePath:          stringValue(transport["filePath"]),
 		StatusPath:        stringValue(transport["statusPath"]),
 		ConnectPath:       stringValue(transport["connectPath"]),
 		DisconnectPath:    stringValue(transport["disconnectPath"]),

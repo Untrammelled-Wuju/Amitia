@@ -10,7 +10,6 @@ import PluginPageFrame from "./PluginPageFrame.vue";
 import ExtensionLoadingOverlay from "./ExtensionLoadingOverlay.vue";
 
 const SchemaUIRenderer = defineAsyncComponent({ loader: () => import("./SchemaUIRenderer.vue"), loadingComponent: ExtensionLoadingOverlay, delay: 0 });
-const SandboxWebUIFrame = defineAsyncComponent({ loader: () => import("./SandboxWebUIFrame.vue"), loadingComponent: ExtensionLoadingOverlay, delay: 0 });
 
 type PageState =
   | "resolving"
@@ -103,7 +102,7 @@ const pageContribution = computed<UIContributionSummary | null>(() => {
     enabled: true,
     runtimeReady: true,
     permissions: pageSpec.value.permissions ?? [],
-    sandbox: pageSpec.value.entryKind === "web_page" ? "web_restricted" : "schema_renderer",
+    sandbox: pageSpec.value.entryKind === "web_page" ? "client_module" : "schema_renderer",
     entryPath: pageSpec.value.entryPath,
     schemaPath: pageSpec.value.schemaPath,
     actions: [],
@@ -113,7 +112,6 @@ const pageSurfaceKind = computed(() =>
   pageContribution.value ? resolvePluginSurface(pageContribution.value) : "none",
 );
 const isSchemaPage = computed(() => pageSurfaceKind.value === "schema");
-const isWebPage = computed(() => pageSurfaceKind.value === "web");
 
 const pageContext = computed<Record<string, unknown>>(() => {
   const env = resolveHostEnvironment();
@@ -302,13 +300,6 @@ watch([extensionId, pageId], async () => {
             :slot-id="`extension.page.main`"
             :context="pageContext"
           />
-          <SandboxWebUIFrame
-            v-else-if="isWebPage"
-            :contribution="pageContribution"
-            :slot-id="`extension.page.main`"
-            :context="pageContext"
-            semantic-target="extension.surface"
-          />
           <div v-else class="extension-page-host__placeholder">
             未知页面类型: {{ pageSpec?.entryKind }}
           </div>
@@ -379,10 +370,6 @@ watch([extensionId, pageId], async () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-}
-.extension-page-host__page-content :deep(.sandbox-webui-frame) {
-  flex: 1;
   min-height: 0;
 }
 .extension-page-host__loading {

@@ -59,7 +59,7 @@ func newGoldenOwnedFixture(t *testing.T, personalityConfig string, emotionEnable
 	old := runtimegate.IsEnabled(runtimegate.EmotionExtensionID)
 	runtimegate.Set(runtimegate.EmotionExtensionID, emotionEnabled)
 	t.Cleanup(func() { runtimegate.Set(runtimegate.EmotionExtensionID, old) })
-	f.port.role.Profile = json.RawMessage(`{"characterId":"role","name":"测试角色","identity":"一位温柔体贴的朋友","personality":"温柔、善解人意、有耐心","globalMemoryEnabled":false,"personalityConfig":` + personalityConfig + `}`)
+	f.port.role.Profile = json.RawMessage(`{"characterId":"role","name":"测试角色","identity":"一位温柔体贴的朋友","personality":"温柔、善解人意、有耐心","personalityConfig":` + personalityConfig + `}`)
 	f.model.llmWithTools = func(_ context.Context, _ *ModelConfig, messages []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
 		f.captured = append(f.captured, messages)
 		return "你今天看起来心情不错呢\n有什么开心的事吗", "", nil, 21, nil

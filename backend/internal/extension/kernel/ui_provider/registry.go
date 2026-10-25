@@ -29,8 +29,7 @@ const (
 	EntryDeclarative    EntryType = "declarative"
 	EntryWebModule      EntryType = "web_module"
 	EntrySchemaRenderer EntryType = "schema_renderer"
-	EntryWebRestricted  EntryType = "web_restricted"
-	EntryWebIsolated    EntryType = "web_isolated"
+	EntryExternalWebUI  EntryType = "external_web_ui"
 )
 
 const (
@@ -72,6 +71,7 @@ const (
 	CapabilitySettingsSection             Capability = "settings.section"
 	CapabilityExtensionCenter             Capability = "extension.center"
 	CapabilityExtensionPage               Capability = "extension.page"
+	CapabilityWorkspaceTab                Capability = "workspace.tab"
 	CapabilityTheme                       Capability = "ui.theme"
 	CapabilityTokens                      Capability = "ui.tokens"
 	CapabilityIcons                       Capability = "ui.icons"
@@ -86,14 +86,15 @@ var knownCapabilities = map[Capability]struct{}{
 	CapabilityConversationDrawer: {}, CapabilityChannelPresentation: {},
 	CapabilityCharacterShell: {}, CapabilityCharacterDetail: {}, CapabilityMemoryShell: {}, CapabilityMemoryDetail: {},
 	CapabilitySettingsShell: {}, CapabilitySettingsSection: {}, CapabilityExtensionCenter: {}, CapabilityExtensionPage: {},
-	CapabilityTheme: {}, CapabilityTokens: {}, CapabilityIcons: {}, CapabilityComponents: {},
+	CapabilityWorkspaceTab: {},
+	CapabilityTheme:        {}, CapabilityTokens: {}, CapabilityIcons: {}, CapabilityComponents: {},
 }
 
 func (c Capability) Valid() bool { _, ok := knownCapabilities[c]; return ok }
 func (m Mode) Valid() bool       { return m == ModeReplace || m == ModeCompose || m == ModeAugment }
 func (e EntryType) Valid() bool {
 	switch e {
-	case EntryBuiltinNative, EntryDeclarative, EntryWebModule, EntrySchemaRenderer, EntryWebRestricted, EntryWebIsolated:
+	case EntryBuiltinNative, EntryDeclarative, EntryWebModule, EntrySchemaRenderer, EntryExternalWebUI:
 		return true
 	default:
 		return false
@@ -118,8 +119,13 @@ type Entry struct {
 	Type           EntryType `json:"type"`
 	Path           string    `json:"path,omitempty"`
 	SchemaPath     string    `json:"schemaPath,omitempty"`
+	StylePath      string    `json:"stylePath,omitempty"`
 	ExportName     string    `json:"exportName,omitempty"`
 	ContentHash    string    `json:"contentHash,omitempty"`
+	StyleHash      string    `json:"styleHash,omitempty"`
+	ModuleToken    string    `json:"moduleToken,omitempty"`
+	URL            string    `json:"url,omitempty"`
+	AllowedOrigins []string  `json:"allowedOrigins,omitempty"`
 }
 
 type ProviderDefinition struct {
@@ -167,7 +173,7 @@ func (d *ProviderDefinition) Normalize() {
 
 func requiresTrustedRootProvider(capability Capability) bool {
 	switch capability {
-	case CapabilityAppShell, CapabilityAppNavigation, CapabilityAppWorkspace, CapabilityRouteRegistry, CapabilityPageProvider:
+	case CapabilityAppShell, CapabilityAppNavigation, CapabilityAppWorkspace, CapabilityRouteRegistry, CapabilityPageProvider, CapabilityWorkspaceTab:
 		return true
 	case CapabilityConversationDrawer:
 		return true
@@ -236,18 +242,45 @@ func (d ProviderDefinition) Validate() error {
 		case EntryWebModule:
 			platformKey := strings.ToLower(strings.TrimSpace(platform))
 			if platformKey == "android" || platformKey == "ios" || platformKey == "mobile" || strings.HasPrefix(platformKey, "flutter_") || platformKey == "*" {
-				return fmt.Errorf("ui_provider: web_module cannot target Flutter/mobile/wildcard entry %s; use schema_renderer or sandbox web and reserve web_module for web/Electron hosts", platform)
+				return fmt.Errorf("ui_provider: web_module cannot target Flutter/mobile/wildcard entry %s; use schema_renderer and reserve web_module for web/Electron hosts", platform)
 			}
 			if strings.TrimSpace(entry.Path) == "" {
 				return fmt.Errorf("ui_provider: web_module path required for %s", platform)
+			}
+			if strings.TrimSpace(entry.ContentHash) == "" {
+				return fmt.Errorf("ui_provider: web_module contentHash required for %s", platform)
+			}
+			if strings.TrimSpace(entry.StylePath) != "" && strings.TrimSpace(entry.StyleHash) == "" {
+				return fmt.Errorf("ui_provider: web_module styleHash required when stylePath is set for %s", platform)
 			}
 		case EntrySchemaRenderer:
 			if strings.TrimSpace(entry.ContributionID) == "" {
 				return fmt.Errorf("ui_provider: schema_renderer contributionId required for %s", platform)
 			}
-		case EntryWebRestricted, EntryWebIsolated:
-			if strings.TrimSpace(entry.ContributionID) == "" {
-				return fmt.Errorf("ui_provider: sandbox web entry contributionId required for %s", platform)
+		case EntryExternalWebUI:
+			if d.Capability != CapabilityWorkspaceTab {
+				return fmt.Errorf("ui_provider: external_web_ui is only supported for workspace.tab")
+			}
+			target, err := url.Parse(strings.TrimSpace(entry.URL))
+			if err != nil || target.Host == "" || (target.Scheme != "http" && target.Scheme != "https") || target.User != nil {
+				return fmt.Errorf("ui_provider: external_web_ui url must be an HTTP(S) URL without credentials for %s", platform)
+			}
+			if len(entry.AllowedOrigins) == 0 {
+				return fmt.Errorf("ui_provider: external_web_ui allowedOrigins required for %s", platform)
+			}
+			targetOrigin := target.Scheme + "://" + target.Host
+			hasTargetOrigin := false
+			for _, rawOrigin := range entry.AllowedOrigins {
+				origin, err := url.Parse(strings.TrimSpace(rawOrigin))
+				if err != nil || origin.Scheme == "" || origin.Host == "" || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" || origin.User != nil {
+					return fmt.Errorf("ui_provider: external_web_ui allowedOrigins contains an invalid origin for %s", platform)
+				}
+				if origin.Scheme+"://"+origin.Host == targetOrigin {
+					hasTargetOrigin = true
+				}
+			}
+			if !hasTargetOrigin {
+				return fmt.Errorf("ui_provider: external_web_ui url origin must be listed in allowedOrigins for %s", platform)
 			}
 		}
 	}
@@ -466,6 +499,66 @@ func validateProviderMetadata(d ProviderDefinition) error {
 			}
 			if err := optionalInteger(row, "priority"); err != nil {
 				return err
+			}
+		}
+	}
+	if d.Capability == CapabilityWorkspaceTab {
+		workspace := field(d.Metadata, "workspace")
+		tabID := field(d.Metadata, "tabId")
+		title := field(d.Metadata, "title")
+		if workspace == "" || tabID == "" || title == "" {
+			return errors.New("ui_provider: workspace.tab requires workspace, tabId and title")
+		}
+		validTabID := true
+		for _, char := range tabID {
+			if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_' || char == '-' || char == '.' {
+				continue
+			}
+			validTabID = false
+			break
+		}
+		if !validTabID || len(tabID) > 128 {
+			return errors.New("ui_provider: workspace.tab tabId must be a safe lowercase identifier")
+		}
+		for _, name := range []string{"icon", "routePrefix"} {
+			if err := optionalString(d.Metadata, name); err != nil {
+				return err
+			}
+		}
+		if routePrefix := field(d.Metadata, "routePrefix"); routePrefix != "" && !safeRoutePath(routePrefix, false) {
+			return errors.New("ui_provider: workspace.tab routePrefix must be a concrete absolute route")
+		}
+		if err := optionalInteger(d.Metadata, "order"); err != nil {
+			return err
+		}
+		if value, exists := d.Metadata["keepMounted"]; exists && value != nil {
+			if _, ok := value.(bool); !ok {
+				return errors.New("ui_provider: workspace.tab keepMounted must be a boolean")
+			}
+		}
+		if storage := field(d.Metadata, "storage"); storage != "" && storage != "session" && storage != "persistent" {
+			return errors.New("ui_provider: workspace.tab storage must be session or persistent")
+		}
+		if value, exists := d.Metadata["contextMatch"]; exists && value != nil {
+			match, ok := value.(map[string]any)
+			if !ok {
+				return errors.New("ui_provider: workspace.tab contextMatch must be an object")
+			}
+			for key, raw := range match {
+				if strings.TrimSpace(key) == "" {
+					return errors.New("ui_provider: workspace.tab contextMatch keys must be nonempty")
+				}
+				switch value := raw.(type) {
+				case string:
+				case []any:
+					for _, item := range value {
+						if _, ok := item.(string); !ok {
+							return errors.New("ui_provider: workspace.tab contextMatch arrays must contain strings")
+						}
+					}
+				default:
+					return errors.New("ui_provider: workspace.tab contextMatch values must be strings or string arrays")
+				}
 			}
 		}
 	}
@@ -939,6 +1032,7 @@ func cloneProvider(p *ProviderDefinition) *ProviderDefinition {
 	if p.Entries != nil {
 		cp.Entries = make(map[string]Entry, len(p.Entries))
 		for k, v := range p.Entries {
+			v.AllowedOrigins = append([]string(nil), v.AllowedOrigins...)
 			cp.Entries[k] = v
 		}
 	}

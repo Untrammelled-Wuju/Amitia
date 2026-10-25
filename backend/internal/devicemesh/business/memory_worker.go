@@ -34,7 +34,7 @@ func (e *Engine) ResumeMemory(ctx context.Context, job coordination.MemoryJobLoc
 		return Response{}, err
 	}
 	scope.RoleRevision = role.Revision
-	if err := coordination.ResolveMemoryScope(&scope, role, ""); err != nil {
+	if err := coordination.ResolveMemoryScope(&scope, ""); err != nil {
 		return Response{}, err
 	}
 	ctx = coordination.WithScope(ctx, scope)

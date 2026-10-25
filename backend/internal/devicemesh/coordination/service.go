@@ -39,6 +39,7 @@ type ExecutionScope struct {
 	ContinuityRoleID         string `json:"continuityRoleId,omitempty"`
 	MemoryRoleID             string `json:"memoryRoleId,omitempty"`
 	WorldbookRoleID          string `json:"worldbookRoleId,omitempty"`
+	ConversationRoleID       string `json:"conversationRoleId,omitempty"`
 	SpaceID                  string `json:"spaceId"`
 	InitiatorDeviceID        string `json:"initiatorDeviceId"`
 	TargetDeviceID           string `json:"targetDeviceId"`

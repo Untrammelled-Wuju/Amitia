@@ -51,7 +51,7 @@ func (k UIContributionKind) DefaultSandbox() UISandboxType {
 	case UIContributionSchemaPage, UIContributionSettingsSection, UIContributionCard, UIContributionBadge:
 		return SandboxSchemaRenderer
 	case UIContributionWebPage:
-		return SandboxWebRestricted
+		return SandboxClientModule
 	case UIContributionAction, UIContributionMenuItem, UIContributionToolbarItem,
 		UIContributionStatusItem, UIContributionMessageAction,
 		UIContributionComposerAction, UIContributionDesktopCommand:
@@ -59,7 +59,7 @@ func (k UIContributionKind) DefaultSandbox() UISandboxType {
 	case UIContributionPanel:
 		return SandboxSchemaRenderer
 	case UIContributionMessageRenderer:
-		return SandboxWebRestricted
+		return SandboxClientModule
 	case UIContributionDetailSectionKind, UIContributionChatSidebarKind:
 		return SandboxSchemaRenderer
 	}
@@ -71,13 +71,12 @@ type UISandboxType string
 const (
 	SandboxHostNative     UISandboxType = "host_native"
 	SandboxSchemaRenderer UISandboxType = "schema_renderer"
-	SandboxWebRestricted  UISandboxType = "web_restricted"
-	SandboxWebIsolated    UISandboxType = "web_isolated"
+	SandboxClientModule   UISandboxType = "client_module"
 )
 
 func (s UISandboxType) Valid() bool {
 	switch s {
-	case SandboxHostNative, SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated:
+	case SandboxHostNative, SandboxSchemaRenderer, SandboxClientModule:
 		return true
 	}
 	return false
@@ -143,13 +142,8 @@ type UIDisplayMetadata struct {
 }
 
 type UISandboxPolicy struct {
-	Type           UISandboxType `json:"type"`
-	CSP            string        `json:"csp,omitempty"`
-	AllowedOrigins []string      `json:"allowed_origins,omitempty"`
-	EnableScripts  bool          `json:"enable_scripts,omitempty"`
-	AllowForms     bool          `json:"allow_forms,omitempty"`
-	AllowPopups    bool          `json:"allow_popups,omitempty"`
-	MaxMemoryMB    int64         `json:"max_memory_mb,omitempty"`
+	Type        UISandboxType `json:"type"`
+	MaxMemoryMB int64         `json:"max_memory_mb,omitempty"`
 }
 
 type UIEntryDefinition struct {
@@ -735,15 +729,15 @@ func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
 	case UIContributionSchemaPage, UIContributionSettingsSection, UIContributionPanel,
 		UIContributionCard, UIContributionBadge, UIContributionDetailSectionKind,
 		UIContributionChatSidebarKind:
-		return []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
+		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule}
 	case UIContributionWebPage, UIContributionMessageRenderer:
-		return []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
+		return []UISandboxType{SandboxSchemaRenderer, SandboxClientModule}
 	case UIContributionAction, UIContributionMenuItem, UIContributionToolbarItem,
 		UIContributionStatusItem, UIContributionMessageAction,
 		UIContributionDesktopCommand:
 		return []UISandboxType{SandboxHostNative}
 	case UIContributionComposerAction:
-		return []UISandboxType{SandboxHostNative, SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
+		return []UISandboxType{SandboxHostNative, SandboxSchemaRenderer, SandboxClientModule}
 	default:
 		return []UISandboxType{kind.DefaultSandbox()}
 	}

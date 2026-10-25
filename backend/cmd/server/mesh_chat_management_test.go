@@ -70,7 +70,7 @@ func TestOwnedChatCleanupPreservesMemoriesAndDeletesLegacyHistory(t *testing.T) 
 			if err := p.services.DB.Create(&message).Error; err != nil {
 				t.Fatal(err)
 			}
-			seedOwnedChatManagement(t, p, "memory", "legacy-memory", coordination.GlobalMemoryRole, `{"conversationId":"legacy","content":"legacy memory","executionScope":{"roleId":"one"}}`)
+			seedOwnedChatManagement(t, p, "memory", "legacy-memory", "one", `{"conversationId":"legacy","content":"legacy memory","executionScope":{"roleId":"one"}}`)
 			preview, err := p.ManageChat(t.Context(), scope, coordination.ChatManagementRequest{Operation: "cleanup/preview", ConversationOwnerID: p.ownerID, IncludeMemories: include})
 			if err != nil {
 				t.Fatal(err)
