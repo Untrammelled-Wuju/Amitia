@@ -17,7 +17,6 @@ func configurationAdministratorRouter(db *gorm.DB) *gin.Engine {
 	handler := system.NewHandler(system.NewService(&app.AppContext{DB: db}, ""), db, nil, nil, nil, nil, nil)
 	router.PUT("/audit", handler.UpdateAuditSettings)
 	router.PUT("/security", handler.UpdateSecurityAccessConfig)
-	router.PUT("/runtime", handler.UpdateRuntimeMode)
 	router.PUT("/long-running", handler.UpdateTaskMaintenanceConfig)
 	router.PUT("/update", handler.UpdateConfig_Update)
 	router.PUT("/timeout", handler.UpdateTimeoutSettings)
@@ -49,7 +48,6 @@ func TestConfigurationAdministratorSettingsKeepRevokedRequestAfterABA(t *testing
 	for _, request := range []struct{ method, path, body string }{
 		{http.MethodPut, "/audit", `{"enabled":false,"retentionDays":3,"logActions":false}`},
 		{http.MethodPut, "/security", `{"requireAuth":false,"allowedOrigins":"late","rateLimit":false}`},
-		{http.MethodPut, "/runtime", `{"mode":"cloud-web","publicBaseUrl":"late"}`},
 		{http.MethodPut, "/long-running", `{"maxTasks":9,"timeoutMinutes":90}`},
 		{http.MethodPut, "/update", `{"autoCheck":false}`},
 		{http.MethodPut, "/timeout", `{"disabled":false,"seconds":120}`},
@@ -78,7 +76,7 @@ func TestConfigurationAdministratorSettingsKeepRevokedRequestAfterABA(t *testing
 func TestConfigurationAdministratorMalformedSettingsDoNotWrite(t *testing.T) {
 	db, _ := configurationDB(t)
 	router := configurationAdministratorRouter(db)
-	for _, path := range []string{"/audit", "/security", "/runtime", "/long-running", "/update"} {
+	for _, path := range []string{"/audit", "/security", "/long-running", "/update"} {
 		if code := configurationHTTPResult(t, router, t.Context(), http.MethodPut, path, `{`); code != 400 {
 			t.Fatalf("malformed administrator setting %s returned %d", path, code)
 		}
@@ -96,7 +94,6 @@ func TestConfigurationAdministratorSettingsRollBackMultiKeyAndTimeoutSideEffects
 	for _, operation := range []struct{ method, path, body, failureKey string }{
 		{http.MethodPut, "/audit", `{"enabled":false,"retentionDays":3,"logActions":false}`, "audit_retention_days"},
 		{http.MethodPut, "/security", `{"requireAuth":false,"allowedOrigins":"changed","rateLimit":false}`, "require_auth"},
-		{http.MethodPut, "/runtime", `{"mode":"cloud-web","publicBaseUrl":"changed"}`, "runtime_mode"},
 		{http.MethodPost, "/setup/finish", `{}`, "setup_step"},
 	} {
 		t.Run(operation.path, func(t *testing.T) {
