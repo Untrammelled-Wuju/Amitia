@@ -1,0 +1,195 @@
+{
+ "version": 1,
+ "kind": "app",
+ "at": "2026-10-25T08:02:50.233Z",
+ "seed": 1660530606,
+ "input": {
+  "kind": "workspace",
+  "brief": "Amitia 多角色 AI 聊天、任务、记忆与插件移动端",
+  "theme": "light",
+  "screens": [
+   "list",
+   "home",
+   "settings"
+  ],
+  "keep": [
+   "palette",
+   "type"
+  ],
+  "style": "achromatic-ledger"
+ },
+ "style": {
+  "id": "achromatic-ledger",
+  "name": "Achromatic ledger",
+  "theme": "light",
+  "basis": "4 screens: a seller home, a per-agent insights page, a generated report, a settings page with usage numbers",
+  "suits": [
+   "finance",
+   "commerce",
+   "devtools",
+   "support",
+   "report",
+   "workspace",
+   "builder"
+  ],
+  "idea": "The chrome holds no colour at all; money and counts are set in ink, the one chart hue marks the screen's main data element, and the only other hue is a small signal where a figure changed.",
+  "colourBudget": "under 1% coloured pixels; the chrome is ink, the one chart hue goes on the main data element, and the only other hue is a small change signal",
+  "tokens": {
+   "ground": "#f8f8f8",
+   "surface": "#ffffff",
+   "raised": "#eeeeee",
+   "border": "#e6e6e6",
+   "rule": "#f0f0f0",
+   "control": "#d4d4d4",
+   "text": "#0a0a0a",
+   "muted": "#6b6b6b",
+   "accent": "#141414",
+   "positive": "#2e7d32",
+   "negative": "#c4242a",
+   "warning": "#92400e",
+   "chart": [
+    "#141414",
+    "#8a8a8a",
+    "#1d5fbf"
+   ],
+   "pills": {
+    "positive": [
+     "#dcfae5",
+     "#04250e"
+    ],
+    "negative": [
+     "#ffedea",
+     "#831c1e"
+    ],
+    "warning": [
+     "#fffbeb",
+     "#92400e"
+    ],
+    "neutral": [
+     "#eeeeee",
+     "#3d3d3d"
+    ]
+   },
+   "radius": {
+    "card": 8,
+    "control": 6
+   },
+   "font": {
+    "family": "Geist",
+    "second": "Geist Mono, for IDs and keys only",
+    "fallback": "Inter, system-ui, sans-serif",
+    "sizes": {
+     "title": 24,
+     "section": 16,
+     "kpi": 30,
+     "body": 14,
+     "small": 12
+    },
+    "weights": [
+     400,
+     500,
+     700
+    ],
+    "note": "700 is for money figures only; every other number is 400-500."
+   },
+   "density": "sparse",
+   "rowHeight": 44,
+   "sidebarWidth": 256,
+   "gap": 12,
+   "pad": 24,
+   "controlHeight": 36
+  },
+  "shell": "open-plane",
+  "shellAlternatives": [
+   "icon-rail",
+   "no-sidebar"
+  ],
+  "signature": "No brand colour anywhere in the chrome: the one primary action is near-black (a grey pill, #e5e5e5, is the secondary), the main data element (today's series, the booked bars, the current period) takes the one chart hue, #1d5fbf, and everything else is drawn in ink with the comparison or the part after the cursor in grey, zero balances are set in grey, and the only hue on the screen is a small triangle or a short coloured number where a figure changed.",
+  "identity": [
+   "A ground from the product's world in place of #f8f8f8, one level off white and low in chroma: a stone (#f4f3f1) for a bakery or a shop, a sage (#f2f5f2) for a garden or a greenhouse, a blue-grey (#f2f4f7) for a ledger or a meter. Cards stay white; a warm tint stays under the cream check (saturation under about 15%).",
+   "The one chart hue (#1d5fbf, or the brand's own hue at 3:1 or more on white) on the screen's main data element: today's line, the booked bars, the current period's column, the margin that breaks. The chrome stays ink and the hue stays under 1% of the screen.",
+   "Every figure in Geist Mono, as the style's decision, so money and counts read as a ledger's columns while the text stays Geist. Lint and the inspector flag mono; give the reason in the report."
+  ],
+  "avoid": [
+   "a brand-coloured primary button",
+   "tinted cards or tinted KPI tiles",
+   "a coloured chart where one series in ink says it",
+   "bold on anything but money",
+   "a chart with no y-scale (the study's one example of this look hid magnitude behind hover and was flagged)",
+   "a grey pill as the only button for the screen's main job: in testing an Approve repeated in grey on every row left the screen without a primary"
+  ],
+  "notes": "The studied screens of this kind used 11-12px card radii, which §9.4 counts among the rare middle values; the library sets the tight pair (8 and 6) so the style lands on the bimodal rule. After testing, the chart hue moved from an unused third series colour onto the main data element: a screen whose only hue was a delta read as a kit."
+ },
+ "shell": {
+  "id": "open-plane",
+  "name": "Open plane",
+  "basis": "5 of 23 screens",
+  "suits": [
+   "finance",
+   "wallet",
+   "workspace",
+   "creator",
+   "analytics"
+  ],
+  "numbers": {
+   "sidebarWidth": "230-256 (230, 240, 256 in the study; 280 and 292 with a built-in icon rail)",
+   "separation": "none, or one 1px hairline; the sidebar sits on the page ground or within 1-2% of it",
+   "navPitch": 34,
+   "navRowHeight": 32,
+   "navIcon": "16px outline, about 1.5px stroke",
+   "navLabel": "14px, 400, grey or ink",
+   "activeItem": "neutral grey pill, radius 6-12, inset 8-12px from the sidebar edges (#e9e9e9-#ededed)",
+   "topBar": "none",
+   "canvas": "fluid with a 24-64px gutter, or a centred 1100px column"
+  },
+  "blueprint": "The labelled sidebar sits on the page ground with nothing or one hairline between it and the canvas; there is no top bar, and the page header and cards sit straight on the ground about 32-36px from the top. Workspace or account switcher at the top of the sidebar, primary nav on a 34px pitch, groups under 12-13px sentence-case grey labels with 22-56px of air above, utilities and the user row pushed to the bottom. Cards are white on the off-white ground (or the sidebar is white with a 1px border on a #f9fafb canvas). The canvas is fluid with one gutter value, or a centred column for personal homes.",
+  "phone": "The sidebar folds into a 48px top bar holding the screen's name, a menu button that opens a full-screen sheet with the nav and the switcher, and at most one action. Content takes the full width with 16px margins."
+ },
+ "screens": [
+  {
+   "name": "list",
+   "pattern": null
+  },
+  {
+   "name": "home",
+   "pattern": {
+    "id": "workspace-home-greeting",
+    "name": "Workspace home with a greeting",
+    "screen": "home",
+    "kinds": [
+     "workspace",
+     "creator"
+    ],
+    "basis": "a team workspace home; a personal insights home",
+    "blueprint": "A centred column on a real 12-column grid (77px columns, 16px gutters, 1100px), about 72px from the top. The greeting is the h1 (48/700 in a serif, or 24/400 in the sans), with the date after it or in a grey line under it, never as a tracked eyebrow, and no emoji. 50px below, 4 count tiles spanning 3 columns each (128px tall, 16px padding): label, value at regular weight in tabular or mono figures, a plain caption ('Ready when you are'), no deltas. Then spans that change by row but share column lines (9 + 3, then 6 + 6, so each internal edge meets one above it) for the main objects: panels with 20px padding, a 14/600 title, a count chip and a 'View all' link, holding row cards 63px tall with 8px gaps, one step lighter than the panel with a border one step darker. Pale tints may code the panels, each in the hue of the tile that counts it. Only a floating composer, if there is one, carries a shadow, and it must not cover the last rows.",
+    "phone": "Greeting at 24-28px; tiles in a 2 x 2 grid; panels stack in reading order."
+   }
+  },
+  {
+   "name": "settings",
+   "pattern": {
+    "id": "settings-two-column",
+    "name": "Settings in two columns",
+    "screen": "settings",
+    "kinds": [
+     "devtools",
+     "smb-admin",
+     "support",
+     "workspace",
+     "commerce",
+     "analytics",
+     "finance",
+     "wallet",
+     "creator",
+     "community",
+     "builder",
+     "markets",
+     "report"
+    ],
+    "basis": "one settings page; stacking from a narrow rail card. The basis is thin.",
+    "blueprint": "A centred column of about 1152px. Each section is one row: a label column of about 450px (16/500 title, 14px grey description; the title's cap top 6-8px below the panel top, level with the panel's first line) beside a panel of about 700px with a #fafafa fill, 16px radius, 16px padding, no border and no shadow. Sections are split by a full-width 1px rule with 32px above and below. Inside a panel: field labels 14/500 above 40px white inputs (1px #e8e8e8, radius 10), 8px from label to field, 16px between fields, 24px from the description to the first label, 16px to the Save button; switch rows with a 14/500 title, a 20px status badge 8px after it, a 14px grey description and a 28x16 toggle 16px from the right edge, centred on the title line. A plan-gated feature shows a 48px tinted strip with a 32px button directly above its panel, and the panel stays readable. When a panel runs much taller than its label, put the section's help or a summary of the current values in the label column rather than 250px of nothing.",
+    "phone": "Each section stacks: title and description, then the panel at full width. Inside, label, 8-10px, field, 16-26px to the next pair; toggles stay on the right of their title."
+   }
+  }
+ ]
+}

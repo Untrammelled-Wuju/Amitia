@@ -6,10 +6,10 @@
 
 | 字段 | 值 |
 |------|----|
-| Report ID | final-acceptance-1792917057823062000 |
-| 生成时间 | 2026-10-25T08:31:06Z |
-| 开始时间 | 2026-10-25T08:30:57Z |
-| 结束时间 | 2026-10-25T08:31:06Z |
+| Report ID | final-acceptance-1792942075460923000 |
+| 生成时间 | 2026-10-25T15:28:07Z |
+| 开始时间 | 2026-10-25T15:27:55Z |
+| 结束时间 | 2026-10-25T15:28:07Z |
 | 总项 | 25 |
 | 通过 | 23 |
 | 失败 | 0 |
@@ -38,7 +38,7 @@
 | stage2.kernel_core | kernel_core | ExtensionKernel 领域模型 | true | passed | HostAPIGateway 实例化成功; AmitiaxInstaller 实例化成功; ToolRegistry 实例化成功; ExecutionKernel 实例化成功; Container.Recover 成功 |
 | stage3.amitiax_manifest | amitiax_runtime | AmitiaxManifestV1 | true | passed | amitiax.Installer 实例化成功; 空归档安装正确失败 (Fail Closed); 错误数量=1,包含 missing_archive 错误码 |
 | stage3.runtimes | amitiax_runtime | 多 Runtime 实现 | true | passed | javascript_main.RuntimeFactory 实例化成功; task_runtime.TaskExecutor 实例化成功; wasm_runtime.ModuleValidator 实例化成功; trusted_service.PlatformSelector 实例化成功; jsonrpc.MethodRegistry 实例化成功; 多 Runtime 实现均已抽取 (JS/Task/WASM/TrustedService/JSONRPC) |
-| stage4.ui_contribution | ui_contribution | UI Contribution 协议 | true | passed | ui_contribution.UIHost 实例化成功,默认slot=57,测试贡献注册成功; extension_slots.DefaultSlotRegistry 实例化成功,slot数量=57; schema_ui.NewValidator 实例化成功; extension_page_host.NewPageHost 实例化成功; ui_ordering.NewOrderingEngine 实例化成功 |
+| stage4.ui_contribution | ui_contribution | UI Contribution 协议 | true | passed | ui_contribution.UIHost 实例化成功,默认slot=58,测试贡献注册成功; extension_slots.DefaultSlotRegistry 实例化成功,slot数量=58; schema_ui.NewValidator 实例化成功; extension_page_host.NewPageHost 实例化成功; ui_ordering.NewOrderingEngine 实例化成功 |
 | stage5.builtin_tools | migration | 内置 Tools 迁移 | true | passed | tool_migration.Registry 实例化成功; 内置 Tool 注册到 system/amitia-core 成功; 查询验证: toolID=system/amitia-core/echo, legacyID=echo |
 | stage5.mcp_workflow | migration | MCP/Workflow 迁移 | true | passed | mcp_migration.Registry 注册并列表成功; workflow_migration.Registry 注册成功; MCP/Workflow 迁移注册表均可写入和读取 |
 | stage6.sdk_cli | dev_ecosystem | TypeScript SDK 与 Plugin CLI | true | passed | dev_mode SDK 工作流 (Registry/Pipeline/Reloader) 实例化成功; 前端扩展 API 客户端存在 (SDK 集成点); Plugin CLI 通过 dev_mode.RebuildPipeline 提供构建能力 |
