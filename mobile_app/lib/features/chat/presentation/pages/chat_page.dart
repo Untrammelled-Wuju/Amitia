@@ -3453,7 +3453,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             Positioned.fill(child: AutomationStatusIndicator(status: status)),
           if (hasSidebarProvider || hasSidebarExtensions)
             Positioned(
-              top: _chatTopBarHeight,
+              top: MediaQuery.paddingOf(context).top + _chatTopBarHeight,
               right: 0,
               bottom: 0,
               child: SizedBox(
@@ -3494,7 +3494,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 }
 
-const double _chatTopBarHeight = 68;
+const double _chatTopBarHeight = AmitiaAppBar.rootPageToolbarHeight;
 
 class _ChatProfileSummarySheet extends StatelessWidget {
   const _ChatProfileSummarySheet({
@@ -3954,161 +3954,181 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: Row(
-          children: [
-            Tooltip(
-              message: '返回',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onBack,
-                child: const _ChatTopBarButton(
-                  icon: AmitiaIconGlyph.back,
-                  size: 44,
-                  iconSize: 20,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
+    final background = context.surfacePrimary;
+    final backgroundBrightness = ThemeData.estimateBrightnessForColor(
+      background,
+    );
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarBrightness: backgroundBrightness,
+        statusBarIconBrightness: backgroundBrightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+        systemStatusBarContrastEnforced: false,
+      ),
+      child: ColoredBox(
+        color: background,
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: _chatTopBarHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.body(
-                        context,
-                      ).copyWith(fontSize: 16, fontWeight: FontWeight.w500),
+                  Tooltip(
+                    message: '返回',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onBack,
+                      child: const _ChatTopBarButton(
+                        icon: AmitiaIconGlyph.back,
+                        size: 44,
+                        iconSize: 20,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _ChatHeaderAvatars(
-                    isGroup: isGroup,
-                    members: groupMembers,
-                    roleId: currentRoleId,
-                    roleName: currentRoleName,
-                    roleAvatar: currentRoleAvatar,
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.body(
+                              context,
+                            ).copyWith(fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _ChatHeaderAvatars(
+                          isGroup: isGroup,
+                          members: groupMembers,
+                          roleId: currentRoleId,
+                          roleName: currentRoleName,
+                          roleAvatar: currentRoleAvatar,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (extensionActions != null) ...[
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      child: extensionActions!,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  AmitiaPopupMenuButton<String>(
+                    tooltip: '更多',
+                    menuWidth: 220,
+                    itemVerticalPadding: 0,
+                    itemFontSize: 14.5,
+                    itemIconSize: 18,
+                    itemHorizontalPadding: 14,
+                    itemHorizontalMargin: 0,
+                    itemMinHeight: 46,
+                    onSelected: (action) {
+                      switch (action) {
+                        case 'member':
+                          onManageMembers();
+                        case 'workspace':
+                          onOpenWorkbench();
+                        case 'video':
+                          onCallSelected('video');
+                        case 'voice':
+                          onCallSelected('voice');
+                        case 'screen':
+                          onCallSelected('screen');
+                        case 'export':
+                          onMoreSelected(0);
+                        case 'profile':
+                          onMoreSelected(1);
+                        case 'memory':
+                          onMoreSelected(2);
+                        case 'clear':
+                          onMoreSelected(3);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'member',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.group_add_outlined,
+                          label: isGroup ? '管理群成员' : '添加角色',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'workspace',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.space_dashboard_outlined,
+                          label: '工作区',
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'video',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.videocam_outlined,
+                          label: '视频通话',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'voice',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.phone_in_talk_outlined,
+                          label: '语音通话',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'screen',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.screen_share_outlined,
+                          label: '屏幕通话',
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: 'export',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.file_download_outlined,
+                          label: '导出聊天记录',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'profile',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.badge_outlined,
+                          label: '用户画像摘要',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'memory',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.psychology_alt_outlined,
+                          label: '记忆上下文',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'clear',
+                        child: AmitiaPopupMenuLabel(
+                          icon: Icons.cleaning_services_outlined,
+                          label: '清空聊天记录',
+                        ),
+                      ),
+                    ],
+                    child: _ChatTopBarButton(
+                      icon: AmitiaIconGlyph.more,
+                      size: 44,
+                      iconSize: 22,
+                    ),
                   ),
                 ],
               ),
             ),
-            if (extensionActions != null) ...[
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 120),
-                child: extensionActions!,
-              ),
-              const SizedBox(width: 8),
-            ],
-            AmitiaPopupMenuButton<String>(
-              tooltip: '更多',
-              menuWidth: 220,
-              itemVerticalPadding: 0,
-              itemFontSize: 14.5,
-              itemIconSize: 18,
-              itemHorizontalPadding: 14,
-              itemHorizontalMargin: 0,
-              itemMinHeight: 46,
-              onSelected: (action) {
-                switch (action) {
-                  case 'member':
-                    onManageMembers();
-                  case 'workspace':
-                    onOpenWorkbench();
-                  case 'video':
-                    onCallSelected('video');
-                  case 'voice':
-                    onCallSelected('voice');
-                  case 'screen':
-                    onCallSelected('screen');
-                  case 'export':
-                    onMoreSelected(0);
-                  case 'profile':
-                    onMoreSelected(1);
-                  case 'memory':
-                    onMoreSelected(2);
-                  case 'clear':
-                    onMoreSelected(3);
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'member',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.group_add_outlined,
-                    label: isGroup ? '管理群成员' : '添加角色',
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'workspace',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.space_dashboard_outlined,
-                    label: '工作区',
-                  ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'video',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.videocam_outlined,
-                    label: '视频通话',
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'voice',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.phone_in_talk_outlined,
-                    label: '语音通话',
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'screen',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.screen_share_outlined,
-                    label: '屏幕通话',
-                  ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'export',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.file_download_outlined,
-                    label: '导出聊天记录',
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'profile',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.badge_outlined,
-                    label: '用户画像摘要',
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'memory',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.psychology_alt_outlined,
-                    label: '记忆上下文',
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'clear',
-                  child: AmitiaPopupMenuLabel(
-                    icon: Icons.cleaning_services_outlined,
-                    label: '清空聊天记录',
-                  ),
-                ),
-              ],
-              child: _ChatTopBarButton(
-                icon: AmitiaIconGlyph.more,
-                size: 44,
-                iconSize: 22,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
