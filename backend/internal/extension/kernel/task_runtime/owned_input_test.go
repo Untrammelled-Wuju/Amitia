@@ -112,7 +112,10 @@ func (s *taskInputQueueStore) EnqueueTask(context.Context, *TaskQueueEntry) erro
 	return nil
 }
 
-func (s *taskInputQueueStore) GetTaskRun(context.Context, string) (*TaskRun, error) {
+func (s *taskInputQueueStore) GetTaskRun(_ context.Context, id string) (*TaskRun, error) {
+	if s.run == nil || s.run.TaskRunID != id {
+		return nil, NewTaskError(ErrTaskNotFound, "任务不存在")
+	}
 	return CloneTaskRun(s.run), nil
 }
 

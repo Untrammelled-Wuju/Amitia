@@ -213,6 +213,9 @@ func TestNetworkSandboxExecutableRequirementsDarwin(t *testing.T) {
 }
 
 func TestNetworkSandboxExecutableRequirementsWindowsModes(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows-only executable requirements: trusted SystemRoot only exists on Windows hosts")
+	}
 	for _, tc := range []struct {
 		mode string
 		want []string

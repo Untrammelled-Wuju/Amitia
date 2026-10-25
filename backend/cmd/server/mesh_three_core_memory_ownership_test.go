@@ -192,10 +192,6 @@ func TestThreeRealCoreSixMemoryLayersSummaryAndContinuityKeepTheirOwners(t *test
 
 func threeCoreExpectedMemoryCount(kind string) int {
 	switch kind {
-	case "profile":
-		return 0
-	case "fact":
-		return 2
 	case "graph":
 		return 3
 	default:

@@ -10,6 +10,10 @@ import (
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 )
 
+func coordinatedScope() coordination.ExecutionScope {
+	return coordination.ExecutionScope{CoreID: "core-b", SpaceID: "core-b", ResourceOwnerID: "core-b", RoleOwnerID: "core-b", TargetDeviceID: "device-a", Coordinated: true}
+}
+
 func TestTaskInspectionReadOnlyAndOwnerScoped(t *testing.T) {
 	db, store := harness(t)
 	binding := executionjournal.TaskExecutionBinding{AttemptID: "invoke", LeaseID: "lease-1", RuntimeID: "runtime", SessionID: "session-1", ConnectionGeneration: 2, TaskDefinitionID: "task.action"}
@@ -24,7 +28,7 @@ func TestTaskInspectionReadOnlyAndOwnerScoped(t *testing.T) {
 	invoke.RuntimeSessionID = "session-1"
 	invoke.ConnectionGeneration = 2
 	invoke.Handler = "task.action"
-	scope := coordination.ExecutionScope{CoreID: "core-b", SpaceID: "core-b", ResourceOwnerID: "core-b", TargetDeviceID: "device-a", Coordinated: true}
+	scope := coordinatedScope()
 	invoke.OwnedExecutionScope, _ = json.Marshal(scope)
 	if _, err := store.ExecuteTask(coordination.WithScope(t.Context(), scope), invoke, binding, func() (*protocol.RuntimeResultPayload, error) {
 		return &protocol.RuntimeResultPayload{Status: "completed", Result: json.RawMessage(`{"private":"owner"}`)}, nil
@@ -86,7 +90,7 @@ func TestTaskInspectionDoesNotTurnUnknownIntoSuccess(t *testing.T) {
 	inv.ConnectionGeneration = 2
 	inv.Handler = "task.action"
 	binding := executionjournal.TaskExecutionBinding{AttemptID: "invoke", LeaseID: "lease-1", RuntimeID: "runtime", SessionID: "session-1", ConnectionGeneration: 2, TaskDefinitionID: "task.action"}
-	scope := coordination.ExecutionScope{CoreID: "core-b", SpaceID: "core-b", ResourceOwnerID: "core-b", TargetDeviceID: "device-a", Coordinated: true}
+	scope := coordinatedScope()
 	inv.OwnedExecutionScope, _ = json.Marshal(scope)
 	if _, err := store.ExecuteTask(coordination.WithScope(t.Context(), scope), inv, binding, func() (*protocol.RuntimeResultPayload, error) { return nil, errors.New("disconnected") }); err == nil {
 		t.Fatal("expected unknown")
@@ -120,7 +124,7 @@ func TestTaskBindingCannotBeRewrittenByNewWorkerAttempt(t *testing.T) {
 	invoke.RuntimeID = "runtime"
 	invoke.RuntimeSessionID = "session-old"
 	invoke.ConnectionGeneration = 9
-	scope := coordination.ExecutionScope{CoreID: "core-b", SpaceID: "core-b", ResourceOwnerID: "core-b", TargetDeviceID: "device-a", Coordinated: true}
+	scope := coordinatedScope()
 	invoke.OwnedExecutionScope, _ = json.Marshal(scope)
 	binding := executionjournal.TaskExecutionBinding{AttemptID: "invoke", LeaseID: "lease-old", RuntimeID: "runtime", SessionID: "session-old", ConnectionGeneration: 9, TaskDefinitionID: "task.action"}
 	calls := 0
@@ -145,6 +149,52 @@ func TestTaskBindingCannotBeRewrittenByNewWorkerAttempt(t *testing.T) {
 	}
 }
 
+func TestDeviceOwnedTaskKeepsWorkerBindingAndRefusesReplay(t *testing.T) {
+	db, store := harness(t)
+	invoke := invocation()
+	invoke.IdempotencyKey = "task/device-owned/5"
+	invoke.RuntimeType = "task"
+	invoke.Handler = "task.action"
+	invoke.RuntimeID = "runtime"
+	invoke.RuntimeSessionID = "session-1"
+	invoke.ConnectionGeneration = 3
+	binding := executionjournal.TaskExecutionBinding{AttemptID: "invoke", LeaseID: "lease-1", RuntimeID: "runtime", SessionID: "session-1", ConnectionGeneration: 3, TaskDefinitionID: "task.action"}
+	scope := coordination.ExecutionScope{CoreID: "core-b", SpaceID: "core-b", ResourceOwnerID: "device-a", RoleOwnerID: "device-a", TargetDeviceID: "device-a"}
+	invoke.OwnedExecutionScope, _ = json.Marshal(scope)
+	calls := 0
+	work := func() (*protocol.RuntimeResultPayload, error) {
+		calls++
+		return &protocol.RuntimeResultPayload{Status: "completed", Result: json.RawMessage(`{"private":"device"}`)}, nil
+	}
+	ctx := coordination.WithScope(t.Context(), scope)
+	if _, err := store.ExecuteTask(ctx, invoke, binding, work); err != nil {
+		t.Fatal(err)
+	}
+	req := executionjournal.TaskInspectionRequest{TaskRunID: "device-owned", TaskGeneration: 5, TaskExecutionBinding: binding}
+	inspected, err := executionjournal.NewStore(db).InspectTask(t.Context(), "core-b", "device-a", req)
+	if err != nil || inspected.State != "performed" || inspected.Result != nil {
+		t.Fatalf("device owned task evidence: %+v %v", inspected, err)
+	}
+	changed := binding
+	changed.LeaseID = "lease-2"
+	if _, err := executionjournal.NewStore(db).ExecuteTask(ctx, invoke, changed, work); !errors.Is(err, executionjournal.ErrConflict) {
+		t.Fatalf("new worker rewrote binding: %v", err)
+	}
+	if _, err := executionjournal.NewStore(db).ExecuteTask(ctx, invoke, binding, work); !errors.Is(err, executionjournal.ErrUncertain) {
+		t.Fatalf("performed task replayed: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("device task executed %d times", calls)
+	}
+	if err := executionjournal.NewStore(db).RecordWorkerStop(t.Context(), "core-b", "device-a", req); err != nil {
+		t.Fatalf("stop receipt rejected: %v", err)
+	}
+	stopped, err := executionjournal.NewStore(db).InspectTask(t.Context(), "core-b", "device-a", req)
+	if err != nil || stopped.State != "stopped_performed" || stopped.Result != nil {
+		t.Fatalf("stop receipt lost: %+v %v", stopped, err)
+	}
+}
+
 func TestTaskStopReceiptSurvivesRestartAndRetainsOwnerPrivacy(t *testing.T) {
 	for _, scenario := range []struct {
 		name      string
@@ -165,7 +215,7 @@ func TestTaskStopReceiptSurvivesRestartAndRetainsOwnerPrivacy(t *testing.T) {
 			invoke.Handler = "task.action"
 			binding := executionjournal.TaskExecutionBinding{AttemptID: "invoke", LeaseID: "lease", RuntimeID: "runtime", SessionID: "session-1", ConnectionGeneration: 4, TaskDefinitionID: "task.action"}
 			req := executionjournal.TaskInspectionRequest{TaskRunID: "task-stop", TaskGeneration: 3, TaskExecutionBinding: binding}
-			scope := coordination.ExecutionScope{CoreID: "core-b", SpaceID: "core-b", ResourceOwnerID: "core-b", TargetDeviceID: "device-a", Coordinated: true}
+			scope := coordinatedScope()
 			invoke.OwnedExecutionScope, _ = json.Marshal(scope)
 			calls := 0
 			work := func() (*protocol.RuntimeResultPayload, error) {

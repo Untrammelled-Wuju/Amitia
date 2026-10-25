@@ -22,15 +22,15 @@ func TestOwnedTaskCheckpointKeepsBodyAtOwnerAndRestoresExactBytes(t *testing.T) 
 	run.Input = nil
 	store := &checkpointFenceStore{completionFenceStore: completionFenceStore{run: CloneTaskRun(run)}}
 	service.store = store
-	payload := json.RawMessage("{\n  \"cursor\": 2, \"private\": \"source checkpoint\"\n}")
+	payload := json.RawMessage("{\n  \"cursor\": 1, \"private\": \"source checkpoint\"\n}")
 	hash := hashBytes(payload)
 	data.wrongAck = true
-	service.handleCheckpoint(ctx, run, definition, payload, hash, 2)
+	service.handleCheckpoint(ctx, run, definition, payload, hash, 1)
 	if store.checkpoint != nil || store.run.CheckpointID != nil {
 		t.Fatal("checkpoint metadata stored before owner acknowledgement")
 	}
 	data.wrongAck = false
-	service.handleCheckpoint(ctx, run, definition, payload, hash, 2)
+	service.handleCheckpoint(ctx, run, definition, payload, hash, 1)
 	if store.checkpoint == nil || len(store.checkpoint.Payload) != 0 || store.checkpoint.PayloadHash != hash || store.run.CheckpointID == nil || data.resource.OwnerID != authority.ResourceOwnerID {
 		t.Fatalf("checkpoint body copied to queue storage: %+v", store.checkpoint)
 	}

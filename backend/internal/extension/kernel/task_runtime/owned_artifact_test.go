@@ -92,7 +92,8 @@ func TestOwnedTaskArtifactsConfirmPayloadAndKeepLargeOutcomeOnlyAtOwner(t *testi
 		t.Fatalf("owner artifact output not hydrated in memory: %v", err)
 	}
 	var document ownedTaskOutcome
-	if json.Unmarshal(data.resource.Body, &document) != nil || len(document.Output) != 0 || document.Result == nil || len(document.Result.ResultJSON) != 0 {
+	outcome := data.resources["checkpoint/"+taskOutcomeID(run)]
+	if outcome == nil || json.Unmarshal(outcome.Body, &document) != nil || len(document.Output) != 0 || document.Result == nil || len(document.Result.ResultJSON) != 0 {
 		t.Fatal("artifact body copied into outcome reference")
 	}
 	data.resources["checkpoint/task/artifact/"+artifact.ArtifactID].Deleted = true

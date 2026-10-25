@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -72,6 +73,9 @@ func TestTargetTaskDefinitionOwnerPinRejectsUpgradeAndConfirmsUnknownAck(t *test
 }
 
 func TestInstalledTaskDescriptionRechecksInstallationAfterEntryResolution(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用，已安装任务描述在当前平台不可用")
+	}
 	definition := &TaskDefinition{TaskID: "task", ExtensionID: "extension", ModuleID: "module", Entry: "task.cjs", EntryHash: "sha256:" + strings.Repeat("a", 64), InstalledGeneration: 2}
 	config := DefaultTaskRuntimeConfig()
 	var checks int

@@ -79,7 +79,11 @@ func TestOwnedTaskOutcomeConfirmsOwnerBeforeTerminalAndKeepsOnlyMetadata(t *test
 					t.Fatal("failure detail copied into ordinary task metadata")
 				}
 				var document ownedTaskOutcome
-				if err := json.Unmarshal(data.resource.Body, &document); err != nil || document.Status != scenario {
+				outcome := data.resources["checkpoint/"+taskOutcomeID(run)]
+				if outcome == nil {
+					t.Fatal("owner outcome was not committed")
+				}
+				if err := json.Unmarshal(outcome.Body, &document); err != nil || document.Status != scenario {
 					t.Fatalf("owner outcome changed: %+v %v", document, err)
 				}
 				if scenario == "failed" && document.ErrorMessage != "private failure details" {

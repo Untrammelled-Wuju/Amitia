@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"testing"
 )
 
@@ -47,6 +48,9 @@ func deviceTaskCatalogFixture(t *testing.T) (*TaskRuntimeService, *deviceTaskCat
 }
 
 func TestDeviceTaskCatalogPaginationPinsInstalledVersionAndSkipsUninstalled(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用，设备任务目录分页在当前平台不可用")
+	}
 	service, store := deviceTaskCatalogFixture(t)
 	store.definitions = append(store.definitions, &TaskDefinition{TaskID: "uninstalled"})
 	store.definitions[0].ModuleID = "disabled"
@@ -69,6 +73,9 @@ func TestDeviceTaskCatalogPaginationPinsInstalledVersionAndSkipsUninstalled(t *t
 }
 
 func TestDeviceTaskCatalogReferencesSeparateCoreDeviceAndPortableVersions(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用，设备任务目录版本引用在当前平台不可用")
+	}
 	service, _ := deviceTaskCatalogFixture(t)
 	page, err := service.DescribeInstalledTaskCatalog(t.Context(), "device", DeviceTaskCatalogRequest{Limit: 1})
 	if err != nil {
@@ -104,6 +111,9 @@ func TestDeviceTaskCatalogReferencesSeparateCoreDeviceAndPortableVersions(t *tes
 }
 
 func TestDeviceTaskCatalogRejectsMutationDuringReadAndMalformedCursor(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用，设备任务目录并发校验在当前平台不可用")
+	}
 	service, store := deviceTaskCatalogFixture(t)
 	for _, request := range []DeviceTaskCatalogRequest{{Limit: 9}, {Limit: -1}, {Cursor: "invalid"}} {
 		if _, err := service.DescribeInstalledTaskCatalog(t.Context(), "device", request); err == nil {

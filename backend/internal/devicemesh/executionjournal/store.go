@@ -206,10 +206,12 @@ func (s *Store) execute(ctx context.Context, invoke protocol.RuntimeInvokePayloa
 		return nil, err
 	}
 	completion := "completed"
-	if ownedScope.Coordinated {
+	if taskBinding != nil {
 		completion = "performed"
-
 		encoded = taskBinding
+	} else if ownedScope.Coordinated {
+		completion = "performed"
+		encoded = nil
 	}
 	tx, err = s.db.BeginTx(ctx, nil)
 	if err != nil {

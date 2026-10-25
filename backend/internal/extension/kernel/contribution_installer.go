@@ -1826,7 +1826,7 @@ func (i *TypedContributionInstaller) activateAgentSkill(ctx context.Context, con
 	if i.container.AgentSkillCatalog == nil {
 		return fmt.Errorf("agent skill catalog not configured")
 	}
-	definition, ok := i.container.AgentSkillCatalog.Get(string(contrib.ExtensionID))
+	definition, ok := i.lookupRegisteredAgentSkill(ctx, contrib)
 	if !ok {
 		defData, _ := json.Marshal(contrib.Definition)
 		if err := json.Unmarshal(defData, &definition); err != nil {
@@ -1850,7 +1850,11 @@ func (i *TypedContributionInstaller) activateAgentSkill(ctx context.Context, con
 		}
 		definition = loaded
 		if err := i.container.AgentSkillCatalog.Register(definition); err != nil {
-			return fmt.Errorf("register agent skill %s for activate: %w", contrib.ID, err)
+			existing, found := i.container.AgentSkillCatalog.GetScopedState(definition.OwnerSpaceID, definition.StateID())
+			if !found {
+				return fmt.Errorf("register agent skill %s for activate: %w", contrib.ID, err)
+			}
+			definition = existing
 		}
 	}
 	enabled := true
@@ -2153,7 +2157,10 @@ func (i *TypedContributionInstaller) deactivateAgentSkill(ctx context.Context, c
 	if i.container.AgentSkillCatalog == nil {
 		return fmt.Errorf("agent skill catalog not configured")
 	}
-	definition, _ := i.container.AgentSkillCatalog.GetScoped("", string(contrib.ID))
+	definition, ok := i.lookupRegisteredAgentSkill(ctx, contrib)
+	if !ok {
+		return nil
+	}
 	if err := i.container.AgentSkillCatalog.SetEnabledForSpace(definition.OwnerSpaceID, definition.ExtensionID, string(contrib.ID), false); err != nil {
 		return fmt.Errorf("deactivate agent skill %s: %w", contrib.ID, err)
 	}
@@ -2163,6 +2170,39 @@ func (i *TypedContributionInstaller) deactivateAgentSkill(ctx context.Context, c
 		}
 	}
 	return nil
+}
+
+func (i *TypedContributionInstaller) lookupRegisteredAgentSkill(ctx context.Context, contrib domain.ContributionDefinition) (agent_skill.AgentSkillDefinition, bool) {
+	ownerSpaceID := i.agentSkillOwnerSpaceID(ctx, contrib.ExtensionID)
+	if ownerSpaceID != "" {
+		stateID := ownerSpaceID + ":" + string(contrib.ExtensionID) + ":" + i.agentSkillContributionID(contrib)
+		if definition, ok := i.container.AgentSkillCatalog.GetScopedState(ownerSpaceID, stateID); ok {
+			return definition, true
+		}
+	}
+	definition, ok := i.container.AgentSkillCatalog.Get(string(contrib.ExtensionID))
+	return definition, ok
+}
+
+func (i *TypedContributionInstaller) agentSkillOwnerSpaceID(ctx context.Context, extID domain.ExtensionID) string {
+	if i.container.InstallationRepository == nil {
+		return ""
+	}
+	installation, err := i.container.InstallationRepository.GetInstallation(ctx, extID)
+	if err != nil {
+		return ""
+	}
+	return metadataString(installation.Metadata["ownerSpaceId"])
+}
+
+func (i *TypedContributionInstaller) agentSkillContributionID(contrib domain.ContributionDefinition) string {
+	var definition agent_skill.AgentSkillDefinition
+	if raw, err := json.Marshal(contrib.Definition); err == nil {
+		if json.Unmarshal(raw, &definition) == nil && definition.ContributionID != "" {
+			return definition.ContributionID
+		}
+	}
+	return string(contrib.ID)
 }
 
 func (i *TypedContributionInstaller) deactivateWorkflow(ctx context.Context, contrib domain.ContributionDefinition) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -34,6 +35,9 @@ func (s *deviceTaskImportStore) CreateTaskDefinition(_ context.Context, definiti
 }
 
 func TestDeviceTaskImportRejectsExpiredAuthorityAndConflictingMetadata(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用，设备任务目录与导入在当前平台不可用")
+	}
 	source, _ := deviceTaskCatalogFixture(t)
 	entry, err := source.DescribeInstalledTaskCatalogEntry(t.Context(), "device", "task-00")
 	if err != nil {
@@ -67,6 +71,9 @@ func TestDeviceTaskImportRejectsExpiredAuthorityAndConflictingMetadata(t *testin
 }
 
 func TestCoreDeviceTaskDefinitionAliasesPreserveSourceFingerprintAndFenceAuthority(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用，设备任务目录别名在当前平台不可用")
+	}
 	service, _ := deviceTaskCatalogFixture(t)
 	page, err := service.DescribeInstalledTaskCatalog(t.Context(), "device", DeviceTaskCatalogRequest{Limit: 1})
 	if err != nil {
@@ -147,6 +154,9 @@ func TestDeviceTaskDefinitionMappingSurvivesTargetNormalizationAndConnectionRefr
 }
 
 func TestDeviceTaskDefinitionGuardUsesSourceAuthorityInsteadOfCoreInstallation(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("设备任务强隔离仅 Windows 可用，设备任务定义校验在当前平台不可用")
+	}
 	source, _ := deviceTaskCatalogFixture(t)
 	entry, err := source.DescribeInstalledTaskCatalogEntry(t.Context(), "device", "task-00")
 	if err != nil {

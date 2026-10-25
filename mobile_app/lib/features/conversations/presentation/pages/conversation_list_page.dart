@@ -78,7 +78,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
             key: const ValueKey('message-create-button'),
             tooltip: '新建',
             icon: const AmitiaIcon(AmitiaIconGlyph.add, size: 21),
-            menuWidth: 220,
+            menuWidth: 140,
             itemVerticalPadding: 0,
             itemFontSize: 14.5,
             itemIconSize: 18,

@@ -78,7 +78,7 @@ func TestTaskAuthorityIsCheckedBeforeLeaseAndBeforeCachedResult(t *testing.T) {
 	if _, err := worker.executeAuthorizedTask(t.Context(), dispatch); err != nil || executor.calls != 1 {
 		t.Fatalf("authorized task rejected: calls=%d err=%v", executor.calls, err)
 	}
-	if _, err := worker.executeAuthorizedTask(t.Context(), dispatch); err != nil || executor.calls != 1 {
+	if _, err := worker.executeAuthorizedTask(t.Context(), dispatch); !errors.Is(err, executionjournal.ErrUncertain) || executor.calls != 1 {
 		t.Fatalf("completed task repeated: calls=%d err=%v", executor.calls, err)
 	}
 	changedPin := dispatch

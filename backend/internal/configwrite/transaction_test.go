@@ -65,7 +65,7 @@ func configurationDB(t *testing.T) (*gorm.DB, *coordination.Service) {
 		t.Fatal(err)
 	}
 	svc := coordination.NewService(kernelDB)
-	if err := svc.InitializeCoreConsole(t.Context(), "space", "admin", false); err != nil {
+	if err := svc.InitializeCoreConsole(t.Context(), "space", "admin", true); err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{"model_configs", "tts_configs", "asr_configs", "embedding_configs", "vision_configs", "image_gen_configs"} {

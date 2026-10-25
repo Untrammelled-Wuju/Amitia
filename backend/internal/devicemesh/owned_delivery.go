@@ -67,7 +67,17 @@ func (rt *Runtime) deliverDeviceData(ctx context.Context, pending coordination.P
 		return ack, coordination.ErrRequestConflict
 	}
 	for _, mutation := range pending.Commit.Mutations {
-		if ack.Versions[mutation.Kind+"/"+mutation.ID] != mutation.ExpectedRevision+1 {
+		applied, ok := ack.Versions[mutation.Kind+"/"+mutation.ID]
+		if !ok {
+			return ack, coordination.ErrResourceVersion
+		}
+		if mutation.ExpectedRevision == coordination.RevisionCurrent {
+			if applied < 1 {
+				return ack, coordination.ErrResourceVersion
+			}
+			continue
+		}
+		if applied != mutation.ExpectedRevision+1 {
 			return ack, coordination.ErrResourceVersion
 		}
 	}
