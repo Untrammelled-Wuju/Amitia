@@ -115,6 +115,7 @@ import {
 } from "@/navigation/workspaceSidebarWidth";
 
 const router = useRouter();
+const extensionUIStore = useExtensionUIStore();
 const workbench = useWorkbenchStore();
 function handleWorkbenchOpen(event: Event) {
   const detail = (event as CustomEvent<WorkbenchOpenCommand>).detail;
@@ -236,7 +237,6 @@ watchEffect(() => {
   );
 });
 const authAvatar = computed(() => appStore.avatar);
-const extensionUIStore = useExtensionUIStore();
 const extensionRuntimeAvailable = ref(false);
 
 const modelClass = computed(() =>

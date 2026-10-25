@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/conversation.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/character_avatar.dart';
 
@@ -28,7 +30,7 @@ String formatConversationTime(String updatedAt) {
   return '${time.year}/${time.month}/${time.day}';
 }
 
-class ConversationListTile extends StatelessWidget {
+class ConversationListTile extends ConsumerWidget {
   const ConversationListTile({
     super.key,
     required this.conversation,
@@ -47,7 +49,12 @@ class ConversationListTile extends StatelessWidget {
   final VoidCallback? onLongPress;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final role = character?.id == conversation.characterId
+        ? character
+        : ref
+              .watch(conversationCharacterProvider(conversation.characterId))
+              .valueOrNull;
     final title = conversation.title.trim().isEmpty
         ? '未命名对话'
         : conversation.title.trim();
@@ -89,8 +96,15 @@ class ConversationListTile extends StatelessWidget {
                       children: [
                         CharacterAvatar(
                           characterId: conversation.characterId,
-                          avatar: character?.avatar ?? '',
-                          initial: title,
+                          avatar: role?.avatar ?? '',
+                          initial: role?.name ?? '',
+                          placeholder: const Center(
+                            child: Icon(
+                              Icons.person_rounded,
+                              color: Colors.white,
+                              size: 26,
+                            ),
+                          ),
                           size: 46,
                           color: context.accentPrimary,
                         ),

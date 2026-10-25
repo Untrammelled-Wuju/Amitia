@@ -376,6 +376,41 @@ console.log("\n[8] Schema UI 文件导入契约");
   check("重复 UI 文件导入去重", repeated.imported === 0 && repeated.duplicate === 1 && env.host.getState().emotes.length === 1);
 }
 
+console.log("\n[9] 分组浏览与组内导入");
+{
+  const env = makeHost();
+  const tools = await activate(env);
+  const run = (action, payload = {}, extra = {}) => tools.get("command")({ action, payload, ...extra });
+  const group = await run("groups.create", { name: "常用" });
+  const other = await run("groups.create", { name: "其他" });
+  const dialog = await run("ui.group_dialog", { open: true });
+  check("新建分组弹窗打开时清空名称", dialog.form_state.groupDialog.open === true && dialog.form_state.group.name === "");
+  const content = pngBuffer();
+  const files = [{ name: "组内.png", mimeType: "image/png", size: content.length, dataBase64: content.toString("base64") }];
+  await run("ui.import", { groupId: group.id }, { files });
+  let dashboard = await run("ui.dashboard");
+  check("组内导入直接关联当前分组", dashboard.emotes.length === 1 && dashboard.emotes[0].groupIds.includes(group.id));
+  check("分组返回数量和拼贴封面", dashboard.groups[0].count === 1 && dashboard.groups[0].covers.length === 1 && dashboard.groups[1].count === 0);
+  const selected = await run("ui.select_group", { id: group.id });
+  check("进入分组保留名称并清空图片选中", selected.form_state.browser.groupId === group.id && selected.form_state.browser.groupName === "常用" && selected.form_state.selected.id === "");
+  dashboard = await run("ui.dashboard", {}, { form_state: selected.form_state });
+  check("刷新后保留当前分组", dashboard.form_state.browser.groupId === group.id);
+  const duplicate = await run("ui.import", { groupId: other.id }, { files });
+  dashboard = await run("ui.dashboard");
+  check("重复图片导入另一分组建立关联且不重复创建", duplicate.duplicate === 1 && dashboard.emotes.length === 1 && dashboard.groups.every((item) => item.count === 1));
+  await run("groups.remove", { groupId: group.id, emoteId: dashboard.emotes[0].id });
+  dashboard = await run("ui.dashboard");
+  check("移出分组保留原图及其他分组关联", dashboard.emotes.length === 1 && dashboard.groups[0].count === 0 && dashboard.groups[1].count === 1);
+  const back = await run("ui.select_group", { id: "" });
+  check("返回分组概览清空当前分组", back.form_state.browser.groupId === "");
+  let error = "";
+  try { await run("ui.select_group", { id: "missing" }); } catch (failure) { error = failure.message; }
+  check("失效分组返回明确错误", error === "分组不存在");
+  await run("groups.delete", { id: other.id });
+  dashboard = await run("ui.dashboard");
+  check("删除分组保留图片并清理分组关联", dashboard.emotes.length === 1 && !dashboard.groups.some((item) => item.id === other.id) && !dashboard.emotes[0].groupIds.includes(other.id));
+}
+
 console.log(`\n========== 结果：${passed} 通过 / ${failed} 失败 ==========`);
 if (failures.length) {
   console.log("失败项：");

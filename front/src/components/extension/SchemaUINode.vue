@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, inject, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import type { Router } from "vue-router";
 import ExtensionSlot from "./ExtensionSlot.vue";
+import SchemaUIImage from "./SchemaUIImage.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
 import {
@@ -250,6 +252,7 @@ const activeTab = computed<string>({
 });
 
 const activeTabQueryParam = computed(() => toText(mergedProps.value.queryParam));
+const activeTabChildren = computed(() => tabPanes.value.find((pane) => toText(pane.props?.name ?? pane.id) === activeTab.value)?.children ?? []);
 
 watch(
   [activeTabQueryParam, () => props.context.routeQuery, tabPanes],
@@ -259,7 +262,10 @@ watch(
     const query = props.context.routeQuery;
     if (!query || typeof query !== "object" || Array.isArray(query)) return;
     const requested = toText((query as Record<string, unknown>)[param]);
-    if (!requested) return;
+    if (!requested) {
+      activeTabRaw.value = "";
+      return;
+    }
     const exists = tabPanes.value.some((pane) => toText(pane.props?.name ?? pane.id) === requested);
     if (exists) activeTabRaw.value = requested;
   },
@@ -292,7 +298,21 @@ const selectOptions = computed<Array<{ label: string; value: unknown }>>(() => {
 const galleryItems = computed<Array<Record<string, unknown>>>(() => {
   const rows = mergedProps.value.items;
   if (!Array.isArray(rows)) return [];
-  return rows.filter((item): item is Record<string, unknown> => !!item && typeof item === "object");
+  const query = toText(mergedProps.value.query).trim().toLocaleLowerCase();
+  const fields = toStringArray(mergedProps.value.searchFields);
+  const filterField = toText(mergedProps.value.filterField);
+  const filterValue = mergedProps.value.filterValue;
+  return rows.filter((item): item is Record<string, unknown> => {
+    if (!item || typeof item !== "object") return false;
+    const row = item as Record<string, unknown>;
+    if (filterField && filterValue) {
+      const value = row[filterField];
+      const matches = Array.isArray(value) ? value.includes(filterValue) : value === filterValue;
+      if (mergedProps.value.excludeFilter === true ? matches : !matches) return false;
+    }
+    return !query || (fields.length ? fields : ["name", "meaning", "keywords"])
+      .some((field) => toText(Array.isArray(row[field]) ? (row[field] as unknown[]).join(" ") : row[field]).toLocaleLowerCase().includes(query));
+  });
 });
 
 const resourceLinkActive = computed(() => {
@@ -310,10 +330,15 @@ const resourceLinkActive = computed(() => {
 const filePickerInput = ref<HTMLInputElement>();
 
 function onButtonClick() {
+  if (busyNodeIds?.has(props.node.id)) return;
   if (!props.node.actions || props.node.actions.length === 0) return;
-  for (const action of props.node.actions) {
-    emit("action", { action, node: props.node });
+  const required = toStringArray(mergedProps.value.requiredFields);
+  if (required.some((field) => !toText(lookupPath(props.formState, field)).trim())) {
+    ElMessage.warning(toText(mergedProps.value.validationMessage) || "请先填写必填内容");
+    return;
   }
+  const [action, ...followUpActions] = props.node.actions;
+  emit("action", { action, node: props.node, followUpActions });
 }
 
 function onResourceLinkClick(event: MouseEvent) {
@@ -432,6 +457,32 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       />
     </div>
 
+    <el-dialog
+      v-else-if="nodeType === 'section' && mergedProps.presentation === 'dialog'"
+      :model-value="modelValue.value === true"
+      :title="toText(mergedProps.title)"
+      :width="toNumber(mergedProps.width, 440)"
+      :close-on-click-modal="false"
+      align-center
+      destroy-on-close
+      :data-node-id="node.id"
+      @update:model-value="updateModelValue"
+    >
+      <SchemaUINode
+        v-for="child in children"
+        :key="child.id"
+        :node="child"
+        :depth="depth + 1"
+        :form-state="formState"
+        :context="context"
+        :session-id="sessionId"
+        :extension-id="extensionId"
+        :contribution-id="contributionId"
+        @action="onActionFromChild"
+        @error="(p) => emit('error', p)"
+      />
+    </el-dialog>
+
     <el-card
       v-else-if="nodeType === 'section'"
       class="schema-ui-section schema-ui-node"
@@ -468,7 +519,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
-      :style="{ gap: mergedProps.gap ? toText(mergedProps.gap) : undefined, alignItems: toText(mergedProps.align) || undefined }"
+      :style="{ gap: mergedProps.gap ? toText(mergedProps.gap) : undefined, alignItems: toText(mergedProps.align) || undefined, maxWidth: mergedProps.maxWidth ? `${toNumber(mergedProps.maxWidth)}px` : undefined }"
     >
       <SchemaUINode
         v-for="child in children"
@@ -488,6 +539,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'row'"
       class="schema-ui-row schema-ui-node"
+      :class="{ 'schema-ui-row--toolbar': mergedProps.layout === 'toolbar' }"
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
@@ -519,6 +571,28 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     >
       <SchemaUINode
         v-for="child in children"
+        :key="child.id"
+        :node="child"
+        :depth="depth + 1"
+        :form-state="formState"
+        :context="context"
+        :session-id="sessionId"
+        :extension-id="extensionId"
+        :contribution-id="contributionId"
+        @action="onActionFromChild"
+        @error="(p) => emit('error', p)"
+      />
+    </div>
+
+    <div
+      v-else-if="nodeType === 'tabs' && mergedProps.navigation === 'external'"
+      class="schema-ui-stack schema-ui-node"
+      :data-amitia-ui="semanticTarget"
+      :data-amitia-node-target="nodeTarget"
+      :data-node-id="node.id"
+    >
+      <SchemaUINode
+        v-for="child in activeTabChildren"
         :key="child.id"
         :node="child"
         :depth="depth + 1"
@@ -642,7 +716,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       <span class="schema-ui-icon__symbol">{{ mergedProps.symbol ?? mergedProps.name ?? mergedProps.label }}</span>
     </el-icon>
 
-    <el-image
+    <SchemaUIImage
       v-else-if="nodeType === 'image'"
       class="schema-ui-image schema-ui-node"
       :data-amitia-ui="semanticTarget"
@@ -652,16 +726,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :fit="(mergedProps.fit as any) || 'cover'"
       :alt="toText(mergedProps.alt)"
       :style="{ width: mergedProps.width ? `${Math.max(1, toNumber(mergedProps.width))}px` : undefined, height: mergedProps.height ? `${Math.max(1, toNumber(mergedProps.height))}px` : undefined }"
-      :preview-src-list="mergedProps.preview ? [toText(mergedProps.src)] : []"
-      lazy
-    >
-      <template #error>
-        <div class="schema-ui-image__error">图片加载失败</div>
-      </template>
-      <template #placeholder>
-        <div class="schema-ui-image__placeholder">加载中</div>
-      </template>
-    </el-image>
+      :preview="mergedProps.preview === true"
+    />
 
     <el-form-item
       v-else-if="nodeType === 'field'"
@@ -770,7 +836,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :type="(mergedProps.type as any) || 'default'"
       :size="(mergedProps.size as any) || 'default'"
       :disabled="disabled || mergedProps.disabled === true"
-      :loading="mergedProps.loading === true"
+      :loading="mergedProps.loading === true || filePickerBusy"
       :plain="mergedProps.plain === true"
       :round="mergedProps.round === true"
       @click="onButtonClick"
@@ -830,30 +896,40 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'gallery'"
       class="schema-ui-gallery schema-ui-node"
+      :class="{ 'schema-ui-gallery--assets': mergedProps.variant === 'assets', 'schema-ui-gallery--collections': mergedProps.variant === 'collections' }"
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
       :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${toNumber(mergedProps.minItemWidth, 148)}px), 1fr))` }"
     >
+      <div v-if="mergedProps.showCount === true" class="schema-ui-gallery__count">{{ galleryItems.length }} 张图片</div>
       <button
         v-for="(item, index) in galleryItems"
         :key="toText(item.id ?? item.value ?? index)"
         type="button"
         class="schema-ui-gallery__item"
+        :class="{ 'is-selected': mergedProps.selectedId === item.id }"
         :disabled="disabled || mergedProps.disabled === true"
         @click="onGalleryItemClick(item)"
       >
-        <img
-          v-if="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
+        <div v-if="mergedProps.variant === 'collections'" class="schema-ui-gallery__cover">
+          <template v-for="index in 4" :key="index">
+            <SchemaUIImage v-if="Array.isArray(item.covers) && item.covers[index - 1]" :src="toText(item.covers[index - 1])" alt="" />
+            <span v-else class="schema-ui-gallery__cover-empty"></span>
+          </template>
+        </div>
+        <SchemaUIImage
+          v-else-if="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
           class="schema-ui-gallery__image"
           :src="toText(item[toText(mergedProps.imageField) || 'image'] ?? item.thumbnailUrl ?? item.assetUrl)"
           :alt="toText(item[toText(mergedProps.titleField) || 'title'] ?? item.name ?? item.label)"
+          loading="lazy"
         />
         <div v-else class="schema-ui-gallery__placeholder">{{ mergedProps.placeholder ?? "无预览" }}</div>
         <span class="schema-ui-gallery__title">
           {{ item[toText(mergedProps.titleField) || "title"] ?? item.name ?? item.label ?? item.id }}
         </span>
-        <span v-if="item[toText(mergedProps.subtitleField) || 'subtitle'] ?? item.meaning ?? item.description" class="schema-ui-gallery__subtitle">
+        <span v-if="mergedProps.showSubtitle !== false && (item[toText(mergedProps.subtitleField) || 'subtitle'] ?? item.meaning ?? item.description)" class="schema-ui-gallery__subtitle">
           {{ item[toText(mergedProps.subtitleField) || "subtitle"] ?? item.meaning ?? item.description }}
         </span>
       </button>
@@ -1158,13 +1234,33 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   flex-wrap: wrap;
   align-items: center;
 }
+.schema-ui-row--toolbar > .schema-ui-node {
+  width: auto;
+  flex: 0 0 auto;
+}
+.schema-ui-row--toolbar > .schema-ui-field {
+  flex: 1 1 200px;
+  max-width: 420px;
+  margin-bottom: 0;
+}
+.schema-ui-row--toolbar > .schema-ui-text {
+  color: var(--text-secondary);
+}
+.schema-ui-row--toolbar > h3.schema-ui-text {
+  color: var(--text-primary);
+  font-size: var(--ac-font-size-lg);
+  font-weight: 600;
+}
 .schema-ui-grid {
   display: grid;
   gap: 12px;
 }
 .schema-ui-grid--master-detail {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
+}
+.schema-ui-grid--master-detail:has(> :nth-child(2)) {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
 }
 .schema-ui-row > .schema-ui-file-picker {
   width: auto;
@@ -1174,7 +1270,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   margin-bottom: 0;
 }
 @container (max-width: 760px) {
-  .schema-ui-grid--master-detail {
+  .schema-ui-grid--master-detail:has(> :nth-child(2)) {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1338,6 +1434,11 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   display: grid;
   gap: 10px;
 }
+.schema-ui-gallery__count {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: var(--ac-font-size-sm);
+}
 
 .schema-ui-gallery__item {
   display: flex;
@@ -1355,6 +1456,49 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 
 .schema-ui-gallery__item:hover {
   border-color: var(--amitia-color-accent, rgba(90, 120, 255, 0.7));
+}
+
+.schema-ui-gallery--assets,
+.schema-ui-gallery--collections {
+  gap: 20px;
+  align-items: start;
+}
+.schema-ui-gallery--assets .schema-ui-gallery__item,
+.schema-ui-gallery--collections .schema-ui-gallery__item {
+  padding: 8px;
+  border-color: transparent;
+  border-radius: 12px;
+  background: transparent;
+}
+.schema-ui-gallery--assets .schema-ui-gallery__item:hover,
+.schema-ui-gallery--collections .schema-ui-gallery__item:hover,
+.schema-ui-gallery__item.is-selected {
+  background: var(--control-hover-bg, rgba(127, 127, 127, 0.08));
+  border-color: var(--ac-color-primary);
+}
+.schema-ui-gallery__item:focus-visible {
+  outline: 2px solid var(--ac-color-primary);
+  outline-offset: 2px;
+}
+.schema-ui-gallery__cover {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--control-hover-bg, rgba(127, 127, 127, 0.06));
+}
+.schema-ui-gallery__cover img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+.schema-ui-gallery__cover-empty {
+  background: var(--control-hover-bg, rgba(127, 127, 127, 0.04));
 }
 
 .schema-ui-gallery__image,

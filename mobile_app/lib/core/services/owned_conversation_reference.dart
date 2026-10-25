@@ -28,12 +28,19 @@ String conversationReference(Map origin) {
   return 'meshconv1:${Uri.encodeComponent(owner)}:${Uri.encodeComponent(id)}';
 }
 
-Map<String, dynamic> ownedConversationRow(Map row, String owner) {
+Map<String, dynamic> ownedConversationRow(
+  Map row,
+  String owner, {
+  String characterId = '',
+}) {
   final origin = row['conversationOrigin'] is Map
       ? Map<String, dynamic>.from(row['conversationOrigin'] as Map)
       : {'ownerId': owner, 'id': row['id']};
   return {
     ...Map<String, dynamic>.from(row),
+    'characterId': [row['characterId'], row['roleId'], characterId]
+        .map((value) => (value ?? '').toString().trim())
+        .firstWhere((value) => value.isNotEmpty, orElse: () => ''),
     'id': conversationReference(origin),
     'resourceId': row['id'],
     'ownerId': owner,

@@ -1579,6 +1579,7 @@ class DeviceOwnedChatService {
             (row['ownerId'] ??
                     (result['executionScope'] as Map)['targetDeviceId'])
                 .toString(),
+            characterId: role,
           ),
         );
         if (value.id.isNotEmpty) rows.putIfAbsent(value.id, () => value);
@@ -1589,12 +1590,18 @@ class DeviceOwnedChatService {
       ].whereType<Map>()) {
         final values = (snapshot['resources'] as List? ?? [])
             .whereType<Map>()
-            .where((row) => row['kind'] == 'conversation')
-            .map((row) => row['body'])
-            .whereType<Map>();
-        for (final row in values) {
+            .where(
+              (row) => row['kind'] == 'conversation' && row['body'] is Map,
+            );
+        for (final resource in values) {
+          final row = resource['body'] as Map;
+          final resourceRole = (resource['roleId'] ?? '').toString().trim();
           final value = ConversationDto.fromJson(
-            ownedConversationRow(row, snapshot['ownerId'].toString()),
+            ownedConversationRow(
+              row,
+              snapshot['ownerId'].toString(),
+              characterId: resourceRole.isEmpty ? role : resourceRole,
+            ),
           );
           if (value.id.isNotEmpty) rows[value.id] = value;
         }

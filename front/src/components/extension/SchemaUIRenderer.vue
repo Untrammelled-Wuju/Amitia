@@ -507,6 +507,7 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   actionLoading[action.action_id] = true;
   const nodeId = typeof node?.id === "string" ? node.id : "";
   if (nodeId) busyNodeIds.add(nodeId);
+  let actionSucceeded = false;
   try {
     const resolvedInput = asRecord(resolveActionInput(action.input ?? {}, formState, mergedContext.value, item));
     const actionPayload = asRecord(resolvedInput.payload);
@@ -539,6 +540,7 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
           setPath(localContextOverride, action.statePath, data);
         }
       }
+      actionSucceeded = !findActionFailure(result);
       return;
     }
     const actionInput = {
@@ -591,6 +593,7 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
         }
       }
     }
+    actionSucceeded = !findActionFailure(data);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     ElMessage.error(message);
@@ -607,9 +610,7 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   } finally {
     actionLoading[action.action_id] = false;
     if (nodeId) busyNodeIds.delete(nodeId);
-    // Follow-up actions (for example refreshing a list after an import) run
-    // serially after the primary action, without the file payload.
-    for (const next of followUpActions ?? []) {
+    for (const next of actionSucceeded ? followUpActions ?? [] : []) {
       try {
         await invokeAction({ action: next, node }, reportFailure);
       } catch {

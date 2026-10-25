@@ -26,66 +26,11 @@
       "type": "page",
       "children": [
         {
-          "id": "emote-actions",
-          "type": "row",
-          "children": [
-            {
-              "id": "emote-refresh",
-              "type": "button",
-              "props": {
-                "text": "刷新",
-                "type": "primary"
-              },
-              "actions": [
-                {
-                  "action_id": "command",
-                  "target": "tool",
-                  "input": {
-                    "action": "ui.dashboard"
-                  },
-                  "statePath": "dashboard"
-                }
-              ]
-            },
-            {
-              "id": "emote-import",
-              "type": "file_picker",
-              "props": {
-                "text": "导入表情包",
-                "accept": ".png,.jpg,.jpeg,.gif,.webp",
-                "multiple": true,
-                "hint": "支持 PNG、JPG、GIF、WebP"
-              },
-              "actions": [
-                {
-                  "action_id": "command",
-                  "target": "tool",
-                  "input": {
-                    "action": "ui.import"
-                  },
-                  "statePath": "importResult"
-                },
-                {
-                  "action_id": "command",
-                  "target": "tool",
-                  "input": {
-                    "action": "ui.dashboard"
-                  },
-                  "statePath": "dashboard"
-                }
-              ]
-            }
-          ],
-          "props": {
-            "gap": "12px",
-            "align": "center"
-          }
-        },
-        {
           "id": "emote-tabs",
           "type": "tabs",
           "props": {
-            "queryParam": "tab"
+            "queryParam": "tab",
+            "navigation": "external"
           },
           "children": [
             {
@@ -97,49 +42,139 @@
               },
               "children": [
                 {
+                  "id": "emote-toolbar",
+                  "type": "row",
+                  "props": {
+                    "layout": "toolbar",
+                    "gap": "12px"
+                  },
+                  "children": [
+                    {
+                      "id": "emote-search",
+                      "type": "field",
+                      "props": {
+                        "placeholder": "搜索名称、含义或关键词",
+                        "clearable": true
+                      },
+                      "bindings": [
+                        {
+                          "path": "browser.query",
+                          "source": "form",
+                          "default": ""
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-count",
+                      "type": "text",
+                      "bindings": [
+                        {
+                          "path": "text",
+                          "source": "state",
+                          "sourcePath": "dashboard.countLabel"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-refresh",
+                      "type": "button",
+                      "props": {
+                        "text": "刷新"
+                      },
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "ui.dashboard"
+                          },
+                          "statePath": "dashboard"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-import",
+                      "type": "file_picker",
+                      "props": {
+                        "text": "导入表情包",
+                        "accept": ".png,.jpg,.jpeg,.gif,.webp",
+                        "multiple": true
+                      },
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "ui.import",
+                            "payload": {}
+                          },
+                          "statePath": "importResult"
+                        },
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "ui.dashboard"
+                          },
+                          "statePath": "dashboard"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
                   "id": "emote-workspace",
                   "type": "grid",
                   "props": {
                     "layout": "master-detail",
-                    "gap": "16px"
+                    "gap": "24px"
                   },
                   "children": [
                     {
-                      "id": "emote-gallery-panel",
-                      "type": "section",
+                      "id": "emote-gallery",
+                      "type": "gallery",
                       "props": {
-                        "title": "表情列表"
+                        "variant": "assets",
+                        "imageField": "thumbnailUrl",
+                        "titleField": "name",
+                        "subtitleField": "none",
+                        "minItemWidth": 144,
+                        "emptyText": "没有符合条件的表情",
+                        "searchFields": [
+                          "name",
+                          "meaning",
+                          "keywords"
+                        ],
+                        "showSubtitle": false,
+                        "showCount": true
                       },
-                      "children": [
+                      "bindings": [
                         {
-                          "id": "emote-gallery",
-                          "type": "gallery",
-                          "props": {
-                            "imageField": "thumbnailUrl",
-                            "titleField": "name",
-                            "subtitleField": "meaning",
-                            "minItemWidth": 150,
-                            "emptyText": "暂无表情"
-                          },
-                          "bindings": [
-                            {
-                              "path": "items",
-                              "source": "state",
-                              "sourcePath": "dashboard.emotes"
+                          "path": "items",
+                          "source": "state",
+                          "sourcePath": "dashboard.emotes"
+                        },
+                        {
+                          "path": "query",
+                          "source": "form",
+                          "sourcePath": "browser.query"
+                        },
+                        {
+                          "path": "selectedId",
+                          "source": "form",
+                          "sourcePath": "selected.id"
+                        }
+                      ],
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "ui.select_emote",
+                            "payload": {
+                              "id": "$item.id"
                             }
-                          ],
-                          "actions": [
-                            {
-                              "action_id": "command",
-                              "target": "tool",
-                              "input": {
-                                "action": "ui.select_emote",
-                                "payload": {
-                                  "id": "$item.id"
-                                }
-                              }
-                            }
-                          ]
+                          }
                         }
                       ]
                     },
@@ -147,20 +182,22 @@
                       "id": "emote-detail",
                       "type": "section",
                       "props": {
-                        "title": "选中表情"
+                        "title": "表情详情"
                       },
                       "children": [
                         {
-                          "id": "emote-detail-empty",
-                          "type": "empty_state",
+                          "id": "emote-detail-preview",
+                          "type": "image",
                           "props": {
-                            "description": "选择一个表情查看和编辑详情"
+                            "fit": "contain",
+                            "height": 220,
+                            "preview": true
                           },
-                          "visibleWhen": [
+                          "bindings": [
                             {
-                              "field": "selected.id",
-                              "operator": "==",
-                              "value": ""
+                              "path": "src",
+                              "source": "form",
+                              "sourcePath": "selected.assetUrl"
                             }
                           ]
                         },
@@ -310,6 +347,29 @@
                               }
                             }
                           ]
+                        },
+                        {
+                          "id": "emote-detail-close",
+                          "type": "button",
+                          "props": {
+                            "text": "关闭详情"
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.close_detail"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "visibleWhen": [
+                        {
+                          "field": "selected.id",
+                          "operator": "!=",
+                          "value": ""
                         }
                       ]
                     }
@@ -326,44 +386,656 @@
               },
               "children": [
                 {
-                  "id": "emote-tab-groups-content",
+                  "id": "emote-group-overview",
                   "type": "stack",
                   "props": {
-                    "gap": "16px"
+                    "gap": "20px"
                   },
                   "children": [
                     {
-                      "id": "emote-groups-table",
-                      "type": "table",
+                      "id": "emote-group-toolbar",
+                      "type": "row",
                       "props": {
-                        "columns": [
-                          {
-                            "prop": "id",
-                            "label": "ID"
-                          },
-                          {
-                            "prop": "name",
-                            "label": "名称"
-                          },
-                          {
-                            "prop": "sortOrder",
-                            "label": "排序"
-                          }
-                        ]
+                        "layout": "toolbar",
+                        "justify": "space-between"
                       },
-                      "bindings": [
+                      "children": [
                         {
-                          "path": "data",
-                          "source": "state",
-                          "sourcePath": "dashboard.groups"
+                          "id": "emote-group-label",
+                          "type": "text",
+                          "props": {
+                            "text": "我的分组",
+                            "variant": "title"
+                          }
+                        },
+                        {
+                          "id": "emote-group-create",
+                          "type": "button",
+                          "props": {
+                            "text": "新建分组",
+                            "type": "primary"
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.group_dialog",
+                                "payload": {
+                                  "open": true
+                                }
+                              }
+                            }
+                          ]
                         }
                       ]
                     },
                     {
+                      "id": "emote-groups-gallery",
+                      "type": "gallery",
+                      "props": {
+                        "variant": "collections",
+                        "titleField": "name",
+                        "subtitleField": "countLabel",
+                        "minItemWidth": 210,
+                        "emptyText": "还没有分组，在上方创建第一个分组"
+                      },
+                      "bindings": [
+                        {
+                          "path": "items",
+                          "source": "state",
+                          "sourcePath": "dashboard.groups"
+                        }
+                      ],
+                      "actions": [
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "ui.select_group",
+                            "payload": {
+                              "id": "$item.id"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "visibleWhen": [
+                    {
+                      "field": "browser.groupId",
+                      "operator": "==",
+                      "value": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-group-content",
+                  "type": "stack",
+                  "props": {
+                    "gap": "20px"
+                  },
+                  "children": [
+                    {
+                      "id": "emote-group-header",
+                      "type": "row",
+                      "props": {
+                        "layout": "toolbar"
+                      },
+                      "children": [
+                        {
+                          "id": "emote-group-back",
+                          "type": "button",
+                          "props": {
+                            "text": "返回分组"
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.select_group",
+                                "payload": {
+                                  "id": ""
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-group-current-name",
+                          "type": "text",
+                          "props": {
+                            "variant": "title"
+                          },
+                          "bindings": [
+                            {
+                              "path": "text",
+                              "source": "form",
+                              "sourcePath": "browser.groupName"
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-group-search",
+                          "type": "field",
+                          "props": {
+                            "placeholder": "搜索名称、含义或关键词",
+                            "clearable": true
+                          },
+                          "bindings": [
+                            {
+                              "path": "browser.query",
+                              "source": "form",
+                              "default": ""
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-group-add",
+                          "type": "button",
+                          "props": {
+                            "text": "添加已有表情"
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.group_picker",
+                                "payload": {
+                                  "open": true
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-group-import",
+                          "type": "file_picker",
+                          "props": {
+                            "text": "导入到当前分组",
+                            "accept": ".png,.jpg,.jpeg,.gif,.webp",
+                            "multiple": true
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.import",
+                                "payload": {
+                                  "groupId": "$form.browser.groupId"
+                                }
+                              },
+                              "statePath": "importResult"
+                            },
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.dashboard"
+                              },
+                              "statePath": "dashboard"
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-group-delete",
+                          "type": "button",
+                          "props": {
+                            "text": "删除分组",
+                            "type": "danger",
+                            "plain": true
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "groups.delete",
+                                "payload": {
+                                  "id": "$form.browser.groupId"
+                                }
+                              },
+                              "confirmation": "确认删除当前分组？分组中的图片会保留，只解除与该分组的关联。"
+                            },
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.select_group",
+                                "payload": {
+                                  "id": ""
+                                }
+                              }
+                            },
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.dashboard"
+                              },
+                              "statePath": "dashboard"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-group-picker",
+                      "type": "section",
+                      "props": {
+                        "title": "添加已有表情"
+                      },
+                      "children": [
+                        {
+                          "id": "emote-group-picker-select",
+                          "type": "select",
+                          "props": {
+                            "placeholder": "选择要加入的表情，可多选",
+                            "multiple": true,
+                            "filterable": true,
+                            "clearable": true
+                          },
+                          "bindings": [
+                            {
+                              "path": "picker.emoteIds",
+                              "source": "form",
+                              "default": []
+                            },
+                            {
+                              "path": "options",
+                              "source": "state",
+                              "sourcePath": "dashboard.emotes"
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-group-picker-actions",
+                          "type": "row",
+                          "props": {
+                            "gap": "8px"
+                          },
+                          "children": [
+                            {
+                              "id": "emote-group-picker-save",
+                              "type": "button",
+                              "props": {
+                                "text": "加入分组",
+                                "type": "primary"
+                              },
+                              "actions": [
+                                {
+                                  "action_id": "command",
+                                  "target": "tool",
+                                  "input": {
+                                    "action": "groups.add",
+                                    "payload": {
+                                      "groupId": "$form.browser.groupId",
+                                      "emoteIds": "$form.picker.emoteIds"
+                                    }
+                                  }
+                                },
+                                {
+                                  "action_id": "command",
+                                  "target": "tool",
+                                  "input": {
+                                    "action": "ui.dashboard"
+                                  },
+                                  "statePath": "dashboard"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "emote-group-picker-cancel",
+                              "type": "button",
+                              "props": {
+                                "text": "取消"
+                              },
+                              "actions": [
+                                {
+                                  "action_id": "command",
+                                  "target": "tool",
+                                  "input": {
+                                    "action": "ui.group_picker",
+                                    "payload": {
+                                      "open": false
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      "visibleWhen": [
+                        {
+                          "field": "picker.open",
+                          "operator": "==",
+                          "value": true
+                        }
+                      ]
+                    },
+                    {
+                      "id": "emote-group-workspace",
+                      "type": "grid",
+                      "props": {
+                        "layout": "master-detail",
+                        "gap": "24px"
+                      },
+                      "children": [
+                        {
+                          "id": "emote-group-gallery",
+                          "type": "gallery",
+                          "props": {
+                            "variant": "assets",
+                            "imageField": "thumbnailUrl",
+                            "titleField": "name",
+                            "subtitleField": "none",
+                            "minItemWidth": 144,
+                            "emptyText": "没有符合条件的表情",
+                            "searchFields": [
+                              "name",
+                              "meaning",
+                              "keywords"
+                            ],
+                            "filterField": "groupIds",
+                            "showSubtitle": false,
+                            "showCount": true
+                          },
+                          "bindings": [
+                            {
+                              "path": "items",
+                              "source": "state",
+                              "sourcePath": "dashboard.emotes"
+                            },
+                            {
+                              "path": "query",
+                              "source": "form",
+                              "sourcePath": "browser.query"
+                            },
+                            {
+                              "path": "selectedId",
+                              "source": "form",
+                              "sourcePath": "selected.id"
+                            },
+                            {
+                              "path": "filterValue",
+                              "source": "form",
+                              "sourcePath": "browser.groupId"
+                            }
+                          ],
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.select_emote",
+                                "payload": {
+                                  "id": "$item.id"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "emote-group-detail",
+                          "type": "section",
+                          "props": {
+                            "title": "表情详情"
+                          },
+                          "children": [
+                            {
+                              "id": "emote-group-detail-preview",
+                              "type": "image",
+                              "props": {
+                                "fit": "contain",
+                                "height": 220,
+                                "preview": true
+                              },
+                              "bindings": [
+                                {
+                                  "path": "src",
+                                  "source": "form",
+                                  "sourcePath": "selected.assetUrl"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "emote-group-detail-form",
+                              "type": "stack",
+                              "props": {
+                                "gap": "16px"
+                              },
+                              "visibleWhen": [
+                                {
+                                  "field": "selected.id",
+                                  "operator": "!=",
+                                  "value": ""
+                                }
+                              ],
+                              "children": [
+                                {
+                                  "id": "emote-group-detail-name",
+                                  "type": "field",
+                                  "props": {
+                                    "label": "名称"
+                                  },
+                                  "bindings": [
+                                    {
+                                      "path": "selected.name",
+                                      "source": "form",
+                                      "default": ""
+                                    }
+                                  ]
+                                },
+                                {
+                                  "id": "emote-group-detail-meaning",
+                                  "type": "field",
+                                  "props": {
+                                    "label": "含义",
+                                    "variant": "textarea",
+                                    "rows": 3
+                                  },
+                                  "bindings": [
+                                    {
+                                      "path": "selected.meaning",
+                                      "source": "form",
+                                      "default": ""
+                                    }
+                                  ]
+                                },
+                                {
+                                  "id": "emote-group-detail-keywords",
+                                  "type": "field",
+                                  "props": {
+                                    "label": "关键词",
+                                    "placeholder": "使用中英文逗号分隔"
+                                  },
+                                  "bindings": [
+                                    {
+                                      "path": "selected.keywords",
+                                      "source": "form",
+                                      "default": ""
+                                    }
+                                  ]
+                                },
+                                {
+                                  "id": "emote-group-detail-ai",
+                                  "type": "switch",
+                                  "props": {
+                                    "activeText": "允许 AI 使用"
+                                  },
+                                  "bindings": [
+                                    {
+                                      "path": "selected.aiEnabled",
+                                      "source": "form",
+                                      "default": false
+                                    }
+                                  ]
+                                },
+                                {
+                                  "id": "emote-group-detail-actions",
+                                  "type": "row",
+                                  "children": [
+                                    {
+                                      "id": "emote-group-detail-save",
+                                      "type": "button",
+                                      "props": {
+                                        "text": "保存",
+                                        "type": "primary"
+                                      },
+                                      "actions": [
+                                        {
+                                          "action_id": "command",
+                                          "target": "tool",
+                                          "input": {
+                                            "action": "emotes.update",
+                                            "payload": {
+                                              "id": "$form.selected.id",
+                                              "name": "$form.selected.name",
+                                              "meaning": "$form.selected.meaning",
+                                              "keywords": "$form.selected.keywords",
+                                              "aiEnabled": "$form.selected.aiEnabled"
+                                            }
+                                          },
+                                          "statePath": "detailSaveResult"
+                                        },
+                                        {
+                                          "action_id": "command",
+                                          "target": "tool",
+                                          "input": {
+                                            "action": "ui.dashboard"
+                                          },
+                                          "statePath": "dashboard"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "id": "emote-group-detail-delete",
+                                      "type": "button",
+                                      "props": {
+                                        "text": "删除",
+                                        "type": "danger"
+                                      },
+                                      "actions": [
+                                        {
+                                          "action_id": "command",
+                                          "target": "tool",
+                                          "input": {
+                                            "action": "emotes.delete",
+                                            "payload": {
+                                              "id": "$form.selected.id"
+                                            }
+                                          },
+                                          "confirmation": "确认删除该表情？",
+                                          "statePath": "detailDeleteResult"
+                                        },
+                                        {
+                                          "action_id": "command",
+                                          "target": "tool",
+                                          "input": {
+                                            "action": "ui.dashboard"
+                                          },
+                                          "statePath": "dashboard"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  "props": {
+                                    "gap": "8px"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "id": "emote-group-detail-close",
+                              "type": "button",
+                              "props": {
+                                "text": "关闭详情"
+                              },
+                              "actions": [
+                                {
+                                  "action_id": "command",
+                                  "target": "tool",
+                                  "input": {
+                                    "action": "ui.close_detail"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "id": "emote-group-detail-remove",
+                              "type": "button",
+                              "props": {
+                                "text": "移出当前分组"
+                              },
+                              "actions": [
+                                {
+                                  "action_id": "command",
+                                  "target": "tool",
+                                  "input": {
+                                    "action": "groups.remove",
+                                    "payload": {
+                                      "groupId": "$form.browser.groupId",
+                                      "emoteId": "$form.selected.id"
+                                    }
+                                  }
+                                },
+                                {
+                                  "action_id": "command",
+                                  "target": "tool",
+                                  "input": {
+                                    "action": "ui.dashboard"
+                                  },
+                                  "statePath": "dashboard"
+                                }
+                              ]
+                            }
+                          ],
+                          "visibleWhen": [
+                            {
+                              "field": "selected.id",
+                              "operator": "!=",
+                              "value": ""
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "visibleWhen": [
+                    {
+                      "field": "browser.groupId",
+                      "operator": "!=",
+                      "value": ""
+                    }
+                  ]
+                },
+                {
+                  "id": "emote-group-create-dialog",
+                  "type": "section",
+                  "props": {
+                    "presentation": "dialog",
+                    "title": "新建分组",
+                    "width": 440
+                  },
+                  "bindings": [
+                    {
+                      "path": "groupDialog.open",
+                      "source": "form",
+                      "default": false
+                    }
+                  ],
+                  "children": [
+                    {
                       "id": "emote-group-name",
                       "type": "field",
                       "props": {
-                        "label": "新分组名称"
+                        "label": "分组名称",
+                        "placeholder": "输入分组名称",
+                        "maxlength": 50
                       },
                       "bindings": [
                         {
@@ -374,39 +1046,64 @@
                       ]
                     },
                     {
-                      "id": "emote-group-create",
-                      "type": "button",
+                      "id": "emote-group-dialog-actions",
+                      "type": "row",
                       "props": {
-                        "text": "新建分组",
-                        "type": "primary"
+                        "layout": "toolbar",
+                        "justify": "flex-end",
+                        "gap": "8px"
                       },
-                      "actions": [
+                      "children": [
                         {
-                          "action_id": "command",
-                          "target": "tool",
-                          "input": {
-                            "action": "groups.create",
-                            "payload": {
-                              "name": "$form.group.name"
+                          "id": "emote-group-cancel-create",
+                          "type": "button",
+                          "props": {
+                            "text": "取消"
+                          },
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.group_dialog",
+                                "payload": {
+                                  "open": false
+                                }
+                              }
                             }
-                          },
-                          "statePath": "groupResult"
+                          ]
                         },
                         {
-                          "action_id": "command",
-                          "target": "tool",
-                          "input": {
-                            "action": "ui.dashboard"
+                          "id": "emote-group-confirm-create",
+                          "type": "button",
+                          "props": {
+                            "text": "创建分组",
+                            "type": "primary",
+                            "requiredFields": [
+                              "group.name"
+                            ],
+                            "validationMessage": "请先输入分组名称"
                           },
-                          "statePath": "settingsSaveResult"
-                        },
-                        {
-                          "action_id": "command",
-                          "target": "tool",
-                          "input": {
-                            "action": "ui.dashboard"
-                          },
-                          "statePath": "dashboard"
+                          "actions": [
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "groups.create",
+                                "payload": {
+                                  "name": "$form.group.name"
+                                }
+                              }
+                            },
+                            {
+                              "action_id": "command",
+                              "target": "tool",
+                              "input": {
+                                "action": "ui.dashboard"
+                              },
+                              "statePath": "dashboard"
+                            }
+                          ]
                         }
                       ]
                     }
@@ -426,9 +1123,17 @@
                   "id": "emote-tab-settings-content",
                   "type": "stack",
                   "props": {
-                    "gap": "16px"
+                    "gap": "24px",
+                    "maxWidth": 560
                   },
                   "children": [
+                    {
+                      "id": "emote-settings-intro",
+                      "type": "text",
+                      "props": {
+                        "text": "控制 AI 何时使用表情，以及发送频率。"
+                      }
+                    },
                     {
                       "id": "emote-settings-enabled",
                       "type": "switch",
@@ -491,6 +1196,14 @@
                               "maxPerHour": "$form.settings.maxPerHour",
                               "sameEmoteCooldownMinutes": "$form.settings.sameEmoteCooldownMinutes"
                             }
+                          },
+                          "statePath": "settingsSaveResult"
+                        },
+                        {
+                          "action_id": "command",
+                          "target": "tool",
+                          "input": {
+                            "action": "ui.dashboard"
                           },
                           "statePath": "dashboard"
                         }

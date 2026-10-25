@@ -347,6 +347,21 @@ final conversationListProvider =
       return svc.listConversations();
     });
 
+final conversationCharacterProvider = FutureProvider.autoDispose
+    .family<CharacterDto?, String>((ref, characterId) async {
+      final id = characterId.trim();
+      if (id.isEmpty) return null;
+      final service = ref.watch(characterServiceProvider);
+      try {
+        final characters = await ref.watch(characterListProvider.future);
+        for (final character in characters) {
+          if (character.id == id) return character;
+        }
+      } catch (_) {}
+      final character = await service.getById(id);
+      return character?.id == id ? character : null;
+    });
+
 final conversationSidebarProvider =
     FutureProvider.autoDispose<ConversationSidebarDto>((ref) async {
       final svc = ref.read(chatServiceProvider);

@@ -365,9 +365,18 @@ async function command(host, input) {
       const items = await Promise.all(snapshot.state.emotes.map((item) => hydrateUrls(host, item)));
       return {
         emotes: items,
-        groups: snapshot.state.groups,
+        countLabel: `${items.length} 张表情`,
+        groups: snapshot.state.groups.map((group) => {
+          const members = items.filter((item) => item.groupIds.includes(group.id));
+          const cover = members.find((item) => item.id === group.coverEmoteId);
+          const ordered = cover ? [cover, ...members.filter((item) => item.id !== cover.id)] : members;
+          return { ...group, count: members.length, countLabel: `${members.length} 张图片`, covers: ordered.slice(0, 4).map((item) => item.thumbnailUrl || item.assetUrl) };
+        }),
         settings: snapshot.state.settings,
         form_state: {
+          browser: { groupId: "", groupName: "", query: "", ...((input.form_state && input.form_state.browser) || {}) },
+          picker: { open: false, emoteIds: [] },
+          groupDialog: { open: false },
           settings: clone(snapshot.state.settings),
           selected: {
             id: "",
@@ -375,12 +384,29 @@ async function command(host, input) {
             meaning: "",
             keywords: "",
             aiEnabled: false,
+            assetUrl: "",
           },
           group: {
             name: "",
           },
         },
       };
+    }
+    case "ui.select_group": {
+      const snapshot = await readState(host);
+      const id = text(payload.id);
+      const group = snapshot.state.groups.find((item) => item.id === id);
+      if (id && !group) throw new Error("分组不存在");
+      return { form_state: { browser: { groupId: id, groupName: group ? group.name : "", query: "", adding: false, emoteIds: [] }, selected: { id: "" } } };
+    }
+    case "ui.group_picker": {
+      return { form_state: { picker: { open: payload.open === true, emoteIds: [] } } };
+    }
+    case "ui.group_dialog": {
+      return { form_state: { groupDialog: { open: payload.open === true }, group: { name: "" } } };
+    }
+    case "ui.close_detail": {
+      return { form_state: { selected: { id: "" } } };
     }
     case "ui.select_emote": {
       const snapshot = await readState(host);
@@ -396,6 +422,7 @@ async function command(host, input) {
             keywords: hydrated.keywords.join("，"),
             aiEnabled: hydrated.aiEnabled,
             groupIds: hydrated.groupIds,
+            assetUrl: hydrated.assetUrl,
           },
         },
       };
@@ -417,6 +444,11 @@ async function command(host, input) {
       };
     }
     case "ui.import": {
+      const groupId = text(payload.groupId);
+      if (groupId) {
+        const snapshot = await readState(host);
+        if (!snapshot.state.groups.some((group) => group.id === groupId)) throw new Error("分组不存在");
+      }
       const files = Array.isArray(input && input.files) ? input.files : [];
       let imported = 0;
       let duplicate = 0;
@@ -447,8 +479,12 @@ async function command(host, input) {
         let existed = false;
         let created = null;
         await mutateState(host, (state) => {
-          existed = state.emotes.some((item) => item.fileHash === fileHash);
-          if (existed) return state;
+          const existing = state.emotes.find((item) => item.fileHash === fileHash);
+          existed = !!existing;
+          if (existing) {
+            if (groupId && !existing.groupIds.includes(groupId)) existing.groupIds.push(groupId);
+            return state;
+          }
           const now = nowISO();
           created = normalizeEmote({
             id: crypto.randomUUID(),
@@ -469,7 +505,7 @@ async function command(host, input) {
             fileHash,
             enabled: true,
             aiEnabled: false,
-            groupIds: [],
+            groupIds: groupId ? [groupId] : [],
             createdAt: now,
             updatedAt: now,
           });

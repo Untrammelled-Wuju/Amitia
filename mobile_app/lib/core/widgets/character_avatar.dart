@@ -46,6 +46,7 @@ class CharacterAvatar extends ConsumerWidget {
   final double size;
   final Color? color;
   final BorderRadius? borderRadius;
+  final Widget? placeholder;
 
   const CharacterAvatar({
     super.key,
@@ -55,20 +56,23 @@ class CharacterAvatar extends ConsumerWidget {
     this.size = 48,
     this.color,
     this.borderRadius,
+    this.placeholder,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fallback = Center(
-      child: Text(
-        initial.trim().isEmpty ? '?' : initial.trim().characters.first,
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: size * 0.42,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
+    final fallback =
+        placeholder ??
+        Center(
+          child: Text(
+            initial.trim().isEmpty ? '?' : initial.trim().characters.first,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: size * 0.42,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
     Widget image = fallback;
     final value = avatar.trim();
     if (value.isNotEmpty) {

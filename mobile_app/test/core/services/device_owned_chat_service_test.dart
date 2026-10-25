@@ -1326,6 +1326,53 @@ void main() {
     expect(api.queries.last, {'characterId': 'role-a', 'keyword': 'different'});
   });
 
+  test('会话头像角色保留显式关联并补齐资源和历史归属', () async {
+    final api = _OwnedApi();
+    final service = DeviceOwnedChatService(
+      api,
+      providerKey: () => 'https://provider',
+    );
+    await service.refresh();
+    api.pages.add({
+      'executionScope': scope(),
+      'historicalConversations': [
+        {'id': 'legacy', 'characterId': ''},
+        {'id': 'legacy-role', 'roleId': 'historical-role'},
+      ],
+      'snapshot': {
+        'ownerId': 'a',
+        'resources': [
+          {
+            'kind': 'conversation',
+            'roleId': 'resource-role',
+            'body': {'id': 'resource', 'characterId': ''},
+          },
+          {
+            'kind': 'conversation',
+            'roleId': '',
+            'body': {'id': 'scoped', 'characterId': ''},
+          },
+          {
+            'kind': 'conversation',
+            'roleId': 'resource-role',
+            'body': {'id': 'explicit', 'characterId': 'explicit-role'},
+          },
+        ],
+      },
+    });
+    final rows = await service.conversations();
+    final roles = {
+      for (final row in rows) row.sourceResourceId: row.characterId,
+    };
+    expect(roles, {
+      'legacy': 'role-a',
+      'legacy-role': 'historical-role',
+      'resource': 'resource-role',
+      'scoped': 'role-a',
+      'explicit': 'explicit-role',
+    });
+  });
+
   test('会话列表分别读完 Core 和原设备历史分页', () async {
     final api = _OwnedApi();
     final service = DeviceOwnedChatService(
