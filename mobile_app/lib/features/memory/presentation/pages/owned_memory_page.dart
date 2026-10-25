@@ -86,7 +86,6 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
   void initState() {
     super.initState();
     _kind = widget.initialKind;
-    if (_kind == 'profile') _memoryView = 'global';
     final owned = ref.read(memoryDataSourceProvider);
     try {
       _role = owned.selectRole(widget.characterId);
@@ -313,7 +312,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     if (key.isEmpty || value.isEmpty) return;
     try {
       final service = ref.read(deviceOwnedMemoryServiceProvider);
-      final page = await service.query(_role, memoryView: 'global');
+      final page = await service.query(_role, memoryView: 'role:$_role');
       final scope = page['executionScope'];
       if (scope is! Map) throw StateError('记忆服务尚未就绪');
       await service.manage(
@@ -1295,7 +1294,10 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
             ),
             if (_kind == 'profile') ...[
               SizedBox(height: AppSpacing.sm),
-              Text('用户画像全局共享', style: AppTypography.caption(context)),
+              Text(
+                '用户画像默认按角色隔离，可在管理操作中明确迁移到全局记忆',
+                style: AppTypography.caption(context),
+              ),
             ],
             if (_source != 'current') ...[
               SizedBox(height: AppSpacing.sm),

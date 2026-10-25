@@ -240,7 +240,7 @@ func (e *Engine) AppendOwnedMessages(ctx context.Context, request Request, appen
 			deliveryScope := scope
 			deliveryScope.RequestID = request.RequestID
 			pending := coordination.PendingChannelDelivery{Pending: true, Scope: deliveryScope, Request: coordination.ChannelDeliveryRequest{ConversationID: appendRequest.ConversationID, RequestID: request.RequestID, Channel: channel, PeerID: peer, Text: text, Outputs: body(outputs)}}
-			mutations = append(mutations, coordination.Mutation{Kind: "checkpoint", ID: "channel-delivery/" + request.RequestID, RoleID: scope.RoleID, Body: body(pending)})
+			mutations = append(mutations, coordination.Mutation{Kind: "checkpoint", ID: "channel-delivery/" + prefix, RoleID: scope.RoleID, Body: body(pending)})
 		}
 		return e.submit(current, scope, "append", mutations)
 	}

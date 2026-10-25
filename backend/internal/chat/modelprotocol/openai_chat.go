@@ -210,8 +210,16 @@ func (a *OpenAIChatAdapter) buildMessages(req ModelRequest) []map[string]interfa
 			"role":    msg.Role,
 			"content": content,
 		}
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			if text, ok := content.(string); ok && strings.TrimSpace(text) == "" {
+				message["content"] = nil
+			}
+		}
 		if msg.Role == "tool" && msg.ToolCallID != "" {
 			message["tool_call_id"] = msg.ToolCallID
+			if text, ok := content.(string); ok && strings.TrimSpace(text) == "" {
+				message["content"] = "工具未返回文本结果。"
+			}
 		}
 		if len(msg.ToolCalls) > 0 {
 			toolCalls := make([]map[string]interface{}, 0, len(msg.ToolCalls))

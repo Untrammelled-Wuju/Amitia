@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/auth"
@@ -111,5 +112,21 @@ func TestOwnedHostChatAppendAndReadShareActualOwner(t *testing.T) {
 		}
 	default:
 		t.Fatal("Owner channel event was not published")
+	}
+	checkpoints, err := p.store.List(channelContext, "checkpoint", "one", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imageDelivery := false
+	for _, checkpoint := range checkpoints {
+		if checkpoint.ID == "channel-delivery/channel-append" {
+			t.Fatal("channel delivery reused the turn request checkpoint id")
+		}
+		if strings.HasPrefix(checkpoint.ID, "channel-delivery/append/") {
+			imageDelivery = true
+		}
+	}
+	if !imageDelivery {
+		t.Fatal("channel delivery checkpoint was not created for the appended message")
 	}
 }

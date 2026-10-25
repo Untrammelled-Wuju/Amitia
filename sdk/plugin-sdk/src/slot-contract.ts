@@ -282,6 +282,7 @@ export interface UISlotMap {
   "provider.app.shell": UIChain<UIProviderOwner>;
   "provider.app.navigation": UIChain<UIProviderOwner>;
   "provider.app.workspace": UIChain<UIProviderOwner>;
+  "provider.app.workspace.sidebar": UIChain<UIProviderOwner>;
   "provider.route.registry": UIList<UIProviderOwner>;
   "provider.page.provider": UIChain<UIProviderOwner>;
   "provider.conversation.shell": UIChain<UIProviderSessionOwner, "session-maybe">;

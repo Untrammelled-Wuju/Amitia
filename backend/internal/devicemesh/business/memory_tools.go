@@ -22,6 +22,46 @@ type MemoryToolResponse struct {
 	Metadata        map[string]interface{}       `json:"metadata,omitempty"`
 }
 
+func ExplicitGlobalMemoryRequest(message string) bool {
+	normalized := strings.ToLower(strings.Join(strings.Fields(message), " "))
+	if normalized == "" {
+		return false
+	}
+	targets := []string{"全局记忆", "全局的记忆", "global memory"}
+	targetFound := false
+	for _, target := range targets {
+		if strings.Contains(normalized, target) {
+			targetFound = true
+			break
+		}
+	}
+	if !targetFound {
+		return false
+	}
+	explicit := []string{"保存", "存储", "存到", "存入", "存为", "写入", "写到", "记录到", "记住到", "记到", "记为", "设为", "提升为", "加入", "放到", "迁移到", "改为", "save", "store", "write", "remember"}
+	matched := false
+	for _, action := range explicit {
+		if strings.Contains(normalized, action) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return false
+	}
+	for _, rejected := range []string{"不要", "别保存", "别存", "无需", "不需要", "禁止", "不能", "不得", "不是", "并非"} {
+		if strings.Contains(normalized, rejected) {
+			return false
+		}
+	}
+	for _, question := range []string{"为什么", "为何", "是否", "能否", "可不可以", "要不要", "需不需要", "怎么", "如何"} {
+		if strings.Contains(normalized, question) {
+			return false
+		}
+	}
+	return !strings.ContainsAny(normalized, "?？")
+}
+
 func NormalizeMemoryExpiresAt(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -100,6 +140,21 @@ func (e *Engine) MemoryTool(ctx context.Context, request Request, name string, a
 }
 
 func (e *Engine) saveMemoryTool(ctx context.Context, request Request, name string, args map[string]interface{}) (MemoryToolResponse, error) {
+	scopeName := MemoryToolString(args, "scope")
+	if scopeName == "" {
+		scopeName = "character"
+	}
+	if scopeName != "character" && scopeName != "global" {
+		return MemoryToolResponse{}, errors.New("记忆范围无效")
+	}
+	if scopeName == "global" {
+		if !ExplicitGlobalMemoryRequest(request.Message) {
+			return MemoryToolResponse{}, errors.New("只有用户明确要求保存到全局记忆时才能写入全局记忆")
+		}
+		request.MemoryView = "global"
+	} else {
+		request.MemoryView = ""
+	}
 	ctx, scope, finish, err := e.memoryManagementScope(ctx, request, false)
 	if err != nil {
 		return MemoryToolResponse{}, err

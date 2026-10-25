@@ -143,12 +143,16 @@ class _TaskHubPageState extends ConsumerState<TaskHubPage> {
     final tasksAsync = ref.watch(reminderListProvider);
     return AmitiaScaffold(
       handlesSystemBack: false,
-      appBar: const AmitiaAppBar(title: '任务'),
+      appBar: AmitiaAppBar(
+        title: '任务',
+        backgroundColor: context.surfacePrimary,
+        toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
+      ),
       body: ListView(
         controller: _scrollController,
         padding: EdgeInsets.fromLTRB(
           AppSpacing.pagePadding,
-          AppSpacing.xs,
+          AppSpacing.md,
           AppSpacing.pagePadding,
           AppSpacing.xl,
         ),

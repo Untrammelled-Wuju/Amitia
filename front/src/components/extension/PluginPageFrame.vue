@@ -1,10 +1,10 @@
 <script setup lang="ts">
-defineProps<{ title: string; description?: string }>();
+defineProps<{ title: string; description?: string; hideHeader?: boolean }>();
 </script>
 
 <template>
   <section class="plugin-page-frame" data-amitia-ui="extension.page">
-    <header class="plugin-page-frame__header">
+    <header v-if="!hideHeader" class="plugin-page-frame__header">
       <div class="plugin-page-frame__identity">
         <h2 class="plugin-page-frame__title">{{ title }}</h2>
         <p v-if="description" class="plugin-page-frame__description">{{ description }}</p>

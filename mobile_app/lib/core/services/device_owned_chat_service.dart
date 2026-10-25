@@ -772,15 +772,24 @@ class DeviceOwnedChatService {
     for (final row
         in (result['snapshot']['resources'] as List? ?? []).whereType<Map>()) {
       final scope = result['executionScope'] as Map;
+      final shared =
+          scope['memoryViewAll'] == true ||
+          scope['memoryRoleId'] != globalMemoryRole;
       if (row['ownerId'] != scope['resourceOwnerId'] ||
-          !(scope['memoryViewAll'] == true &&
-                  isMemoryKind(row['kind'].toString())) &&
-              row['roleId'] != memoryStorageRole(scope, row['kind'].toString()))
+          (!shared &&
+                  row['roleId'] !=
+                      memoryStorageRole(scope, row['kind'].toString()) ||
+              shared &&
+                  row['roleId'] !=
+                      memoryStorageRole(scope, row['kind'].toString()) &&
+                  row['roleId'] != globalMemoryRole))
         throw StateError('记忆数据归属无效');
       _resources['${row['kind']}/${row['id']}'] = Map<String, dynamic>.from(row)
         ..['executionScope'] =
-            scope['memoryViewAll'] == true &&
-                isMemoryKind(row['kind'].toString())
+            shared &&
+                isMemoryKind(row['kind'].toString()) &&
+                row['roleId'] !=
+                    memoryStorageRole(scope, row['kind'].toString())
             ? memoryRecordScope(scope, row['roleId'].toString())
             : scope;
     }

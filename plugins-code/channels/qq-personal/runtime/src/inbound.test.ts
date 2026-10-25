@@ -48,6 +48,7 @@ test("入站转发携带宿主身份和 OneBot 凭据", async () => {
     coreUrl: "http://127.0.0.1:18899",
     extensionId: "com.amitia/channel-qq-personal",
     moduleId: "qq-personal-service",
+    channelId: "qq_personal",
     serviceAuthToken: "service-token",
     localToken: "local-token",
   }
@@ -62,6 +63,7 @@ test("入站转发携带宿主身份和 OneBot 凭据", async () => {
   assert.equal(headers.Authorization, "Bearer service-token")
   assert.equal(headers["X-Amitia-Extension-ID"], config.extensionId)
   assert.equal(headers["X-Amitia-Module-ID"], config.moduleId)
+  assert.equal(headers["X-Amitia-Channel-ID"], config.channelId)
   assert.equal(headers["X-Amitia-Local-Token"], config.localToken)
   assert.equal(coreHeaders(config)["X-Amitia-Module-ID"], "qq-personal-service")
 })

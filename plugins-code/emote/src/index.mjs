@@ -321,7 +321,7 @@ async function sendEmote(host, payload, triggerType = "manual", enforceLimits = 
     conversationId,
     characterId,
     channel: text(payload.channel) || "web",
-    role: "user",
+    role: "assistant",
     source: "extension:com.amitia/emote",
     replyToMessageId: text(payload.replyToMessageId) || undefined,
     requestId: text(payload.requestId) || `emote-${triggerType}-${crypto.randomUUID()}`,
@@ -793,7 +793,7 @@ async function ai(host, input) {
       spaceId: text(payload.spaceId) || text(invocationContext.spaceId),
       conversationId: text(payload.conversationId) || text(invocationContext.conversationId),
       channel: text(payload.channel) || text(invocationContext.channel),
-      requestId: text(payload.requestId) || text(invocationContext.operationId),
+      requestId: text(payload.requestId) || text(invocationContext.invocationId) || text(invocationContext.operationId),
     }, "ai_tool", true);
     return {
       status: "sent",

@@ -128,6 +128,8 @@ class _AmitiaScaffoldState extends State<AmitiaScaffold> {
 }
 
 class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
+  static const double rootPageToolbarHeight = 50;
+
   final String? title;
   final Widget? titleWidget;
   final List<Widget>? actions;
@@ -139,6 +141,9 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double? leadingWidth;
   final String fallbackRoute;
   final PreferredSizeWidget? bottom;
+  final Color? backgroundColor;
+  final SystemUiOverlayStyle? systemOverlayStyle;
+  final double? toolbarHeight;
 
   const AmitiaAppBar({
     super.key,
@@ -153,11 +158,14 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.leadingWidth,
     this.fallbackRoute = AppRoutes.conversations,
     this.bottom,
+    this.backgroundColor,
+    this.systemOverlayStyle,
+    this.toolbarHeight,
   });
 
   @override
   Size get preferredSize => Size.fromHeight(
-    DesignTokenRuntime.components.toolbarHeight +
+    (toolbarHeight ?? DesignTokenRuntime.components.toolbarHeight) +
         (bottom?.preferredSize.height ?? 0),
   );
 
@@ -165,6 +173,21 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final router = GoRouter.maybeOf(context);
     final canPop = router?.canPop() ?? Navigator.of(context).canPop();
+    final headerBrightness = backgroundColor == null
+        ? null
+        : ThemeData.estimateBrightnessForColor(backgroundColor!);
+    final resolvedOverlayStyle =
+        systemOverlayStyle ??
+        (headerBrightness == null
+            ? null
+            : SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarBrightness: headerBrightness,
+                statusBarIconBrightness: headerBrightness == Brightness.dark
+                    ? Brightness.light
+                    : Brightness.dark,
+                systemStatusBarContrastEnforced: false,
+              ));
     Widget? effectiveLeading = leading;
     if (effectiveLeading == null) {
       if (navigation == AmitiaAppBarNavigation.back || showBackButton) {
@@ -202,7 +225,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       }
     }
     return AppBar(
-      toolbarHeight: context.uiComponents.toolbarHeight,
+      toolbarHeight: toolbarHeight ?? context.uiComponents.toolbarHeight,
       iconTheme: IconThemeData(size: context.uiIcons.navigation),
       title:
           titleWidget ??
@@ -220,6 +243,9 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: centerTitle,
       elevation: elevation,
       scrolledUnderElevation: 0,
+      backgroundColor: backgroundColor,
+      surfaceTintColor: backgroundColor == null ? null : Colors.transparent,
+      systemOverlayStyle: resolvedOverlayStyle,
       bottom: bottom,
     );
   }

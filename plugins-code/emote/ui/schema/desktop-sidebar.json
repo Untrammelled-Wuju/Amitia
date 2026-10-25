@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "表情包导航",
+  "actions": [],
+  "children": [
+    {
+      "id": "emote-sidebar",
+      "type": "page",
+      "children": [
+        {
+          "id": "emote-sidebar-title",
+          "type": "text",
+          "props": {
+            "text": "表情包",
+            "variant": "title"
+          }
+        },
+        {
+          "id": "emote-sidebar-links",
+          "type": "stack",
+          "props": {
+            "gap": "4px"
+          },
+          "children": [
+            {
+              "id": "emote-sidebar-emotes",
+              "type": "resource_link",
+              "props": {
+                "text": "表情",
+                "href": "/emotes?tab=emotes",
+                "target": "_self",
+                "underline": false,
+                "type": "default",
+                "variant": "navigation"
+              }
+            },
+            {
+              "id": "emote-sidebar-groups",
+              "type": "resource_link",
+              "props": {
+                "text": "分组",
+                "href": "/emotes?tab=groups",
+                "target": "_self",
+                "underline": false,
+                "type": "default",
+                "variant": "navigation"
+              }
+            },
+            {
+              "id": "emote-sidebar-settings",
+              "type": "resource_link",
+              "props": {
+                "text": "AI 设置",
+                "href": "/emotes?tab=settings",
+                "target": "_self",
+                "underline": false,
+                "type": "default",
+                "variant": "navigation"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 60,
+    "maxLayoutCount": 30,
+    "maxNodeCount": 30,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 0
+  }
+}

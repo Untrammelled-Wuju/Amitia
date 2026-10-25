@@ -52,12 +52,42 @@ func TestValidateProviderMetadataAcceptsWellFormedNavigation(t *testing.T) {
 					"id": "main", "label": "Minecraft", "route": "/games/minecraft", "order": float64(100),
 					"mobile": true, "panel": "main", "match": []any{"/games/minecraft"},
 					"routePrefixes": []any{"/games/minecraft"}, "icon": "extension", "group": "games",
+					"containerId": "minecraft-workspace", "sidebarProviderId": "minecraft-sidebar",
+					"sidebarItems": []any{
+						map[string]any{"label": "概览", "route": "/games/minecraft?tab=overview"},
+					},
 				},
 			},
 		},
 	}
 	if err := validateProviderMetadata(def); err != nil {
 		t.Fatalf("expected metadata to validate, got %v", err)
+	}
+}
+
+func TestValidateProviderMetadataAcceptsWorkspaceSidebarProvider(t *testing.T) {
+	def := ProviderDefinition{
+		Capability: CapabilityAppWorkspaceSidebar,
+		Metadata: map[string]any{
+			"containerId": "emote-workspace",
+		},
+	}
+	if err := validateProviderMetadata(def); err != nil {
+		t.Fatalf("expected workspace sidebar metadata to validate, got %v", err)
+	}
+}
+
+func TestValidateProviderMetadataRejectsUnsafeWorkspaceSidebarContainer(t *testing.T) {
+	for _, containerID := range []string{"", "../emote", "emote/child", `emote\child`} {
+		def := ProviderDefinition{
+			Capability: CapabilityAppWorkspaceSidebar,
+			Metadata: map[string]any{
+				"containerId": containerID,
+			},
+		}
+		if err := validateProviderMetadata(def); err == nil || !strings.Contains(err.Error(), "safe metadata.containerId") {
+			t.Fatalf("expected safe container error for %q, got %v", containerID, err)
+		}
 	}
 }
 

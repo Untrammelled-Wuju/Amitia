@@ -48,6 +48,14 @@ export interface UINavigationItem {
   mobile?: boolean;
   extensionId?: string;
   runtimeCapability?: RuntimeCapabilityName;
+  containerId?: string;
+  sidebarProviderId?: string;
+  sidebarItems?: UINavigationSidebarItem[];
+}
+
+export interface UINavigationSidebarItem {
+  label: string;
+  route: string;
 }
 
 export interface UINavigationGroup {
@@ -239,6 +247,14 @@ export function collectExtensionNavigationItems(
         match: absolutePrefixes(row.match ?? row.routePrefixes),
         mobile: row.mobile === true || String(row.panel ?? "").trim() === "main",
         extensionId: provider.extensionId,
+        containerId: String(row.containerId ?? "").trim(),
+        sidebarProviderId: String(row.sidebarProviderId ?? "").trim(),
+        sidebarItems: Array.isArray(row.sidebarItems)
+          ? row.sidebarItems
+            .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+            .map((item) => ({ label: String(item.label ?? "").trim(), route: String(item.route ?? "").trim() }))
+            .filter((item) => item.label && item.route.startsWith("/"))
+          : undefined,
       });
     }
   }

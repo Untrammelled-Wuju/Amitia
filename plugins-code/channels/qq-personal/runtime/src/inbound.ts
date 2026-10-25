@@ -19,6 +19,7 @@ export interface InboundClientConfig {
   coreUrl: string
   extensionId: string
   moduleId: string
+  channelId: string
   serviceAuthToken: string
   localToken: string
 }
@@ -66,6 +67,7 @@ export function coreHeaders(config: InboundClientConfig): Record<string, string>
     "Content-Type": "application/json",
     "X-Amitia-Extension-ID": config.extensionId,
     "X-Amitia-Module-ID": config.moduleId,
+    "X-Amitia-Channel-ID": config.channelId,
   }
   if (config.serviceAuthToken) headers.Authorization = `Bearer ${config.serviceAuthToken}`
   if (config.localToken) headers["X-Amitia-Local-Token"] = config.localToken

@@ -142,6 +142,9 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 			if err != nil {
 				return err
 			}
+			if ownedPromptContentEmpty(content) {
+				return nil
+			}
 			historyRole := message.Role
 			if inference.Group != nil && message.Role == "assistant" && message.CharacterID != "" && message.CharacterID != inference.Scope.RoleID {
 				name := strings.TrimSpace(message.CharacterName)
@@ -201,7 +204,10 @@ func ownedMessageContentContext(ctx context.Context, text string, attachments []
 	if err := business.ValidateAttachments(attachments); err != nil {
 		return nil, err
 	}
-	parts := []map[string]any{{"type": "text", "text": text}}
+	parts := make([]map[string]any, 0, 1+len(attachments))
+	if strings.TrimSpace(text) != "" {
+		parts = append(parts, map[string]any{"type": "text", "text": text})
+	}
 	for _, item := range attachments {
 		if item.Kind == "audio" {
 			continue
@@ -230,6 +236,27 @@ func ownedMessageContentContext(ctx context.Context, text string, attachments []
 		parts = append(parts, map[string]any{"type": "image_url", "image_url": map[string]string{"url": "data:" + item.MIME + ";base64," + item.Data}})
 	}
 	return parts, nil
+}
+
+func ownedPromptContentEmpty(content any) bool {
+	switch value := content.(type) {
+	case string:
+		return strings.TrimSpace(value) == ""
+	case []map[string]any:
+		for _, part := range value {
+			partType, _ := part["type"].(string)
+			if partType != "text" {
+				return false
+			}
+			partText, _ := part["text"].(string)
+			if strings.TrimSpace(partText) != "" {
+				return false
+			}
+		}
+		return true
+	default:
+		return content == nil
+	}
 }
 
 func (s *service) TranscribeOwnedAudio(ctx context.Context, inference business.Inference, attachment business.Attachment) (string, error) {

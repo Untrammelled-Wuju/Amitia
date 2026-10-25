@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/dbtransaction"
+	"strings"
 	"time"
 )
 
@@ -33,6 +34,8 @@ var ErrResourceVersion = errors.New("数据版本已变化，请重新加载")
 var ErrRequestConflict = errors.New("同一请求编号不能用于不同数据")
 var ErrWrongOwner = errors.New("禁止将设备专属数据保存到其他设备")
 var ErrPendingLimit = errors.New("待保存数据已达到上限，请等待设备恢复连接")
+
+const RevisionCurrent int64 = -1
 
 type Resource struct {
 	OwnerID   string          `json:"ownerId"`
@@ -208,7 +211,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if commit.MemoryTransfer != nil {
 			expectedRole = commit.MemoryTransfer.ToRoleID
 		}
-		if !validKind(mutation.Kind) || mutation.ID == "" || mutation.RoleID != expectedRole || !json.Valid(mutation.Body) || mutation.ExpectedRevision < 0 {
+		if !validKind(mutation.Kind) || mutation.ID == "" || mutation.RoleID != expectedRole || !json.Valid(mutation.Body) || mutation.ExpectedRevision < RevisionCurrent {
 			return Acknowledgement{}, ErrWrongOwner
 		}
 		key := mutation.Kind + "/" + mutation.ID
@@ -225,7 +228,12 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 		if err == nil && storedRole != StorageRole(scope, mutation.Kind) {
 			return Acknowledgement{}, ErrWrongOwner
 		}
-		if revision != mutation.ExpectedRevision {
+		if mutation.ExpectedRevision == RevisionCurrent {
+			baseRequestID := strings.SplitN(scope.RequestID, "|", 2)[0]
+			if mutation.Kind != "checkpoint" || mutation.ID != "turn/"+baseRequestID || err != nil {
+				return Acknowledgement{}, ErrResourceVersion
+			}
+		} else if revision != mutation.ExpectedRevision {
 			return Acknowledgement{}, ErrResourceVersion
 		}
 		if storedDeleted && !mutation.Deleted && (mutation.Kind == "memory" || mutation.Kind == "message" || mutation.Kind == "conversation" || mutation.Kind == "checkpoint") {

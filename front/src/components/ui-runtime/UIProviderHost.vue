@@ -77,6 +77,8 @@ const mergedContext = computed<Record<string, unknown>>(() => {
   );
   return {
     route: route.fullPath,
+    routeParams: route.params,
+    routeQuery: route.query,
     platform: env.platform,
     host: env.host,
     os: env.os,

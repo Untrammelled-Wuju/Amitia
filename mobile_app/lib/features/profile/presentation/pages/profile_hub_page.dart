@@ -54,11 +54,15 @@ class ProfileHubPage extends ConsumerWidget {
     final initial = name.characters.first;
     return AmitiaScaffold(
       handlesSystemBack: false,
-      appBar: const AmitiaAppBar(title: '我的'),
+      appBar: AmitiaAppBar(
+        title: '我的',
+        backgroundColor: context.surfacePrimary,
+        toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
+      ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
           AppSpacing.pagePadding,
-          AppSpacing.xs,
+          AppSpacing.md,
           AppSpacing.pagePadding,
           AppSpacing.xl,
         ),

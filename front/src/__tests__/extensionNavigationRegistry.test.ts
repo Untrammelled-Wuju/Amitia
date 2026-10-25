@@ -224,6 +224,40 @@ describe("extension navigation registry", () => {
     expect(item?.label).toBe("表情包管理");
   });
 
+  it("parses provider and simple sidebar declarations from navigation metadata", () => {
+    const providers = [
+      routeRegistry("com.amitia/emote", "routes.emote", "/games/emote-manager", "page.emote", 50, false),
+      pageProvider("com.amitia/emote", "page.emote"),
+      provider({
+        providerId: "nav.emote",
+        extensionId: "com.amitia/emote",
+        capability: "app.navigation",
+        metadata: {
+          navigationItems: [{
+            id: "manager",
+            label: "表情包管理",
+            route: "/games/emote-manager",
+            containerId: "emote-workspace",
+            sidebarProviderId: "emote-workspace-sidebar-provider",
+            sidebarItems: [
+              { label: "表情", route: "/games/emote-manager?tab=emotes" },
+              { label: "设置", route: "/games/emote-manager?tab=settings" },
+            ],
+          }],
+        },
+      }),
+    ];
+
+    expect(collectExtensionNavigationItems(store(providers))[0]).toMatchObject({
+      containerId: "emote-workspace",
+      sidebarProviderId: "emote-workspace-sidebar-provider",
+      sidebarItems: [
+        { label: "表情", route: "/games/emote-manager?tab=emotes" },
+        { label: "设置", route: "/games/emote-manager?tab=settings" },
+      ],
+    });
+  });
+
   it("marks extension provider routes as full height", () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [] });
     syncProviderRoutes(router, store([

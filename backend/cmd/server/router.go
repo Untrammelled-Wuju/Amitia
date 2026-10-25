@@ -505,6 +505,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if services.OwnedIngress != nil {
 		channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry, services.OwnedIngress.channelOwnerResolver)
 	}
+	if services.KernelContainer != nil && services.KernelContainer.ResourceLinks != nil {
+		channelinbound.RegisterMediaRouter(r, channelProviders, services.KernelContainer.ResourceLinks)
+	}
 
 	apiGroup := r.Group("/api")
 	if services.DeviceMesh != nil && services.DeviceMesh.LocalHandler != nil {

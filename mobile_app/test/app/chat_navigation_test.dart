@@ -1,8 +1,10 @@
 import 'package:amitia_app/app/app_routes.dart';
+import 'package:amitia_app/app/theme/app_colors.dart';
 import 'package:amitia_app/core/models/character.dart';
 import 'package:amitia_app/core/models/conversation.dart';
 import 'package:amitia_app/core/models/memory.dart';
 import 'package:amitia_app/core/models/reminder.dart';
+import 'package:amitia_app/core/services/extension_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/core/services/memory_service.dart';
 import 'package:amitia_app/core/ui_runtime/routing/builtin_route_catalog.dart';
@@ -10,6 +12,7 @@ import 'package:amitia_app/core/widgets/amitia_icons.dart';
 import 'package:amitia_app/core/widgets/main_tab_scaffold.dart';
 import 'package:amitia_app/features/conversations/presentation/pages/conversation_list_page.dart';
 import 'package:amitia_app/features/conversations/presentation/pages/conversation_search_page.dart';
+import 'package:amitia_app/features/extensions/presentation/pages/extension_center_page.dart';
 import 'package:amitia_app/features/memory/presentation/pages/memory_hub_page.dart';
 import 'package:amitia_app/features/profile/presentation/pages/profile_hub_page.dart';
 import 'package:amitia_app/features/tasks/presentation/pages/task_hub_page.dart';
@@ -81,9 +84,41 @@ Widget _app(
           nextCursor: next < memories.length ? '$next' : '',
         );
       }),
+      installedExtensionViewProvider.overrideWith(
+        (ref) async => ExtensionCenterView(
+          installed: const [],
+          discover: const [],
+          updates: const [],
+          needsAction: const [],
+        ),
+      ),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
+}
+
+void _expectRootHeaderSurface(WidgetTester tester) {
+  final context = tester.element(find.byType(MainTabScaffold));
+  final appBar = tester.widget<AppBar>(find.byType(AppBar));
+  final expectedIconBrightness =
+      ThemeData.estimateBrightnessForColor(context.surfacePrimary) ==
+          Brightness.dark
+      ? Brightness.light
+      : Brightness.dark;
+  expect(appBar.backgroundColor, context.surfacePrimary);
+  expect(appBar.backgroundColor, isNot(context.backgroundPrimary));
+  expect(appBar.toolbarHeight, 50);
+  expect(
+    appBar.systemOverlayStyle?.statusBarIconBrightness,
+    expectedIconBrightness,
+  );
+}
+
+void _expectRootContentTop(WidgetTester tester, Finder page) {
+  final listView = tester.widget<ListView>(
+    find.descendant(of: page, matching: find.byType(ListView)).first,
+  );
+  expect(listView.padding, const EdgeInsets.fromLTRB(16, 12, 16, 20));
 }
 
 void main() {
@@ -103,10 +138,19 @@ void main() {
     expect(find.byKey(const ValueKey('main-tab-插件')), findsOneWidget);
     expect(find.byKey(const ValueKey('main-tab-我的')), findsOneWidget);
     expect(find.byKey(const ValueKey('message-search-field')), findsOneWidget);
+    _expectRootHeaderSurface(tester);
+    expect(
+      tester
+          .widget<Padding>(find.byKey(const ValueKey('message-search-region')))
+          .padding,
+      const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    );
 
     await tester.tap(find.byKey(const ValueKey('main-tab-任务')));
     await tester.pumpAndSettle();
     expect(find.byType(TaskHubPage), findsOneWidget);
+    _expectRootHeaderSurface(tester);
+    _expectRootContentTop(tester, find.byType(TaskHubPage));
     expect(find.text('主动任务'), findsOneWidget);
     expect(find.text('持续事项'), findsOneWidget);
     expect(find.text('提醒、计划与定时任务'), findsNothing);
@@ -116,6 +160,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('main-tab-记忆')));
     await tester.pumpAndSettle();
     expect(find.byType(MemoryHubPage), findsOneWidget);
+    _expectRootHeaderSurface(tester);
+    _expectRootContentTop(tester, find.byType(MemoryHubPage));
     for (final label in ['知识库', '记忆总览', '情景记忆', '记忆图谱', '时间线']) {
       expect(find.text(label), findsOneWidget);
     }
@@ -125,9 +171,17 @@ void main() {
     expect(find.text('关系与概念连接'), findsNothing);
     expect(find.text('暂无最近记忆'), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('main-tab-插件')));
+    await tester.pumpAndSettle();
+    expect(find.text('扩展包'), findsOneWidget);
+    _expectRootHeaderSurface(tester);
+    _expectRootContentTop(tester, find.byType(ExtensionCenterPage));
+
     await tester.tap(find.byKey(const ValueKey('main-tab-我的')));
     await tester.pumpAndSettle();
     expect(find.byType(ProfileHubPage), findsOneWidget);
+    _expectRootHeaderSurface(tester);
+    _expectRootContentTop(tester, find.byType(ProfileHubPage));
     expect(find.text('我的空间'), findsOneWidget);
     for (final label in ['角色', '创意工坊', '游戏模式', '渠道接入', '设置']) {
       expect(find.text(label), findsOneWidget);
@@ -138,6 +192,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('main-tab-消息')));
     await tester.pumpAndSettle();
     expect(find.byType(ConversationListPage), findsOneWidget);
+    _expectRootHeaderSurface(tester);
   });
 
   testWidgets('任务和记忆预览支持向下滚动加载更多', (tester) async {

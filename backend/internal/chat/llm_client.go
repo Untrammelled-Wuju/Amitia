@@ -454,13 +454,17 @@ func messagesToModelRequest(cfg *ModelConfig, messages []map[string]interface{},
 			}
 		case "user":
 			parts := extractContentParts(m)
+			if len(parts) == 0 {
+				continue
+			}
 			msgs = append(msgs, ModelMessage{Role: "user", Parts: parts})
 		case "assistant":
 			parts := extractContentParts(m)
-			if len(parts) == 0 {
-				parts = []ModelContentPart{{Type: ContentTypeText, Text: ""}}
+			toolCalls := modelToolCallsFromLegacy(m["tool_calls"])
+			if len(parts) == 0 && len(toolCalls) == 0 {
+				continue
 			}
-			msgs = append(msgs, ModelMessage{Role: "assistant", Parts: parts, ToolCalls: modelToolCallsFromLegacy(m["tool_calls"])})
+			msgs = append(msgs, ModelMessage{Role: "assistant", Parts: parts, ToolCalls: toolCalls})
 		case "tool":
 			parts := extractContentParts(m)
 			toolCallID, _ := m["tool_call_id"].(string)

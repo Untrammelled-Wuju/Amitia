@@ -913,10 +913,6 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	} else if !hasIngress || !ingress.SuppressReplyPersistence {
 		response.Evidence = append(response.Evidence, coordination.ResourceVersion{Kind: "message", ID: request.RequestID + "/user", Revision: userRevision})
 	}
-	checkpointRevision, err := e.ownedCheckpointRevision(ctx, scope)
-	if err != nil {
-		return response, err
-	}
 	output := []coordination.Mutation{
 		{Kind: "message", ID: request.RequestID + "/assistant", RoleID: coordination.StorageRole(scope, "message"), Body: body(map[string]any{"id": request.RequestID + "/assistant", "conversationId": request.ConversationID, "characterId": role.ID, "characterName": role.Name, "characterAvatar": role.Avatar, "roleOwnerId": scope.RoleOwnerID, "senderType": "character", "role": "assistant", "content": generation.Text, "reasoningContent": generation.Reasoning, "tokens": generation.Tokens, "outputs": generation.Outputs, "forceVoice": generation.ForceVoice, "requestId": request.RequestID, "groupRoundId": func() string {
 			if prepared != nil {
@@ -929,7 +925,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 			}
 			return ""
 		}(), "createdAt": time.Now().UTC().Format(time.RFC3339Nano), "executionScope": scope})},
-		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, ExpectedRevision: checkpointRevision, Body: body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, request.ConversationID)).ActiveTurn})},
+		{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, ExpectedRevision: coordination.RevisionCurrent, Body: body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, request.ConversationID)).ActiveTurn})},
 	}
 	output[1].Body = body(checkpoint{Hash: fingerprint, Status: "completed", ConversationID: request.ConversationID, Response: &response, Context: request.Context, Runtime: ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, request.ConversationID)).ActiveTurn, Ingress: storedIngress})
 	var assistantDocument map[string]any
@@ -937,11 +933,16 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		return response, err
 	}
 	assistantSequence := userSequence + 1
+	var conversationRevision int64
 	if prepared != nil {
-		assistantSequence = nextOwnedMessageSequence(snapshot, request.ConversationID) + 1
+		conversation, conversationRevision, err = e.ownedConversationForReply(ctx, scope, request.ConversationID, conversation, version(snapshot, "conversation", request.ConversationID))
+		if err != nil {
+			return response, err
+		}
+		assistantSequence = ownedConversationSequence(conversation) + 1
 		conversation["lastMessageSequence"] = assistantSequence
 		conversation["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
-		output = append(output, coordination.Mutation{Kind: "conversation", ID: request.ConversationID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: version(snapshot, "conversation", request.ConversationID), Body: body(conversation)})
+		output = append(output, coordination.Mutation{Kind: "conversation", ID: request.ConversationID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: conversationRevision, Body: body(conversation)})
 	}
 	assistantDocument["sequence"], assistantDocument["reasoningDurationMs"] = assistantSequence, generation.ReasoningDurationMS
 	if len(generation.CitationSnapshot) == 0 {
@@ -962,6 +963,10 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		response.Saved = false
 		return response, fmt.Errorf("回复尚未确认保存: %w", err)
 	}
+	checkpointRevision, err := e.ownedCheckpointRevision(ctx, scope)
+	if err != nil {
+		return response, err
+	}
 	if err := e.coordination.CompleteRequest(ctx, scope); err != nil {
 		return response, err
 	}
@@ -977,7 +982,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if emit != nil {
 		return response, nil
 	}
-	response, err = e.completeMemory(ctx, inference, fingerprint, response, checkpointRevision+1)
+	response, err = e.completeMemory(ctx, inference, fingerprint, response, checkpointRevision)
 	if err != nil {
 		return response, err
 	}
@@ -987,6 +992,41 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		}
 	}
 	return response, nil
+}
+
+func (e *Engine) ownedConversationForReply(ctx context.Context, scope coordination.ExecutionScope, conversationID string, fallback map[string]any, fallbackRevision int64) (map[string]any, int64, error) {
+	port, ok := e.data.(coordination.ResourcePort)
+	if !ok {
+		return nil, 0, errors.New("Owner 会话资源端口未接通")
+	}
+	resource, err := port.Resource(ctx, scope, "conversation", conversationID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if resource == nil || resource.Deleted {
+		return fallback, fallbackRevision, nil
+	}
+	document := map[string]any{}
+	if err := json.Unmarshal(resource.Body, &document); err != nil {
+		return nil, 0, err
+	}
+	return document, resource.Revision, nil
+}
+
+func ownedConversationSequence(document map[string]any) int64 {
+	switch value := document["lastMessageSequence"].(type) {
+	case int:
+		return int64(value)
+	case int64:
+		return value
+	case float64:
+		return int64(value)
+	case json.Number:
+		number, _ := value.Int64()
+		return number
+	default:
+		return 0
+	}
 }
 
 func (e *Engine) completeMemory(ctx context.Context, inference Inference, fingerprint string, response Response, checkpointRevision int64) (Response, error) {

@@ -155,6 +155,7 @@ function main() {
       [`${target}-index.json`, "index.schema.json"],
       [`${target}-composer.json`, "composer.schema.json"],
       [`${target}-message.json`, "message.schema.json"],
+      [`${target}-sidebar.json`, "sidebar.schema.json"],
     ];
     for (const [sourceName, targetName] of schemas) {
       const source = join(packageRoot, "ui", "schema", sourceName);

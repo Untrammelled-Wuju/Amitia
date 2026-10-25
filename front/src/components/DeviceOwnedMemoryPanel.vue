@@ -9,7 +9,7 @@
             <el-option v-for="role in kind === 'profile' ? historicalRoles.slice(0, 1) : historicalRoles" :key="role.id" :label="kind === 'profile' ? '原设备历史' : `原设备历史 · ${role.name}`" :value="`history:${role.id}`" />
           </el-select>
         </div>
-        <div v-if="view !== 'profile'" class="filter-field">
+        <div class="filter-field">
           <label :for="`${controlId}-scope`">查看范围</label>
           <el-select :id="`${controlId}-scope`" v-model="memoryView" aria-label="记忆查看范围" class="layer-select">
             <el-option v-for="option in viewOptions" :key="option.value" :label="option.label" :value="option.value" />
@@ -85,13 +85,13 @@
           </div>
         </div>
         <div class="record-state">
-          <el-tag v-if="['memory', 'episodic', 'graph', 'fact', 'vector'].includes(row.kind)" size="small">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '全局记忆' : '角色记忆' }}</el-tag>
+          <el-tag v-if="['memory', 'episodic', 'graph', 'fact', 'vector', 'profile'].includes(row.kind)" size="small">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '全局记忆' : '角色记忆' }}</el-tag>
           <el-tag size="small">版本 {{ row.revision }}</el-tag>
           <el-tag v-if="row.kind === 'memory'" size="small">L{{ (row.body.effectiveRetentionLevel ?? row.body.retentionLevel) || 3 }} · 强度 {{ Math.round(((row.body.effectiveStrength ?? row.body.memoryStrength) ?? 0.68) * 100) }}% · {{ row.body.pinned ? '已固定' : (row.body.effectiveDecayState ?? row.body.decayState) === 'archived' ? '自动归档' : (row.body.effectiveDecayState ?? row.body.decayState) === 'fading' ? '淡化' : '活跃' }} · 强化 {{ row.body.reinforceCount || 0 }} 次</el-tag>
           <el-tag v-if="row.body.allowContextUse === false" size="small" type="warning">已停用</el-tag>
           <el-tag v-if="row.body.expiresAt" size="small" type="info">到期 {{ row.body.expiresAt }}</el-tag>
         </div>
-        <div v-if="source === 'current' && ['memory', 'episodic', 'fact', 'vector'].includes(row.kind) && row.executionScope" class="record-actions">
+        <div v-if="source === 'current' && ['memory', 'episodic', 'fact', 'vector', 'profile'].includes(row.kind) && row.executionScope" class="record-actions">
           <el-button size="small" :disabled="loading" @click="openTransfer(row)">{{ row.roleId === GLOBAL_MEMORY_ROLE ? '降级为角色记忆' : '提升为全局记忆' }}</el-button>
         </div>
         <div v-if="['memory', 'summary'].includes(row.kind) && source === 'current' && row.revision > 0" class="record-actions">

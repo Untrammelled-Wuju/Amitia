@@ -12,7 +12,7 @@ vi.mock("vue-router", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("element-plus", () => ({ ElMessage: {}, ElMessageBox: {} }));
 
 describe("引导初始记忆接入", () => {
-  const scope = { coreId: "core", roleId: "role", memoryRoleId: "@global-memory", resourceOwnerId: "phone" };
+  const scope = { coreId: "core", roleId: "role", memoryRoleId: "role", resourceOwnerId: "phone" };
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockReset());
     mocks.refresh.mockResolvedValue(true);
@@ -24,7 +24,7 @@ describe("引导初始记忆接入", () => {
     const wrapper = mount(defineComponent({ setup() { onboarding = useImmersiveOnboarding(); return () => null; } }));
     onboarding.memoryItems.value = ["小明", "简洁", "喜欢茶"];
     await onboarding.handleEnterAmitia();
-    expect(mocks.get).toHaveBeenCalledWith("/api/device-mesh/v1/business/memories", expect.objectContaining({ memoryView: "global", characterId: "role" }));
+    expect(mocks.get).toHaveBeenCalledWith("/api/device-mesh/v1/business/memories", expect.objectContaining({ memoryView: "role:role", characterId: "role" }));
     expect(mocks.write).toHaveBeenCalledTimes(3);
     expect(mocks.write).toHaveBeenCalledWith(scope, expect.any(String), expect.objectContaining({ action: "create", partition: "profile", key: "称呼", value: "小明" }));
     expect(mocks.post).not.toHaveBeenCalled();

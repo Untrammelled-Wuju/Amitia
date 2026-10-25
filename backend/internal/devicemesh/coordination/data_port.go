@@ -165,9 +165,10 @@ func ValidateSnapshot(scope ExecutionScope, snapshot DataSnapshot) error {
 	for _, resource := range snapshot.Resources {
 		key := resource.Kind + "/" + resource.ID
 		validWorldbookRole := resource.Kind == "worldbook" && (resource.RoleID == scope.RoleID || resource.RoleID == GlobalWorldbookRole)
+		validGlobalMemoryRole := !scope.MemoryViewAll && scope.MemoryRoleID != GlobalMemoryRole && resource.RoleID == GlobalMemoryRole && MemoryKind(resource.Kind)
 		legacyReadOnly := resource.Origin == "legacy" && resource.ReadOnly && resource.Revision == 0
 		validGroupRole := snapshot.GroupRoles != nil && GroupConversationKind(resource.Kind) && snapshot.GroupRoles[GroupResourceConversationID(resource)] == resource.RoleID
-		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !validGroupRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 && !legacyReadOnly || !json.Valid(resource.Body) || seen[key] {
+		if resource.OwnerID != scope.ResourceOwnerID || resource.RoleID == "" || resource.RoleID != StorageRole(scope, resource.Kind) && !validWorldbookRole && !validGroupRole && !validGlobalMemoryRole && !(scope.MemoryViewAll && MemoryKind(resource.Kind)) || resource.Deleted || !validKind(resource.Kind) || resource.ID == "" || resource.Revision < 1 && !legacyReadOnly || !json.Valid(resource.Body) || seen[key] {
 			return fmt.Errorf("%w: 无效上下文记录", ErrWrongOwner)
 		}
 		seen[key] = true

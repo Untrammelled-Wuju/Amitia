@@ -52,6 +52,7 @@ const (
 	CapabilityAppShell                    Capability = "app.shell"
 	CapabilityAppNavigation               Capability = "app.navigation"
 	CapabilityAppWorkspace                Capability = "app.workspace"
+	CapabilityAppWorkspaceSidebar         Capability = "app.workspace.sidebar"
 	CapabilityRouteRegistry               Capability = "route.registry"
 	CapabilityPageProvider                Capability = "page.provider"
 	CapabilityConversationShell           Capability = "conversation.shell"
@@ -79,7 +80,7 @@ const (
 )
 
 var knownCapabilities = map[Capability]struct{}{
-	CapabilityAppShell: {}, CapabilityAppNavigation: {}, CapabilityAppWorkspace: {},
+	CapabilityAppShell: {}, CapabilityAppNavigation: {}, CapabilityAppWorkspace: {}, CapabilityAppWorkspaceSidebar: {},
 	CapabilityRouteRegistry: {}, CapabilityPageProvider: {},
 	CapabilityConversationShell: {}, CapabilityConversationHeader: {}, CapabilityConversationMessages: {},
 	CapabilityConversationMessageRenderer: {}, CapabilityConversationSidebar: {}, CapabilityConversationComposer: {}, CapabilityConversationOverlay: {},
@@ -173,7 +174,7 @@ func (d *ProviderDefinition) Normalize() {
 
 func requiresTrustedRootProvider(capability Capability) bool {
 	switch capability {
-	case CapabilityAppShell, CapabilityAppNavigation, CapabilityAppWorkspace, CapabilityRouteRegistry, CapabilityPageProvider, CapabilityWorkspaceTab:
+	case CapabilityAppShell, CapabilityAppNavigation, CapabilityAppWorkspace, CapabilityAppWorkspaceSidebar, CapabilityRouteRegistry, CapabilityPageProvider, CapabilityWorkspaceTab:
 		return true
 	case CapabilityConversationDrawer:
 		return true
@@ -354,6 +355,9 @@ func providerEntryPlatformFamily(platform string) string {
 
 func validateProviderMetadata(d ProviderDefinition) error {
 	if d.Metadata == nil {
+		if d.Capability == CapabilityAppWorkspaceSidebar {
+			return errors.New("ui_provider: app.workspace.sidebar requires a safe metadata.containerId")
+		}
 		return nil
 	}
 	objectField := func(name string) error {
@@ -463,6 +467,14 @@ func validateProviderMetadata(d ProviderDefinition) error {
 			}
 		}
 		return true
+	}
+	safeRouteTarget := func(raw string) bool {
+		value := strings.TrimSpace(raw)
+		path, query, hasQuery := strings.Cut(value, "?")
+		if !safeRoutePath(path, false) || strings.ContainsAny(value, "#\\") || strings.IndexByte(value, 0) >= 0 {
+			return false
+		}
+		return !hasQuery || (query != "" && !strings.Contains(query, "?"))
 	}
 
 	routePaths := map[string]struct{}{}
@@ -588,7 +600,7 @@ func validateProviderMetadata(d ProviderDefinition) error {
 					return fmt.Errorf("ui_provider: route.registry navigation item %s references undeclared route %q", id, route)
 				}
 			}
-			for _, name := range []string{"icon", "group", "groupLabel", "groupIcon"} {
+			for _, name := range []string{"icon", "group", "groupLabel", "groupIcon", "containerId", "sidebarProviderId"} {
 				if err := optionalString(row, name); err != nil {
 					return err
 				}
@@ -613,6 +625,24 @@ func validateProviderMetadata(d ProviderDefinition) error {
 			if err := absoluteStringList(row, "routePrefixes"); err != nil {
 				return err
 			}
+			if sidebarItems, exists := row["sidebarItems"]; exists && sidebarItems != nil {
+				rows, ok := sidebarItems.([]any)
+				if !ok {
+					return fmt.Errorf("ui_provider: navigationItems sidebarItems must be an array")
+				}
+				for _, rawSidebar := range rows {
+					sidebar, ok := rawSidebar.(map[string]any)
+					if !ok || field(sidebar, "label") == "" || !safeRouteTarget(field(sidebar, "route")) {
+						return fmt.Errorf("ui_provider: navigationItems sidebarItems require label and a safe absolute route")
+					}
+				}
+			}
+		}
+	}
+	if d.Capability == CapabilityAppWorkspaceSidebar {
+		containerID := strings.TrimSpace(fmt.Sprint(d.Metadata["containerId"]))
+		if containerID == "" || strings.ContainsAny(containerID, "/\\") || strings.Contains(containerID, "..") {
+			return errors.New("ui_provider: app.workspace.sidebar requires a safe metadata.containerId")
 		}
 	}
 	if d.Capability == CapabilityConversationMessageRenderer {

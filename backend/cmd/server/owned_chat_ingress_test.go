@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,6 +20,14 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/interaction"
 )
+
+type fixedExtensionResourceResolver struct {
+	fullPath string
+}
+
+func (r fixedExtensionResourceResolver) ResolveResourceLink(string) (string, string, string, error) {
+	return "com.example/media", "data", r.fullPath, nil
+}
 
 func TestOwnedIngressMediaCarriesActualBytesAndRejectsUnsafeSources(t *testing.T) {
 	data := make([]byte, 46)
@@ -42,6 +52,24 @@ func TestOwnedIngressMediaCarriesActualBytesAndRejectsUnsafeSources(t *testing.T
 		if _, _, _, err := ownedIngressMedia(t.Context(), source); err == nil {
 			t.Fatalf("unsafe media accepted: %.80s", source)
 		}
+	}
+}
+
+func TestTrustedExtensionMediaSourceResolvesSignedResource(t *testing.T) {
+	imagePath := filepath.Join(t.TempDir(), "emote.png")
+	data := []byte("\x89PNG\r\n\x1a\nimage")
+	if err := os.WriteFile(imagePath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	source, err := trustedExtensionMediaSource("/api/extension/resources/signed-token", fixedExtensionResourceResolver{fullPath: imagePath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(source, "data:image/png;base64,") || !strings.HasSuffix(source, base64.StdEncoding.EncodeToString(data)) {
+		t.Fatalf("unexpected data URL: %.80s", source)
+	}
+	if _, err := trustedExtensionMediaSource("/api/extension/resources/signed-token", nil); err == nil {
+		t.Fatal("expected missing resolver to fail")
 	}
 }
 

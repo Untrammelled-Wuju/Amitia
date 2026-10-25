@@ -245,8 +245,18 @@ func (a *conversationMessageSenderAdapter) SendConversationMessage(ctx context.C
 }
 
 type conversationMessageAppenderAdapter struct {
-	engine *business.Engine
-	coreID string
+	engine          *business.Engine
+	coreID          string
+	resourceLinks   extensionResourceResolver
+	channelDelivery channelDeliveryRecovery
+}
+
+type extensionResourceResolver interface {
+	ResolveResourceLink(token string) (extensionID string, scope string, fullPath string, err error)
+}
+
+type channelDeliveryRecovery interface {
+	ResumeChannelDeliveries(ctx context.Context) error
 }
 
 func newConversationMessageAppenderAdapter() *conversationMessageAppenderAdapter {
@@ -283,18 +293,29 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 	if err != nil {
 		return kernel.ConversationMessageAppendResult{}, err
 	}
+	if ownedRequest.ExpectedScope != nil && strings.EqualFold(strings.TrimSpace(request.Role), "assistant") {
+		if strings.TrimSpace(ownedRequest.ExpectedScope.TurnID) == "" {
+			ownedRequest.ExpectedScope.TurnID = "manual-turn-" + request.RequestID
+		}
+		if strings.TrimSpace(ownedRequest.ExpectedScope.ExecutionID) == "" {
+			ownedRequest.ExpectedScope.ExecutionID = "manual-execution-" + request.RequestID
+		}
+	}
 	if strings.EqualFold(strings.TrimSpace(request.Role), "user") {
 		for i, part := range parts {
 			media := &interaction.UnifiedEntryRequest{}
 			switch strings.ToLower(strings.TrimSpace(part.Type)) {
 			case "image":
-				media.ImageUrl = part.URL
+				media.ImageUrl, err = trustedExtensionMediaSource(part.URL, a.resourceLinks)
 			case "audio":
-				media.AudioUrl = part.URL
+				media.AudioUrl, err = trustedExtensionMediaSource(part.URL, a.resourceLinks)
 			case "video":
-				media.VideoUrl = part.URL
+				media.VideoUrl, err = trustedExtensionMediaSource(part.URL, a.resourceLinks)
 			default:
 				continue
+			}
+			if err != nil {
+				return kernel.ConversationMessageAppendResult{}, err
 			}
 			parts[i].Attachments, err = ownedIngressAttachments(ctx, media)
 			if err != nil {
@@ -305,6 +326,11 @@ func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx cont
 	result, err := a.engine.AppendOwnedMessages(ctx, ownedRequest, business.AppendOwnedMessagesRequest{ConversationID: request.ConversationID, Role: request.Role, Source: request.Source, Channel: request.Channel, ReplyToMessageID: request.ReplyToMessageID, Parts: parts})
 	if err != nil {
 		return kernel.ConversationMessageAppendResult{}, err
+	}
+	if result.Status == "sending" && a.channelDelivery != nil {
+		if err := a.channelDelivery.ResumeChannelDeliveries(ctx); err != nil {
+			return kernel.ConversationMessageAppendResult{}, fmt.Errorf("resume channel delivery: %w", err)
+		}
 	}
 	bus := system.GetMessageEventBus()
 	direction := "outbound"

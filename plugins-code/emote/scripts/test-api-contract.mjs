@@ -258,6 +258,7 @@ console.log("\n[4] 编辑 / 批量 / 手动发送");
   });
   check("emotes.send 返回消息 id", Array.isArray(manual.messageIds) && manual.messageIds[0] === "message-1");
   check("手动发送记录 triggerType=manual", env.host.getState().sendRecords.some((r) => r.triggerType === "manual"));
+  check("表情消息使用 assistant 出站角色", env.host.calls.messageAppend.at(-1)?.role === "assistant");
 
   const search = await tools.get("command")({ action: "emotes.list", payload: { q: "改名" } });
   check("搜索命中更新后的名称", search.items.length === 1);

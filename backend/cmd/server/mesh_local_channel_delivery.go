@@ -87,7 +87,7 @@ func (p *meshLocalDataPort) PendingChannelDeliveries(ctx context.Context, cursor
 			return nil, err
 		}
 		item.Cursor = item.ID
-		if item.Scope.ResourceOwnerID != p.ownerID || item.ID != "channel-delivery/"+item.Scope.RequestID || item.Request.RequestID != item.Scope.RequestID {
+		if item.Scope.ResourceOwnerID != p.ownerID || !strings.HasPrefix(item.ID, "channel-delivery/") || item.Request.RequestID != item.Scope.RequestID {
 			return nil, coordination.ErrWrongOwner
 		}
 		result = append(result, item)
@@ -96,7 +96,7 @@ func (p *meshLocalDataPort) PendingChannelDeliveries(ctx context.Context, cursor
 }
 
 func (p *meshLocalDataPort) CompleteChannelDelivery(ctx context.Context, pending coordination.PendingChannelDelivery) error {
-	if pending.ID != "channel-delivery/"+pending.Scope.RequestID || pending.Scope.ResourceOwnerID != p.ownerID || pending.Revision <= 0 {
+	if !strings.HasPrefix(pending.ID, "channel-delivery/") || pending.Scope.ResourceOwnerID != p.ownerID || pending.Revision <= 0 {
 		return coordination.ErrWrongOwner
 	}
 	pending.Pending = false

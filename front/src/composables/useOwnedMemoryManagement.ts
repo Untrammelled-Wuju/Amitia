@@ -1,6 +1,6 @@
 import { apiClient } from "./useApi";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";
-import { memoryStorageRole, memoryViewForScope, memoryRecordScope } from "@/runtime/owned-memory-scope";
+import { GLOBAL_MEMORY_ROLE, memoryStorageRole, memoryViewForScope, memoryRecordScope } from "@/runtime/owned-memory-scope";
 
 export interface OwnedMemoryManagementResource { id: string; kind: string; ownerId: string; roleId: string; revision: number; deleted?: boolean; body: Record<string, any>; executionScope: OwnedExecutionScope }
 const unwrap = (response: any) => response?.data?.data ?? response?.data;
@@ -10,8 +10,10 @@ export function useOwnedMemoryManagement() {
   function resources(result: any, expected: OwnedExecutionScope): OwnedMemoryManagementResource[] {
     if (!expected.authorizationRealm || !result?.executionScope || ownedMemoryAuthority(result.executionScope) !== ownedMemoryAuthority(expected) || !Array.isArray(result.resources) || result.resources.length > 512) throw new Error("记忆管理的数据归属已变化，请重新加载");
     return result.resources.map((resource: any) => {
-      if (!resource.id || resource.ownerId !== expected.resourceOwnerId || !resource.roleId || !expected.memoryViewAll && resource.roleId !== memoryStorageRole(expected, resource.kind) || !Number.isSafeInteger(resource.revision) || resource.revision < 1 || !resource.body || typeof resource.body !== "object") throw new Error("记忆管理记录所属设备或版本无效");
-      return { ...resource, executionScope: expected.memoryViewAll && resource.kind === "memory" ? memoryRecordScope(expected, resource.roleId) : { ...expected } };
+      const shared = expected.memoryViewAll || expected.memoryRoleId !== GLOBAL_MEMORY_ROLE;
+      const validRole = resource.roleId === memoryStorageRole(expected, resource.kind) || shared && resource.roleId === GLOBAL_MEMORY_ROLE;
+      if (!resource.id || resource.ownerId !== expected.resourceOwnerId || !resource.roleId || !validRole || !Number.isSafeInteger(resource.revision) || resource.revision < 1 || !resource.body || typeof resource.body !== "object") throw new Error("记忆管理记录所属设备或版本无效");
+      return { ...resource, executionScope: shared && ["memory", "fact", "episodic", "vector", "graph", "profile", "continuity"].includes(resource.kind) && resource.roleId !== memoryStorageRole(expected, resource.kind) ? memoryRecordScope(expected, resource.roleId, resource.kind) : { ...expected } };
     });
   }
   async function read(expected: OwnedExecutionScope, query: Record<string, unknown> = {}, candidates = false) {

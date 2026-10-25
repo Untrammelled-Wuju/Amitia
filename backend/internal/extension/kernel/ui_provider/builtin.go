@@ -21,6 +21,7 @@ func BuiltinProviders() []ProviderDefinition {
 		builtin("builtin.amitia.app-shell", CapabilityAppShell),
 		builtin("builtin.amitia.navigation", CapabilityAppNavigation),
 		builtin("builtin.amitia.workspace", CapabilityAppWorkspace),
+		builtin("builtin.amitia.workspace-sidebar", CapabilityAppWorkspaceSidebar),
 		builtin("builtin.amitia.routes", CapabilityRouteRegistry),
 		builtin("builtin.amitia.page", CapabilityPageProvider),
 		builtin("builtin.amitia.conversation", CapabilityConversationShell),

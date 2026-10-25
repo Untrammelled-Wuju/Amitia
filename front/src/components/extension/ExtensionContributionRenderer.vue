@@ -49,7 +49,11 @@ const isPage = computed(() => ["schema_page", "web_page"].includes(props.contrib
     :host-actions="hostActions"
     @error="(error: string) => emit('error', error)"
   />
-  <PluginPageFrame v-else-if="renderer && isPage" :title="contribution.title">
+  <PluginPageFrame
+    v-else-if="renderer && isPage"
+    :title="contribution.title"
+    :hide-header="contribution.extensionId === 'com.amitia/emote' && slotId === 'provider.page.provider'"
+  >
     <component :is="renderer" :contribution="contribution" :context="context" :slot-id="slotId" :host-actions="hostActions" @error="(error: string) => emit('error', error)" />
   </PluginPageFrame>
   <ExtensionSurface v-else-if="renderer && needsSurface" :role="surfaceRole as any" :bordered="surfaceRole !== 'message' && surfaceRole !== 'composer'" :target="target">

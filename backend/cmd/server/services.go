@@ -455,6 +455,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
 	}
+	kernelChatAppender.resourceLinks = kernelContainer.ResourceLinks
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	wireConversationEventDurableStore(kernelContainer.EventService)
 	mcpRuntime, mcpRuntimeErr = mcpservice.NewRuntime(
@@ -1228,6 +1229,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		multiAgentCoordinator.SetOwnedExecution(services.OwnedBusiness.WithExecutionScope)
 		kernelMemQuerySvc.engine = services.OwnedBusiness
 		kernelChatAppender.engine, kernelChatAppender.coreID = services.OwnedBusiness, localSpace.SpaceID()
+		kernelChatAppender.channelDelivery = deviceMeshRuntime
 		kernelConvReader.engine, kernelConvReader.coreID = services.OwnedBusiness, localSpace.SpaceID()
 		kernelCharReader.engine, kernelCharReader.catalog, kernelCharReader.coreID = services.OwnedBusiness, deviceMeshRuntime, localSpace.SpaceID()
 		var inferenceAuthority chat.InferenceAuthority

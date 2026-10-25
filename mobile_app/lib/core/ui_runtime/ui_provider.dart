@@ -27,6 +27,7 @@ abstract final class UICapability {
   static const appShell = 'app.shell';
   static const appNavigation = 'app.navigation';
   static const appWorkspace = 'app.workspace';
+  static const appWorkspaceSidebar = 'app.workspace.sidebar';
   static const routeRegistry = 'route.registry';
   static const pageProvider = 'page.provider';
   static const conversationShell = 'conversation.shell';
@@ -54,6 +55,7 @@ abstract final class UICapability {
     appShell,
     appNavigation,
     appWorkspace,
+    appWorkspaceSidebar,
     routeRegistry,
     pageProvider,
     conversationShell,

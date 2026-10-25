@@ -38,8 +38,21 @@ func TestJavaScriptRuntimeInjectsTrustedInvocationContext(t *testing.T) {
 	if result.Status != ToolResultStatusSuccess {
 		t.Fatalf("execution failed: %+v", result)
 	}
+	if string(result.Structured) != `{"ok":true}` {
+		t.Fatalf("structured result missing: %s", result.Structured)
+	}
 	invocation, _ := received["__amitiaContext"].(map[string]any)
 	if invocation["conversationId"] != "conversation-1" || invocation["channel"] != "qq_personal" || invocation["characterId"] != "character-1" {
 		t.Fatalf("invocation context missing or incorrect: %+v", received)
+	}
+}
+
+func TestJavaScriptRuntimeKeepsPlainTextUnstructured(t *testing.T) {
+	adapter := NewJavaScriptRuntimeAdapter(func(context.Context, string, string, string, json.RawMessage, ToolInvocationContext) (json.RawMessage, error) {
+		return json.RawMessage(`plain result`), nil
+	}, nil)
+	result := adapter.Execute(context.Background(), RuntimeBinding{RuntimeType: RuntimeTypePluginJS}, ToolInvocationContext{InvocationID: "inv-2"}, nil)
+	if result.Status != ToolResultStatusSuccess || len(result.Structured) != 0 {
+		t.Fatalf("plain text was incorrectly structured: %+v", result)
 	}
 }

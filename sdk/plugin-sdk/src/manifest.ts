@@ -174,7 +174,7 @@ export interface WorkflowStepDefinition {
 }
 
 export type UIProviderCapability =
-  | "app.shell" | "app.navigation" | "app.workspace"
+  | "app.shell" | "app.navigation" | "app.workspace" | "app.workspace.sidebar"
   | "route.registry" | "page.provider"
   | "conversation.shell" | "conversation.header" | "conversation.messages"
   | "conversation.message_renderer" | "conversation.sidebar" | "conversation.composer" | "conversation.overlay"
@@ -212,6 +212,9 @@ export interface UINavigationItemDefinition {
   match?: string[];
   routePrefixes?: string[];
   mobile?: boolean;
+  containerId?: string;
+  sidebarProviderId?: string;
+  sidebarItems?: Array<{ label: string; route: string }>;
 }
 
 export interface UIRouteDefinition {

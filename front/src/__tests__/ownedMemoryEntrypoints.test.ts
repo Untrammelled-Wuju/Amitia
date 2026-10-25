@@ -133,10 +133,10 @@ describe("网页六层记忆的数据归属入口", () => {
     await selector.setValue("role:other"); await flushPromises();
     expect(mocks.data.mock.calls.at(-1)).toEqual(["memory", "other", "", "", { legacyCursor: "", memoryView: "role:other" }]);
   });
-  it("用户画像全局共享，范围只提供全局画像", async () => {
+  it("用户画像默认按角色隔离，并允许查看全部或全局", async () => {
     const wrapper = open(DeviceOwnedDataView, { title: "用户画像", initialKind: "profile" }); await flushPromises();
-    expect(wrapper.find('select[aria-label="记忆查看范围"]').findAll("option").map(option => option.text())).toEqual(["全局用户画像"]);
-    expect(mocks.data).toHaveBeenCalledWith("profile", "role", "", "", { legacyCursor: "", memoryView: "global" });
+    expect(wrapper.find('select[aria-label="记忆查看范围"]').findAll("option").map(option => option.text())).toEqual(["全部记忆", "全局记忆", "角色"]);
+    expect(mocks.data).toHaveBeenCalledWith("profile", "role", "", "", { legacyCursor: "", memoryView: "all" });
   });
   it.each(["memory", "episodic", "graph", "profile", "timeline"])("%s 页面来源切换后只展示对应范围，搜索入口唯一", async (kind) => {
     mocks.owned.coordinated.value = true;
@@ -150,8 +150,8 @@ describe("网页六层记忆的数据归属入口", () => {
     expect((selection.element as HTMLSelectElement).value).toBe("all");
     expect(mocks.data.mock.calls.at(-1)?.[4]).toMatchObject({ historicalRoleId: "old-role" });
     await source.setValue("current"); await flushPromises();
-    expect(selection.findAll("option").map(option => option.text())).toEqual(kind === "profile" ? ["全局用户画像"] : ["全部记忆", "全局记忆", "角色"]);
-    expect((selection.element as HTMLSelectElement).value).toBe(kind === "profile" ? "global" : "all");
+    expect(selection.findAll("option").map(option => option.text())).toEqual(["全部记忆", "全局记忆", "角色"]);
+    expect((selection.element as HTMLSelectElement).value).toBe("all");
   });
   it("关系图谱的统一搜索框筛选实际画布资源", async () => {
     const wrapper = open(DeviceOwnedDataView, { title: "关系图谱", initialKind: "graph" });

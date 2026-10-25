@@ -82,7 +82,7 @@ func (p *toolMemoryTestRuntime) Resource(ctx context.Context, scope coordination
 	return row, err
 }
 func (p *toolMemoryTestRuntime) ExecuteMemory(ctx context.Context, execution ToolExecutionContext, name string, args map[string]interface{}) (business.MemoryToolResponse, error) {
-	request := business.Request{SpaceID: p.space, DeviceID: "device", CoreID: p.space, RoleID: execution.CharacterID, ConversationID: execution.ConversationID, RequestID: execution.RequestID + "/" + execution.ToolCallID}
+	request := business.Request{SpaceID: p.space, DeviceID: "device", CoreID: p.space, RoleID: execution.CharacterID, ConversationID: execution.ConversationID, RequestID: execution.RequestID + "/" + execution.ToolCallID, Message: execution.UserMessage}
 	return p.engine.MemoryTool(ctx, request, name, args)
 }
 
@@ -142,5 +142,17 @@ func TestOwnedMemoryToolSaveValidationAndReplay(t *testing.T) {
 	args["expiresAt"] = "2026/12/31"
 	if _, err = p.ExecuteMemory(t.Context(), execution, "save_memory", args); err == nil {
 		t.Fatal("invalid expiry saved")
+	}
+}
+
+func TestOwnedMemoryToolGlobalScopeUsesOnlyUserRequest(t *testing.T) {
+	p := newToolMemoryTestRuntime(t, "space")
+	denied := ToolExecutionContext{CharacterID: "char-a", ConversationID: "conv-char-a", RequestID: "global-denied", ToolCallID: "call", UserMessage: "记住我喜欢茶"}
+	if _, err := p.ExecuteMemory(t.Context(), denied, "save_memory", map[string]interface{}{"key": "饮品", "value": "茶", "scope": "global"}); err == nil {
+		t.Fatal("global memory accepted without explicit user request")
+	}
+	allowed := ToolExecutionContext{CharacterID: "char-a", ConversationID: "conv-char-a", RequestID: "global-allowed", ToolCallID: "call", UserMessage: "把这条保存到全局记忆"}
+	if response, err := p.ExecuteMemory(t.Context(), allowed, "save_memory", map[string]interface{}{"key": "饮品", "value": "茶", "scope": "global"}); err != nil || !response.Saved {
+		t.Fatalf("explicit global save failed: %+v %v", response, err)
 	}
 }

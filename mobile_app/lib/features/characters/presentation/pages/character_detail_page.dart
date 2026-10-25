@@ -34,7 +34,6 @@ class CharacterDetailPage extends ConsumerStatefulWidget {
 }
 
 class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
-  bool _globalMemoryEnabled = true;
   int _selectedTab = 0;
   final _nameController = TextEditingController();
   final _identityController = TextEditingController();
@@ -75,7 +74,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   void _syncControllers(CharacterDto character) {
     if (_loadedCharacterId == character.id) return;
     _loadedCharacterId = character.id;
-    _globalMemoryEnabled = character.globalMemoryEnabled;
     _editorAuthority = character.roleAuthority;
     _nameController.text = character.name;
     _identityController.text = character.identity;
@@ -436,7 +434,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       await ref
           .read(characterServiceProvider)
           .update(character.id, <String, dynamic>{
-            'globalMemoryEnabled': _globalMemoryEnabled,
             'name': name,
             'identity': _identityController.text.trim(),
             'personality': _personalityController.text.trim(),
@@ -619,17 +616,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
-        AmitiaCard(
-          child: SwitchListTile.adaptive(
-            title: Text(_globalMemoryEnabled ? '全局记忆' : '角色记忆'),
-            subtitle: const Text('决定默认读取和保存范围，已有记录保留原分区。'),
-            value: _globalMemoryEnabled,
-            onChanged: _savingSettings
-                ? null
-                : (value) => setState(() => _globalMemoryEnabled = value),
-          ),
-        ),
-        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

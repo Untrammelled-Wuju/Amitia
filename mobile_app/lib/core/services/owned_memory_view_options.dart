@@ -22,9 +22,6 @@ List<({String label, String value})> ownedMemoryViewOptions(
       ),
     ];
   }
-  if (kind == 'profile') {
-    return [(label: '全局用户画像', value: 'global')];
-  }
   final noun = kind == 'continuity' ? '事项' : '记忆';
   return [
     (label: '全部$noun', value: 'all'),

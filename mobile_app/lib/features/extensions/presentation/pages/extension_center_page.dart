@@ -32,6 +32,8 @@ class ExtensionCenterPage extends ConsumerWidget {
       handlesSystemBack: false,
       appBar: AmitiaAppBar(
         title: '插件',
+        backgroundColor: context.surfacePrimary,
+        toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
         actions: [
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 180),
@@ -64,7 +66,7 @@ class ExtensionCenterPage extends ConsumerWidget {
     return ListView(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
-        AppSpacing.xs,
+        AppSpacing.md,
         AppSpacing.pagePadding,
         AppSpacing.xl,
       ),

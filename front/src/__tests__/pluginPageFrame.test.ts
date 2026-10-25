@@ -21,7 +21,7 @@ describe("插件页面公共适配", () => {
   it("Schema 页面通过 Provider 直出时仍有标题和页面容器", async () => {
     const kind = "schema_page";
     const wrapper = mount(ExtensionContributionRenderer, {
-      props: { contribution: contribution(kind), context: {}, slotId: "provider.page.provider" },
+      props: { contribution: { ...contribution(kind), extensionId: "com.amitia/example" }, context: {}, slotId: "provider.page.provider" },
     });
     try {
       expect(wrapper.find(".extension-loading-overlay").exists()).toBe(true);
@@ -46,6 +46,20 @@ describe("插件页面公共适配", () => {
       await flushPromises();
       expect(wrapper.find(".plugin-page-frame").exists()).toBe(false);
       expect(wrapper.find(".extension-surface--sidebar").exists()).toBe(true);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it("表情包主页面保留内容容器并移除标题占位", async () => {
+    const wrapper = mount(ExtensionContributionRenderer, {
+      props: { contribution: contribution("schema_page"), context: {}, slotId: "provider.page.provider" },
+    });
+    try {
+      await flushPromises();
+      expect(wrapper.find(".plugin-page-frame").exists()).toBe(true);
+      expect(wrapper.find(".plugin-page-frame__header").exists()).toBe(false);
+      expect(wrapper.find(".plugin-page-frame__content").text()).toContain("内容");
     } finally {
       wrapper.unmount();
     }

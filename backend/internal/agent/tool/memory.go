@@ -43,6 +43,11 @@ func init() {
 						Type:        "string",
 						Description: "关联实体ID，用于关联到特定人物、地点、事件等",
 					},
+					"scope": {
+						Type:        "string",
+						Description: "记忆范围。默认当前角色；只有用户在当前消息中明确要求保存到全局记忆时才使用global",
+						Enum:        []string{"character", "global"},
+					},
 				},
 				Required: []string{"key", "value"},
 			},
@@ -75,6 +80,11 @@ func init() {
 						Type:        "integer",
 						Description: "置信度0-100。用户明确说出的信息80-100，推测的信息40-60，模糊的信息20-40",
 					},
+					"scope": {
+						Type:        "string",
+						Description: "画像范围。默认当前角色；只有用户在当前消息中明确要求保存到全局记忆时才使用global",
+						Enum:        []string{"character", "global"},
+					},
 				},
 				Required: []string{"category", "attribute_name", "attribute_value"},
 			},
@@ -106,6 +116,11 @@ func init() {
 					"sentiment_score": {
 						Type:        "integer",
 						Description: "情感分值-10到+10，负值负面正值正面",
+					},
+					"scope": {
+						Type:        "string",
+						Description: "情景范围。默认当前角色；只有用户在当前消息中明确要求保存到全局记忆时才使用global",
+						Enum:        []string{"character", "global"},
 					},
 				},
 				Required: []string{"scene_type", "title", "content"},

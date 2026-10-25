@@ -21,7 +21,6 @@ class ProfileService {
       queryParameters: <String, dynamic>{
         'kind': 'profile',
         if (characterId.isNotEmpty) 'characterId': characterId,
-        'memoryView': 'global',
       },
     );
     final search = keyword.trim().toLowerCase();
@@ -66,7 +65,6 @@ class ProfileService {
       queryParameters: <String, dynamic>{
         if (characterId.isNotEmpty) 'characterId': characterId,
         'kind': 'profile',
-        'memoryView': 'global',
       },
     );
     final nested = resp?['data'];

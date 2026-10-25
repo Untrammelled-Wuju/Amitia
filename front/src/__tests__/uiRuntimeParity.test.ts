@@ -249,6 +249,7 @@ describe("DSH parity runtime contracts", () => {
   it("maps every provider capability onto the unified provider slot namespace", () => {
     expect(providerSlotId("conversation.composer")).toBe("provider.conversation.composer");
     expect(providerSlotId("app.shell")).toBe("provider.app.shell");
+    expect(providerSlotId("app.workspace.sidebar")).toBe("provider.app.workspace.sidebar");
   });
 
   it("keeps the current atomic package alive when a candidate version fails", async () => {

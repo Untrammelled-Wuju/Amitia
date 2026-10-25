@@ -164,6 +164,27 @@ func TestMeshMemoryManagementIncludesInactiveWithoutLeakingIntoInference(t *test
 	}
 }
 
+func TestMeshDefaultMemoryReadIncludesRoleAndGlobalWrites(t *testing.T) {
+	p := setupMeshLocalDataPort(t)
+	scope := coordination.ExecutionScope{TargetDeviceID: "device-a", CoreID: "core", RoleOwnerID: "device-a", ResourceOwnerID: "device-a", RoleID: "one", RoleRevision: 3, MemoryRoleID: "one"}
+	kernelDB := p.services.KernelContainer.DeviceRegistry.Database()
+	for id, role := range map[string]string{"role-memory": "one", "global-memory": coordination.GlobalMemoryRole} {
+		_, err := kernelDB.ExecContext(t.Context(), `INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,revision,body,updated_at) VALUES(?,'memory',?,?,1,?,?)`, p.ownerID, id, role, []byte(`{"allowContextUse":true,"content":{"value":"shared"}}`), time.Now().UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot, err := p.Snapshot(t.Context(), scope, coordination.DataQuery{ResourceKind: "memory"})
+	if err != nil || len(snapshot.Resources) != 2 {
+		t.Fatalf("shared snapshot=%+v err=%v", snapshot.Resources, err)
+	}
+	scope.MemoryRoleID = coordination.GlobalMemoryRole
+	snapshot, err = p.Snapshot(t.Context(), scope, coordination.DataQuery{ResourceKind: "memory"})
+	if err != nil || len(snapshot.Resources) != 1 || snapshot.Resources[0].RoleID != coordination.GlobalMemoryRole {
+		t.Fatalf("global snapshot=%+v err=%v", snapshot.Resources, err)
+	}
+}
+
 func TestMeshLocalCommitRejectsDeletedOrRevisedRole(t *testing.T) {
 	p := setupMeshLocalDataPort(t)
 	commit := coordination.Commit{Scope: coordination.ExecutionScope{RoleOwnerID: "device-a", ResourceOwnerID: "device-a", RoleID: "one", RoleRevision: 2, RequestID: "write"}, Mutations: []coordination.Mutation{{Kind: "memory", ID: "memory", RoleID: "one", Body: json.RawMessage(`{"value":"tea"}`)}}}

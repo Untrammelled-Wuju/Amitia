@@ -34,6 +34,7 @@ const inboundConfig = {
   coreUrl: env.AMITIA_CORE_URL || env.CORE_URL || "http://127.0.0.1:18899",
   extensionId: env.AMITIA_EXTENSION_ID || "com.amitia/channel-qq-personal",
   moduleId: env.AMITIA_MODULE_ID || "qq-personal-service",
+  channelId: "qq_personal",
   serviceAuthToken: env.AMITIA_SERVICE_AUTH_TOKEN || env.BRIDGE_API_TOKEN || "",
   localToken: env.AMITIA_LOCAL_TOKEN || "",
 }
@@ -211,7 +212,7 @@ app.post("/api/send-image", async (request, reply) => {
       idempotencyKey(request.headers),
       deliveryFingerprint(body, target),
       async () => {
-        const media = await downloadMedia(inboundConfig.coreUrl, candidate)
+        const media = await downloadMedia(inboundConfig, candidate)
         const result = await sendMedia(bridge, target, "image", media)
         replyCount++
         return { delivered: "image", result }
@@ -236,7 +237,7 @@ app.post("/api/send-voice", async (request, reply) => {
       deliveryFingerprint(body, target),
       async () => {
         if (assetUrl) {
-          const media = await downloadMedia(inboundConfig.coreUrl, assetUrl)
+          const media = await downloadMedia(inboundConfig, assetUrl)
           await sendMedia(bridge, target, "record", media)
           replyCount++
           return { delivered: "voice", items: [{ kind: "voice" }] }
@@ -278,7 +279,7 @@ app.post("/api/send-video", async (request, reply) => {
       idempotencyKey(request.headers),
       deliveryFingerprint(body, target),
       async () => {
-        const media = await downloadMedia(inboundConfig.coreUrl, candidate)
+        const media = await downloadMedia(inboundConfig, candidate)
         const result = await sendMedia(bridge, target, "video", media)
         replyCount++
         return { delivered: "video", result }
@@ -302,7 +303,7 @@ app.post("/api/send-file", async (request, reply) => {
       idempotencyKey(request.headers),
       deliveryFingerprint(body, target),
       async () => {
-        const media = await downloadMedia(inboundConfig.coreUrl, candidate)
+        const media = await downloadMedia(inboundConfig, candidate)
         const result = await sendMedia(bridge, target, "file", media, fileName)
         replyCount++
         return { delivered: "file", result }

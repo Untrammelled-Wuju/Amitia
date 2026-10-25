@@ -17,6 +17,7 @@ describe("两级导航映射", () => {
     expect(resolveAppSection("/channels/qq")).toBe("channels");
     expect(resolveAppSection("/my-space/profile")).toBe("account");
     expect(resolveAppSection("/settings/system")).toBe("settings");
+    expect(resolveAppSection("/plugin-only-route")).toBeNull();
   });
 
   it("提供角色、记忆、创意工坊和扩展中心的二级入口", () => {
@@ -51,5 +52,14 @@ describe("两级导航映射", () => {
     expect(appMain).toBeGreaterThan(-1);
     expect(sectionSidebar).toBeGreaterThan(appMain);
     expect(appContent).toBeGreaterThan(sectionSidebar);
+  });
+
+  it("插件工作区第二栏优先于内置区侧栏", () => {
+    expect(shellSource).toContain('capability="app.workspace.sidebar"');
+    expect(shellSource.indexOf('capability="app.workspace.sidebar"')).toBeLessThan(
+      shellSource.indexOf("<SettingsSidebar"),
+    );
+    expect(shellSource).toContain('return "none"');
+    expect(shellSource).toMatch(/\.extension-workspace-sidebar\s*\{[^}]*padding:\s*0\s+8px\s+18px/s);
   });
 });

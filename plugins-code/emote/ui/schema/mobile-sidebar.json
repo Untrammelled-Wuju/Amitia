@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "schema-ui/1",
+  "type": "document",
+  "title": "表情包导航（手机端）",
+  "actions": [],
+  "children": [
+    {
+      "id": "mobile-emote-sidebar",
+      "type": "page",
+      "children": [
+        {
+          "id": "mobile-emote-sidebar-title",
+          "type": "text",
+          "props": {
+            "text": "表情包",
+            "variant": "title"
+          }
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "mode": "auto"
+  },
+  "performanceBudget": {
+    "maxRenderTimeMs": 30,
+    "maxLayoutCount": 10,
+    "maxNodeCount": 10,
+    "maxDataFetchCount": 0,
+    "maxActionCount": 0
+  }
+}

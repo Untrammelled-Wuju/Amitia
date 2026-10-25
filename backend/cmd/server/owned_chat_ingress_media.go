@@ -43,6 +43,32 @@ func ownedIngressAttachments(ctx context.Context, req *interaction.UnifiedEntryR
 	return items, nil
 }
 
+func trustedExtensionMediaSource(source string, resolver extensionResourceResolver) (string, error) {
+	const prefix = "/api/extension/resources/"
+	if !strings.HasPrefix(source, prefix) {
+		return source, nil
+	}
+	if resolver == nil {
+		return "", errors.New("扩展资源解析器不可用")
+	}
+	_, _, fullPath, err := resolver.ResolveResourceLink(strings.TrimPrefix(source, prefix))
+	if err != nil {
+		return "", errors.New("扩展资源链接无效")
+	}
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", errors.New("扩展资源不可读取")
+	}
+	if len(data) == 0 || len(data) > 1<<20 {
+		return "", errors.New("媒体内容为空或超过附件大小上限")
+	}
+	contentType := mime.TypeByExtension(filepath.Ext(fullPath))
+	if contentType == "" || contentType == "application/octet-stream" {
+		contentType = http.DetectContentType(data)
+	}
+	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
 func ownedIngressMedia(ctx context.Context, source string) ([]byte, string, string, error) {
 	var reader io.ReadCloser
 	contentType, name := "", "附件"

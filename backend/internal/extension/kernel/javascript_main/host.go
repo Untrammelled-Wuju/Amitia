@@ -788,6 +788,15 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 		ParentID:             p.ParentID,
 		ExecutionContext:     executionContext,
 	}
+	if hasInvocationContext {
+		callReq.SpaceID = invocationContext.context.SpaceID
+		callReq.CharacterID = invocationContext.context.CharacterID
+		callReq.ConversationID = invocationContext.context.ConversationID
+		callReq.Channel = invocationContext.context.Channel
+		if callReq.SpaceID == "" {
+			callReq.SpaceID = invocationContext.context.ExecutionTarget.SpaceID.String()
+		}
+	}
 
 	result := gateway.Call(callCtx, callReq)
 

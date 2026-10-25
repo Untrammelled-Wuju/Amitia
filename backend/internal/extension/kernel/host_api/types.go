@@ -117,6 +117,11 @@ type CallRequest struct {
 	ExecutionContext     permission.PermissionExecutionContext
 	ParentID             string
 	Deadline             time.Time
+	UserInitiated        bool
+	SpaceID              string
+	CharacterID          string
+	ConversationID       string
+	Channel              string
 }
 
 type CallResult struct {

@@ -1342,6 +1342,20 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kernel: initialize resource links: %w", err)
 	}
+	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
+	toolFacade.SetLocalDeviceID(b.runtimeIdentity.DeviceID)
+	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
+	agentSkillRuntime := NewAgentSkillRuntime(agentSkillCatalog, observabilityStore, b.extRoot)
+	toolFacade.SetAgentSkillRuntime(agentSkillRuntime)
+	toolFacade.SetCapabilityResolver(capabilityResolver)
+	toolFacade.SetCapabilityService(capabilityService)
+	toolFacade.SetAcquisitionBridge(acquisitionBridge)
+	capabilityService.SetToolRegistry(toolRegistry)
+	if hookService != nil {
+		toolFacade.SetHookService(hookService)
+	}
+	recoveryService := acquisition.NewRecoveryService(acquisitionService)
+	toolFacade.SetRecoveryService(recoveryService)
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:                  extensionStateStore,
 		CharacterReader:             charReader,
@@ -1353,6 +1367,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		RuntimeSupervisor:           supervisor,
 		EventService:                eventSvc,
 		ScheduleService:             scheduleSvc,
+		ToolFacade:                  toolFacade,
 		ExecutionKernel:             executionKernel,
 		ToolRegistry:                toolRegistry,
 		OperationRepository:         opRepo,
@@ -1402,6 +1417,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			Context:        ctx,
 			ConversationID: invocation.ConversationID,
 			CharacterID:    invocation.CharacterID,
+			UserMessage:    invocation.UserMessage,
 			SpaceID:        invocation.SpaceID,
 			Path:           "kernel.builtin",
 			ToolCallID:     invocation.InvocationID,
@@ -1563,22 +1579,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := ensureCoreToolScopeBindings(ctx, toolRegistry, scopeManager); err != nil {
 		return nil, fmt.Errorf("kernel: ensure core tool scope bindings: %w", err)
 	}
-
-	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
-	toolFacade.SetLocalDeviceID(b.runtimeIdentity.DeviceID)
-	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
-	agentSkillRuntime := NewAgentSkillRuntime(agentSkillCatalog, observabilityStore, b.extRoot)
-	toolFacade.SetAgentSkillRuntime(agentSkillRuntime)
-	toolFacade.SetCapabilityResolver(capabilityResolver)
-	toolFacade.SetCapabilityService(capabilityService)
-	toolFacade.SetAcquisitionBridge(acquisitionBridge)
-	capabilityService.SetToolRegistry(toolRegistry)
-	if hookService != nil {
-		toolFacade.SetHookService(hookService)
-	}
-
-	recoveryService := acquisition.NewRecoveryService(acquisitionService)
-	toolFacade.SetRecoveryService(recoveryService)
 
 	builtin.SetUIAgentInspector(source.NewSourceInspectorWithWorkspace(b.workspaceService))
 	preciseEditingSvc := workspace.NewDefaultPreciseEditingService(b.workspaceService)

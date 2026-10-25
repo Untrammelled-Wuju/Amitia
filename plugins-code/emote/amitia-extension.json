@@ -8,7 +8,7 @@
     "description": {
       "default": "提供表情包管理、AI 表情选择、聊天发送和消息渲染。"
     },
-    "version": "1.1.4",
+    "version": "1.1.8",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -247,7 +247,7 @@
         "default": "表情包界面"
       },
       "description": {
-        "default": "在角色导航组和聊天区域提供表情包界面。"
+        "default": "提供独立表情包导航、管理页面和聊天区域界面。"
       },
       "type": "data_only",
       "placement": "device",
@@ -370,6 +370,91 @@
             ],
             "integrity": {
               "definition_hash": "emote-mobile-page-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-workspace-sidebar",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情包工作区导航"
+          },
+          "spec": {
+            "contribution_id": "emote-workspace-sidebar",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.app.workspace.sidebar",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "表情包"
+              },
+              "description": {
+                "default": "切换表情、分组和 AI 设置。"
+              },
+              "icon": "star"
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/desktop/sidebar.schema.json",
+              "content_hash": "emote-workspace-sidebar-v1"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "windows",
+                "linux",
+                "macos"
+              ]
+            },
+            "integrity": {
+              "definition_hash": "emote-workspace-sidebar-v1"
+            }
+          }
+        },
+        {
+          "id": "emote-mobile-workspace-sidebar",
+          "kind": "ui_page",
+          "name": {
+            "default": "表情包工作区导航（手机）"
+          },
+          "spec": {
+            "contribution_id": "emote-mobile-workspace-sidebar",
+            "extension_id": "com.amitia/emote",
+            "module_id": "emote-ui",
+            "kind": "schema_page",
+            "slot": {
+              "slot_id": "provider.app.workspace.sidebar",
+              "contract_version": 1
+            },
+            "contract_version": 1,
+            "display": {
+              "title": {
+                "default": "表情包"
+              }
+            },
+            "entry": {
+              "type": "schema_renderer",
+              "schema_path": "modules/emote-ui/mobile/sidebar.schema.json",
+              "content_hash": "emote-mobile-workspace-sidebar-v1"
+            },
+            "sandbox": {
+              "type": "schema_renderer"
+            },
+            "visibility": {
+              "platforms": [
+                "android",
+                "ios"
+              ]
+            },
+            "integrity": {
+              "definition_hash": "emote-mobile-workspace-sidebar-v1"
             }
           }
         },
@@ -603,11 +688,50 @@
                 "contributionId": "emote-page"
               }
             },
-      "metadata": {
-        "routes": [
-          "/emotes"
-        ]
-      }
+            "metadata": {
+              "routes": [
+                "/emotes"
+              ]
+            }
+          }
+        },
+        {
+          "id": "emote-workspace-sidebar-provider",
+          "kind": "ui_provider",
+          "name": {
+            "default": "表情包工作区导航 Provider"
+          },
+          "spec": {
+            "providerId": "emote-workspace-sidebar-provider",
+            "capability": "app.workspace.sidebar",
+            "mode": "replace",
+            "priority": 100,
+            "trustLevel": "official",
+            "entries": {
+              "web": {
+                "type": "schema_renderer",
+                "contributionId": "emote-workspace-sidebar"
+              },
+              "mobile": {
+                "type": "schema_renderer",
+                "contributionId": "emote-mobile-workspace-sidebar"
+              },
+              "electron_windows": {
+                "type": "schema_renderer",
+                "contributionId": "emote-workspace-sidebar"
+              },
+              "electron_macos": {
+                "type": "schema_renderer",
+                "contributionId": "emote-workspace-sidebar"
+              },
+              "electron_linux": {
+                "type": "schema_renderer",
+                "contributionId": "emote-workspace-sidebar"
+              }
+            },
+            "metadata": {
+              "containerId": "emote-workspace"
+            }
           }
         },
         {
@@ -656,10 +780,26 @@
                   "label": "表情包管理",
                   "route": "/emotes",
                   "icon": "star",
-                  "group": "character",
-                  "groupLabel": "角色",
-                  "groupIcon": "character",
-                  "order": 50
+                  "group": "emote",
+                  "groupLabel": "表情包",
+                  "groupIcon": "star",
+                  "order": 55,
+                  "containerId": "emote-workspace",
+                  "sidebarProviderId": "emote-workspace-sidebar-provider",
+                  "sidebarItems": [
+                    {
+                      "label": "表情",
+                      "route": "/emotes?tab=emotes"
+                    },
+                    {
+                      "label": "分组",
+                      "route": "/emotes?tab=groups"
+                    },
+                    {
+                      "label": "AI 设置",
+                      "route": "/emotes?tab=settings"
+                    }
+                  ]
                 }
               ]
             }

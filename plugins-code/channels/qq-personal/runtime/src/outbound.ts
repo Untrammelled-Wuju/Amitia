@@ -20,12 +20,19 @@ function absoluteMediaUrl(coreUrl: string, rawUrl: string): string {
     : coreUrl.replace(/\/$/, "") + (rawUrl.startsWith("/") ? rawUrl : `/${rawUrl}`)
 }
 
+function channelMediaUrl(config: InboundClientConfig, rawUrl: string): string {
+  const prefix = "/api/extension/resources/"
+  if (!rawUrl.startsWith(prefix)) return absoluteMediaUrl(config.coreUrl, rawUrl)
+  return `${config.coreUrl.replace(/\/$/, "")}/api/channels/media/${rawUrl.slice(prefix.length)}`
+}
+
 export async function downloadMedia(
-  coreUrl: string,
+  config: InboundClientConfig,
   rawUrl: string,
   fetcher: typeof fetch = fetch,
 ): Promise<MediaAsset> {
-  const response = await fetcher(absoluteMediaUrl(coreUrl, rawUrl), {
+  const response = await fetcher(channelMediaUrl(config, rawUrl), {
+    headers: coreHeaders(config),
     signal: AbortSignal.timeout(30000),
   })
   if (!response.ok) throw new Error(`媒体下载失败 HTTP ${response.status}`)
@@ -61,7 +68,7 @@ export async function synthesizeVoice(
   }
   const audioUrl = String(body.data?.audioUrl || "").trim()
   if (!audioUrl) throw new Error("TTS 未返回音频")
-  return downloadMedia(config.coreUrl, audioUrl, fetcher)
+  return downloadMedia(config, audioUrl, fetcher)
 }
 
 function base64Url(asset: MediaAsset): string {

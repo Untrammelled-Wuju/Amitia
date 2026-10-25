@@ -306,24 +306,41 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 		if scope.MemoryViewAll && query.Management && coordination.MemoryKind(kind) {
 			partition = coordination.AllMemoryRole
 		}
-		resourceQuery := query
-		if kind == "continuity" && !query.Management {
-			if lease := coordination.CommitLease(ctx); lease != nil {
-				resourceQuery.ResourceID = lease.ContinuityID
-			}
-		}
 		var resources []coordination.Resource
-		var nextCursor string
-		if kind == "worldbook" {
-			resources, err = p.listAllWorldbookResources(ctx, partition, resourceQuery)
-		} else {
-			resources, nextCursor, err = p.store.ListPage(ctx, kind, partition, resourceQuery)
+		partitions := []string{partition}
+		if coordination.MemoryKind(kind) && partition != coordination.GlobalMemoryRole && partition != coordination.AllMemoryRole && query.Cursor == "" {
+			partitions = append(partitions, coordination.GlobalMemoryRole)
 		}
-		if err != nil {
-			return snapshot, err
-		}
-		if nextCursor != "" {
-			snapshot.NextCursors[kind] = nextCursor
+		seenResources := map[string]bool{}
+		for _, currentPartition := range partitions {
+			resourceQuery := query
+			resourceQuery.Cursor = ""
+			if kind == "continuity" && !query.Management {
+				if lease := coordination.CommitLease(ctx); lease != nil {
+					resourceQuery.ResourceID = lease.ContinuityID
+				}
+			}
+			var listed []coordination.Resource
+			var nextCursor string
+			if kind == "worldbook" {
+				listed, err = p.listAllWorldbookResources(ctx, currentPartition, resourceQuery)
+			} else {
+				listed, nextCursor, err = p.store.ListPage(ctx, kind, currentPartition, resourceQuery)
+			}
+			if err != nil {
+				return snapshot, err
+			}
+			if currentPartition == partition && nextCursor != "" {
+				snapshot.NextCursors[kind] = nextCursor
+			}
+			for _, resource := range listed {
+				key := resource.Kind + "/" + resource.ID
+				if seenResources[key] {
+					continue
+				}
+				seenResources[key] = true
+				resources = append(resources, resource)
+			}
 		}
 		if kind == "message" && query.RequestID != "" {
 			for _, id := range []string{query.RequestID + "/user", query.RequestID + "/assistant"} {
@@ -360,9 +377,8 @@ func (p *meshLocalDataPort) snapshotWithRole(ctx context.Context, scope coordina
 					if err != nil {
 						return snapshot, err
 					}
-					expectedSourceRole := coordination.StorageRole(scope, "memory")
-					usableMemories[resource.SourceID] = source != nil && !source.Deleted && source.RoleID == expectedSourceRole && coordination.ResourceUsable(source.Body, time.Now())
-					if usableMemories[resource.SourceID] && source.RoleID == coordination.StorageRole(scope, "memory") {
+					usableMemories[resource.SourceID] = source != nil && !source.Deleted && source.RoleID == resource.RoleID && coordination.ResourceUsable(source.Body, time.Now())
+					if usableMemories[resource.SourceID] {
 						alreadyPresent := false
 						for _, row := range snapshot.Resources {
 							if row.Kind == "memory" && row.ID == source.ID {
@@ -901,7 +917,7 @@ func (p *meshLocalDataPort) Commit(ctx context.Context, commit coordination.Comm
 	if role.Revision != commit.Scope.RoleRevision {
 		return coordination.Acknowledgement{}, coordination.ErrScopeExpired
 	}
-	if commit.MemoryTransfer != nil {
+	if commit.MemoryTransfer != nil && commit.MemoryTransfer.ToRoleID != coordination.GlobalMemoryRole {
 		target, err := coordination.ResolveRole(commit.MemoryTransfer.ToRoleID, roles)
 		if err != nil || target.Revision != commit.MemoryTransfer.TargetRoleRevision {
 			return coordination.Acknowledgement{}, coordination.ErrScopeExpired

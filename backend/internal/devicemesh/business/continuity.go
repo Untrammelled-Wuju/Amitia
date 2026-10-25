@@ -124,6 +124,8 @@ func (e *Engine) continuityAuthority(ctx context.Context, request Request) (cont
 	if request.ExpectedScope != nil {
 		if request.ExpectedScope.MemoryViewAll {
 			view = "all"
+		} else if request.ExpectedScope.MemoryRoleID == coordination.GlobalMemoryRole {
+			view = "global"
 		} else if request.ExpectedScope.MemoryRoleID != "" {
 			view = "role:" + request.ExpectedScope.MemoryRoleID
 		}

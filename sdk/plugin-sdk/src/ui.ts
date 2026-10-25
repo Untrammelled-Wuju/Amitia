@@ -742,6 +742,26 @@ function assertUIProviderMetadata(definition: UIProviderDefinition): void {
       if (!item?.id || !item.label || !item.route?.startsWith("/")) {
         throw new ValidationError("navigation items require id, label and an absolute route");
       }
+      if (item.containerId !== undefined && typeof item.containerId !== "string") {
+        throw new ValidationError("navigation item containerId must be a string");
+      }
+      if (item.sidebarProviderId !== undefined && typeof item.sidebarProviderId !== "string") {
+        throw new ValidationError("navigation item sidebarProviderId must be a string");
+      }
+      if (item.sidebarItems !== undefined) {
+        if (!Array.isArray(item.sidebarItems)) throw new ValidationError("navigation item sidebarItems must be an array");
+        for (const sidebar of item.sidebarItems) {
+          if (!sidebar?.label || !sidebar.route?.startsWith("/")) {
+            throw new ValidationError("navigation sidebar items require label and an absolute route");
+          }
+        }
+      }
+    }
+  }
+  if (definition.capability === "app.workspace.sidebar") {
+    const containerId = typeof metadata.containerId === "string" ? metadata.containerId.trim() : "";
+    if (!containerId || /[\\/]/.test(containerId) || containerId.includes("..")) {
+      throw new ValidationError("app.workspace.sidebar requires a safe metadata.containerId");
     }
   }
   if (definition.capability === "conversation.message_renderer") {

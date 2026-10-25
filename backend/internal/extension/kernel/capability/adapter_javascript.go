@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -76,13 +77,17 @@ func (a *JavaScriptRuntimeAdapter) Execute(
 		}
 	}
 
-	return UnifiedToolResult{
+	result := UnifiedToolResult{
 		InvocationID: invocation.InvocationID,
 		Status:       ToolResultStatusSuccess,
 		Content: []ToolContent{
 			{Type: ToolContentText, Text: string(output)},
 		},
 	}
+	if trimmed := bytes.TrimSpace(output); len(trimmed) > 0 && json.Valid(trimmed) {
+		result.Structured = append(json.RawMessage(nil), trimmed...)
+	}
+	return result
 }
 
 func withJavaScriptInvocationContext(input json.RawMessage, invocation ToolInvocationContext) json.RawMessage {

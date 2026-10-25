@@ -219,3 +219,29 @@ func TestConversationMessageAppendRouteUsesResolvedScope(t *testing.T) {
 		t.Fatalf("unexpected parts: %+v", appender.request.Parts)
 	}
 }
+
+func TestConversationMessageAppendRouteUsesExplicitTrustedScope(t *testing.T) {
+	appender := &recordingConversationMessageAppender{
+		result: ConversationMessageAppendResult{MessageIDs: []string{"message-1"}, Sequences: []int64{1}, LastSequence: 1},
+	}
+	gateway := newConversationMessageTestGateway()
+	if err := setupDefaultHostAPIRoutes(gateway, HostAPIRouteDeps{ConversationMessageAppender: appender}); err != nil {
+		t.Fatalf("setup routes: %v", err)
+	}
+	result := gateway.Call(context.Background(), host_api.CallRequest{
+		CallID:          "call-append-explicit-scope",
+		RuntimeIdentity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: domain.ExtensionID("com.amitia/emote"), ModuleID: "emote-runtime"},
+		Method:          host_api.MethodConversationMessageAppend,
+		Version:         1,
+		Input:           json.RawMessage(`{"channel":"qq_personal","role":"user","source":"extension:com.amitia/emote","parts":[{"type":"image","url":"/api/extension/resources/image"}]}`),
+		SpaceID:         "space-1",
+		CharacterID:     "character-1",
+		ConversationID:  "conversation-1",
+	})
+	if result.Status != host_api.StatusSuccess {
+		t.Fatalf("expected success, got %s: %+v", result.Status, result.Error)
+	}
+	if appender.request.SpaceID != "space-1" || appender.request.CharacterID != "character-1" || appender.request.ConversationID != "conversation-1" {
+		t.Fatalf("unexpected explicit scope: %+v", appender.request)
+	}
+}

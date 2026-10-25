@@ -130,6 +130,28 @@ func TestOwnedPromptRejectsHistoricalSystemRole(t *testing.T) {
 	}
 }
 
+func TestOwnedPromptDropsEmptyHistoricalMessages(t *testing.T) {
+	ctx, inference, _ := cachePromptFixture(t, "same-role", 0)
+	inference.Snapshot.Resources = append(inference.Snapshot.Resources,
+		legacyMessageResource("device", "role", "empty-user", map[string]any{"role": "user", "content": "   "}),
+		legacyMessageResource("device", "role", "empty-assistant", map[string]any{"role": "assistant", "content": ""}),
+	)
+	messages, err := ownedPromptContext(ctx, inference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range messages {
+		content, ok := message["content"].(string)
+		if ok && strings.TrimSpace(content) == "" {
+			t.Fatalf("empty message reached prompt: %#v", message)
+		}
+		parts, ok := message["content"].([]map[string]any)
+		if ok && ownedPromptContentEmpty(parts) {
+			t.Fatalf("empty content parts reached prompt: %#v", message)
+		}
+	}
+}
+
 func TestOwnedPromptIncludesOwnerReunionPolicy(t *testing.T) {
 	ctx, inference, runtime := cachePromptFixture(t, "same-role", 0)
 	runtime.Context.Temporal.Status = interaction.LoadStatusReady

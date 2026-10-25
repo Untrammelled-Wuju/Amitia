@@ -4,6 +4,7 @@ export type UIProviderCapability =
   | "app.shell"
   | "app.navigation"
   | "app.workspace"
+  | "app.workspace.sidebar"
   | "route.registry"
   | "page.provider"
   | "conversation.shell"
@@ -30,7 +31,7 @@ export type UIProviderCapability =
   | "ui.components";
 
 export const UI_PROVIDER_CAPABILITIES: readonly UIProviderCapability[] = [
-  "app.shell", "app.navigation", "app.workspace", "route.registry", "page.provider",
+  "app.shell", "app.navigation", "app.workspace", "app.workspace.sidebar", "route.registry", "page.provider",
   "conversation.shell", "conversation.header", "conversation.messages", "conversation.message_renderer",
   "conversation.sidebar", "conversation.composer", "conversation.overlay",
   "conversation.drawer", "channel.presentation",

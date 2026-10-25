@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
@@ -447,6 +448,34 @@ func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
 		}
 		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 		scope := GetHostAPIScope(ctx)
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
+				}, nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		if req.ConversationID != "" {
+			if scope.ConversationID != "" && scope.ConversationID != req.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			scope.ConversationID = req.ConversationID
+		}
+		ctx = WithHostAPIScope(ctx, scope)
 		if scope.SpaceID != "" {
 			if p.SpaceID != "" && p.SpaceID != scope.SpaceID {
 				return host_api.CallResult{
@@ -539,6 +568,34 @@ func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handl
 		}
 		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
 		scope := GetHostAPIScope(ctx)
+		if req.SpaceID != "" {
+			if scope.SpaceID != "" && scope.SpaceID != req.SpaceID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
+				}, nil
+			}
+			scope.SpaceID = req.SpaceID
+		}
+		if req.CharacterID != "" {
+			if scope.CharacterID != "" && scope.CharacterID != req.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			scope.CharacterID = req.CharacterID
+		}
+		if req.ConversationID != "" {
+			if scope.ConversationID != "" && scope.ConversationID != req.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			scope.ConversationID = req.ConversationID
+		}
+		ctx = WithHostAPIScope(ctx, scope)
 		if scope.SpaceID != "" {
 			if p.SpaceID != "" && p.SpaceID != scope.SpaceID {
 				return host_api.CallResult{
@@ -1808,6 +1865,42 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "toolId is required"},
 					}, nil
 				}
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+				hostScope := GetHostAPIScope(ctx)
+				if req.SpaceID != "" {
+					if hostScope.SpaceID != "" && hostScope.SpaceID != req.SpaceID {
+						return host_api.CallResult{
+							Status: host_api.StatusRejected,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "spaceId does not match current scope"},
+						}, nil
+					}
+					hostScope.SpaceID = req.SpaceID
+				}
+				if req.CharacterID != "" {
+					if hostScope.CharacterID != "" && hostScope.CharacterID != req.CharacterID {
+						return host_api.CallResult{
+							Status: host_api.StatusRejected,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+						}, nil
+					}
+					hostScope.CharacterID = req.CharacterID
+				}
+				if req.ConversationID != "" {
+					if hostScope.ConversationID != "" && hostScope.ConversationID != req.ConversationID {
+						return host_api.CallResult{
+							Status: host_api.StatusRejected,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+						}, nil
+					}
+					hostScope.ConversationID = req.ConversationID
+				}
+				ctx = WithHostAPIScope(ctx, hostScope)
+				if hostScope.SpaceID != "" && req.ExecutionContext.SpaceID != "" && hostScope.SpaceID != req.ExecutionContext.SpaceID.String() {
+					return host_api.CallResult{
+						Status: host_api.StatusRejected,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "execution space does not match current scope"},
+					}, nil
+				}
 				depth := 0
 				if req.ParentID != "" {
 					depth = extractDepth(req.ParentID) + 1
@@ -1818,38 +1911,79 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: fmt.Sprintf("tool execution depth limit (%d) exceeded", maxToolExecutionDepth)},
 					}, nil
 				}
-				invocation := capability.ToolInvocationContext{
-					InvocationID: req.InvocationID,
-					ParentID:     req.ParentID,
-					SpaceID:      req.ExecutionContext.SpaceID.String(),
-					ExtensionID:  string(req.RuntimeIdentity.ExtensionID),
-					ModuleID:     string(req.RuntimeIdentity.ModuleID),
-					Source:       capability.InvocationSourcePlugin,
-					TraceID:      req.TraceID,
-					Metadata: map[string]any{
-						"operationId":       fmt.Sprintf("op-%s", uuid.NewString()),
-						"runtimeInstanceId": req.RuntimeIdentity.InstanceID,
-						"generation":        req.RuntimeIdentity.Generation,
-						"depth":             depth,
+				if deps.ToolFacade == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "tool facade not configured"},
+					}, nil
+				}
+				invocationID := req.InvocationID
+				if invocationID == "" {
+					invocationID = fmt.Sprintf("hostapi-%s", uuid.NewString())
+				}
+				source := capability.InvocationSourcePlugin
+				permissionMode := ""
+				if req.UserInitiated {
+					source = capability.InvocationSourceUser
+					permissionMode = string(capability.ApprovalModeSession)
+				}
+				executionContext := &coreexec.ExecutionContext{
+					ExecutionID:          invocationID,
+					SpaceID:              req.ExecutionContext.SpaceID,
+					ConversationID:       hostScope.ConversationID,
+					InvocationID:         invocationID,
+					TraceID:              req.TraceID,
+					ScopeSnapshotID:      req.ScopeSnapshotID,
+					PermissionSnapshotID: req.PermissionSnapshotID,
+					ExtensionID:          string(req.RuntimeIdentity.ExtensionID),
+					ModuleID:             string(req.RuntimeIdentity.ModuleID),
+					RuntimeTarget: &coreexec.RuntimeTarget{
+						Placement: string(req.ExecutionContext.Placement),
+						SpaceID:   req.ExecutionContext.SpaceID,
+						DeviceID:  req.ExecutionContext.DeviceID,
+						RuntimeID: req.ExecutionContext.RuntimeID,
 					},
+					Source:    string(source),
+					CreatedAt: time.Now().UTC(),
 				}
-				if invocation.InvocationID == "" {
-					invocation.InvocationID = fmt.Sprintf("hostapi-%s", uuid.NewString())
+				toolScope := InvocationScope{
+					SpaceID:        hostScope.SpaceID,
+					DeviceID:       req.ExecutionContext.DeviceID.String(),
+					RuntimeID:      req.ExecutionContext.RuntimeID.String(),
+					CharacterID:    hostScope.CharacterID,
+					ConversationID: hostScope.ConversationID,
+					Channel:        req.Channel,
+					SessionID:      req.RuntimeIdentity.InstanceID,
+					Source:         string(source),
+					TraceID:        req.TraceID,
+					RequestID:      invocationID,
+					ToolCallID:     invocationID,
+					PermissionMode: permissionMode,
+					ExecContext:    executionContext,
 				}
-				execReq := execution.ToolExecutionRequest{
-					ToolID:     capability.CapabilityID(p.ToolID),
-					Input:      p.Input,
-					Invocation: invocation,
+				result, found := deps.ToolFacade.ExecuteTool(ctx, capability.CapabilityID(p.ToolID), p.Input, toolScope, invocationID, "")
+				if !found {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeMethodNotFound, Message: "tool not found"},
+					}, nil
 				}
-				result := deps.ExecutionKernel.Execute(ctx, execReq)
+				var content []map[string]any
+				if strings.TrimSpace(result.VisibleText) != "" {
+					content = append(content, map[string]any{"type": "text", "text": result.VisibleText})
+				}
+				var resultError *capability.ToolError
+				if result.Error != nil {
+					resultError = &capability.ToolError{Code: result.Error.Code, Message: result.Error.Message, Retryable: result.Error.Retryable}
+				}
 				output, _ := json.Marshal(map[string]any{
-					"invocationId": result.InvocationID,
-					"status":       string(result.Status),
-					"content":      result.Content,
-					"structured":   json.RawMessage(result.Structured),
-					"error":        result.Error,
+					"invocationId": invocationID,
+					"status":       result.Status,
+					"content":      content,
+					"structured":   json.RawMessage(result.Output),
+					"error":        resultError,
 				})
-				if result.Status != capability.ToolResultStatusSuccess {
+				if result.Status != string(capability.ToolResultStatusSuccess) {
 					message := fmt.Sprintf("tool execution failed: %s", result.Status)
 					code := host_api.ErrorCodeInternal
 					if result.Error != nil {

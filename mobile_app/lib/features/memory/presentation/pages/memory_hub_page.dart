@@ -243,12 +243,16 @@ class _MemoryHubPageState extends ConsumerState<MemoryHubPage> {
   Widget build(BuildContext context) {
     return AmitiaScaffold(
       handlesSystemBack: false,
-      appBar: const AmitiaAppBar(title: '记忆'),
+      appBar: AmitiaAppBar(
+        title: '记忆',
+        backgroundColor: context.surfacePrimary,
+        toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
+      ),
       body: ListView(
         controller: _scrollController,
         padding: EdgeInsets.fromLTRB(
           AppSpacing.pagePadding,
-          AppSpacing.xs,
+          AppSpacing.md,
           AppSpacing.pagePadding,
           AppSpacing.xl,
         ),

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, inject, ref } from "vue";
+import { computed, getCurrentInstance, inject, ref, watch } from "vue";
+import type { Router } from "vue-router";
 import ExtensionSlot from "./ExtensionSlot.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 const busyNodeIds = inject<Set<string> | undefined>("schema-ui-busy-node-ids", undefined);
 
 const uiStore = useExtensionUIStore();
+const router = getCurrentInstance()?.appContext.config.globalProperties.$router as Router | undefined;
 const nodeType = computed(() => props.node.type);
 const typeAllowed = computed(() => isAllowedNodeType(nodeType.value));
 const depthExceeded = computed(() => props.depth > SCHEMA_UI_MAX_DEPTH);
@@ -247,6 +249,23 @@ const activeTab = computed<string>({
   },
 });
 
+const activeTabQueryParam = computed(() => toText(mergedProps.value.queryParam));
+
+watch(
+  [activeTabQueryParam, () => props.context.routeQuery, tabPanes],
+  () => {
+    const param = activeTabQueryParam.value;
+    if (!param) return;
+    const query = props.context.routeQuery;
+    if (!query || typeof query !== "object" || Array.isArray(query)) return;
+    const requested = toText((query as Record<string, unknown>)[param]);
+    if (!requested) return;
+    const exists = tabPanes.value.some((pane) => toText(pane.props?.name ?? pane.id) === requested);
+    if (exists) activeTabRaw.value = requested;
+  },
+  { deep: true, immediate: true },
+);
+
 const tabsType = computed<"" | "card" | "border-card">(() => {
   const variant = toText(mergedProps.value.variant).trim();
   if (variant === "card" || variant === "border-card") return variant;
@@ -276,6 +295,18 @@ const galleryItems = computed<Array<Record<string, unknown>>>(() => {
   return rows.filter((item): item is Record<string, unknown> => !!item && typeof item === "object");
 });
 
+const resourceLinkActive = computed(() => {
+  const href = toText(mergedProps.value.href).trim();
+  const route = toText(props.context.route).trim();
+  const defaultRoute = toText(props.context.defaultNavigationRoute).trim();
+  const current = route && !/[?#]/.test(route) && defaultRoute.split(/[?#]/, 1)[0] === route
+    ? defaultRoute
+    : route;
+  if (!href || !current) return false;
+  if (href.includes("?") || href.includes("#")) return current === href;
+  return current.split(/[?#]/, 1)[0] === href;
+});
+
 const filePickerInput = ref<HTMLInputElement>();
 
 function onButtonClick() {
@@ -283,6 +314,25 @@ function onButtonClick() {
   for (const action of props.node.actions) {
     emit("action", { action, node: props.node });
   }
+}
+
+function onResourceLinkClick(event: MouseEvent) {
+  const href = toText(mergedProps.value.href).trim();
+  const target = toText(mergedProps.value.target) || "_blank";
+  if (
+    !router
+    || target !== "_self"
+    || !href.startsWith("/")
+    || href.startsWith("//")
+    || event.defaultPrevented
+    || event.button !== 0
+    || event.metaKey
+    || event.ctrlKey
+    || event.shiftKey
+    || event.altKey
+  ) return;
+  event.preventDefault();
+  void router.push(href);
 }
 
 function onGalleryItemClick(item: Record<string, unknown>) {
@@ -927,6 +977,10 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <el-link
       v-else-if="nodeType === 'resource_link'"
       class="schema-ui-resource-link schema-ui-node"
+      :class="{
+        'schema-ui-resource-link--navigation': mergedProps.variant === 'navigation',
+        'is-active': mergedProps.variant === 'navigation' && resourceLinkActive,
+      }"
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
@@ -934,7 +988,9 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :target="toText(mergedProps.target) || '_blank'"
       :type="(mergedProps.type as any) || 'primary'"
       :underline="mergedProps.underline !== false"
+      :aria-current="mergedProps.variant === 'navigation' && resourceLinkActive ? 'page' : undefined"
       :disabled="disabled || mergedProps.disabled === true"
+      @click="onResourceLinkClick"
     >
       {{ mergedProps.text ?? mergedProps.label ?? mergedProps.href }}
     </el-link>
@@ -1127,6 +1183,26 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   font-size: 13px;
   color: var(--amitia-color-text, inherit);
   line-height: 1.6;
+}
+.schema-ui-resource-link--navigation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: var(--amitia-color-text-secondary, var(--text-secondary, rgba(127, 127, 127, 0.9)));
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.schema-ui-resource-link--navigation:hover,
+.schema-ui-resource-link--navigation.is-active {
+  background: var(--workbench-sidebar-hover, rgba(127, 127, 127, 0.1));
+  color: var(--amitia-color-text, var(--text-primary, inherit));
+  text-decoration: none;
 }
 .schema-ui-markdown {
   font-size: 13px;

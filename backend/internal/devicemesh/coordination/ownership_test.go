@@ -153,6 +153,30 @@ func TestOwnedQuerySelectsCurrentConversationBeforeApplyingHistoryLimit(t *testi
 	}
 }
 
+func TestTurnCheckpointCanCommitAgainstCurrentRevision(t *testing.T) {
+	db, _ := setup(t)
+	store := coordination.NewOwnershipStore(db, "a")
+	scope := coordination.ExecutionScope{ResourceOwnerID: "a", RoleID: "role", RequestID: "turn-request"}
+	id := "turn/turn-request"
+	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: id, RoleID: "role", Body: json.RawMessage(`{"status":"running"}`)}}}); err != nil {
+		t.Fatal(err)
+	}
+	progressScope := scope
+	progressScope.RequestID = "turn-request|progress"
+	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: progressScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: id, RoleID: "role", ExpectedRevision: 1, Body: json.RawMessage(`{"status":"running","sequence":2}`)}}}); err != nil {
+		t.Fatal(err)
+	}
+	replyScope := scope
+	replyScope.RequestID = "turn-request|reply"
+	ack, err := store.Apply(t.Context(), coordination.Commit{Scope: replyScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: id, RoleID: "role", ExpectedRevision: coordination.RevisionCurrent, Body: json.RawMessage(`{"status":"completed"}`)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ack.Versions["checkpoint/"+id] != 3 {
+		t.Fatalf("checkpoint revision = %d, want 3", ack.Versions["checkpoint/"+id])
+	}
+}
+
 func ownedCommit(request string) coordination.Commit {
 	return coordination.Commit{Scope: coordination.ExecutionScope{SpaceID: "space", InitiatorDeviceID: "a", TargetDeviceID: "a", CoreID: "core", ProviderEpoch: 1, ModeRevision: 1, PermissionRevision: 1, ResourceOwnerID: "a", RoleOwnerID: "a", RoleID: "role", RequestID: request}, Mutations: []coordination.Mutation{{Kind: "memory", ID: "memory-1", RoleID: "role", Body: json.RawMessage(`{"key":"preference","value":"tea"}`)}}}
 }

@@ -280,8 +280,8 @@ func TestOwnedMemoryPrivateProfileExtractionDoesNotPublishGlobalProfile(t *testi
 		t.Fatalf("role profile lost: %v %v", profiles, err)
 	}
 	memories, err := coordination.NewOwnershipStore(db, "a").List(t.Context(), "memory", "role", false)
-	if err != nil || len(memories) != 0 {
-		t.Fatalf("profile duplicated as memory: %v %v", memories, err)
+	if err != nil || len(memories) != 1 || !strings.Contains(string(memories[0].Body), "私密信息") {
+		t.Fatalf("profile source memory lost: %v %v", memories, err)
 	}
 }
 

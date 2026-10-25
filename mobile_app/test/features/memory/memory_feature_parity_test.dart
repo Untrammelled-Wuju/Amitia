@@ -24,7 +24,9 @@ Map<String, dynamic> currentScope(String view) => {
   ...fixture.scope(),
   'memoryRoleId': view.startsWith('role:')
       ? view.substring(5)
-      : '@global-memory',
+      : view == 'global'
+      ? '@global-memory'
+      : 'role',
   if (view == 'all') 'memoryViewAll': true,
 };
 Map<String, dynamic> record(String kind) => {
@@ -373,14 +375,14 @@ void main() {
     expect(source.edits.single['characterId'], 'role');
     expect(find.byType(BottomSheet), findsNothing);
   });
-  testWidgets('用户画像只提供全局范围，图谱页显示真实画布', (tester) async {
+  testWidgets('用户画像默认角色范围并可查看全局，图谱页显示真实画布', (tester) async {
     await render(tester, 'profile');
     await tester.tap(find.byTooltip('筛选与管理'));
     await tester.pumpAndSettle();
     expect(find.text('查看范围'), findsOneWidget);
-    expect(find.text('全局用户画像'), findsOneWidget);
+    expect(find.text('全局记忆'), findsOneWidget);
     expect(find.text('记忆层'), findsNothing);
-    expect(find.textContaining('全局共享'), findsOneWidget);
+    expect(find.textContaining('默认按角色隔离'), findsOneWidget);
     await tester.tap(find.byTooltip('关闭筛选'));
     await tester.pumpAndSettle();
     await render(tester, 'graph');

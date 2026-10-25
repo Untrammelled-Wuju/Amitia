@@ -107,6 +107,12 @@ func TestB17FullAccessUsesFullControlApprovalMode(t *testing.T) {
 	if got := capabilityApprovalMode("request_approval"); got != capability.ApprovalModeManual {
 		t.Fatalf("expected manual approval mode, got %s", got)
 	}
+	if got := capabilityApprovalMode("session"); got != capability.ApprovalModeSession {
+		t.Fatalf("expected session approval mode, got %s", got)
+	}
+	if got := capabilityApprovalMode("auto"); got != capability.ApprovalModeAuto {
+		t.Fatalf("expected auto approval mode, got %s", got)
+	}
 }
 
 func TestB17ModelToolsSortByExposurePriority(t *testing.T) {

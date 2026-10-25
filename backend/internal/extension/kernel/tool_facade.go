@@ -1000,6 +1000,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 				SpaceID:        scope.SpaceID,
 				CharacterID:    scope.CharacterID,
 				ConversationID: scope.ConversationID,
+				UserMessage:    scope.Message,
 				Channel:        scope.Channel,
 				SessionID:      scope.SessionID,
 				ExtensionID:    def.ExtensionID,
@@ -1072,6 +1073,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		SpaceID:         scope.SpaceID,
 		CharacterID:     scope.CharacterID,
 		ConversationID:  scope.ConversationID,
+		UserMessage:     scope.Message,
 		Channel:         scope.Channel,
 		SessionID:       scope.SessionID,
 		ExtensionID:     def.ExtensionID,
@@ -1171,6 +1173,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		SpaceID:         scope.SpaceID,
 		CharacterID:     scope.CharacterID,
 		ConversationID:  scope.ConversationID,
+		UserMessage:     scope.Message,
 		Channel:         scope.Channel,
 		SessionID:       scope.SessionID,
 		ExtensionID:     def.ExtensionID,
@@ -1199,6 +1202,16 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 }
 
 func capabilityApprovalMode(mode string) capability.ApprovalMode {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case string(capability.ApprovalModeAuto):
+		return capability.ApprovalModeAuto
+	case string(capability.ApprovalModeSession):
+		return capability.ApprovalModeSession
+	case string(capability.ApprovalModeFullControl):
+		return capability.ApprovalModeFullControl
+	case string(capability.ApprovalModeManual):
+		return capability.ApprovalModeManual
+	}
 	switch agentpermission.Normalize(mode) {
 	case agentpermission.FullAccess:
 		return capability.ApprovalModeFullControl

@@ -174,4 +174,61 @@ void main() {
       expect(find.byIcon(Icons.more_vert), findsOneWidget);
     });
   });
+
+  testWidgets('root header background controls status bar icons', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(brightness: Brightness.light),
+        home: Scaffold(
+          appBar: AmitiaAppBar(
+            title: 'Light Header',
+            backgroundColor: Colors.white,
+          ),
+        ),
+      ),
+    );
+    var appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.backgroundColor, Colors.white);
+    expect(appBar.systemOverlayStyle?.statusBarIconBrightness, Brightness.dark);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(brightness: Brightness.dark),
+        home: Scaffold(
+          appBar: AmitiaAppBar(
+            title: 'Dark Header',
+            backgroundColor: const Color(0xFF191A1C),
+          ),
+        ),
+      ),
+    );
+    appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.backgroundColor, const Color(0xFF191A1C));
+    expect(
+      appBar.systemOverlayStyle?.statusBarIconBrightness,
+      Brightness.light,
+    );
+  });
+
+  testWidgets('compact toolbar height applies to layout and app bar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AmitiaAppBar(
+            title: 'Root',
+            toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
+          ),
+        ),
+      ),
+    );
+
+    final appBarWidget = tester.widget<AmitiaAppBar>(find.byType(AmitiaAppBar));
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBarWidget.preferredSize.height, 50);
+    expect(appBar.toolbarHeight, 50);
+  });
 }

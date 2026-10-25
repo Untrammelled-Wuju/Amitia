@@ -142,7 +142,9 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	scope.RoleID, scope.RoleRevision = role.ID, role.Revision
 	view := ""
 	if edit.ExpectedScope != nil {
-		if edit.ExpectedScope.MemoryRoleID != "" {
+		if edit.ExpectedScope.MemoryRoleID == coordination.GlobalMemoryRole {
+			view = "global"
+		} else if edit.ExpectedScope.MemoryRoleID != "" {
 			view = "role:" + edit.ExpectedScope.MemoryRoleID
 		}
 	}

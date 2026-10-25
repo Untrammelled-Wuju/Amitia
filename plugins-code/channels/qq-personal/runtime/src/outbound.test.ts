@@ -8,6 +8,7 @@ const config: InboundClientConfig = {
   coreUrl: "http://127.0.0.1:18899",
   extensionId: "com.amitia/channel-qq-personal",
   moduleId: "qq-personal-service",
+  channelId: "qq_personal",
   serviceAuthToken: "service-token",
   localToken: "local-token",
 }
@@ -36,16 +37,24 @@ test("语音合成使用当前预览接口并携带宿主凭据", async () => {
   assert.equal(headers["X-Amitia-Local-Token"], "local-token")
 })
 
-test("媒体下载支持 Core 相对资源地址并拒绝超限响应", async () => {
-  const fetcher = (async () => new Response(Buffer.from("image"), {
-    status: 200,
-    headers: { "content-type": "image/png", "content-length": "5" },
-  })) as typeof fetch
-  const asset = await downloadMedia(config.coreUrl, "/images/a.png", fetcher)
+test("媒体下载通过渠道媒体代理携带服务身份并拒绝超限响应", async () => {
+  const calls: Array<{ url: string; init: RequestInit }> = []
+  const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init: init || {} })
+    return new Response(Buffer.from("image"), {
+      status: 200,
+      headers: { "content-type": "image/png", "content-length": "5" },
+    })
+  }) as typeof fetch
+  const asset = await downloadMedia(config, "/api/extension/resources/signed.png", fetcher)
   assert.equal(asset.buffer.toString(), "image")
   assert.equal(asset.mime, "image/png")
+  assert.equal(calls[0].url, "http://127.0.0.1:18899/api/channels/media/signed.png")
+  const headers = calls[0].init.headers as Record<string, string>
+  assert.equal(headers.Authorization, "Bearer service-token")
+  assert.equal(headers["X-Amitia-Channel-ID"], "qq_personal")
   await assert.rejects(
-    downloadMedia(config.coreUrl, "/images/a.png", (async () => new Response("x", {
+    downloadMedia(config, "/api/extension/resources/a.png", (async () => new Response("x", {
       headers: { "content-length": String(51 * 1024 * 1024) },
     })) as typeof fetch),
     /50 MiB/,

@@ -279,6 +279,7 @@ export interface ClientSlotMap {
   "provider.app.shell": ClientChain<ClientProviderOwner>;
   "provider.app.navigation": ClientChain<ClientProviderOwner>;
   "provider.app.workspace": ClientChain<ClientProviderOwner>;
+  "provider.app.workspace.sidebar": ClientChain<ClientProviderOwner>;
   "provider.route.registry": ClientList<ClientProviderOwner>;
   "provider.page.provider": ClientChain<ClientProviderOwner>;
   "provider.conversation.shell": ClientChain<ClientProviderSessionOwner, "session-maybe">;

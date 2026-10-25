@@ -144,6 +144,10 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 		InvocationID:         callID,
 		ExecutionContext:     executionContext,
+		UserInitiated:        true,
+		SpaceID:              execCtx.SpaceID,
+		CharacterID:          execCtx.CharacterID,
+		ConversationID:       execCtx.ConversationID,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {

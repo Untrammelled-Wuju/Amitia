@@ -4,6 +4,7 @@ import (
 	"strings"
 )
 
+const GlobalMemoryRole = "@global-memory"
 const AllMemoryRole = "@all-memory"
 const GlobalWorldbookRole = "@global-worldbook"
 
@@ -66,6 +67,8 @@ func ResolveMemoryScope(scope *ExecutionScope, view string) error {
 	scope.MemoryViewAll = view == "all"
 	switch view {
 	case "", "all", "character":
+	case "global":
+		scope.MemoryRoleID = GlobalMemoryRole
 	default:
 		if !strings.HasPrefix(view, "role:") || len(view) > 517 || len(view) <= 5 || strings.ContainsAny(view, "\x00\r\n") || strings.HasPrefix(strings.TrimPrefix(view, "role:"), "@") {
 			return ErrWrongOwner

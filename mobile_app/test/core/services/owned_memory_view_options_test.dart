@@ -25,7 +25,7 @@ void main() {
       );
       expect(
         current.map((option) => option.value),
-        kind == 'profile' ? ['global'] : ['all', 'global', 'role:current-role'],
+        ['all', 'global', 'role:current-role'],
       );
       final history = ownedMemoryViewOptions(
         'history:old-role',

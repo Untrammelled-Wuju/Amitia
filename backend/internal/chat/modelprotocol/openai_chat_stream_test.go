@@ -2,7 +2,6 @@ package modelprotocol
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -115,7 +114,7 @@ func TestOpenAIChatBuildMessagesPreservesToolLoopState(t *testing.T) {
 	}
 }
 
-func TestOpenAIChatBuildMessagesNeverSerializesNullContent(t *testing.T) {
+func TestOpenAIChatBuildMessagesUsesNullAssistantContentForToolCalls(t *testing.T) {
 	req := ModelRequest{
 		Messages: []ModelMessage{
 			{
@@ -135,18 +134,12 @@ func TestOpenAIChatBuildMessagesNeverSerializesNullContent(t *testing.T) {
 	if len(messages) != 2 {
 		t.Fatalf("message count = %d, want 2", len(messages))
 	}
-	for index, message := range messages {
-		content, ok := message["content"].(string)
-		if !ok || content != "" {
-			t.Fatalf("message %d content = %#v, want empty string", index, message["content"])
-		}
+	if messages[0]["content"] != nil {
+		t.Fatalf("assistant tool-call content = %#v, want null", messages[0]["content"])
 	}
-	encoded, err := json.Marshal(messages)
-	if err != nil {
-		t.Fatalf("marshal messages: %v", err)
-	}
-	if strings.Contains(string(encoded), `"content":null`) {
-		t.Fatalf("messages contain null content: %s", encoded)
+	content, ok := messages[1]["content"].(string)
+	if !ok || strings.TrimSpace(content) == "" {
+		t.Fatalf("tool result content = %#v, want non-empty string", messages[1]["content"])
 	}
 }
 

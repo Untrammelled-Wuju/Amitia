@@ -112,12 +112,19 @@ class DeviceOwnedMemoryService {
     final rows = <Map<String, dynamic>>[];
     final seen = <String>{};
     for (final raw in value['resources'] as List) {
+      final shared =
+          scope['memoryViewAll'] == true ||
+          scope['memoryRoleId'] != globalMemoryRole;
       if (raw is! Map ||
           raw['ownerId'] != scope['resourceOwnerId'] ||
           raw['roleId'] is! String ||
-          scope['memoryViewAll'] != true &&
-              raw['roleId'] !=
-                  memoryStorageRole(scope, raw['kind'].toString()) ||
+          (!shared &&
+                  raw['roleId'] !=
+                      memoryStorageRole(scope, raw['kind'].toString()) ||
+              shared &&
+                  raw['roleId'] !=
+                      memoryStorageRole(scope, raw['kind'].toString()) &&
+                  raw['roleId'] != globalMemoryRole) ||
           raw['id'] is! String ||
           (raw['id'] as String).isEmpty ||
           raw['revision'] is! int ||
@@ -128,7 +135,10 @@ class DeviceOwnedMemoryService {
         Map<String, dynamic>.unmodifiable({
           ...Map<String, dynamic>.from(raw),
           'executionScope':
-              scope['memoryViewAll'] == true && raw['kind'] == 'memory'
+              shared &&
+                  isMemoryKind(raw['kind'].toString()) &&
+                  raw['roleId'] !=
+                      memoryStorageRole(scope, raw['kind'].toString())
               ? memoryRecordScope(scope, raw['roleId'].toString())
               : scope,
           '_memoryAuthority': _authority,

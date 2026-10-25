@@ -104,6 +104,7 @@ type ToolExecutionContext struct {
 	CharacterID    string
 	Channel        string
 	RequestID      string
+	UserMessage    string
 	CorrelationID  string
 	CausationID    string
 	SpaceID        string

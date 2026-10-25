@@ -592,7 +592,7 @@ const res = await post<any>("/api/model/detect-models", {
         if (!await owned.refresh()) throw new Error("当前记忆服务尚未就绪，初始记忆未保存");
         const characterId = owned.selectInitialRole(localStorage.getItem("webchat-char-id") || "");
         if (!characterId) throw new Error("请先创建角色后保存初始记忆");
-        const page = await get<{ executionScope: OwnedExecutionScope }>("/api/device-mesh/v1/business/memories", { characterId, memoryView: "global", mode: "keyword", limit: 1 });
+        const page = await get<{ executionScope: OwnedExecutionScope }>("/api/device-mesh/v1/business/memories", { characterId, memoryView: `role:${characterId}`, mode: "keyword", limit: 1 });
         if (!page?.executionScope) throw new Error("初始记忆缺少当前数据归属");
         const memoryAttrNames = ["称呼", "交流风格", "初始记忆"];
         for (let i = 0; i < memoryItems.value.length; i++) {

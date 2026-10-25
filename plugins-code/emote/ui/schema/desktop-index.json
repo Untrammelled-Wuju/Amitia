@@ -84,6 +84,9 @@
         {
           "id": "emote-tabs",
           "type": "tabs",
+          "props": {
+            "queryParam": "tab"
+          },
           "children": [
             {
               "id": "emote-tab-gallery",

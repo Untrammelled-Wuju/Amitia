@@ -7,13 +7,13 @@ bool isMemoryKind(String kind) => const [
   'vector',
   'graph',
   'continuity',
+  'profile',
 ].contains(kind);
 
 String memoryStorageRole(Map scope, String kind) {
   if (kind == 'continuity' && scope['continuityRoleId'] != null)
     return scope['continuityRoleId'].toString();
   if (scope['memoryRoleId'] == null) return scope['roleId'].toString();
-  if (kind == 'profile') return globalMemoryRole;
   return isMemoryKind(kind)
       ? scope['memoryRoleId'].toString()
       : scope['roleId'].toString();

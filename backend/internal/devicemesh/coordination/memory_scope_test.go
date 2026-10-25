@@ -21,11 +21,23 @@ func TestMemoryScopeDefaultsToCharacterAndKeepsConversationIsolation(t *testing.
 			t.Fatalf("conversation isolation: %s", kind)
 		}
 	}
-	if err := coordination.ResolveMemoryScope(&scope, "global"); err == nil {
-		t.Fatal("global memory view must be rejected")
+	if err := coordination.ResolveMemoryScope(&scope, "global"); err != nil || coordination.StorageRole(scope, "profile") != coordination.GlobalMemoryRole {
+		t.Fatal("explicit global view must scope every memory kind")
 	}
 	if err := coordination.ResolveMemoryScope(&scope, "role:other"); err != nil || coordination.StorageRole(scope, "profile") != "other" {
 		t.Fatal("explicit role view must scope every memory kind")
+	}
+}
+
+func TestValidateSnapshotAllowsGlobalMemoryAndRejectsForeignRoles(t *testing.T) {
+	scope := coordination.ExecutionScope{ResourceOwnerID: "owner", RoleID: "role", RoleRevision: 1, MemoryRoleID: "role"}
+	snapshot := coordination.DataSnapshot{OwnerID: "owner", Role: coordination.Role{ID: "role", Revision: 1, Profile: json.RawMessage(`{}`)}, Resources: []coordination.Resource{{OwnerID: "owner", RoleID: coordination.GlobalMemoryRole, Kind: "memory", ID: "global", Revision: 1, Body: json.RawMessage(`{}`)}}}
+	if err := coordination.ValidateSnapshot(scope, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Resources[0].RoleID = "foreign"
+	if err := coordination.ValidateSnapshot(scope, snapshot); err == nil {
+		t.Fatal("shared memory scope accepted a foreign role")
 	}
 }
 

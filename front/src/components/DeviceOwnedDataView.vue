@@ -64,7 +64,7 @@ const owned = useDeviceOwnedConversation();
 const loading = ref(true);
 const error = ref("");
 const role = ref("");
-const viewSelection = ref(props.initialKind === "profile" ? "global" : "all");
+const viewSelection = ref("all");
 const searchKeyword = ref("");
 const dataSource = ref("current");
 const historicalRoles = ref<Array<{ id: string; name: string }>>([]);

@@ -8,11 +8,27 @@ SPDX-License-Identifier: AGPL-3.0-only
       <UIProviderHost v-if="!isMobile" capability="app.navigation" :fallback="SideNav" :context="{ viewport: 'desktop' }" :username="authUsername" :avatar="authAvatar" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
 
       <div class="app-main workspace" :class="{ 'is-desktop-shell': isDesktopShell() }" :style="workspaceSidebarStyle">
-        <SettingsSidebar v-if="workspaceSidebarVisible && isSettingsPage" />
+        <div v-if="workspaceSidebarVisible && workspaceSidebarTarget === 'provider'" class="extension-workspace-sidebar">
+          <UIProviderHost
+            capability="app.workspace.sidebar"
+            :provider-id="activeWorkspaceSidebarProvider?.providerId"
+            :fallback="PluginWorkspaceSidebar"
+            :context="workspaceSidebarContext"
+            :title="activeNavigationItem?.label || ''"
+            :items="activeNavigationItem?.sidebarItems || []"
+            frameless
+          />
+        </div>
+        <PluginWorkspaceSidebar
+          v-else-if="workspaceSidebarVisible && workspaceSidebarTarget === 'links'"
+          :title="activeNavigationItem?.label || ''"
+          :items="activeNavigationItem?.sidebarItems || []"
+        />
+        <SettingsSidebar v-else-if="workspaceSidebarVisible && appSectionId === 'settings'" />
         <AccountSidebar v-else-if="workspaceSidebarVisible && appSectionId === 'account'" />
         <ChannelSidebar v-else-if="workspaceSidebarVisible && appSectionId === 'channels'" />
         <WorkspaceSidebar v-else-if="workspaceSidebarVisible && appSectionId === 'home'" />
-        <SectionSidebar v-else-if="workspaceSidebarVisible" :section-id="appSectionId" />
+        <SectionSidebar v-else-if="workspaceSidebarVisible && sectionSidebarId" :section-id="sectionSidebarId" />
         <div
           v-if="workspaceSidebarVisible"
           class="workspace-sidebar-resizer"
@@ -70,6 +86,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted, provide, watch, watchEffect } from "vue";
 import { useRouter } from "vue-router";
 import SideNav from "./SideNav.vue";
+import PluginWorkspaceSidebar from "./PluginWorkspaceSidebar.vue";
 import SettingsSidebar from "./SettingsSidebar.vue";
 import AccountSidebar from "./AccountSidebar.vue";
 import ChannelSidebar from "./ChannelSidebar.vue";
@@ -84,7 +101,8 @@ import { useTheme } from "../composables/useTheme";
 import {
   apiClient,
 } from "../composables/useApi";
-import { resolvePageTitle, useUINavigationRegistry } from "@/ui-runtime/navigationRegistry";
+import { isUINavigationItemActive, resolvePageTitle, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
+import type { UIProviderDefinition } from "@/ui-runtime/types";
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { isDesktopShell } from "../runtime/runtime-capabilities";
@@ -124,7 +142,38 @@ const workspaceSidebarWidth = computed(() => clampWorkspaceSidebarWidth(
   workspaceSidebarPreferredWidth.value,
   windowWidth.value,
 ));
-const workspaceSidebarVisible = computed(() => !isMobile.value && !appStore.sidebarCollapsed);
+const activeNavigationItem = computed<UINavigationItem | null>(() =>
+  navigationItems.value.find((item) => isUINavigationItemActive(router.currentRoute.value.path, item)) ?? null,
+);
+const activeWorkspaceSidebarProvider = computed<UIProviderDefinition | null>(() => {
+  const item = activeNavigationItem.value;
+  if (!item?.extensionId) return null;
+  const providers = extensionUIStore
+    .getProviders("app.workspace.sidebar")
+    .filter((provider) => provider.enabled && !provider.builtin && provider.extensionId === item.extensionId)
+    .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0) || left.providerId.localeCompare(right.providerId));
+  if (item.sidebarProviderId) {
+    return providers.find((provider) => provider.providerId === item.sidebarProviderId) ?? null;
+  }
+  if (!item.containerId) return null;
+  return providers.find((provider) => String(provider.metadata?.containerId ?? "").trim() === item.containerId) ?? null;
+});
+const workspaceSidebarTarget = computed<"provider" | "links" | "builtin" | "none">(() => {
+  if (isMobile.value || appStore.sidebarCollapsed) return "none";
+  if (activeWorkspaceSidebarProvider.value) return "provider";
+  if (activeNavigationItem.value?.sidebarItems?.length) return "links";
+  if (appSectionId.value) return "builtin";
+  return "none";
+});
+const workspaceSidebarVisible = computed(() => workspaceSidebarTarget.value !== "none");
+const workspaceSidebarContext = computed<Record<string, unknown>>(() => ({
+  viewport: "desktop",
+  containerId: activeNavigationItem.value?.containerId || "",
+  navigationItemId: activeNavigationItem.value?.id || "",
+  navigationLabel: activeNavigationItem.value?.label || "",
+  defaultNavigationRoute: activeNavigationItem.value?.sidebarItems?.[0]?.route || "",
+  routeQuery: router.currentRoute.value.query,
+}));
 const workspaceSidebarStyle = computed<Record<string, string>>(() => ({
   "--ac-workspace-sidebar-width": `${workspaceSidebarWidth.value}px`,
 }));
@@ -137,6 +186,11 @@ const isSettingsPage = computed(() => {
   return path === "/settings" || path.startsWith("/settings/");
 });
 const appSectionId = computed(() => resolveAppSection(router.currentRoute.value.path));
+const sectionSidebarId = computed(() => {
+  const id = appSectionId.value;
+  if (!id || id === "home" || id === "channels" || id === "account" || id === "settings") return null;
+  return id;
+});
 const isExtensionPage = computed(() => router.currentRoute.value.path.startsWith("/extension/page/"));
 const isFullHeightRoute = computed(() => router.currentRoute.value.meta.fullHeight === true || isExtensionPage.value);
 const isContentPaddingDisabled = computed(() => {
@@ -368,6 +422,38 @@ onUnmounted(() => {
   margin-left: -6px;
   cursor: col-resize;
   touch-action: none;
+}
+
+.extension-workspace-sidebar {
+  width: var(--ac-workspace-sidebar-width);
+  flex: 0 0 var(--ac-workspace-sidebar-width);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 0 8px 18px;
+  background: var(--workbench-bg);
+  border-right: 1px solid var(--surface-border);
+}
+
+.extension-workspace-sidebar > :deep(*) {
+  width: 100%;
+  min-width: 0;
+}
+
+.extension-workspace-sidebar :deep(.schema-ui-renderer__content > .schema-ui-page) {
+  gap: 0;
+  padding: 0;
+}
+
+.extension-workspace-sidebar :deep(.schema-ui-renderer__content > .schema-ui-page > h3.schema-ui-text:first-child) {
+  margin: 0;
+  padding: 18px 10px 12px;
+  color: var(--text-primary);
+  font-size: var(--ac-font-size-xl);
+  font-weight: 650;
+  line-height: normal;
 }
 
 .workspace-sidebar-resizer::after {

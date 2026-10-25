@@ -68,6 +68,8 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       handlesSystemBack: false,
       appBar: AmitiaAppBar(
         title: '消息',
+        backgroundColor: context.surfacePrimary,
+        toolbarHeight: AmitiaAppBar.rootPageToolbarHeight,
         leading: const SizedBox.shrink(),
         leadingWidth: 0,
         actions: [
@@ -108,9 +110,12 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       body: Column(
         children: [
           Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: AppSpacing.pagePadding,
-              vertical: AppSpacing.sm,
+            key: const ValueKey('message-search-region'),
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+              AppSpacing.pagePadding,
+              AppSpacing.xs,
             ),
             child: Row(
               children: [
@@ -121,15 +126,15 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                     child: InkWell(
                       onTap: () => context.push(AppRoutes.conversationSearch),
                       borderRadius: BorderRadius.circular(20),
+                      overlayColor: const WidgetStatePropertyAll(
+                        Colors.transparent,
+                      ),
+                      splashFactory: NoSplash.splashFactory,
                       child: Ink(
                         height: 40,
                         decoration: BoxDecoration(
                           color: context.surfacePrimary,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: context.borderPrimary,
-                            width: 0.5,
-                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,

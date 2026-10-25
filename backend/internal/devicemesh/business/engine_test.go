@@ -186,6 +186,29 @@ func TestCompletedRequestCannotRunAgainAfterOwnerSwitch(t *testing.T) {
 	}
 }
 
+func TestReplyConversationUsesLatestRevisionAfterToolAppend(t *testing.T) {
+	engine, db, _, _ := engineHarness(t)
+	scope := coordination.ExecutionScope{ResourceOwnerID: "a", RoleID: "role", RequestID: "reply-refresh"}
+	store := coordination.NewOwnershipStore(db, "a")
+	initial := map[string]any{"id": "conversation", "conversationId": "conversation", "lastMessageSequence": 4}
+	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: scope, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "conversation", RoleID: coordination.StorageRole(scope, "conversation"), Body: body(initial)}}}); err != nil {
+		t.Fatal(err)
+	}
+	appendScope := scope
+	appendScope.RequestID = "reply-refresh-append"
+	appended := map[string]any{"id": "conversation", "conversationId": "conversation", "lastMessageSequence": 7}
+	if _, err := store.Apply(t.Context(), coordination.Commit{Scope: appendScope, Mutations: []coordination.Mutation{{Kind: "conversation", ID: "conversation", RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: 1, Body: body(appended)}}}); err != nil {
+		t.Fatal(err)
+	}
+	document, revision, err := engine.ownedConversationForReply(t.Context(), scope, "conversation", map[string]any{"lastMessageSequence": 4}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revision != 2 || ownedConversationSequence(document) != 7 {
+		t.Fatalf("stale reply conversation: revision=%d document=%+v", revision, document)
+	}
+}
+
 func TestCrossDeviceAIRequiresTargetGrantAndUsesTargetMode(t *testing.T) {
 	engine, db, service, model := engineHarness(t)
 	if _, err := db.Exec(`INSERT INTO kernel_devices(device_id,space_id,trust_state,created_at,last_seen_at) VALUES('b','core','trusted','now','now')`); err != nil {

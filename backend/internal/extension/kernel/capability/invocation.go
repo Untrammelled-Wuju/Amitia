@@ -95,6 +95,7 @@ type ToolInvocationContext struct {
 	SpaceID        string           `json:"spaceId"`
 	CharacterID    string           `json:"characterId,omitempty"`
 	ConversationID string           `json:"conversationId,omitempty"`
+	UserMessage    string           `json:"-"`
 	Channel        string           `json:"channel,omitempty"`
 	SessionID      string           `json:"sessionId,omitempty"`
 	ExtensionID    string           `json:"extensionId,omitempty"`
@@ -136,6 +137,7 @@ type ToolInvocationOptions struct {
 	SpaceID        string
 	CharacterID    string
 	ConversationID string
+	UserMessage    string
 
 	Channel   string
 	SessionID string
@@ -194,6 +196,7 @@ func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext 
 		SpaceID:              opts.SpaceID,
 		CharacterID:          opts.CharacterID,
 		ConversationID:       opts.ConversationID,
+		UserMessage:          opts.UserMessage,
 		Channel:              opts.Channel,
 		SessionID:            opts.SessionID,
 		ExtensionID:          opts.ExtensionID,
