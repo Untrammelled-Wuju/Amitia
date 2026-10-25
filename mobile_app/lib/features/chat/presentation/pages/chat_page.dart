@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
@@ -3422,7 +3423,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       onExpand: () {
                         Navigator.of(sheetContext).pop();
                         Navigator.of(context).push(
-                          MaterialPageRoute<void>(
+                          amitiaSlideRoute<void>(
                             builder: (_) => WorkbenchPage(
                               conversationId: conversationId,
                               characterId: characterId,

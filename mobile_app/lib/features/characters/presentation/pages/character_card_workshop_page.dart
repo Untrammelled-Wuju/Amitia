@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
@@ -83,7 +84,7 @@ class _CharacterCardWorkshopPageState
 
   Future<void> _openEditor({CharacterDto? character}) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      amitiaSlideRoute<void>(
         builder: (_) => CharacterCardWorkshopPage(
           creating: character == null,
           character: character,

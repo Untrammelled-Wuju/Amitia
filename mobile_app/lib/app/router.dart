@@ -48,7 +48,7 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
       GoRoute(path: '/', redirect: (context, state) => AppRoutes.conversations),
       GoRoute(
         path: '/onboarding',
-        pageBuilder: (context, state) => slideFadePage(
+        pageBuilder: (context, state) => amitiaSlidePage(
           context: context,
           state: state,
           child: const OnboardingPage(),
@@ -56,7 +56,7 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
       ),
       GoRoute(
         path: '/privacy',
-        pageBuilder: (context, state) => slideFadePage(
+        pageBuilder: (context, state) => amitiaSlidePage(
           context: context,
           state: state,
           child: const PrivacyPage(),
@@ -65,7 +65,7 @@ RoutingConfig _routingConfigFor(UIProviderSnapshot? providerSnapshot) {
       // Recovery route deliberately bypasses replaceable appShell.
       GoRoute(
         path: '/settings/ui-providers',
-        pageBuilder: (context, state) => slideFadePage(
+        pageBuilder: (context, state) => amitiaSlidePage(
           context: context,
           state: state,
           child: Theme(

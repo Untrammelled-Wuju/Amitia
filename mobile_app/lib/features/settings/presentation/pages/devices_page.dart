@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/app_routes.dart';
 
 import '../../../../app/theme/app_colors.dart';
@@ -180,7 +181,7 @@ class DevicesPage extends ConsumerWidget {
                               ? () => _confirmRevoke(context, ref, items[i])
                               : null,
                           onCall: () => Navigator.of(context).push(
-                            MaterialPageRoute(
+                            amitiaSlideRoute(
                               builder: (_) => DeviceCoreCallPage(
                                 deviceId: items[i].deviceId,
                                 label: items[i].name,
@@ -192,7 +193,7 @@ class DevicesPage extends ConsumerWidget {
                                   items[i].intent.policy['deviceId'] ==
                                       items[i].deviceId
                               ? () => Navigator.of(context).push(
-                                  MaterialPageRoute(
+                                  amitiaSlideRoute(
                                     builder: (_) => DeviceCapabilityGrantsPage(
                                       deviceId: items[i].deviceId,
                                       label: items[i].name,

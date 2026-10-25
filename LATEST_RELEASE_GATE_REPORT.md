@@ -1,33 +1,33 @@
 # AMITIA Release Gate Report
 
-Generated: 2026-10-23T15:15:13.167Z
+Generated: 2026-10-25T16:16:45.765Z
 
 Status: **PASS**
 
 | Gate | Result |
 |---|---|
-| Canonical freeze verification | PASS (11107 files) |
-| Source Gate SHA256 | `64f0d5f42ac0d3607e7b2d8367a9e3ebafa2fe4d58706be331afd760508fe6c7` |
+| Canonical freeze verification | PASS (11175 files) |
+| Source Gate SHA256 | `78884671f90cdf59b3096f8b0b143d691a58a8b97990e1ab4fca2e5dddc0423b` |
 | AmitiaCore provenance | PASS |
 | Runtime asset provenance | PASS (4 files) |
 | Packaged artifact integrity | PASS |
 
 ## Core provenance
 
-- Core SHA256: `e34e40f4112ea8d651166172e7195c1880f5f7c8a80c5b2e8102f005501dd41d`
-- Core SourceGate SHA256: `64f0d5f42ac0d3607e7b2d8367a9e3ebafa2fe4d58706be331afd760508fe6c7`
+- Core SHA256: `401a40d7af9348b41ea94729ac983460c67131bcf61e7dcb9e8cc2e534479058`
+- Core SourceGate SHA256: `78884671f90cdf59b3096f8b0b143d691a58a8b97990e1ab4fca2e5dddc0423b`
 - Go: go version go1.26.1 darwin/arm64
-- Commit: affb5ac
+- Commit: 7f11025
 
 ## Runtime assets
 
-- Runtime asset SourceGate SHA256: `64f0d5f42ac0d3607e7b2d8367a9e3ebafa2fe4d58706be331afd760508fe6c7`
+- Runtime asset SourceGate SHA256: `78884671f90cdf59b3096f8b0b143d691a58a8b97990e1ab4fca2e5dddc0423b`
 - Verified packaged runtime files: 4
 
 ## Release artifacts
 
 | Artifact | Bytes | SHA256 |
 |---|---:|---|
-| AmitiaSetup-26.2.0-beta.15-x64.exe | 276080686 | `5d9fe50d734ef23891cb54a2016e1ad6682461d1ad8d5d1ffea0180993e3731b` |
-| AmitiaSetup-26.2.0-beta.15-x64.exe.blockmap | 287378 | `ec2ce2c8c336deb0c30c4ca62102e39067d027b7489d83f17d9ae5b398e2db87` |
-| latest.yml | 7725 | `f6b1f836a9de79758728f598ed3d4ef3241bf1ce083ee7617e9b81235cd6965b` |
+| AmitiaSetup-26.2.0-beta.16-x64.exe | 274661281 | `44a858953f5eb80e06f6348dee2cb97208398f060e4a0375a77c34c3ac2531be` |
+| AmitiaSetup-26.2.0-beta.16-x64.exe.blockmap | 286733 | `6ad12f222c06cbad4c308c212a4d9bb3716b88c5930c93499cfff5f781af6b93` |
+| latest.yml | 8995 | `fa45f7aaab904a6303de42a23dd098d342184baa0e10c032cdc84bbbd36a08a2` |

@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../../../app/amitia_page_route.dart';
 import '../../../app/app_routes.dart';
 import '../../../app/route_transitions.dart';
 import '../../../features/chat/presentation/pages/chat_page.dart';
@@ -109,15 +110,22 @@ import '../../../core/widgets/main_tab_scaffold.dart';
 /// the shell, and extension supplied routes.
 List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   StatefulShellRoute.indexedStack(
-    builder: (context, state, navigationShell) =>
-        MainTabScaffold(navigationShell: navigationShell),
+    pageBuilder: (context, state, navigationShell) => AmitiaSlidePage<void>(
+      key: state.pageKey,
+      rootLevel: true,
+      child: MainTabScaffold(navigationShell: navigationShell),
+    ),
     branches: <StatefulShellBranch>[
       StatefulShellBranch(
         routes: <RouteBase>[
           GoRoute(
             path: AppRoutes.conversations,
-            pageBuilder: (context, state) =>
-                const NoTransitionPage(child: ConversationListPage()),
+            pageBuilder: (context, state) => amitiaSlidePage(
+              context: context,
+              state: state,
+              rootLevel: true,
+              child: const ConversationListPage(),
+            ),
           ),
         ],
       ),
@@ -125,8 +133,12 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         routes: <RouteBase>[
           GoRoute(
             path: AppRoutes.tasks,
-            pageBuilder: (context, state) =>
-                const NoTransitionPage(child: TaskHubPage()),
+            pageBuilder: (context, state) => amitiaSlidePage(
+              context: context,
+              state: state,
+              rootLevel: true,
+              child: const TaskHubPage(),
+            ),
           ),
         ],
       ),
@@ -134,8 +146,12 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         routes: <RouteBase>[
           GoRoute(
             path: AppRoutes.memoryHub,
-            pageBuilder: (context, state) =>
-                const NoTransitionPage(child: MemoryHubPage()),
+            pageBuilder: (context, state) => amitiaSlidePage(
+              context: context,
+              state: state,
+              rootLevel: true,
+              child: const MemoryHubPage(),
+            ),
           ),
         ],
       ),
@@ -143,8 +159,12 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         routes: <RouteBase>[
           GoRoute(
             path: AppRoutes.extensions,
-            pageBuilder: (context, state) =>
-                const NoTransitionPage(child: ExtensionCenterPage()),
+            pageBuilder: (context, state) => amitiaSlidePage(
+              context: context,
+              state: state,
+              rootLevel: true,
+              child: const ExtensionCenterPage(),
+            ),
           ),
         ],
       ),
@@ -152,8 +172,12 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
         routes: <RouteBase>[
           GoRoute(
             path: AppRoutes.me,
-            pageBuilder: (context, state) =>
-                const NoTransitionPage(child: ProfileHubPage()),
+            pageBuilder: (context, state) => amitiaSlidePage(
+              context: context,
+              state: state,
+              rootLevel: true,
+              child: const ProfileHubPage(),
+            ),
           ),
         ],
       ),
@@ -161,7 +185,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: AppRoutes.conversationSearch,
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ConversationSearchPage(),
@@ -169,7 +193,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/category/:categoryId',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: SettingsCategoryPage(
@@ -179,7 +203,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/chat',
-    pageBuilder: (context, state) => chatRootPage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       state: state,
       child: ChatPage(
         initialConversationId: state.uri.queryParameters['conversationId'],
@@ -190,7 +214,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/call/:conversationId',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: RealtimeCallPage(
@@ -212,11 +236,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/agent',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const AgentPage()),
+        amitiaSlidePage(state: state, child: const AgentPage()),
   ),
   GoRoute(
     path: '/agent/task/:id',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: AgentTaskDetailPage(
@@ -230,11 +254,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/characters',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const CharacterListPage()),
+        amitiaSlidePage(state: state, child: const CharacterListPage()),
   ),
   GoRoute(
     path: '/characters/create',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const CharacterCreatePage(),
@@ -242,7 +266,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/characters/:id',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: CharacterDetailPage(characterId: state.pathParameters['id']!),
@@ -250,7 +274,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/characters/:id/life-rules',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const PluginUnavailablePage(
@@ -262,7 +286,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/characters/:id/voice',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: CharacterVoicePage(characterId: state.pathParameters['id']!),
@@ -270,7 +294,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/characters/:id/memory',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: CharacterMemoryPage(characterId: state.pathParameters['id']!),
@@ -278,7 +302,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/characters/:id/timeline',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: CharacterTimelinePage(characterId: state.pathParameters['id']!),
@@ -286,7 +310,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/characters/:id/active-task',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: RemindersPage(
@@ -301,7 +325,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/characters/:id/psyche',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: CharacterPsychePage(characterId: state.pathParameters['id']!),
@@ -310,11 +334,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/memory',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const MemoryPage()),
+        amitiaSlidePage(state: state, child: const MemoryPage()),
   ),
   GoRoute(
     path: '/memory/manager',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const MemoryManagerPage(),
@@ -322,7 +346,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/memory/episodic',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const EpisodicMemoryPage(),
@@ -330,7 +354,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/memory/graph',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const MemoryGraphPage(),
@@ -338,7 +362,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/memory/timeline',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const MemoryTimelinePage(),
@@ -346,7 +370,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/memory/profiles',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const UserProfilesPage(),
@@ -355,11 +379,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: AppRoutes.knowledge,
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const KnowledgePage()),
+        amitiaSlidePage(state: state, child: const KnowledgePage()),
   ),
   GoRoute(
     path: '/memory/world-book',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const WorldBookPage(),
@@ -368,16 +392,16 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/reminders',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const RemindersPage()),
+        amitiaSlidePage(state: state, child: const RemindersPage()),
   ),
   GoRoute(
     path: '/continuity',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const ContinuityPage()),
+        amitiaSlidePage(state: state, child: const ContinuityPage()),
   ),
   GoRoute(
     path: '/continuity/:id',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: ContinuityDetailPage(
@@ -390,7 +414,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: AppRoutes.channelMessages,
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ChannelMessagesPage(),
@@ -398,7 +422,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/emotes',
-    pageBuilder: (context, state) => drawerSlideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       state: state,
       child: const PluginUnavailablePage(
         title: '表情包',
@@ -410,16 +434,16 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/chat-logs',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const ChatLogsPage()),
+        amitiaSlidePage(state: state, child: const ChatLogsPage()),
   ),
   GoRoute(
     path: '/chat-import',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const ChatImportPage()),
+        amitiaSlidePage(state: state, child: const ChatImportPage()),
   ),
   GoRoute(
     path: '/extensions/packages',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ExtensionPackagesPage(),
@@ -427,7 +451,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/extensions/mcp',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const McpListPage(),
@@ -435,7 +459,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/extensions/mcp/new',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const McpEditPage(mcpId: 'new'),
@@ -443,7 +467,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/extensions/mcp/:id',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: McpDetailPage(mcpId: state.pathParameters['id']!),
@@ -451,7 +475,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/extensions/mcp/:id/edit',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: McpEditPage(mcpId: state.pathParameters['id']!),
@@ -459,7 +483,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/extensions/agent-skills',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const AgentSkillsPage(),
@@ -467,7 +491,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/extension/page/:pageId',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: ExtensionPageHostPage(
@@ -479,11 +503,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/game-center',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const GameCenterPage()),
+        amitiaSlidePage(state: state, child: const GameCenterPage()),
   ),
   GoRoute(
     path: AppRoutes.gamePlugin,
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: game_center.PluginDetailPage(
@@ -495,16 +519,16 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/desktop-pet',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const DesktopPetPage()),
+        amitiaSlidePage(state: state, child: const DesktopPetPage()),
   ),
   GoRoute(
     path: '/workshop',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const WorkshopHomePage()),
+        amitiaSlidePage(state: state, child: const WorkshopHomePage()),
   ),
   GoRoute(
     path: '/workshop/character-cards',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const CharacterCardWorkshopPage(),
@@ -512,7 +536,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/workshop/workflows',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const WorkflowListPage(),
@@ -520,7 +544,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/workshop/workflows/:id',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: WorkflowEditorPage(
@@ -532,7 +556,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/workshop/pet',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const PetCenterPage(),
@@ -540,7 +564,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/workshop/pet/installations',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: PetInstallationsPage(
@@ -551,11 +575,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/settings',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const SettingsPage()),
+        amitiaSlidePage(state: state, child: const SettingsPage()),
   ),
   GoRoute(
     path: '/settings/overview',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DashboardPage(initialTab: 0),
@@ -563,7 +587,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/data',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DashboardPage(initialTab: 1),
@@ -571,7 +595,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/models',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ModelSettingsPage(),
@@ -579,7 +603,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/models/:modelType',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: ModelConfigPage(modelType: state.pathParameters['modelType']!),
@@ -587,7 +611,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: AppRoutes.settingsSearchApi,
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const SearchApiSettingsPage(),
@@ -595,7 +619,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/appearance',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const AppearanceSettingsPage(),
@@ -603,7 +627,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: AppRoutes.settingsNotifications,
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const NotificationSettingsPage(),
@@ -611,7 +635,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/runtime',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const RuntimePage(),
@@ -619,7 +643,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/permissions',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const PermissionsPage(),
@@ -627,7 +651,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/android-automation',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const AndroidAutomationPage(),
@@ -635,7 +659,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/backup',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const BackupPage(),
@@ -644,11 +668,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/settings/asr',
     pageBuilder: (context, state) =>
-        slideFadePage(context: context, state: state, child: const AsrPage()),
+        amitiaSlidePage(context: context, state: state, child: const AsrPage()),
   ),
   GoRoute(
     path: '/settings/deployment',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DeploymentPage(),
@@ -656,7 +680,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/system',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const SystemSettingsPage(),
@@ -664,7 +688,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/temporal',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const TemporalSettingsPage(),
@@ -672,7 +696,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/safety',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const SafetyPage(),
@@ -680,7 +704,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/maintenance',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const MaintenancePage(),
@@ -688,7 +712,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/user-feedback',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const UserFeedbackPage(),
@@ -696,7 +720,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/long-running',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const LongRunningPage(),
@@ -704,7 +728,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/advanced',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const AdvancedSystemPage(),
@@ -712,7 +736,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/decision-viz',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DecisionVizPage(),
@@ -724,7 +748,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/storage',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const StoragePage(),
@@ -732,7 +756,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/user',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const UserSettingsPage(),
@@ -741,11 +765,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/settings/devices',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const DevicesPage()),
+        amitiaSlidePage(state: state, child: const DevicesPage()),
   ),
   GoRoute(
     path: '/settings/devices/add',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DeviceAddPage(),
@@ -753,7 +777,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/devices/settings',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DeviceSettingsPage(),
@@ -761,7 +785,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/privacy-scan',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const PrivacyScanPage(),
@@ -769,7 +793,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/privacy-policy',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const PrivacyPolicyPage(),
@@ -777,7 +801,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/user-agreement',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const UserAgreementPage(),
@@ -785,7 +809,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/app-update',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const AppUpdatePage(),
@@ -793,7 +817,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/about',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const AboutPageNew(),
@@ -805,7 +829,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/file-browser',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxFileBrowserPage(),
@@ -813,7 +837,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/workspace',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxWorkspacePage(),
@@ -821,7 +845,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/task-log',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxTaskLogPage(),
@@ -829,7 +853,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/log',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxLogPage(),
@@ -837,7 +861,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/prompt-trace',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxPromptTracePage(),
@@ -845,7 +869,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/runtime-status',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxRuntimeStatusPage(),
@@ -853,7 +877,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/database-status',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxDatabaseStatusPage(),
@@ -861,7 +885,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/settings/toolbox/device-status',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const ToolboxDeviceStatusPage(),
@@ -870,11 +894,11 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/developer',
     pageBuilder: (context, state) =>
-        drawerSlideFadePage(state: state, child: const DeveloperHomePage()),
+        amitiaSlidePage(state: state, child: const DeveloperHomePage()),
   ),
   GoRoute(
     path: '/developer/kernel',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const KernelHomePage(),
@@ -883,16 +907,16 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   GoRoute(
     path: '/developer/kernel/wasm',
     pageBuilder: (context, state) =>
-        slideFadePage(context: context, state: state, child: const WasmPage()),
+        amitiaSlidePage(context: context, state: state, child: const WasmPage()),
   ),
   GoRoute(
     path: '/developer/kernel/hooks',
     pageBuilder: (context, state) =>
-        slideFadePage(context: context, state: state, child: const HooksPage()),
+        amitiaSlidePage(context: context, state: state, child: const HooksPage()),
   ),
   GoRoute(
     path: '/developer/kernel/trusted-services',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const TrustedServicesPage(),
@@ -900,7 +924,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/tasks',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const KernelTasksPage(),
@@ -908,7 +932,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/events',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const EventsPage(),
@@ -916,7 +940,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/schedules',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const SchedulesPage(),
@@ -924,7 +948,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/desktop',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DesktopContributionsPage(),
@@ -932,7 +956,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/updates',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const UpdatesPage(),
@@ -940,7 +964,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/dev-console',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DevConsolePage(),
@@ -948,7 +972,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/migrations',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const MigrationsPage(),
@@ -956,7 +980,7 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/dev-mode',
-    pageBuilder: (context, state) => slideFadePage(
+    pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
       child: const DevModePage(),

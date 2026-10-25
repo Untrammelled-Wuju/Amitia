@@ -1,0 +1,24 @@
+# Android 消息页加号自定义下拉菜单构建与安装记录
+
+- 记录时间：2026-10-25T23:52:00+08:00。
+- 版本：26.2.0-beta.16，versionCode 22，保持项目当前版本。
+- 源码基线：`4925e1653ce65bdeeea08c0e8b7bf9aa89e38d89`，提交日志 `chore(release): refresh extension kernel readiness report`；本次功能改动已包含在父提交 `a471b30251d09bf5209ba903e4916717061b4cd2`（`chore(release): freeze 26.2.0-beta.16 sources`）。
+- 最近本地安装源码基线：`b15ba9f2189790a0da9670587f2ac3dbaafa6bc2`；已发布平台源码基线仍为 `affb5ac4b6ecfce79778e59edc3fea2bdabd7a17`。
+- 本次功能范围：消息页右上角加号由 Material `PopupMenuButton` 改为项目自定义下拉菜单 `AmitiaPopupMenuButton`，与对话页右上角三个点菜单同款；`AmitiaPopupMenuLabel` 提取到 `mobile_app/lib/core/widgets/amitia_popup_menu.dart` 供两处共用，删除 `chat_page.dart` 内的私有重复实现。
+- 宽度调整（用户反馈后二次构建）：消息页加号菜单宽度由 220dp 收窄为 140dp，理由是两项短标签在 375dp 宽屏上占 58.7% 过宽；按内容实际占位（图标 18 + 间距 12 + 3 字标签约 43.5 + 左右内边距 28 ≈ 101.5dp）取 140dp，保留约 38dp 余量，符合 Material 3 菜单最小 112dp 与移动端紧凑操作菜单 140–160dp 的通行取值。对话页三个点菜单因含「管理群成员」等 5 字标签，保持 220dp 不变。
+- 改动文件：`mobile_app/lib/core/widgets/amitia_popup_menu.dart`、`mobile_app/lib/features/chat/presentation/pages/chat_page.dart`、`mobile_app/lib/features/conversations/presentation/pages/conversation_list_page.dart`、`mobile_app/test/app/chat_navigation_test.dart`。
+- APK：`artifacts/apk/amitia-26.2.0-beta.16-release-arm64-v8a-20261025-235645.apk`，160535851 字节（宽度调整后的最终包；前一版 `...-234529.apk`，160535855 字节，SHA-256 `6af348e1765925726520046c5f5d3e7da3d8efa70ab4c7508e7309d190260e2e` 已被替换）。
+- APK SHA-256：`edf462629cee0a4db1e81d1bce4b0fd6afc9745f973634741b711831d0b81e72`。
+- Runtime Package SHA-256：`69de59cbf7c2ea5d9a6e5aaf1163746b0f7e124b3d7b12275b3788447c8a514b`。
+- 从本次源码重新编译 Linux ARM64 后端（vcs.revision 与源码基线一致）、plugin-host、task-host，并重新生成 Runtime Package，`validate-runtime-package.py` 通过且 sourceCommit 与源码基线一致。
+- 正式签名、原安装证书匹配、16 KB zipalign、单 arm64-v8a ABI、内嵌 Runtime、三个组件哈希及 sourceCommit 校验通过。
+- lintVitalRelease、assembleRelease 通过。
+- 安装前已卸载真机上的 `com.amitia.amitia_app.debug`，覆盖安装到 2407FRK8EC（JV9LT8JB8TVKNJ65），安装后版本复核为 versionCode 22 / versionName 26.2.0-beta.16，debug 包不存在，安装后 APK 哈希与本次制品一致。
+- 冷启动进入消息页，验证日志未发现 FATAL EXCEPTION；真机点击右上角加号弹出自定义下拉菜单，含「新对话」「新群聊」两项，样式与对话页三个点菜单一致，菜单实测宽度 140dp（455 物理像素，设备 dpr 3.25）。截图见 `artifacts/android-popup-20261025/screen-message-page.png` 与 `screen-message-menu.png`。
+- 手机 /api/health HTTP 200，health.ready=true，model=configured，version 26.2.0-beta.16；/readyz HTTP 200、degraded（3 ready、1 degraded、0 blocking、0 failed）。本次未进行实际模型对话。
+- 定向测试：`test/app/chat_navigation_test.dart` 7 项全部通过（含「消息页加号提供新对话和新群聊」新增的 `AmitiaPopupSurface` 断言）。
+- `test/core/widgets/amitia_popup_menu_test.dart` 中仓库级守卫用例「built-in popup menu buttons are fully replaced」失败：改动后剩余 `devices_page.dart`、`chat_logs_page.dart`、`knowledge_page.dart`、`workbench_page.dart`、`amitia_rich_blocks.dart` 共 5 处历史 `PopupMenuButton` 未改造，属既有失败，与本次改动无关，本次未做范围外改造。
+- 本次为纯手机端改动，未改动 Go 源码，未重复运行后端包测试；不记录为全项目测试通过的结论。
+- 完整验证记录及日志：`artifacts/android-popup-20261025/`。
+- 本次仅本地构建和真机安装，未发布更新通道、未推送 Git。
+- 本记录提交不是下一次源码差异对比的目标源码提交。

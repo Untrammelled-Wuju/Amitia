@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'device_pair_scan_page.dart';
 
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/notification_runtime_bootstrap.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -315,7 +316,7 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
 
   Future<void> _scanPairing() async {
     final raw = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const DevicePairScanPage()),
+      amitiaSlideRoute(builder: (_) => const DevicePairScanPage()),
     );
     if (!mounted || raw == null || raw.isEmpty) return;
     _pairingController.text = raw;

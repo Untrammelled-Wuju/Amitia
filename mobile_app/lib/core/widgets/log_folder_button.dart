@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/amitia_page_route.dart';
 import '../../app/app_routes.dart';
 import '../backend_transport/providers/backend_transport_providers.dart';
 import 'amitia_icons.dart';
@@ -10,7 +11,7 @@ import 'amitia_scaffold.dart';
 void openLogFolder(BuildContext context) {
   Navigator.of(
     context,
-  ).push<void>(MaterialPageRoute(builder: (_) => const LogFolderPage()));
+  ).push<void>(amitiaSlideRoute(builder: (_) => const LogFolderPage()));
 }
 
 class LogFolderButton extends StatelessWidget {

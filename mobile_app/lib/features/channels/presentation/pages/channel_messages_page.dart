@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -113,7 +114,7 @@ class _ChannelMessagesPageState extends ConsumerState<ChannelMessagesPage> {
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
+                      amitiaSlideRoute<void>(
                         builder: (_) => ChannelMessageDetailPage(
                           conversation: conversation,
                           channelName: _channelLabel(

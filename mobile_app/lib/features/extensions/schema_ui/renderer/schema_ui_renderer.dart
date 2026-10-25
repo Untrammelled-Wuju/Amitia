@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide ActionDispatcher;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -644,7 +645,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       ..loadRequest(uri);
     if (!mounted) return;
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      amitiaSlideRoute(
         builder: (pageContext) => Scaffold(
           appBar: AppBar(title: Text(uri.host.isEmpty ? '资源链接' : uri.host)),
           body: SafeArea(child: WebViewWidget(controller: controller)),

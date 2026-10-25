@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -330,7 +331,7 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
+                      amitiaSlideRoute(
                         builder: (_) => RuntimeDetailPage(
                           runtimeId: rt.runtimeId,
                           pluginId: rt.pluginId,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/amitia_page_route.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -208,7 +209,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
                             onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
+                              amitiaSlideRoute<void>(
                                 builder: (_) => ArchivedConversationDetailPage(
                                   conversation: conversation,
                                   projectName: _projectName(
