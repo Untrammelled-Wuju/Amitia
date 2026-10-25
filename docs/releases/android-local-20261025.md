@@ -1,0 +1,21 @@
+# Android 本地构建与安装记录
+
+- 时间：2026-10-25T13:40:54+08:00
+- 版本：26.2.0-beta.15（21），保持项目当前版本。
+- 源码基线：`3413979de7b6ab65edba12782a0ed7e76a1ab539`，提交日志 `test(configwrite): remove obsolete runtime mode handler cases`；发布冻结提交 `80435f1`。
+- 对比基线：`affb5ac4b6ecfce79778e59edc3fea2bdabd7a17`。
+- 安装设备：2407FRK8EC（JV9LT8JB8TVKNJ65）。
+- APK：`artifacts/apk/amitia-26.2.0-beta.15-release-arm64-v8a-20261025-133835.apk`，159818555 字节。
+- APK SHA-256：`4a7a4e626ccb7a5249bb2169445ae171e31f0034db032571cf4396c109db4984`。
+- Runtime SHA-256：`4b72afd4625c7c0d743a7b3c60e3400c30d901d89057585fa7604ff2d4075a1f`。
+- 后端 SHA-256：`53c05a4dd51af57e54710527dcfa7b43660b6f4b51c4c9cfeb7caeab02a98d09`。
+- 后端、plugin-host 和 task-host 均从当前源码重建，并重新生成 Runtime Package；内嵌 Runtime、三个组件哈希和 sourceCommit 校验通过。
+- Release Vital lint、assembleRelease、正式签名、与原安装证书一致性、16 KB zipalign、单 arm64-v8a ABI 校验通过。
+- 覆盖安装成功，安装后 APK 哈希一致，Debug 包不存在，第二次冷启动进入聊天主页。
+- 手机 `/api/health` 返回 200、ready=true、version=26.2.0-beta.15；`/readyz` 返回 200、degraded（3 ready、1 degraded、0 blocking、0 failed）。模型尚未配置，未进行实际模型对话测试。
+- 手机端 27 个改动测试文件共 153 项通过；任务宿主 3 个改动测试文件共 16 项通过。
+- `go mod verify`、`go vet ./...`、Linux ARM64 后端编译通过。
+- 后端 37 个改动包定向测试：28 包通过，2 包无测试，7 包失败，共 26 个顶层失败用例。涉及配置权限、设备执行记录、隐藏项目会话限制、扩展任务与平台隔离。完整明细位于 `artifacts/android-latest-20261025/backend-test-results.json` 和 `go-targeted-tests.log`。测试未全部通过，不记为完整测试门禁通过。
+- 完整开发项目已重启，前端、Core 正常，readiness 为 ready（6 ready、0 degraded、0 blocking、0 failed）。
+- 本次仅本地构建与真机安装，未发布更新通道、未推送 Git。
+- 本记录提交不作为下次源码差异对比目标。
