@@ -139,6 +139,38 @@ class AmitiaPopupSurface extends StatelessWidget {
   }
 }
 
+class AmitiaPopupMenuLabel extends StatelessWidget {
+  const AmitiaPopupMenuLabel({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.iconSize = 18,
+    this.iconColor,
+    this.gap = 12,
+  });
+
+  final IconData icon;
+  final String label;
+  final double iconSize;
+  final Color? iconColor;
+  final double gap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        AmitiaIcon.adaptive(
+          icon,
+          size: iconSize,
+          color: iconColor ?? context.textSecondary,
+        ),
+        SizedBox(width: gap),
+        Text(label),
+      ],
+    );
+  }
+}
+
 class AmitiaPopupMenuButton<T> extends StatefulWidget {
   const AmitiaPopupMenuButton({
     super.key,

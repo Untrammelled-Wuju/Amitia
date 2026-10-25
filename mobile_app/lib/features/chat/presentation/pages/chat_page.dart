@@ -4038,14 +4038,14 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               itemBuilder: (context) => [
                 PopupMenuItem(
                   value: 'member',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.group_add_outlined,
                     label: isGroup ? '管理群成员' : '添加角色',
                   ),
                 ),
                 const PopupMenuItem(
                   value: 'workspace',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.space_dashboard_outlined,
                     label: '工作区',
                   ),
@@ -4053,21 +4053,21 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                 const PopupMenuDivider(),
                 const PopupMenuItem(
                   value: 'video',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.videocam_outlined,
                     label: '视频通话',
                   ),
                 ),
                 const PopupMenuItem(
                   value: 'voice',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.phone_in_talk_outlined,
                     label: '语音通话',
                   ),
                 ),
                 const PopupMenuItem(
                   value: 'screen',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.screen_share_outlined,
                     label: '屏幕通话',
                   ),
@@ -4075,28 +4075,28 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                 const PopupMenuDivider(),
                 const PopupMenuItem(
                   value: 'export',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.file_download_outlined,
                     label: '导出聊天记录',
                   ),
                 ),
                 const PopupMenuItem(
                   value: 'profile',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.badge_outlined,
                     label: '用户画像摘要',
                   ),
                 ),
                 const PopupMenuItem(
                   value: 'memory',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.psychology_alt_outlined,
                     label: '记忆上下文',
                   ),
                 ),
                 const PopupMenuItem(
                   value: 'clear',
-                  child: _ChatPopupMenuLabel(
+                  child: AmitiaPopupMenuLabel(
                     icon: Icons.cleaning_services_outlined,
                     label: '清空聊天记录',
                   ),
@@ -4227,24 +4227,6 @@ class _ChatHeaderAvatar extends StatelessWidget {
         size: size - 3,
         color: context.accentPrimary,
       ),
-    );
-  }
-}
-
-class _ChatPopupMenuLabel extends StatelessWidget {
-  const _ChatPopupMenuLabel({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        AmitiaIcon.adaptive(icon, size: 18, color: context.textSecondary),
-        const SizedBox(width: 12),
-        Text(label),
-      ],
     );
   }
 }

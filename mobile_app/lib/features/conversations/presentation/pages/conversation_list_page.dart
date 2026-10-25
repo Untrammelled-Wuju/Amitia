@@ -9,6 +9,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_popup_menu.dart';
 import '../../../../core/widgets/compact_empty_state.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/models/character.dart';
@@ -73,10 +74,17 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
         leading: const SizedBox.shrink(),
         leadingWidth: 0,
         actions: [
-          PopupMenuButton<_MessageCreateAction>(
+          AmitiaPopupMenuButton<_MessageCreateAction>(
             key: const ValueKey('message-create-button'),
             tooltip: '新建',
             icon: const AmitiaIcon(AmitiaIconGlyph.add, size: 21),
+            menuWidth: 220,
+            itemVerticalPadding: 0,
+            itemFontSize: 14.5,
+            itemIconSize: 18,
+            itemHorizontalPadding: 14,
+            itemHorizontalMargin: 0,
+            itemMinHeight: 46,
             onSelected: (action) {
               switch (action) {
                 case _MessageCreateAction.chat:
@@ -88,18 +96,16 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
             itemBuilder: (context) => const [
               PopupMenuItem(
                 value: _MessageCreateAction.chat,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: AmitiaIcon(AmitiaIconGlyph.newChat),
-                  title: Text('新对话'),
+                child: AmitiaPopupMenuLabel(
+                  icon: Icons.add_comment_outlined,
+                  label: '新对话',
                 ),
               ),
               PopupMenuItem(
                 value: _MessageCreateAction.group,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: AmitiaIcon(AmitiaIconGlyph.newGroup),
-                  title: Text('新群聊'),
+                child: AmitiaPopupMenuLabel(
+                  icon: Icons.group_add_outlined,
+                  label: '新群聊',
                 ),
               ),
             ],

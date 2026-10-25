@@ -9,6 +9,7 @@ import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/core/services/memory_service.dart';
 import 'package:amitia_app/core/ui_runtime/routing/builtin_route_catalog.dart';
 import 'package:amitia_app/core/widgets/amitia_icons.dart';
+import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';
 import 'package:amitia_app/core/widgets/main_tab_scaffold.dart';
 import 'package:amitia_app/features/conversations/presentation/pages/conversation_list_page.dart';
 import 'package:amitia_app/features/conversations/presentation/pages/conversation_search_page.dart';
@@ -265,6 +266,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('message-create-button')));
     await tester.pumpAndSettle();
+    expect(find.byType(AmitiaPopupSurface), findsOneWidget);
     expect(find.text('新对话'), findsOneWidget);
     expect(find.text('新群聊'), findsOneWidget);
 

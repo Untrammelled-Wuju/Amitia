@@ -23,7 +23,7 @@ config:
 
 app:
   name: "U-Ai"
-  version: "26.2.0-beta.15"
+  version: "26.2.0-beta.16"
   deployMode: "desktop-local"
 
 chat:
