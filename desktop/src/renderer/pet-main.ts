@@ -398,6 +398,36 @@ async function main(): Promise<void> {
     decoderName: "",
     contentHash: "",
   };
+  let pendingHitMaskTimer: ReturnType<typeof setTimeout> | null = null;
+  let latestHitMaskFrameIndex = 0;
+
+  const publishHitMask = () => {
+    pendingHitMaskTimer = null;
+    const hitMaskUpdated = hitMaskAdapter.updateHitMask(hitMaskPlaceholderFrame);
+    if (!hitMaskUpdated) {
+      pendingHitMaskTimer = setTimeout(publishHitMask, 120);
+      return;
+    }
+    const mask = hitMaskAdapter.getMask();
+    if (mask.width <= 0 || mask.height <= 0) return;
+    maskRevision += 1;
+    const hitMaskPayload: PetHitMaskPayload = {
+      width: mask.width,
+      height: mask.height,
+      data: mask.data,
+      threshold: mask.threshold,
+      packageRevision: currentPackageRevision,
+      actionKey: currentActionKey ?? "",
+      frameIndex: latestHitMaskFrameIndex,
+      playbackInstanceId: currentPlaybackInstanceId,
+      maskRevision,
+    };
+    try {
+      api.reportHitMask(hitMaskPayload);
+    } catch {
+      void 0;
+    }
+  };
 
   const eventListener: EventListener = (event: PlaybackEvent) => {
     reportEventToMain(api, event);
@@ -418,27 +448,8 @@ async function main(): Promise<void> {
       sendSnapshotIfChanged(api, engine, true);
     } else if (event.type === "playback.frame_presented") {
       scheduleFrameSnapshot(api, engine);
-      const hitMaskUpdated = hitMaskAdapter.updateHitMask(hitMaskPlaceholderFrame);
-      const mask = hitMaskAdapter.getMask();
-      if (hitMaskUpdated && mask.width > 0 && mask.height > 0) {
-        maskRevision += 1;
-        const hitMaskPayload: PetHitMaskPayload = {
-          width: mask.width,
-          height: mask.height,
-          data: mask.data,
-          threshold: mask.threshold,
-          packageRevision: currentPackageRevision,
-          actionKey: currentActionKey ?? "",
-          frameIndex: event.frameIndex ?? 0,
-          playbackInstanceId: currentPlaybackInstanceId,
-          maskRevision,
-        };
-        try {
-          api.reportHitMask(hitMaskPayload);
-        } catch {
-          void 0;
-        }
-      }
+      latestHitMaskFrameIndex = event.frameIndex ?? 0;
+      if (pendingHitMaskTimer === null) publishHitMask();
     }
   };
   const unsubEvent = engine.onEvent(eventListener);
@@ -528,6 +539,7 @@ async function main(): Promise<void> {
     disposeListeners();
     disposeDragListeners();
     disposeSnapshotReporting();
+    if (pendingHitMaskTimer !== null) clearTimeout(pendingHitMaskTimer);
     document.removeEventListener("visibilitychange", onVisibilityChange);
     hitMaskAdapter.dispose();
     engine.dispose();

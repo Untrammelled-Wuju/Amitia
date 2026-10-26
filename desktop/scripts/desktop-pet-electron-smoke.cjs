@@ -425,6 +425,7 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -452,6 +453,7 @@ app.whenReady().then(async () => {
   );
   windowRef.show();
   windowRef.focus();
+  await new Promise((resolve) => setTimeout(resolve, 150));
   windowRef.webContents.send(CHANNELS.windowShown);
   await waitUntil(
     "default action first frame",
@@ -461,7 +463,7 @@ app.whenReady().then(async () => {
   await waitUntil(
     "renderer hit mask",
     () => observed.hitMasks > 0,
-    5000,
+    8000,
   );
 
   await exerciseInteractions();
