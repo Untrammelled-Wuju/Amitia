@@ -52,6 +52,7 @@ import '../../../features/settings/presentation/pages/settings_page.dart';
 import '../../../features/tasks/presentation/pages/task_hub_page.dart';
 import '../../../features/memory/presentation/pages/memory_hub_page.dart';
 import '../../../features/profile/presentation/pages/profile_hub_page.dart';
+import '../../../features/profile/presentation/pages/character_world_book_hub_page.dart';
 import '../../../features/settings/presentation/pages/model_settings_page.dart';
 import '../../../features/settings/presentation/pages/search_api_settings_page.dart';
 import '../../../features/settings/presentation/pages/appearance_settings_page.dart';
@@ -254,6 +255,14 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
     path: '/characters',
     pageBuilder: (context, state) =>
         amitiaSlidePage(state: state, child: const CharacterListPage()),
+  ),
+  GoRoute(
+    path: AppRoutes.meCharacters,
+    pageBuilder: (context, state) => amitiaSlidePage(
+      context: context,
+      state: state,
+      child: const CharacterWorldBookHubPage(),
+    ),
   ),
   GoRoute(
     path: '/characters/create',
@@ -900,13 +909,19 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/developer/kernel/wasm',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(context: context, state: state, child: const WasmPage()),
+    pageBuilder: (context, state) => amitiaSlidePage(
+      context: context,
+      state: state,
+      child: const WasmPage(),
+    ),
   ),
   GoRoute(
     path: '/developer/kernel/hooks',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(context: context, state: state, child: const HooksPage()),
+    pageBuilder: (context, state) => amitiaSlidePage(
+      context: context,
+      state: state,
+      child: const HooksPage(),
+    ),
   ),
   GoRoute(
     path: '/developer/kernel/trusted-services',

@@ -32,7 +32,6 @@ describe("一级导航对应的第二栏", () => {
     const character = await render("character");
     expect(character.wrapper.findAll(".section-entry strong").map(node => node.text())).toEqual([
       "角色管理",
-      "用户画像",
       "世界书",
     ]);
     character.wrapper.unmount();
@@ -44,6 +43,7 @@ describe("一级导航对应的第二栏", () => {
       "情景记忆",
       "记忆图谱",
       "时间线",
+      "用户画像",
     ]);
     memory.wrapper.unmount();
   });

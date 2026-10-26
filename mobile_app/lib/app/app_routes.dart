@@ -5,6 +5,7 @@ abstract final class AppRoutes {
   static const tasks = '/tasks';
   static const memoryHub = '/memory-hub';
   static const me = '/me';
+  static const meCharacters = '/me/characters';
   static const dashboard = '/dashboard';
   static const channels = '/channels';
   static const characters = '/characters';

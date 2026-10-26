@@ -30,7 +30,6 @@ export const appSections: AppSectionDefinition[] = [
     label: "角色",
     entries: [
       { route: "/character", label: "角色管理" },
-      { route: "/profiles", label: "用户画像" },
       { route: "/world-book", label: "世界书" },
     ],
   },
@@ -44,6 +43,7 @@ export const appSections: AppSectionDefinition[] = [
       { route: "/episodic", label: "情景记忆" },
       { route: "/graph", label: "记忆图谱" },
       { route: "/memory-timeline", label: "时间线" },
+      { route: "/profiles", label: "用户画像" },
     ],
   },
   {
@@ -77,8 +77,8 @@ export function resolveAppSection(target: string): AppSectionId | null {
   if (path === "/reminders" || /^\/characters\/[^/]+\/active-task$/.test(path)) return "tasks";
   if (path === "/continuity") return "continuity";
   if (path === "/game-center" || path.startsWith("/game-center/")) return "game";
-  if (path === "/characters" || path === "/character" || path.startsWith("/character/") || path === "/profiles" || path === "/world-book") return "character";
-  if (path === "/memory" || path.startsWith("/memory/") || path === "/memory-manager" || path === "/memory-timeline" || path === "/knowledge" || path === "/episodic" || path === "/graph") return "memory";
+  if (path === "/characters" || path === "/character" || path.startsWith("/character/") || path === "/world-book") return "character";
+  if (path === "/memory" || path.startsWith("/memory/") || path === "/memory-manager" || path === "/memory-timeline" || path === "/knowledge" || path === "/episodic" || path === "/graph" || path === "/profiles") return "memory";
   if (path === "/creative-workshop" || path.startsWith("/creative-workshop/")) return "workshop";
   if (path === "/extensions" || path.startsWith("/extensions/") || path === "/kernel" || path.startsWith("/kernel/") || path.startsWith("/extension/page/")) return "extensions";
   return null;

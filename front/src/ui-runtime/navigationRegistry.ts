@@ -97,8 +97,8 @@ export function resolveNavigationIcon(name?: string): Component {
 const builtinItems: UINavigationItem[] = [
   { id: "home", route: "/chat", label: "主页", description: "开始新对话，或继续最近的聊天。", icon: HomeIcon, group: "home", order: 0, mobile: true, match: ["/chat", "/logs"] },
   { id: "tasks.proactive", route: "/reminders", label: "主动任务", description: "安排定时消息和角色主动执行的任务。", icon: AlarmClock, group: "tasks", order: 70 },
-  { id: "character.hub", route: "/characters", label: "角色", description: "管理角色、用户画像和世界书。", icon: CharacterIcon, group: "character", order: 20, mobile: true, match: ["/character", "/profiles", "/world-book"] },
-  { id: "memory.hub", route: "/memory", label: "记忆", description: "查看知识库、记忆图谱、情景和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, match: ["/memory-manager", "/memory-timeline", "/knowledge", "/episodic", "/graph"] },
+  { id: "character.hub", route: "/characters", label: "角色", description: "管理角色和世界书。", icon: CharacterIcon, group: "character", order: 20, mobile: true, match: ["/character", "/world-book"] },
+  { id: "memory.hub", route: "/memory", label: "记忆", description: "查看知识库、用户画像、记忆图谱、情景和时间线。", icon: BrainIcon, group: "memory", order: 50, mobile: true, match: ["/memory-manager", "/memory-timeline", "/knowledge", "/episodic", "/graph", "/profiles"] },
   { id: "continuity.threads", route: "/continuity", label: "持续事项", description: "跟踪跨对话的长期目标、承诺和进展。", icon: ContinuityIcon, group: "continuity", order: 75, mobile: true },
   { id: "workshop.game-center", route: "/game-center", label: "游戏模式", description: "安装、运行并查看游戏插件。", icon: GamepadIcon, group: "workshop", order: 80, runtimeCapability: "gameMode" },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", description: "创建角色卡、桌宠和其他创作内容。", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },

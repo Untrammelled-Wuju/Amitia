@@ -14,6 +14,7 @@ import 'package:amitia_app/features/conversations/presentation/pages/conversatio
 import 'package:amitia_app/features/conversations/presentation/pages/conversation_search_page.dart';
 import 'package:amitia_app/features/extensions/presentation/pages/extension_center_page.dart';
 import 'package:amitia_app/features/memory/presentation/pages/memory_hub_page.dart';
+import 'package:amitia_app/features/profile/presentation/pages/character_world_book_hub_page.dart';
 import 'package:amitia_app/features/profile/presentation/pages/profile_hub_page.dart';
 import 'package:amitia_app/features/tasks/presentation/pages/task_hub_page.dart';
 import 'package:flutter/material.dart';
@@ -257,6 +258,58 @@ void main() {
       find.byKey(const ValueKey('recent-memory-memory-11')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('我的角色入口先进入角色与世界书二级页', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(500, 1200);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final router = _router();
+    await tester.pumpWidget(_app(router));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('main-tab-我的')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('角色'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CharacterWorldBookHubPage), findsOneWidget);
+    expect(find.text('角色管理'), findsOneWidget);
+    expect(find.text('世界书'), findsOneWidget);
+  });
+
+  testWidgets('角色与世界书二级页提供两个独立入口', (tester) async {
+    final router = GoRouter(
+      initialLocation: AppRoutes.meCharacters,
+      routes: [
+        GoRoute(
+          path: AppRoutes.meCharacters,
+          builder: (context, state) => const CharacterWorldBookHubPage(),
+        ),
+        GoRoute(
+          path: AppRoutes.characters,
+          builder: (context, state) => const Scaffold(body: Text('角色管理目标页')),
+        ),
+        GoRoute(
+          path: AppRoutes.memoryWorldBook,
+          builder: (context, state) => const Scaffold(body: Text('世界书目标页')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('角色管理'));
+    await tester.pumpAndSettle();
+    expect(find.text('角色管理目标页'), findsOneWidget);
+
+    router.pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('世界书'));
+    await tester.pumpAndSettle();
+    expect(find.text('世界书目标页'), findsOneWidget);
   });
 
   testWidgets('消息页加号提供新对话和新群聊', (tester) async {

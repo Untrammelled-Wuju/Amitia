@@ -20,7 +20,7 @@ class ProfileHubPage extends ConsumerWidget {
     _ProfileEntry(
       title: '角色',
       icon: AmitiaIconGlyph.characters,
-      route: AppRoutes.characters,
+      route: AppRoutes.meCharacters,
     ),
     _ProfileEntry(
       title: '创意工坊',
