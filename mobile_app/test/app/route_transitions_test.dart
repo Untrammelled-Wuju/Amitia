@@ -1,5 +1,6 @@
 import 'package:amitia_app/app/amitia_page_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _app(
@@ -180,7 +181,8 @@ void main() {
     );
     final pushed = amitiaSlideRoute<void>(builder: (_) => const SizedBox());
     expect(root.transitionDuration, Duration.zero);
-    expect(pushed.transitionDuration, greaterThan(Duration.zero));
+    expect(pushed.transitionDuration, const Duration(milliseconds: 320));
+    expect(pushed.reverseTransitionDuration, const Duration(milliseconds: 320));
   });
 
   testWidgets('底页与顶页共享同一进度，位移比例恒定', (tester) async {
@@ -192,12 +194,15 @@ void main() {
     navigatorKey.currentState!.push(detail);
     await tester.pumpAndSettle();
 
-    detail.handleStartBackGesture(progress: 1);
+    detail.beginBackGesture();
     await tester.pump();
 
     var previousShared = 1.0;
     for (final progress in <double>[0.8, 0.6, 0.4, 0.2]) {
-      detail.handleUpdateBackGestureProgress(progress: progress);
+      detail.updateBackGesture(
+        (detail.backGestureProgress - progress) * 1000,
+        1000,
+      );
       await tester.pump();
       final topDx = _detailSlide(tester).position.value.dx;
       final rootDx = _rootSlide(tester).position.value.dx;
@@ -212,20 +217,18 @@ void main() {
     expect(previousShared, lessThan(0.8));
   });
 
-  testWidgets('预测返回取消后回弹到位且不返回', (tester) async {
+  testWidgets('边缘返回取消后回弹到位且不返回', (tester) async {
     final navigatorKey = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(
-      _app(navigatorKey, platform: TargetPlatform.android),
-    );
+    await tester.pumpWidget(_app(navigatorKey));
     await tester.pumpAndSettle();
 
     final detail = _detailRoute();
     navigatorKey.currentState!.push(detail);
     await tester.pumpAndSettle();
 
-    detail.handleStartBackGesture(progress: 1);
+    detail.beginBackGesture();
     await tester.pump();
-    detail.handleUpdateBackGestureProgress(progress: 0.4);
+    detail.updateBackGesture(600, 1000);
     await tester.pump();
 
     expect(detail.backGestureActive, isTrue);
@@ -235,7 +238,7 @@ void main() {
       greaterThan(-amitiaSlideRatio),
     );
 
-    detail.handleCancelBackGesture();
+    detail.endBackGesture(pop: false);
     await tester.pumpAndSettle();
 
     expect(detail.backGestureActive, isFalse);
@@ -250,22 +253,20 @@ void main() {
     );
   });
 
-  testWidgets('预测返回提交后退出当前页且底页归位', (tester) async {
+  testWidgets('边缘返回提交后退出当前页且底页归位', (tester) async {
     final navigatorKey = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(
-      _app(navigatorKey, platform: TargetPlatform.android),
-    );
+    await tester.pumpWidget(_app(navigatorKey));
     await tester.pumpAndSettle();
 
     final detail = _detailRoute();
     navigatorKey.currentState!.push(detail);
     await tester.pumpAndSettle();
 
-    detail.handleStartBackGesture(progress: 1);
+    detail.beginBackGesture();
     await tester.pump();
-    detail.handleUpdateBackGestureProgress(progress: 0.3);
+    detail.updateBackGesture(700, 1000);
     await tester.pump();
-    detail.handleCommitBackGesture();
+    detail.endBackGesture(pop: true);
     await tester.pumpAndSettle();
 
     expect(find.text('detail'), findsNothing);
@@ -310,6 +311,47 @@ void main() {
     expect(find.text('detail'), findsOneWidget);
   });
 
+  testWidgets('Android 不接管预测返回，普通返回仍以 320ms 完成', (tester) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      _app(navigatorKey, platform: TargetPlatform.android),
+    );
+    await tester.pumpAndSettle();
+    final detail = _detailRoute();
+    navigatorKey.currentState!.push(detail);
+    await tester.pumpAndSettle();
+    Object? handled;
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      'flutter/backgesture',
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('startBackGesture', <String, Object>{
+          'touchOffset': <double>[0, 300],
+          'progress': 0.5,
+          'swipeEdge': 0,
+        }),
+      ),
+      (reply) {
+        handled = const StandardMethodCodec().decodeEnvelope(reply!);
+      },
+    );
+    await tester.pump();
+    expect(handled, isFalse);
+    expect(detail.backGestureActive, isFalse);
+    expect(_detailSlide(tester).position.value.dx, 0);
+    expect(await navigatorKey.currentState!.maybePop(), isTrue);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 160));
+    final during = _detailSlide(tester).position.value.dx;
+    expect(during, inExclusiveRange(0, 1));
+    expect(_rootSlide(tester).position.value.dx, closeTo(during - 1, 0.001));
+    await tester.pump(const Duration(milliseconds: 160));
+    expect(_rootSlide(tester).position.value.dx, closeTo(0, 0.001));
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump();
+    expect(find.text('detail'), findsNothing);
+    expect(_rootSlide(tester).position.value.dx, 0);
+  });
+
   testWidgets('系统关闭动画时直接展示页面', (tester) async {
     final navigatorKey = GlobalKey<NavigatorState>();
     await tester.pumpWidget(_app(navigatorKey, disableAnimations: true));
@@ -347,37 +389,35 @@ void main() {
       expect(root.right, closeTo(detail.left, 0.01));
     }
 
-    for (var frame = 0; frame < 25; frame++) {
+    for (var frame = 0; frame < 19; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
       expectJoinedEdges();
     }
     await tester.pumpAndSettle();
     navigatorKey.currentState!.pop();
     await tester.pump();
-    for (var frame = 0; frame < 22; frame++) {
+    for (var frame = 0; frame < 19; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
       expectJoinedEdges();
     }
     await tester.pumpAndSettle();
   });
 
-  testWidgets('预测返回线性跟手且停手不自行移动，收尾不瞬间完成', (tester) async {
+  testWidgets('边缘返回线性跟手且停手不自行移动，收尾不瞬间完成', (tester) async {
     final navigatorKey = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(
-      _app(navigatorKey, platform: TargetPlatform.android),
-    );
+    await tester.pumpWidget(_app(navigatorKey));
     await tester.pumpAndSettle();
     final detail = _detailRoute();
     navigatorKey.currentState!.push(detail);
     await tester.pumpAndSettle();
-    detail.handleStartBackGesture(progress: 1);
-    detail.handleUpdateBackGestureProgress(progress: 0.4);
+    detail.beginBackGesture();
+    detail.updateBackGesture(600, 1000);
     await tester.pump();
     expect(_detailSlide(tester).position.value.dx, closeTo(0.6, 0.001));
     expect(_rootSlide(tester).position.value.dx, closeTo(-0.4, 0.001));
     await tester.pump(const Duration(milliseconds: 120));
     expect(_detailSlide(tester).position.value.dx, closeTo(0.6, 0.001));
-    detail.handleCommitBackGesture();
+    detail.endBackGesture(pop: true);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('detail'), findsOneWidget);
@@ -413,18 +453,21 @@ void main() {
 
     navigatorKey.currentState!.push(third);
     await tester.pump();
-    for (var frame = 0; frame < 25; frame++) {
+    for (var frame = 0; frame < 19; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
       expectJoinedEdges();
     }
     await tester.pumpAndSettle();
-    third.handleStartBackGesture(progress: 1);
+    third.beginBackGesture();
     for (final progress in [0.8, 0.6, 0.4]) {
-      third.handleUpdateBackGestureProgress(progress: progress);
+      third.updateBackGesture(
+        (third.backGestureProgress - progress) * 1000,
+        1000,
+      );
       await tester.pump();
       expectJoinedEdges();
     }
-    third.handleCancelBackGesture();
+    third.endBackGesture(pop: false);
     await tester.pump();
     for (var frame = 0; frame < 13; frame++) {
       await tester.pump(const Duration(milliseconds: 16));

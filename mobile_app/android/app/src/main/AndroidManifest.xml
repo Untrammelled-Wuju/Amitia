@@ -38,7 +38,7 @@
     <application
         android:label="amitia_app"
         android:name="${applicationName}"
-        android:enableOnBackInvokedCallback="true"
+        android:enableOnBackInvokedCallback="false"
         android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <service

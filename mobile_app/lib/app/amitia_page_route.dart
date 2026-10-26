@@ -1,10 +1,8 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show PredictiveBackEvent;
 
 const double amitiaSlideRatio = 1;
-const Duration _transitionDuration = Duration(milliseconds: 420);
-const Duration _reverseDuration = Duration(milliseconds: 380);
+const Duration _transitionDuration = Duration(milliseconds: 320);
 const Curve _pageCurve = Curves.easeInOutCubic;
 const double _edgeDragWidth = 24;
 const double _flingVelocity = 700;
@@ -76,7 +74,7 @@ class AmitiaSlideRoute<T> extends PageRoute<T> {
 
   @override
   Duration get reverseTransitionDuration =>
-      isRootLevel ? Duration.zero : _reverseDuration;
+      isRootLevel ? Duration.zero : _transitionDuration;
 
   @override
   bool get popGestureEnabled {
@@ -92,41 +90,6 @@ class AmitiaSlideRoute<T> extends PageRoute<T> {
   bool _backGestureActive = false;
   bool get backGestureActive => _backGestureActive;
   double get backGestureProgress => controller?.value ?? 1;
-
-  @override
-  void handleStartBackGesture({double progress = 0.0}) {
-    final animation = controller;
-    final navigatorState = navigator;
-    if (animation == null || navigatorState == null) return;
-    if (_backGestureActive) {
-      animation.value = progress.clamp(0.0, 1.0);
-      return;
-    }
-    if (!popGestureEnabled) return;
-    _backGestureActive = true;
-    animation.value = progress.clamp(0.0, 1.0);
-    navigatorState.didStartUserGesture();
-  }
-
-  @override
-  void handleUpdateBackGestureProgress({required double progress}) {
-    if (!_backGestureActive) return;
-    final animation = controller;
-    if (animation == null) return;
-    animation.value = progress.clamp(0.0, 1.0);
-  }
-
-  @override
-  void handleCommitBackGesture() {
-    if (!_backGestureActive) return;
-    _settleBackGesture(pop: true);
-  }
-
-  @override
-  void handleCancelBackGesture() {
-    if (!_backGestureActive) return;
-    _settleBackGesture(pop: false);
-  }
 
   void beginBackGesture() {
     if (_backGestureActive || !popGestureEnabled) return;
@@ -160,9 +123,9 @@ class AmitiaSlideRoute<T> extends PageRoute<T> {
       navigatorState.pop();
     }
     final distance = pop ? animation.value : 1 - animation.value;
-    final milliseconds = (_reverseDuration.inMilliseconds * distance)
+    final milliseconds = (_transitionDuration.inMilliseconds * distance)
         .round()
-        .clamp(220, _reverseDuration.inMilliseconds);
+        .clamp(220, _transitionDuration.inMilliseconds);
     final settling = pop
         ? animation.animateBack(
             0,
@@ -232,14 +195,10 @@ class AmitiaSlideRoute<T> extends PageRoute<T> {
               ),
       ),
     );
-    final forwarder = _AmitiaPredictiveBackForwarder(
-      route: this,
-      child: layered,
-    );
     if (!popGestureEnabled || !_supportsInAppBackGesture(context)) {
-      return forwarder;
+      return layered;
     }
-    return _AmitiaBackGestureDetector(route: this, child: forwarder);
+    return _AmitiaBackGestureDetector(route: this, child: layered);
   }
 
   bool _supportsInAppBackGesture(BuildContext context) {
@@ -253,68 +212,6 @@ class AmitiaSlideRoute<T> extends PageRoute<T> {
   ) {
     return gestureActive ? parent : parent.drive(CurveTween(curve: _pageCurve));
   }
-}
-
-class _AmitiaPredictiveBackForwarder extends StatefulWidget {
-  const _AmitiaPredictiveBackForwarder({
-    required this.route,
-    required this.child,
-  });
-
-  final AmitiaSlideRoute<dynamic> route;
-  final Widget child;
-
-  @override
-  State<_AmitiaPredictiveBackForwarder> createState() =>
-      _AmitiaPredictiveBackForwarderState();
-}
-
-class _AmitiaPredictiveBackForwarderState
-    extends State<_AmitiaPredictiveBackForwarder>
-    with WidgetsBindingObserver {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  bool handleStartBackGesture(PredictiveBackEvent backEvent) {
-    final route = widget.route;
-    if (!route.isCurrent || !route.popGestureEnabled) return false;
-    if (backEvent.isButtonEvent) {
-      route.navigator?.maybePop();
-      return true;
-    }
-    route.handleStartBackGesture(progress: 1 - backEvent.progress);
-    return true;
-  }
-
-  @override
-  void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
-    widget.route.handleUpdateBackGestureProgress(
-      progress: 1 - backEvent.progress,
-    );
-  }
-
-  @override
-  void handleCommitBackGesture() {
-    widget.route.handleCommitBackGesture();
-  }
-
-  @override
-  void handleCancelBackGesture() {
-    widget.route.handleCancelBackGesture();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
 }
 
 class _AmitiaBackGestureDetector extends StatefulWidget {
