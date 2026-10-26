@@ -65,7 +65,7 @@ describe("图标导航栏布局", () => {
       await vi.waitFor(() => {
         const tooltip = document.body.querySelector("#side-nav-tooltip");
         expect(tooltip?.textContent).toContain("记忆");
-        expect(tooltip?.textContent).toContain("知识库、记忆图谱、情景和时间线");
+        expect(tooltip?.textContent).toContain("知识库、用户画像、记忆图谱、情景和时间线");
       });
     } finally {
       wrapper.unmount();
