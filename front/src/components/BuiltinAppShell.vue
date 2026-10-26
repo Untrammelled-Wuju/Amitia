@@ -384,13 +384,14 @@ onUnmounted(() => {
   transition: background-color 0.3s ease;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: var(--workbench-bg);
 }
 
 .app-body {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -503,6 +504,7 @@ onUnmounted(() => {
 .content-scroll {
   transition: background-color 0.3s ease;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   background: transparent;

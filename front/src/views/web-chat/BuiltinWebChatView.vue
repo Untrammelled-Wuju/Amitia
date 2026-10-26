@@ -18,7 +18,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <section ref="chatSurfaceRef" class="chat-surface" :class="{ 'chat-surface--sidebar': conversationSidebarVisible }" data-amitia-ui="chat.surface">
     <AutomationStatusIndicator :status="automationStatus" />
 
-    <Teleport to="#window-chat-slot" :disabled="!useTitlebarChrome">
+    <Teleport v-if="titlebarTeleportReady" :to="titlebarTeleportTarget" :disabled="!useTitlebarChrome">
     <div ref="chatHeaderRef" class="chat-header-region" :class="{ 'is-titlebar': useTitlebarChrome }">
     <UIProviderHost
       capability="conversation.header"
@@ -443,6 +443,28 @@ const hasConversationOverlay = computed(() => callActive.value || hasStatusExten
 const sidebarDrawerOpen = ref(false);
 const isSmallViewport = ref(window.innerWidth < 1024);
 const useTitlebarChrome = ref(window.innerWidth >= 900);
+const titlebarTargetElement = ref<HTMLElement | null>(null);
+const titlebarTeleportTarget = computed<string | HTMLElement>(() => titlebarTargetElement.value || "body");
+const titlebarTeleportReady = computed(() => !useTitlebarChrome.value || Boolean(titlebarTargetElement.value));
+let titlebarTargetObserver: MutationObserver | null = null;
+
+function syncTitlebarTarget() {
+  const target = document.querySelector<HTMLElement>("#window-chat-slot");
+  if (target) titlebarTargetElement.value = target;
+  if (target || !useTitlebarChrome.value) {
+    titlebarTargetObserver?.disconnect();
+    titlebarTargetObserver = null;
+  }
+}
+
+function startTitlebarTargetObserver() {
+  titlebarTargetObserver?.disconnect();
+  titlebarTargetObserver = null;
+  syncTitlebarTarget();
+  if (!useTitlebarChrome.value || titlebarTargetElement.value || typeof MutationObserver === "undefined") return;
+  titlebarTargetObserver = new MutationObserver(syncTitlebarTarget);
+  titlebarTargetObserver.observe(document.body, { childList: true, subtree: true });
+}
 
 function updateViewport() {
   isSmallViewport.value = window.innerWidth < 1024;
@@ -474,7 +496,9 @@ function startChatLayoutObserver() {
 }
 
 watch(useTitlebarChrome, async () => {
+  titlebarTargetElement.value = null;
   await nextTick();
+  startTitlebarTargetObserver();
   chatLayoutObserver?.disconnect();
   chatLayoutObserver = null;
   startChatLayoutObserver();
@@ -1078,6 +1102,7 @@ watch(isOffline, (offline) => {
 });
 
 onMounted(async () => {
+  startTitlebarTargetObserver();
   startChatLayoutObserver();
   window.addEventListener("resize", updateViewport);
   window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
@@ -1168,6 +1193,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  titlebarTargetObserver?.disconnect();
+  titlebarTargetObserver = null;
   chatLayoutObserver?.disconnect();
   chatLayoutObserver = null;
   window.removeEventListener("amitia:execution-scope-changed", handleScopeChanged);

@@ -18,8 +18,7 @@ onMounted(() => { void init(); mediaQuery.addEventListener("change", motionChang
 onUnmounted(() => { mediaQuery.removeEventListener("change", motionChanged); delete document.documentElement.dataset.customBackground; });
 </script>
 <style>
-.application-background { position: fixed !important; inset: 0; z-index: 0; pointer-events: none; }
-html.amitia-desktop-shell .application-background { top: 34px; }
+.application-background { position: absolute !important; inset: 0; z-index: 0; pointer-events: none; }
 html[data-custom-background="true"] .app-shell,
 html[data-custom-background="true"] .app-body.is-desktop-shell,
 html[data-custom-background="true"] .app-main,

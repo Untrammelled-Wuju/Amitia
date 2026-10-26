@@ -334,7 +334,6 @@ function capLabel(key: string | number): string {
 .model-config-dialog {
   display: flex;
   flex-direction: column;
-  max-height: calc(100dvh - 32px);
 }
 .model-config-dialog :deep(.el-dialog__header),
 .model-config-dialog :deep(.el-dialog__footer) {

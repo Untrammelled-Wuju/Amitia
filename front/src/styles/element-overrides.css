@@ -322,7 +322,40 @@ html[data-custom-palette="true"] .el-button:not(.el-button--primary):not(.el-but
 .el-overlay { z-index: 40; }
 
 .el-dialog {
-  border-radius: var(--ac-radius-lg);
+  border-radius: var(--ui-component-dialog-radius, var(--ac-radius-xl));
+}
+
+.el-overlay-dialog {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.el-dialog:not(.is-fullscreen) {
+  display: flex;
+  flex-direction: column;
+  max-width: min(960px, calc(100vw - 32px));
+  max-height: min(820px, calc(100dvh - 32px));
+  margin: 0;
+  overflow: hidden;
+}
+
+.el-dialog:not(.is-fullscreen) .el-dialog__header,
+.el-dialog:not(.is-fullscreen) .el-dialog__footer {
+  flex-shrink: 0;
+}
+
+.el-dialog:not(.is-fullscreen) .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.el-message-box {
+  border-radius: var(--ui-component-dialog-radius, var(--ac-radius-xl));
 }
 
 .el-drawer__body,

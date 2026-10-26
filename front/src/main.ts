@@ -13,6 +13,8 @@ import "./styles/variables.css";
 import "./styles/element-overrides.css";
 
 import App from "./App.vue";
+import WindowDialog from "./components/ui-runtime/WindowDialog.vue";
+import WindowDrawer from "./components/ui-runtime/WindowDrawer.vue";
 import router from "./router";
 import { getRuntimeConnection } from "./runtime/runtime-adapter";
 import { initializeRuntimeCapabilities, shouldRegisterServiceWorker } from "./runtime/runtime-capabilities";
@@ -57,6 +59,11 @@ async function bootstrap() {
   });
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
+  const globalComponents = (app as unknown as {
+    _context: { components: Record<string, unknown> };
+  })._context.components;
+  globalComponents.ElDialog = WindowDialog;
+  globalComponents.ElDrawer = WindowDrawer;
   installClientErrorTracking(app);
   await router.isReady();
 

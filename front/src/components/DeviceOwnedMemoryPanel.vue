@@ -153,7 +153,8 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch, onMounted, onUnmounted, useId } from "vue";
-import { ElDrawer, ElMessageBox } from "element-plus";
+import { ElMessageBox } from "element-plus";
+import ElDrawer from "@/components/ui-runtime/WindowDrawer.vue";
 import { useDeviceOwnedConversation } from "@/composables/useDeviceOwnedConversation";
 import { useOwnedMemoryManagement } from "@/composables/useOwnedMemoryManagement";
 import type { OwnedExecutionScope } from "@/runtime/device-owned-chat";

@@ -167,7 +167,7 @@ void main() {
       expect(find.text(label), findsOneWidget);
     }
     expect(find.text('用户画像'), findsOneWidget);
-    expect(find.text('世界书'), findsOneWidget);
+    expect(find.text('世界书'), findsNothing);
     expect(find.text('全部长期记忆'), findsNothing);
     expect(find.text('关系与概念连接'), findsNothing);
     expect(find.text('暂无最近记忆'), findsOneWidget);

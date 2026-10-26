@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAppStore } from "@/stores/app";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
+import { setWindowLayerFallback, useWindowLayerState } from "@/composables/useWindowLayer";
 
 const props = defineProps<{ transparent?: boolean }>();
 const appStore = useAppStore();
@@ -11,6 +12,7 @@ const route = useRoute();
 const windowApi = window.electronWindowApi;
 const desktop = isDesktopShell();
 const platform = desktop ? windowApi?.platform ?? "" : "web";
+const windowLayerBlocked = useWindowLayerState();
 const usesNativeControls = desktop && (platform === "darwin" || platform === "win32");
 const showCustomWindowActions = desktop && !usesNativeControls;
 document.documentElement.dataset.desktopPlatform = platform;
@@ -19,6 +21,7 @@ document.documentElement.style.setProperty("--desktop-titlebar-height", "40px");
 let stopWindowState: (() => void) | undefined;
 let stopAfterEach: (() => void) | undefined;
 let appearanceObserver: MutationObserver | undefined;
+let overlayObserver: MutationObserver | undefined;
 let appearanceProbe: HTMLSpanElement | undefined;
 let documentObserver: MutationObserver | null = null;
 let previousCaptionColors = "";
@@ -62,6 +65,14 @@ function syncOnboardingWorld() {
   hasOnboardingWorld.value = document.querySelector(".onboarding-world, .login-world") !== null;
 }
 
+function syncWindowOverlayState() {
+  const active = Array.from(document.querySelectorAll<HTMLElement>(".el-overlay, .search-overlay")).some((element) => {
+    const style = getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  });
+  setWindowLayerFallback(active);
+}
+
 function updateNavigationState() {
   canGoBack.value = currentIndex > 0;
   canGoForward.value = currentIndex < historyStack.length - 1;
@@ -73,6 +84,14 @@ onMounted(async () => {
   syncOnboardingWorld();
   documentObserver = new MutationObserver(syncOnboardingWorld);
   documentObserver.observe(document.body, { childList: true, subtree: true });
+  overlayObserver = new MutationObserver(syncWindowOverlayState);
+  overlayObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "style"],
+  });
+  syncWindowOverlayState();
   stopWindowState = windowApi?.onWindowStateChanged(applyWindowState);
   if (windowApi) applyWindowState(await windowApi.getWindowState());
 
@@ -106,6 +125,9 @@ onUnmounted(() => {
   if (desktop) document.documentElement.classList.remove("amitia-desktop-shell");
   documentObserver?.disconnect();
   documentObserver = null;
+  overlayObserver?.disconnect();
+  overlayObserver = undefined;
+  setWindowLayerFallback(false);
   stopWindowState?.();
   stopAfterEach?.();
   appearanceObserver?.disconnect();
@@ -145,8 +167,11 @@ async function handleClose() {
   <div
     id="WindowControlButtons"
     class="drag"
-    :class="{ 'is-onboarding': props.transparent || hasOnboardingWorld, 'is-web': !desktop, 'is-macos': platform === 'darwin', 'is-windows': platform === 'win32', 'is-fullscreen': isFullscreen, 'is-chat-page': isChatPage, 'has-workspace-sidebar': hasWorkspaceSidebar }"
+    :class="{ 'is-onboarding': props.transparent || hasOnboardingWorld, 'is-web': !desktop, 'is-macos': platform === 'darwin', 'is-windows': platform === 'win32', 'is-fullscreen': isFullscreen, 'is-chat-page': isChatPage, 'has-workspace-sidebar': hasWorkspaceSidebar, 'is-overlay-blocked': windowLayerBlocked }"
+    :inert="windowLayerBlocked || undefined"
+    :aria-hidden="windowLayerBlocked ? 'true' : undefined"
   >
+    <div class="window-drag-region" aria-hidden="true"></div>
     <div class="titlebar-left">
       <button
         v-if="!hasOnboardingWorld"
@@ -227,15 +252,12 @@ async function handleClose() {
 </template>
 
 <style scoped>
-.drag { -webkit-app-region: drag; }
+.drag { -webkit-app-region: no-drag; }
 .no-drag { -webkit-app-region: no-drag; }
 #WindowControlButtons {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 10000;
+  position: relative;
   height: var(--desktop-titlebar-height, 40px);
+  flex: none;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -244,13 +266,14 @@ async function handleClose() {
   color: var(--ac-color-text);
   font: 12px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   user-select: none;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   --window-controls-safe-right: 8px;
 }
-:global(html[data-theme="dark"]) #WindowControlButtons:not(.is-onboarding) {
-  background: var(--workbench-sidebar-bg);
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+.window-drag-region {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  -webkit-app-region: drag;
 }
 #WindowControlButtons.is-onboarding {
   background: transparent;
@@ -258,6 +281,8 @@ async function handleClose() {
   backdrop-filter: none;
 }
 #WindowControlButtons .titlebar-left {
+  position: relative;
+  z-index: 2;
   height: 100%;
   display: flex;
   align-items: center;
@@ -294,10 +319,6 @@ async function handleClose() {
 }
 #WindowControlButtons.is-chat-page .window-chat-slot { display: block; }
 #WindowControlButtons.is-chat-page:not(.has-workspace-sidebar) .window-chat-slot::before { display: none; }
-:global(html:has(.workspace-sidebar-resizer:hover)) #WindowControlButtons .window-chat-slot::before,
-:global(html.is-resizing-workspace-sidebar) #WindowControlButtons .window-chat-slot::before {
-  background: var(--ac-color-primary);
-}
 .sidebar-toggle-btn,
 .nav-icon-btn {
   display: grid;
@@ -322,6 +343,8 @@ async function handleClose() {
 .nav-icon-btn:disabled { opacity: 0.35; cursor: default; }
 .nav-icon-btn svg { width: 18px; height: 18px; }
 #WindowControlButtons .window-actions {
+  position: relative;
+  z-index: 2;
   height: 100%;
   display: flex;
   -webkit-app-region: no-drag;
@@ -351,6 +374,12 @@ async function handleClose() {
   width: 14px;
   height: 14px;
   fill: currentColor;
+}
+#WindowControlButtons.is-overlay-blocked {
+  pointer-events: none;
+}
+#WindowControlButtons.is-overlay-blocked .window-drag-region {
+  display: none;
 }
 @media (max-width: 899px) {
   .window-chat-slot { display: none !important; }

@@ -75,10 +75,12 @@ import {
   Operation,
 } from "@element-plus/icons-vue";
 import { apiClient } from "../composables/useApi";
+import { useWindowLayerBlocker } from "../composables/useWindowLayer";
 
 const router = useRouter();
 
 const visible = ref(false);
+useWindowLayerBlocker("search-modal", visible);
 const query = ref("");
 const inputRef = ref<HTMLInputElement | null>(null);
 const activeGroup = ref(0);

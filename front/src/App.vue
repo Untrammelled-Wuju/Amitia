@@ -3,25 +3,28 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <DesktopTitleBar :transparent="isOnboardingPage" />
-  <div id="amitia-overlay-root" aria-live="polite"></div>
-  <UpdateDialog />
-  <AgentApprovalGuard />
-  <PrivacyConsent v-if="!isPublicPage && !renderError" />
-  <NotFoundView v-if="renderError" :error="capturedError" />
-  <div v-else class="workspace-root">
-    <ApplicationBackground :visible="!isPublicPage" />
-    <div class="workspace-foreground">
-      <Transition name="route-slide" mode="out-in">
-        <AppLayout v-if="!isPublicPage" key="app">
-          <router-view v-slot="{ Component }">
-            <RouteSurfaceHost v-if="Component" :fallback="Component" />
-          </router-view>
-        </AppLayout>
-        <div v-else key="public" class="public-root">
-          <router-view />
+  <div class="desktop-root" :class="{ 'is-titlebar-overlay': isOnboardingPage }">
+    <DesktopTitleBar :transparent="isOnboardingPage" />
+    <div class="desktop-stage">
+      <UpdateDialog />
+      <AgentApprovalGuard />
+      <PrivacyConsent v-if="!isPublicPage && !renderError" />
+      <NotFoundView v-if="renderError" :error="capturedError" />
+      <div v-else class="workspace-root">
+        <ApplicationBackground :visible="!isPublicPage" />
+        <div class="workspace-foreground">
+          <Transition name="route-slide" mode="out-in">
+            <AppLayout v-if="!isPublicPage" key="app">
+              <router-view v-slot="{ Component }">
+                <RouteSurfaceHost v-if="Component" :fallback="Component" />
+              </router-view>
+            </AppLayout>
+            <div v-else key="public" class="public-root">
+              <router-view />
+            </div>
+          </Transition>
         </div>
-      </Transition>
+      </div>
     </div>
   </div>
 </template>
@@ -185,7 +188,22 @@ details {
   margin: 2px 0 2px;
 }
 
-.workspace-root { height: 100%; }
+.desktop-root {
+  display: grid;
+  grid-template-rows: var(--desktop-titlebar-height, 40px) minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
+}
+.desktop-stage {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.desktop-root.is-titlebar-overlay {
+  display: block;
+}
+.workspace-root { position: relative; height: 100%; min-height: 0; overflow: hidden; }
 .workspace-foreground { position: relative; z-index: 1; height: 100%; }
 /* Cross-platform declarative ui.components primitives. These variables are
    emitted by providerTheme.ts from metadata.componentVariants. */
@@ -201,7 +219,7 @@ details {
   --ui-component-input-radius: var(--el-input-border-radius, var(--el-border-radius-base));
   --ui-component-input-padding-x: 11px;
 
-  --ui-component-dialog-radius: var(--el-border-radius-base);
+  --ui-component-dialog-radius: var(--ac-radius-xl);
   --ui-component-card-radius: var(--el-card-border-radius, var(--el-border-radius-base));
 }
 .el-button {
@@ -238,58 +256,59 @@ details {
   background: #f5f7fa;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-html.amitia-titlebar-shell body {
-  padding-top: var(--desktop-titlebar-height, 40px);
-  box-sizing: border-box;
-  overflow: hidden;
-}
-html.amitia-titlebar-shell #app {
-  height: calc(100vh - var(--desktop-titlebar-height, 40px));
-}
 html.amitia-titlebar-shell .app-shell {
   height: 100%;
 }
 
 html.amitia-titlebar-shell .el-overlay {
-  top: var(--desktop-titlebar-height, 40px) !important;
+  top: 0 !important;
+  z-index: 20000 !important;
 }
 
 html.amitia-titlebar-shell .el-message {
-  top: calc(var(--desktop-titlebar-height, 40px) + 20px) !important;
+  top: 20px !important;
+  z-index: 20010 !important;
 }
 html.amitia-titlebar-shell .el-notification {
-  top: calc(var(--desktop-titlebar-height, 40px) + 20px) !important;
+  top: 20px !important;
+  z-index: 20010 !important;
 }
 
 html.amitia-titlebar-shell .el-drawer.ltr,
 html.amitia-titlebar-shell .el-drawer.rtl,
 html.amitia-titlebar-shell .el-drawer.ttb,
 html.amitia-titlebar-shell .el-drawer.btt {
-  height: calc(100% - var(--desktop-titlebar-height, 40px)) !important;
+  height: 100% !important;
+  padding-top: var(--desktop-titlebar-height, 40px);
+  box-sizing: border-box;
 }
 
 html.amitia-titlebar-shell .search-overlay {
-  top: var(--desktop-titlebar-height, 40px) !important;
+  top: 0 !important;
 }
 
-html.amitia-titlebar-shell.amitia-desktop-onboarding body {
-  padding-top: 0;
+html[data-theme="dark"] #WindowControlButtons:not(.is-onboarding) {
+  background: var(--workbench-sidebar-bg);
 }
 
-html.amitia-titlebar-shell.amitia-desktop-onboarding #app {
-  height: 100vh;
+html:has(.workspace-sidebar-resizer:hover) #WindowControlButtons .window-chat-slot::before,
+html.is-resizing-workspace-sidebar #WindowControlButtons .window-chat-slot::before {
+  background-color: var(--ac-color-primary) !important;
 }
 
-html.amitia-desktop-shell:has(.onboarding-world) body {
-  padding-top: 0 !important;
+html.amitia-desktop-shell:has(.onboarding-world) .desktop-root,
+html.amitia-desktop-shell:has(.login-world) .desktop-root {
+  display: block;
 }
 
-html.amitia-desktop-shell:has(.onboarding-world) #app {
-  height: 100vh !important;
-}
-
-html.amitia-desktop-shell:has(.onboarding-world) #WindowControlButtons {
+html.amitia-desktop-onboarding #WindowControlButtons,
+html.amitia-desktop-shell:has(.onboarding-world) #WindowControlButtons,
+html.amitia-desktop-shell:has(.login-world) #WindowControlButtons {
   position: fixed !important;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 10000;
   background: transparent !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;

@@ -62,11 +62,6 @@ class _MemoryHubPageState extends ConsumerState<MemoryHubPage> {
       icon: AmitiaIconGlyph.userProfile,
       route: AppRoutes.memoryProfiles,
     ),
-    _MemoryEntry(
-      title: '世界书',
-      icon: AmitiaIconGlyph.worldBook,
-      route: AppRoutes.memoryWorldBook,
-    ),
   ];
 
   final _scrollController = ScrollController();
