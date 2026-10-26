@@ -48,7 +48,7 @@ func (p *RuntimePipeline) Replan(
 	var newExpressionPlan *decision.ExpressionPlan
 
 	if p.candidateRegistry != nil {
-		bp, ep, err := p.runDecision(ctx, scope, previous.Context, previous.Appraisal, previous.Personality, goalContext, now, safetyDecision)
+		bp, ep, err := p.runDecision(ctx, scope, previous.Context, previous.Appraisal, previous.Personality, goalContext, now, safetyDecision, previous.SafetyPolicy)
 		if err != nil {
 			return RuntimeReplanResult{Goals: goalContext}, fmt.Errorf("replan decision failed: %w", err)
 		}

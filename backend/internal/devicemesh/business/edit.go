@@ -45,7 +45,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 	case "message":
 		allowed = map[string]bool{"content": true}
 	case "memory":
-		allowed = map[string]bool{"content": true, "allowContextUse": true, "expiresAt": true, "archivedAt": true, "retentionLevel": true, "memoryStrength": true, "pinned": true}
+		allowed = map[string]bool{"content": true, "allowContextUse": true, "allowProactiveMention": true, "expiresAt": true, "archivedAt": true, "retentionLevel": true, "memoryStrength": true, "pinned": true}
 	case "profile":
 		allowed = map[string]bool{"content": true}
 	case "episodic":
@@ -72,7 +72,7 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 				return coordination.Acknowledgement{}, errors.New("项目名称无效或超过上限")
 			}
 		}
-		if key == "archived" || key == "pinned" || key == "hidden" || key == "allowContextUse" {
+		if key == "archived" || key == "pinned" || key == "hidden" || key == "allowContextUse" || key == "allowProactiveMention" {
 			var valueBool bool
 			if json.Unmarshal(value, &valueBool) != nil {
 				return coordination.Acknowledgement{}, errors.New("开关参数无效")

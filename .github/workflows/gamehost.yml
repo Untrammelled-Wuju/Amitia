@@ -112,7 +112,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.18.0'
+          node-version: '26.12.1'
           cache: npm
           cache-dependency-path: backend/pkg/gameplugin/sdk/game-plugin/package-lock.json
       - name: Verify Go / JSON Schema / TypeScript contract parity
@@ -157,7 +157,7 @@ jobs:
           cache-dependency-path: backend/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.18.0'
+          node-version: '26.12.1'
           cache: npm
           cache-dependency-path: |
             testplugins/mock-amitiax-game-plugin/package-lock.json

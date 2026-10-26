@@ -131,10 +131,7 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
         !widget.message.outputComplete &&
         (message.state == AmrpMessageState.streaming ||
             message.state == AmrpMessageState.queued);
-    final citationSources = _mergeCitationSources(
-      message.sources,
-      widget.message.assistantTurn,
-    );
+    final citationSources = _mergeCitationSources(message.sources);
     final citationIds = citationSources.map((source) => source.id).toSet();
     final hasAssistantTurnContent =
         widget.message.assistantTurn?.items.isNotEmpty == true;
@@ -711,54 +708,10 @@ class _AmitiaMessageViewState extends ConsumerState<AmitiaMessageView> {
 
   List<AmrpCitationSource> _mergeCitationSources(
     List<AmrpCitationSource> messageSources,
-    AssistantTurnDto? turn,
   ) {
     final byId = <String, AmrpCitationSource>{
       for (final source in messageSources) source.id: source,
     };
-    // Frozen citations are the authority for new messages. Legacy turns may
-    // still recover web sources from tool results when no snapshot exists.
-    if (messageSources.isNotEmpty) {
-      return byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
-    }
-    if (turn != null) {
-      for (final item in turn.items) {
-        if (item.type != 'tool_result' ||
-            (item.toolName != 'web_run' && item.toolName != 'web.run') ||
-            item.resultJson.trim().isEmpty) {
-          continue;
-        }
-        try {
-          final decoded = jsonDecode(item.resultJson);
-          if (decoded is! Map) continue;
-          final citations = decoded['citations'];
-          if (citations is! List) continue;
-          for (final raw in citations) {
-            if (raw is! Map) continue;
-            final citation = Map<String, dynamic>.from(raw);
-            final index = (citation['index'] as num?)?.toInt() ?? 0;
-            final fallbackId =
-                (citation['ref_id'] ?? citation['evidence_id'] ?? '')
-                    .toString()
-                    .trim();
-            final id = index > 0 ? index.toString() : fallbackId;
-            if (id.isEmpty || byId.containsKey(id)) continue;
-            final url = (citation['url'] ?? '').toString();
-            final title = (citation['title'] ?? '').toString().trim();
-            byId[id] = AmrpCitationSource(
-              id: id,
-              title: title.isNotEmpty
-                  ? title
-                  : (url.isNotEmpty ? url : 'Source $id'),
-              url: url,
-              snippet: (citation['text'] ?? '').toString(),
-            );
-          }
-        } catch (_) {
-          // Ignore legacy/non-JSON tool results.
-        }
-      }
-    }
     final sources = byId.values.toList();
     sources.sort((left, right) {
       final leftNumber = int.tryParse(left.id);
@@ -1393,7 +1346,6 @@ String _turnJSONText(dynamic value) {
 String _turnToolDisplayName(String raw, {String fallback = '工具调用'}) {
   final value = raw.trim();
   if (value.isEmpty) return fallback;
-  if (value == 'web_run' || value == 'web.run') return '联网研究';
   return value;
 }
 
@@ -1412,18 +1364,6 @@ String _turnToolSubject(AssistantTurnItemDto item) {
   }
   final decoded = _decodeTurnJSON(item.argumentsJson);
   if (decoded is Map) {
-    final searchQueries = decoded['search_query'];
-    if (searchQueries is List && searchQueries.isNotEmpty) {
-      final first = searchQueries.first;
-      if (first is Map) {
-        final query = first['q']?.toString().trim() ?? '';
-        if (query.isNotEmpty) {
-          return searchQueries.length > 1
-              ? '$query · ${searchQueries.length} 个查询'
-              : query;
-        }
-      }
-    }
     for (final key in const <String>[
       'path',
       'file',
@@ -1436,203 +1376,13 @@ String _turnToolSubject(AssistantTurnItemDto item) {
       final value = decoded[key]?.toString().trim() ?? '';
       if (value.isNotEmpty) return value;
     }
-    for (final key in const <String>['open', 'find', 'click', 'screenshot']) {
-      final commands = decoded[key];
-      if (commands is List && commands.isNotEmpty) {
-        return '$key · ${commands.length}';
-      }
-    }
   }
   final text = _turnJSONText(decoded).replaceAll(RegExp(r'\s+'), ' ').trim();
   return text.length > 72 ? '${text.substring(0, 72)}…' : text;
 }
 
-bool _isWebResearchTool(String name) => name == 'web_run' || name == 'web.run';
-
-String _webResearchStopReasonText(String reason) {
-  const labels = <String, String>{
-    'coverage_satisfied': '关键问题已覆盖',
-    'max_rounds': '达到研究轮次上限',
-    'max_search_calls': '达到搜索调用上限',
-    'max_provider_cost': '达到 Provider 成本上限',
-    'max_provider_credits': '达到 Provider credits 上限',
-    'no_new_queries': '没有新的有效查询',
-    'no_new_sources': '没有发现新的有效来源',
-    'low_information_gain': '新增信息已低于阈值',
-    'budget_satisfied': '研究预算已满足',
-  };
-  return labels[reason] ?? reason;
-}
-
-String _formatWebResearchDetails(Map<dynamic, dynamic> record) {
-  final lines = <String>[];
-  final operation = record['operation']?.toString().trim() ?? 'research';
-  const operationLabels = <String, String>{
-    'search': '搜索',
-    'open': '网页读取',
-    'find': '页面查找',
-    'click': '链接读取',
-    'screenshot': '视觉证据',
-  };
-  lines.add('联网研究 · ${operationLabels[operation] ?? '研究'}');
-
-  final research = record['research'];
-  if (research is Map) {
-    final unresolved = <String>{
-      if (research['unresolved_questions'] is List)
-        for (final value in research['unresolved_questions'] as List)
-          if (value.toString().trim().isNotEmpty) value.toString().trim(),
-    };
-    final plan = research['plan'];
-    if (plan is Map) {
-      final goal = plan['goal']?.toString().trim() ?? '';
-      if (goal.isNotEmpty) {
-        lines
-          ..add('')
-          ..add('研究目标：$goal');
-      }
-      final questions = plan['questions'];
-      if (questions is List && questions.isNotEmpty) {
-        lines
-          ..add('')
-          ..add('研究计划');
-        for (final question in questions) {
-          if (question is! Map) continue;
-          final text = question['question']?.toString().trim() ?? '';
-          if (text.isEmpty) continue;
-          lines.add('${unresolved.contains(text) ? '…' : '✓'} $text');
-        }
-      }
-    }
-    final findings = research['findings'];
-    if (findings is List && findings.isNotEmpty) {
-      lines
-        ..add('')
-        ..add('研究结论');
-      for (final finding in findings.take(12)) {
-        if (finding is! Map) continue;
-        final question = finding['question']?.toString().trim() ?? '';
-        final status = finding['status']?.toString().trim() ?? 'insufficient';
-        final icon = status == 'corroborated'
-            ? '✓✓'
-            : (status == 'supported' ? '✓' : '…');
-        if (question.isNotEmpty) lines.add('$icon $question');
-        final summary = finding['summary']?.toString().trim() ?? '';
-        if (summary.isNotEmpty) {
-          final compact = summary.replaceAll(RegExp(r'\s+'), ' ');
-          lines.add(
-            '  ${compact.length > 600 ? compact.substring(0, 600) : compact}',
-          );
-        }
-      }
-    }
-    final stopReason = research['stop_reason']?.toString().trim() ?? '';
-    if (stopReason.isNotEmpty) {
-      lines
-        ..add('')
-        ..add('停止条件：${_webResearchStopReasonText(stopReason)}');
-    }
-  }
-
-  final search = record['search'];
-  if (search is List && search.isNotEmpty) {
-    lines
-      ..add('')
-      ..add('来源（${search.length}）');
-    for (final source in search.take(20)) {
-      if (source is! Map) continue;
-      final url = source['url']?.toString().trim() ?? '';
-      final title = source['title']?.toString().trim();
-      final label = title == null || title.isEmpty
-          ? (url.isEmpty ? '来源' : url)
-          : title;
-      lines.add('- $label${url.isNotEmpty ? '\n  $url' : ''}');
-    }
-  }
-
-  final citations = record['citations'];
-  if (citations is List && citations.isNotEmpty) {
-    lines
-      ..add('')
-      ..add('证据与引用（${citations.length}）');
-    for (final citation in citations.take(24)) {
-      if (citation is! Map) continue;
-      final index = int.tryParse(citation['index']?.toString() ?? '') ?? 0;
-      final url = citation['url']?.toString().trim() ?? '';
-      final title = citation['title']?.toString().trim();
-      final label = title == null || title.isEmpty
-          ? (url.isEmpty ? '证据' : url)
-          : title;
-      var locatorText = '';
-      final locator = citation['locator'];
-      if (locator is Map && locator['kind']?.toString() == 'pdf_page') {
-        final page = int.tryParse(locator['page']?.toString() ?? '');
-        if (page != null && page >= 0) locatorText = ' · PDF 第 ${page + 1} 页';
-      }
-      lines.add('- ${index > 0 ? '[$index] ' : ''}$label$locatorText');
-    }
-  }
-
-  final graph = record['evidence_graph'];
-  if (graph is Map) {
-    final conflicts =
-        int.tryParse(graph['conflict_count']?.toString() ?? '') ?? 0;
-    if (conflicts > 0) {
-      lines
-        ..add('')
-        ..add('证据冲突：$conflicts 组（已保留供最终回答审计）');
-    }
-  }
-
-  final security = record['security'];
-  if (security is Map && security['potential_prompt_injection'] == true) {
-    lines
-      ..add('')
-      ..add('安全：检测到网页中的指令型文本，已按不可信外部内容处理。');
-  }
-
-  final stats = record['stats'];
-  if (stats is Map) {
-    final calls = int.tryParse(stats['search_calls']?.toString() ?? '') ?? 0;
-    final fetches = int.tryParse(stats['fetch_calls']?.toString() ?? '') ?? 0;
-    final duration = int.tryParse(stats['duration_ms']?.toString() ?? '') ?? 0;
-    final summary = <String>[];
-    if (calls > 0) summary.add('$calls 次搜索');
-    if (fetches > 0) summary.add('$fetches 次抓取');
-    if (duration > 0) summary.add('$duration ms');
-    if (summary.isNotEmpty) {
-      lines
-        ..add('')
-        ..add('运行统计：${summary.join(' · ')}');
-    }
-  }
-
-  if (research is Map && research['cost'] is Map) {
-    final cost = research['cost'] as Map;
-    final usd =
-        double.tryParse(cost['provider_cost_usd']?.toString() ?? '') ?? 0;
-    final credits =
-        double.tryParse(cost['provider_credits']?.toString() ?? '') ?? 0;
-    final values = <String>[];
-    if (usd > 0) values.add(r'$' + usd.toStringAsFixed(4));
-    if (credits > 0) {
-      final creditText = credits == credits.roundToDouble()
-          ? credits.toInt().toString()
-          : credits.toStringAsFixed(2);
-      values.add('$creditText credits');
-    }
-    if (values.isNotEmpty) lines.add('Provider 成本：${values.join(' · ')}');
-  }
-
-  return lines.join('\n').trim();
-}
-
 String _turnResultText(AssistantTurnItemDto item) {
   final decoded = _decodeTurnJSON(item.resultJson);
-  if (_isWebResearchTool(item.toolName) && decoded is Map) {
-    final formatted = _formatWebResearchDetails(decoded);
-    if (formatted.isNotEmpty) return formatted;
-  }
   final text = _turnJSONText(decoded);
   if (text.trim().isNotEmpty) return text;
   return item.errorCode.trim().isNotEmpty ? item.errorCode : '无返回内容';

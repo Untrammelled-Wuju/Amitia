@@ -20,7 +20,6 @@ import 'extension_service.dart';
 import 'extension_task_service.dart';
 import 'extension_view_invalidator.dart';
 import 'system_service.dart';
-import 'search_api_service.dart';
 import 'user_feedback_service.dart';
 import 'channel_service.dart';
 import 'workspace_service.dart';
@@ -223,10 +222,6 @@ final systemServiceProvider = Provider<SystemService>(
     _getDynamicServiceApi(ref),
     owned: ref.read(chatServiceProvider).owned,
   ),
-);
-
-final searchApiServiceProvider = Provider<SearchApiService>(
-  (ref) => SearchApiService(_getDynamicServiceApi(ref)),
 );
 
 final safetyServiceProvider = Provider<SafetyService>(

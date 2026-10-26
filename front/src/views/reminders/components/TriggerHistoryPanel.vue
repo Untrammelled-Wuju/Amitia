@@ -4,14 +4,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <section class="history-panel" aria-label="执行历史">
-    <header class="panel-header">
-      <div>
-        <h2>每次执行，都有记录</h2>
-        <p>查看消息保存、通知与渠道投递的实际结果，展开记录查看详情。</p>
-      </div>
+    <header class="panel-toolbar">
       <div class="header-actions">
+        <slot name="toolbar" />
         <el-select
           v-model="filterState"
+          size="small"
           aria-label="筛选执行结果"
           @change="
             () => {
@@ -24,7 +22,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             :key="state"
             :label="label"
             :value="state" /></el-select
-        ><el-button :loading="loading" @click="$emit('refresh')">刷新</el-button>
+        >
       </div>
     </header>
     <el-table :data="items" v-loading="loading" class="history-table" row-key="id">
@@ -72,7 +70,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         ><template #default="{ row }">{{ fmtDate(row.createdAt) }}</template></el-table-column
       >
       <template #empty
-        ><el-empty description="暂无执行记录" :image-size="72"
+        ><el-empty description="暂无执行记录" :image-size="64"
           ><span class="empty-hint">任务执行后，结果会显示在这里</span></el-empty
         ></template
       >
@@ -105,10 +103,6 @@ import { ref, onMounted, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { request } from "../../../composables/request";
 import type { TriggerHistory } from "../../../types";
-
-defineEmits<{
-  refresh: [];
-}>();
 
 const props = withDefaults(defineProps<{ kind?: "user_reminder" | "proactive_task" }>(), {
   kind: "user_reminder",
@@ -193,23 +187,12 @@ onUnmounted(() => clearInterval(refreshTimer));
 </script>
 
 <style scoped>
-.panel-header {
+.panel-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 24px;
-}
-h2 {
-  font-size: 18px;
-  margin: 0 0 8px;
-  color: var(--tp-text);
-}
-.panel-header p {
-  color: var(--tp-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-  margin: 0;
+  justify-content: flex-end;
+  min-height: 32px;
+  margin-bottom: 10px;
 }
 .header-actions,
 .pagination {
@@ -226,15 +209,15 @@ h2 {
   font-size: 14px;
 }
 .history-table :deep(th.el-table__cell) {
-  height: 44px;
+  height: 40px;
   font-weight: 500;
   color: var(--tp-text-secondary);
 }
 .history-table :deep(td.el-table__cell) {
-  padding: 18px 0;
+  padding: 10px 0;
 }
 .history-expanded {
-  padding: 16px 32px;
+  padding: 12px 24px;
   background: var(--tp-panel-soft);
   overflow-wrap: anywhere;
 }
@@ -256,7 +239,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 20px;
+  margin-top: 12px;
   color: var(--tp-text-secondary);
   font-size: 13px;
 }
@@ -264,13 +247,10 @@ h2 {
   color: var(--tp-text-secondary);
   font-size: 13px;
 }
-@media (max-width: 900px) {
-  .panel-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+@media (max-width: 760px) {
   .header-actions {
     width: 100%;
+    flex-wrap: wrap;
   }
   .history-footer {
     flex-wrap: wrap;

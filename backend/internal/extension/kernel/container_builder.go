@@ -91,14 +91,12 @@ import (
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
-	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/uiagent"
 	"github.com/u-ai/backend/internal/uiagent/preview"
 	"github.com/u-ai/backend/internal/uiagent/preview/adapters"
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/vision"
-	"github.com/u-ai/backend/internal/webresearch"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
@@ -120,11 +118,6 @@ type ContainerBuilder struct {
 	androidNativeProvider        capability.AndroidProvider
 	iosNativeProvider            capability.IOSProvider
 	host                         runtimehost.RuntimeHost
-	searchConfig                 search.Config
-	searchProviders              []SearchProviderRegistration
-	webResearchConfig            webresearch.Config
-	webResearchReranker          webresearch.SemanticReranker
-	webResearchFetchProviders    []webresearch.AdvancedFetchProvider
 	visionSvc                    vision.Service
 	imagegenSvc                  imagegen.Service
 	imageProviderRegistry        *imageprovider.Registry
@@ -264,33 +257,6 @@ func (b *ContainerBuilder) WithRuntimeIdentity(identity runtimeidentity.Identity
 
 func (b *ContainerBuilder) WithWorkshopModelGenerator(model WorkshopModelGenerator) *ContainerBuilder {
 	b.workshopModelGenerator = model
-	return b
-}
-
-func (b *ContainerBuilder) WithSearchConfig(cfg search.Config) *ContainerBuilder {
-	b.searchConfig = cfg
-	return b
-}
-
-func (b *ContainerBuilder) WithSearchProvider(registration SearchProviderRegistration) *ContainerBuilder {
-	b.searchProviders = append(b.searchProviders, registration)
-	return b
-}
-
-func (b *ContainerBuilder) WithWebResearchConfig(cfg webresearch.Config) *ContainerBuilder {
-	b.webResearchConfig = cfg
-	return b
-}
-
-func (b *ContainerBuilder) WithWebResearchSemanticReranker(reranker webresearch.SemanticReranker) *ContainerBuilder {
-	b.webResearchReranker = reranker
-	return b
-}
-
-func (b *ContainerBuilder) WithWebResearchFetchProvider(provider webresearch.AdvancedFetchProvider) *ContainerBuilder {
-	if provider != nil {
-		b.webResearchFetchProviders = append(b.webResearchFetchProviders, provider)
-	}
 	return b
 }
 
@@ -627,6 +593,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	kernelSecretBroker, err := buildKernelSecretBroker(b.extRoot)
 	if err != nil {
 		return nil, fmt.Errorf("kernel: build secret broker: %w", err)
+	}
+	if err := purgeRetiredSecretRefs(ctx, b.scopeRelationDB, kernelSecretBroker); err != nil {
+		return nil, fmt.Errorf("kernel: purge retired secret refs: %w", err)
 	}
 	workflowTriggerManager.SetSecretResolver(func(ctx context.Context, rawRef string, event workflow.WorkflowTriggerEvent, binding workflow.TriggerBinding) ([]byte, error) {
 		if !workflow.TriggerSecretRefOwnedBySpace(rawRef, event.OwnerSpaceID) {
@@ -1148,7 +1117,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
 	providerInstanceReconciler := capability.NewProviderInstanceReconcilerWithAdapters(providerLifecycle, capabilityProviderRegistry, b.runtimeIdentity, adapterRegistry)
-	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle, adapterRegistry)
 	capabilityResolver := capability.NewResolver(capability.NewProviderCatalogAdapter(capabilityProviderRegistry))
 	capabilityResolver.SetRuntimeCatalog(capability.NewRuntimeAdapterCatalogAdapter(adapterRegistry))
 
@@ -1466,25 +1434,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		deviceRuntimePort = capability.NewMeshDeviceRuntimeInvocationPort(meshPorts)
 	}
 
-	searchService := buildSearchService(b.searchConfig, kernelSecretBroker, b.scopeRelationDB, b.searchProviders)
-	webStore := webresearch.NewStore(db)
-	if err := webStore.EnsureSchema(ctx); err != nil {
-		return nil, fmt.Errorf("kernel: ensure web research schema: %w", err)
-	}
-	webConfig := b.webResearchConfig
-	if webConfig == (webresearch.Config{}) {
-		webConfig = webresearch.DefaultConfig()
-	}
-	var webBrowser webresearch.BrowserReader
-	if b.browserProvider != nil {
-		webBrowser = webresearch.NewAmitiaBrowserReader(b.browserProvider).WithMaxScrolls(webConfig.MaxBrowserScrolls)
-	}
-	webConfig.Enabled = webConfig.Enabled && b.searchConfig.Enabled && (b.searchConfig.HasProvider() || len(b.searchProviders) > 0)
-	webRuntime := webresearch.NewRuntime(webConfig, searchService, webStore, webBrowser).WithSemanticReranker(b.webResearchReranker)
-	for _, fetchProvider := range b.webResearchFetchProviders {
-		webRuntime.WithFetchProvider(fetchProvider)
-	}
-
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
 		JSGlobalFactory:   jsFactory,
 		WASMFactory:       wasmFactory,
@@ -1499,9 +1448,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		},
 		AndroidLinuxProvider:  b.androidLinuxProvider,
 		AndroidNativeProvider: b.androidNativeProvider,
-		SearchCaller:          buildWebResearchCallFunc(webRuntime),
-		SearchStreamCaller:    buildWebResearchStreamCallFunc(webRuntime),
-		SearchHealth:          buildSearchHealthFunc(searchService),
 		InternalDispatcher:    internalDispatcher,
 		MediaCaller:           mediaCaller,
 		MediaHealth:           mediaHealth,
@@ -1514,10 +1460,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ChannelStore:          b.channelStore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
-	}
-
-	if err := builtinProviderReconciler.Reconcile(); err != nil {
-		return nil, fmt.Errorf("builtin provider reconcile failed: %w", err)
 	}
 
 	if err := registerIOSToolsIfPresent(toolRegistry, b.iosNativeProvider); err != nil {

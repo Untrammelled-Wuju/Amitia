@@ -698,6 +698,15 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
     }
   }
 
+  Future<void> _setProactiveMention(Map row) async {
+    await _edit(
+      row,
+      changes: {
+        'allowProactiveMention': row['body']?['allowProactiveMention'] == false,
+      },
+    );
+  }
+
   Future<void> _editContent(Map row) async {
     final original = Map<String, dynamic>.from(
       jsonDecode(jsonEncode(row)) as Map,
@@ -1902,7 +1911,7 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                   SizedBox(height: AppSpacing.md),
                 ],
                 Text(
-                  '版本 ${row['revision'] ?? 0}${body['allowContextUse'] == false ? ' · 已停用' : ''}',
+                  '版本 ${row['revision'] ?? 0}${body['allowContextUse'] == false ? ' · 已停用' : ''}${body['allowProactiveMention'] == false ? ' · 不主动提及' : ''}',
                   style: AppTypography.caption(context),
                 ),
                 if (row['kind'] == 'memory')
@@ -2048,6 +2057,19 @@ class _OwnedMemoryPageState extends ConsumerState<OwnedMemoryPage> {
                               ),
                             ),
                           ],
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () => _detailAction(
+                                    sheetContext,
+                                    () => _setProactiveMention(row),
+                                  ),
+                            child: Text(
+                              row['body']?['allowProactiveMention'] == false
+                                  ? '允许主动提及'
+                                  : '禁止主动提及',
+                            ),
+                          ),
                           TextButton(
                             onPressed: _loading
                                 ? null

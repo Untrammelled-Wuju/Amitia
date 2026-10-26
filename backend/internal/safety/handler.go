@@ -25,8 +25,13 @@ func (h *Handler) GetBdiConfig(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "读取配置失败", nil)
 		return
 	}
+	policy.BDI = NormalizeBdiConfig(policy.BDI)
 	policy.BDI.Revision = policy.Revision
 	util.SuccessResponse(c, &policy.BDI)
+}
+
+func (h *Handler) GetBdiOptions(c *gin.Context) {
+	util.SuccessResponse(c, BdiOptionSet())
 }
 
 func (h *Handler) PutBdiConfig(c *gin.Context) {
@@ -41,6 +46,10 @@ func (h *Handler) PutBdiConfig(c *gin.Context) {
 		return
 	}
 	policy, err := NewRepository(h.db).SaveBDI(c.Request.Context(), scope, body)
+	if errors.Is(err, ErrBdiConfigInvalid) {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(409, gin.H{"code": 409, "msg": "BDI 安全策略已被其他操作更新，请重新加载"})
 		return

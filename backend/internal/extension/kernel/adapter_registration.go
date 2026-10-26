@@ -30,9 +30,6 @@ type AdapterRegistrationDeps struct {
 	DesktopProvider        capability.DesktopProvider
 	AndroidLinuxProvider   interface{}
 	AndroidNativeProvider  capability.AndroidProvider
-	SearchCaller           capability.SearchCallFunc
-	SearchStreamCaller     capability.SearchStreamCallFunc
-	SearchHealth           capability.SearchHealthFunc
 	BrowserCaller          capability.BrowserCallFunc
 	BrowserHealth          capability.BrowserHealthFunc
 	InternalDispatcher     capability.InternalCallFunc
@@ -125,11 +122,6 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 			capability.RuntimeTypeAndroid_Native,
 			capability.NewAndroidRuntimeAdapter(deps.AndroidNativeProvider),
 		)
-	}
-
-	if deps.SearchCaller != nil {
-		searchAdapter := capability.NewSearchRuntimeAdapterWithStream(deps.SearchCaller, deps.SearchStreamCaller, deps.SearchHealth)
-		registry.Register(capability.RuntimeTypeSearch, searchAdapter)
 	}
 
 	if deps.BrowserCaller != nil {

@@ -99,6 +99,7 @@ backend/testdata/extensions/**/dist-candidate-*/
 /backend/scripts/__pycache__/
 /wechat_personal_ai_demo/
 /plugins-code/channels/wechat-ipad860/
+/plugins-code/channels/qq-personal/runtime/data/
 /backend/server-linux-arm64
 /backend/admin-server.exe
 /backend/surrealdb/

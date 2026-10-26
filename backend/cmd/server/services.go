@@ -38,6 +38,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/platform"
 
+	channelsandbox "github.com/u-ai/backend/internal/channel/sandbox"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
@@ -59,7 +60,6 @@ import (
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/extension"
-	channelsandbox "github.com/u-ai/backend/internal/channel/sandbox"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
@@ -419,8 +419,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithVectorStore(newKernelVectorStoreAdapter(ctx.DB)).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
-		WithSearchConfig(searchConfigFromAppConfig(config.AppCfg)).
-		WithWebResearchConfig(webResearchConfigFromAppConfig(config.AppCfg)).
 		WithVisionService(visionSvc).
 		WithImageGenService(imagegenSvc).
 		WithImageProviderRegistry(providerRegistry).

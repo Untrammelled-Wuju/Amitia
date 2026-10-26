@@ -10,6 +10,7 @@ import (
 func RegisterSafetyRouter(r *gin.RouterGroup, db *gorm.DB, coordinator ...*coordination.Service) {
 	h := NewHandler(db, coordinator...)
 	r.GET("/safety/bdi-config", security.SharedCoreAdminOnly(), h.GetBdiConfig)
+	r.GET("/safety/bdi-options", security.SharedCoreAdminOnly(), h.GetBdiOptions)
 	r.PUT("/safety/bdi-config", security.SharedCoreAdminOnly(), h.PutBdiConfig)
 	r.GET("/safety/audit-logs", security.SharedCoreAdminOnly(), h.GetAuditLogs)
 	r.GET("/safety/config", security.SharedCoreAdminOnly(), h.GetConfig)

@@ -136,7 +136,6 @@ const pageTitleOverrides: Record<string, string> = {
   "/graph": "记忆图谱",
   "/settings/overview": "运行概览",
   "/settings/data": "运行数据",
-  "/settings/search-api": "搜索 API",
   "/channel-center": "渠道接入",
   "/continuity": "持续事项",
   "/my-space": "我的空间",

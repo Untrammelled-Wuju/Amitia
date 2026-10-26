@@ -23,11 +23,6 @@ type ownedFixtureToolRuntime interface {
 	ExecuteModelTool(context.Context, string, json.RawMessage, SkillScope, string) (ToolResult, bool)
 }
 
-func (a *ownedCitationAudit) captureToolResultFixture(_ context.Context, _ string, name, result, _ string, _ string, _ int64) error {
-	a.captureCitationIDs(name, result)
-	return nil
-}
-
 func (r *ownedLoopTestRuntime) Tools(context.Context, business.Inference) ([]tool.Tool, error) {
 	return r.definitions, nil
 }

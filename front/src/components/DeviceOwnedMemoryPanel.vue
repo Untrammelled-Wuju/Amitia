@@ -89,6 +89,7 @@
           <el-tag size="small">版本 {{ row.revision }}</el-tag>
           <el-tag v-if="row.kind === 'memory'" size="small">L{{ (row.body.effectiveRetentionLevel ?? row.body.retentionLevel) || 3 }} · 强度 {{ Math.round(((row.body.effectiveStrength ?? row.body.memoryStrength) ?? 0.68) * 100) }}% · {{ row.body.pinned ? '已固定' : (row.body.effectiveDecayState ?? row.body.decayState) === 'archived' ? '自动归档' : (row.body.effectiveDecayState ?? row.body.decayState) === 'fading' ? '淡化' : '活跃' }} · 强化 {{ row.body.reinforceCount || 0 }} 次</el-tag>
           <el-tag v-if="row.body.allowContextUse === false" size="small" type="warning">已停用</el-tag>
+          <el-tag v-if="row.body.allowProactiveMention === false" size="small" type="info">不主动提及</el-tag>
           <el-tag v-if="row.body.expiresAt" size="small" type="info">到期 {{ row.body.expiresAt }}</el-tag>
         </div>
         <div v-if="source === 'current' && ['memory', 'episodic', 'fact', 'vector', 'profile'].includes(row.kind) && row.executionScope" class="record-actions">
@@ -99,6 +100,7 @@
           <template v-if="row.kind === 'memory'">
             <el-button size="small" :disabled="loading" @click="openLifecycle(row)">保留等级与固定</el-button>
             <el-button size="small" :disabled="loading" @click="setUse(row)">{{ row.body.allowContextUse === false ? '允许用于对话' : '停用' }}</el-button>
+            <el-button size="small" :disabled="loading" @click="setProactiveMention(row)">{{ row.body.allowProactiveMention === false ? '允许主动提及' : '禁止主动提及' }}</el-button>
             <el-button size="small" :disabled="loading" @click="setExpiry(row)">到期时间</el-button>
             <el-button size="small" :disabled="loading" @click="setArchive(row)">{{ row.body.archivedAt ? '取消归档' : '归档' }}</el-button>
           </template>
@@ -462,6 +464,13 @@ async function submitCreateProfile() {
 async function setUse(row: any) {
   try {
     await owned.edit("memory", row.id, { allowContextUse: row.body.allowContextUse === false }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
+    await load();
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : "修改失败"; }
+}
+
+async function setProactiveMention(row: any) {
+  try {
+    await owned.edit("memory", row.id, { allowProactiveMention: row.body.allowProactiveMention === false }, { characterId: row.executionScope.roleId, expectedExecutionScope: row.executionScope, expectedOwnerId: row.ownerId, expectedRevision: row.revision });
     await load();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : "修改失败"; }
 }

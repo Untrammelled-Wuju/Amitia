@@ -9,10 +9,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 )
 
@@ -82,19 +82,12 @@ func TestOwnedDocumentOutputIsBounded(t *testing.T) {
 	}
 }
 
-func TestOwnedPDFParsesRealDocumentUsingCoreConfiguredCommand(t *testing.T) {
+func TestOwnedPDFParsesRealDocumentUsingPathCommand(t *testing.T) {
 	command := os.Getenv("AMITIA_TEST_PDF_TOOL")
 	if command == "" {
 		t.Skip("actual PDF command not supplied")
 	}
-	previous := config.AppCfg
-	current := config.Config{}
-	if previous != nil {
-		current = *previous
-	}
-	current.Providers.Search.Research.PDFTextCommand = command
-	config.AppCfg = &current
-	t.Cleanup(func() { config.AppCfg = previous })
+	t.Setenv("PATH", filepath.Dir(command)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	content := "BT /F1 12 Tf 72 720 Td (Hello Core) Tj ET"
 	objects := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",

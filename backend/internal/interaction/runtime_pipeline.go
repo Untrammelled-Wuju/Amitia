@@ -204,7 +204,7 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 	var behaviorPlan *decision.BehaviorPlan
 	var expressionPlan *decision.ExpressionPlan
 	if p.candidateRegistry != nil {
-		bp, ep, err := p.runDecision(ctx, scope, snapshot, appraisalResult, compiledPersonality, goalContext, now, safetyDecision)
+		bp, ep, err := p.runDecision(ctx, scope, snapshot, appraisalResult, compiledPersonality, goalContext, now, safetyDecision, safetyPolicy)
 		if err != nil {
 			log.Printf("[runtime_pipeline] scoring failed, fail-closed: %v", err)
 		} else {

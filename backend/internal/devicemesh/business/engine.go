@@ -1225,7 +1225,7 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 				var old map[string]json.RawMessage
 				if json.Unmarshal(previous.Body, &old) == nil {
 					state = memorypolicy.ReadLifecycle(old, time.Now())
-					for _, field := range []string{"allowContextUse", "expiresAt", "archivedAt", "createdAt"} {
+					for _, field := range []string{"allowContextUse", "allowProactiveMention", "expiresAt", "archivedAt", "createdAt"} {
 						if value, found := old[field]; found {
 							document[field] = value
 						}

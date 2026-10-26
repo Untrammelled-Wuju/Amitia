@@ -107,10 +107,6 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, svc Service, 
 	r.PUT("/audit/settings", sharedCoreAdminOnly(), handler.UpdateAuditSettings)
 	r.GET("/audit/stats", sharedCoreAdminOnly(), handler.AuditStats)
 
-	r.GET("/search/credentials", sharedCoreAdminOnly(), handler.SearchCredentialList)
-	r.PUT("/search/credentials/:engineId", sharedCoreAdminOnly(), handler.SearchCredentialSave)
-	r.DELETE("/search/credentials/:engineId", sharedCoreAdminOnly(), handler.SearchCredentialDelete)
-
 	r.GET("/security/access-config", sharedCoreAdminOnly(), handler.SecurityAccessConfig)
 	r.PUT("/security/access-config", sharedCoreAdminOnly(), handler.UpdateSecurityAccessConfig)
 	r.GET("/security/access-status", sharedCoreAdminOnly(), handler.SecurityAccessStatus)

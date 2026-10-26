@@ -31,11 +31,6 @@ List<SettingsCategory> buildSettingsCategories({
           value: modelSummary,
           route: AppRoutes.settingsModels,
         ),
-        SettingItem(
-          title: '搜索 API',
-          icon: Icons.manage_search_outlined,
-          route: AppRoutes.settingsSearchApi,
-        ),
       ],
     ),
   ),

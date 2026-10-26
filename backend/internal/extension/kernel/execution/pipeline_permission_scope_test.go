@@ -10,9 +10,9 @@ import (
 
 func TestBuildPermissionRequirementsPreservesInvocationScope(t *testing.T) {
 	tool := capability.ToolDefinition{
-		ID:          "web_run",
-		ExtensionID: "com.amitia.builtin.search",
-		Permissions: []capability.PermissionRequirement{{Capability: "network.request"}},
+		ID:          "browser_tab_get",
+		ExtensionID: "com.amitia.builtin.browser",
+		Permissions: []capability.PermissionRequirement{{Capability: "browser.runtime"}},
 	}
 	invocation := capability.ToolInvocationContext{
 		CharacterID:    "character-1",

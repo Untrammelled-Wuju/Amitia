@@ -4,64 +4,49 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <main class="task-workspace" aria-label="主动任务">
-    <header class="workspace-header">
+    <header class="workspace-toolbar">
       <div class="task-kind-switch" role="group" aria-label="主动任务类型">
         <el-radio-group v-model="taskKind" @change="switchTaskKind">
           <el-radio-button value="user_reminder">定时任务</el-radio-button>
           <el-radio-button value="proactive_task">主动消息</el-radio-button>
         </el-radio-group>
-        <span>{{
-          taskKind === "user_reminder"
-            ? "按指定时间执行的一次性或重复任务"
-            : "由角色按规则、频率和安静时段主动发起消息"
-        }}</span>
       </div>
-      <div class="header-actions">
-        <el-button :icon="Refresh" :loading="refreshing" @click="refreshWorkspace">刷新</el-button>
+      <div class="workspace-summary" aria-label="任务概览">
+        <span class="summary-item"
+          >全部 <strong>{{ statusLoaded ? totalCount : "—" }}</strong></span
+        >
+        <span class="summary-item"
+          >启用 <strong>{{ statusLoaded ? enabledCount : "—" }}</strong></span
+        >
+        <span class="summary-item"
+          >已到期 <strong>{{ statusLoaded ? dueCount : "—" }}</strong></span
+        >
+        <span
+          class="scheduler-state"
+          :class="{
+            'is-running': statusLoaded && schedulerRunning,
+            'is-stopped': statusLoaded && !schedulerRunning,
+          }"
+        >
+          <i aria-hidden="true"></i>
+          {{
+            statusLoaded ? (schedulerRunning ? "调度正常" : "调度已停止") : "状态未确认"
+          }}
+        </span>
+        <el-button
+          text
+          circle
+          :icon="Refresh"
+          :loading="refreshing"
+          aria-label="刷新任务"
+          title="刷新任务"
+          @click="refreshWorkspace"
+        />
       </div>
     </header>
-    <section class="overview" aria-label="任务概览">
-      <div class="overview-item">
-        <span class="metric-icon"
-          ><el-icon><Calendar /></el-icon
-        ></span>
-        <div>
-          <span class="metric-label">全部任务</span
-          ><strong>{{ statusLoaded ? totalCount : "—" }}</strong>
-        </div>
-      </div>
-      <div class="overview-item">
-        <span class="metric-icon success"
-          ><el-icon><CircleCheck /></el-icon
-        ></span>
-        <div>
-          <span class="metric-label">已启用</span
-          ><strong>{{ statusLoaded ? enabledCount : "—" }}</strong>
-        </div>
-      </div>
-      <div class="overview-item">
-        <span class="metric-icon warning"
-          ><el-icon><Timer /></el-icon
-        ></span>
-        <div>
-          <span class="metric-label">已到执行时间</span
-          ><strong>{{ statusLoaded ? dueCount : "—" }}</strong>
-        </div>
-      </div>
-      <div class="scheduler-state">
-        <el-tag
-          :type="statusLoaded ? (schedulerRunning ? 'success' : 'danger') : 'info'"
-          effect="light"
-          round
-          >{{
-            statusLoaded ? (schedulerRunning ? "调度运行中" : "调度已停止") : "状态未确认"
-          }}</el-tag
-        ><span>执行与投递结果可在历史中查看</span>
-      </div>
-    </section>
     <section class="workspace-content">
       <el-tabs v-model="activeView" class="workspace-tabs">
-        <el-tab-pane label="任务列表" name="tasks">
+        <el-tab-pane label="任务" name="tasks">
           <div class="list-toolbar">
             <el-input
               v-model="searchText"
@@ -93,7 +78,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             /></el-select>
           </div>
           <el-alert
-            v-if="listError"
+            v-if="listError && reminders.length"
             :title="listError"
             type="error"
             :closable="false"
@@ -101,24 +86,16 @@ SPDX-License-Identifier: AGPL-3.0-only
             class="load-error"
             ><el-button link type="primary" @click="fetchReminders">重新加载</el-button></el-alert
           >
-          <el-table
-            :data="filteredReminders"
-            v-loading="loading"
-            class="task-table"
-            :row-style="{ height: '88px' }"
-          >
+          <el-table :data="filteredReminders" v-loading="loading" class="task-table">
             <el-table-column label="任务" min-width="240"
               ><template #default="{ row }"
-                ><button class="task-title" @click="showDetail(row)">{{ row.title }}</button>
+                ><div class="task-heading">
+                  <button class="task-title" @click="showDetail(row)">{{ row.title }}</button>
+                  <span class="task-role">{{ roleLabel(row) }}</span>
+                </div>
                 <p class="task-description">
-                  {{ row.content || "到期后由角色发送消息" }}
+                  {{ row.content || "无附加消息内容" }}
                 </p></template
-              ></el-table-column
-            >
-            <el-table-column label="所属角色" min-width="140"
-              ><template #default="{ row }"
-                ><span class="role-name">{{ roleLabel(row) }}</span>
-                <p class="cell-secondary">{{ sourceLabel(row.source) }}</p></template
               ></el-table-column
             >
             <el-table-column label="下次执行" min-width="185"
@@ -129,7 +106,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                     : "—"
                 }}</span>
                 <p class="cell-secondary">
-                  {{ repeatLabel(row.repeatRule) }} · {{ row.timezone }}
+                  {{ repeatLabel(row.repeatRule) }}
                 </p></template
               ></el-table-column
             >
@@ -140,7 +117,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 }}</el-tag></template
               ></el-table-column
             >
-            <el-table-column label="操作" width="154" align="right"
+            <el-table-column label="操作" width="132" align="right"
               ><template #default="{ row }"
                 ><div class="row-actions">
                   <el-button
@@ -191,14 +168,14 @@ SPDX-License-Identifier: AGPL-3.0-only
                   {{
                     searchText || filterCharacterId || activeGroup
                       ? "没有匹配的任务"
-                      : "为下一次陪伴安排时间"
+                      : "还没有定时任务"
                   }}
                 </h3>
                 <p>
                   {{
                     searchText || filterCharacterId || activeGroup
                       ? "尝试调整搜索内容或筛选条件。"
-                      : "创建第一项任务，由角色在约定的时间向你发送消息。"
+                      : "从左侧新建任务，安排角色在指定时间发送消息。"
                   }}
                 </p>
                 <el-button
@@ -209,34 +186,39 @@ SPDX-License-Identifier: AGPL-3.0-only
                     activeGroup = '';
                   "
                   >清除筛选</el-button>
+                <el-button v-else type="primary" @click="openCreate">新建任务</el-button>
               </div></template
             >
           </el-table>
-          <footer class="list-footer">
-            <span>显示 {{ filteredReminders.length }} 项任务</span
-            ><span>一次性任务执行后结束，重复任务按规则继续</span>
-          </footer>
         </el-tab-pane>
         <el-tab-pane label="待执行" name="upcoming"
           ><ProspectivePanel
             ref="prospectivePanel"
             :kind="taskKind"
-            @refresh="fetchAll"
             @clear-backpressure="clearBackpressure"
         /></el-tab-pane>
         <el-tab-pane label="执行历史" name="history"
-          ><div class="history-preferences">
-            <span>自动清理终态历史</span
-            ><el-select v-model="cleanupDays" aria-label="历史保留时间" @change="setCleanupConfig"
-              ><el-option label="不自动清理" value="0" /><el-option
-                v-for="days in [1, 3, 7, 14, 30]"
-                :key="days"
-                :label="days + ' 天后'"
-                :value="String(days)"
-            /></el-select>
-          </div>
-          <TriggerHistoryPanel ref="historyPanel" :kind="taskKind" @refresh="fetchAll"
-        /></el-tab-pane>
+          ><TriggerHistoryPanel ref="historyPanel" :kind="taskKind">
+            <template #toolbar>
+              <span class="history-retention">历史保留</span>
+              <el-select
+                v-model="cleanupDays"
+                size="small"
+                aria-label="历史保留时间"
+                class="cleanup-select"
+                @change="setCleanupConfig"
+              >
+                <el-option label="不自动清理" value="0" />
+                <el-option
+                  v-for="days in [1, 3, 7, 14, 30]"
+                  :key="days"
+                  :label="days + ' 天后'"
+                  :value="String(days)"
+                />
+              </el-select>
+            </template>
+          </TriggerHistoryPanel></el-tab-pane
+        >
       </el-tabs>
     </section>
     <el-drawer
@@ -602,8 +584,6 @@ import {
   Refresh,
   Search,
   MoreFilled,
-  Timer,
-  CircleCheck,
   Calendar,
   ArrowRight,
 } from "@element-plus/icons-vue";
@@ -1285,112 +1265,95 @@ onUnmounted(() => {
 </script>
 <style scoped>
 .task-workspace {
-  max-width: 1440px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   padding: 0;
   color: var(--tp-text);
 }
-.workspace-header {
+.workspace-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 28px;
+  gap: 20px;
+  min-height: 36px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--tp-border-light);
 }
 .task-kind-switch {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-top: 0;
+  gap: 0;
 }
-.task-kind-switch > span {
-  color: var(--tp-text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-.header-actions,
 .row-actions,
 .drawer-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.header-actions {
-  flex-shrink: 0;
-}
-.overview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr)) minmax(200px, 1.2fr);
-  padding: 24px;
-  margin-bottom: 24px;
-  border: 1px solid var(--tp-border-light);
-  border-radius: 16px;
-  background: var(--tp-panel);
-  gap: 24px;
-}
-.overview-item {
+.workspace-summary {
   display: flex;
   align-items: center;
-  gap: 14px;
-}
-.metric-icon,
-.empty-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--tp-primary-soft);
-  color: var(--tp-primary);
-  font-size: 21px;
-  flex-shrink: 0;
-}
-.metric-icon.success {
-  background: var(--tp-success-soft);
-  color: var(--tp-success);
-}
-.metric-icon.warning {
-  background: var(--tp-warning-soft);
-  color: var(--tp-warning);
-}
-.metric-label {
-  display: block;
-  font-size: 13px;
+  justify-content: flex-end;
+  gap: 16px;
+  min-width: 0;
   color: var(--tp-text-secondary);
-  margin-bottom: 5px;
+  font-size: 12px;
+  white-space: nowrap;
 }
-.overview strong {
-  font-size: 26px;
-  line-height: 1.2;
-  font-weight: 650;
+.summary-item strong {
+  margin-left: 3px;
+  color: var(--tp-text);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 .scheduler-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 9px;
-  padding-left: 24px;
-  border-left: 1px solid var(--tp-border-light);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.scheduler-state > span:last-child {
-  color: var(--tp-text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+.scheduler-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tp-text-muted);
+}
+.scheduler-state.is-running i {
+  background: var(--tp-success);
+}
+.scheduler-state.is-stopped {
+  color: var(--tp-danger);
+}
+.scheduler-state.is-stopped i {
+  background: var(--tp-danger);
+}
+.workspace-summary :deep(.el-button) {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+}
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--tp-primary-soft);
+  color: var(--tp-primary);
+  font-size: 23px;
+  flex-shrink: 0;
 }
 .workspace-content {
-  border: 1px solid var(--tp-border-light);
-  border-radius: 16px;
-  background: var(--tp-panel);
-  overflow: hidden;
+  min-width: 0;
 }
 .workspace-tabs :deep(.el-tabs__header) {
   margin: 0;
-  padding: 6px 24px 0;
+  padding: 0;
 }
 .workspace-tabs :deep(.el-tabs__item) {
-  height: 52px;
+  height: 44px;
   font-size: 14px;
 }
 .workspace-tabs :deep(.el-tabs__nav-wrap::after) {
@@ -1398,15 +1361,18 @@ onUnmounted(() => {
   background: var(--tp-border-light);
 }
 .workspace-tabs :deep(.el-tabs__content) {
-  padding: 24px;
+  padding: 12px 0 0;
 }
 .list-toolbar {
   display: flex;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 .task-search {
-  max-width: 360px;
+  width: auto;
+  max-width: none;
+  min-width: 220px;
+  flex: 1;
   margin-right: auto;
 }
 .role-filter {
@@ -1422,12 +1388,21 @@ onUnmounted(() => {
   font-size: 14px;
 }
 .task-table :deep(th.el-table__cell) {
-  height: 44px;
+  height: 40px;
   color: var(--tp-text-secondary);
   font-weight: 500;
 }
+.task-table :deep(td.el-table__cell) {
+  padding: 11px 0;
+}
+.task-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .task-title {
-  display: block;
+  min-width: 0;
   border: 0;
   padding: 0;
   background: transparent;
@@ -1437,13 +1412,24 @@ onUnmounted(() => {
   font-weight: 600;
   line-height: 1.5;
   cursor: pointer;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .task-title:hover {
   color: var(--tp-primary);
 }
+.task-role {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--tp-panel-soft);
+  color: var(--tp-text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
 .task-description {
-  margin: 6px 0 0;
+  margin: 3px 0 0;
   color: var(--tp-text-secondary);
   font-size: 13px;
   white-space: nowrap;
@@ -1460,55 +1446,37 @@ onUnmounted(() => {
   justify-content: flex-end;
 }
 .row-actions :deep(.el-button) {
-  min-height: 36px;
-}
-.list-footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 18px;
-  color: var(--tp-text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  min-height: 30px;
 }
 .task-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 56px 16px;
+  padding: 36px 16px;
   line-height: 1.5;
 }
 .empty-icon {
-  width: 60px;
-  height: 60px;
-  font-size: 28px;
-  border-radius: 18px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .task-empty h3 {
   color: var(--tp-text);
   font-size: 17px;
-  margin: 8px 0;
+  margin: 6px 0;
 }
 .task-empty p {
   color: var(--tp-text-secondary);
   font-size: 14px;
-  margin: 0 0 24px;
+  margin: 0 0 16px;
 }
-.history-preferences {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  font-size: 13px;
+.history-retention {
   color: var(--tp-text-secondary);
+  font-size: 12px;
 }
-.history-preferences .el-select {
-  width: 148px;
+.cleanup-select {
+  width: 128px;
 }
 .load-error {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .editor-section {
   margin-bottom: 24px;
@@ -1643,41 +1611,24 @@ onUnmounted(() => {
     background-color 160ms ease;
 }
 @media (max-width: 1100px) {
-  .task-workspace {
-    padding: 0;
-  }
-  .overview {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .scheduler-state {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    align-items: center;
-    border-left: 0;
-    border-top: 1px solid var(--tp-border-light);
-    padding: 16px 0 0;
+  .workspace-summary {
+    gap: 12px;
   }
 }
 @media (max-width: 760px) {
-  .task-workspace {
-    padding: 0;
-  }
-  .workspace-header {
+  .workspace-toolbar {
     align-items: flex-start;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
   }
-  .task-kind-switch {
-    align-items: flex-start;
-    flex-direction: column;
+  .workspace-summary {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
-  .overview {
-    gap: 16px;
-    padding: 16px;
-  }
-  .overview-item {
-    flex-direction: column;
-    align-items: flex-start;
+  .workspace-summary :deep(.el-button) {
+    margin-left: auto;
   }
   .list-toolbar {
     flex-wrap: wrap;
@@ -1692,10 +1643,7 @@ onUnmounted(() => {
     min-width: 130px;
   }
   .workspace-tabs :deep(.el-tabs__content) {
-    padding: 16px;
-  }
-  .list-footer {
-    flex-direction: column;
+    padding: 10px 0 0;
   }
   .form-grid {
     grid-template-columns: 1fr;

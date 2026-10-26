@@ -338,6 +338,10 @@ class SafetyService {
     return resp;
   }
 
+  Future<Map<String, dynamic>?> bdiOptions() async {
+    return _api.get<Map<String, dynamic>>('/api/safety/bdi-options');
+  }
+
   Future<Map<String, dynamic>?> updateBdiConfig(Map<String, dynamic> data) async {
     return _api.put<Map<String, dynamic>>(
       '/api/safety/bdi-config',

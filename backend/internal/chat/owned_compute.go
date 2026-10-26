@@ -87,8 +87,16 @@ func ownedPromptContext(ctx context.Context, inference business.Inference, knowl
 	if matches := ownedWorldbookMatches(inference.Scope, inference.Snapshot.Resources, inference.Message); len(matches) > 0 {
 		contextData["worldbookRules"] = matches
 	}
+	proactiveRun := inference.Ingress != nil && strings.TrimSpace(inference.Ingress.ProactiveTaskInstruction) != ""
+	preventSensitiveProactive := true
+	if runtime, ok := interaction.RuntimeFromContext(ctx); ok {
+		preventSensitiveProactive = runtime.SafetyPolicy.Config.PreventSensitiveProactiveMention
+	}
 	owned := make([]coordination.Resource, 0)
 	for _, row := range inference.Snapshot.Resources {
+		if proactiveRun && preventSensitiveProactive && !memoryAllowsProactiveMention(row.Body) {
+			continue
+		}
 		if row.Kind != "message" && row.Kind != "checkpoint" && row.Kind != "conversation" && row.Kind != "vector" && row.Kind != "worldbook" && row.Kind != "group-round" && row.Kind != "group-delivery" && row.Kind != "group-invitation" {
 			owned = append(owned, row)
 		}
@@ -590,4 +598,23 @@ func ownedSummaryContext(inference business.Inference) []json.RawMessage {
 	}
 	appendSnapshot(inference.Snapshot)
 	return summaries
+}
+
+func memoryAllowsProactiveMention(raw json.RawMessage) bool {
+	var document struct {
+		AllowProactiveMention *bool `json:"allowProactiveMention"`
+		Content               struct {
+			AllowProactiveMention *bool `json:"allowProactiveMention"`
+		} `json:"content"`
+	}
+	if json.Unmarshal(raw, &document) != nil {
+		return true
+	}
+	if document.AllowProactiveMention != nil {
+		return *document.AllowProactiveMention
+	}
+	if document.Content.AllowProactiveMention != nil {
+		return *document.Content.AllowProactiveMention
+	}
+	return true
 }

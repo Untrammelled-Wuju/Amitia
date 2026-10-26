@@ -102,7 +102,7 @@ func RegisterBuiltinUtilityTools(ctx context.Context, registry *capability.ToolR
 		},
 		{
 			id: "builtin.execute_host_command", modelName: "execute_host_command", name: "Execute Host Command",
-			description: "Run a bounded command on Windows, Linux, or macOS using an explicit cwd or the current conversation workspace. Requires explicit high-risk command approval; use for builds, tests, and code verification.",
+			description: "Run a bounded command on Windows, Linux, or macOS using an explicit cwd or the current conversation workspace. Requires explicit high-risk command approval. Use curl for direct HTTP access to a known external URL; do not use search engines or third-party search APIs.",
 			input:       `{"type":"object","required":["command"],"additionalProperties":false,"properties":{"workspaceId":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":131072},"cwd":{"type":"string"},"workingDir":{"type":"string"},"timeoutMs":{"type":"integer","minimum":100,"maximum":300000},"maxOutputBytes":{"type":"integer","minimum":1,"maximum":1048576}}}`,
 			permissions: []capability.PermissionRequirement{{Capability: "runtime.host.command.execute", Risk: "high"}}, risk: capability.RiskHigh, side: capability.SideEffectSystem, approval: true, idempotent: false, timeout: 305 * time.Second, maxOutput: 2 * 1024 * 1024, category: "terminal",
 		},

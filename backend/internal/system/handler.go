@@ -19,12 +19,9 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/business"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
-	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
-	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/tts"
-	applog "github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
 
@@ -57,7 +54,6 @@ type Handler struct {
 	shadowMu          sync.RWMutex
 	shadowState       mindruntime.ShadowState
 	approvalBroker    *execution.ApprovalBroker
-	searchCredentials *search.CredentialStore
 	coordination      *coordination.Service
 }
 
@@ -76,11 +72,6 @@ func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *m
 		service.memoryConsumer = memoryConsumer
 	}
 	h := &Handler{service: srv, db: db, importRepo: importbatch.NewRepository(db), chatSvc: chatSvc, memoryConsumer: memoryConsumer, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
-	if db != nil {
-		if sqlDB, err := db.DB(); err == nil {
-			h.searchCredentials = search.NewCredentialStore(sqlDB)
-		}
-	}
 	h.versionInfo.Store(srv.GetVersion())
 	return h
 }
@@ -99,21 +90,6 @@ func (h *Handler) SetApprovalBroker(broker *execution.ApprovalBroker) {
 
 func (h *Handler) SetSafetyCoordination(coordinator *coordination.Service) {
 	h.coordination = coordinator
-}
-
-func (h *Handler) SetSearchCredentialSecretBroker(broker *secret.Broker) {
-	if h == nil || h.searchCredentials == nil || broker == nil {
-		return
-	}
-	h.searchCredentials.WithVault(newSearchCredentialVault(broker))
-	ctx, cancel := timeoutpolicy.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := h.searchCredentials.CleanupPendingCredentials(ctx); err != nil {
-		applog.Warn("system search credential cleanup remains pending", "error", err)
-	}
-	if err := h.searchCredentials.MigrateLegacyCredentials(ctx); err != nil {
-		applog.Warn("system search credential migration to SecretBroker failed", "error", err)
-	}
 }
 
 func (h *Handler) getDBPath() string {

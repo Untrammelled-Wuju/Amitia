@@ -2005,7 +2005,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (toolName.isEmpty) return null;
     return AmitiaAgentActivity(
       id: event.id,
-      title: toolName == 'web_run' || toolName == 'web.run' ? '联网研究' : toolName,
+      title: toolName,
       status: (event.payload['status'] ?? 'completed').toString(),
       errorCode: (event.payload['errorCode'] ?? '').toString().trim().isEmpty
           ? null

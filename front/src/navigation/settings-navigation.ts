@@ -7,7 +7,6 @@ export const settingsGroups = [
   ] },
   { title: "AI 配置", items: [
     { label: "模型配置", path: "/settings/model" },
-    { label: "搜索 API", path: "/settings/search-api" },
   ] },
   { title: "数据与安全", items: [
     { label: "数据管理", path: "/settings/data-management" },

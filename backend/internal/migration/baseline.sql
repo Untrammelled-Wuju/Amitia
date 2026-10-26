@@ -5979,20 +5979,6 @@ CREATE TABLE IF NOT EXISTS continuity_waits (
 );
 CREATE INDEX IF NOT EXISTS idx_continuity_waits_thread_status ON continuity_waits(thread_id, status, wait_type);
 
-CREATE TABLE IF NOT EXISTS search_api_keys (
-    engine_id TEXT PRIMARY KEY,
-    api_key TEXT NOT NULL DEFAULT '',
-    updated_at DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS search_credential_cleanup (
-    secret_ref TEXT PRIMARY KEY,
-    engine_id TEXT NOT NULL,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT NOT NULL DEFAULT '',
-    created_at DATETIME NOT NULL
-);
-
 
 -- Additive Knowledge/RAG domain; modern WorldBook/Memory tables unchanged.
 CREATE TABLE IF NOT EXISTS knowledge_sources (

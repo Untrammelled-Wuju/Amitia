@@ -81,7 +81,6 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
         { path: "imagegen", name: "settingsModelImageGen", component: () => import("@/views/model-config/ImageGenModelConfigView.vue"), meta: { requiresAuth: true } },
       ],
     },
-    { path: "search-api", name: "settingsSearchApi", component: () => import("@/views/settings/SearchApiSettingsView.vue"), meta: { requiresAuth: true } },
     { path: "safety", name: "settingsSafety", component: () => import("@/views/safety-settings/SafetySettingsView.vue"), meta: { requiresAuth: true } },
     { path: "privacy", name: "settingsPrivacy", component: () => import("@/views/privacy/Privacy.vue"), meta: { requiresAuth: true } },
     { path: "usage-boundary", name: "settingsUsageBoundary", component: () => import("@/views/usage-boundary/UsageBoundary.vue"), meta: { requiresAuth: true } },

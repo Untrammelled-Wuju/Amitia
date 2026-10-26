@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "component": "node",
-  "version": "24.19.0",
+  "version": "26.12.1",
   "platform": "linux",
   "architecture": "arm64",
-  "archiveFileName": "node-v24.19.0-linux-arm64.tar.xz",
-  "sourceUrl": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-arm64.tar.xz",
-  "shasumsUrl": "https://nodejs.org/dist/v24.19.0/SHASUMS256.txt",
-  "sha256": "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc",
+  "archiveFileName": "node-v26.12.1-linux-arm64.tar.xz",
+  "sourceUrl": "https://nodejs.org/dist/v26.12.1/node-v26.12.1-linux-arm64.tar.xz",
+  "shasumsUrl": "https://nodejs.org/dist/v26.12.1/SHASUMS256.txt",
+  "sha256": "42aa04922591ee5d4dbc7740d452621acf28508239daa512f5ee8c47ee224fdb",
   "installSubdir": "node"
 }

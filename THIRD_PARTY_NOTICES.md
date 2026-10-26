@@ -28,6 +28,8 @@
 | pinia | ^2.1.0 | https://github.com/vuejs/pinia | MIT | front/package.json | No known extra NOTICE | Direct dependency |
 | vue | ^3.4.0 | https://github.com/vuejs/core | MIT | front/package.json | No known extra NOTICE | Direct dependency |
 | vue-router | ^4.3.0 | https://github.com/vuejs/router | MIT | front/package.json | No known extra NOTICE | Direct dependency |
+| extract-zip | ^2.0.1 | https://github.com/maxogden/extract-zip | BSD-2-Clause | plugins-code/channels/qq-personal/runtime/package.json | Preserve license | Direct dependency |
+| tar | ^7.5.22 | https://github.com/isaacs/node-tar | ISC | plugins-code/channels/qq-personal/runtime/package.json | Preserve license | Direct dependency |
 
 ## Python Packages
 
@@ -46,6 +48,7 @@
 | Qdrant runtime binaries | bundled under the runtime directory qdrant folder and backend/qdrant | License status: TO BE VERIFIED | runtime vector database | Bundled binary notices should be reviewed before redistribution |
 | SurrealDB runtime binary | bundled under the runtime directory surrealdb folder if present | License status: TO BE VERIFIED | runtime graph database | Bundled binary notices should be reviewed before redistribution |
 | unidbg-fetch-qsign-all.jar | bundled JAR | License status: TO BE VERIFIED | backend/libs | Bundled third-party binary requires manual license review |
+| SnowLuma | 2.2.0 Lite release downloaded at runtime | Source-available non-commercial license and EULA | QQ Personal native runtime | Not bundled with the plugin; user must comply with upstream EULA |
 
 ## Fonts, Images, Icons, Audio, Models, and Media
 

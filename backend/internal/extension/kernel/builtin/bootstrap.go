@@ -20,6 +20,8 @@ const LegacyLifestyleExtensionID = "com.amitia.builtin.lifestyle"
 
 const LegacyDeepSearchExtensionID = "com.amitia.builtin.deep-search"
 
+const RetiredSearchExtensionID = "com.amitia.builtin.search"
+
 type Bootstrapper struct {
 	catalog            *Catalog
 	definitions        domain.DefinitionRepository
@@ -77,6 +79,9 @@ func (b *Bootstrapper) Reconcile(ctx context.Context) error {
 	if err := b.removeLegacyDeepSearch(ctx); err != nil {
 		return err
 	}
+	if err := b.removeRetiredSearch(ctx); err != nil {
+		return err
+	}
 
 	defs := b.catalog.List()
 	for _, def := range defs {
@@ -116,6 +121,37 @@ func (b *Bootstrapper) removeLegacyDeepSearch(ctx context.Context) error {
 		}
 	}
 	runtimegate.Set(LegacyDeepSearchExtensionID, false)
+	return nil
+}
+
+func (b *Bootstrapper) removeRetiredSearch(ctx context.Context) error {
+	extID := domain.ExtensionID(RetiredSearchExtensionID)
+	if b.contributions != nil {
+		if err := b.contributions.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("remove retired search contributions: %w", err)
+		}
+	}
+	if b.modules != nil {
+		if err := b.modules.DeleteModules(ctx, extID); err != nil {
+			return fmt.Errorf("remove retired search modules: %w", err)
+		}
+	}
+	if err := b.installations.DeleteInstallation(ctx, extID); err != nil {
+		return fmt.Errorf("remove retired search installation: %w", err)
+	}
+	defs, err := b.definitions.ListExtensions(ctx)
+	if err != nil {
+		return fmt.Errorf("list retired search definitions: %w", err)
+	}
+	for _, def := range defs {
+		if def.ID != extID {
+			continue
+		}
+		if err := b.definitions.DeleteExtension(ctx, extID, def.Version); err != nil {
+			return fmt.Errorf("remove retired search definition: %w", err)
+		}
+	}
+	runtimegate.Set(RetiredSearchExtensionID, false)
 	return nil
 }
 

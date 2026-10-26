@@ -69,9 +69,6 @@ func messageOutputsFromTurnItems(items []AssistantTurnItem) []MessageOutput {
 		}
 		switch item.ToolName {
 		case "media_image_generate", "media.image.generate", "send_attachment":
-		case "web_run", "web.run":
-			outputs = append(outputs, imageOutputsFromWebSearch(raw)...)
-			continue
 		default:
 			continue
 		}
@@ -86,75 +83,6 @@ func messageOutputsFromTurnItems(items []AssistantTurnItem) []MessageOutput {
 		outputs = append(outputs, envelope.Outputs...)
 	}
 	return outputs
-}
-
-func imageOutputsFromWebSearch(raw string) []MessageOutput {
-	var envelope struct {
-		Search []struct {
-			Kind         string `json:"kind"`
-			Title        string `json:"title"`
-			URL          string `json:"url"`
-			MediaURL     string `json:"media_url"`
-			ThumbnailURL string `json:"thumbnail_url"`
-			Width        int    `json:"width"`
-			Height       int    `json:"height"`
-		} `json:"search"`
-	}
-	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
-		return nil
-	}
-	outputs := make([]MessageOutput, 0, 4)
-	for _, hit := range envelope.Search {
-		if len(outputs) >= 4 || !strings.EqualFold(strings.TrimSpace(hit.Kind), "image") {
-			continue
-		}
-		mediaURL := strings.TrimSpace(hit.MediaURL)
-		if mediaURL == "" {
-			mediaURL = strings.TrimSpace(hit.ThumbnailURL)
-		}
-		if mediaURL == "" {
-			continue
-		}
-		title := strings.TrimSpace(hit.Title)
-		if title == "" {
-			title = "搜索结果图片"
-		}
-		outputs = append(outputs, MessageOutput{
-			OutputID:  "web_run.image",
-			Placement: "after_text",
-			Part: MessagePart{
-				Type:     "image",
-				Content:  title,
-				URL:      mediaURL,
-				AltText:  title,
-				Width:    hit.Width,
-				Height:   hit.Height,
-				MIMEType: mimeTypeFromURL(mediaURL),
-			},
-		})
-	}
-	return outputs
-}
-
-func mimeTypeFromURL(raw string) string {
-	path := strings.ToLower(strings.TrimSpace(raw))
-	if index := strings.IndexAny(path, "?#"); index >= 0 {
-		path = path[:index]
-	}
-	switch {
-	case strings.HasSuffix(path, ".png"):
-		return "image/png"
-	case strings.HasSuffix(path, ".jpg"), strings.HasSuffix(path, ".jpeg"):
-		return "image/jpeg"
-	case strings.HasSuffix(path, ".gif"):
-		return "image/gif"
-	case strings.HasSuffix(path, ".webp"):
-		return "image/webp"
-	case strings.HasSuffix(path, ".svg"):
-		return "image/svg+xml"
-	default:
-		return ""
-	}
 }
 
 func normalizeMessageOutputs(outputs []MessageOutput) ([]MessageOutput, error) {

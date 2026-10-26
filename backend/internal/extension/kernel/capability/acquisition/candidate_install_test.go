@@ -27,16 +27,16 @@ func (*fakeEnableExistingPort) EnableMCP(context.Context, string) error {
 func TestInstalledCandidateCarriesExtensionIdentity(t *testing.T) {
 	registry := capability.NewProviderRegistry()
 	provider := capability.CapabilityProviderDefinition{
-		ID:           "com.amitia.builtin.search.provider",
-		CapabilityID: "search.web",
+		ID:           "com.amitia.builtin.browser.provider",
+		CapabilityID: "browser.control",
 		Kind:         capability.ProviderKindBuiltin,
 		Placement:    capability.ProviderPlacementCore,
-		ExtensionID:  "com.amitia.builtin.search",
-		ModuleID:     "search-runtime",
+		ExtensionID:  "com.amitia.builtin.browser",
+		ModuleID:     "browser-runtime",
 		Runtime: capability.RuntimeBinding{
-			RuntimeType: capability.RuntimeTypeSearch,
-			RuntimeID:   "search-runtime",
-			HandlerName: "web.run",
+			RuntimeType: capability.RuntimeTypeBrowser,
+			RuntimeID:   "browser-runtime",
+			HandlerName: "browser.tab.get",
 		},
 	}
 	if err := registry.RegisterDefinition(provider); err != nil {
@@ -45,7 +45,7 @@ func TestInstalledCandidateCarriesExtensionIdentity(t *testing.T) {
 	service := capability.NewCapabilityService(registry)
 	source := NewInstalledSource(service, registry)
 
-	candidates, err := source.Search(context.Background(), AcquisitionRequest{CapabilityID: "search.web"})
+	candidates, err := source.Search(context.Background(), AcquisitionRequest{CapabilityID: "browser.control"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestInstalledCandidateCarriesExtensionIdentity(t *testing.T) {
 		t.Fatalf("candidates = %d, want 1", len(candidates))
 	}
 	candidate := candidates[0]
-	if candidate.ExtensionID != "com.amitia.builtin.search" || candidate.PackageName != "com.amitia.builtin.search" || candidate.ProviderID != string(provider.ID) {
+	if candidate.ExtensionID != "com.amitia.builtin.browser" || candidate.PackageName != "com.amitia.builtin.browser" || candidate.ProviderID != string(provider.ID) {
 		t.Fatalf("candidate identity = %#v", candidate)
 	}
 
@@ -62,7 +62,7 @@ func TestInstalledCandidateCarriesExtensionIdentity(t *testing.T) {
 	if _, err := installer.Install(context.Background(), candidate, DeploymentTarget{}); err != nil {
 		t.Fatal(err)
 	}
-	if port.extensionID != "com.amitia.builtin.search" {
+	if port.extensionID != "com.amitia.builtin.browser" {
 		t.Fatalf("enabled extension = %q", port.extensionID)
 	}
 }

@@ -54,7 +54,6 @@ import '../../../features/memory/presentation/pages/memory_hub_page.dart';
 import '../../../features/profile/presentation/pages/profile_hub_page.dart';
 import '../../../features/profile/presentation/pages/character_world_book_hub_page.dart';
 import '../../../features/settings/presentation/pages/model_settings_page.dart';
-import '../../../features/settings/presentation/pages/search_api_settings_page.dart';
 import '../../../features/settings/presentation/pages/appearance_settings_page.dart';
 import '../../../features/runtime/presentation/pages/runtime_page.dart';
 import '../../../features/settings/presentation/pages/long_running_page.dart';
@@ -610,14 +609,6 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
       context: context,
       state: state,
       child: ModelConfigPage(modelType: state.pathParameters['modelType']!),
-    ),
-  ),
-  GoRoute(
-    path: AppRoutes.settingsSearchApi,
-    pageBuilder: (context, state) => amitiaSlidePage(
-      context: context,
-      state: state,
-      child: const SearchApiSettingsPage(),
     ),
   ),
   GoRoute(

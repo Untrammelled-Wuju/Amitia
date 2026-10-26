@@ -118,12 +118,12 @@ def write_build_record(output_dir, lock, tree_sha):
 LOCK_DATA = {
     "schemaVersion": 1,
     "component": "node",
-    "version": "24.19.0",
+    "version": "26.12.1",
     "platform": "linux",
     "architecture": "arm64",
-    "archiveFileName": "node-v24.19.0-linux-arm64.tar.xz",
-    "sourceUrl": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-arm64.tar.xz",
-    "sha256": "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc",
+    "archiveFileName": "node-v26.12.1-linux-arm64.tar.xz",
+    "sourceUrl": "https://nodejs.org/dist/v26.12.1/node-v26.12.1-linux-arm64.tar.xz",
+    "sha256": "42aa04922591ee5d4dbc7740d452621acf28508239daa512f5ee8c47ee224fdb",
     "installSubdir": "node",
 }
 
@@ -141,7 +141,7 @@ class LockTests(unittest.TestCase):
         issues = []
         result = validator.check_lock(lock_path, issues)
         self.assertIsNotNone(result)
-        self.assertEqual(result["version"], "24.19.0")
+        self.assertEqual(result["version"], "26.12.1")
         self.assertEqual(len(issues), 0)
 
     def test_missing_lock(self):
@@ -195,7 +195,7 @@ class BuildRecordTests(unittest.TestCase):
         issues = []
         record = validator.check_build_record(output_dir, LOCK_DATA, issues)
         self.assertIsNotNone(record)
-        self.assertEqual(record["version"], "24.19.0")
+        self.assertEqual(record["version"], "26.12.1")
         self.assertEqual(len(issues), 0)
 
     def test_missing_record(self):

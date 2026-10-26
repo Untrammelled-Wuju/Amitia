@@ -1,6 +1,6 @@
 {
   "name": "@amitia/qq-personal-sidecar",
-  "version": "0.2.5",
+  "version": "0.2.28",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -12,10 +12,12 @@
   "dependencies": {
     "@fastify/cors": "^9.0.0",
     "fastify": "^4.29.0",
+    "fflate": "0.8.2",
+    "tar": "^7.5.22",
     "ws": "^8.17.0"
   },
   "devDependencies": {
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.5",
     "@types/ws": "^8.18.1",
     "tsx": "^4.11.0",
     "typescript": "^5.4.0"

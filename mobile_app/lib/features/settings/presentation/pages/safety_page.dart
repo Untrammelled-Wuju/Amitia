@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,10 +8,10 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/safety.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/log_folder_button.dart';
+import '../widgets/bdi_policy_editor.dart';
 
 final _safetyConfigProvider = FutureProvider<SafetyConfigDto>((ref) async {
   final svc = ref.read(safetyServiceProvider);
@@ -89,7 +87,6 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
   late String _violationAction;
   late int _auditLogRetentionDays;
   late int _revision;
-  int _bdiRevision = 0;
   bool _saving = false;
   bool _logsLoading = false;
 
@@ -241,92 +238,11 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
   }
 
   Future<void> _showBdiConfig() async {
-    try {
-      final current =
-          await ref.read(safetyServiceProvider).bdiConfig() ??
-          <String, dynamic>{};
-      _bdiRevision = int.tryParse((current['revision'] ?? 0).toString()) ?? 0;
-      if (!mounted) return;
-      final controller = TextEditingController(
-        text: const JsonEncoder.withIndent('  ').convert(current),
-      );
-      final saved = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('BDI 安全策略'),
-          content: SizedBox(
-            width: 680,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '可配置 hardConstraints、softPreferences、copingStrategy 和 emotionExpression。保存时由后端统一持久化。',
-                  style: AppTypography.caption(dialogContext),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: MediaQuery.sizeOf(dialogContext).height * 0.5,
-                  child: TextField(
-                    controller: controller,
-                    expands: true,
-                    minLines: null,
-                    maxLines: null,
-                    textAlignVertical: TextAlignVertical.top,
-                    keyboardType: TextInputType.multiline,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'BDI JSON',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                try {
-                  final decoded = jsonDecode(controller.text);
-                  if (decoded is! Map)
-                    throw const FormatException('根节点必须是 JSON 对象');
-                  final payload = Map<String, dynamic>.from(decoded)
-                    ..['expectedRevision'] = _bdiRevision;
-                  final updated = await ref
-                      .read(safetyServiceProvider)
-                      .updateBdiConfig(payload);
-                  _bdiRevision =
-                      int.tryParse((updated?['revision'] ?? 0).toString()) ??
-                      _bdiRevision + 1;
-                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
-                } catch (e) {
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(
-                      dialogContext,
-                    ).showSnackBar(SnackBar(content: Text('保存失败：$e')));
-                  }
-                }
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      );
-      controller.dispose();
-      if (saved == true && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('BDI 安全策略已保存')));
-      }
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('读取 BDI 配置失败：$e')));
+    final saved = await showBdiPolicyEditor(context);
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('BDI 安全策略已保存')));
     }
   }
 

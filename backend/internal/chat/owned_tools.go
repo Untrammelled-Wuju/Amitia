@@ -83,11 +83,6 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 		messages = append(messages, recovered...)
 		verification.Restore(items)
 		for _, item := range items {
-			if item.ItemType == assistantTurnItemToolResult {
-				citations.captureCitationIDs(item.ToolName, item.ResultJSON)
-			}
-		}
-		for _, item := range items {
 			if item.ItemType == assistantTurnItemToolCall {
 				seen[item.CallID] = true
 			}
@@ -267,7 +262,6 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 				output = string(result.Output)
 			}
 			outcome := toolResultToOutcome(result, true)
-			citations.captureCitationIDs(modelName, string(result.Output))
 			forceVoice = forceVoice || result.ForceVoice
 			if !outcome.HasError {
 				outputs = append(outputs, messageOutputsFromTurnItems([]AssistantTurnItem{{ItemType: assistantTurnItemToolResult, Status: assistantTurnStatusCompleted, ToolName: modelName, ResultJSON: string(result.Output)}})...)

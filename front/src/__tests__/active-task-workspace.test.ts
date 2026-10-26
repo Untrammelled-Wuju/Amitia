@@ -4,7 +4,15 @@ import ElementPlus from "element-plus";
 import Workspace from "../views/reminders/Reminders.vue";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
+const routing = vi.hoisted(() => ({
+  route: { query: {} as Record<string, string>, path: "/reminders", hash: "" },
+  replace: vi.fn(),
+}));
 vi.mock("../composables/request", () => ({ request: api }));
+vi.mock("vue-router", () => ({
+  useRoute: () => routing.route,
+  useRouter: () => ({ replace: routing.replace }),
+}));
 vi.mock("../composables/useDeviceOwnedConversation", async () => {
   const { ref } = await import("vue");
   return {
@@ -44,6 +52,8 @@ const task = {
 };
 
 beforeEach(() => {
+  routing.route.query = {};
+  routing.replace.mockReset();
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -53,8 +63,9 @@ beforeEach(() => {
     },
   );
   api.get.mockReset();
-  api.get.mockImplementation(async (path: string) => {
-    if (path === "/api/reminders") return [task];
+  api.get.mockImplementation(async (path: string, options?: { params?: { kind?: string } }) => {
+    if (path === "/api/reminders")
+      return options?.params?.kind === "proactive_task" ? [] : [task];
     if (path === "/api/reminders/status")
       return { schedulerRunning: true, total: 1, enabled: 1, dueNow: 0 };
     if (path === "/api/reminders/cleanup-config") return { cleanupDays: "0" };
@@ -93,8 +104,12 @@ describe("主动任务工作台", () => {
 
   it("真实任务可搜索并打开详情，版本确认后的记录保留全部发送设置", async () => {
     await openWorkspace();
-    expect(wrapper.get("h1").text()).toBe("主动任务");
+    expect(wrapper.get(".workspace-summary").text()).toContain("全部 1");
+    expect(wrapper.get(".workspace-summary").text()).toContain("调度正常");
+    expect(wrapper.find(".overview").exists()).toBe(false);
     expect(wrapper.get(".task-title").text()).toBe("每晚晚安");
+    expect(wrapper.get(".task-role").text()).toBe("小夏");
+    expect(wrapper.text()).not.toContain("手动创建");
     const search = wrapper.get('input[aria-label="搜索任务"]');
     await search.setValue("不存在");
     expect(wrapper.find(".task-title").exists()).toBe(false);
@@ -109,10 +124,14 @@ describe("主动任务工作台", () => {
 
   it("创建表单分组展示，结束条件可展开，取消编辑不会创建任务", async () => {
     api.post.mockClear();
+    routing.route.query = { create: "1" };
     await openWorkspace();
-    const create = wrapper.findAll("button").find((button) => button.text() === "新建任务");
-    await create!.trigger("click");
     await flushPromises();
+    expect(routing.replace).toHaveBeenCalledWith({
+      path: "/reminders",
+      query: {},
+      hash: "",
+    });
     const dialog = document.querySelector(".task-editor")!;
     expect(dialog.textContent).toContain("任务内容");
     expect(dialog.textContent).toContain("执行时间");
@@ -140,6 +159,7 @@ describe("主动任务工作台", () => {
       params: { kind: "proactive_task" },
     });
     const create = wrapper.findAll("button").find((button) => button.text() === "新建任务");
+    expect(create).toBeTruthy();
     await create!.trigger("click");
     await flushPromises();
     const dialog = document.querySelector(".task-editor")!;

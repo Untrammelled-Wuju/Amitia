@@ -41,7 +41,7 @@ func configurationDB(t *testing.T) (*gorm.DB, *coordination.Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"model_configs", "tts_configs", "asr_configs", "tts_cloned_voices", "model_scenario_routes", "embedding_configs", "vision_configs", "image_gen_configs", "app_settings", "search_api_keys", "search_credential_cleanup", "messages", "safety_policies", "safety_incidents"} {
+	for _, table := range []string{"model_configs", "tts_configs", "asr_configs", "tts_cloned_voices", "model_scenario_routes", "embedding_configs", "vision_configs", "image_gen_configs", "app_settings", "messages", "safety_policies", "safety_incidents"} {
 		statement := regexp.MustCompile(`(?s)CREATE TABLE IF NOT EXISTS ` + regexp.QuoteMeta(table) + `\s*\(.*?\);`).Find(baseline)
 		if len(statement) == 0 {
 			t.Fatalf("production baseline missing %s", table)

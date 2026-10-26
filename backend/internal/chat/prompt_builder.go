@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 
@@ -251,6 +252,25 @@ func renderExpressionPlanSummary(plan *decision.ExpressionPlan) string {
 	}
 	if plan.Suppressed {
 		lines = append(lines, "- 表达抑制: 是")
+	}
+	if plan.CopingStrategy != "" {
+		lines = append(lines, "- 应对策略: "+safety.CopingStrategyLabel(plan.CopingStrategy))
+	}
+	if plan.Metadata != nil {
+		if mode, ok := plan.Metadata["emotionExpressMode"].(string); ok && mode == safety.EmotionDisplaySuppress {
+			lines = append(lines, "- 情绪表露方式: 抑制，不主动外显")
+		} else if mode == safety.EmotionDisplayReframe {
+			lines = append(lines, "- 情绪表露方式: 重构表达")
+		}
+		if internal, ok := plan.Metadata["internalIntensity"].(float64); ok {
+			lines = append(lines, fmt.Sprintf("- 内在感受强度: %.0f%%（只影响措辞与态度，不必直接说出）", internal*100))
+		}
+		if capped, ok := plan.Metadata["negativeEmotionCapped"].(bool); ok && capped {
+			lines = append(lines, "- 负向情绪已按安全上限收敛")
+		}
+		if capped, ok := plan.Metadata["intimacyCapped"].(bool); ok && capped {
+			lines = append(lines, "- 亲密表达已按安全上限收敛")
+		}
 	}
 
 	return strings.Join(lines, "\n")

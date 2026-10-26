@@ -215,7 +215,6 @@ func DefaultMigrations() []Migration {
 		ModelScenarioRoutesMigration(),
 		ContinuityThreadRuntimeMigration(),
 		ContinuityRuntimeCompletionMigration(),
-		SearchApiCredentialsMigration(),
 		TemporalRelationshipPresenceUniqueIndexMigration(),
 		TemporalRelationshipIndexesRepairMigration(),
 		QdrantOwnedProjectionMigration(),
@@ -223,7 +222,6 @@ func DefaultMigrations() []Migration {
 		NotificationRuntimeMigration(),
 		NotificationVoIPMigration(),
 		NotificationOutboxMigration(),
-		SearchCredentialCleanupMigration(),
 		WebChatRequestIdempotencyMigration(),
 		ToolExecutionLedgerMigration(),
 		ConversationReadStateMigration(),
@@ -262,6 +260,7 @@ func DefaultMigrations() []Migration {
 		RuntimeModelBudgetMigration(),
 		RemoveGlobalMemoryStorageMigration(),
 		ChannelSandboxPoliciesMigration(),
+		RetireWebSearchMigration(),
 	}
 }
 
@@ -389,21 +388,6 @@ func NotificationRuntimeMigration() Migration {
 			s.CreateIndex("idx_notification_delivery_device", "notification_deliveries", []string{"device_id"}, false)
 			s.CreateIndex("idx_notification_delivery_status", "notification_deliveries", []string{"status"}, false)
 			s.CreateIndex("idx_notification_delivery_expires", "notification_deliveries", []string{"expires_at"}, false)
-			return nil
-		},
-	}
-}
-
-func SearchApiCredentialsMigration() Migration {
-	return Migration{
-		Version: "20260923001",
-		Name:    "create_search_api_credentials",
-		Up: func(s *Step) error {
-			s.CreateTable(`CREATE TABLE IF NOT EXISTS search_api_keys (
-				engine_id TEXT PRIMARY KEY,
-				api_key TEXT NOT NULL DEFAULT '',
-				updated_at DATETIME NOT NULL
-			)`)
 			return nil
 		},
 	}

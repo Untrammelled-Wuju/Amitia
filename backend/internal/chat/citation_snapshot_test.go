@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestPhase17FreezeOnlyUsedKnowledgeAndWebReferences(t *testing.T) {
+func TestPhase17FreezeOnlyUsedKnowledgeReferences(t *testing.T) {
 	r := &ownedCitationAudit{}
 	r.registerKnowledgeCitation(1, knowledge.Evidence{
 		ID: "ev-1", SourceID: "src-a", SourceRevision: 9,
@@ -19,19 +19,15 @@ func TestPhase17FreezeOnlyUsedKnowledgeAndWebReferences(t *testing.T) {
 		Checksum: "original-checksum",
 	}, strings.Repeat("甲", 2500))
 	r.registerKnowledgeCitation(2, knowledge.Evidence{ID: "ev-2", SourceID: "src-b", SourceRevision: 1}, "unused")
-	r.captureCitationIDs("web_run", `{"citations":[{"index":1,"evidence_id":"web-1","url":"https://example.org","title":"web","text":"source text"}]}`)
 	got := r.BuildCitationSnapshot("引用 [K1] 与 [1]。`[K2]` 只是示例。\n```md\n[K2]\n```\n[K999] 未找到")
-	if len(got) != 2 {
-		t.Fatalf("expected two used citations only, got %+v", got)
+	if len(got) != 1 {
+		t.Fatalf("expected one used citation only, got %+v", got)
 	}
 	if got[0].Marker != "[K1]" || got[0].Kind != "knowledge" || got[0].SourceRevision != 9 || got[0].UnitID != "u-37" {
 		t.Fatalf("knowledge snapshot incorrect: %+v", got[0])
 	}
 	if len([]rune(got[0].Excerpt)) != 1200 || got[0].ContentHash == "" {
 		t.Fatalf("unbounded/missing excerpt checksum: %+v", got[0])
-	}
-	if got[1].Kind != "web" || got[1].EvidenceID != "web-1" {
-		t.Fatalf("web citation lost: %+v", got[1])
 	}
 	got[0].Locator["page"] = 99
 	snapshots := r.BuildCitationSnapshot("[K1]")

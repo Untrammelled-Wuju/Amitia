@@ -213,7 +213,7 @@ jobs:
           version: 11.17.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '26.12.1'
           cache: pnpm
           cache-dependency-path: '${{ matrix.workspace }}/pnpm-lock.yaml'
       - name: Install dependencies
@@ -266,7 +266,7 @@ jobs:
           version: 11.17.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '26.12.1'
           cache: pnpm
           cache-dependency-path: |
             front/pnpm-lock.yaml
@@ -293,7 +293,7 @@ jobs:
           version: 11.17.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '26.12.1'
       - uses: actions/setup-go@v5
         with:
           go-version-file: 'backend/go.mod'

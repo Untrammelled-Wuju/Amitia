@@ -7,12 +7,14 @@ import (
 
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/personality"
+	"github.com/u-ai/backend/internal/safety"
 )
 
-func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality, goalContext RuntimeGoalContext, now time.Time, safetyDecision RuntimeSafetyDecision) (*decision.BehaviorPlan, *decision.ExpressionPlan, error) {
+func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScope, snapshot ContextSnapshot, appraisal *AppraisalResult, compiledPersonality *personality.CompiledPersonality, goalContext RuntimeGoalContext, now time.Time, safetyDecision RuntimeSafetyDecision, policy safety.RuntimePolicy) (*decision.BehaviorPlan, *decision.ExpressionPlan, error) {
 	if p.candidateRegistry == nil {
 		return nil, nil, nil
 	}
+	bdi := safety.BuildBdiRuntime(policy)
 	var psycheSignals decision.PsycheSignalSet
 	if snapshot.Psyche.Status == LoadStatusReady {
 		psycheSignals = decision.PsycheSignalSet{Mood: decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodPressure}, Stress: decision.ScalarSignal{Value: snapshot.Psyche.Value.Stress}, CognitiveLoad: decision.ScalarSignal{Value: snapshot.Psyche.Value.Fatigue}, Valence: decision.ScalarSignal{Value: snapshot.Psyche.Value.Valence}, Arousal: decision.ScalarSignal{Value: snapshot.Psyche.Value.Arousal}, Dominance: decision.ScalarSignal{Value: snapshot.Psyche.Value.Dominance}, MoodValence: decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodValence}, MoodArousal: decision.ScalarSignal{Value: snapshot.Psyche.Value.MoodArousal}}
@@ -59,12 +61,14 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		Relationship:       relSnapshot,
 		Life:               lifeSnapshot,
 		PersonalityWeights: personalityWeights,
+		UserPreferences:    bdi.SoftPreferences,
 		Now:                now,
 	}
 	scoredCandidates, err := decision.ScoreCandidates(candidates, scoringContext, decision.DefaultBehaviorScoringOptions())
 	if err != nil {
 		return nil, nil, fmt.Errorf("scoring failed: %w", err)
 	}
+	scoredCandidates = decision.PromoteCandidates(scoredCandidates, bdi.OverrideIDs)
 
 	arbitrationInput := decision.ArbitrationInput{
 		Candidates: scoredCandidates,
@@ -72,7 +76,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		Intentions: append([]decision.Intention(nil), goalContext.Intentions...),
 		Psyche:     psycheSignals,
 		Life:       lifeSnapshot,
-		Filter:     decision.DefaultHardConstraintFilter(),
+		Filter:     decision.NewHardConstraintFilter(bdi.Filter),
 		Now:        now,
 	}
 	arbitrationResult, arbErr := p.arbitrationLayer.Arbitrate(arbitrationInput)
@@ -119,6 +123,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		Life:           lifeSnapshot,
 		Personality:    personalityRef,
 		Safety:         planSafetyCtx,
+		ContentPolicy:  decision.PlanContentPolicy{ForbiddenTopics: bdi.ForbiddenTopics},
 		Now:            now,
 	}
 
@@ -165,10 +170,15 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	}
 	safetyResult.ConfidenceScore = 0.9
 
+	coping := bdi.Coping
+	if coping == "" {
+		coping = selectCopingStrategy(psycheSignals, relSnapshot)
+	}
 	exprInput := decision.ExpressionPlanInput{
 		BehaviorPlan:               *plan,
 		Psyche:                     psycheSignals,
 		ExpressionCtrl:             exprCtrl,
+		CopingStrategy:             coping,
 		SafetyResult:               safetyResult,
 		PersonalityExpressionStyle: personalityStyle,
 		Now:                        now,
@@ -177,7 +187,35 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	if exprErr != nil {
 		return nil, nil, fmt.Errorf("expression plan generation failed: %w", exprErr)
 	}
+	exprPlan = safety.ApplyEmotionDirective(exprPlan, bdi.Emotion)
 	return plan, &exprPlan, nil
+}
+
+func selectCopingStrategy(psyche decision.PsycheSignalSet, rel decision.RelationshipSnapshot) decision.CopingStrategy {
+	negative := 0.0
+	for _, emotion := range psyche.Emotions {
+		switch emotion.Kind {
+		case "anger", "sadness", "fear", "anxiety", "disgust":
+			negative += emotion.Intensity
+		}
+	}
+	if negative > 1 {
+		negative = 1
+	}
+	availableSupport := 0.5
+	if rel.Dimensions != nil {
+		if value, ok := rel.Dimensions[decision.RelationshipSafety]; ok {
+			availableSupport = value.Value
+		}
+	}
+	result := decision.SelectCopingStrategy(decision.CopingInput{
+		PositiveEmotion:  psyche.Mood.Value,
+		NegativeEmotion:  negative,
+		Stress:           psyche.Stress.Value,
+		CognitiveLoad:    psyche.CognitiveLoad.Value,
+		AvailableSupport: availableSupport,
+	})
+	return result.PrimaryStrategy
 }
 
 func derivePersonalityWeights(cp *personality.CompiledPersonality) map[decision.BehaviorTag]float64 {

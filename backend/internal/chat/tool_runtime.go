@@ -193,9 +193,7 @@ func toolResultContent(toolName string, outcome toolExecOutcome) string {
 
 func structuredToolResult(toolName string) bool {
 	switch toolName {
-	case "web_run",
-		"web.run",
-		"harness_multi_agent_delegate",
+	case "harness_multi_agent_delegate",
 		"harness_multi_agent_status",
 		"harness_multi_agent_wait",
 		"execute_host_command",

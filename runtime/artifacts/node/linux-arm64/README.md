@@ -4,16 +4,16 @@
 
 | 项目 | 值 |
 | --- | --- |
-| Node.js | 24.19.0 |
+| Node.js | 26.12.1 |
 | 平台 | linux |
 | 架构 | arm64 |
-| 归档文件名 | node-v24.19.0-linux-arm64.tar.xz |
-| 官方 SHA-256 | `01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc` |
+| 归档文件名 | node-v26.12.1-linux-arm64.tar.xz |
+| 官方 SHA-256 | `42aa04922591ee5d4dbc7740d452621acf28508239daa512f5ee8c47ee224fdb` |
 
 ## 来源
 
-- 官方下载: https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-arm64.tar.xz
-- SHA 校验源: https://nodejs.org/dist/v24.19.0/SHASUMS256.txt
+- 官方下载: https://nodejs.org/dist/v26.12.1/node-v26.12.1-linux-arm64.tar.xz
+- SHA 校验源: https://nodejs.org/dist/v26.12.1/SHASUMS256.txt
 
 ## 引用关系
 

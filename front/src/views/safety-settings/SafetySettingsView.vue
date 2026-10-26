@@ -164,7 +164,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         show-icon
         style="margin-bottom: 10px"
       >
-        安全卫士启用时，以下硬约束将阻止或覆盖不符合安全边界的候选行为
+        规则在候选行为仲裁阶段生效：阻断会直接移除该候选，优先会保留候选并排到最前；阻断原因同时作为本轮禁止话题写入提示词。当前 {{ blockRuleCount }} 条阻断、{{ overrideRuleCount }} 条优先。
       </el-alert>
       <el-table
         :data="hardConstraints"
@@ -172,33 +172,50 @@ SPDX-License-Identifier: AGPL-3.0-only
         size="small"
         empty-text="暂无约束规则"
       >
-        <el-table-column
-          prop="ruleId"
-          label="规则 ID"
-          width="140"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          prop="candidateKey"
-          label="候选行为"
-          width="140"
-          show-overflow-tooltip
-        />
-        <el-table-column prop="reason" label="拦截原因" show-overflow-tooltip />
-        <el-table-column label="严重程度" width="100">
+        <el-table-column label="规则 ID" width="150">
           <template #default="{ row }">
-            <el-tag
-              :type="row.severity === 'block' ? 'danger' : 'warning'"
-              size="small"
-            >
-              {{ row.severity === "block" ? "阻止" : "覆盖" }}
-            </el-tag>
+            <el-input v-model="row.ruleId" size="small" maxlength="40" />
+          </template>
+        </el-table-column>
+        <el-table-column label="候选行为" width="170">
+          <template #default="{ row }">
+            <el-select v-model="row.candidateKey" size="small" filterable placeholder="选择候选">
+              <el-option
+                v-for="item in bdiOptions.candidates"
+                :key="item.id"
+                :label="item.label"
+                :value="item.id"
+              />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="原因 / 禁止话题">
+          <template #default="{ row }">
+            <el-input v-model="row.reason" size="small" maxlength="60" />
+          </template>
+        </el-table-column>
+        <el-table-column label="生效方式" width="140">
+          <template #default="{ row }">
+            <el-select v-model="row.severity" size="small">
+              <el-option
+                v-for="item in bdiOptions.severities"
+                :key="item.id"
+                :label="item.label"
+                :value="item.id"
+              />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="70">
+          <template #default="{ $index }">
+            <el-button link type="danger" size="small" @click="removeHardConstraint($index)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
       <div style="margin-top: 10px; display: flex; gap: 8px">
         <el-button size="small" @click="addHardConstraint">添加规则</el-button>
         <el-button size="small" @click="fetchBdiConfig">刷新</el-button>
+        <el-button size="small" type="primary" @click="saveBdiConfig">保存约束</el-button>
       </div>
     </el-card>
 
@@ -212,7 +229,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         show-icon
         style="margin-bottom: 10px"
       >
-        软偏好维度加权影响候选行为的最终效用评分
+        软偏好只做加权，不阻断候选：贡献值 =（原始分 - 5）/ 5 × 权重，写入该候选的偏好分（默认权重 0.1），最终影响仲裁排序。
       </el-alert>
       <el-table
         :data="softPreferences"
@@ -220,13 +237,29 @@ SPDX-License-Identifier: AGPL-3.0-only
         size="small"
         empty-text="暂无偏好维度"
       >
-        <el-table-column
-          prop="dimension"
-          label="维度"
-          width="140"
-          show-overflow-tooltip
-        />
-        <el-table-column label="原始分" width="100">
+        <el-table-column label="维度" width="200">
+          <template #default="{ row }">
+            <el-select v-model="row.dimension" size="small" filterable placeholder="选择候选或类别">
+              <el-option-group label="具体候选">
+                <el-option
+                  v-for="item in bdiOptions.dimensions.filter((entry) => entry.group === 'candidate')"
+                  :key="item.id"
+                  :label="item.label"
+                  :value="item.id"
+                />
+              </el-option-group>
+              <el-option-group label="行为类别">
+                <el-option
+                  v-for="item in bdiOptions.dimensions.filter((entry) => entry.group === 'tag')"
+                  :key="item.id"
+                  :label="item.label"
+                  :value="item.id"
+                />
+              </el-option-group>
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="原始分" width="110">
           <template #default="{ row }">
             <el-input-number
               v-model="row.rawScore"
@@ -238,18 +271,27 @@ SPDX-License-Identifier: AGPL-3.0-only
             />
           </template>
         </el-table-column>
-        <el-table-column label="归一化权重" width="110">
+        <el-table-column label="权重" width="120">
           <template #default="{ row }">
-            <span style="font-size: 13px">{{
-              row.normalizedWeight?.toFixed(2)
-            }}</span>
+            <el-input-number
+              v-model="row.normalizedWeight"
+              :min="-1"
+              :max="1"
+              :step="0.1"
+              size="small"
+              controls-position="right"
+              style="width: 110px"
+            />
           </template>
         </el-table-column>
-        <el-table-column label="贡献值" width="110">
+        <el-table-column label="贡献值" width="90">
           <template #default="{ row }">
-            <span style="font-size: 13px">{{
-              row.contribution?.toFixed(2)
-            }}</span>
+            <span style="font-size: 13px">{{ preferenceContribution(row) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="70">
+          <template #default="{ $index }">
+            <el-button link type="danger" size="small" @click="removeSoftPreference($index)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -271,18 +313,18 @@ SPDX-License-Identifier: AGPL-3.0-only
         show-icon
         style="margin-bottom: 10px"
       >
-        当 AI 面对冲突或负面事件时，选择默认应对策略
+        选择的策略直接进入本轮表达计划并写入提示词；未选择时按当前压力与情绪自动选择。
       </el-alert>
       <div class="coping-section">
         <div class="coping-row">
           <span class="coping-label">当前策略</span>
           <el-select v-model="copingSelected" style="width: 200px" size="small">
-            <el-option label="主动解决问题" value="active" />
-            <el-option label="寻求支持" value="support" />
-            <el-option label="重新评估" value="reframe" />
-            <el-option label="回避转移" value="avoid" />
-            <el-option label="抑制情绪" value="suppress" />
-            <el-option label="接受现状" value="accept" />
+            <el-option
+              v-for="item in bdiOptions.copingStrategies"
+              :key="item.id"
+              :label="item.label"
+              :value="item.id"
+            />
           </el-select>
         </div>
         <div class="coping-row">
@@ -290,16 +332,16 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-select
             v-model="copingAlternatives"
             multiple
-            style="width: 300px"
+            style="width: 320px"
             size="small"
             placeholder="选择备选策略"
           >
-            <el-option label="主动解决问题" value="active" />
-            <el-option label="寻求支持" value="support" />
-            <el-option label="重新评估" value="reframe" />
-            <el-option label="回避转移" value="avoid" />
-            <el-option label="抑制情绪" value="suppress" />
-            <el-option label="接受现状" value="accept" />
+            <el-option
+              v-for="item in bdiOptions.copingStrategies"
+              :key="item.id"
+              :label="item.label"
+              :value="item.id"
+            />
           </el-select>
         </div>
         <div class="coping-row">
@@ -332,8 +374,12 @@ SPDX-License-Identifier: AGPL-3.0-only
         show-icon
         style="margin-bottom: 10px"
       >
-        控制 AI 在输出中如何显露、抑制或重构情绪表达
+        控制 AI 在输出中如何显露、抑制或重构情绪表达；下面的显示强度是本轮情绪强度的整体上限。
       </el-alert>
+      <div class="effective-row">
+        <el-tag size="small" type="info">当前生效</el-tag>
+        <span class="effective-text">{{ effectiveEmotionSummary }}</span>
+      </div>
       <div class="emotion-section">
         <div class="emotion-row">
           <span class="emotion-label">表达模式</span>
@@ -473,7 +519,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, computed, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../composables/useApi";
 
@@ -527,6 +573,60 @@ const emotionDisplayIntensity = ref(5);
 const emotionOverrideReason = ref("");
 const bdiRevision = ref(0);
 
+interface BdiOptionItem {
+  id: string;
+  label: string;
+  group?: string;
+}
+
+const bdiOptions = ref<{
+  candidates: BdiOptionItem[];
+  dimensions: BdiOptionItem[];
+  severities: BdiOptionItem[];
+  copingStrategies: BdiOptionItem[];
+  displayModes: BdiOptionItem[];
+}>({
+  candidates: [],
+  dimensions: [],
+  severities: [],
+  copingStrategies: [],
+  displayModes: [],
+});
+
+const legacyCoping: Record<string, string> = {
+  active: "problem_solving",
+  support: "seek_support",
+  reframe: "reappraisal",
+  avoid: "avoidance",
+  suppress: "suppression",
+  accept: "acceptance",
+};
+
+const blockRuleCount = computed(
+  () => hardConstraints.value.filter((rule) => rule.severity === "block").length,
+);
+const overrideRuleCount = computed(
+  () =>
+    hardConstraints.value.filter((rule) => rule.severity === "override").length,
+);
+const effectiveEmotionSummary = computed(() => {
+  const mode =
+    bdiOptions.value.displayModes.find(
+      (item) => item.id === emotionDisplayMode.value,
+    )?.label || "如实表露";
+  return `${mode}；显示强度上限 ${emotionDisplayIntensity.value}/10；负面情绪上限 ${config.negativeEmotionCap}/10（关切语气）；亲密表达上限 ${config.intimacyExpressionCap}/10（温柔或柔和语气）`;
+});
+
+function preferenceContribution(row: {
+  rawScore: number;
+  normalizedWeight: number;
+}) {
+  const raw = Number(row.rawScore ?? 5);
+  const weight = Number(row.normalizedWeight ?? 0);
+  const value = weight === 0 ? (raw - 5) / 5 : weight * ((raw - 5) / 5);
+  return value.toFixed(2);
+}
+
 function addHardConstraint() {
   hardConstraints.value.push({
     ruleId: "",
@@ -534,6 +634,14 @@ function addHardConstraint() {
     reason: "",
     severity: "block",
   });
+}
+
+function removeHardConstraint(index: number) {
+  hardConstraints.value.splice(index, 1);
+}
+
+function removeSoftPreference(index: number) {
+  softPreferences.value.splice(index, 1);
 }
 
 function addSoftPreference() {
@@ -599,8 +707,11 @@ async function fetchBdiConfig() {
     if (r?.hardConstraints) hardConstraints.value = r.hardConstraints;
     if (r?.softPreferences) softPreferences.value = r.softPreferences;
     if (r?.copingStrategy) {
-      copingSelected.value = r.copingStrategy.selected || "active";
-      copingAlternatives.value = r.copingStrategy.alternatives || [];
+      const selected = String(r.copingStrategy.selected || "problem_solving");
+      copingSelected.value = legacyCoping[selected] || selected;
+      copingAlternatives.value = (r.copingStrategy.alternatives || []).map(
+        (value: string) => legacyCoping[value] || value,
+      );
       copingReason.value = r.copingStrategy.selectionReason || "";
     }
     if (r?.emotionExpression) {
@@ -614,13 +725,52 @@ async function fetchBdiConfig() {
   } catch {}
 }
 
+async function fetchBdiOptions() {
+  try {
+    const data = await get<any>("/api/safety/bdi-options");
+    if (data) {
+      bdiOptions.value = {
+        candidates: data.candidates || [],
+        dimensions: data.dimensions || [],
+        severities: data.severities || [],
+        copingStrategies: data.copingStrategies || [],
+        displayModes: data.displayModes || [],
+      };
+    }
+  } catch {}
+}
+
 async function saveBdiConfig() {
+  for (const [index, rule] of hardConstraints.value.entries()) {
+    if (!rule.ruleId.trim()) {
+      ElMessage.error(`第 ${index + 1} 条规则缺少规则 ID`);
+      return;
+    }
+    if (!rule.candidateKey) {
+      ElMessage.error(`第 ${index + 1} 条规则未选择候选行为`);
+      return;
+    }
+    if (rule.severity === "block" && !rule.reason.trim()) {
+      ElMessage.error(`第 ${index + 1} 条阻断规则必须填写原因`);
+      return;
+    }
+  }
+  if (softPreferences.value.some((item) => !item.dimension)) {
+    ElMessage.error("软偏好存在未选择维度的行");
+    return;
+  }
   try {
     const updated = await put<any>("/api/safety/bdi-config", {
-      hardConstraints: hardConstraints.value,
+      hardConstraints: hardConstraints.value.map((rule) => ({
+        ...rule,
+        ruleId: rule.ruleId.trim(),
+        reason: rule.reason.trim(),
+      })),
       softPreferences: softPreferences.value.map((sp) => ({
-        ...sp,
+        dimension: sp.dimension,
         rawScore: Number(sp.rawScore),
+        normalizedWeight: Number(sp.normalizedWeight),
+        contribution: Number(preferenceContribution(sp)),
       })),
       copingStrategy: {
         selected: copingSelected.value,
@@ -689,6 +839,7 @@ function fmtDate(d: string) {
 
 onMounted(() => {
   fetchConfig();
+  fetchBdiOptions();
   fetchBdiConfig();
   fetchEvents();
   fetchAuditLogs();
@@ -772,5 +923,15 @@ onMounted(() => {
 .slider-hint {
   font-size: 12px;
   color: var(--ac-color-text-muted);
+}
+.effective-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.effective-text {
+  font-size: 12px;
+  color: var(--ac-color-text-secondary);
 }
 </style>

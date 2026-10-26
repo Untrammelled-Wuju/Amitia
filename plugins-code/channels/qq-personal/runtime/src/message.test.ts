@@ -17,6 +17,8 @@ const config: QQPersonalConfig = {
   groupTrigger: "mention",
   triggerPrefix: "Amitia",
   ignoredUserIds: ["2854196310"],
+  runtimeMode: "docker",
+  snowlumaRoot: "",
   webuiPort: 5099,
   novncPort: 6081,
   containerName: "snowluma",

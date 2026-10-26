@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -28,55 +27,7 @@ func ownedCitationAuditFromContext(ctx context.Context) *ownedCitationAudit {
 
 type ownedCitationAudit struct {
 	citationMu                sync.RWMutex
-	citationIDs               map[int]struct{}
-	citationEvidence          map[int]citationEvidence
 	knowledgeCitationEvidence map[int]citationEvidence
-	webResearchUsed           bool
-}
-
-func (r *ownedCitationAudit) captureCitationIDs(toolName, result string) {
-	if r == nil || (toolName != "web_run" && toolName != "web.run") {
-		return
-	}
-	r.citationMu.Lock()
-	r.webResearchUsed = true
-	r.citationMu.Unlock()
-	if strings.TrimSpace(result) == "" {
-		return
-	}
-	var payload struct {
-		Citations []struct {
-			Index      int    `json:"index"`
-			EvidenceID string `json:"evidence_id"`
-			RefID      string `json:"ref_id"`
-			Title      string `json:"title"`
-			URL        string `json:"url"`
-			Text       string `json:"text"`
-		} `json:"citations"`
-	}
-	if err := json.Unmarshal([]byte(result), &payload); err != nil {
-		return
-	}
-	r.citationMu.Lock()
-	defer r.citationMu.Unlock()
-	if r.citationIDs == nil {
-		r.citationIDs = make(map[int]struct{})
-	}
-	if r.citationEvidence == nil {
-		r.citationEvidence = make(map[int]citationEvidence)
-	}
-	for _, citation := range payload.Citations {
-		if citation.Index > 0 {
-			r.citationIDs[citation.Index] = struct{}{}
-			r.citationEvidence[citation.Index] = citationEvidence{
-				EvidenceID: strings.TrimSpace(citation.EvidenceID),
-				RefID:      strings.TrimSpace(citation.RefID),
-				Title:      strings.TrimSpace(citation.Title),
-				URL:        strings.TrimSpace(citation.URL),
-				Text:       strings.TrimSpace(citation.Text),
-			}
-		}
-	}
 }
 
 func (r *ownedCitationAudit) registerKnowledgeCitation(index int, ev knowledge.Evidence, shownText string) {
@@ -100,10 +51,6 @@ func (r *ownedCitationAudit) BuildCitationSnapshot(markdown string) []CitationSn
 		return []CitationSnapshot{}
 	}
 	r.citationMu.RLock()
-	web := make(map[int]citationEvidence, len(r.citationEvidence))
-	for index, ev := range r.citationEvidence {
-		web[index] = ev
-	}
 	knowledgeItems := make(map[int]citationEvidence, len(r.knowledgeCitationEvidence))
 	for index, ev := range r.knowledgeCitationEvidence {
 		knowledgeItems[index] = ev
@@ -139,11 +86,6 @@ func (r *ownedCitationAudit) BuildCitationSnapshot(markdown string) []CitationSn
 			add("knowledge", index, ev)
 		}
 	}
-	for _, index := range citationMarkersInProse(markdown, numericCitationPattern) {
-		if ev, ok := web[index]; ok {
-			add("web", index, ev)
-		}
-	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Kind != out[j].Kind {
 			return out[i].Kind < out[j].Kind
@@ -158,16 +100,9 @@ func (r *ownedCitationAudit) AuditCitationMarkers(markdown string) citationAudit
 		return citationAudit{}
 	}
 	r.citationMu.RLock()
-	webResearchUsed := r.webResearchUsed
-	availableSet := make(map[int]struct{}, len(r.citationIDs))
-	for id := range r.citationIDs {
-		availableSet[id] = struct{}{}
-	}
-	evidenceByCitation := make(map[int]citationEvidence, len(r.citationEvidence))
-	for id, evidence := range r.citationEvidence {
-		evidenceByCitation[id] = evidence
-	}
 	r.citationMu.RUnlock()
+	availableSet := map[int]struct{}{}
+	evidenceByCitation := map[int]citationEvidence{}
 	usedSet := make(map[int]struct{})
 	unknownSet := make(map[int]struct{})
 	for _, id := range citationMarkersInProse(markdown, numericCitationPattern) {
@@ -177,15 +112,11 @@ func (r *ownedCitationAudit) AuditCitationMarkers(markdown string) citationAudit
 			unknownSet[id] = struct{}{}
 		}
 	}
-	missing := []string(nil)
-	if webResearchUsed {
-		missing = auditMissingCitationClaims(markdown)
-	}
 	return citationAudit{
 		Available:       sortedCitationIDs(availableSet),
 		Used:            sortedCitationIDs(usedSet),
 		Unknown:         sortedCitationIDs(unknownSet),
 		Claims:          auditCitationClaims(markdown, availableSet, evidenceByCitation),
-		MissingCitation: missing,
+		MissingCitation: nil,
 	}
 }

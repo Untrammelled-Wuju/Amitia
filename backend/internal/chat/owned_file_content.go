@@ -15,7 +15,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/devicemesh/business"
 )
 
@@ -115,9 +114,6 @@ func ownedWordText(ctx context.Context, data []byte) (string, error) {
 
 func ownedPDFText(ctx context.Context, data []byte) (string, error) {
 	commandName := "pdftotext"
-	if config.AppCfg != nil && strings.TrimSpace(config.AppCfg.Providers.Search.Research.PDFTextCommand) != "" {
-		commandName = strings.TrimSpace(config.AppCfg.Providers.Search.Research.PDFTextCommand)
-	}
 	tool, err := exec.LookPath(commandName)
 	if err != nil {
 		return "", errors.New("当前 Core 未安装 PDF 文字解析工具 pdftotext，请由 Core 管理员配置")

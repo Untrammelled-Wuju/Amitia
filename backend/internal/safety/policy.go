@@ -136,6 +136,10 @@ func (r *Repository) SaveBDI(ctx context.Context, scope PolicyScope, bdi BdiConf
 		return RuntimePolicy{}, err
 	}
 	expected := bdi.ExpectedRevision
+	bdi = NormalizeBdiConfig(bdi)
+	if err := ValidateBdiConfig(bdi); err != nil {
+		return RuntimePolicy{}, err
+	}
 	bdi.Revision = 0
 	bdi.ExpectedRevision = 0
 	raw, err := json.Marshal(bdi)

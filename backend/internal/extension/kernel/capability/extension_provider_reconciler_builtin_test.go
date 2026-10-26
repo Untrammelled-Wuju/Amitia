@@ -9,23 +9,23 @@ import (
 func TestExtensionProviderReconcilerPreservesBuiltinProviders(t *testing.T) {
 	registry := NewProviderRegistry()
 	builtinProvider := CapabilityProviderDefinition{
-		ID:           "com.amitia.builtin.search.provider",
-		CapabilityID: "search.web",
+		ID:           "com.amitia.builtin.browser.provider",
+		CapabilityID: "browser.control",
 		Kind:         ProviderKindBuiltin,
 		Placement:    ProviderPlacementCore,
-		ExtensionID:  "com.amitia.builtin.search",
-		ModuleID:     "search-runtime",
+		ExtensionID:  "com.amitia.builtin.browser",
+		ModuleID:     "browser-runtime",
 		Runtime: RuntimeBinding{
-			RuntimeType: RuntimeTypeSearch,
-			RuntimeID:   "search-runtime",
-			HandlerName: "web.run",
+			RuntimeType: RuntimeTypeBrowser,
+			RuntimeID:   "browser-runtime",
+			HandlerName: "browser.tab.get",
 		},
 	}
 	if err := registry.RegisterDefinition(builtinProvider); err != nil {
 		t.Fatal(err)
 	}
 	if err := registry.RegisterInstance(CapabilityProviderInstance{
-		ID:           "builtin-search-instance",
+		ID:           "builtin-browser-instance",
 		ProviderID:   builtinProvider.ID,
 		CapabilityID: builtinProvider.CapabilityID,
 		Placement:    builtinProvider.Placement,
@@ -36,18 +36,18 @@ func TestExtensionProviderReconcilerPreservesBuiltinProviders(t *testing.T) {
 	}
 
 	definition := domain.ExtensionDefinition{
-		ID:      "com.amitia.builtin.search",
+		ID:      "com.amitia.builtin.browser",
 		Version: domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0},
 		Modules: []domain.ModuleDefinition{
 			{
-				ID:          "search-runtime",
-				ExtensionID: "com.amitia.builtin.search",
+				ID:          "browser-runtime",
+				ExtensionID: "com.amitia.builtin.browser",
 				Type:        domain.ModuleTypeBuiltin,
 				Runtime: &domain.RuntimeDefinition{
 					Type:       domain.RuntimeTypeBuiltin,
-					EntryPoint: "web.run",
+					EntryPoint: "browser.tab.get",
 				},
-				ProvidedCapabilities: []domain.ProvidedCapability{{ID: "search.web", Version: "1.0.0"}},
+				ProvidedCapabilities: []domain.ProvidedCapability{{ID: "browser.control", Version: "1.0.0"}},
 			},
 		},
 	}

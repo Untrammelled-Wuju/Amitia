@@ -78,25 +78,22 @@ type AssistantTurnItem struct {
 func (AssistantTurnItem) TableName() string { return "assistant_turn_items" }
 
 type assistantTurnRecorder struct {
-	db               *gorm.DB
-	TurnID           string
-	ConversationID   string
-	CharacterID      string
-	UserMessageID    string
-	RequestID        string
-	ExecutionID      string
-	TurnSequence     int64
-	Provider         string
-	enabled          bool
-	itemMu           sync.Mutex
-	items            []AssistantTurnItem
-	itemByID         map[string]int
-	toolCallByID     map[string]int
-	progressMu       sync.Mutex
-	citationMu       sync.RWMutex
-	citationIDs      map[int]struct{}
-	citationEvidence map[int]citationEvidence
-	webResearchUsed  bool
+	db             *gorm.DB
+	TurnID         string
+	ConversationID string
+	CharacterID    string
+	UserMessageID  string
+	RequestID      string
+	ExecutionID    string
+	TurnSequence   int64
+	Provider       string
+	enabled        bool
+	itemMu         sync.Mutex
+	items          []AssistantTurnItem
+	itemByID       map[string]int
+	toolCallByID   map[string]int
+	progressMu     sync.Mutex
+	citationMu     sync.RWMutex
 }
 
 func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMessageID, requestID string, ids ...string) *assistantTurnRecorder {
@@ -117,17 +114,15 @@ func newAssistantTurnRecorder(db *gorm.DB, conversationID, characterID, userMess
 		executionID = uuid.NewString()
 	}
 	return &assistantTurnRecorder{
-		db:               db,
-		TurnID:           turnID,
-		ConversationID:   strings.TrimSpace(conversationID),
-		CharacterID:      strings.TrimSpace(characterID),
-		UserMessageID:    strings.TrimSpace(userMessageID),
-		RequestID:        strings.TrimSpace(requestID),
-		ExecutionID:      executionID,
-		itemByID:         make(map[string]int),
-		toolCallByID:     make(map[string]int),
-		citationIDs:      make(map[int]struct{}),
-		citationEvidence: make(map[int]citationEvidence),
+		db:             db,
+		TurnID:         turnID,
+		ConversationID: strings.TrimSpace(conversationID),
+		CharacterID:    strings.TrimSpace(characterID),
+		UserMessageID:  strings.TrimSpace(userMessageID),
+		RequestID:      strings.TrimSpace(requestID),
+		ExecutionID:    executionID,
+		itemByID:       make(map[string]int),
+		toolCallByID:   make(map[string]int),
 	}
 }
 
@@ -318,7 +313,6 @@ func (r *assistantTurnRecorder) AddToolResult(ctx context.Context, callID, toolN
 	if r == nil {
 		return nil
 	}
-	r.captureCitationIDs(toolName, result)
 	if r.db == nil || !r.enabled {
 		return nil
 	}
@@ -421,66 +415,12 @@ type claimCitationAudit struct {
 
 var numericCitationPattern = regexp.MustCompile(`\[(\d{1,6})\]`)
 
-func (r *assistantTurnRecorder) captureCitationIDs(toolName, result string) {
-	if r == nil || (toolName != "web_run" && toolName != "web.run") {
-		return
-	}
-	r.citationMu.Lock()
-	r.webResearchUsed = true
-	r.citationMu.Unlock()
-	if strings.TrimSpace(result) == "" {
-		return
-	}
-	var payload struct {
-		Citations []struct {
-			Index      int    `json:"index"`
-			EvidenceID string `json:"evidence_id"`
-			RefID      string `json:"ref_id"`
-			Title      string `json:"title"`
-			URL        string `json:"url"`
-			Text       string `json:"text"`
-		} `json:"citations"`
-	}
-	if err := json.Unmarshal([]byte(result), &payload); err != nil {
-		return
-	}
-	r.citationMu.Lock()
-	defer r.citationMu.Unlock()
-	if r.citationIDs == nil {
-		r.citationIDs = make(map[int]struct{})
-	}
-	if r.citationEvidence == nil {
-		r.citationEvidence = make(map[int]citationEvidence)
-	}
-	for _, citation := range payload.Citations {
-		if citation.Index > 0 {
-			r.citationIDs[citation.Index] = struct{}{}
-			r.citationEvidence[citation.Index] = citationEvidence{
-				EvidenceID: strings.TrimSpace(citation.EvidenceID),
-				RefID:      strings.TrimSpace(citation.RefID),
-				Title:      strings.TrimSpace(citation.Title),
-				URL:        strings.TrimSpace(citation.URL),
-				Text:       strings.TrimSpace(citation.Text),
-			}
-		}
-	}
-}
-
 func (r *assistantTurnRecorder) AuditCitationMarkers(markdown string) citationAudit {
 	if r == nil {
 		return citationAudit{}
 	}
-	r.citationMu.RLock()
-	webResearchUsed := r.webResearchUsed
-	availableSet := make(map[int]struct{}, len(r.citationIDs))
-	for id := range r.citationIDs {
-		availableSet[id] = struct{}{}
-	}
-	evidenceByCitation := make(map[int]citationEvidence, len(r.citationEvidence))
-	for id, evidence := range r.citationEvidence {
-		evidenceByCitation[id] = evidence
-	}
-	r.citationMu.RUnlock()
+	availableSet := map[int]struct{}{}
+	evidenceByCitation := map[int]citationEvidence{}
 	usedSet := make(map[int]struct{})
 	unknownSet := make(map[int]struct{})
 	for _, id := range citationMarkersInProse(markdown, numericCitationPattern) {
@@ -490,16 +430,12 @@ func (r *assistantTurnRecorder) AuditCitationMarkers(markdown string) citationAu
 			unknownSet[id] = struct{}{}
 		}
 	}
-	missing := []string(nil)
-	if webResearchUsed {
-		missing = auditMissingCitationClaims(markdown)
-	}
 	return citationAudit{
 		Available:       sortedCitationIDs(availableSet),
 		Used:            sortedCitationIDs(usedSet),
 		Unknown:         sortedCitationIDs(unknownSet),
 		Claims:          auditCitationClaims(markdown, availableSet, evidenceByCitation),
-		MissingCitation: missing,
+		MissingCitation: nil,
 	}
 }
 

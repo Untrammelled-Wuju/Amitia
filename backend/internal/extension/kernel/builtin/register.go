@@ -3,7 +3,6 @@ package builtin
 // AllBuiltinRegistrations 返回所有 Built-in Extension 的注册函数列表
 func AllBuiltinRegistrations() []func(c *Catalog) error {
 	return []func(c *Catalog) error{
-		func(c *Catalog) error { return c.Register(BuildSearchExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildBrowserExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildWorkspaceExtension("1.0.0")) },
 		func(c *Catalog) error { return c.Register(BuildUIAgentExtension("1.0.0")) },

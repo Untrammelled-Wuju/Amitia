@@ -15,7 +15,7 @@ type FindCapabilitiesInput struct {
 	Install       *CandidateInstallDescriptor `json:"install,omitempty"`
 	ExtensionID   string                      `json:"extensionId,omitempty"`
 	Version       string                      `json:"version,omitempty"`
-	CapabilityID  string                      `json:"capabilityId" description:"The identifier of the capability needed (for example: browser.control, search.web, mcp.server.filesystem, chat.openai, skill.weather_query)"`
+	CapabilityID  string                      `json:"capabilityId" description:"The identifier of the capability needed (for example: browser.control, mcp.server.filesystem, chat.openai, skill.weather_query)"`
 	Description   string                      `json:"description,omitempty" description:"Optional description of what the AI wants to use the capability for"`
 	PreferredKind string                      `json:"preferredKind,omitempty" description:"Optional preferred kind filter: extension, mcp, skill, generated_skill"`
 }
@@ -36,7 +36,7 @@ type AcquireInput struct {
 	ExtensionID   string                      `json:"extensionId,omitempty"`
 	Version       string                      `json:"version,omitempty"`
 	PreferredKind string                      `json:"preferredKind,omitempty"`
-	CapabilityID  string                      `json:"capabilityId,omitempty" description:"The canonical capability identifier to acquire (for example: search.web, browser.control, github.issue.manage). Required for a new acquisition."`
+	CapabilityID  string                      `json:"capabilityId,omitempty" description:"The canonical capability identifier to acquire (for example: browser.control, github.issue.manage). Required for a new acquisition."`
 	CandidateID   string                      `json:"candidateId,omitempty" description:"Optional candidate id from find_capability result. If empty, the Planner selects the best candidate automatically."`
 	ResumeToken   string                      `json:"resumeToken,omitempty" description:"Resume token returned by a previous approval-required acquisition. When supplied, the existing acquisition transaction is resumed instead of creating a new one."`
 	Approval      bool                        `json:"approval,omitempty" description:"Whether the AI should proceed with auto-install when user pre-approved"`

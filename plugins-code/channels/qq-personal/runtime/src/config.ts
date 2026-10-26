@@ -3,6 +3,7 @@ import path from "node:path"
 import { randomBytes } from "node:crypto"
 
 export type GroupTrigger = "mention" | "all" | "prefix"
+export type SnowLumaRuntimeMode = "native" | "docker"
 
 export interface QQPersonalConfig {
   enabled: boolean
@@ -13,6 +14,8 @@ export interface QQPersonalConfig {
   groupTrigger: GroupTrigger
   triggerPrefix: string
   ignoredUserIds: string[]
+  runtimeMode: SnowLumaRuntimeMode
+  snowlumaRoot: string
   webuiPort: number
   novncPort: number
   containerName: string
@@ -23,6 +26,10 @@ const dataDir = process.env.AMITIA_MODULE_DATA_DIR
   ? path.resolve(process.env.AMITIA_MODULE_DATA_DIR)
   : path.resolve(process.cwd(), "data")
 const configPath = path.join(dataDir, "qq-personal-config.json")
+
+export function moduleDataDir(): string {
+  return dataDir
+}
 
 function readPort(raw: unknown, fallback: number): number {
   const parsed = Number(raw)
@@ -36,6 +43,22 @@ function normalizeTrigger(raw: unknown): GroupTrigger {
 function normalizeText(raw: unknown, fallback: string): string {
   const value = String(raw ?? "").trim()
   return value || fallback
+}
+
+export function isRuntimeModeSupported(mode: string, platform = process.platform): mode is SnowLumaRuntimeMode {
+  if (platform === "darwin") return mode === "docker"
+  return mode === "docker" || (mode === "native" && (platform === "win32" || platform === "linux"))
+}
+
+export function normalizeRuntimeModeForPlatform(raw: unknown, fallback: SnowLumaRuntimeMode, platform = process.platform): SnowLumaRuntimeMode {
+  if (typeof raw === "string" && isRuntimeModeSupported(raw, platform)) return raw
+  if (isRuntimeModeSupported(fallback, platform)) return fallback
+  return "docker"
+}
+
+function defaultRuntimeMode(): SnowLumaRuntimeMode {
+  if (process.env.QQ_PERSONAL_RUNTIME_MODE && isRuntimeModeSupported(process.env.QQ_PERSONAL_RUNTIME_MODE)) return process.env.QQ_PERSONAL_RUNTIME_MODE
+  return process.platform === "win32" ? "native" : "docker"
 }
 
 export function generateToken(): string {
@@ -53,6 +76,8 @@ export function defaults(): QQPersonalConfig {
     groupTrigger: normalizeTrigger(process.env.QQ_PERSONAL_GROUP_TRIGGER),
     triggerPrefix: process.env.QQ_PERSONAL_TRIGGER_PREFIX || "Amitia",
     ignoredUserIds: ["2854196310"],
+    runtimeMode: defaultRuntimeMode(),
+    snowlumaRoot: "",
     webuiPort: readPort(process.env.QQ_PERSONAL_WEBUI_PORT, 5099),
     novncPort: readPort(process.env.QQ_PERSONAL_NOVNC_PORT, 6081),
     containerName: process.env.QQ_PERSONAL_CONTAINER || "snowluma",
@@ -72,6 +97,8 @@ export function normalizeConfig(input: Partial<QQPersonalConfig>, base = default
     ignoredUserIds: Array.isArray(input.ignoredUserIds)
       ? input.ignoredUserIds.map(String).map((item) => item.trim()).filter(Boolean)
       : base.ignoredUserIds,
+    runtimeMode: normalizeRuntimeModeForPlatform(input.runtimeMode, base.runtimeMode),
+    snowlumaRoot: String(input.snowlumaRoot ?? base.snowlumaRoot).trim(),
     webuiPort: readPort(input.webuiPort, base.webuiPort),
     novncPort: readPort(input.novncPort, base.novncPort),
     containerName: normalizeText(input.containerName, base.containerName),

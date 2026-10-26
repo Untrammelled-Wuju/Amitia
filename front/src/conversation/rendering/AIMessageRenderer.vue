@@ -262,36 +262,8 @@ const citationSources = computed<CitationSource[]>(() => {
     const id = String(source.id || "").trim();
     if (id) byId.set(id, source);
   }
-  // For new messages the immutable snapshot is authoritative. Do not append
-  // retrieved-but-uncited web tool candidates to historical references.
   if (Array.isArray(message.value.raw?.citationSnapshot)) {
     return [...byId.values()].sort(compareCitationSources);
-  }
-  const turn = assistantTurn.value;
-  if (!turn) return [...byId.values()].sort(compareCitationSources);
-  for (const item of turn.items) {
-    if (item.type !== "tool_result" || !["web_run", "web.run"].includes(String(item.toolName || ""))) continue;
-    const raw = String(item.resultJson || "").trim();
-    if (!raw) continue;
-    try {
-      const result = JSON.parse(raw) as Record<string, unknown>;
-      const citations = Array.isArray(result.citations) ? result.citations : [];
-      for (const entry of citations) {
-        if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
-        const citation = entry as Record<string, unknown>;
-        const index = Number(citation.index || 0);
-        const id = index > 0 ? String(index) : String(citation.ref_id || citation.evidence_id || "").trim();
-        if (!id || byId.has(id)) continue;
-        byId.set(id, {
-          id,
-          title: String(citation.title || citation.url || `Source ${id}`),
-          url: String(citation.url || "") || undefined,
-          snippet: String(citation.text || "") || undefined,
-        });
-      }
-    } catch {
-      // Tool results from non-JSON/legacy turns are simply not citation sources.
-    }
   }
   return [...byId.values()].sort(compareCitationSources);
 });

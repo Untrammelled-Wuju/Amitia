@@ -102,7 +102,7 @@ def _build_component_lock(version, package_id):
         "packageId": package_id,
         "components": [
             {"id": "backend", "version": "1.0.0", "architecture": "arm64", "path": "payload/runtime/runtime.tar.xz", "sha256": "a" * 64},
-            {"id": "node", "version": "24.19.0", "architecture": "arm64", "path": "payload/runtime/runtime.tar.xz", "sha256": "b" * 64},
+            {"id": "node", "version": "26.12.1", "architecture": "arm64", "path": "payload/runtime/runtime.tar.xz", "sha256": "b" * 64},
             {"id": "qdrant", "version": "1.9.0", "architecture": "arm64", "path": "payload/runtime/runtime.tar.xz", "sha256": "c" * 64},
         ],
     }

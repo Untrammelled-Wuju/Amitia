@@ -11,7 +11,7 @@ func memoryContentChanged(previous, next json.RawMessage) bool {
 		if json.Unmarshal(raw, &document) != nil {
 			return raw
 		}
-		for _, key := range []string{"executionScope", "createdAt", "updatedAt", "retentionLevel", "pinned", "memoryStrength", "strengthUpdatedAt", "lastReinforcedAt", "reinforceCount", "retrievedCount", "injectedCount", "decayState", "archivedAt", "expiresAt", "allowContextUse", "effectiveStrength", "effectiveDecayState", "effectiveRetentionLevel"} {
+		for _, key := range []string{"executionScope", "createdAt", "updatedAt", "retentionLevel", "pinned", "memoryStrength", "strengthUpdatedAt", "lastReinforcedAt", "reinforceCount", "retrievedCount", "injectedCount", "decayState", "archivedAt", "expiresAt", "allowContextUse", "allowProactiveMention", "effectiveStrength", "effectiveDecayState", "effectiveRetentionLevel"} {
 			delete(document, key)
 		}
 		encoded, err := json.Marshal(document)

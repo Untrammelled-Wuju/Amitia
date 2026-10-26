@@ -87,7 +87,7 @@ func inputSchemaFindCapabilities() json.RawMessage {
   "properties": {
     "capabilityId": {
       "type": "string",
-      "description": "The identifier of the capability needed (for example: browser.control, search.web, mcp.server.filesystem, chat.openai, skill.weather_query)"
+      "description": "The identifier of the capability needed (for example: browser.control, mcp.server.filesystem, chat.openai, skill.weather_query)"
     },
     "description": {
       "type": "string",
@@ -114,7 +114,7 @@ func inputSchemaAcquireCapability() json.RawMessage {
   "properties": {
     "capabilityId": {
       "type": "string",
-      "description": "The identifier of the capability to acquire (for example: browser.control, search.web, mcp.server.filesystem)"
+      "description": "The identifier of the capability to acquire (for example: browser.control, mcp.server.filesystem)"
     },
     "candidateId": {
       "type": "string",

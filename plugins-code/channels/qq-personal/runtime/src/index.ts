@@ -6,15 +6,17 @@ import path from "node:path"
 import Fastify from "fastify"
 import cors from "@fastify/cors"
 import { OneBotBridge } from "./onebot.js"
-import { dataFilePath, loadConfig, normalizeConfig, saveConfig, type QQPersonalConfig } from "./config.js"
+import { dataFilePath, isRuntimeModeSupported, loadConfig, moduleDataDir, normalizeConfig, saveConfig, type QQPersonalConfig } from "./config.js"
 import { parseOneBotMessage, shouldHandleMessage, applyPrefix, type ParsedQQMessage } from "./message.js"
 import { buildInboundPayload, forwardInbound } from "./inbound.js"
 import { changeWebuiPassword, evaluatePassword, readSnowLumaInfo } from "./snowluma-info.js"
+import { effectiveSnowLumaRoot, resolveReverseWebSocketTarget, SnowLumaRuntimeManager } from "./snowluma-runtime.js"
 import { CredentialStore } from "./credential-store.js"
 import { PeerStore } from "./peer-store.js"
 import { authorizeServiceRequest } from "./service-auth.js"
 import { downloadMedia, sendMedia, synthesizeVoice } from "./outbound.js"
 import { IdempotencyStore } from "./idempotency.js"
+import { startDockerService } from "./docker-service.js"
 
 const env = process.env
 const app = Fastify({ logger: { level: env.LOG_LEVEL || "info" } })
@@ -29,6 +31,7 @@ let bridge: OneBotBridge
 const peers = new PeerStore()
 const outboundRequests = new IdempotencyStore()
 const credentialStore = new CredentialStore(path.dirname(dataFilePath("qq-personal-config.json")))
+const runtimeManager = new SnowLumaRuntimeManager()
 let lastError = ""
 let messageCount = 0
 let replyCount = 0
@@ -111,10 +114,14 @@ app.server.on("upgrade", (request, socket, head) => {
 })
 
 async function publicConfig() {
-  const hostForDocker = process.platform === "darwin" || process.platform === "win32"
-    ? "host.docker.internal"
-    : "127.0.0.1"
+  const reverseTarget = await resolveReverseWebSocketTarget(config)
+  const effectiveRoot = config.runtimeMode === "native"
+    ? runtimeManager.nativeRoot(config)
+    : effectiveSnowLumaRoot(config.snowlumaRoot, moduleDataDir())
   const snowluma = await readSnowLumaInfo({
+    runtimeMode: config.runtimeMode,
+    snowlumaRoot: effectiveRoot,
+    bootstrapPassword: runtimeManager.webuiBootstrapPassword(),
     containerName: config.containerName,
     webuiPort: config.webuiPort,
     novncPort: config.novncPort,
@@ -122,16 +129,20 @@ async function publicConfig() {
   }, credentialStore.read())
   return {
     enabled: config.enabled,
+    platform: process.platform,
     listenHost: config.listenHost,
     listenPort: config.listenPort,
     websocketPath: config.websocketPath,
-    reverseWebSocketUrl: `ws://${hostForDocker}:${config.listenPort}${config.websocketPath}`,
+    reverseWebSocketUrl: reverseTarget.url,
+    reverseWebSocketWarning: reverseTarget.warning,
     localWebSocketUrl: `ws://127.0.0.1:${config.listenPort}${config.websocketPath}`,
     token: config.token,
     groupTrigger: config.groupTrigger,
     triggerPrefix: config.triggerPrefix,
+    runtimeMode: config.runtimeMode,
     webuiPort: config.webuiPort,
     novncPort: config.novncPort,
+    novncEnabled: config.runtimeMode === "docker",
     containerName: config.containerName,
     dockerBin: config.dockerBin,
     webuiUrl: snowluma.webuiUrl,
@@ -141,6 +152,9 @@ async function publicConfig() {
     webuiPasswordState: snowluma.webuiPasswordState,
     novncPassword: snowluma.novncPassword,
     snowlumaError: snowluma.error,
+    runtimeStatus: runtimeManager.status(),
+    snowlumaInstall: runtimeManager.installState(),
+    runtimeLogLines: runtimeManager.recentLines(),
   }
 }
 
@@ -164,6 +178,8 @@ function statusPayload() {
       messageCount,
       replyCount,
       lastError,
+      snowluma: runtimeManager.status(),
+      snowlumaInstall: runtimeManager.installState(),
     },
   }
 }
@@ -201,6 +217,35 @@ app.post("/api/action", async (request, reply) => {
   const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
     ? body.input
     : {}) as Record<string, unknown>
+  if (action === "install-snowluma") {
+    const requested = (input.config && typeof input.config === "object" && !Array.isArray(input.config)
+      ? input.config
+      : {}) as Partial<QQPersonalConfig>
+    const next = normalizeConfig({ ...config, ...requested, runtimeMode: "native", enabled: true }, config)
+    if (!next.token) return reply.send({ success: false, error: "OneBot Token 不能为空" })
+    config = next
+    saveConfig(config)
+    await runtimeManager.install(config)
+    return reply.send({ success: true, data: await publicConfig() })
+  }
+  if (action === "start-docker") {
+    try {
+      const dockerService = await startDockerService({
+        dockerBin: config.dockerBin,
+        containerName: config.containerName,
+        launchDocker: input.skipDockerLaunch !== true,
+      })
+      return reply.send({
+        success: true,
+        data: {
+          ...await publicConfig(),
+          dockerService,
+        },
+      })
+    } catch (error) {
+      return reply.send({ success: false, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
   if (action === "change-webui-password") {
     const oldPassword = String(input.oldPassword || "").trim()
     const newPassword = String(input.newPassword || "")
@@ -212,6 +257,11 @@ app.post("/api/action", async (request, reply) => {
     }
     if (oldPassword === newPassword) return reply.send({ success: false, error: "新密码不能与当前密码相同" })
     const current = await readSnowLumaInfo({
+      runtimeMode: config.runtimeMode,
+      snowlumaRoot: config.runtimeMode === "native"
+        ? runtimeManager.nativeRoot(config)
+        : effectiveSnowLumaRoot(config.snowlumaRoot, moduleDataDir()),
+      bootstrapPassword: runtimeManager.webuiBootstrapPassword(),
       containerName: config.containerName,
       webuiPort: config.webuiPort,
       novncPort: config.novncPort,
@@ -247,11 +297,22 @@ app.post("/api/peers", async (request) => {
 
 app.post("/api/connect", async (request, reply) => {
   const body = (request.body || {}) as Partial<QQPersonalConfig>
+  if (body.runtimeMode && !isRuntimeModeSupported(String(body.runtimeMode))) {
+    return reply.status(400).send({ success: false, error: process.platform === "darwin" ? "macOS 仅支持 Docker 运行模式" : "当前系统不支持该运行模式" })
+  }
   const next = normalizeConfig({ ...config, ...body, enabled: true }, config)
   if (next.listenPort !== config.listenPort) {
     return reply.status(400).send({ success: false, error: "修改监听端口后需要重启插件" })
   }
   if (!next.token) return reply.status(400).send({ success: false, error: "OneBot Token 不能为空" })
+  try {
+    const runtimeStatus = await runtimeManager.start(next)
+    if (next.runtimeMode === "native" && !runtimeStatus.running) {
+      return reply.status(400).send({ success: false, error: runtimeStatus.error || "SnowLuma 启动失败" })
+    }
+  } catch (error) {
+    return reply.status(400).send({ success: false, error: error instanceof Error ? error.message : String(error) })
+  }
   if (next.token !== config.token) bridge.disconnectClients()
   config = next
   saveConfig(config)
@@ -262,6 +323,7 @@ app.post("/api/disconnect", async (_request, reply) => {
   config = { ...config, enabled: false }
   saveConfig(config)
   bridge.disconnectClients()
+  await runtimeManager.stop()
   return reply.send({ success: true })
 })
 
@@ -408,6 +470,16 @@ try {
     port: config.listenPort,
     path: config.websocketPath,
   }, "QQ 个人号 OneBot 反向 WebSocket 已启动")
+  if (config.runtimeMode !== "native") {
+    await runtimeManager.start(config)
+  } else {
+    try {
+      await runtimeManager.start(config)
+    } catch (error) {
+      runtimeManager.recordError(config.runtimeMode, error instanceof Error ? error.message : String(error))
+      app.log.error({ error: runtimeManager.status().error }, "SnowLuma 原生运行环境启动失败")
+    }
+  }
 } catch (error) {
   app.log.error(error)
   process.exit(1)
@@ -415,6 +487,7 @@ try {
 
 const shutdown = async () => {
   bridge.close()
+  await runtimeManager.stop()
   await app.close()
 }
 

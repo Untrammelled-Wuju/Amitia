@@ -7,9 +7,9 @@
       "default": "QQ 个人号"
     },
     "description": {
-      "default": "通过 OneBot 11 反向 WebSocket 将 SnowLuma 个人 QQ 协议端接入 Amitia，并在工作区中内嵌 SnowLuma WebUI 与 noVNC 桌面。"
+      "default": "通过 OneBot 11 反向 WebSocket 将 SnowLuma 个人 QQ 协议端接入 Amitia，支持 Windows、Linux 原生运行及 Docker 部署。"
     },
-    "version": "0.2.5",
+    "version": "0.2.28",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -180,6 +180,28 @@
                 },
                 "title": {
                   "default": "断开 QQ 个人号连接"
+                }
+              },
+              {
+                "action_id": "install-snowluma",
+                "risk_level": "high",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "安装或更新 SnowLuma"
+                }
+              },
+              {
+                "action_id": "start-docker",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "启动 Docker 与 SnowLuma"
                 }
               },
               {
@@ -597,13 +619,13 @@
           }
         },
         {
-          "id": "qq-personal-snowluma-novnc",
+          "id": "qq-personal-novnc",
           "kind": "ui_provider",
           "name": {
-            "default": "SnowLuma noVNC"
+            "default": "noVNC 远程桌面"
           },
           "description": {
-            "default": "在渠道工作区 Tab 中嵌入 SnowLuma 容器内部桌面的 noVNC 入口。"
+            "default": "在渠道工作区 Tab 中嵌入 SnowLuma 的 noVNC 远程桌面。"
           },
           "spec": {
             "capability": "workspace.tab",
@@ -632,8 +654,8 @@
             },
             "metadata": {
               "workspace": "channel.workspace",
-              "tabId": "snowluma-novnc",
-              "title": "noVNC 桌面",
+              "tabId": "novnc-desktop",
+              "title": "noVNC",
               "icon": "connection",
               "order": 30,
               "routePrefix": "/channels/qq-personal",
@@ -647,7 +669,7 @@
             },
             "mode": "replace",
             "priority": 211,
-            "providerId": "qq-personal-snowluma-novnc",
+            "providerId": "qq-personal-novnc",
             "trustLevel": "official"
           }
         }
@@ -705,7 +727,7 @@
     },
     {
       "name": "files.read",
-      "reason": "通过 docker exec 读取 SnowLuma 容器内的 webui.json 与 vnc-password，以展示 WebUI 与 noVNC 凭据。",
+      "reason": "读取 SnowLuma 原生数据目录中的 webui.json，或通过 docker exec 读取容器中的 WebUI 与 noVNC 凭据。",
       "required": true,
       "scope": "global"
     }

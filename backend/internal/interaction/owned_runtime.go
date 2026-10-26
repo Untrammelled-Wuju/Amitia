@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/temporal"
@@ -31,7 +32,7 @@ func (r *RuntimeAssembly) EvaluateGeneratedText(ctx context.Context, text string
 	incident.Description = strings.Join(result.Reasons, ",")
 	incident.Status = "open"
 	incident.PolicyRevision = r.SafetyPolicy.Revision
-	details, err := json.Marshal(map[string]any{"action": result.Action, "reasons": result.Reasons, "replacement": result.Replacement})
+	details, err := json.Marshal(map[string]any{"action": result.Action, "reasons": result.Reasons, "replacement": result.Replacement, "bdiRevision": r.SafetyPolicy.BDI.Revision, "copingStrategy": copingStrategyOf(r.ExpressionPlan), "emotionIntensity": emotionIntensityOf(r.ExpressionPlan)})
 	if err != nil {
 		return safety.PostGenOutput{}, err
 	}
@@ -40,6 +41,20 @@ func (r *RuntimeAssembly) EvaluateGeneratedText(ctx context.Context, text string
 		return safety.PostGenOutput{}, err
 	}
 	return result, nil
+}
+
+func copingStrategyOf(plan *decision.ExpressionPlan) string {
+	if plan == nil {
+		return ""
+	}
+	return string(plan.CopingStrategy)
+}
+
+func emotionIntensityOf(plan *decision.ExpressionPlan) float64 {
+	if plan == nil {
+		return 0
+	}
+	return plan.EmotionIntensity
 }
 
 func (r *RuntimeAssembly) CheckGeneratedText(text string) safety.PostGenOutput {

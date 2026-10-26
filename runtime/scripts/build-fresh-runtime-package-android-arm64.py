@@ -39,7 +39,7 @@ def extract_binary(archive, member_name, destination):
 
 
 def extract_node(archive, destination):
-    prefix = "node-v24.19.0-linux-arm64/"
+    prefix = "node-v26.12.1-linux-arm64/"
     with tarfile.open(archive, "r:xz") as source:
         for member in source:
             name = member.name
