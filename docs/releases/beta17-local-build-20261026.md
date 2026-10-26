@@ -23,6 +23,19 @@ APK 正式证书、v2 签名、16 KB 对齐、单 arm64-v8a、内嵌 Runtime 与
 完整项目已重启，前端及 Core、Qdrant、SurrealDB、已安装渠道插件健康接口正常；Core beta.17，readyz 为 6 ready、0 degraded、0 blocking、0 failed。
 
 当前为 macOS，未实测 Windows NSIS 安装。最终 APK 构建完成时设备断开，未安装最终包；早期 e4d54dbd 构建曾覆盖安装并冷启动成功，不作为最终包真机验证结果。
-用户要求先不发布，本次未上传服务器、未发布 GitHub Release、未推送 Git。
+初次本地交付按用户要求未发布；随后收到“推送云端更新”的明确指令，正式发布结果如下。未发布 GitHub Release，未推送 Git。
 详细记录：artifacts/release-26.2.0-beta.17/release-build-record.json。
 本记录提交不是下一次差异比较的源码目标提交。
+
+
+## 云端正式通道发布
+
+记录时间：2026-10-26T19:07:16+08:00。
+通过现有管理端 HTTPS 接口发布，先完成两个平台的草稿上传及服务端校验，再切换 stable 通道。
+桌面端发布编号 45；Android 发布编号 46，versionCode 23。
+线上 latest.yml 版本 beta.17，安装包大小、SHA-512、更新说明与本次制品一致，blockmap SHA-256 与本地一致。
+线上 android/stable.json 版本 beta.17 / 23，APK 大小和 SHA-256 一致；stable.json.sig 使用客户端内置公钥通过 RSA SHA-256 验证。
+EXE 与 APK 首段、中段、尾段共 6 个 Range 内容逐字节与本地一致。
+公开清单：https://amitia.untrammelled.top/amitia/latest.yml 及 https://amitia.untrammelled.top/amitia/android/stable.json 。
+完整发布结果与线上校验保存在 artifacts/release-26.2.0-beta.17/admin-publish-result.json 和 cloud-verification.json。
+未推送 Git；本记录提交不是下一次发布差异的源码目标提交。
