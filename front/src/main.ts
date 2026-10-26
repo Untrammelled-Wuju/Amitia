@@ -100,11 +100,13 @@ async function bootstrap() {
   });
 
   app.mount("#app");
+  document.getElementById("app")?.setAttribute("data-amitia-mounted", "true");
+  window.dispatchEvent(new Event("amitia:mounted"));
   // There is no product-account gate. In Cloud browser mode the lightweight
   // Web access gate is already resolved before private extension UI boots.
 }
 
-void bootstrap();
+export const applicationReady = bootstrap();
 
 // ============================================================
 // Register Service Worker (PWA)

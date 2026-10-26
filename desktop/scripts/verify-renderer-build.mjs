@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, dirname, relative, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -178,6 +179,25 @@ function checkPetMainIsViteOutput() {
   }
 }
 
+function checkJavaScriptSyntax(directory) {
+  if (!existsSync(directory)) return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      checkJavaScriptSyntax(path);
+    } else if (/\.(?:m?js)$/.test(entry.name)) {
+      const result = spawnSync(process.execPath, ["--check", "--input-type=module"], {
+        input: readFileSync(path, "utf8"),
+        encoding: "utf8",
+        windowsHide: true,
+      });
+      if (result.error || result.status !== 0) {
+        errors.push(`INVALID JAVASCRIPT: ${relative(projectRoot, path)}\n${result.error?.message ?? result.stderr}`);
+      }
+    }
+  }
+}
+
 function main() {
   console.log("[verify-renderer-build] starting...");
 
@@ -192,6 +212,7 @@ function main() {
   checkHtmlAssetReferences(resolve(rendererDir, "index.html"), "index.html");
 
   checkRendererModuleGraph(petMainPath);
+  checkJavaScriptSyntax(rendererDir);
   checkPetMainIsViteOutput();
   checkPreloadOutputs();
 

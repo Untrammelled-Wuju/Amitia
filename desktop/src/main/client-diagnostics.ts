@@ -74,6 +74,13 @@ export function clearDesktopClientErrors(): void {
 }
 
 function attachWindowDiagnostics(win: BrowserWindow): void {
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (level < 3) return;
+    console.error("[AmitiaRenderer]", message, `${sourceId}:${line}`);
+  });
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error("[AmitiaRenderer] preload 加载失败:", preloadPath, error);
+  });
   win.webContents.on("render-process-gone", (_event, details) => {
     diagnostics.record({
       message: `Electron renderer exited: ${details.reason} (exitCode=${details.exitCode})`,

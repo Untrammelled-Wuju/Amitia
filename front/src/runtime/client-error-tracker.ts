@@ -79,7 +79,7 @@ function describeReason(reason: unknown): { message: string; stack: string } {
   return { message: shorten(reason, 2000), stack: "" };
 }
 
-export function installClientErrorTracking(app: App): void {
+export function installWindowErrorTracking(): void {
   if (installed || typeof window === "undefined") return;
   installed = true;
 
@@ -102,6 +102,10 @@ export function installClientErrorTracking(app: App): void {
     });
   });
 
+}
+
+export function installClientErrorTracking(app: App): void {
+  installWindowErrorTracking();
   const previousHandler = app.config.errorHandler;
   app.config.errorHandler = (error, instance, info) => {
     const described = describeReason(error);

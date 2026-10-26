@@ -125,7 +125,8 @@ export function trustedWebModuleExport(
   const cached = trustedModuleCache.get(key);
   if (cached) return cached;
   const component = markRaw(defineAsyncComponent(async () => {
-    const mod = await import(/* @vite-ignore */ await providerModuleURL(provider, entry.path!, entry.contentHash, entry.moduleToken));
+    const url = await providerModuleURL(provider, entry.path!, entry.contentHash, entry.moduleToken);
+    const mod = await import(/* @vite-ignore */ url);
     const exported = mod[name] ?? mod.default?.[name] ?? mod.components?.[name] ?? mod.icons?.[name];
     if (!exported) throw new Error(`UI provider ${provider.providerId} module does not export ${name}`);
     return exported;
@@ -140,7 +141,8 @@ export function trustedWebModule(provider: UIProviderDefinition, entry: UIProvid
   const cached = trustedModuleCache.get(key);
   if (cached) return cached;
   const moduleComponent = defineAsyncComponent(async () => {
-    const mod = await import(/* @vite-ignore */ await providerModuleURL(provider, entry.path!, entry.contentHash, entry.moduleToken));
+    const url = await providerModuleURL(provider, entry.path!, entry.contentHash, entry.moduleToken);
+    const mod = await import(/* @vite-ignore */ url);
     const exported = entry.exportName ? mod[entry.exportName] : (mod.default ?? mod);
     if (!exported) throw new Error(`UI provider ${provider.providerId} module does not export ${entry.exportName ?? "default"}`);
     return exported;
@@ -189,5 +191,6 @@ export async function prewarmTrustedWebModule(provider: UIProviderDefinition, en
       document.head.append(link);
     }
   }
-  await import(/* @vite-ignore */ await providerModuleURL(provider, entry.path, entry.contentHash, entry.moduleToken));
+  const url = await providerModuleURL(provider, entry.path, entry.contentHash, entry.moduleToken);
+  await import(/* @vite-ignore */ url);
 }
