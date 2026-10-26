@@ -60,7 +60,7 @@ select {
 
 .qq-personal-page {
   max-width: 1080px;
-  min-height: 100vh;
+  min-height: 100%;
   margin: 0 auto;
   padding: 32px 24px 48px;
   background: var(--qq-personal-page-bg);
@@ -255,8 +255,117 @@ button:disabled {
   border-top: 1px solid var(--qq-personal-border);
 }
 
-.webui-token-error {
-  margin-bottom: 0;
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.env-grid {
+  margin-top: 16px;
+}
+
+.env-link {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-bottom: 12px;
+  color: var(--qq-personal-accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  text-decoration: none;
+}
+
+.env-link:hover {
+  text-decoration: underline;
+}
+
+.env-copy {
+  margin-bottom: 14px;
+}
+
+.env-dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.secret {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.secret-missing {
+  color: var(--qq-personal-warning);
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.password-state {
+  align-self: center;
+  padding: 3px 9px;
+  border: 1px solid var(--qq-personal-border);
+  border-radius: 999px;
+  color: var(--qq-personal-muted);
+  font-size: 12px;
+}
+
+.password-state[data-state="stored"] {
+  border-color: color-mix(in srgb, var(--qq-personal-success) 42%, var(--qq-personal-border));
+  color: var(--qq-personal-success);
+}
+
+.password-state[data-state="temporary"] {
+  border-color: color-mix(in srgb, var(--qq-personal-warning) 42%, var(--qq-personal-border));
+  color: var(--qq-personal-warning);
+}
+
+.password-state[data-state="changed"],
+.password-state[data-state="unavailable"] {
+  border-color: color-mix(in srgb, var(--qq-personal-danger) 42%, var(--qq-personal-border));
+  color: var(--qq-personal-danger);
+}
+
+.env-actions {
+  margin-top: 10px;
+}
+
+.password-form {
+  display: grid;
+  gap: 0;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--qq-personal-border);
+  border-radius: var(--amitia-radius-sm, 10px);
+  background: var(--qq-personal-hover);
+}
+
+.password-form label {
+  margin-bottom: 10px;
+}
+
+.password-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  color: var(--qq-personal-danger);
+  font-size: 12px;
+}
+
+.password-rules li::before {
+  content: "•";
+  margin-right: 5px;
+}
+
+.password-rules li.ok {
+  color: var(--qq-personal-success);
+}
+
+.password-form .hint {
+  margin: 10px 0 0;
+  font-size: 12px;
 }
 
 .message {
@@ -330,6 +439,8 @@ dd {
   }
 
   .grid,
+  .field-row,
+  .env-dl,
   dl {
     grid-template-columns: 1fr;
   }

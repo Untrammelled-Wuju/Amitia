@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	goruntime "runtime"
 	runtimedebug "runtime/debug"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
 	channelinbound "github.com/u-ai/backend/internal/channel/inbound"
+	channelsandbox "github.com/u-ai/backend/internal/channel/sandbox"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/delivery"
@@ -75,6 +77,7 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func publicRuntimeCapabilities(services *AppServices) gin.H {
@@ -502,11 +505,39 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	if services.KernelContainer != nil {
 		channelProviders = services.KernelContainer.CapabilityProviders
 	}
+	var channelSandbox *channelsandbox.Service
+	if ctx != nil && ctx.DB != nil {
+		channelSandbox = channelsandbox.NewService(ctx.DB, channelSandboxDataDir())
+	}
 	if services.OwnedIngress != nil {
-		channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry, services.OwnedIngress.channelOwnerResolver)
+		if channelSandbox != nil {
+			channelinbound.RegisterInboundRouterWithSandbox(r, channelProviders, services.UnifiedEntry, channelinbound.SandboxResolver(func(spaceID, channelID string) (string, string, bool, bool) {
+				policy, err := channelSandbox.Get(spaceID, channelID)
+				if err != nil || !policy.Enabled {
+					return "", "", false, false
+				}
+				root, err := policy.RootOrDefault()
+				if err != nil {
+					return "", "", false, false
+				}
+				return policy.WorkspaceID, root, policy.AllowNetwork, true
+			}), services.OwnedIngress.channelOwnerResolver)
+		} else {
+			channelinbound.RegisterInboundRouter(r, channelProviders, services.UnifiedEntry, services.OwnedIngress.channelOwnerResolver)
+		}
 	}
 	if services.KernelContainer != nil && services.KernelContainer.ResourceLinks != nil {
 		channelinbound.RegisterMediaRouter(r, channelProviders, services.KernelContainer.ResourceLinks)
+	}
+	if channelProviders != nil && ctx != nil && ctx.DB != nil {
+		channelTTS := tts.NewService(tts.NewRepository(ctx.DB))
+		channelinbound.RegisterTTSRouter(r, channelProviders, channelinbound.SynthesizeFunc(func(callCtx context.Context, text string) (string, error) {
+			result, err := channelTTS.SynthesizePreview(&tts.SynthesizePreviewRequest{Text: text})
+			if err != nil {
+				return "", err
+			}
+			return result.AudioURL, nil
+		}))
 	}
 
 	apiGroup := r.Group("/api")
@@ -515,6 +546,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		registerLocalSourceTaskApprovalRouter(r.Group("/internal/device-mesh", security.LocalRuntimeControlMiddleware(localCredentialStore, config.AppCfg.Server.Host)), services)
 	}
 	apiGroup.Use(security.AuthenticationMiddleware(newAuthConfig(config.AppCfg.Security.Mode)))
+	if channelSandbox != nil {
+		channelsandbox.RegisterRoutes(apiGroup, channelSandbox)
+	}
 	if services.DeviceMesh != nil && services.DeviceMesh.BusinessCoordinationReady {
 		apiGroup.Use(security.DeviceExecutionAuthority(services.DeviceMesh.Coordination, spaceID))
 	}
@@ -1103,4 +1137,11 @@ func generateShutdownOpID() string {
 		return "shutdown_fallback"
 	}
 	return "sd_" + base64.RawURLEncoding.EncodeToString(b)
+}
+
+func channelSandboxDataDir() string {
+	if value := strings.TrimSpace(os.Getenv(util.DataDirEnv)); value != "" {
+		return value
+	}
+	return util.RuntimeRoot()
 }

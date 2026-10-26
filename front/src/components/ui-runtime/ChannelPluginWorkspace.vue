@@ -20,6 +20,15 @@
         消息统计
       </button>
       <button
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'settings'"
+        :class="{ active: activeTab === 'settings' }"
+        @click="selectTab('settings')"
+      >
+        设置
+      </button>
+      <button
         v-for="tab in workspaceTabs"
         :key="tab.key"
         type="button"
@@ -48,6 +57,16 @@
       class="channel-host-messages"
     />
 
+    <template v-if="channelId">
+      <ChannelPluginSettingsPanel
+        v-show="activeTab === 'settings'"
+        :channel-id="channelId"
+        :title="`${pluginItem?.label || '渠道'}设置`"
+        class="channel-workspace-extension"
+        data-workspace-tab-id="settings"
+      />
+    </template>
+
     <template v-for="tab in workspaceTabs" :key="tab.key">
       <WorkspaceTabHost
         v-if="activeTab === tab.tabId || (tab.keepMounted && visitedTabs.has(tab.tabId))"
@@ -70,6 +89,7 @@ import { useExtensionUIStore } from "@/stores/extensionUI";
 import { collectChannelPluginNavigationItems } from "@/ui-runtime/navigationRegistry";
 import ChannelHostMessagesPanel from "@/views/channels/ChannelHostMessagesPanel.vue";
 import WorkspaceTabHost from "./WorkspaceTabHost.vue";
+import ChannelPluginSettingsPanel from "@/views/channels/ChannelPluginSettingsPanel.vue";
 import { collectWorkspaceTabs } from "@/ui-runtime/workspaceTabs";
 
 const props = defineProps<{
@@ -103,6 +123,7 @@ const workspaceTabs = computed(() => collectWorkspaceTabs(
 const validTabIds = computed(() => new Set([
   "plugin",
   "messages",
+  "settings",
   ...workspaceTabs.value.map((tab) => tab.tabId),
 ]));
 function validTab(tab: unknown): string {
@@ -139,9 +160,9 @@ watch(workspaceTabs, () => {
 .channel-plugin-tabs button:hover { color: var(--text-primary); }
 .channel-plugin-tabs button.active { border-bottom-color: var(--ac-color-primary); color: var(--text-primary); font-weight: 600; }
 .channel-plugin-tabs button:focus-visible { outline: 2px solid var(--ac-color-primary); outline-offset: -2px; }
-.channel-plugin-content { min-height: 0; flex: 1; overflow: hidden; }
-.channel-host-messages { min-height: 0; flex: 1; }
-.channel-workspace-extension { min-height: 0; flex: 1; }
+.channel-plugin-content { min-height: 0; flex: 1; overflow: auto; }
+.channel-host-messages { min-height: 0; flex: 1; overflow: auto; }
+.channel-workspace-extension { min-height: 0; flex: 1; overflow: auto; display: flex; flex-direction: column; }
 .channel-plugin-unavailable { padding: 24px; color: var(--text-secondary); }
 @media (max-width: 720px) {
   .channel-plugin-tabs { padding-left: 10px; padding-right: 10px; }

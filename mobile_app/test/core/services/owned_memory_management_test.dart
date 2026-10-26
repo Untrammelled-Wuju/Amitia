@@ -40,10 +40,12 @@ Map<String, dynamic> state([int epoch = 1]) => {
 Map<String, dynamic> resource({
   String kind = 'memory',
   String owner = 'phone',
+  String id = 'item',
+  String roleId = 'role',
 }) => {
-  'id': 'item',
+  'id': id,
   'ownerId': owner,
-  'roleId': 'role',
+  'roleId': roleId,
   'kind': kind,
   'revision': 1,
   'body': {
@@ -149,9 +151,15 @@ void main() {
     } on OwnedMemoryConflict catch (conflict) {
       expect(conflict.resources.single['ownerId'], 'phone');
       expect(conflict.resources.single['revision'], 1);
+      final conflictScope = Map<String, dynamic>.from(
+        conflict.resources.single['executionScope'] as Map,
+      );
+      expect(conflictScope.remove('memoryRoleId'), 'role');
       expect(
-        conflict.resources.single['executionScope'],
-        original['executionScope'],
+        DeviceOwnedMemoryService.scopeStamp(conflictScope),
+        DeviceOwnedMemoryService.scopeStamp(
+          Map<String, dynamic>.from(original['executionScope'] as Map),
+        ),
       );
     }
     expect(transport.requests.length, 6);
@@ -352,6 +360,68 @@ void main() {
       throwsStateError,
     );
     expect(transport.requests.length, 4);
+  });
+  test('全部记忆视图接受同一 owner 的其他角色与全局记忆', () async {
+    final allScope = {
+      ...scope(),
+      'memoryViewAll': true,
+      'memoryRoleId': 'role',
+    };
+    final transport = TaskTransport([
+      state(),
+      {
+        'resources': [
+          resource(id: 'one'),
+          resource(id: 'two', roleId: 'role2'),
+          resource(id: 'three', roleId: '@global-memory'),
+        ],
+        'executionScope': allScope,
+        'nextCursor': '',
+      },
+      state(),
+    ]);
+    final page = await DeviceOwnedMemoryService(
+      BackendServiceApi(transport, 1),
+      isCurrent: () => true,
+    ).query('role', memoryView: 'all');
+    final rows = (page['resources'] as List).cast<Map<String, dynamic>>();
+    expect(rows.map((row) => row['id']), ['one', 'two', 'three']);
+    expect((rows[1]['executionScope'] as Map)['memoryRoleId'], 'role2');
+    expect((rows[1]['executionScope'] as Map)['roleId'], 'role');
+    expect(
+      (rows[1]['executionScope'] as Map).containsKey('memoryViewAll'),
+      isFalse,
+    );
+  });
+  test('全部记忆视图仍拒绝其他设备与非记忆角色', () async {
+    final allScope = {
+      ...scope(),
+      'memoryViewAll': true,
+      'memoryRoleId': 'role',
+    };
+    for (final row in [
+      resource(owner: 'other', roleId: 'role2'),
+      resource(kind: 'conversation', roleId: 'role2'),
+    ]) {
+      await expectLater(
+        DeviceOwnedMemoryService(
+          BackendServiceApi(
+            TaskTransport([
+              state(),
+              {
+                'resources': [row],
+                'executionScope': allScope,
+                'nextCursor': '',
+              },
+              state(),
+            ]),
+            1,
+          ),
+          isCurrent: () => true,
+        ).query('role', memoryView: 'all'),
+        throwsStateError,
+      );
+    }
   });
   test('混合 owner 查询结果不能展示', () async {
     final transport = TaskTransport([

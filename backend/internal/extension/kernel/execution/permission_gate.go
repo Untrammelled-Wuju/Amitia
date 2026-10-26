@@ -84,8 +84,33 @@ func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability
 	case permission.DecisionDeny:
 		return PermissionGateEvaluation{Decision: PermissionDeny, Subject: subject, Reasons: result.Reasons}
 	case permission.DecisionRequireApproval:
+		if sandboxAutoApproval(tool, inv) {
+			log.Printf("[permission-gate] auto-approve tool=%s reason=channel-sandbox root=%q", tool.ID, inv.ExecContext.Sandbox.Root)
+			return PermissionGateEvaluation{Decision: PermissionAllow, Subject: subject, Reasons: result.Reasons}
+		}
 		return PermissionGateEvaluation{Decision: PermissionRequireApproval, Subject: subject, Reasons: result.Reasons}
 	default:
 		return PermissionGateEvaluation{Decision: PermissionDeny, Subject: subject, Reasons: result.Reasons}
 	}
+}
+
+// sandboxAutoApprovedTools lists the high risk tools whose host reach is fully
+// replaced by the channel sandbox: they keep the sandboxed working directory, a
+// wrapped child process and a scrubbed environment. Manual approval exists to
+// make a person decide before host access happens; inside the sandbox that access
+// no longer reaches the host, and channel conversations have no approval surface,
+// so waiting would only stall the turn for minutes.
+var sandboxAutoApprovedTools = map[string]struct{}{
+	"builtin.execute_host_command": {},
+}
+
+func sandboxAutoApproval(tool capability.ToolDefinition, inv capability.ToolInvocationContext) bool {
+	if inv.ExecContext == nil || inv.ExecContext.Sandbox == nil {
+		return false
+	}
+	if strings.TrimSpace(inv.ExecContext.Sandbox.Root) == "" {
+		return false
+	}
+	_, ok := sandboxAutoApprovedTools[tool.ID]
+	return ok
 }

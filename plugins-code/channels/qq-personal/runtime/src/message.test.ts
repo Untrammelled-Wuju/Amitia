@@ -17,6 +17,10 @@ const config: QQPersonalConfig = {
   groupTrigger: "mention",
   triggerPrefix: "Amitia",
   ignoredUserIds: ["2854196310"],
+  webuiPort: 5099,
+  novncPort: 6081,
+  containerName: "snowluma",
+  dockerBin: "",
 }
 
 test("解析群聊 @机器人 和回复消息", async () => {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 )
 
 type hostCommandOutput struct {
@@ -90,8 +92,15 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 	if workspaceID == "" && invocation.ExecContext != nil {
 		workspaceID = strings.TrimSpace(invocation.ExecContext.WorkspaceID)
 	}
+	sandbox := invocationSandbox(invocation.ExecContext)
 	root := ""
-	if workspaceID != "" {
+	if sandbox != nil {
+		// A sandboxed channel conversation owns a virtual workspace that is not
+		// registered with the workspace service, so the sandbox root is the only
+		// authoritative working directory.
+		root = sandbox.Root
+		workspaceID = ""
+	} else if workspaceID != "" {
 		if executionWorkspaceRoot(invocation.ExecContext, workspaceID) == "" {
 			return nil, errors.New("WORKSPACE_SCOPE_MISMATCH: selected workspace is outside the current project")
 		}
@@ -125,6 +134,9 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureSandboxPath(invocation.ExecContext, directory); err != nil {
+		return nil, err
+	}
 	timeoutMS := intValue(obj, 30000, "timeoutMs")
 	if timeoutMS < 100 || timeoutMS > 300000 {
 		return nil, errors.New("timeoutMs must be between 100 and 300000")
@@ -135,23 +147,50 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 	}
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
 	defer cancel()
-	var process *exec.Cmd
+	shellPath := ""
+	shellArgs := []string(nil)
 	switch runtime.GOOS {
 	case "windows":
-		shell, lookupErr := exec.LookPath("pwsh.exe")
-		if lookupErr != nil {
-			shell, lookupErr = exec.LookPath("powershell.exe")
-			if lookupErr != nil {
-				return nil, fmt.Errorf("PowerShell executable unavailable: %w", lookupErr)
-			}
+		shellPath = "powershell.exe"
+		if resolved, lookupErr := exec.LookPath("pwsh.exe"); lookupErr == nil {
+			shellPath = resolved
+		} else if resolved, lookupErr := exec.LookPath("powershell.exe"); lookupErr == nil {
+			shellPath = resolved
+		} else {
+			return nil, fmt.Errorf("PowerShell executable unavailable: %w", lookupErr)
 		}
-		process = exec.CommandContext(execCtx, shell, "-NoProfile", "-NonInteractive", "-Command", command)
+		shellArgs = []string{"-NoProfile", "-NonInteractive", "-Command", command}
 	case "linux", "darwin":
-		process = exec.CommandContext(execCtx, "/bin/sh", "-lc", command)
+		shellPath = "/bin/sh"
+		shellArgs = []string{"-lc", command}
 	default:
 		return nil, fmt.Errorf("host command execution is not supported on %s", runtime.GOOS)
 	}
-	process.Dir = directory
+	var process *exec.Cmd
+	if sandbox != nil {
+		policy := trusted_service.ServiceNetworkPolicy{Mode: "loopback", Enforce: true, AllowInbound: true, LoopbackOnly: true}
+		if sandbox.AllowNetwork {
+			policy = trusted_service.ServiceNetworkPolicy{Mode: "unrestricted", Enforce: true, AllowOutbound: true}
+		}
+		tempDir := filepath.Join(sandbox.Root, ".runtime", fmt.Sprintf("cmd-%d", time.Now().UnixNano()))
+		if err := os.MkdirAll(tempDir, 0o700); err != nil {
+			return nil, fmt.Errorf("prepare sandbox temp dir: %w", err)
+		}
+		wrapped, wrapErr := trusted_service.WrapSandboxCommand(policy, shellPath, shellArgs, directory, tempDir)
+		if wrapErr != nil {
+			return nil, wrapErr
+		}
+		if wrapped.Cleanup != nil {
+			defer wrapped.Cleanup()
+		}
+		process = exec.CommandContext(execCtx, wrapped.Path, wrapped.Args...)
+		process.Dir = wrapped.WorkingDir
+		process.Env = sandboxCommandEnv(sandbox.Root, tempDir)
+		log.Printf("[sandbox-audit] command cwd=%q network=%v command=%q", directory, sandbox.AllowNetwork, truncateForAudit(command, 160))
+	} else {
+		process = exec.CommandContext(execCtx, shellPath, shellArgs...)
+		process.Dir = directory
+	}
 	stdout := &hostCommandOutput{limit: maxOutput}
 	stderr := &hostCommandOutput{limit: maxOutput}
 	process.Stdout = stdout
@@ -195,4 +234,23 @@ func parseMountedWorkspaceDirectory(value string) (string, string, bool) {
 		relative = parts[1]
 	}
 	return strings.TrimSpace(parts[0]), relative, true
+}
+
+// sandboxCommandEnv keeps a sandboxed command from inheriting host credentials
+// or the user's real home directory.
+func sandboxCommandEnv(root, tempDir string) []string {
+	return []string{
+		"PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+		"HOME=" + root,
+		"TMPDIR=" + tempDir,
+		"PWD=" + root,
+		"LANG=en_US.UTF-8",
+	}
+}
+
+func truncateForAudit(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "…"
 }

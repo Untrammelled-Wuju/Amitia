@@ -13,11 +13,11 @@ const config: InboundClientConfig = {
   localToken: "local-token",
 }
 
-test("语音合成使用当前预览接口并携带宿主凭据", async () => {
+test("语音合成使用渠道语音接口并携带宿主凭据", async () => {
   const calls: Array<{ url: string; init: RequestInit }> = []
   const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init: init || {} })
-    if (String(url).endsWith("/api/tts/preview")) {
+    if (String(url).endsWith("/api/channels/tts/preview")) {
       return new Response(JSON.stringify({ code: 200, data: { audioUrl: "/audio/test.mp3" } }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -32,7 +32,7 @@ test("语音合成使用当前预览接口并携带宿主凭据", async () => {
   assert.equal(asset.mime, "audio/mpeg")
   assert.equal(asset.buffer.toString(), "mp3")
   const headers = calls[0].init.headers as Record<string, string>
-  assert.equal(calls[0].url, "http://127.0.0.1:18899/api/tts/preview")
+  assert.equal(calls[0].url, "http://127.0.0.1:18899/api/channels/tts/preview")
   assert.equal(headers.Authorization, "Bearer service-token")
   assert.equal(headers["X-Amitia-Local-Token"], "local-token")
 })

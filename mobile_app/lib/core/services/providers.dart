@@ -6,12 +6,10 @@ import 'space_profile_service.dart';
 import 'character_service.dart';
 import 'character_detail_service.dart';
 import 'chat_service.dart';
-import 'memory_service.dart';
 import 'knowledge_service.dart';
 import 'device_owned_memory_service.dart';
 import 'device_owned_chat_service.dart';
 import 'profile_service.dart';
-import 'episodic_service.dart';
 import 'worldbook_service.dart';
 import 'continuity_service.dart';
 import 'reminder_service.dart';
@@ -34,10 +32,6 @@ import 'onboarding_service.dart';
 import '../models/character.dart';
 import '../models/conversation.dart';
 import '../models/project.dart';
-import '../models/memory.dart';
-import '../models/profile.dart';
-import '../models/episodic.dart';
-import '../models/worldbook.dart';
 import '../models/reminder.dart';
 import '../models/model_config.dart';
 import '../runtime/backend/mobile_backend_providers.dart';
@@ -87,10 +81,6 @@ final knowledgeServiceProvider = Provider<KnowledgeService>(
   (ref) => KnowledgeService(_getDynamicServiceApi(ref)),
 );
 
-final memoryServiceProvider = Provider<MemoryService>(
-  (ref) => MemoryService(_getDynamicServiceApi(ref)),
-);
-
 final memoryDataSourceProvider = Provider<DeviceOwnedChatService>((ref) {
   ref.watch(mobileDeploymentConfigProvider);
   final api = ref.watch(rawBackendServiceApiProvider);
@@ -119,6 +109,11 @@ final deviceOwnedMemoryServiceProvider = Provider<DeviceOwnedMemoryService>((
   );
 });
 
+final ownedMemoryCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final rows = await ref.read(deviceOwnedMemoryServiceProvider).listMemories();
+  return rows.length;
+});
+
 final ownedMemoryModeProvider = FutureProvider<bool>((ref) async {
   final owned = ref.watch(memoryDataSourceProvider);
   final ready = await owned.refresh();
@@ -129,11 +124,10 @@ final ownedMemoryModeProvider = FutureProvider<bool>((ref) async {
 });
 
 final profileServiceProvider = Provider<ProfileService>(
-  (ref) => ProfileService(_getDynamicServiceApi(ref)),
-);
-
-final episodicServiceProvider = Provider<EpisodicService>(
-  (ref) => EpisodicService(_getDynamicServiceApi(ref)),
+  (ref) => ProfileService(
+    ref.watch(memoryDataSourceProvider),
+    memory: () => ref.read(deviceOwnedMemoryServiceProvider),
+  ),
 );
 
 final worldBookServiceProvider = Provider<WorldBookService>(
@@ -475,46 +469,6 @@ final conversationUIEventWindowProvider = StreamProvider.autoDispose
         await Future<void>.delayed(const Duration(seconds: 1));
       }
     });
-
-final memoryListProvider = FutureProvider.autoDispose<List<MemoryDto>>((
-  ref,
-) async {
-  final svc = ref.read(memoryServiceProvider);
-  return svc.list();
-});
-
-final memoryListByCharacterProvider = FutureProvider.autoDispose
-    .family<List<MemoryDto>, String>((ref, characterId) async {
-      final svc = ref.read(memoryServiceProvider);
-      return svc.list(characterId: characterId);
-    });
-
-final memoryCandidateListProvider =
-    FutureProvider.autoDispose<List<MemoryCandidateDto>>((ref) async {
-      final svc = ref.read(memoryServiceProvider);
-      return svc.listCandidates();
-    });
-
-final profileListProvider = FutureProvider.autoDispose<List<ProfileDto>>((
-  ref,
-) async {
-  final svc = ref.read(profileServiceProvider);
-  return svc.list();
-});
-
-final episodicListProvider = FutureProvider.autoDispose<List<EpisodicDto>>((
-  ref,
-) async {
-  final svc = ref.read(episodicServiceProvider);
-  return svc.list();
-});
-
-final worldBookListProvider = FutureProvider.autoDispose<List<WorldBookDto>>((
-  ref,
-) async {
-  final svc = ref.read(worldBookServiceProvider);
-  return svc.list();
-});
 
 final reminderListProvider = FutureProvider.autoDispose<List<ReminderDto>>((
   ref,

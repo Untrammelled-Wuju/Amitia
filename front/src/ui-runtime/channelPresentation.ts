@@ -11,6 +11,7 @@ export interface ChannelPresentationDescriptor {
   icon: string;
   order: number;
   priority: number;
+  singleConversation: boolean;
   capabilities: Record<string, unknown>;
 }
 
@@ -46,6 +47,7 @@ export function resolveChannelPresentations(
       icon: text(metadata.icon) || "channel",
       order: integer(metadata.order, 1000),
       priority: provider.priority ?? 0,
+      singleConversation: metadata.singleConversation === true,
       capabilities,
     });
   }

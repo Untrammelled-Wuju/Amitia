@@ -28,6 +28,7 @@ const _protectedRouteNamespaces = <String>{
   AppRoutes.dashboard,
   AppRoutes.characters,
   AppRoutes.agent,
+  AppRoutes.memoryHub,
   AppRoutes.memory,
   AppRoutes.knowledge,
   AppRoutes.reminders,

@@ -5,6 +5,14 @@ export interface InboundPayload {
   accountId: string
   conversationId: string
   peerId: string
+  peerKind: "group" | "private"
+  conversationTitle?: string
+  senderId: string
+  senderName?: string
+  mentions?: string[]
+  replyExcerpt?: string
+  fileUrl?: string
+  fileName?: string
   messageId: string
   contentType: "text" | "image" | "video" | "voice"
   text: string
@@ -24,7 +32,7 @@ export interface InboundClientConfig {
   localToken: string
 }
 
-export function buildInboundPayload(message: ParsedQQMessage): InboundPayload {
+export function buildInboundPayload(message: ParsedQQMessage, conversationTitle = ""): InboundPayload {
   const peerId = message.messageType === "group" ? message.groupId : message.senderId
   if (!peerId) throw new Error("QQ 消息缺少群号或发送者")
   const contentType = message.audioUrl
@@ -50,6 +58,8 @@ export function buildInboundPayload(message: ParsedQQMessage): InboundPayload {
       ? `conv-qq-personal-group-${message.groupId}`
       : `conv-qq-personal-private-${message.senderId}`,
     peerId,
+    peerKind: message.messageType,
+    senderId: message.senderId,
     messageId: message.messageId,
     contentType,
     text: message.content || fallback,
@@ -59,6 +69,12 @@ export function buildInboundPayload(message: ParsedQQMessage): InboundPayload {
   if (message.videoUrl) payload.videoUrl = message.videoUrl
   if (message.audioUrl) payload.audioUrl = message.audioUrl
   if (message.replyToMessageId) payload.replyToMessageId = message.replyToMessageId
+  if (message.senderName) payload.senderName = message.senderName
+  if (message.mentionNames.length) payload.mentions = message.mentionNames
+  if (message.replyExcerpt) payload.replyExcerpt = message.replyExcerpt
+  if (message.fileUrl) payload.fileUrl = message.fileUrl
+  if (message.fileName) payload.fileName = message.fileName
+  if (conversationTitle.trim()) payload.conversationTitle = conversationTitle.trim()
   return payload
 }
 

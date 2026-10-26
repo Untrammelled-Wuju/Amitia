@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -265,7 +264,6 @@ void main() {
   Future<MemorySource> render(
     WidgetTester tester,
     String kind, {
-    bool showTools = false,
     double textScale = 1,
     Brightness brightness = Brightness.light,
     bool timeline = false,
@@ -279,11 +277,8 @@ void main() {
       routes: [
         GoRoute(
           path: '/',
-          builder: (context, state) => OwnedMemoryPage(
-            initialKind: kind,
-            showTools: showTools,
-            timeline: timeline,
-          ),
+          builder: (context, state) =>
+              OwnedMemoryPage(initialKind: kind, timeline: timeline),
         ),
       ],
     );
@@ -336,14 +331,15 @@ void main() {
 
   testWidgets('记忆页面忽略旧版本数据、保留当前入口和操作', (tester) async {
     final source = await render(tester, 'memory');
-    expect(find.text('查看范围'), findsNothing);
-    expect(find.text('全部记忆'), findsOneWidget);
+    expect(find.text('记忆工具'), findsNothing);
+    expect(find.byKey(const ValueKey('search/memory')), findsOneWidget);
+    expect(find.text('范围：全部记忆'), findsOneWidget);
     expect(find.text('记忆层'), findsNothing);
     expect(find.text('工作角色'), findsNothing);
     await tester.tap(find.byTooltip('筛选与管理'));
     await tester.pumpAndSettle();
     for (final text in ['待审核候选', '从对话生成候选', '查看范围']) {
-      expect(find.text(text), findsOneWidget);
+      expect(find.text(text), findsWidgets);
     }
     await tester.tap(find.byTooltip('关闭筛选'));
     await tester.pumpAndSettle();
@@ -375,16 +371,17 @@ void main() {
     expect(source.edits.single['characterId'], 'role');
     expect(find.byType(BottomSheet), findsNothing);
   });
-  testWidgets('用户画像默认角色范围并可查看全局，图谱页显示真实画布', (tester) async {
+  testWidgets('用户画像可切换全局范围，图谱页显示真实画布', (tester) async {
     await render(tester, 'profile');
     await tester.tap(find.byTooltip('筛选与管理'));
     await tester.pumpAndSettle();
     expect(find.text('查看范围'), findsOneWidget);
-    expect(find.text('全局记忆'), findsOneWidget);
-    expect(find.text('记忆层'), findsNothing);
-    expect(find.textContaining('默认按角色隔离'), findsOneWidget);
-    await tester.tap(find.byTooltip('关闭筛选'));
+    await tester.tap(find.byKey(const ValueKey('view/all/current')));
     await tester.pumpAndSettle();
+    expect(find.text('全局记忆'), findsOneWidget);
+    await tester.tap(find.text('全局记忆'));
+    await tester.pumpAndSettle();
+    expect(find.text('记忆层'), findsNothing);
     await render(tester, 'graph');
     expect(find.byType(OwnedMemoryGraph), findsOneWidget);
     expect(find.byType(InteractiveViewer), findsOneWidget);
@@ -424,22 +421,25 @@ void main() {
       );
     });
   }
-  testWidgets('历史工具卡片在窄屏、大字体和深色下保持可用', (tester) async {
+  testWidgets('记忆总览筛选栏在窄屏、大字体和深色下保持可用', (tester) async {
     tester.view.physicalSize = const Size(375, 812);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await render(
-      tester,
-      'memory',
-      showTools: true,
-      textScale: 2,
-      brightness: Brightness.dark,
-    );
-    for (final title in ['记忆管理', '情景记忆', '记忆图谱', '记忆时间线', '用户画像', '世界书']) {
-      expect(find.text(title), findsOneWidget);
+    await render(tester, 'memory', textScale: 2, brightness: Brightness.dark);
+    for (final label in [
+      '数据：当前设备',
+      '范围：全部记忆',
+      '类型：全部',
+      '保留：全部',
+      '状态：全部',
+      '排序：默认',
+      '检索：关键词',
+    ]) {
+      expect(find.text(label), findsOneWidget);
     }
-    expect(find.byType(GridView), findsOneWidget);
+    expect(find.text('记忆工具'), findsNothing);
+    expect(find.byType(GridView), findsNothing);
     expect(tester.takeException(), isNull);
   });
   testWidgets('搜索和筛选可以展开，手机横屏不溢出', (tester) async {
@@ -448,8 +448,6 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await render(tester, 'memory');
-    await tester.tap(find.byTooltip('搜索记忆'));
-    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('search/memory')), findsOneWidget);
     await tester.tap(find.byTooltip('筛选与管理'));
     await tester.pumpAndSettle();
@@ -465,13 +463,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     for (final kind in ['memory', 'profile', 'episodic']) {
-      await render(tester, kind, showTools: kind == 'memory');
+      await render(tester, kind);
       if (kind == 'memory') {
-        final grid = tester.widget<GridView>(find.byType(GridView));
-        final delegate =
-            grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(delegate.crossAxisCount, 2);
-        expect(delegate.childAspectRatio, 3);
+        expect(find.text('记忆工具'), findsNothing);
+        expect(find.byKey(const ValueKey('search/memory')), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
       final directory = Platform.environment['MEMORY_UI_PREVIEW_DIR'];

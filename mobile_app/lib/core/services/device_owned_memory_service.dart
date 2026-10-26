@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../backend_transport/errors/backend_transport_error.dart';
+import '../models/memory.dart';
 import 'owned_memory_scope.dart';
 
 class OwnedMemoryConflict implements Exception {
@@ -16,6 +17,7 @@ class DeviceOwnedMemoryService {
   final BackendServiceApi api;
   final bool Function() isCurrent;
   final Object _authority = Object();
+  final Map<String, Map<String, dynamic>> _pageScopes = {};
   DeviceOwnedMemoryService(this.api, {required this.isCurrent});
 
   static String scopeStamp(Map scope) => jsonEncode(
@@ -108,38 +110,37 @@ class DeviceOwnedMemoryService {
     final scope = Map<String, dynamic>.unmodifiable(
       value['executionScope'] as Map,
     );
-    if (scope['roleId'] != role) throw StateError('记忆角色已变化');
+    if (role.isNotEmpty && scope['roleId'] != role) throw StateError('记忆角色已变化');
+    final allView = scope['memoryViewAll'] == true;
     final rows = <Map<String, dynamic>>[];
     final seen = <String>{};
     for (final raw in value['resources'] as List) {
-      final shared =
-          scope['memoryViewAll'] == true ||
-          scope['memoryRoleId'] != globalMemoryRole;
+      final kind = raw is Map ? (raw['kind'] ?? '').toString() : '';
+      final partition = raw is Map ? raw['roleId'] : null;
+      final memory = isMemoryKind(kind);
+      final global =
+          !allView &&
+          scope['memoryRoleId'] != globalMemoryRole &&
+          partition == globalMemoryRole &&
+          memory;
       if (raw is! Map ||
           raw['ownerId'] != scope['resourceOwnerId'] ||
-          raw['roleId'] is! String ||
-          (!shared &&
-                  raw['roleId'] !=
-                      memoryStorageRole(scope, raw['kind'].toString()) ||
-              shared &&
-                  raw['roleId'] !=
-                      memoryStorageRole(scope, raw['kind'].toString()) &&
-                  raw['roleId'] != globalMemoryRole) ||
+          partition is! String ||
+          partition.isEmpty ||
+          partition != memoryStorageRole(scope, kind) &&
+              !global &&
+              !(allView && memory) ||
           raw['id'] is! String ||
           (raw['id'] as String).isEmpty ||
           raw['revision'] is! int ||
           raw['revision'] < 1 ||
-          !seen.add('${raw['kind']}/${raw['id']}'))
+          !seen.add('$kind/${raw['id']}'))
         throw StateError('记忆资源归属或版本无效');
       rows.add(
         Map<String, dynamic>.unmodifiable({
           ...Map<String, dynamic>.from(raw),
-          'executionScope':
-              shared &&
-                  isMemoryKind(raw['kind'].toString()) &&
-                  raw['roleId'] !=
-                      memoryStorageRole(scope, raw['kind'].toString())
-              ? memoryRecordScope(scope, raw['roleId'].toString())
+          'executionScope': memory
+              ? memoryRecordScope(scope, partition)
               : scope,
           '_memoryAuthority': _authority,
         }),
@@ -166,9 +167,11 @@ class DeviceOwnedMemoryService {
     String decayState = '',
     String cursor = '',
     String memoryView = '',
+    int limit = 128,
     Map<String, dynamic>? original,
   }) async {
     if (cursor.isNotEmpty && original == null) throw StateError('分页缺少原始记忆范围');
+    if (limit < 1 || limit > 128) throw ArgumentError('记忆分页参数无效');
     final state = await _state(original);
     final result = await api.get<Map<String, dynamic>>(
       '/api/device-mesh/v1/business/${candidates ? 'memory-candidates' : 'memories'}',
@@ -183,7 +186,7 @@ class DeviceOwnedMemoryService {
         if (pinned != null) 'pinned': pinned,
         if (decayState.isNotEmpty) 'decayState': decayState,
         'cursor': cursor,
-        'limit': 128,
+        'limit': limit,
         if (memoryView.isNotEmpty) 'memoryView': memoryView,
       },
     );
@@ -204,6 +207,137 @@ class DeviceOwnedMemoryService {
     if (cursor.isNotEmpty && page['nextCursor'] == cursor)
       throw StateError('记忆分页游标重复');
     return page;
+  }
+
+  Future<List<MemoryDto>> listMemories({
+    String? characterId,
+    String? keyword,
+    String? memoryType,
+    int? retentionLevel,
+    String? decayState,
+    bool? pinned,
+    String? sort,
+    int page = 1,
+    int pageSize = 200,
+  }) async {
+    if (page < 1 || pageSize < 1) throw ArgumentError('记忆分页参数无效');
+    final role = characterId ?? '';
+    final view = role.isEmpty ? 'all' : 'role:$role';
+    final rows = <MemoryDto>[];
+    var cursor = '';
+    Map<String, dynamic>? original;
+    final visited = <String>{};
+    final target = page * pageSize;
+    do {
+      final result = await query(
+        role,
+        query: keyword ?? '',
+        memoryType: memoryType ?? '',
+        sort: sort ?? '',
+        retentionLevel: retentionLevel ?? 0,
+        pinned: pinned,
+        decayState: decayState ?? '',
+        cursor: cursor,
+        memoryView: view,
+        original: original,
+      );
+      rows.addAll(
+        (result['resources'] as List).cast<Map<String, dynamic>>().map(
+          _memoryDto,
+        ),
+      );
+      original = result;
+      cursor = (result['nextCursor'] ?? '').toString();
+      if (cursor.isNotEmpty && !visited.add(cursor))
+        throw StateError('记忆分页游标重复');
+      if (visited.length > 256) throw StateError('记忆结果超过分页上限');
+    } while (cursor.isNotEmpty && rows.length < target);
+    final offset = (page - 1) * pageSize;
+    if (offset >= rows.length) return const <MemoryDto>[];
+    return rows.sublist(offset, target > rows.length ? rows.length : target);
+  }
+
+  Future<MemoryPage> pageMemories({
+    String cursor = '',
+    int limit = 10,
+    String? characterId,
+    String? sort,
+  }) async {
+    if (limit < 1 || limit > 128) throw ArgumentError('记忆分页参数无效');
+    final role = characterId ?? '';
+    final original = cursor.isEmpty ? null : _pageScopes[cursor];
+    if (cursor.isNotEmpty && original == null) throw StateError('记忆分页缺少原始记忆范围');
+    final page = await query(
+      role,
+      sort: sort ?? '',
+      cursor: cursor,
+      limit: limit,
+      memoryView: role.isEmpty ? 'all' : 'role:$role',
+      original: original,
+    );
+    final next = (page['nextCursor'] ?? '').toString();
+    if (next.isNotEmpty) {
+      _pageScopes[next] = page;
+      if (_pageScopes.length > 64) _pageScopes.remove(_pageScopes.keys.first);
+    }
+    return MemoryPage(
+      items: List<MemoryDto>.unmodifiable(
+        (page['resources'] as List).cast<Map<String, dynamic>>().map(
+          _memoryDto,
+        ),
+      ),
+      nextCursor: next,
+    );
+  }
+
+  Future<List<MemoryCandidateDto>> listMemoryCandidates({
+    String? characterId,
+  }) async {
+    final role = characterId ?? '';
+    final page = await query(
+      role,
+      candidates: true,
+      memoryView: role.isEmpty ? 'all' : 'role:$role',
+    );
+    return (page['resources'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(_memoryCandidateDto)
+        .toList(growable: false);
+  }
+
+  static MemoryDto _memoryDto(Map<String, dynamic> resource) {
+    if (resource['kind'] != 'memory' || resource['body'] is! Map)
+      throw StateError('记忆资源类型无效');
+    final body = Map<String, dynamic>.from(resource['body'] as Map);
+    final content = body['content'];
+    final metadata = content is Map
+        ? Map<String, dynamic>.from(content)
+        : <String, dynamic>{'value': content ?? ''};
+    return MemoryDto.fromJson({
+      ...metadata,
+      ...body,
+      'id': resource['id'],
+      'characterId': resource['roleId'],
+      'scope': resource['roleId'] == globalMemoryRole ? 'user' : 'character',
+      'value':
+          metadata['value'] ?? metadata['text'] ?? metadata['summary'] ?? '',
+      'updatedAt': resource['updatedAt'] ?? '',
+      'memoryStrength': body['effectiveStrength'] ?? body['memoryStrength'],
+      'retentionLevel':
+          body['effectiveRetentionLevel'] ?? body['retentionLevel'],
+      'decayState': body['effectiveDecayState'] ?? body['decayState'],
+    });
+  }
+
+  static MemoryCandidateDto _memoryCandidateDto(Map<String, dynamic> resource) {
+    if (resource['kind'] != 'checkpoint' || resource['body'] is! Map)
+      throw StateError('候选记忆资源类型无效');
+    final body = Map<String, dynamic>.from(resource['body'] as Map);
+    return MemoryCandidateDto.fromJson({
+      ...body,
+      'id': resource['id'],
+      'characterId': resource['roleId'],
+    });
   }
 
   Future<Map<String, dynamic>> manage(
@@ -261,8 +395,10 @@ class DeviceOwnedMemoryService {
     if (value['saved'] != true ||
         scopeStamp(responseScope) != scopeStamp(scope) ||
         responseScope['requestId'] != id ||
-        (responseScope['turnId'] ?? '').toString().isEmpty ||
-        (responseScope['executionId'] ?? '').toString().isEmpty ||
+        (responseScope['turnId'] ?? '').toString() !=
+            (scope['turnId'] ?? '').toString() ||
+        (responseScope['executionId'] ?? '').toString() !=
+            (scope['executionId'] ?? '').toString() ||
         ack is! Map ||
         ack['ownerId'] != scope['resourceOwnerId'] ||
         ack['requestId'] != (generated ? '$id|candidate-result' : id) ||

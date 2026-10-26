@@ -52,7 +52,7 @@ export async function synthesizeVoice(
   text: string,
   fetcher: typeof fetch = fetch,
 ): Promise<MediaAsset> {
-  const response = await fetcher(`${config.coreUrl.replace(/\/$/, "")}/api/tts/preview`, {
+  const response = await fetcher(`${config.coreUrl.replace(/\/$/, "")}/api/channels/tts/preview`, {
     method: "POST",
     headers: coreHeaders(config),
     body: JSON.stringify({ text }),

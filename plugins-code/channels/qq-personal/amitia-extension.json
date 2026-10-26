@@ -7,9 +7,9 @@
       "default": "QQ 个人号"
     },
     "description": {
-      "default": "通过 OneBot 11 反向 WebSocket 将 NapCat 等个人 QQ 协议端接入 Amitia。"
+      "default": "通过 OneBot 11 反向 WebSocket 将 SnowLuma 个人 QQ 协议端接入 Amitia，并在工作区中内嵌 SnowLuma WebUI 与 noVNC 桌面。"
     },
-    "version": "0.1.15",
+    "version": "0.2.5",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -18,7 +18,7 @@
     ],
     "keywords": [
       "qq",
-      "napcat",
+      "snowluma",
       "onebot",
       "personal"
     ]
@@ -45,7 +45,7 @@
         "default": "QQ 个人号桥接服务"
       },
       "description": {
-        "default": "监听 OneBot 11 反向 WebSocket，将 NapCat 事件转换为 Amitia 渠道消息。"
+        "default": "监听 OneBot 11 反向 WebSocket，将 SnowLuma 事件转换为 Amitia 渠道消息。"
       },
       "type": "service",
       "runtime": {
@@ -103,6 +103,7 @@
             "connectPath": "/api/connect",
             "disconnectPath": "/api/disconnect",
             "configPath": "/api/config",
+            "actionPath": "/api/action",
             "sendPath": "/api/send",
             "imagePath": "/api/send-image",
             "voicePath": "/api/send-voice",
@@ -121,7 +122,7 @@
         "default": "QQ 个人号界面"
       },
       "description": {
-        "default": "配置 NapCat 反向 WebSocket、查看连接状态和群聊触发策略。"
+        "default": "配置 SnowLuma 反向 WebSocket、查看连接状态与 SnowLuma 运行环境。"
       },
       "type": "data_only",
       "placement": "device",
@@ -133,7 +134,7 @@
             "default": "QQ 个人号"
           },
           "description": {
-            "default": "管理 NapCat OneBot 11 桥接。"
+            "default": "管理 SnowLuma OneBot 11 桥接。"
           },
           "spec": {
             "actions": [
@@ -190,13 +191,46 @@
                 "title": {
                   "default": "复制文本"
                 }
+              },
+              {
+                "action_id": "change-webui-password",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "修改 SnowLuma WebUI 密码"
+                }
+              },
+              {
+                "action_id": "record-webui-password",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "记录 SnowLuma WebUI 密码"
+                }
+              },
+              {
+                "action_id": "clear-webui-password",
+                "risk_level": "medium",
+                "target": {
+                  "command": "channel.invoke",
+                  "type": "host_command"
+                },
+                "title": {
+                  "default": "清除已记录的 WebUI 密码"
+                }
               }
             ],
             "permissions": [
               {
                 "name": "clipboard.write",
                 "scope": "session",
-                "reason": "复制插件页面中的 OneBot Token 和反向 WebSocket 地址。",
+                "reason": "复制插件页面中的 OneBot Token、SnowLuma 账号密码和反向 WebSocket 地址。",
                 "required": true
               }
             ],
@@ -204,7 +238,7 @@
             "contribution_id": "qq-personal-page",
             "display": {
               "description": {
-                "default": "将 NapCat 收到的个人 QQ 消息桥接到 Amitia。"
+                "default": "将 SnowLuma 收到的个人 QQ 消息桥接到 Amitia。"
               },
               "icon": "connection",
               "title": {
@@ -302,7 +336,7 @@
             "contribution_id": "qq-personal-mobile-page",
             "display": {
               "description": {
-                "default": "配置 NapCat OneBot 11 桥接。"
+                "default": "配置 SnowLuma OneBot 11 桥接。"
               },
               "icon": "connection",
               "title": {
@@ -508,43 +542,98 @@
           }
         },
         {
-          "id": "qq-personal-napcat-webui",
+          "id": "qq-personal-snowluma-webui",
           "kind": "ui_provider",
           "name": {
-            "default": "NapCat WebUI"
+            "default": "SnowLuma WebUI"
           },
           "description": {
-            "default": "在通用工作区 Tab 中嵌入原始 NapCat WebUI。"
+            "default": "在渠道工作区 Tab 中嵌入 SnowLuma 官方 WebUI。"
           },
           "spec": {
             "capability": "workspace.tab",
             "entries": {
               "electron_linux": {
                 "type": "external_web_ui",
-                "url": "http://127.0.0.1:6099/webui/",
+                "url": "http://127.0.0.1:5099/",
                 "allowedOrigins": [
-                  "http://127.0.0.1:6099"
+                  "http://127.0.0.1:5099"
                 ]
               },
               "electron_macos": {
                 "type": "external_web_ui",
-                "url": "http://127.0.0.1:6099/webui/",
+                "url": "http://127.0.0.1:5099/",
                 "allowedOrigins": [
-                  "http://127.0.0.1:6099"
+                  "http://127.0.0.1:5099"
                 ]
               },
               "electron_windows": {
                 "type": "external_web_ui",
-                "url": "http://127.0.0.1:6099/webui/",
+                "url": "http://127.0.0.1:5099/",
                 "allowedOrigins": [
-                  "http://127.0.0.1:6099"
+                  "http://127.0.0.1:5099"
                 ]
               }
             },
             "metadata": {
               "workspace": "channel.workspace",
-              "tabId": "napcat-webui",
-              "title": "NapCat WebUI",
+              "tabId": "snowluma-webui",
+              "title": "SnowLuma WebUI",
+              "icon": "connection",
+              "order": 31,
+              "routePrefix": "/channels/qq-personal",
+              "contextMatch": {
+                "channelId": [
+                  "qq_personal"
+                ]
+              },
+              "keepMounted": true,
+              "storage": "persistent"
+            },
+            "mode": "replace",
+            "priority": 211,
+            "providerId": "qq-personal-snowluma-webui",
+            "trustLevel": "official"
+          }
+        },
+        {
+          "id": "qq-personal-snowluma-novnc",
+          "kind": "ui_provider",
+          "name": {
+            "default": "SnowLuma noVNC"
+          },
+          "description": {
+            "default": "在渠道工作区 Tab 中嵌入 SnowLuma 容器内部桌面的 noVNC 入口。"
+          },
+          "spec": {
+            "capability": "workspace.tab",
+            "entries": {
+              "electron_linux": {
+                "type": "external_web_ui",
+                "url": "http://127.0.0.1:6081/",
+                "allowedOrigins": [
+                  "http://127.0.0.1:6081"
+                ]
+              },
+              "electron_macos": {
+                "type": "external_web_ui",
+                "url": "http://127.0.0.1:6081/",
+                "allowedOrigins": [
+                  "http://127.0.0.1:6081"
+                ]
+              },
+              "electron_windows": {
+                "type": "external_web_ui",
+                "url": "http://127.0.0.1:6081/",
+                "allowedOrigins": [
+                  "http://127.0.0.1:6081"
+                ]
+              }
+            },
+            "metadata": {
+              "workspace": "channel.workspace",
+              "tabId": "snowluma-novnc",
+              "title": "noVNC 桌面",
               "icon": "connection",
               "order": 30,
               "routePrefix": "/channels/qq-personal",
@@ -558,7 +647,7 @@
             },
             "mode": "replace",
             "priority": 211,
-            "providerId": "qq-personal-napcat-webui",
+            "providerId": "qq-personal-snowluma-novnc",
             "trustLevel": "official"
           }
         }
@@ -568,13 +657,13 @@
   "permissions": [
     {
       "name": "conversation.read",
-      "reason": "在渠道消息页面读取 NapCat 个人 QQ 会话。",
+      "reason": "在渠道消息页面读取 SnowLuma 个人 QQ 会话。",
       "required": true,
       "scope": "global"
     },
     {
       "name": "conversation.write",
-      "reason": "将 NapCat 入站消息提交给 Amitia 统一会话管线。",
+      "reason": "将 SnowLuma 入站消息提交给 Amitia 统一会话管线。",
       "required": true,
       "scope": "global"
     },
@@ -592,7 +681,7 @@
     },
     {
       "name": "service.network.request",
-      "reason": "连接本机 Amitia Core 并调用 NapCat OneBot action。",
+      "reason": "连接本机 Amitia Core 并调用 SnowLuma OneBot action。",
       "required": true,
       "scope": "extension"
     },
@@ -604,19 +693,19 @@
     },
     {
       "name": "service.background.run",
-      "reason": "持续监听 NapCat 反向 WebSocket 并转发消息。",
+      "reason": "持续监听 SnowLuma 反向 WebSocket 并转发消息。",
       "required": true,
       "scope": "extension"
     },
     {
       "name": "clipboard.write",
-      "reason": "从 QQ 个人号插件页面复制 OneBot Token、NapCat WebUI Token 和反向 WebSocket 地址。",
+      "reason": "从 QQ 个人号插件页面复制 OneBot Token、SnowLuma WebUI 与 noVNC 账号密码和反向 WebSocket 地址。",
       "required": true,
       "scope": "session"
     },
     {
       "name": "files.read",
-      "reason": "读取本机挂载的 NapCat webui.json，以展示 WebUI 登录 Token。",
+      "reason": "通过 docker exec 读取 SnowLuma 容器内的 webui.json 与 vnc-password，以展示 WebUI 与 noVNC 凭据。",
       "required": true,
       "scope": "global"
     }

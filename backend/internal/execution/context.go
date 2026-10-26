@@ -33,6 +33,15 @@ type WorkspaceBinding struct {
 	ReadOnly bool   `json:"readOnly,omitempty"`
 }
 
+// SandboxConstraint marks an execution as confined to an OS sandbox root. It is
+// set only for conversations that entered through a channel whose plugin runs
+// inside an enforced sandbox; every other execution leaves it nil and keeps the
+// unrestricted host behaviour.
+type SandboxConstraint struct {
+	Root         string `json:"root"`
+	AllowNetwork bool   `json:"allowNetwork"`
+}
+
 type ExecutionContext struct {
 	ExecutionID string `json:"executionId"`
 
@@ -57,6 +66,7 @@ type ExecutionContext struct {
 	WorkspaceID        string             `json:"workspaceId,omitempty"`
 	PrimaryWorkspaceID string             `json:"primaryWorkspaceId,omitempty"`
 	WorkspaceBindings  []WorkspaceBinding `json:"workspaceBindings,omitempty"`
+	Sandbox            *SandboxConstraint `json:"sandbox,omitempty"`
 
 	Resume *ResumeContext `json:"resume,omitempty"`
 

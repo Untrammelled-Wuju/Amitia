@@ -121,7 +121,7 @@ export function trustedWebModuleExport(
 ): Component | null {
   if (!canLoadTrustedWebModule(provider, entry) || !entry.path || !exportName.trim()) return null;
   const name = exportName.trim();
-  const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:export:${name}`;
+  const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:${entry.contentHash ?? ""}:export:${name}`;
   const cached = trustedModuleCache.get(key);
   if (cached) return cached;
   const component = markRaw(defineAsyncComponent(async () => {
@@ -136,7 +136,7 @@ export function trustedWebModuleExport(
 
 export function trustedWebModule(provider: UIProviderDefinition, entry: UIProviderEntry): Component | null {
   if (!canLoadTrustedWebModule(provider, entry) || !entry.path) return null;
-  const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:${entry.stylePath ?? ""}:${entry.exportName ?? "default"}`;
+  const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:${entry.contentHash ?? ""}:${entry.stylePath ?? ""}:${entry.exportName ?? "default"}`;
   const cached = trustedModuleCache.get(key);
   if (cached) return cached;
   const moduleComponent = defineAsyncComponent(async () => {

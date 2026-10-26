@@ -1,6 +1,18 @@
 <template>
   <div class="channel-message" :class="message.role">
-    <div class="message-meta">{{ message.senderLabel }} · {{ formatTime(String(message.createdAt || "")) }}</div>
+    <div class="message-meta">
+      <span class="message-sender">{{ message.senderLabel }}</span>
+      <span v-if="message.peerKind === 'group'" class="message-chip">群聊</span>
+      <span v-for="name in message.mentions" :key="`mention-${name}`" class="message-chip message-chip--mention">@{{ name }}</span>
+      <span class="message-time">{{ formatTime(String(message.createdAt || "")) }}</span>
+    </div>
+    <blockquote v-if="message.replyExcerpt" class="message-quote">
+      <span class="message-quote-sender">{{ message.replySender || "引用" }}</span>
+      <span class="message-quote-text">{{ message.replyExcerpt }}</span>
+    </blockquote>
+    <div v-if="mediaTags.length" class="message-tags">
+      <span v-for="tag in mediaTags" :key="tag" class="message-chip message-chip--media">{{ tag }}</span>
+    </div>
     <div v-if="images.length" class="media-grid">
       <div v-for="item in images" :key="item.url" class="media-block">
         <img
@@ -65,6 +77,17 @@ function media(kind: ChannelMediaItem["kind"]) {
   return props.message.media.filter((item) => item.kind === kind);
 }
 
+const mediaTags = computed(() => {
+  const tags: string[] = [];
+  const counts: Array<[ChannelMediaItem["kind"], string]> = [["image", "图片"], ["video", "视频"], ["audio", "语音"]];
+  for (const [kind, label] of counts) {
+    const total = media(kind).length;
+    if (total > 0) tags.push(total > 1 ? `${label} ×${total}` : label);
+  }
+  for (const item of media("file")) tags.push(item.name ? `文件 ${item.name}` : "文件");
+  return tags;
+});
+
 function markFailed(url: string) {
   failed.add(url);
 }
@@ -78,7 +101,16 @@ function formatTime(value: string) {
 <style scoped>
 .channel-message { max-width: min(680px, 82%); padding: 9px 12px; border-radius: 10px; background: var(--ac-color-surface); }
 .channel-message.user { align-self: flex-end; background: var(--ac-color-primary-bg); }
-.message-meta { color: var(--text-muted); font-size: 10px; }
+.message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; color: var(--text-muted); font-size: 10px; }
+.message-sender { color: var(--text-secondary); font-weight: 600; }
+.message-time { margin-left: auto; }
+.message-chip { padding: 1px 6px; border-radius: 999px; background: var(--ac-color-bg-secondary, rgba(127, 127, 127, 0.12)); color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
+.message-chip--mention { background: color-mix(in srgb, var(--ac-color-primary) 16%, transparent); color: var(--ac-color-primary); }
+.message-chip--media { background: color-mix(in srgb, var(--ac-color-primary) 10%, transparent); color: var(--text-secondary); }
+.message-quote { margin: 7px 0 0; padding: 6px 9px; border-left: 3px solid var(--surface-border); border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--text-muted) 8%, transparent); font-size: 11px; line-height: 1.5; }
+.message-quote-sender { display: block; margin-bottom: 2px; color: var(--text-secondary); font-weight: 600; }
+.message-quote-text { color: var(--text-muted); word-break: break-word; }
+.message-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 6px; margin-top: 7px; }
 .media-block { min-width: 0; }
 .message-image, .message-video { display: block; max-width: 100%; max-height: 420px; border-radius: 8px; }

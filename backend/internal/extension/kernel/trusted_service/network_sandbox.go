@@ -813,11 +813,20 @@ func buildDarwinSandboxProfile(mode, executable, workingDir, tempDir string, rea
 	b.WriteString("(allow signal (target self))\n")
 	b.WriteString("(allow sysctl-read)\n")
 	b.WriteString("(allow mach-lookup)\n")
+	b.WriteString("(allow system-socket)\n")
+	// Managed runtimes resolve their working directory during early startup and
+	// abort when stat on an ancestor is refused, so metadata stays visible while
+	// file contents remain behind the deny list below.
 	b.WriteString("(allow file-read-metadata)\n")
-	// Runtime/linker/system roots needed by native and managed runtimes. User
-	// homes are deliberately absent; plugin/package roots are added explicitly.
-	for _, root := range []string{"/System", "/usr", "/bin", "/sbin", "/Library", "/private/etc", "/private/var/db", "/dev"} {
-		b.WriteString("(allow file-read* (subpath ")
+	// Seatbelt on current macOS releases aborts while compiling a profile that
+	// pairs a narrow file-read allowlist with a network filter, so the read
+	// boundary is expressed the other way around: every user-owned location is
+	// denied first and only the runtime, package and sandbox roots are granted
+	// back afterwards. Seatbelt evaluates later rules last, so the grants win for
+	// these roots without widening the rest of the disk.
+	b.WriteString("(allow file-read*)\n")
+	for _, root := range []string{"/Users", "/Volumes", "/private/tmp", "/private/var/folders"} {
+		b.WriteString("(deny file-read* (subpath ")
 		b.WriteString(seatbeltQuote(root))
 		b.WriteString("))\n")
 	}
@@ -852,6 +861,21 @@ func buildDarwinSandboxProfile(mode, executable, workingDir, tempDir string, rea
 	if err := addRead(filepath.Dir(executable)); err != nil {
 		return "", err
 	}
+	// Managed runtimes keep their lib/node_modules next to the bin directory, so
+	// expose the runtime install root read-only (never the host data directory).
+	if binDir := filepath.Dir(executable); strings.EqualFold(filepath.Base(binDir), "bin") {
+		// A managed runtime keeps its lib/ next to bin/, but a system shell such
+		// as /bin/sh has no such parent and must not widen the profile to "/".
+		if parent := filepath.Dir(binDir); parent != string(filepath.Separator) {
+			if err := addRead(parent); err != nil {
+				return "", err
+			}
+		}
+	}
+	b.WriteString("(deny file-write*)\n")
+	b.WriteString("(allow file-write* (literal \"/dev/null\"))\n")
+	b.WriteString("(allow file-write* (literal \"/dev/stdout\"))\n")
+	b.WriteString("(allow file-write* (literal \"/dev/stderr\"))\n")
 	for _, root := range []string{workingDir, tempDir} {
 		root = strings.TrimSpace(root)
 		if root == "" {
@@ -861,24 +885,53 @@ func buildDarwinSandboxProfile(mode, executable, workingDir, tempDir string, rea
 		if err != nil {
 			return "", err
 		}
+		abs = filepath.Clean(abs)
 		if err := addRead(abs); err != nil {
 			return "", err
 		}
 		b.WriteString("(allow file-write* (subpath ")
-		b.WriteString(seatbeltQuote(filepath.Clean(abs)))
+		b.WriteString(seatbeltQuote(abs))
 		b.WriteString("))\n")
 	}
-	b.WriteString("(allow file-write* (literal \"/dev/null\"))\n")
 	switch mode {
 	case "unrestricted":
 		// Outbound approval must never imply permission to bind host-facing
-		// listeners. Seatbelt can express this distinction directly.
+		// listeners. Seatbelt can express this distinction directly: the plugin
+		// keeps its loopback endpoint reachable for the host while every other
+		// inbound interface stays closed.
 		b.WriteString("(allow network-outbound)\n")
+		b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")
 	case "loopback":
 		b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
 		b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")
 	}
+
 	return b.String(), nil
+}
+
+// SandboxCommand is the platform-neutral launch recipe for a sandboxed child
+// process. Callers turn it into an *exec.Cmd without depending on launcher
+// internals, so host command tools reuse exactly the same boundary as plugin
+// services instead of re-implementing per-platform profiles.
+type SandboxCommand struct {
+	Path       string
+	Args       []string
+	WorkingDir string
+	Cleanup    func()
+}
+
+// WrapSandboxCommand prepares a host command to run inside the enforced OS
+// boundary. The policy is never downgraded: when the active platform cannot
+// enforce it the call fails and the caller must not start the process.
+func WrapSandboxCommand(policy ServiceNetworkPolicy, executable string, args []string, workingDir, tempDir string) (SandboxCommand, error) {
+	if !policy.Enforce {
+		return SandboxCommand{}, fmt.Errorf("%w: an enforced network policy is required", ErrUnauthorizedNetwork)
+	}
+	plan, err := prepareNetworkLaunchWithStateRoot(policy, executable, args, workingDir, tempDir, workingDir)
+	if err != nil {
+		return SandboxCommand{}, err
+	}
+	return SandboxCommand{Path: plan.Path, Args: plan.Args, WorkingDir: plan.WorkingDir, Cleanup: plan.Cleanup}, nil
 }
 
 func seatbeltQuote(value string) string {

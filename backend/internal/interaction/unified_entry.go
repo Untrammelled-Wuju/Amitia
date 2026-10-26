@@ -128,6 +128,17 @@ type UnifiedEntryRequest struct {
 	VideoUrl                 string             `json:"videoUrl,omitempty"`
 	ImageContext             string             `json:"imageContext,omitempty"`
 	ReplyToMessageID         *string            `json:"replyToMessageId,omitempty"`
+	ReplyExcerpt             string             `json:"replyExcerpt,omitempty"`
+	SenderName               string             `json:"senderName,omitempty"`
+	SenderID                 string             `json:"senderId,omitempty"`
+	MentionNames             []string           `json:"mentionNames,omitempty"`
+	PeerKind                 string             `json:"peerKind,omitempty"`
+	ConversationTitle        string             `json:"conversationTitle,omitempty"`
+	SandboxWorkspaceID       string             `json:"sandboxWorkspaceId,omitempty"`
+	SandboxRoot              string             `json:"sandboxRoot,omitempty"`
+	SandboxAllowNetwork      bool               `json:"sandboxAllowNetwork,omitempty"`
+	FileUrl                  string             `json:"fileUrl,omitempty"`
+	FileName                 string             `json:"fileName,omitempty"`
 	ModelConfigID            int                `json:"modelConfigId,omitempty"`
 	ReasoningEffort          string             `json:"reasoningEffort,omitempty"`
 	MessageStyle             string             `json:"messageStyle,omitempty"`

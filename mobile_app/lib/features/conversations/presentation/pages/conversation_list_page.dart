@@ -221,7 +221,11 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                 );
               },
               data: (conversations) {
-                final filtered = List<ConversationDto>.of(conversations);
+                final filtered = conversations
+                    .where(
+                      (conversation) => !_isChannelConversation(conversation),
+                    )
+                    .toList();
                 filtered.sort((a, b) {
                   final aPinned = a.pinnedAt.trim().isNotEmpty;
                   final bPinned = b.pinnedAt.trim().isNotEmpty;
@@ -414,4 +418,17 @@ class _SheetActionItem extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _isChannelConversation(ConversationDto conversation) {
+  final channel = conversation.channel.trim().toLowerCase();
+  if (channel.isNotEmpty && channel != 'web') return true;
+  final id = conversation.sourceResourceId.trim().isNotEmpty
+      ? conversation.sourceResourceId.trim()
+      : conversation.id;
+  return id.startsWith('conv-qq-personal-') ||
+      id.startsWith('conv-group-') ||
+      id.startsWith('wechat-ipad860-') ||
+      id.contains('@im.wechat') ||
+      id.contains('@chatroom');
 }

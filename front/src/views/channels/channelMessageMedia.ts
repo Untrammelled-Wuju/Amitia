@@ -12,6 +12,11 @@ export interface NormalizedChannelMessage extends Record<string, unknown> {
   role: string
   text: string
   senderLabel: string
+  senderID: string
+  mentions: string[]
+  replyExcerpt: string
+  replySender: string
+  peerKind: string
   media: ChannelMediaItem[]
 }
 
@@ -27,6 +32,7 @@ export function resolveConversationChannelId(
   let inferred = explicit
   if (!inferred && id.startsWith("wechat-ipad860-")) inferred = "wechat_ipad860"
   if (!inferred && (id.includes("@im.wechat") || id.includes("@chatroom"))) inferred = "wechat"
+  if (!inferred && id.startsWith("conv-qq-personal-")) inferred = "qq_personal"
   if (!inferred && (id.startsWith("conv-group-") || id.startsWith("conv-"))) inferred = "qq"
   if (availableChannels && inferred && !availableChannels.has(inferred)) return ""
   return inferred
@@ -127,12 +133,22 @@ export function normalizeChannelMessage(message: Record<string, unknown>, channe
     message.author_name,
   ) || (role === "user" ? "对方" : "Amitia")
 
+  const quote = message.quote && typeof message.quote === "object" ? message.quote as Record<string, unknown> : {}
+  const mentionNames = Array.isArray(message.mentionNames)
+    ? message.mentionNames.map((item) => text(item)).filter(Boolean)
+    : []
+
   return {
     ...message,
     channelId: text(message.channelId ?? message.channel ?? channelId),
     role,
     text: media.length > 0 && placeholder ? "" : content,
     senderLabel,
+    senderID: text(message.senderId ?? message.sender_id),
+    mentions: mentionNames,
+    replyExcerpt: text(message.replyToExcerpt ?? message.reply_excerpt ?? quote.content),
+    replySender: text(message.replySenderName ?? message.reply_sender_name ?? quote.senderName),
+    peerKind: text(message.peerKind ?? message.peer_kind),
     media,
   }
 }

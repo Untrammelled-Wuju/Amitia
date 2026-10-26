@@ -63,6 +63,7 @@ func (c *Container) registerServiceModuleDefinitions(ctx context.Context, extID 
 		if buildErr != nil {
 			return fmt.Errorf("build service definition %s: %w", module.ID, buildErr)
 		}
+		c.applyChannelSandboxPolicy(module, serviceDefinition)
 		if err := c.registerServiceRuntimeDefinition(serviceDefinition); err != nil {
 			return fmt.Errorf("register service definition %s: %w", module.ID, err)
 		}
@@ -316,4 +317,61 @@ func sha256Path(filePath string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func (c *Container) applyChannelSandboxPolicy(module domain.ModuleDefinition, definition *trusted_service.ServiceRuntimeDefinition) {
+	if c == nil || definition == nil {
+		return
+	}
+	channelID := moduleChannelID(module)
+	if c.ChannelSandbox == nil || channelID == "" {
+		return
+	}
+	policy, ok := c.ChannelSandbox.ChannelSandboxPolicy(channelID)
+	if !ok || !policy.Enabled || strings.TrimSpace(policy.Root) == "" {
+		return
+	}
+	definition.Network.Enforce = true
+	if policy.AllowNetwork {
+		definition.Network.Mode = "unrestricted"
+		definition.Network.AllowOutbound = true
+		definition.Network.AllowInbound = false
+		definition.Network.LoopbackOnly = false
+	} else {
+		definition.Network.Mode = "loopback"
+		definition.Network.AllowOutbound = false
+		definition.Network.AllowInbound = true
+		definition.Network.LoopbackOnly = true
+	}
+	definition.SandboxWritableRoot = policy.Root
+}
+
+func moduleChannelID(module domain.ModuleDefinition) string {
+	if module.Provider == nil {
+		return ""
+	}
+	if channelID := strings.TrimSpace(module.Provider.Labels["channelId"]); channelID != "" {
+		return channelID
+	}
+	metadata := module.Provider.Metadata
+	if metadata == nil {
+		return ""
+	}
+	if channelID := strings.TrimSpace(channelStringValue(metadata["channelId"])); channelID != "" {
+		return channelID
+	}
+	if labels, ok := metadata["labels"].(map[string]any); ok {
+		if channelID := strings.TrimSpace(channelStringValue(labels["channelId"])); channelID != "" {
+			return channelID
+		}
+	}
+	if raw, ok := metadata["labels"]; ok && raw != nil {
+		if encoded, err := json.Marshal(raw); err == nil {
+			var parsed map[string]any
+			if json.Unmarshal(encoded, &parsed) == nil {
+				return strings.TrimSpace(channelStringValue(parsed["channelId"]))
+			}
+		}
+	}
+	return ""
 }

@@ -57,6 +57,11 @@ func ownedToolScope(inference business.Inference, call string) kernel.Invocation
 	exec.Metadata["ownedDeviceTarget"] = true
 	exec.Metadata["projectId"] = inference.ProjectID
 	exec.Metadata["workingDirectory"] = inference.WorkingDirectory
+	if root := strings.TrimSpace(inference.SandboxRoot); root != "" {
+		exec.Sandbox = &execution.SandboxConstraint{Root: root, AllowNetwork: inference.SandboxAllowNetwork}
+		exec.Metadata["sandboxRoot"] = root
+		exec.Metadata["sandboxAllowNetwork"] = inference.SandboxAllowNetwork
+	}
 	permissionMode := strings.TrimSpace(inference.PermissionMode)
 	if permissionMode == "" {
 		permissionMode = "request_approval"

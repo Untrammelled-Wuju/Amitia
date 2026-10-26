@@ -6,6 +6,9 @@ import type { ParsedQQMessage } from "./message.js"
 const base: ParsedQQMessage = {
   selfId: "10001",
   senderId: "40004",
+  senderName: "测试用户",
+  mentionNames: [],
+  replyExcerpt: "",
   messageId: "30003",
   messageType: "group",
   groupId: "20002",

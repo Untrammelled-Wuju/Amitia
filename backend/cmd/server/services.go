@@ -59,6 +59,7 @@ import (
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/extension"
+	channelsandbox "github.com/u-ai/backend/internal/channel/sandbox"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
@@ -455,6 +456,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
 	}
+	kernelContainer.ChannelSandbox = newChannelSandboxPolicySource(channelsandbox.NewService(ctx.DB, channelSandboxDataDir()))
 	kernelChatAppender.resourceLinks = kernelContainer.ResourceLinks
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	wireConversationEventDurableStore(kernelContainer.EventService)

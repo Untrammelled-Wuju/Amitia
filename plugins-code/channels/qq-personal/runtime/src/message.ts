@@ -10,6 +10,8 @@ interface Segment {
 export interface ParsedQQMessage {
   selfId: string
   senderId: string
+  senderName: string
+  mentionNames: string[]
   messageId: string
   messageType: "group" | "private"
   groupId: string
@@ -20,6 +22,7 @@ export interface ParsedQQMessage {
   fileUrl: string
   fileName: string
   replyToMessageId: string
+  replyExcerpt: string
   mentionedSelf: boolean
   toMe: boolean
   createdAt: number
@@ -125,6 +128,7 @@ export async function parseOneBotMessage(bridge: OneBotBridge, event: OneBotEven
   const selfId = String(event.self_id || "")
   const sender = event.sender || {}
   const senderId = String(sender.user_id || event.user_id || "")
+  const senderName = String(sender.card || sender.nickname || "").trim()
   const messageId = String(event.message_id || "")
   const messageType = event.message_type === "group" ? "group" : "private"
   const groupId = String(event.group_id || "")
@@ -137,6 +141,8 @@ export async function parseOneBotMessage(bridge: OneBotBridge, event: OneBotEven
   let fileUrl = ""
   let fileName = ""
   let replyToMessageId = ""
+  let replyExcerpt = ""
+  const mentionNames: string[] = []
 
   for (const segment of segments) {
     const type = String(segment.type || "")
@@ -147,15 +153,18 @@ export async function parseOneBotMessage(bridge: OneBotBridge, event: OneBotEven
     }
     if (type === "at") {
       const qq = String(data.qq || "")
+      const name = String(data.name || "").trim() || (qq === selfId ? "机器人" : qq)
+      if (name && !mentionNames.includes(name)) mentionNames.push(name)
       if (qq === selfId || qq === "all") {
         mentionedSelf = qq === selfId
       } else if (qq) {
-        content += ` @${String(data.name || qq)} `
+        content += ` @${name} `
       }
       continue
     }
     if (type === "reply") {
       replyToMessageId = String(data.id || "")
+      replyExcerpt = await resolveReplyExcerpt(bridge, replyToMessageId)
       continue
     }
     if (type === "image") {
@@ -194,6 +203,8 @@ export async function parseOneBotMessage(bridge: OneBotBridge, event: OneBotEven
   return {
     selfId,
     senderId,
+    senderName,
+    mentionNames,
     messageId,
     messageType,
     groupId,
@@ -204,9 +215,43 @@ export async function parseOneBotMessage(bridge: OneBotBridge, event: OneBotEven
     fileUrl,
     fileName,
     replyToMessageId,
+    replyExcerpt,
     mentionedSelf,
     toMe: event.to_me === true,
     createdAt: Number(event.time || Math.floor(Date.now() / 1000)) * 1000,
+  }
+}
+
+function plainText(raw: unknown): string {
+  if (typeof raw === "string") return raw.replace(/\[CQ:[^\]]+\]/g, "").trim()
+  if (!Array.isArray(raw)) return ""
+  return raw.map((item) => {
+    const segment = item as Segment
+    const type = String(segment?.type || "")
+    const data = segment?.data || {}
+    if (type === "text") return String(data.text || "")
+    if (type === "at") return `@${String(data.name || data.qq || "")}`
+    if (type === "face") return "[表情]"
+    if (type === "image") return "[图片]"
+    if (type === "record" || type === "voice" || type === "audio") return "[语音]"
+    if (type === "video") return "[视频]"
+    if (type === "file") return `[文件]${String(data.file_name || data.name || "")}`
+    return ""
+  }).join("").trim()
+}
+
+async function resolveReplyExcerpt(bridge: OneBotBridge, messageId: string): Promise<string> {
+  const id = String(messageId || "").trim()
+  if (!id) return ""
+  try {
+    const result = await bridge.callAction("get_msg", { message_id: id }) as Record<string, unknown>
+    const sender = (result?.sender || {}) as Record<string, unknown>
+    const name = String(sender.card || sender.nickname || sender.user_id || "").trim()
+    const excerpt = plainText(result?.message).replace(/\s+/g, " ").trim().slice(0, 80)
+    if (!excerpt) return name
+    return name ? `${name}：${excerpt}` : excerpt
+  } catch {
+    return ""
   }
 }
 

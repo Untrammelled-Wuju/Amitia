@@ -25,7 +25,7 @@ export function buildInboundRequest(messages: BufferedMessage[], imageUrl = "") 
     return {
         channelId: "wechat",
         accountId: "openclaw-wechat",
-        conversationId: `conv-${last.fromUserId}`,
+        conversationId: "conv-wechat",
         peerId: last.fromUserId,
         messageId: last.messageId,
         contentType: audioUrl ? "audio" : resolvedImage ? "image" : "text",

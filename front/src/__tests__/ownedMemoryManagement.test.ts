@@ -15,4 +15,20 @@ describe("Owned 记忆管理归属及保存确认", () => {
   it("检索拒绝同 ID 新 Core 范围", async () => { mocks.get.mockResolvedValue(wrap({ executionScope: { ...scope, coreId: "next" }, resources: [resource()] })); await expect(useOwnedMemoryManagement().read(scope, { query: "茶" })).rejects.toThrow("归属已变化"); });
   it("只有操作收据而无正式记忆版本时不能提示已保存", async () => { const data = result(); data.resources = []; mocks.post.mockResolvedValue(wrap(data)); await expect(useOwnedMemoryManagement().write(scope, "write", { action: "create" })).rejects.toThrow("原记录"); });
   it("候选确认缺少正式记忆及其派生层时拒绝确认", async () => { const data = result(true); data.resources[0].revision = 2; data.resources[0].body.state = "accepted"; data.acknowledgement.versions["checkpoint/memory-candidate/write/fact"] = 2; mocks.post.mockResolvedValue(wrap(data)); await expect(useOwnedMemoryManagement().write(scope, "write", { action: "accept", id: "memory-candidate/write/fact", expectedRevision: 1 }, true)).rejects.toThrow("正式记忆"); });
+  it("全部记忆视图接受同一 owner 的其他角色与全局记忆", async () => {
+    const view = { ...scope, memoryViewAll: true, memoryRoleId: "role" };
+    mocks.get.mockResolvedValue(wrap({ executionScope: view, resources: [resource(), { ...resource("memory", "two"), roleId: "role2" }, { ...resource("memory", "three"), roleId: "@global-memory" }] }));
+    const { resources } = await useOwnedMemoryManagement().read(view, {});
+    expect(resources.map((row) => row.id)).toEqual(["same", "two", "three"]);
+    expect(resources.map((row) => row.executionScope.memoryRoleId)).toEqual(["role", "role2", "@global-memory"]);
+    expect(resources.every((row) => row.executionScope.memoryViewAll === undefined)).toBe(true);
+    expect(resources.every((row) => row.executionScope.roleId === "role")).toBe(true);
+  });
+  it("全部记忆视图仍拒绝其他设备与非记忆角色", async () => {
+    const view = { ...scope, memoryViewAll: true, memoryRoleId: "role" };
+    mocks.get.mockResolvedValue(wrap({ executionScope: view, resources: [{ ...resource("memory", "two"), ownerId: "other" }] }));
+    await expect(useOwnedMemoryManagement().read(view, {})).rejects.toThrow("所属设备");
+    mocks.get.mockResolvedValue(wrap({ executionScope: view, resources: [{ ...resource("checkpoint", "two"), roleId: "role2" }] }));
+    await expect(useOwnedMemoryManagement().read(view, {}, true)).rejects.toThrow("所属设备");
+  });
 });

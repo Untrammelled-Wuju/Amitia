@@ -2,13 +2,15 @@ process.on("unhandledRejection", (reason) => {
   console.error("[QQ-Personal] unhandled rejection", reason)
 })
 
+import path from "node:path"
 import Fastify from "fastify"
 import cors from "@fastify/cors"
 import { OneBotBridge } from "./onebot.js"
-import { loadConfig, normalizeConfig, saveConfig, type QQPersonalConfig } from "./config.js"
-import { parseOneBotMessage, shouldHandleMessage, applyPrefix } from "./message.js"
+import { dataFilePath, loadConfig, normalizeConfig, saveConfig, type QQPersonalConfig } from "./config.js"
+import { parseOneBotMessage, shouldHandleMessage, applyPrefix, type ParsedQQMessage } from "./message.js"
 import { buildInboundPayload, forwardInbound } from "./inbound.js"
-import { readNapCatWebUIInfo } from "./napcat-webui.js"
+import { changeWebuiPassword, evaluatePassword, readSnowLumaInfo } from "./snowluma-info.js"
+import { CredentialStore } from "./credential-store.js"
 import { PeerStore } from "./peer-store.js"
 import { authorizeServiceRequest } from "./service-auth.js"
 import { downloadMedia, sendMedia, synthesizeVoice } from "./outbound.js"
@@ -26,6 +28,7 @@ let config = loadConfig()
 let bridge: OneBotBridge
 const peers = new PeerStore()
 const outboundRequests = new IdempotencyStore()
+const credentialStore = new CredentialStore(path.dirname(dataFilePath("qq-personal-config.json")))
 let lastError = ""
 let messageCount = 0
 let replyCount = 0
@@ -60,13 +63,40 @@ app.addHook("onSend", async (request, reply, payload) => {
 
 bridge = new OneBotBridge(() => config)
 
+const conversationTitles = new Map<string, { value: string; expiresAt: number }>()
+
+async function resolveConversationTitle(message: ParsedQQMessage): Promise<string> {
+  const isGroup = message.messageType === "group"
+  const key = isGroup ? `group:${message.groupId}` : `private:${message.senderId}`
+  const cached = conversationTitles.get(key)
+  const now = Date.now()
+  if (cached && cached.expiresAt > now) return cached.value
+  const fallback = isGroup
+    ? `QQ 群 ${message.groupId || "未知"}`
+    : (message.senderName || `QQ 用户 ${message.senderId || "未知"}`)
+  let value = fallback
+  try {
+    if (isGroup && message.groupId) {
+      const info = await bridge.callAction("get_group_info", { group_id: message.groupId }) as Record<string, unknown>
+      value = String(info?.group_name || "").trim() || fallback
+    } else if (message.senderId) {
+      const info = await bridge.callAction("get_stranger_info", { user_id: message.senderId }) as Record<string, unknown>
+      value = String(info?.card || info?.nickname || "").trim() || fallback
+    }
+  } catch {
+    value = fallback
+  }
+  conversationTitles.set(key, { value, expiresAt: now + 10 * 60 * 1000 })
+  return value
+}
+
 bridge.onEvent(async (event) => {
   try {
     const parsed = await parseOneBotMessage(bridge, event)
     if (!shouldHandleMessage(parsed, event, config)) return
     const normalized = applyPrefix(parsed, config)
     peers.set(normalized.messageType === "group" ? normalized.groupId : normalized.senderId, normalized.messageType)
-    const payload = buildInboundPayload(normalized)
+    const payload = buildInboundPayload(normalized, await resolveConversationTitle(normalized))
     await forwardInbound(inboundConfig, payload)
     messageCount++
     lastError = ""
@@ -80,11 +110,16 @@ app.server.on("upgrade", (request, socket, head) => {
   bridge.handleUpgrade(request, socket, head)
 })
 
-function publicConfig() {
+async function publicConfig() {
   const hostForDocker = process.platform === "darwin" || process.platform === "win32"
     ? "host.docker.internal"
     : "127.0.0.1"
-  const napcatWebUI = readNapCatWebUIInfo()
+  const snowluma = await readSnowLumaInfo({
+    containerName: config.containerName,
+    webuiPort: config.webuiPort,
+    novncPort: config.novncPort,
+    dockerBin: config.dockerBin,
+  }, credentialStore.read())
   return {
     enabled: config.enabled,
     listenHost: config.listenHost,
@@ -93,10 +128,19 @@ function publicConfig() {
     reverseWebSocketUrl: `ws://${hostForDocker}:${config.listenPort}${config.websocketPath}`,
     localWebSocketUrl: `ws://127.0.0.1:${config.listenPort}${config.websocketPath}`,
     token: config.token,
-    webuiToken: napcatWebUI.token,
-    webuiError: napcatWebUI.error,
     groupTrigger: config.groupTrigger,
     triggerPrefix: config.triggerPrefix,
+    webuiPort: config.webuiPort,
+    novncPort: config.novncPort,
+    containerName: config.containerName,
+    dockerBin: config.dockerBin,
+    webuiUrl: snowluma.webuiUrl,
+    novncUrl: snowluma.novncUrl,
+    webuiUser: snowluma.webuiUser,
+    webuiPassword: snowluma.webuiPassword,
+    webuiPasswordState: snowluma.webuiPasswordState,
+    novncPassword: snowluma.novncPassword,
+    snowlumaError: snowluma.error,
   }
 }
 
@@ -104,7 +148,7 @@ function statusPayload() {
   const status = bridge.status()
   return {
     data: {
-      provider: "napcat",
+      provider: "snowluma",
       status: status.connected ? "online" : config.enabled ? "waiting" : "disconnected",
       running: true,
       connected: status.connected,
@@ -150,6 +194,47 @@ function deliveryFingerprint(body: Record<string, unknown>, target: { kind: stri
 app.get("/api/health", async () => ({ success: true, bridgeReady: true, qqOnline: bridge.status().connected }))
 app.get("/api/status", async () => statusPayload())
 app.get("/api/config", async () => publicConfig())
+
+app.post("/api/action", async (request, reply) => {
+  const body = (request.body || {}) as Record<string, unknown>
+  const action = String(body.action || "").trim()
+  const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
+    ? body.input
+    : {}) as Record<string, unknown>
+  if (action === "change-webui-password") {
+    const oldPassword = String(input.oldPassword || "").trim()
+    const newPassword = String(input.newPassword || "")
+    if (!oldPassword) return reply.send({ success: false, error: "请填写当前密码" })
+    const evaluation = evaluatePassword(newPassword)
+    if (!evaluation.valid) {
+      const failed = evaluation.rules.filter((rule) => !rule.ok).map((rule) => rule.label)
+      return reply.send({ success: false, error: `新密码不符合要求：${failed.join("、")}` })
+    }
+    if (oldPassword === newPassword) return reply.send({ success: false, error: "新密码不能与当前密码相同" })
+    const current = await readSnowLumaInfo({
+      containerName: config.containerName,
+      webuiPort: config.webuiPort,
+      novncPort: config.novncPort,
+      dockerBin: config.dockerBin,
+    }, credentialStore.read())
+    const changed = await changeWebuiPassword({ webuiPort: config.webuiPort }, oldPassword, newPassword, current.webuiUser)
+    if (!changed.ok) return reply.send({ success: false, error: changed.message })
+    credentialStore.write(newPassword)
+    return reply.send({ success: true, data: await publicConfig() })
+  }
+  if (action === "record-webui-password") {
+    const password = String(input.password || "").trim()
+    if (!password) return reply.send({ success: false, error: "请填写要记录的密码" })
+    credentialStore.write(password)
+    return reply.send({ success: true, data: await publicConfig() })
+  }
+  if (action === "clear-webui-password") {
+    credentialStore.clear()
+    return reply.send({ success: true, data: await publicConfig() })
+  }
+  return reply.send({ success: false, error: `未知操作：${action || "(空)"}` })
+})
+
 app.post("/api/messages", async () => ({ success: true, data: { messages: [], total: 0 } }))
 app.post("/api/logs", async () => ({ success: true, data: { items: [], total: 0 } }))
 app.post("/api/peers", async (request) => {
@@ -170,7 +255,7 @@ app.post("/api/connect", async (request, reply) => {
   if (next.token !== config.token) bridge.disconnectClients()
   config = next
   saveConfig(config)
-  return reply.send({ success: true, data: publicConfig() })
+  return reply.send({ success: true, data: await publicConfig() })
 })
 
 app.post("/api/disconnect", async (_request, reply) => {

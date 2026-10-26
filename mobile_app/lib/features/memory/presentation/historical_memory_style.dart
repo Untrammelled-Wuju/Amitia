@@ -209,14 +209,21 @@ class HistoricalMemorySurface extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: margin,
-        padding: padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
-        decoration: BoxDecoration(
+        child: Material(
           color: backgroundColor ?? context.surfacePrimary,
           borderRadius: borderRadius ?? AppRadius.brMedium,
-          border:
-              border ?? Border.all(color: context.borderPrimary, width: 0.5),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            padding: padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
+            decoration: BoxDecoration(
+              borderRadius: borderRadius ?? AppRadius.brMedium,
+              border:
+                  border ??
+                  Border.all(color: context.borderPrimary, width: 0.5),
+            ),
+            child: child,
+          ),
         ),
-        child: child,
       ),
     );
   }

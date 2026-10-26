@@ -312,6 +312,7 @@ func (s *ProcessSupervisor) GetDefinition(serviceID string) (*ServiceRuntimeDefi
 		Network:             def.Network,
 		AllowedNamespaces:   ns,
 		SandboxReadOnlyRoot: def.SandboxReadOnlyRoot,
+		SandboxWritableRoot: def.SandboxWritableRoot,
 		ManifestHash:        def.ManifestHash,
 		DefinitionVersion:   def.DefinitionVersion,
 		AutoStart:           def.AutoStart,
@@ -430,6 +431,16 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	if err := os.MkdirAll(tempDir, 0o755); err != nil {
 		return nil, fmt.Errorf("trusted_service: create temp dir: %w", err)
 	}
+	if jail := strings.TrimSpace(def.SandboxWritableRoot); jail != "" {
+		if err := os.MkdirAll(jail, 0o700); err != nil {
+			return nil, fmt.Errorf("trusted_service: create sandbox root: %w", err)
+		}
+		workingDir = jail
+		tempDir = filepath.Join(jail, ".runtime", instanceID)
+		if err := os.MkdirAll(tempDir, 0o700); err != nil {
+			return nil, fmt.Errorf("trusted_service: create sandbox temp dir: %w", err)
+		}
+	}
 
 	fullExePath := exe.Path
 	if !filepath.IsAbs(fullExePath) && req.BasePath != "" {
@@ -437,7 +448,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	}
 
 	env := s.buildSafeEnvironment(exe, def, req.SessionToken, instanceID, req.Generation, tempDir, defaultLogLevel(req.LogLevel), req.SecretLease)
-	launchPlan, err := prepareNetworkLaunchWithStateRoot(def.Network, fullExePath, args, workingDir, tempDir, s.rootDir, def.SandboxReadOnlyRoot)
+	launchPlan, err := prepareNetworkLaunchWithStateRoot(def.Network, fullExePath, args, workingDir, tempDir, s.rootDir, sandboxReadOnlyRoots(def, args)...)
 	if err != nil {
 		return nil, fmt.Errorf("trusted_service: enforce network policy: %w", err)
 	}
@@ -825,6 +836,66 @@ func (s *ProcessSupervisor) drainStderr(stderrPipe io.ReadCloser, serviceID, ins
 			return
 		}
 	}
+}
+
+// sandboxReadOnlyRoots lists the host-owned roots an enforced sandbox must keep
+// readable. Besides the authoritative package root it derives the anchor from the
+// launched entry point so a managed runtime can always load its own code and the
+// immutable generation that contains it.
+func sandboxReadOnlyRoots(def *ServiceRuntimeDefinition, args []string) []string {
+	if def == nil || !def.Network.Enforce {
+		return []string{def.SandboxReadOnlyRoot}
+	}
+	roots := []string{def.SandboxReadOnlyRoot}
+	seen := make(map[string]struct{})
+	for _, root := range roots {
+		if root = strings.TrimSpace(root); root != "" {
+			seen[filepath.Clean(root)] = struct{}{}
+		}
+	}
+	add := func(candidate string) {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			return
+		}
+		candidate = filepath.Clean(candidate)
+		if _, ok := seen[candidate]; ok {
+			return
+		}
+		seen[candidate] = struct{}{}
+		roots = append(roots, candidate)
+	}
+	for _, arg := range args {
+		if strings.TrimSpace(arg) == "" || strings.HasPrefix(arg, "-") || !filepath.IsAbs(arg) {
+			continue
+		}
+		info, err := os.Stat(arg)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		entry := filepath.Dir(arg)
+		add(entry)
+		if root := generationRoot(entry); root != "" {
+			add(root)
+		}
+		break
+	}
+	return roots
+}
+
+func generationRoot(dir string) string {
+	segments := strings.Split(filepath.ToSlash(dir), "/")
+	for index := len(segments) - 1; index >= 1; index-- {
+		if segments[index] != "generations" || index+1 >= len(segments) {
+			continue
+		}
+		joined := strings.Join(segments[:index+2], "/")
+		if strings.HasPrefix(dir, "/") {
+			joined = "/" + strings.TrimPrefix(joined, "/")
+		}
+		return filepath.FromSlash(joined)
+	}
+	return ""
 }
 
 func (s *ProcessSupervisor) buildSafeEnvironment(exe *PlatformExecutable, def *ServiceRuntimeDefinition, session, instance string, generation int64, tempDir, logLevel, secretLease string) []string {

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/url"
 	"os"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/browser"
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/workspace"
 )
@@ -104,7 +106,38 @@ func (s *BuiltinUtilityService) Supports(name string) bool {
 
 func (s *BuiltinUtilityService) CanHandle(name string) bool { return s.Supports(name) }
 
+// sandboxDeniedTools lists host capabilities that reach past the sandbox
+// boundary: another machine, an external device, or host input injection. File
+// and command tools stay available because they are themselves confined.
+var sandboxDeniedTools = map[string]string{
+	"press_key":               "宿主输入注入",
+	"combined_operation":      "设备操作",
+	"bluetooth_send_and_read": "蓝牙设备",
+	"bluetooth_ble_write_and_read_characteristic": "蓝牙设备",
+	"execute_terminal":                            "跨设备终端",
+	"execute_in_terminal_session_streaming":       "跨设备终端",
+	"get_terminal_session_screen":                 "跨设备终端",
+	"ssh_login":                                   "远程主机",
+	"ssh_exit":                                    "远程主机",
+}
+
+func enforceSandboxToolPolicy(name string, execCtx *execution.ExecutionContext) error {
+	if invocationSandbox(execCtx) == nil {
+		return nil
+	}
+	if reason, denied := sandboxDeniedTools[name]; denied {
+		return fmt.Errorf("%w: %s 在渠道沙箱内不可用（%s）", ErrSandboxEscape, name, reason)
+	}
+	return nil
+}
+
 func (s *BuiltinUtilityService) Dispatch(ctx context.Context, name string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
+	if sandbox := invocationSandbox(invocation.ExecContext); sandbox != nil {
+		log.Printf("[sandbox-audit] tool=%s root=%q network=%v", name, sandbox.Root, sandbox.AllowNetwork)
+	}
+	if err := enforceSandboxToolPolicy(name, invocation.ExecContext); err != nil {
+		return nil, err
+	}
 	switch name {
 	case "list_files":
 		return s.listFiles(ctx, input, invocation)
@@ -316,7 +349,11 @@ func directLocalPath(obj map[string]any, invocation capability.ToolInvocationCon
 	if err != nil {
 		return "", false, err
 	}
-	return filepath.Clean(absolute), true, nil
+	clean := filepath.Clean(absolute)
+	if err := ensureSandboxPath(invocation.ExecContext, clean); err != nil {
+		return "", false, err
+	}
+	return clean, true, nil
 }
 
 func localFileURI(entryPath string) string {

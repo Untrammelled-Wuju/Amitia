@@ -77,6 +77,20 @@ func TestEditingRejectsStaleDisplayedAuthority(t *testing.T) {
 	}
 }
 
+func TestEditingAcceptsScopeCarryingViewSelector(t *testing.T) {
+	engine, _, _, _ := engineHarness(t)
+	authority := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", ConversationID: "conversation", RequestID: "turn", Message: "tea"}
+	response, err := engine.Run(t.Context(), authority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := response.Scope
+	expected.MemoryViewAll = true
+	if _, err := engine.Edit(t.Context(), authority, EditRequest{ExpectedScope: &expected, RoleID: "role", RequestID: "view-edit", Kind: "message", ID: "turn/user", ExpectedRevision: 1, Changes: map[string]json.RawMessage{"content": json.RawMessage(`"coffee"`)}}); err != nil {
+		t.Fatalf("view selector blocked edit: %v", err)
+	}
+}
+
 func TestMessageEditedDuringGenerationRejectsLateReply(t *testing.T) {
 	engine, db, _, model := engineHarness(t)
 	request := Request{SpaceID: "core", DeviceID: "a", CoreID: "core", ConversationID: "conversation", RequestID: "turn", Message: "tea"}

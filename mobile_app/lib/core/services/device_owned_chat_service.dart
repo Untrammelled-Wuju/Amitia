@@ -37,6 +37,18 @@ const _authorityFields = [
   'continuityRoleId',
 ];
 
+Map<String, dynamic> _resourceScope(Map scope, Map resource) =>
+    isMemoryKind((resource['kind'] ?? '').toString())
+    ? memoryRecordScope(scope, (resource['roleId'] ?? '').toString())
+    : Map<String, dynamic>.from(scope);
+
+String _recordStamp(Map scope) => jsonEncode(
+  _authorityFields
+      .where((key) => key != 'memoryViewAll')
+      .map((key) => scope[key])
+      .toList(),
+);
+
 String _scopeStamp(Map<String, dynamic> scope, String requestId) {
   if (scope['requestId'] != requestId ||
       const [
@@ -785,13 +797,7 @@ class DeviceOwnedChatService {
                   row['roleId'] != globalMemoryRole))
         throw StateError('记忆数据归属无效');
       _resources['${row['kind']}/${row['id']}'] = Map<String, dynamic>.from(row)
-        ..['executionScope'] =
-            shared &&
-                isMemoryKind(row['kind'].toString()) &&
-                row['roleId'] !=
-                    memoryStorageRole(scope, row['kind'].toString())
-            ? memoryRecordScope(scope, row['roleId'].toString())
-            : scope;
+        ..['executionScope'] = _resourceScope(scope, row);
     }
     return result;
   }
@@ -845,7 +851,10 @@ class DeviceOwnedChatService {
       );
       if (result?['resource'] is Map) {
         resource = Map<String, dynamic>.from(result!['resource'] as Map);
-        resource['executionScope'] = result['executionScope'];
+        resource['executionScope'] = _resourceScope(
+          result['executionScope'] as Map,
+          resource,
+        );
       }
     }
     if (captured != revision) throw StateError('服务状态已变化，请重新加载后再操作');
@@ -863,9 +872,31 @@ class DeviceOwnedChatService {
       throw StateError('记录缺少数据来源版本，请重新加载');
     }
     if (expectedScope != null &&
-        _authorityStamp(expectedScope) !=
-            _authorityStamp(resource['executionScope'] as Map)) {
-      throw StateError('记录原始归属已变化，请重新加载后再修改');
+        _recordStamp(expectedScope) !=
+            _recordStamp(resource['executionScope'] as Map)) {
+      final refreshed = await _api.get<Map<String, dynamic>>(
+        '/api/device-mesh/v1/business/resources',
+        queryParameters: {
+          'kind': kind,
+          'id': id,
+          'characterId': role,
+          'memoryView': memoryViewForScope(expectedScope),
+        },
+      );
+      if (refreshed?['resource'] is Map &&
+          refreshed?['executionScope'] is Map) {
+        resource = Map<String, dynamic>.from(refreshed!['resource'] as Map)
+          ..['executionScope'] = _resourceScope(
+            refreshed['executionScope'] as Map,
+            refreshed['resource'] as Map,
+          );
+      }
+      if (resource['executionScope'] is! Map ||
+          _recordStamp(expectedScope) !=
+              _recordStamp(resource['executionScope'] as Map)) {
+        throw StateError('记录原始归属已变化，请重新加载后再修改');
+      }
+      if (captured != revision) throw StateError('服务状态已变化，请重新加载后再操作');
     }
     final requestId =
         'edit-${DateTime.now().microsecondsSinceEpoch}-${_editSequence++}';

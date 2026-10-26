@@ -383,7 +383,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       _show('已导入 ${result?['totalImported'] ?? 0} 条记录');
       ref.invalidate(characterListProvider);
       ref.invalidate(conversationListProvider);
-      ref.invalidate(memoryListProvider);
+      ref.invalidate(ownedMemoryCountProvider);
     });
   }
 
@@ -613,7 +613,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   Widget build(BuildContext context) {
     final charactersAsync = ref.watch(characterListProvider);
     final conversationsAsync = ref.watch(conversationListProvider);
-    final memoriesAsync = ref.watch(memoryListProvider);
+    final memoriesAsync = ref.watch(ownedMemoryCountProvider);
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -631,7 +631,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
               _DataOverview(
                 charactersCount: charactersAsync.valueOrNull?.length ?? 0,
                 conversationsCount: conversationsAsync.valueOrNull?.length ?? 0,
-                memoriesCount: memoriesAsync.valueOrNull?.length ?? 0,
+                memoriesCount: memoriesAsync.valueOrNull ?? 0,
                 isLoading:
                     charactersAsync.isLoading ||
                     conversationsAsync.isLoading ||

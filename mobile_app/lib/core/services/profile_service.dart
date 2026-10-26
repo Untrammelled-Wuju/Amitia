@@ -1,12 +1,14 @@
-import '../backend_transport/backend_service_api.dart';
-import 'dart:math';
 import 'dart:convert';
+
 import '../models/profile.dart';
+import 'device_owned_chat_service.dart';
+import 'device_owned_memory_service.dart';
 
 class ProfileService {
-  final BackendServiceApi _api;
+  final DeviceOwnedChatService owned;
+  final DeviceOwnedMemoryService Function() memory;
 
-  ProfileService(this._api);
+  ProfileService(this.owned, {required this.memory});
 
   Future<List<ProfileDto>> list({
     String spaceId = '',
@@ -16,79 +18,89 @@ class ProfileService {
     int page = 1,
     int pageSize = 100,
   }) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/device-mesh/v1/business/data',
-      queryParameters: <String, dynamic>{
-        'kind': 'profile',
-        if (characterId.isNotEmpty) 'characterId': characterId,
-      },
+    if (page < 1 || pageSize < 1) throw ArgumentError('画像分页参数无效');
+    if (!await owned.refresh()) {
+      throw StateError(owned.notice.isEmpty ? '设备数据服务尚未就绪' : owned.notice);
+    }
+    final result = await owned.data(
+      'profile',
+      characterId: owned.selectRole(characterId),
+      memoryView: 'global',
     );
     final search = keyword.trim().toLowerCase();
     final rows = <ProfileDto>[];
-    for (final resource in _profiles(resp)) {
-      final body = resource['body'] is Map
-          ? Map<String, dynamic>.from(resource['body'] as Map)
-          : <String, dynamic>{};
-      final content = body['content'];
-      final attribute = (body['key'] ?? '').toString();
-      final value = content is Map
-          ? (content['value'] ??
-                    content['text'] ??
-                    content['summary'] ??
-                    jsonEncode(content))
-                .toString()
-          : (content ?? '').toString();
-      final type = content is Map ? (content['memoryType'] ?? '').toString() : '';
-      if (category.isNotEmpty && category != type) continue;
-      if (search.isNotEmpty &&
-          !'$attribute $value'.toLowerCase().contains(search)) continue;
-      rows.add(
-        ProfileDto.fromJson(<String, dynamic>{
-          'id': resource['id']?.toString() ?? '',
-          'characterId': (resource['roleId'] ?? '').toString(),
-          'category': type.isEmpty ? 'custom' : type,
-          'attributeName': attribute,
-          'attributeValue': value,
-          'confidence': 100,
-          'source': 'device-owned',
-          'createdAt': (resource['updatedAt'] ?? '').toString(),
-          'updatedAt': (resource['updatedAt'] ?? '').toString(),
-        }),
-      );
+    for (final resource in profileResources(result)) {
+      final dto = profileDto(resource);
+      if (category.isNotEmpty && category != dto.category) continue;
+      if (search.isNotEmpty) {
+        final haystack =
+            '${dto.attributeName} ${dto.attributeValue}'.toLowerCase();
+        if (!haystack.contains(search)) continue;
+      }
+      rows.add(dto);
     }
-    return rows;
+    final offset = (page - 1) * pageSize;
+    if (offset >= rows.length) return const <ProfileDto>[];
+    final end = offset + pageSize;
+    return rows.sublist(offset, end > rows.length ? rows.length : end);
   }
 
-  Future<Map<String, dynamic>?> _profileScope(String characterId) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/device-mesh/v1/business/data',
-      queryParameters: <String, dynamic>{
-        if (characterId.isNotEmpty) 'characterId': characterId,
-        'kind': 'profile',
-      },
+  Future<ProfileDto?> create(Map<String, dynamic> data) async {
+    final role = (data['characterId'] ?? '').toString().trim();
+    final name = (data['attributeName'] ?? '').toString().trim();
+    final value = (data['attributeValue'] ?? '').toString().trim();
+    final category = (data['category'] ?? 'custom').toString().trim();
+    if (name.isEmpty || value.isEmpty) throw StateError('画像内容不能为空');
+    if (!await owned.refresh()) {
+      throw StateError(owned.notice.isEmpty ? '设备数据服务尚未就绪' : owned.notice);
+    }
+    final service = memory();
+    final page = await service.query(
+      owned.selectRole(role),
+      memoryView: 'global',
+      limit: 1,
     );
-    final nested = resp?['data'];
-    final payload = nested is Map ? nested : resp;
-    return payload is Map ? Map<String, dynamic>.from(payload) : null;
+    final input = <String, dynamic>{
+      'action': 'create',
+      'key': name,
+      'value': value,
+      'memoryType': category.isEmpty ? 'custom' : category,
+      'importance': 5,
+      'partition': 'profile',
+    };
+    try {
+      final saved = await service.manage(page, input);
+      for (final row in profileResources(saved)) {
+        final dto = profileDto(row);
+        if (dto.attributeName == name) return dto;
+      }
+    } on OwnedMemoryConflict catch (conflict) {
+      final existing = conflict.resources
+          .where(
+            (row) =>
+                row['kind'] == 'profile' && profileDto(row).attributeName == name,
+          )
+          .toList(growable: false);
+      if (existing.isEmpty) rethrow;
+      return profileDto(existing.first);
+    }
+    return ProfileDto(
+      id: name,
+      characterId: role,
+      category: category.isEmpty ? 'custom' : category,
+      attributeName: name,
+      attributeValue: value,
+      confidence: 100,
+    );
   }
 
-  static String _requestId() {
-    final values = List<int>.generate(16, (_) => Random.secure().nextInt(256));
-    values[6] = (values[6] & 15) | 64;
-    values[8] = (values[8] & 63) | 128;
-    final value = values
-        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-        .join();
-    return '${value.substring(0, 8)}-${value.substring(8, 12)}-'
-        '${value.substring(12, 16)}-${value.substring(16, 20)}-'
-        '${value.substring(20)}';
-  }
-
-  List<Map<String, dynamic>> _profiles(Map<String, dynamic>? resp) {
-    final nested = resp?['data'];
-    final payload = nested is Map ? nested : resp;
-    final snapshot = payload is Map ? payload['snapshot'] : null;
-    final resources = snapshot is Map && snapshot['resources'] is List
+  static List<Map<String, dynamic>> profileResources(
+    Map<String, dynamic> result,
+  ) {
+    final snapshot = result['snapshot'];
+    final resources = result['resources'] is List
+        ? result['resources'] as List
+        : snapshot is Map && snapshot['resources'] is List
         ? snapshot['resources'] as List
         : const [];
     return resources
@@ -98,96 +110,50 @@ class ProfileService {
         .toList(growable: false);
   }
 
-  Future<void> _editProfile(String id, {bool? deleted}) async {
-    final resp = await _api.get<Map<String, dynamic>>(
-      '/api/device-mesh/v1/business/resources',
-      queryParameters: <String, dynamic>{'kind': 'profile', 'id': id},
-    );
-    final nested = resp?['data'];
-    final payload = nested is Map ? nested : resp;
-    final resource = payload is Map ? payload['resource'] : null;
-    final scope = payload is Map ? payload['executionScope'] : null;
-    if (resource is! Map || scope is! Map) {
-      throw StateError('该画像不在当前数据来源中');
-    }
-    await _api.post<Map<String, dynamic>>(
-      '/api/device-mesh/v1/business/resources/edit',
-      data: <String, dynamic>{
-        'requestId': _requestId(),
-        'kind': 'profile',
-        'id': id,
-        'expectedRevision': resource['revision'],
-        'expectedExecutionScope': scope,
-        if (deleted != null) 'deleted': deleted,
-      },
-    );
+  static String profileAttribute(dynamic content, String key, String category) {
+    final named = content is Map
+        ? (content['attributeName'] ?? '').toString().trim()
+        : '';
+    if (named.isNotEmpty) return named;
+    final trimmed = key.trim();
+    final prefix = '$category/';
+    return trimmed.startsWith(prefix)
+        ? trimmed.substring(prefix.length).trim()
+        : trimmed;
   }
 
-
-  Future<ProfileDto?> create(Map<String, dynamic> data) async {
-    final payload = await _profileScope(
-      (data['characterId'] ?? '').toString(),
+  static ProfileDto profileDto(Map<String, dynamic> resource) {
+    final body = resource['body'] is Map
+        ? Map<String, dynamic>.from(resource['body'] as Map)
+        : <String, dynamic>{};
+    final content = body['content'];
+    final value = content is Map
+        ? (content['value'] ??
+                  content['text'] ??
+                  content['summary'] ??
+                  jsonEncode(content))
+              .toString()
+        : (content ?? '').toString();
+    final type = content is Map
+        ? (content['memoryType'] ?? content['category'] ?? '').toString().trim()
+        : '';
+    final category = type.isEmpty ? 'custom' : type;
+    final attribute = profileAttribute(
+      content,
+      (body['key'] ?? '').toString(),
+      category,
     );
-    if (payload == null) return null;
-    await _api.post<Map<String, dynamic>>(
-      '/api/device-mesh/v1/business/memories/manage',
-      data: <String, dynamic>{
-        'action': 'create',
-        'key': (data['attributeName'] ?? '').toString(),
-        'value': (data['attributeValue'] ?? '').toString(),
-        'memoryType': (data['category'] ?? 'custom').toString(),
-        'importance': 5,
-        'partition': 'profile',
-        'requestId': _requestId(),
-        'characterId': (data['characterId'] ?? '').toString(),
-        'expectedExecutionScope': payload,
-      },
-    );
+    final stamp = (resource['updatedAt'] ?? '').toString();
     return ProfileDto.fromJson(<String, dynamic>{
-      'id': (data['attributeName'] ?? '').toString(),
-      'characterId': (data['characterId'] ?? '').toString(),
-      'category': (data['category'] ?? 'custom').toString(),
-      'attributeName': (data['attributeName'] ?? '').toString(),
-      'attributeValue': (data['attributeValue'] ?? '').toString(),
+      'id': resource['id']?.toString() ?? '',
+      'characterId': (resource['roleId'] ?? '').toString(),
+      'category': category,
+      'attributeName': attribute,
+      'attributeValue': value,
       'confidence': 100,
+      'source': 'device-owned',
+      'createdAt': stamp,
+      'updatedAt': stamp,
     });
   }
-
-  Future<ProfileDto?> update(String id, Map<String, dynamic> data) async {
-    final payload = await _profileScope(
-      (data['characterId'] ?? '').toString(),
-    );
-    if (payload == null) return null;
-    await _api.post<Map<String, dynamic>>(
-      '/api/device-mesh/v1/business/resources/edit',
-      data: <String, dynamic>{
-        'requestId': _requestId(),
-        'kind': 'profile',
-        'id': id,
-        'characterId': (data['characterId'] ?? '').toString(),
-        'expectedRevision': payload['revision'],
-        'expectedExecutionScope': payload['executionScope'],
-        'changes': <String, dynamic>{
-          'content': <String, dynamic>{
-            'value': (data['attributeValue'] ?? '').toString(),
-          },
-        },
-      },
-    );
-    return ProfileDto.fromJson(<String, dynamic>{
-      'id': id,
-      'category': (data['category'] ?? 'custom').toString(),
-      'attributeName': (data['attributeName'] ?? '').toString(),
-      'attributeValue': (data['attributeValue'] ?? '').toString(),
-      'confidence': 100,
-    });
-  }
-
-  Future<bool> delete(String id) async {
-    await _editProfile(id, deleted: true);
-    return true;
-  }
-
-
-
 }

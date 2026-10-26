@@ -2337,8 +2337,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       try {
         if (characterId.isEmpty) return const <MemoryDto>[];
         return await ref
-            .read(memoryServiceProvider)
-            .list(
+            .read(deviceOwnedMemoryServiceProvider)
+            .listMemories(
               characterId: characterId,
               page: 1,
               pageSize: 8,

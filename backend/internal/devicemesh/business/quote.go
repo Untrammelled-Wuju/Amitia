@@ -20,8 +20,15 @@ type QuoteReference struct {
 	ExpectedScope    *coordination.ExecutionScope `json:"expectedExecutionScope"`
 }
 
+type ExternalQuote struct {
+	MessageID  string `json:"messageId,omitempty"`
+	SenderName string `json:"senderName,omitempty"`
+	Content    string `json:"content,omitempty"`
+}
+
 type ReviewedQuote struct {
 	OwnerID        string `json:"ownerId"`
+	SenderName     string `json:"senderName,omitempty"`
 	RoleID         string `json:"characterId"`
 	ConversationID string `json:"conversationId"`
 	MessageID      string `json:"messageId"`

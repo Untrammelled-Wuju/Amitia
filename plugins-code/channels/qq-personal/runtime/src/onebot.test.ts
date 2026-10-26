@@ -14,6 +14,10 @@ const baseConfig: QQPersonalConfig = {
   groupTrigger: "mention",
   triggerPrefix: "Amitia",
   ignoredUserIds: [],
+  webuiPort: 5099,
+  novncPort: 6081,
+  containerName: "snowluma",
+  dockerBin: "",
 }
 
 async function bridgeServer(bridge: OneBotBridge): Promise<{ server: http.Server; url: string }> {

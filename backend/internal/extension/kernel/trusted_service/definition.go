@@ -146,6 +146,9 @@ type ServiceRuntimeDefinition struct {
 	// arbitrary host filesystem mounts. Strict OS sandboxes may expose this root
 	// read-only to managed interpreters while keeping host data inaccessible.
 	SandboxReadOnlyRoot string `json:"-"`
+	// SandboxWritableRoot pins the service working directory and temp directory
+	// inside a host-computed jail so the process can only write there.
+	SandboxWritableRoot string `json:"sandbox_writable_root,omitempty"`
 	ManifestHash        string `json:"manifest_hash"`
 	DefinitionVersion   int    `json:"definition_version"`
 	AutoStart           bool   `json:"auto_start"`

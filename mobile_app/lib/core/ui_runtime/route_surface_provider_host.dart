@@ -17,10 +17,12 @@ String? capabilityForBuiltinRoute(String route) {
     return UICapability.pageProvider;
   }
   if (route.startsWith('/characters/')) return UICapability.characterDetail;
-  if (route == '/memory' || route == '/memory/manager') {
+  if (route == '/memory-hub') {
     return UICapability.memoryShell;
   }
-  if (route.startsWith('/memory/')) return UICapability.memoryDetail;
+  if (route == '/memory' || route.startsWith('/memory/')) {
+    return UICapability.memoryDetail;
+  }
   if (route == '/settings/ui-providers') return null;
   if (route == '/settings') return UICapability.settingsShell;
   if (route.startsWith('/settings/')) return UICapability.settingsSection;

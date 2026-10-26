@@ -19,7 +19,7 @@ test("forwards the declared provider identity and current inbound schema", async
     assert.equal(headers.get("X-Amitia-Extension-ID"), config.extensionId);
     assert.equal(headers.get("X-Amitia-Module-ID"), config.moduleId);
     assert.equal(headers.get("Authorization"), "Bearer " + config.serviceAuthToken);
-    assert.deepEqual(JSON.parse(String(actual?.body)), { channelId: "wechat", accountId: "openclaw-wechat", conversationId: "conv-test-peer", peerId: "test-peer", messageId: "message-1", contentType: "text", text: "你好" });
+    assert.deepEqual(JSON.parse(String(actual?.body)), { channelId: "wechat", accountId: "openclaw-wechat", conversationId: "conv-wechat", peerId: "test-peer", messageId: "message-1", contentType: "text", text: "你好" });
 });
 
 test("keeps failures visible and rejects missing runtime credentials", async () => {

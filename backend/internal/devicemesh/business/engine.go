@@ -26,6 +26,7 @@ type Request struct {
 	RecallEvidence     []coordination.ResourceVersion `json:"-"`
 	MemoryView         string                         `json:"memoryView,omitempty"`
 	Quote              *QuoteReference                `json:"quote,omitempty"`
+	ExternalQuote      *ExternalQuote                 `json:"externalQuote,omitempty"`
 	ConversationOrigin *ConversationOrigin            `json:"conversationOrigin,omitempty"`
 	Attachments        []Attachment                   `json:"attachments,omitempty"`
 	ExpectedScope      *coordination.ExecutionScope   `json:"expectedExecutionScope,omitempty"`
@@ -51,6 +52,12 @@ type Request struct {
 	WorkingDirectory   string                         `json:"workingDirectory,omitempty"`
 	RequestID          string                         `json:"requestId"`
 	Message            string                         `json:"message"`
+	SenderName         string                         `json:"senderName,omitempty"`
+	SenderID           string                         `json:"senderId,omitempty"`
+	MentionNames       []string                       `json:"mentionNames,omitempty"`
+	ReplyExcerpt       string                         `json:"replyExcerpt,omitempty"`
+	FileURL            string                         `json:"fileUrl,omitempty"`
+	FileName           string                         `json:"fileName,omitempty"`
 }
 
 type ContextMessage struct {
@@ -123,33 +130,35 @@ type TaskEvent struct {
 }
 
 type Inference struct {
-	RecoveredRuntime   *conversationstream.ActiveTurnState                  `json:"-"`
-	Preview            bool                                                 `json:"-"`
-	Ingress            *Ingress                                             `json:"-"`
-	RegisterCompletion func(func(context.Context, Generation, error) error) `json:"-"`
-	InternalWorker     bool
-	ScheduledMessage   bool
-	ConsolidateMemory  bool
-	Quote              *ReviewedQuote
-	Attachments        []Attachment
-	Context            *ForwardedContext
-	Scope              coordination.ExecutionScope
-	ConversationID     string
-	ProjectID          string
-	Workspaces         []ProjectWorkspace
-	PrimaryWorkspaceID string
-	WorkingDirectory   string
-	Snapshot           coordination.DataSnapshot
-	HistoricalSnapshot *coordination.DataSnapshot
-	Emit               func(Event) error `json:"-"`
-	PermissionMode     string
-	ModelConfigID      int
-	ReasoningEffort    string
-	ReasoningEnabled   *bool
-	MessageStyle       string
-	Message            string
-	Group              *GroupReplyContext
-	PreparedReply      *PreparedGroupReply
+	RecoveredRuntime    *conversationstream.ActiveTurnState                  `json:"-"`
+	Preview             bool                                                 `json:"-"`
+	Ingress             *Ingress                                             `json:"-"`
+	RegisterCompletion  func(func(context.Context, Generation, error) error) `json:"-"`
+	InternalWorker      bool
+	ScheduledMessage    bool
+	ConsolidateMemory   bool
+	Quote               *ReviewedQuote
+	Attachments         []Attachment
+	Context             *ForwardedContext
+	Scope               coordination.ExecutionScope
+	ConversationID      string
+	ProjectID           string
+	Workspaces          []ProjectWorkspace
+	PrimaryWorkspaceID  string
+	SandboxRoot         string
+	SandboxAllowNetwork bool
+	WorkingDirectory    string
+	Snapshot            coordination.DataSnapshot
+	HistoricalSnapshot  *coordination.DataSnapshot
+	Emit                func(Event) error `json:"-"`
+	PermissionMode      string
+	ModelConfigID       int
+	ReasoningEffort     string
+	ReasoningEnabled    *bool
+	MessageStyle        string
+	Message             string
+	Group               *GroupReplyContext
+	PreparedReply       *PreparedGroupReply
 }
 
 type DerivedMemory struct {
@@ -566,6 +575,10 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 	if err != nil {
 		return Response{}, err
 	}
+	if ingress, ok := IngressFromContext(ctx); ok && strings.TrimSpace(ingress.SandboxRoot) != "" && strings.TrimSpace(ingress.SandboxWorkspaceID) != "" {
+		workspaces = []ProjectWorkspace{{ID: ingress.SandboxWorkspaceID, DeviceID: scope.TargetDeviceID, Name: "渠道沙箱", Kind: "local", RootURI: ingress.SandboxRoot}}
+		primaryWorkspaceID = ingress.SandboxWorkspaceID
+	}
 	request.ProjectID, request.ProjectWorkspaces, request.PrimaryWorkspaceID = projectID, workspaces, primaryWorkspaceID
 	request.WorkingDirectory = strings.TrimSpace(request.WorkingDirectory)
 	if request.WorkingDirectory == "" {
@@ -624,6 +637,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 				}
 				inference := Inference{Context: request.Context, Scope: recorded.Response.Scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, WorkingDirectory: request.WorkingDirectory, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: message}
 				inference.Ingress = recorded.Ingress
+				inference.SandboxRoot, inference.SandboxAllowNetwork = sandboxConstraintFromContext(ctx)
 				return e.completeMemory(coordination.WithScope(ctx, recorded.Response.Scope), inference, fingerprint, *recorded.Response, row.Revision)
 			}
 			return *recorded.Response, nil
@@ -643,6 +657,9 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 			return Response{}, err
 		}
 	}
+	if quote == nil && request.ExternalQuote != nil && strings.TrimSpace(request.ExternalQuote.Content) != "" {
+		quote = &ReviewedQuote{MessageID: request.ExternalQuote.MessageID, SenderName: request.ExternalQuote.SenderName, Role: "user", Content: request.ExternalQuote.Content}
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	conversation := map[string]any{"id": request.ConversationID, "conversationId": request.ConversationID, "title": request.Message, "characterId": role.ID, "createdAt": now, "ownerId": scope.ResourceOwnerID, "coreId": scope.CoreID}
 	if hasIngress {
@@ -654,6 +671,12 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		}
 		if ingress.PeerID != "" {
 			conversation["peerId"] = ingress.PeerID
+		}
+		if ingress.PeerKind != "" {
+			conversation["peerKind"] = ingress.PeerKind
+		}
+		if strings.TrimSpace(ingress.ConversationTitle) != "" {
+			conversation["title"] = ingress.ConversationTitle
 		}
 	}
 	if projectID != "" {
@@ -686,7 +709,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		applyConversationSettings(conversation, request)
 		input = []coordination.Mutation{
 			{Kind: "conversation", ID: request.ConversationID, RoleID: coordination.StorageRole(scope, "conversation"), ExpectedRevision: version(snapshot, "conversation", request.ConversationID), Body: body(conversation)},
-			{Kind: "message", ID: request.RequestID + "/user", RoleID: coordination.StorageRole(scope, "message"), Body: body(map[string]any{"id": request.RequestID + "/user", "conversationId": request.ConversationID, "characterId": role.ID, "role": "user", "senderType": "user", "content": request.Message, "requestId": request.RequestID, "createdAt": now, "executionScope": scope, "attachments": request.Attachments, "quote": quote})},
+			{Kind: "message", ID: request.RequestID + "/user", RoleID: coordination.StorageRole(scope, "message"), Body: body(userMessageBody(request, role.ID, now, scope, quote, ingress))},
 			{Kind: "checkpoint", ID: checkpointID, RoleID: role.ID, Body: body(checkpoint{Hash: fingerprint, Status: "running", ConversationID: request.ConversationID, Scope: &scope, Context: request.Context})},
 		}
 		var userDocument map[string]any
@@ -768,6 +791,7 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		return nil
 	}
 	inference := Inference{Quote: quote, Attachments: request.Attachments, Context: request.Context, Scope: scope, ConversationID: request.ConversationID, ProjectID: projectID, Workspaces: workspaces, PrimaryWorkspaceID: primaryWorkspaceID, WorkingDirectory: request.WorkingDirectory, Snapshot: snapshot, HistoricalSnapshot: historicalSnapshot, PermissionMode: request.PermissionMode, Message: request.Message, Emit: emitCurrent}
+	inference.SandboxRoot, inference.SandboxAllowNetwork = sandboxConstraintFromContext(ctx)
 	inference.PreparedReply = request.PreparedReply
 	if prepared != nil && snapshot.Group != nil {
 		sourceMember, _ := snapshot.Group.ActiveMember(scope.RoleID)
@@ -1256,4 +1280,65 @@ func memoryMutations(scope coordination.ExecutionScope, conversation string, der
 		result = append(result, mutation)
 	}
 	return result, nil
+}
+
+func userMessageBody(request Request, roleID, now string, scope coordination.ExecutionScope, quote *ReviewedQuote, ingress Ingress) map[string]any {
+	document := map[string]any{
+		"id":             request.RequestID + "/user",
+		"conversationId": request.ConversationID,
+		"characterId":    roleID,
+		"role":           "user",
+		"senderType":     "user",
+		"content":        request.Message,
+		"requestId":      request.RequestID,
+		"createdAt":      now,
+		"executionScope": scope,
+		"attachments":    request.Attachments,
+		"quote":          quote,
+	}
+	senderName, senderID := request.SenderName, request.SenderID
+	mentionNames, replyExcerpt := request.MentionNames, request.ReplyExcerpt
+	peerKind := ingress.PeerKind
+	if strings.TrimSpace(senderName) == "" {
+		senderName = ingress.SenderName
+	}
+	if strings.TrimSpace(senderID) == "" {
+		senderID = ingress.SenderID
+	}
+	if len(mentionNames) == 0 {
+		mentionNames = ingress.MentionNames
+	}
+	if strings.TrimSpace(replyExcerpt) == "" {
+		replyExcerpt = ingress.ReplyExcerpt
+	}
+	if strings.TrimSpace(senderName) != "" {
+		document["senderName"] = senderName
+	}
+	if strings.TrimSpace(senderID) != "" {
+		document["senderId"] = senderID
+	}
+	if len(mentionNames) > 0 {
+		document["mentionNames"] = mentionNames
+	}
+	if strings.TrimSpace(replyExcerpt) != "" {
+		document["replyExcerpt"] = replyExcerpt
+	}
+	if strings.TrimSpace(peerKind) != "" {
+		document["peerKind"] = peerKind
+	}
+	if strings.TrimSpace(request.FileURL) != "" {
+		document["fileUrl"] = request.FileURL
+	}
+	if strings.TrimSpace(request.FileName) != "" {
+		document["fileName"] = request.FileName
+	}
+	return document
+}
+
+func sandboxConstraintFromContext(ctx context.Context) (string, bool) {
+	ingress, ok := IngressFromContext(ctx)
+	if !ok {
+		return "", false
+	}
+	return strings.TrimSpace(ingress.SandboxRoot), ingress.SandboxAllowNetwork
 }

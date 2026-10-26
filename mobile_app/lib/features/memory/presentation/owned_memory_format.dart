@@ -44,6 +44,14 @@ const Map<String, String> _fieldLabels = <String, String>{
   'fieldValue': '取值',
   'memoryType': '类型',
   'importance': '重要度',
+  'pinned': '固定',
+  'retentionLevel': '保留等级',
+  'effectiveRetentionLevel': '保留等级',
+  'memoryStrength': '强度',
+  'effectiveStrength': '强度',
+  'decayState': '衰减状态',
+  'effectiveDecayState': '衰减状态',
+  'allowContextUse': '参与上下文',
   'createdAt': '创建时间',
   'updatedAt': '更新时间',
   'file': '文件',
@@ -263,7 +271,18 @@ String ownedMemoryTitle(Map<String, dynamic> row) {
   final body = ownedMemoryBody(row);
   final raw = (body['title'] ?? body['key'] ?? '').toString().trim();
   if (raw.isEmpty) return (row['id'] ?? '记忆记录').toString();
-  return _translateKey(raw) ?? _translateKey(_stripPrefix(raw)) ?? raw;
+  final title = ownedMemoryKeyTitle(raw);
+  return title.isEmpty ? raw : title;
+}
+
+String ownedMemoryKeyTitle(String key) {
+  final raw = key.trim();
+  if (raw.isEmpty) return '';
+  final stripped = _stripPrefix(raw);
+  final attribute = stripped.replaceFirst(RegExp(r'^[a-z][a-z0-9_]*/'), '');
+  return _translateKey(raw) ??
+      _translateKey(stripped) ??
+      _fieldLabel(attribute.isEmpty ? stripped : attribute);
 }
 
 List<OwnedMemoryField> ownedMemoryFields(

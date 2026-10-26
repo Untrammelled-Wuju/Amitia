@@ -6,7 +6,6 @@ import 'package:amitia_app/core/models/memory.dart';
 import 'package:amitia_app/core/models/reminder.dart';
 import 'package:amitia_app/core/services/extension_service.dart';
 import 'package:amitia_app/core/services/providers.dart';
-import 'package:amitia_app/core/services/memory_service.dart';
 import 'package:amitia_app/core/ui_runtime/routing/builtin_route_catalog.dart';
 import 'package:amitia_app/core/widgets/amitia_icons.dart';
 import 'package:amitia_app/core/widgets/amitia_popup_menu.dart';

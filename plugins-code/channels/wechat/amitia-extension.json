@@ -9,7 +9,7 @@
     "description": {
       "default": "通过 OpenClaw 微信协议接入微信消息。"
     },
-    "version": "1.0.22",
+    "version": "1.0.23",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -353,6 +353,7 @@
               "displayName": "微信",
               "icon": "channel",
               "order": 30,
+              "singleConversation": true,
               "capabilities": {
                 "text": true,
                 "image": true,

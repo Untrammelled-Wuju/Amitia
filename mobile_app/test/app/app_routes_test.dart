@@ -22,7 +22,6 @@ void main() {
           AppRoutes.memoryWorldBook,
           AppRoutes.memoryEpisodic,
           AppRoutes.memoryProfiles,
-          AppRoutes.memoryManager,
           AppRoutes.reminders,
           AppRoutes.continuity,
           AppRoutes.emotes,
@@ -82,6 +81,7 @@ void main() {
     );
 
     test('dynamic route helpers produce correct paths', () {
+      expect(AppRoutes.knowledge, '/memory/knowledge');
       expect(AppRoutes.character('c1'), '/characters/c1');
       expect(AppRoutes.characterLifeRules('c1'), '/characters/c1/life-rules');
       expect(AppRoutes.characterVoice('c1'), '/characters/c1/voice');
@@ -116,7 +116,6 @@ void main() {
         AppRoutes.memoryWorldBook,
         AppRoutes.memoryEpisodic,
         AppRoutes.memoryProfiles,
-        AppRoutes.memoryManager,
         AppRoutes.reminders,
         AppRoutes.continuity,
         AppRoutes.emotes,

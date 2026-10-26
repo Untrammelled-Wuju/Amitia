@@ -17,8 +17,7 @@ import '../../../features/characters/presentation/pages/character_voice_page.dar
 import '../../../features/characters/presentation/pages/character_memory_page.dart';
 import '../../../features/characters/presentation/pages/character_timeline_page.dart';
 import '../../../features/characters/presentation/pages/character_psyche_page.dart';
-import '../../../features/memory/presentation/pages/memory_page.dart';
-import '../../../features/memory/presentation/pages/memory_manager_page.dart';
+import '../../../features/memory/presentation/pages/memory_overview_page.dart';
 import '../../../features/memory/presentation/pages/episodic_memory_page.dart';
 import '../../../features/memory/presentation/pages/memory_graph_page.dart';
 import '../../../features/memory/presentation/pages/memory_timeline_page.dart';
@@ -333,15 +332,10 @@ List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
   ),
   GoRoute(
     path: '/memory',
-    pageBuilder: (context, state) =>
-        amitiaSlidePage(state: state, child: const MemoryPage()),
-  ),
-  GoRoute(
-    path: '/memory/manager',
     pageBuilder: (context, state) => amitiaSlidePage(
       context: context,
       state: state,
-      child: const MemoryManagerPage(),
+      child: const MemoryOverviewPage(),
     ),
   ),
   GoRoute(

@@ -152,9 +152,10 @@ func (e *Engine) Edit(ctx context.Context, authority Request, edit EditRequest) 
 		return coordination.Acknowledgement{}, err
 	}
 	if edit.ExpectedScope != nil {
-		expected := *edit.ExpectedScope
+		expected, current := *edit.ExpectedScope, scope
 		expected.RequestID, expected.TurnID, expected.ExecutionID = scope.RequestID, scope.TurnID, scope.ExecutionID
-		if expected != scope {
+		expected.MemoryViewAll, current.MemoryViewAll = false, false
+		if expected != current {
 			return coordination.Acknowledgement{}, coordination.ErrScopeExpired
 		}
 	}

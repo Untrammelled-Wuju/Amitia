@@ -6442,3 +6442,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_model_usage_id ON runtime_model_us
 CREATE INDEX IF NOT EXISTS idx_model_usage_scope ON runtime_model_usage(space_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_runtime_model_usage_started_at ON runtime_model_usage(started_at);
 CREATE INDEX IF NOT EXISTS idx_owned_tool_coord ON runtime_owned_tool_calls(space_id, coordination_id);
+
+CREATE TABLE IF NOT EXISTS channel_sandbox_policies (
+    space_id TEXT NOT NULL DEFAULT '',
+    channel_id TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    allow_network INTEGER NOT NULL DEFAULT 1,
+    workspace_id TEXT NOT NULL DEFAULT '',
+    sandbox_root TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (space_id, channel_id)
+);

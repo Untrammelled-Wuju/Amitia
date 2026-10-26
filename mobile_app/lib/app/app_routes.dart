@@ -14,10 +14,9 @@ abstract final class AppRoutes {
   static const memoryTimeline = '/memory/timeline';
   static const memoryGraph = '/memory/graph';
   static const memoryWorldBook = '/memory/world-book';
-  static const knowledge = '/knowledge';
+  static const knowledge = '/memory/knowledge';
   static const memoryEpisodic = '/memory/episodic';
   static const memoryProfiles = '/memory/profiles';
-  static const memoryManager = '/memory/manager';
   static const reminders = '/reminders';
   static const continuity = '/continuity';
   static const emotes = '/emotes';

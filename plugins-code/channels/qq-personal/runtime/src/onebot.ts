@@ -169,7 +169,7 @@ export class OneBotBridge {
 
   async callAction(action: string, params: Record<string, unknown>, timeoutMs = 15000): Promise<unknown> {
     const socket = this.activeSocket()
-    if (!socket) throw new Error("NapCat OneBot 尚未连接")
+    if (!socket) throw new Error("SnowLuma OneBot 尚未连接")
     const echo = randomUUID()
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

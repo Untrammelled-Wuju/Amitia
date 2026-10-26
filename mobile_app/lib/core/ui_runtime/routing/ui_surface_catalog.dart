@@ -25,7 +25,6 @@ const _routeAliasRules = <_RouteAliasRule>[
   _RouteAliasRule('/workshop', '/creative-workshop'),
   _RouteAliasRule('/settings/devices', '/devices'),
   _RouteAliasRule('/developer/kernel', '/kernel'),
-  _RouteAliasRule('/memory/manager', '/memory-manager', exact: true),
   _RouteAliasRule('/memory/timeline', '/memory-timeline', exact: true),
   _RouteAliasRule('/memory/episodic', '/episodic', exact: true),
   _RouteAliasRule('/memory/graph', '/graph', exact: true),
@@ -80,9 +79,8 @@ String canonicalUISurfaceId(String rawRoute) {
   if (hasPrefix('/characters') || hasPrefix('/character')) {
     return 'surface.character.detail';
   }
-  if (aliases.contains('/memory/manager') ||
-      aliases.contains('/memory-manager')) {
-    return 'surface.memory.manager';
+  if (aliases.contains('/memory-hub')) {
+    return 'surface.memory.hub';
   }
   if (hasPrefix('/memory') ||
       aliases.any(

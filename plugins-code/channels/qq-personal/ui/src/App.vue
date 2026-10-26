@@ -10,19 +10,72 @@ const props = defineProps({
 })
 
 const detail = ref({ status: "disconnected", qqOnline: false })
-const config = ref({ token: "", webuiToken: "", webuiError: "", reverseWebSocketUrl: "", groupTrigger: "mention", triggerPrefix: "Amitia" })
-const form = ref({ token: "", groupTrigger: "mention", triggerPrefix: "Amitia" })
+const config = ref({
+  token: "",
+  reverseWebSocketUrl: "",
+  groupTrigger: "mention",
+  triggerPrefix: "Amitia",
+  webuiPort: 5099,
+  novncPort: 6081,
+  containerName: "snowluma",
+  dockerBin: "",
+  webuiUrl: "",
+  novncUrl: "",
+  webuiUser: "admin",
+  webuiPassword: "",
+  webuiPasswordState: "unavailable",
+  novncPassword: "",
+  snowlumaError: "",
+})
+const form = ref({
+  token: "",
+  groupTrigger: "mention",
+  triggerPrefix: "Amitia",
+  webuiPort: 5099,
+  novncPort: 6081,
+  containerName: "snowluma",
+  dockerBin: "",
+})
 const ready = ref(false)
-const showWebuiToken = ref(false)
+const showWebuiPassword = ref(false)
+const showNovncPassword = ref(false)
 const busy = ref("")
 const error = ref("")
 const notice = ref("")
+const passwordPanel = ref("")
+const passwordForm = ref({ oldPassword: "", newPassword: "", confirmPassword: "" })
+const recordPassword = ref("")
 let invoke
 let disposed = false
 let timer
 
 const connected = computed(() => detail.value.qqOnline === true || detail.value.status === "online")
 const label = computed(() => statusLabel(connected.value ? "online" : detail.value.status))
+const passwordStateLabel = computed(() => ({
+  stored: "已记录",
+  temporary: "临时密码",
+  changed: "未记录",
+  unavailable: "未读取到",
+})[config.value.webuiPasswordState] || "未记录")
+const passwordRules = computed(() => {
+  const value = String(passwordForm.value.newPassword || "")
+  return [
+    { id: "length", label: "长度不少于 10 位", ok: value.length >= 10 },
+    { id: "lower", label: "包含小写字母", ok: /[a-z]/.test(value) },
+    { id: "upper", label: "包含大写字母", ok: /[A-Z]/.test(value) },
+    { id: "special", label: "包含特殊符号 (!@#$%…)", ok: /[^A-Za-z0-9\s]/.test(value) },
+    { id: "no-space", label: "不包含空格", ok: value.length > 0 && !/\s/.test(value) },
+  ]
+})
+const passwordRulesPassed = computed(() => passwordRules.value.every((rule) => rule.ok))
+const webuiPasswordText = computed(() => {
+  if (config.value.webuiPassword) return config.value.webuiPassword
+  if (config.value.webuiPasswordState === "changed") return "已改密，请录入当前密码"
+  return config.value.snowlumaError || "未读取到 WebUI 密码"
+})
+const novncPasswordText = computed(() => config.value.novncPassword || config.value.snowlumaError || "未读取到 noVNC 密码")
+const webuiMissing = computed(() => !config.value.webuiPassword)
+const novncMissing = computed(() => !config.value.novncPassword)
 
 function failure(reason) {
   return reason instanceof Error ? reason.message : String(reason || "操作失败")
@@ -48,16 +101,15 @@ function copyWithSelection(text) {
 }
 
 function applyConfig(next) {
-  config.value = {
-    ...config.value,
-    ...(next || {}),
-    webuiToken: String(next?.webuiToken || ""),
-    webuiError: String(next?.webuiError || ""),
-  }
+  config.value = { ...config.value, ...(next || {}) }
   form.value = {
     token: String(next?.token || ""),
     groupTrigger: String(next?.groupTrigger || "mention"),
     triggerPrefix: String(next?.triggerPrefix || "Amitia"),
+    webuiPort: Number(next?.webuiPort || 5099),
+    novncPort: Number(next?.novncPort || 6081),
+    containerName: String(next?.containerName || "snowluma"),
+    dockerBin: String(next?.dockerBin || ""),
   }
 }
 
@@ -80,6 +132,15 @@ function schedule() {
   if (!disposed) timer = setTimeout(() => void refresh(true), connected.value ? 4000 : 8000)
 }
 
+async function reconnectConfig() {
+  if (!invoke) return
+  try {
+    applyConfig(await invoke("config"))
+  } catch (reason) {
+    error.value = failure(reason)
+  }
+}
+
 async function connect() {
   if (!invoke || busy.value) return
   busy.value = "connect"
@@ -89,7 +150,7 @@ async function connect() {
     await invoke("connect", { config: { ...form.value } })
     applyConfig(await invoke("config"))
     await refresh(true)
-    notice.value = "桥接已启用，请在 NapCat 中把反向 WebSocket 地址设置为下方地址"
+    notice.value = "已保存，SnowLuma 会通过反向 WebSocket 连接本插件"
   } catch (reason) {
     error.value = failure(reason)
   } finally {
@@ -111,10 +172,107 @@ async function disconnect() {
   }
 }
 
+function togglePasswordPanel(panel) {
+  passwordPanel.value = passwordPanel.value === panel ? "" : panel
+  if (passwordPanel.value === "change") {
+    passwordForm.value = {
+      oldPassword: String(config.value.webuiPassword || ""),
+      newPassword: "",
+      confirmPassword: "",
+    }
+  }
+  if (passwordPanel.value === "record") {
+    recordPassword.value = ""
+  }
+}
+
+async function changePassword() {
+  if (!invoke || busy.value) return
+  const oldPassword = String(passwordForm.value.oldPassword || "").trim()
+  const newPassword = String(passwordForm.value.newPassword || "")
+  if (!oldPassword) {
+    error.value = "请填写当前密码"
+    return
+  }
+  if (!passwordRulesPassed.value) {
+    error.value = "新密码不符合 SnowLuma 密码规则"
+    return
+  }
+  if (newPassword !== passwordForm.value.confirmPassword) {
+    error.value = "两次输入的新密码不一致"
+    return
+  }
+  busy.value = "change-password"
+  error.value = ""
+  notice.value = ""
+  try {
+    const next = await invoke("change-webui-password", {
+      action: "change-webui-password",
+      input: { oldPassword, newPassword },
+    })
+    applyConfig(next)
+    passwordForm.value = { oldPassword: "", newPassword: "", confirmPassword: "" }
+    passwordPanel.value = ""
+    showWebuiPassword.value = true
+    notice.value = "WebUI 密码已更新，并已加密记录在插件里"
+  } catch (reason) {
+    error.value = failure(reason)
+  } finally {
+    busy.value = ""
+  }
+}
+
+async function saveRecordedPassword() {
+  if (!invoke || busy.value) return
+  const password = String(recordPassword.value || "").trim()
+  if (!password) {
+    error.value = "请填写当前 WebUI 密码"
+    return
+  }
+  busy.value = "record-password"
+  error.value = ""
+  notice.value = ""
+  try {
+    const next = await invoke("record-webui-password", {
+      action: "record-webui-password",
+      input: { password },
+    })
+    applyConfig(next)
+    recordPassword.value = ""
+    passwordPanel.value = ""
+    notice.value = "密码已加密记录"
+  } catch (reason) {
+    error.value = failure(reason)
+  } finally {
+    busy.value = ""
+  }
+}
+
+async function clearRecordedPassword() {
+  if (!invoke || busy.value) return
+  if (!window.confirm("确定清除已记录的 WebUI 密码？清除后将无法再显示和复制。")) return
+  busy.value = "clear-password"
+  error.value = ""
+  notice.value = ""
+  try {
+    const next = await invoke("clear-webui-password", { action: "clear-webui-password" })
+    applyConfig(next)
+    notice.value = "已清除记录的密码"
+  } catch (reason) {
+    error.value = failure(reason)
+  } finally {
+    busy.value = ""
+  }
+}
+
 async function copy(value, type) {
   error.value = ""
   notice.value = ""
   const text = String(value || "")
+  if (!text) {
+    error.value = "没有可复制的内容"
+    return
+  }
   try {
     try {
       copyWithSelection(text)
@@ -123,8 +281,11 @@ async function copy(value, type) {
     }
     const labels = {
       onebot: "OneBot Token",
-      webui: "NapCat WebUI Token",
       url: "反向 WebSocket 地址",
+      "webui-password": "SnowLuma WebUI 密码",
+      "novnc-password": "noVNC 密码",
+      "webui-url": "SnowLuma WebUI 地址",
+      "novnc-url": "noVNC 地址",
     }
     notice.value = `${labels[type] || "内容"}已复制`
   } catch (reason) {
@@ -164,7 +325,7 @@ onUnmounted(() => {
       <div>
         <p class="eyebrow">ONEBOT 11 · 个人 QQ</p>
         <h1>QQ 个人号桥接</h1>
-        <p class="description">NapCat 主动连接 Amitia，消息通过统一渠道管线进入角色对话。</p>
+        <p class="description">SnowLuma 主动连接 Amitia，消息通过统一渠道管线进入角色对话。</p>
       </div>
       <span class="badge" :class="{ online: connected }">{{ ready ? label : "正在加载" }}</span>
     </header>
@@ -194,6 +355,26 @@ onUnmounted(() => {
           <span>群聊触发前缀</span>
           <input v-model="form.triggerPrefix" />
         </label>
+        <div class="field-row">
+          <label>
+            <span>SnowLuma WebUI 端口</span>
+            <input v-model.number="form.webuiPort" type="number" min="1" max="65535" />
+          </label>
+          <label>
+            <span>noVNC 端口</span>
+            <input v-model.number="form.novncPort" type="number" min="1" max="65535" />
+          </label>
+        </div>
+        <div class="field-row">
+          <label>
+            <span>SnowLuma 容器名</span>
+            <input v-model="form.containerName" placeholder="snowluma" />
+          </label>
+          <label>
+            <span>docker 路径（可留空）</span>
+            <input v-model="form.dockerBin" placeholder="自动探测" />
+          </label>
+        </div>
         <div class="actions">
           <button class="primary" type="button" :disabled="!!busy" @click="connect">{{ busy === "connect" ? "启用中…" : "保存并启用" }}</button>
           <button type="button" :disabled="!!busy" @click="refresh()">{{ busy === "refresh" ? "刷新中…" : "刷新" }}</button>
@@ -202,26 +383,116 @@ onUnmounted(() => {
       </article>
 
       <article class="panel">
-        <h2>NapCat 反向 WebSocket</h2>
-        <p class="hint">NapCat 网络配置中选择“WebSockets 客户端”，启用后填写：</p>
+        <h2>SnowLuma 反向 WebSocket</h2>
+        <p class="hint">在 SnowLuma 网络配置中新建 WebSocket 客户端，填写下面的地址与 Token：</p>
         <div class="endpoint">{{ config.reverseWebSocketUrl }}</div>
         <button type="button" @click="copy(config.reverseWebSocketUrl, 'url')">复制地址</button>
         <p class="hint">Token 使用左侧 OneBot Token。连接成功后状态会变为“已连接”。</p>
         <div class="token-section">
-          <h3>NapCat WebUI Token</h3>
-          <p class="hint">用于登录 NapCat WebUI，不是 OneBot 反向 WebSocket Token。</p>
-          <div v-if="config.webuiToken" class="copy-row">
-            <input
-              :type="showWebuiToken ? 'text' : 'password'"
-              :value="config.webuiToken"
-              readonly
-              autocomplete="off"
-            />
-            <button type="button" @click="showWebuiToken = !showWebuiToken">{{ showWebuiToken ? "隐藏" : "显示" }}</button>
-            <button type="button" @click="copy(config.webuiToken, 'webui')">复制</button>
-          </div>
-          <p v-else class="message error webui-token-error">{{ config.webuiError || "未检测到 NapCat WebUI Token" }}</p>
+          <h3>运行环境</h3>
+          <p class="hint">以下账号密码由插件读取 SnowLuma 容器得到，修改密码后需要重新登录一次才能刷新。</p>
+          <button type="button" :disabled="!!busy" @click="reconnectConfig">重新读取</button>
         </div>
+      </article>
+    </section>
+
+    <section class="grid env-grid">
+      <article class="panel">
+        <h2>SnowLuma WebUI</h2>
+        <a class="env-link" :href="config.webuiUrl" target="_blank" rel="noreferrer">{{ config.webuiUrl }}</a>
+        <div class="copy-row env-copy">
+          <button type="button" @click="copy(config.webuiUrl, 'webui-url')">复制网址</button>
+        </div>
+        <dl class="env-dl">
+          <div>
+            <dt>账号</dt>
+            <dd>{{ config.webuiUser || "admin" }}</dd>
+          </div>
+          <div>
+            <dt>密码</dt>
+            <dd class="secret">
+              <span v-if="!webuiMissing">{{ showWebuiPassword ? webuiPasswordText : "••••••••" }}</span>
+              <span v-else class="secret-missing">{{ webuiPasswordText }}</span>
+            </dd>
+          </div>
+        </dl>
+        <div class="copy-row">
+          <button v-if="!webuiMissing" type="button" @click="showWebuiPassword = !showWebuiPassword">{{ showWebuiPassword ? "隐藏密码" : "显示密码" }}</button>
+          <button v-if="!webuiMissing" type="button" @click="copy(config.webuiPassword, 'webui-password')">复制密码</button>
+          <span class="password-state" :data-state="config.webuiPasswordState">{{ passwordStateLabel }}</span>
+        </div>
+        <div class="copy-row env-actions">
+          <button type="button" :disabled="!!busy" @click="togglePasswordPanel('change')">修改密码</button>
+          <button type="button" :disabled="!!busy" @click="togglePasswordPanel('record')">记录当前密码</button>
+          <button v-if="config.webuiPasswordState === 'stored'" class="danger" type="button" :disabled="!!busy" @click="clearRecordedPassword">清除记录</button>
+        </div>
+
+        <div v-if="passwordPanel === 'change'" class="password-form">
+          <label>
+            <span>当前密码</span>
+            <input v-model="passwordForm.oldPassword" type="password" autocomplete="off" />
+          </label>
+          <label>
+            <span>新密码</span>
+            <input v-model="passwordForm.newPassword" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            <span>确认新密码</span>
+            <input v-model="passwordForm.confirmPassword" type="password" autocomplete="new-password" />
+          </label>
+          <ul class="password-rules">
+            <li v-for="rule in passwordRules" :key="rule.id" :class="{ ok: rule.ok }">{{ rule.label }}</li>
+          </ul>
+          <div class="copy-row">
+            <button class="primary" type="button" :disabled="!!busy || !passwordRulesPassed" @click="changePassword">
+              {{ busy === "change-password" ? "提交中…" : "提交修改" }}
+            </button>
+            <button type="button" :disabled="!!busy" @click="passwordPanel = ''">取消</button>
+          </div>
+          <p class="hint">改密由 SnowLuma 官方接口执行，成功后所有已登录的 WebUI 会话会退出，需要重新登录。新密码会加密记录在插件里。</p>
+        </div>
+
+        <div v-if="passwordPanel === 'record'" class="password-form">
+          <label>
+            <span>当前 WebUI 密码</span>
+            <input v-model="recordPassword" type="password" autocomplete="off" />
+          </label>
+          <div class="copy-row">
+            <button class="primary" type="button" :disabled="!!busy" @click="saveRecordedPassword">
+              {{ busy === "record-password" ? "保存中…" : "保存记录" }}
+            </button>
+            <button type="button" :disabled="!!busy" @click="passwordPanel = ''">取消</button>
+          </div>
+          <p class="hint">如果你在 SnowLuma WebUI 里自己改过密码，在这里录入一次，之后就可以直接显示和复制。</p>
+        </div>
+
+        <p class="hint">首次启动的临时密码只在容器日志里出现一次，插件会自动读取最新值。</p>
+      </article>
+
+      <article class="panel">
+        <h2>noVNC 远程桌面</h2>
+        <a class="env-link" :href="config.novncUrl" target="_blank" rel="noreferrer">{{ config.novncUrl }}</a>
+        <div class="copy-row env-copy">
+          <button type="button" @click="copy(config.novncUrl, 'novnc-url')">复制网址</button>
+        </div>
+        <dl class="env-dl">
+          <div>
+            <dt>用途</dt>
+            <dd>QQ 扫码登录</dd>
+          </div>
+          <div>
+            <dt>密码</dt>
+            <dd class="secret">
+              <span v-if="!novncMissing">{{ showNovncPassword ? novncPasswordText : "••••••••" }}</span>
+              <span v-else class="secret-missing">{{ novncPasswordText }}</span>
+            </dd>
+          </div>
+        </dl>
+        <div class="copy-row">
+          <button v-if="!novncMissing" type="button" @click="showNovncPassword = !showNovncPassword">{{ showNovncPassword ? "隐藏密码" : "显示密码" }}</button>
+          <button v-if="!novncMissing" type="button" @click="copy(config.novncPassword, 'novnc-password')">复制密码</button>
+        </div>
+        <p class="hint">容器重建后登录态仍在数据卷里，一般不需要重新扫码。</p>
       </article>
     </section>
 

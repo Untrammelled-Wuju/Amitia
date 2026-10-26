@@ -1,3 +1,12 @@
+class MemoryPage {
+  const MemoryPage({required this.items, required this.nextCursor});
+
+  final List<MemoryDto> items;
+  final String nextCursor;
+
+  bool get hasMore => nextCursor.isNotEmpty;
+}
+
 class MemoryDto {
   final String id;
   final String characterId;
@@ -69,28 +78,49 @@ class MemoryDto {
       id: (json['id'] ?? '').toString(),
       characterId: (json['characterId'] ?? '').toString(),
       memoryType: (json['memoryType'] ?? json['type'] ?? 'custom').toString(),
-      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '').toString(),
+      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '')
+          .toString(),
       source: (json['source'] ?? 'manual').toString(),
       scope: (json['scope'] ?? 'character').toString(),
       key: (json['key'] ?? '').toString(),
       value: (json['value'] ?? json['content'] ?? '').toString(),
       importance: _asInt(json['importance']),
       confidence: _asInt(json['confidence'], fallback: 50),
-      verifiedStatus: (json['verifiedStatus'] ?? json['status'] ?? 'unverified').toString(),
+      verifiedStatus: (json['verifiedStatus'] ?? json['status'] ?? 'unverified')
+          .toString(),
       useCount: _asInt(json['useCount']),
-      retentionLevel: _asInt(json['retentionLevel'] ?? json['retention_level'], fallback: 3),
-      memoryStrength: _asDouble(json['memoryStrength'] ?? json['memory_strength'], fallback: 0.68),
-      strengthUpdatedAt: _nullableString(json['strengthUpdatedAt'] ?? json['strength_updated_at']),
-      lastReinforcedAt: _nullableString(json['lastReinforcedAt'] ?? json['last_reinforced_at']),
+      retentionLevel: _asInt(
+        json['retentionLevel'] ?? json['retention_level'],
+        fallback: 3,
+      ),
+      memoryStrength: _asDouble(
+        json['memoryStrength'] ?? json['memory_strength'],
+        fallback: 0.68,
+      ),
+      strengthUpdatedAt: _nullableString(
+        json['strengthUpdatedAt'] ?? json['strength_updated_at'],
+      ),
+      lastReinforcedAt: _nullableString(
+        json['lastReinforcedAt'] ?? json['last_reinforced_at'],
+      ),
       reinforceCount: _asInt(json['reinforceCount'] ?? json['reinforce_count']),
       retrievedCount: _asInt(json['retrievedCount'] ?? json['retrieved_count']),
       injectedCount: _asInt(json['injectedCount'] ?? json['injected_count']),
-      decayState: (json['decayState'] ?? json['decay_state'] ?? 'active').toString(),
+      decayState: (json['decayState'] ?? json['decay_state'] ?? 'active')
+          .toString(),
       pinned: _asBool(json['pinned']),
       archivedAt: _nullableString(json['archivedAt'] ?? json['archived_at']),
-      sensitivityLevel: (json['sensitivityLevel'] ?? json['sensitivity_level'] ?? 'internal').toString(),
-      allowContextUse: _asBool(json['allowContextUse'] ?? json['allow_context_use'], fallback: true),
-      allowProactiveMention: _asBool(json['allowProactiveMention'] ?? json['allow_proactive_mention'], fallback: true),
+      sensitivityLevel:
+          (json['sensitivityLevel'] ?? json['sensitivity_level'] ?? 'internal')
+              .toString(),
+      allowContextUse: _asBool(
+        json['allowContextUse'] ?? json['allow_context_use'],
+        fallback: true,
+      ),
+      allowProactiveMention: _asBool(
+        json['allowProactiveMention'] ?? json['allow_proactive_mention'],
+        fallback: true,
+      ),
       requiresConfirmation: _asBool(json['requiresConfirmation']),
       createdAt: (json['createdAt'] ?? '').toString(),
       updatedAt: (json['updatedAt'] ?? '').toString(),
@@ -190,7 +220,8 @@ class MemoryCandidateDto {
   /// Backward-compatible aliases for existing candidate UI.
   String get content => value.isNotEmpty ? value : sourceText;
   String get source => sourceText;
-  String get status => proposedAction.isNotEmpty ? proposedAction : candidateKind;
+  String get status =>
+      proposedAction.isNotEmpty ? proposedAction : candidateKind;
 
   factory MemoryCandidateDto.fromJson(Map<String, dynamic> json) {
     return MemoryCandidateDto(
@@ -199,19 +230,25 @@ class MemoryCandidateDto {
       key: (json['key'] ?? '').toString(),
       value: (json['value'] ?? json['content'] ?? '').toString(),
       memoryType: (json['memoryType'] ?? json['type'] ?? 'custom').toString(),
-      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '').toString(),
+      memorySubtype: (json['memorySubtype'] ?? json['memory_subtype'] ?? '')
+          .toString(),
       importance: MemoryDto._asInt(json['importance'], fallback: 5),
-      confidence: _normalizedConfidence(json['confidenceReal'] ?? json['confidence']),
+      confidence: _normalizedConfidence(
+        json['confidenceReal'] ?? json['confidence'],
+      ),
       sourceText: (json['sourceText'] ?? json['source'] ?? '').toString(),
       candidateKind: (json['candidateKind'] ?? '').toString(),
-      proposedAction: (json['proposedAction'] ?? json['status'] ?? '').toString(),
+      proposedAction: (json['proposedAction'] ?? json['status'] ?? '')
+          .toString(),
       reason: (json['reason'] ?? '').toString(),
       createdAt: (json['createdAt'] ?? '').toString(),
     );
   }
 
   static double _normalizedConfidence(dynamic value) {
-    final parsed = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '') ?? 0;
+    final parsed = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '') ?? 0;
     return parsed > 1 ? parsed / 100.0 : parsed;
   }
 }

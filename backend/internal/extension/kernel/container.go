@@ -74,7 +74,18 @@ type MCPDuplicateMetricProvider interface {
 	ListUnresolved(ctx context.Context) ([]MCPDuplicateDetail, error)
 }
 
+type ChannelSandboxPolicy struct {
+	Enabled      bool
+	AllowNetwork bool
+	Root         string
+}
+
+type ChannelSandboxPolicySource interface {
+	ChannelSandboxPolicy(channelID string) (ChannelSandboxPolicy, bool)
+}
+
 type Container struct {
+	ChannelSandbox ChannelSandboxPolicySource
 	Store                  *sqlite.Store
 	TransactionManager     *sqlite.TransactionManager
 	DefinitionRepository   domain.DefinitionRepository

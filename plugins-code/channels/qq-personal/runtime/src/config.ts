@@ -13,6 +13,10 @@ export interface QQPersonalConfig {
   groupTrigger: GroupTrigger
   triggerPrefix: string
   ignoredUserIds: string[]
+  webuiPort: number
+  novncPort: number
+  containerName: string
+  dockerBin: string
 }
 
 const dataDir = process.env.AMITIA_MODULE_DATA_DIR
@@ -27,6 +31,11 @@ function readPort(raw: unknown, fallback: number): number {
 
 function normalizeTrigger(raw: unknown): GroupTrigger {
   return raw === "all" || raw === "prefix" || raw === "mention" ? raw : "mention"
+}
+
+function normalizeText(raw: unknown, fallback: string): string {
+  const value = String(raw ?? "").trim()
+  return value || fallback
 }
 
 export function generateToken(): string {
@@ -44,6 +53,10 @@ export function defaults(): QQPersonalConfig {
     groupTrigger: normalizeTrigger(process.env.QQ_PERSONAL_GROUP_TRIGGER),
     triggerPrefix: process.env.QQ_PERSONAL_TRIGGER_PREFIX || "Amitia",
     ignoredUserIds: ["2854196310"],
+    webuiPort: readPort(process.env.QQ_PERSONAL_WEBUI_PORT, 5099),
+    novncPort: readPort(process.env.QQ_PERSONAL_NOVNC_PORT, 6081),
+    containerName: process.env.QQ_PERSONAL_CONTAINER || "snowluma",
+    dockerBin: process.env.QQ_PERSONAL_DOCKER_BIN || "",
   }
 }
 
@@ -59,6 +72,10 @@ export function normalizeConfig(input: Partial<QQPersonalConfig>, base = default
     ignoredUserIds: Array.isArray(input.ignoredUserIds)
       ? input.ignoredUserIds.map(String).map((item) => item.trim()).filter(Boolean)
       : base.ignoredUserIds,
+    webuiPort: readPort(input.webuiPort, base.webuiPort),
+    novncPort: readPort(input.novncPort, base.novncPort),
+    containerName: normalizeText(input.containerName, base.containerName),
+    dockerBin: String(input.dockerBin ?? base.dockerBin).trim(),
   }
 }
 

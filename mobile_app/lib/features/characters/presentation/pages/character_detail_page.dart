@@ -22,6 +22,14 @@ import '../../../../core/models/character.dart';
 import '../../../../core/models/memory.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
+import '../../../memory/presentation/pages/owned_memory_page.dart';
+
+final characterMemoryPreviewProvider = FutureProvider.autoDispose
+    .family<List<MemoryDto>, String>((ref, characterId) async {
+      return ref
+          .read(deviceOwnedMemoryServiceProvider)
+          .listMemories(characterId: characterId, page: 1, pageSize: 3);
+    });
 
 class CharacterDetailPage extends ConsumerStatefulWidget {
   final String characterId;
@@ -97,7 +105,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   @override
   Widget build(BuildContext context) {
     final characterAsync = ref.watch(characterListProvider);
-    final memoriesAsync = ref.watch(memoryListProvider);
+    final memoriesAsync = ref.watch(
+      characterMemoryPreviewProvider(widget.characterId),
+    );
     final backendAvailability = ref
         .watch(backendConnectionProvider)
         .valueOrNull;
@@ -124,25 +134,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           return const AmitiaScaffold(body: Center(child: Text('角色不存在')));
         }
         _syncControllers(character);
-
-        return memoriesAsync.when(
-          loading: () => const AmitiaScaffold(
-            body: Center(child: CircularProgressIndicator()),
-          ),
-          error: (_, __) => _buildScaffold(
-            context,
-            character,
-            [],
-            hasExtensionTab,
-            backendAvailability,
-          ),
-          data: (memories) => _buildScaffold(
-            context,
-            character,
-            memories.take(5).toList(),
-            hasExtensionTab,
-            backendAvailability,
-          ),
+        return _buildScaffold(
+          context,
+          character,
+          memoriesAsync,
+          hasExtensionTab,
+          backendAvailability,
         );
       },
     );
@@ -161,7 +158,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Widget _buildScaffold(
     BuildContext context,
     CharacterDto character,
-    List<MemoryDto> memories,
+    AsyncValue<List<MemoryDto>> memories,
     bool hasExtensionTab,
     BackendConnectionAvailability? backendAvailability,
   ) {
@@ -217,12 +214,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 selectedIndex: selectedTab,
                 onChanged: (index) {
                   if (index == 2) {
-                    _showSections(
-                      context,
-                      character,
-                      memories,
-                      hasExtensionTab,
-                    );
+                    _showSections(context, character, hasExtensionTab);
                   } else {
                     setState(() => _selectedTab = index);
                   }
@@ -362,7 +354,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   void _showSections(
     BuildContext context,
     CharacterDto character,
-    List<MemoryDto> memories,
     bool hasExtensionTab,
   ) {
     showModalBottomSheet<void>(
@@ -528,7 +519,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Widget _buildTabContent(
     BuildContext context,
     CharacterDto character,
-    List<MemoryDto> memories,
+    AsyncValue<List<MemoryDto>> memories,
     bool hasExtensionTab,
   ) {
     switch (_selectedTab) {
@@ -537,7 +528,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       case 1:
         return _buildSettingsTab(context, character);
       case 2:
-        return _buildMemoryTab(context, memories);
+        return OwnedMemoryPage(characterId: character.id, embedded: true);
       case 3:
         return _buildRelationTab(context, character);
       case 4:
@@ -563,8 +554,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Widget _buildOverviewTab(
     BuildContext context,
     CharacterDto character,
-    List<MemoryDto> memories,
+    AsyncValue<List<MemoryDto>> memories,
   ) {
+    final preview = memories.valueOrNull ?? const <MemoryDto>[];
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -600,9 +592,16 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('最近记忆', style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.xs),
-              ...memories.take(3).map((m) => _buildMemoryItem(context, m)),
-              if (memories.isEmpty)
-                Text('暂无记忆', style: AppTypography.caption(context)),
+              ...preview.take(3).map((m) => _buildMemoryItem(context, m)),
+              if (preview.isEmpty)
+                Text(
+                  memories.hasError
+                      ? '记忆加载失败'
+                      : memories.isLoading
+                      ? '正在加载记忆…'
+                      : '暂无记忆',
+                  style: AppTypography.caption(context),
+                ),
             ],
           ),
         ),
@@ -757,26 +756,6 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildMemoryTab(BuildContext context, List<MemoryDto> memories) {
-    return ListView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      children: [
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('最近记忆', style: AppTypography.cardTitle(context)),
-              SizedBox(height: AppSpacing.xs),
-              ...memories.map((m) => _buildMemoryItem(context, m)),
-              if (memories.isEmpty)
-                Text('暂无记忆', style: AppTypography.caption(context)),
-            ],
-          ),
-        ),
-      ],
     );
   }
 

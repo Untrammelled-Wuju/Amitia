@@ -42,8 +42,8 @@
           "type": "alert",
           "props": {
             "type": "info",
-            "title": "NapCat 反向 WebSocket",
-            "description": "在 NapCat 网络配置中新建 WebSockets 客户端，填写页面中的反向 WebSocket 地址和 Token。"
+            "title": "SnowLuma 反向 WebSocket",
+            "description": "在 SnowLuma 网络配置中新建 WebSocket 客户端，填写反向 WebSocket 地址和 Token。WebUI 与 noVNC 地址、账号密码见下方已保存配置，桌面端会直接展示并支持一键复制。"
           }
         },
         {
@@ -83,6 +83,22 @@
               ]
             },
             {
+              "id": "qq-personal-webui-port",
+              "type": "field",
+              "props": { "label": "SnowLuma WebUI 端口", "placeholder": "5099" },
+              "bindings": [
+                { "path": "credentials.webuiPort", "source": "form", "default": "5099" }
+              ]
+            },
+            {
+              "id": "qq-personal-novnc-port",
+              "type": "field",
+              "props": { "label": "noVNC 端口", "placeholder": "6081" },
+              "bindings": [
+                { "path": "credentials.novncPort", "source": "form", "default": "6081" }
+              ]
+            },
+            {
               "id": "qq-personal-save",
               "type": "button",
               "props": { "text": "保存并启用", "type": "primary" },
@@ -95,7 +111,9 @@
                     "config": {
                       "token": "$form.credentials.token",
                       "groupTrigger": "$form.credentials.groupTrigger",
-                      "triggerPrefix": "$form.credentials.triggerPrefix"
+                      "triggerPrefix": "$form.credentials.triggerPrefix",
+                      "webuiPort": "$form.credentials.webuiPort",
+                      "novncPort": "$form.credentials.novncPort"
                     }
                   },
                   "statePath": "connectResult"

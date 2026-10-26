@@ -36,8 +36,8 @@ export function createHostBridge(actions, navigate) {
 export function statusLabel(status) {
   return {
     online: "已连接",
-    waiting: "等待 NapCat",
+    waiting: "等待 SnowLuma",
     disconnected: "已停用",
     error: "连接异常",
-  }[status] || "等待 NapCat"
+  }[status] || "等待 SnowLuma"
 }

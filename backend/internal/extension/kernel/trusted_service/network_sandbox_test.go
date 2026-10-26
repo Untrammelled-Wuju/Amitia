@@ -126,11 +126,16 @@ func TestBuildDarwinSandboxProfileUnrestrictedDoesNotAllowInbound(t *testing.T) 
 	if err != nil {
 		t.Fatalf("buildDarwinSandboxProfile() error = %v", err)
 	}
-	if containsLiteral(profile, "(allow network*)") || containsLiteral(profile, "network-inbound") {
-		t.Fatalf("unrestricted outbound profile unexpectedly allows inbound networking:\n%s", profile)
+	if containsLiteral(profile, "(allow network*)") || strings.Contains(profile, "(allow network-inbound)\n") {
+		t.Fatalf("unrestricted outbound profile unexpectedly allows ambient inbound networking:\n%s", profile)
 	}
 	if !containsLiteral(profile, "(allow network-outbound)") {
 		t.Fatalf("unrestricted outbound profile is missing network-outbound rule:\n%s", profile)
+	}
+	// The loopback endpoint has to stay reachable for the host supervisor while
+	// every host-facing interface remains closed.
+	if !containsLiteral(profile, "(allow network-inbound (local ip \"localhost:*\"))") {
+		t.Fatalf("unrestricted outbound profile is missing the loopback inbound rule:\n%s", profile)
 	}
 }
 

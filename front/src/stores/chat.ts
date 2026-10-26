@@ -10,6 +10,16 @@ import { ownedProjectReference } from "@/runtime/owned-project-reference";
 
 class SidebarStaleError extends Error {}
 
+export function conversationChannel(value: Record<string, unknown>): string {
+  const explicit = String(value.channel ?? value.channelId ?? "").trim();
+  if (explicit && explicit !== "web") return explicit;
+  const id = String(value.resourceId ?? value.id ?? "");
+  if (id.startsWith("conv-qq-personal-")) return "qq_personal";
+  if (id.startsWith("conv-group-")) return "qq";
+  if (id.startsWith("wechat-ipad860-") || id.includes("@im.wechat") || id.includes("@chatroom")) return "wechat";
+  return "web";
+}
+
 export interface ConversationItem {
   id: string;
   projectId: string;
@@ -131,9 +141,11 @@ export const useChatStore = defineStore("chat", () => {
       historicalProjectRole.value = projectPage.selectedHistoricalRole;
       const rows=new Map<string,ConversationItem>();
       for (const value of conversations) {
-        if (value?.id) rows.set(value.id,{...value,channel:"web",projectId:value.projectId && value.ownerId ? ownedProjectReference(value.ownerId, value.projectId) : "",source:value.source || "device-mesh",messageCount:value.messageCount || 0});
+        if (!value?.id) continue;
+        const channel=conversationChannel(value as Record<string, unknown>);
+        rows.set(value.id,{...value,channel,projectId:value.projectId && value.ownerId ? ownedProjectReference(value.ownerId, value.projectId) : "",source:value.source || "device-mesh",messageCount:value.messageCount || 0});
       }
-      const visible=[...rows.values()].filter((row)=>!row.archivedAt).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      const visible=[...rows.values()].filter((row)=>!row.archivedAt && row.channel === "web").sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
       const projects = projectPage.projects.map((project) => projectRow(project, visible.filter((row) => row.projectId === ownedProjectReference(project.ownerId, project.id))));
       const visibleProjects = projects.filter((project) => !project.hiddenAt);
       const removedProjects = projects.filter((project) => project.hiddenAt);

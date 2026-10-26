@@ -261,6 +261,7 @@ func DefaultMigrations() []Migration {
 		ModelBudgetRatesMigration(),
 		RuntimeModelBudgetMigration(),
 		RemoveGlobalMemoryStorageMigration(),
+		ChannelSandboxPoliciesMigration(),
 	}
 }
 
@@ -1007,6 +1008,28 @@ func KernelSecurityAuditOutboxMigration() Migration {
 				occurred_at TEXT NOT NULL,
 				attempts INTEGER NOT NULL DEFAULT 0,
 				last_error TEXT NOT NULL DEFAULT ''
+			)`)
+			return nil
+		},
+	}
+}
+
+func ChannelSandboxPoliciesMigration() Migration {
+	return Migration{
+		Version: "20261026001",
+		Name:    "create_channel_sandbox_policies",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS channel_sandbox_policies (
+				space_id TEXT NOT NULL DEFAULT '',
+				channel_id TEXT NOT NULL,
+				enabled INTEGER NOT NULL DEFAULT 0,
+				allow_network INTEGER NOT NULL DEFAULT 1,
+				workspace_id TEXT NOT NULL DEFAULT '',
+				sandbox_root TEXT NOT NULL DEFAULT '',
+				revision INTEGER NOT NULL DEFAULT 1,
+				created_at TEXT NOT NULL DEFAULT '',
+				updated_at TEXT NOT NULL DEFAULT '',
+				PRIMARY KEY (space_id, channel_id)
 			)`)
 			return nil
 		},

@@ -10,17 +10,17 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/memory.dart';
-import '../../../../core/services/memory_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_icons.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/hub_entry_card.dart';
+import '../owned_memory_format.dart';
 
 final recentMemoryPageProvider = FutureProvider.autoDispose
     .family<MemoryPage, String>((ref, cursor) async {
       return ref
-          .read(memoryServiceProvider)
-          .listPage(cursor: cursor, limit: 10);
+          .read(deviceOwnedMemoryServiceProvider)
+          .pageMemories(cursor: cursor, limit: 10);
     });
 
 class MemoryHubPage extends ConsumerStatefulWidget {
@@ -150,7 +150,7 @@ class _MemoryHubPageState extends ConsumerState<MemoryHubPage> {
   }
 
   String _memoryTitle(MemoryDto memory) {
-    final key = memory.key.trim();
+    final key = ownedMemoryKeyTitle(memory.key);
     if (key.isNotEmpty) return key;
     return switch (memory.memoryType) {
       'fact' => '事实记忆',

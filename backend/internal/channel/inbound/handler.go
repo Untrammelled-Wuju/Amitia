@@ -32,27 +32,48 @@ type UnifiedEntryScopeResolver interface {
 }
 
 type InboundRequest struct {
-	ChannelID        string  `json:"channelId"`
-	AccountID        string  `json:"accountId,omitempty"`
-	ConversationID   string  `json:"conversationId,omitempty"`
-	PeerID           string  `json:"peerId"`
-	MessageID        string  `json:"messageId,omitempty"`
-	Text             string  `json:"text,omitempty"`
-	ContentType      string  `json:"contentType,omitempty"`
-	ImageURL         string  `json:"imageUrl,omitempty"`
-	VideoURL         string  `json:"videoUrl,omitempty"`
-	AudioURL         string  `json:"audioUrl,omitempty"`
-	AudioDuration    float64 `json:"audioDuration,omitempty"`
-	ReplyToMessageID string  `json:"replyToMessageId,omitempty"`
-	SpaceID          string  `json:"spaceId,omitempty"`
-	CharacterID      string  `json:"characterId,omitempty"`
-	Source           string  `json:"source,omitempty"`
+	ChannelID           string   `json:"channelId"`
+	AccountID           string   `json:"accountId,omitempty"`
+	ConversationID      string   `json:"conversationId,omitempty"`
+	PeerID              string   `json:"peerId"`
+	MessageID           string   `json:"messageId,omitempty"`
+	Text                string   `json:"text,omitempty"`
+	ContentType         string   `json:"contentType,omitempty"`
+	ImageURL            string   `json:"imageUrl,omitempty"`
+	VideoURL            string   `json:"videoUrl,omitempty"`
+	AudioURL            string   `json:"audioUrl,omitempty"`
+	AudioDuration       float64  `json:"audioDuration,omitempty"`
+	ReplyToMessageID    string   `json:"replyToMessageId,omitempty"`
+	ReplyExcerpt        string   `json:"replyExcerpt,omitempty"`
+	SenderName          string   `json:"senderName,omitempty"`
+	SenderID            string   `json:"senderId,omitempty"`
+	Mentions            []string `json:"mentions,omitempty"`
+	SandboxWorkspaceID  string   `json:"sandboxWorkspaceId,omitempty"`
+	SandboxRoot         string   `json:"sandboxRoot,omitempty"`
+	SandboxAllowNetwork bool     `json:"sandboxAllowNetwork,omitempty"`
+	FileURL             string   `json:"fileUrl,omitempty"`
+	FileName            string   `json:"fileName,omitempty"`
+	ConversationTitle   string   `json:"conversationTitle,omitempty"`
+	PeerKind            string   `json:"peerKind,omitempty"`
+	SpaceID             string   `json:"spaceId,omitempty"`
+	CharacterID         string   `json:"characterId,omitempty"`
+	Source              string   `json:"source,omitempty"`
 }
+
+type SandboxResolver func(spaceID, channelID string) (workspaceID string, root string, allowNetwork bool, enabled bool)
 
 type InboundHandler struct {
 	providers ProviderDefinitionSource
 	entry     UnifiedEntryHandler
 	owner     OwnerResolver
+	sandbox   SandboxResolver
+}
+
+func (h *InboundHandler) SetSandboxResolver(resolver SandboxResolver) {
+	if h == nil {
+		return
+	}
+	h.sandbox = resolver
 }
 
 type OwnerResolver func(context.Context, string, string, string) (context.Context, error)
@@ -65,6 +86,18 @@ func RegisterInboundRouter(router gin.IRouter, providers ProviderDefinitionSourc
 	if len(owners) > 0 {
 		handler.owner = owners[0]
 	}
+	router.POST("/api/channels/inbound", handler.Handle)
+}
+
+func RegisterInboundRouterWithSandbox(router gin.IRouter, providers ProviderDefinitionSource, entry UnifiedEntryHandler, resolver SandboxResolver, owners ...OwnerResolver) {
+	if router == nil {
+		return
+	}
+	handler := &InboundHandler{providers: providers, entry: entry}
+	if len(owners) > 0 {
+		handler.owner = owners[0]
+	}
+	handler.SetSandboxResolver(resolver)
 	router.POST("/api/channels/inbound", handler.Handle)
 }
 
@@ -121,6 +154,13 @@ func (h *InboundHandler) Handle(c *gin.Context) {
 		}
 		if resolution.Scope.ConversationID != "" {
 			entryRequest.ConversationID = resolution.Scope.ConversationID
+		}
+	}
+	if h.sandbox != nil {
+		if workspaceID, root, allowNetwork, enabled := h.sandbox(entryRequest.SpaceID, normalized.ChannelID); enabled && workspaceID != "" && root != "" {
+			entryRequest.SandboxWorkspaceID = workspaceID
+			entryRequest.SandboxRoot = root
+			entryRequest.SandboxAllowNetwork = allowNetwork
 		}
 	}
 	if h.owner != nil {
@@ -220,21 +260,32 @@ func buildUnifiedEntryRequest(extensionID, moduleID string, request InboundReque
 		conversationID = derivedConversationID(request)
 	}
 	entryRequest := &interaction.UnifiedEntryRequest{
-		Channel:          request.ChannelID,
-		Message:          request.Text,
-		PeerID:           request.PeerID,
-		SpaceID:          request.SpaceID,
-		Source:           source,
-		CharacterID:      request.CharacterID,
-		ConversationID:   conversationID,
-		RequestID:        requestID,
-		SessionID:        request.AccountID,
-		ImageUrl:         request.ImageURL,
-		VideoUrl:         request.VideoURL,
-		AudioUrl:         request.AudioURL,
-		AudioDuration:    request.AudioDuration,
-		VoiceMessage:     request.ContentType == "audio" || request.ContentType == "voice",
-		ReplyToMessageID: optionalString(request.ReplyToMessageID),
+		Channel:             request.ChannelID,
+		Message:             request.Text,
+		PeerID:              request.PeerID,
+		SpaceID:             request.SpaceID,
+		Source:              source,
+		CharacterID:         request.CharacterID,
+		ConversationID:      conversationID,
+		RequestID:           requestID,
+		SessionID:           request.AccountID,
+		ImageUrl:            request.ImageURL,
+		VideoUrl:            request.VideoURL,
+		AudioUrl:            request.AudioURL,
+		AudioDuration:       request.AudioDuration,
+		VoiceMessage:        request.ContentType == "audio" || request.ContentType == "voice",
+		ReplyToMessageID:    optionalString(request.ReplyToMessageID),
+		ReplyExcerpt:        strings.TrimSpace(request.ReplyExcerpt),
+		SenderName:          strings.TrimSpace(request.SenderName),
+		SenderID:            strings.TrimSpace(request.SenderID),
+		MentionNames:        request.Mentions,
+		PeerKind:            strings.TrimSpace(request.PeerKind),
+		ConversationTitle:   strings.TrimSpace(request.ConversationTitle),
+		SandboxWorkspaceID:  strings.TrimSpace(request.SandboxWorkspaceID),
+		SandboxRoot:         strings.TrimSpace(request.SandboxRoot),
+		SandboxAllowNetwork: request.SandboxAllowNetwork,
+		FileUrl:             strings.TrimSpace(request.FileURL),
+		FileName:            strings.TrimSpace(request.FileName),
 	}
 	return entryRequest
 }
