@@ -40,3 +40,4 @@
 *.gamex binary
 *.petx binary
 *.extension-key binary
+/desktop/resources/runtime/windows-x64/powershell/** binary
