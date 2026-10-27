@@ -1,6 +1,9 @@
 {
   "name": "@ai-companion/web",
   "version": "26.2.0-beta.17",
+  "engines": {
+    "node": ">=26 <27"
+  },
   "private": true,
   "type": "module",
   "main": "../desktop/dist/main/index.cjs",

@@ -1,5 +1,6 @@
 import { app } from "electron";
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
+import { createHash } from "node:crypto";
 import http from "http";
 import path from "path";
 import fs from "fs";
@@ -374,10 +375,7 @@ function ensureCoreBinaries(dataDir: string): void {
     },
   ];
   if (nodeArchive) {
-    binaries.push({
-      sources: [nodeArchive],
-      dest: path.join(dataDir, "node", path.basename(nodeArchive)),
-    });
+    ensureBundledNodeArchive(dataDir, nodeArchive);
   }
   for (const { sources, dest } of binaries) {
     if (fs.existsSync(dest)) {
@@ -416,6 +414,40 @@ export function syncRuntimeHostAssets(dataDir: string, runtimeRoot: string): voi
     fs.cpSync(source, destination, { recursive: true, force: true });
     console.log("[CoreManager] 运行时宿主已同步:", destination);
   }
+}
+
+function ensureBundledNodeArchive(dataDir: string, sourceArchive: string): void {
+  const nodeDir = path.join(dataDir, "node");
+  const destination = path.join(nodeDir, path.basename(sourceArchive));
+  const sourceHash = fileSha256(sourceArchive);
+  const destinationHash = fs.existsSync(destination)
+    ? fileSha256(destination)
+    : "";
+  if (sourceHash === destinationHash) {
+    return;
+  }
+  fs.mkdirSync(nodeDir, { recursive: true });
+  fs.copyFileSync(sourceArchive, destination);
+  const staleArchives = process.platform === "win32"
+    ? ["node.exe.zip", "node.zip"]
+    : ["node.zip"];
+  for (const archive of staleArchives) {
+    if (archive === path.basename(destination)) {
+      continue;
+    }
+    fs.rmSync(path.join(nodeDir, archive), { force: true });
+  }
+  const extractedNodes = process.platform === "win32"
+    ? ["node.exe", path.join("bin", "node.exe")]
+    : [path.join("bin", "node"), "node"];
+  for (const nodePath of extractedNodes) {
+    fs.rmSync(path.join(nodeDir, nodePath), { force: true });
+  }
+  console.log("[CoreManager] Node 运行时已更新:", sourceArchive, "->", destination);
+}
+
+function fileSha256(filePath: string): string {
+  return createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
 export function startCore(profile: BundledCoreProfile): void {

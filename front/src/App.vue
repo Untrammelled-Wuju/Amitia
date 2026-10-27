@@ -265,6 +265,10 @@ html.amitia-titlebar-shell .el-overlay {
   z-index: 20000 !important;
 }
 
+html.amitia-titlebar-shell .el-popper {
+  z-index: 20001 !important;
+}
+
 html.amitia-titlebar-shell .el-message {
   top: 20px !important;
   z-index: 20010 !important;

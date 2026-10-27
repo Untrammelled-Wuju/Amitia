@@ -41,7 +41,7 @@ await buildRuntime({
   bundle: true,
   platform: "node",
   format: "esm",
-  target: "node24",
+  target: "node26",
   legalComments: "none",
   nodePaths: [path.join(runtimeRoot, "node_modules")],
 })

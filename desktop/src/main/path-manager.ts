@@ -2,7 +2,15 @@ import { app } from "electron";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "node:url";
-import { resolveStableDataDir } from "./data-location";
+import {
+  migrateLegacyDataDir,
+  migrateLegacyElectronProfile,
+} from "./data-location";
+import {
+  resolveElectronSessionDataDir,
+  resolveElectronUserDataDir,
+  resolveSiblingDataDir,
+} from "./storage-policy";
 
 let cachedAmitiaDataDir = "";
 
@@ -19,15 +27,8 @@ export function getInstallDir(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 }
 
-export function getDataLocationFile(): string {
+function getLegacyDataLocationFile(): string {
   return path.join(app.getPath("userData"), "data-location.json");
-}
-
-function getStableDataDir(): string {
-  const localAppData = process.env.LOCALAPPDATA?.trim();
-  return localAppData
-    ? path.join(path.resolve(localAppData), "AmitiaData")
-    : path.join(app.getPath("userData"), "AmitiaData");
 }
 
 export function getAmitiaDataDir(): string {
@@ -39,13 +40,28 @@ export function getAmitiaDataDir(): string {
     return cachedAmitiaDataDir;
   }
 
-  const installDir = getInstallDir();
-  cachedAmitiaDataDir = resolveStableDataDir({
-    locationFile: getDataLocationFile(),
-    legacyDataDir: path.join(path.dirname(installDir), "AmitiaData"),
-    stableDataDir: getStableDataDir(),
+  const dataDir = resolveSiblingDataDir(getInstallDir());
+  migrateLegacyDataDir({
+    targetDataDir: dataDir,
+    locationFile: getLegacyDataLocationFile(),
   });
+  cachedAmitiaDataDir = dataDir;
   return cachedAmitiaDataDir;
+}
+
+export function configureElectronStorage(): void {
+  const dataDir = getAmitiaDataDir();
+  const userDataDir = resolveElectronUserDataDir(dataDir);
+  const sessionDataDir = resolveElectronSessionDataDir(dataDir);
+  const previousUserDataDir = app.getPath("userData");
+  migrateLegacyElectronProfile({
+    sourceProfileDir: previousUserDataDir,
+    targetProfileDir: userDataDir,
+  });
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.mkdirSync(sessionDataDir, { recursive: true });
+  app.setPath("userData", userDataDir);
+  app.setPath("sessionData", sessionDataDir);
 }
 
 export function getBackendDataDir(): string {

@@ -1,6 +1,9 @@
 {
   "name": "@amitia/task-host",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=26 <27"
+  },
   "private": true,
   "main": "./dist/index.js",
   "scripts": {
