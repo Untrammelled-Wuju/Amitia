@@ -68,6 +68,9 @@ func TestOwnedCompletionRunsAfterOwnerCommitAndPreservesFailure(t *testing.T) {
 				if json.Unmarshal(row.Body, &checkpoint) != nil || checkpoint.Status != "failed" {
 					t.Fatalf("failed checkpoint status: %+v", checkpoint)
 				}
+				if !strings.Contains(string(row.Body), "controlled model failure") {
+					t.Fatalf("failed checkpoint lost the model error: %s", row.Body)
+				}
 				if errors.Is(err, coordination.ErrWrongOwner) {
 					t.Fatalf("model failure was replaced by authorization error: %v", err)
 				}

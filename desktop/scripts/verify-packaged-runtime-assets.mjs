@@ -31,6 +31,12 @@ async function main() {
   }
 
   const manifest = loadManifest();
+  if (
+    manifest.platform === "windows" &&
+    !manifest.entries.some((entry) => entry.path === "powershell/pwsh.exe")
+  ) {
+    throw new Error("bundled PowerShell runtime is missing from the release manifest");
+  }
   const currentSourceGate = await computeFreezeSourceGateHash(repositoryRoot);
   if (manifest.sourceGateSha256 !== currentSourceGate) {
     throw new Error("release runtime assets were staged from a different frozen source; restage required");

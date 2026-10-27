@@ -316,6 +316,7 @@ func NewEnvBuilder() *EnvBuilder {
 			"AMITIA_PLATFORM":                   true,
 			"AMITIA_NATIVE_COMPANIONS":          true,
 			"AMITIA_NATIVE_COMPANIONS_VERSION":  true,
+			"AMITIA_POWERSHELL_PATH":            true,
 			"QQ_SIDECAR_PORT":                   true,
 			"SIDECAR_PORT":                      true,
 			"AMITIA_WECHAT_IPAD860_PORT":        true,

@@ -1,9 +1,35 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { isSystemDriveInstall } from "./storage-policy";
 
-function powershellPath(): string {
+type WindowsPowerShellResolutionOptions = {
+  configuredPath?: string;
+  resourcesPath?: string;
+  systemRoot?: string;
+  exists?: (candidate: string) => boolean;
+};
+
+export function resolveWindowsPowerShellPath(
+  options: WindowsPowerShellResolutionOptions = {},
+): string {
+  const configuredPath =
+    options.configuredPath ?? process.env.AMITIA_POWERSHELL_PATH?.trim();
+  const resourcesPath = options.resourcesPath ?? process.resourcesPath;
+  const exists = options.exists ?? existsSync;
+  const bundledPath = path.win32.join(
+    resourcesPath,
+    "powershell",
+    "pwsh.exe",
+  );
+  if (configuredPath && exists(configuredPath)) {
+    return configuredPath;
+  }
+  if (exists(bundledPath)) {
+    return bundledPath;
+  }
   const systemRoot =
+    options.systemRoot?.trim() ||
     process.env.SystemRoot?.trim() ||
     process.env.WINDIR?.trim() ||
     "C:\\Windows";
@@ -52,11 +78,11 @@ export function isProcessElevated(): boolean {
     "$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)",
   ].join("; ");
   const result = spawnSync(
-    powershellPath(),
+    resolveWindowsPowerShellPath(),
     ["-NoProfile", "-NonInteractive", "-Command", script],
     {
       encoding: "utf8",
-      timeout: 5000,
+      timeout: 10000,
       windowsHide: true,
     },
   );
@@ -87,7 +113,7 @@ export function relaunchAsAdministrator(
     AMITIA_ELEVATION_CWD: process.cwd(),
   };
   const child = spawn(
-    powershellPath(),
+    resolveWindowsPowerShellPath(),
     ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script],
     {
       detached: true,

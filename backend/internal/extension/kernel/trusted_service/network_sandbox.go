@@ -138,7 +138,7 @@ func networkSandboxExecutableRequirements(goos, mode, systemRoot string) ([]netw
 			return nil, fmt.Errorf("%w: trusted SystemRoot is unavailable", ErrNetworkSandboxUnavailable)
 		}
 		requirements := []networkSandboxExecutableRequirement{
-			{Name: "powershell", Candidates: []string{filepath.Join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")}},
+			{Name: "powershell", Candidates: process.PowerShellCandidates(root)},
 			{Name: "icacls", Candidates: []string{filepath.Join(root, "System32", "icacls.exe")}},
 		}
 		if mode == "loopback" || mode == "unrestricted" {

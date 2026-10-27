@@ -28,6 +28,7 @@ import {
   removeCoreEndpoint,
   setCoreEndpoint,
 } from "./core-endpoint";
+import { resolveWindowsPowerShellPath } from "./windows-elevation";
 
 export type { CorePrerequisiteResult };
 
@@ -489,6 +490,10 @@ export function startCore(profile: BundledCoreProfile): void {
   }
 
   const configPath = path.join(dataDir, "config");
+  const bundledPowerShellPath =
+    process.platform === "win32"
+      ? resolveWindowsPowerShellPath()
+      : undefined;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     CONFIG_PATH: configPath,
@@ -497,6 +502,9 @@ export function startCore(profile: BundledCoreProfile): void {
     AMITIA_DATA_DIR: dataDir,
     AMITIA_EXTENSION_DEV_MODE: isDevMode() ? "true" : "false",
     AMITIA_VERSION: app.getVersion(),
+    ...(bundledPowerShellPath
+      ? { AMITIA_POWERSHELL_PATH: bundledPowerShellPath }
+      : {}),
   };
 
   console.log("[CoreManager] CONFIG_PATH:", configPath);

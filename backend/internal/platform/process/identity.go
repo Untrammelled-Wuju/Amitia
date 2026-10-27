@@ -62,7 +62,11 @@ func ReadProcessIdentity(pid int) (ProcessIdentity, error) {
 		return ProcessIdentity{Executable: canonicalExecutable(exePath), StartIdentity: start}, nil
 	case "windows":
 		script := fmt.Sprintf(`$p=Get-CimInstance Win32_Process -Filter "ProcessId=%d"; if($null -eq $p){exit 3}; Write-Output ($p.ExecutablePath); Write-Output ($p.CreationDate)`, pid)
-		out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script).Output()
+		powershell, err := ResolvePowerShell(os.Getenv("SystemRoot"))
+		if err != nil {
+			return ProcessIdentity{}, fmt.Errorf("resolve powershell process identity: %w", err)
+		}
+		out, err := exec.Command(powershell, "-NoProfile", "-NonInteractive", "-Command", script).Output()
 		if err != nil {
 			return ProcessIdentity{}, fmt.Errorf("powershell process identity: %w", err)
 		}

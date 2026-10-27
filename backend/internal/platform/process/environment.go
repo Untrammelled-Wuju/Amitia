@@ -41,6 +41,7 @@ func (b *EnvironmentBuilder) addSystemMinimum() {
 		b.vars["USERPROFILE"] = os.Getenv("USERPROFILE")
 		b.vars["LOCALAPPDATA"] = os.Getenv("LOCALAPPDATA")
 		b.vars["PATHEXT"] = os.Getenv("PATHEXT")
+		b.vars[PowerShellPathEnv] = os.Getenv(PowerShellPathEnv)
 	}
 }
 
@@ -155,6 +156,7 @@ func allowedEnvKeys() map[string]bool {
 		"SIDECAR_PORT":                      true,
 		"AMITIA_WECHAT_IPAD860_PORT":        true,
 		"AMITIA_WECHAT_IPAD860_ENGINE_PORT": true,
+		PowerShellPathEnv:                   true,
 		"CORE_URL":                          true,
 	}
 }

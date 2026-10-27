@@ -63,7 +63,10 @@ func prepareWindowsContainerWithLimits(mode, executable string, args []string, w
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: trusted SystemRoot is unavailable", ErrNetworkSandboxUnavailable)
 	}
 	systemRoot := filepath.Clean(systemRootRaw)
-	powershell := filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+	powershell, err := process.ResolvePowerShell(systemRoot)
+	if err != nil {
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: trusted Windows sandbox PowerShell is unavailable: %v", ErrNetworkSandboxUnavailable, err)
+	}
 	icacls := filepath.Join(systemRoot, "System32", "icacls.exe")
 	checkNet := filepath.Join(systemRoot, "System32", "CheckNetIsolation.exe")
 	for _, path := range []string{powershell, icacls} {
@@ -111,9 +114,14 @@ func prepareWindowsContainerWithLimits(mode, executable string, args []string, w
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: inspect Windows sandbox state %q: %v", ErrNetworkSandboxUnavailable, stateFile, statErr)
 	}
 
-	readOnly := make([]string, 0, len(readOnlyRoots)+1)
+	readOnlyCandidates := append([]string(nil), readOnlyRoots...)
+	readOnlyCandidates = append(readOnlyCandidates, exe)
+	if strings.EqualFold(filepath.Base(exe), "pwsh.exe") {
+		readOnlyCandidates = append(readOnlyCandidates, filepath.Dir(exe))
+	}
+	readOnly := make([]string, 0, len(readOnlyCandidates))
 	seen := make(map[string]struct{})
-	for _, root := range append(readOnlyRoots, exe) {
+	for _, root := range readOnlyCandidates {
 		root = strings.TrimSpace(root)
 		if root == "" {
 			continue
@@ -309,7 +317,10 @@ func recoverWindowsSandboxRecord(stateFile string) error {
 		return fmt.Errorf("%w: trusted SystemRoot is unavailable during residue recovery", ErrNetworkSandboxUnavailable)
 	}
 	systemRoot := filepath.Clean(systemRootRaw)
-	powershell := filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+	powershell, err := process.ResolvePowerShell(systemRoot)
+	if err != nil {
+		return fmt.Errorf("%w: trusted Windows recovery PowerShell is unavailable: %v", ErrNetworkSandboxUnavailable, err)
+	}
 	icacls := filepath.Join(systemRoot, "System32", "icacls.exe")
 	checkNet := filepath.Join(systemRoot, "System32", "CheckNetIsolation.exe")
 	for _, path := range []string{powershell, icacls} {

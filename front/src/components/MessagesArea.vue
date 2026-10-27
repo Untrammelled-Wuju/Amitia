@@ -285,14 +285,14 @@ type FlowItem =
 
 function turnErrorDetail(turn: any): string {
   const item = [...(turn?.items || [])].reverse().find((candidate) => candidate?.type === "error");
-  if (!item) return "网络错误";
+  if (!item) return "执行失败，未收到具体错误信息";
   let payload: Record<string, unknown>;
   try {
     const parsed = JSON.parse(String(item.resultJson || "{}"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.errorCode || "网络错误";
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.content || item.errorCode || "执行失败，未收到具体错误信息";
     payload = parsed as Record<string, unknown>;
   } catch {
-    return String(item.errorCode || "网络错误");
+    return String(item.content || item.errorCode || "执行失败，未收到具体错误信息");
   }
   const toText = (value: unknown): string => {
     if (value === undefined || value === null) return "";
@@ -307,7 +307,7 @@ function turnErrorDetail(turn: any): string {
   const userMessage = toText(payload.userMessage);
   const errorCode = toText(payload.errorCode) || String(item.errorCode || "").trim();
   const provider = toText(payload.provider);
-  const message = internalMessage || userMessage || errorCode || "网络错误";
+  const message = internalMessage || userMessage || toText(payload.message) || toText(payload.error) || toText(item.content) || errorCode || "执行失败，未收到具体错误信息";
   return [provider, errorCode, message].filter(Boolean).join(" · ");
 }
 

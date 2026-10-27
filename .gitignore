@@ -110,6 +110,7 @@ backend/testdata/extensions/**/dist-candidate-*/
 /desktop/resources/core/
 /desktop/resources/release-runtime/
 /desktop/resources/databases/
+/desktop/resources/runtime/windows-x64/powershell/
 /desktop/scripts/.publish-config.json
 /config/admin-mysql.local.json
 

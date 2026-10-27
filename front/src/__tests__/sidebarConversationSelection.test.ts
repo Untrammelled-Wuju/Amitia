@@ -98,6 +98,23 @@ describe("sidebar conversation selection", () => {
     }
   });
 
+  it("keeps the page open when creating a conversation fails", async () => {
+    const errors = vi.fn();
+    const message = vi.spyOn(ElMessage, "error");
+    const { wrapper, router } = await renderSidebar(`/chat?conversationId=${conversation.id}`, errors);
+    mocks.startDraft.mockRejectedValueOnce(new Error("服务不可用"));
+    try {
+      await wrapper.get('.section-caption .section-add[aria-label="新建对话"]').trigger("click");
+      await flushPromises();
+      expect(message).toHaveBeenCalledWith("服务不可用");
+      expect(errors).not.toHaveBeenCalled();
+      expect(router.currentRoute.value.query.conversationId).toBe(conversation.id);
+    } finally {
+      message.mockRestore();
+      wrapper.unmount();
+    }
+  });
+
   it("renders recent conversations before projects", async () => {
     const { wrapper, chat } = await renderSidebar("/chat");
     const project = { id: "project-order", name: "排序项目", workspaceId: "workspace-order", deviceId: "source", rootUri: "amitia://workspace/@workspace-order/", workspaces: [{ id: "workspace-order", deviceId: "source", name: "排序项目", kind: "local", rootUri: "amitia://workspace/@workspace-order/" }], primaryWorkspaceId: "workspace-order", available: true, status: "available", conversationCount: 0, conversations: [] };

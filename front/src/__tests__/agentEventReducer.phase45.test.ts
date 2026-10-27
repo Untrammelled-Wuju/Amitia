@@ -21,6 +21,14 @@ function event(type: string, sequence: number, blockId = ""): AgentUIEvent {
 }
 
 describe("Phase 45 terminal and historical projection invariants", () => {
+  it("preserves the backend failure message", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([historic()], 5);
+    expect(reducer.apply({ ...event("turn.failed", 6), payload: { message: "模型请求超时" } })).toBe("applied");
+    const failure = reducer.turn("turn-a")?.items.find((item) => item.type === "error");
+    expect(failure?.content).toBe("模型请求超时");
+    expect(JSON.parse(failure?.resultJson || "{}").message).toBe("模型请求超时");
+  });
   it("rejects late turn.started and approval events after completion", () => {
     const reducer = new AgentEventReducer();
     reducer.reset([historic("completed")], 5);

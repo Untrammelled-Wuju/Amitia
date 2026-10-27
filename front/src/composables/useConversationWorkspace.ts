@@ -213,13 +213,13 @@ export function useConversationWorkspace() {
   async function startDraftConversation(projectId = ""): Promise<ProjectItem | null> {
     activeConversationId.value = "";
     chatStore.clearMessages();
-    await chatStore.fetchSidebar();
     const normalizedProjectId = String(projectId || "").trim();
     if (!normalizedProjectId) {
       currentWorkspace.value = null;
       chatStore.currentProjectId = "";
       return null;
     }
+    await chatStore.fetchSidebar();
     const project = chatStore.sidebar.projects.find(
       (item) => item.id === normalizedProjectId,
     );

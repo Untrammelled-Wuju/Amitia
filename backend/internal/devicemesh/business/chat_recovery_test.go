@@ -132,7 +132,7 @@ func TestOwnedRuntimePersistsToolJournalAndRetryLoadsItWithoutReplay(t *testing.
 	}
 	row, err := coordination.NewOwnershipStore(db, "a").Get(t.Context(), "checkpoint", "turn/"+request.RequestID)
 	var saved checkpoint
-	if err != nil || row == nil || json.Unmarshal(row.Body, &saved) != nil || saved.Runtime == nil || len(saved.Runtime.Blocks) != 1 || saved.Runtime.Blocks[0].Status != "completed" {
+	if err != nil || row == nil || json.Unmarshal(row.Body, &saved) != nil || saved.Runtime == nil || len(saved.Runtime.Blocks) != 2 || saved.Runtime.Blocks[0].Status != "completed" || saved.Runtime.Blocks[1].Type != "error" || saved.Runtime.Blocks[1].Content != "model disconnected after confirmed tool result" {
 		t.Fatalf("journal not durable: row=%+v saved=%+v err=%v", row, saved, err)
 	}
 	model.generate = func(ctx context.Context, inference Inference) (Generation, error) {

@@ -654,7 +654,7 @@ export function useDeviceOwnedConversation() {
     const captured = revision;
     const rows = new Map<string, OwnedProject>();
     const historical = new Map<string, OwnedProject>();
-    const availableHistoricalRoles = await historicalRoles(characterId);
+    const availableHistoricalRoles = policy.value?.coordinated ? await historicalRoles(characterId) : [];
     const historicalRole = selectedHistoricalRole || (availableHistoricalRoles.length === 1 ? availableHistoricalRoles[0].id : "");
     if (historicalRole && !availableHistoricalRoles.some((role) => role.id === historicalRole)) throw new Error("旧项目角色已变化，请重新选择");
     const cursors = new Set<string>();

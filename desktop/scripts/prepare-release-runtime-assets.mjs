@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  cpSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -21,6 +22,18 @@ const resourcesRoot = resolve(desktopRoot, "resources");
 const coreRoot = resolve(resourcesRoot, "core");
 const stageRoot = resolve(resourcesRoot, "release-runtime");
 const manifestPath = resolve(stageRoot, ".release-runtime-assets.json");
+const powershellRequiredFiles = [
+  "pwsh.exe",
+  "pwsh.dll",
+  "pwsh.runtimeconfig.json",
+  "pwsh.deps.json",
+  "System.Management.Automation.dll",
+  "hostfxr.dll",
+  "hostpolicy.dll",
+  "coreclr.dll",
+  "LICENSE.txt",
+  "ThirdPartyNotices.txt",
+];
 
 const archiveNames = {
   qdrant: {
@@ -54,6 +67,25 @@ function normalizeArch(value) {
 
 function runtimeTarget(platform, arch) {
   return `${platform}-${arch}`;
+}
+
+function stageBundledPowerShell(platform, arch) {
+  if (platform !== "windows") {
+    return;
+  }
+  const override = process.env.AMITIA_POWERSHELL_RUNTIME_PATH;
+  const source = override
+    ? resolve(override)
+    : resolve(resourcesRoot, "runtime", runtimeTarget(platform, arch), "powershell");
+  for (const name of powershellRequiredFiles) {
+    assertRegularNonEmptyFile(join(source, name), `PowerShell runtime ${name}`);
+  }
+  const destination = join(stageRoot, "powershell");
+  mkdirSync(resolve(destination, ".."), { recursive: true });
+  cpSync(source, destination, { recursive: true, force: true });
+  for (const name of powershellRequiredFiles) {
+    assertRegularNonEmptyFile(join(destination, name), `staged PowerShell runtime ${name}`);
+  }
 }
 
 function goTarget(platform, arch) {
@@ -248,6 +280,7 @@ export async function prepareReleaseRuntimeAssets() {
   normalizeNodeArchive(selectArchive("node", platform, arch), platform);
   normalizeDatabaseArchive("qdrant", selectArchive("qdrant", platform, arch), platform, arch);
   normalizeDatabaseArchive("surrealdb", selectArchive("surrealdb", platform, arch), platform, arch);
+  stageBundledPowerShell(platform, arch);
 
   const entries = collectStageFiles().map((absolute) => {
     const stats = statSync(absolute);
