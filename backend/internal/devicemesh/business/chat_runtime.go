@@ -71,6 +71,18 @@ func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.Exe
 		if turnErr == nil {
 			return coordination.ErrWrongOwner
 		}
+		if errors.Is(turnErr, ErrInterrupted) || errors.Is(turnErr, context.Canceled) {
+			saved.Status = "interrupted"
+		} else {
+			saved.Status = "failed"
+		}
+		if saved.Runtime == nil {
+			saved.Runtime = &conversationstream.ActiveTurnState{TurnID: scope.TurnID, RequestID: scope.RequestID, ExecutionID: scope.ExecutionID}
+		}
+		saved.Runtime.Status = saved.Status
+		if saved.Status == "failed" {
+			appendRuntimeError(saved.Runtime, turnErr)
+		}
 	} else {
 		saved.Runtime = runtime
 		if turnErr != nil && saved.Status != "interrupted" {
@@ -87,6 +99,23 @@ func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.Exe
 	commitScope.RequestID = fmt.Sprintf("runtime/%s/%d", scope.RequestID, row.Revision)
 	_, err = e.commit(ctx, coordination.Commit{Scope: commitScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: row.ID, RoleID: scope.RoleID, ExpectedRevision: row.Revision, Body: body(saved)}}})
 	return err
+}
+
+func appendRuntimeError(runtime *conversationstream.ActiveTurnState, turnErr error) {
+	if runtime == nil || turnErr == nil {
+		return
+	}
+	message := strings.TrimSpace(turnErr.Error())
+	if message == "" {
+		return
+	}
+	for _, block := range runtime.Blocks {
+		if block.Type == "error" {
+			return
+		}
+	}
+	result, _ := json.Marshal(map[string]string{"userMessage": message})
+	runtime.Blocks = append(runtime.Blocks, conversationstream.BlockState{BlockID: "error/" + runtime.TurnID, BlockSequence: int64(len(runtime.Blocks) + 1), Type: "error", Status: "failed", Revision: 1, Content: message, Payload: map[string]any{"result": string(result)}})
 }
 
 func (e *Engine) loadOwnedRetryRuntime(ctx context.Context, scope coordination.ExecutionScope, request Request) (*conversationstream.ActiveTurnState, error) {
@@ -135,6 +164,13 @@ func (e *Engine) loadOwnedRetryRuntime(ctx context.Context, scope coordination.E
 			return nil, ErrUncertainExecution
 		}
 	}
+	blocks := make([]conversationstream.BlockState, 0, len(runtime.Blocks))
+	for _, block := range runtime.Blocks {
+		if block.Type != "error" {
+			blocks = append(blocks, block)
+		}
+	}
+	runtime.Blocks = blocks
 	return runtime, nil
 }
 

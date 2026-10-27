@@ -290,10 +290,10 @@ function turnErrorDetail(turn: any): string {
   let payload: Record<string, unknown>;
   try {
     const parsed = JSON.parse(String(item.resultJson || "{}"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.content || item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
     payload = parsed as Record<string, unknown>;
   } catch {
-    return String(item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因");
+    return String(item.content || item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因");
   }
   const toText = (value: unknown): string => {
     if (value === undefined || value === null) return "";
@@ -308,7 +308,7 @@ function turnErrorDetail(turn: any): string {
   const userMessage = toText(payload.userMessage);
   const errorCode = toText(payload.errorCode) || String(item.errorCode || "").trim();
   const provider = toText(payload.provider);
-  const message = userMessage || internalMessage || errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
+  const message = userMessage || internalMessage || toText(payload.message) || toText(payload.error) || toText(item.content) || errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
   return [provider, errorCode, message].filter(Boolean).join(" · ");
 }
 

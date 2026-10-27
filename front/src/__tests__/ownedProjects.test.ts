@@ -33,7 +33,10 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     currentProjects = [project("source")];
     oldProjects = [];
     mocks.get.mockImplementation(async (path: string, config: any) => {
-      if (path.endsWith("/historical-roles")) return { data: { roles: historicalRoles, executionScope: structuredClone(scope) } };
+      if (path.endsWith("/historical-roles")) {
+        if (!scope.coordinated) throw new Error("禁止将设备专属数据保存到其他设备");
+        return { data: { roles: historicalRoles, executionScope: structuredClone(scope) } };
+      }
       if (path.endsWith("/projects")) return { data: { projects: currentProjects, historicalProjects: config.params.historicalRoleId ? oldProjects : [], executionScope: structuredClone(scope) } };
       if (path.endsWith("/resources")) return { data: { resource: { kind: config.params.kind, id: config.params.id, roleId: scope.roleId, ownerId: scope.resourceOwnerId, revision: 1, deleted: false, body: {} }, executionScope: structuredClone(scope) } };
       if (path.endsWith("/conversations")) return { data: { executionScope: structuredClone(scope), snapshot: { ownerId: scope.resourceOwnerId, resources: [{ kind: "conversation", id: "chat", roleId: "role", ownerId: scope.resourceOwnerId, revision: 1, deleted: false, body: { id: "chat", title: "当前对话", projectId: "same-project", updatedAt: "2026-10-07T00:00:00Z" } }] }, ...(scope.coordinated ? { historicalSnapshot: { ownerId: "source", resources: [{ kind: "conversation", id: "chat", roleId: "old-role", ownerId: "source", revision: 1, deleted: false, body: { id: "chat", title: "原设备对话", projectId: "same-project", updatedAt: "2026-10-06T00:00:00Z" } }] } } : {}) } };
@@ -49,9 +52,18 @@ describe("按角色和数据所有者保存的逻辑项目", () => {
     });
   });
 
+  it("普通新对话不依赖侧边栏接口", async () => {
+    const store = useChatStore();
+    const fetchSidebar = vi.spyOn(store, "fetchSidebar").mockRejectedValue(new Error("接口不可用"));
+    await expect(store.fetchSidebar()).rejects.toThrow("接口不可用");
+    await expect(useConversationWorkspace().startDraftConversation()).resolves.toBeNull();
+    expect(fetchSidebar).toHaveBeenCalledOnce();
+  });
+
   it("OFF 项目由 Source 保存，并携带多工作区集合", async () => {
     const store = useChatStore();
     await store.fetchSidebar();
+    expect(mocks.get.mock.calls.some(([path]) => path.endsWith("/historical-roles"))).toBe(false);
     expect(store.sidebar.projects[0]).toMatchObject({ id: ownedProjectReference("source", "same-project"), ownerId: "source", rootUri: "amitia://workspace/@workspace-source/", workspaceId: "workspace-source", primaryWorkspaceId: "workspace-source", conversationCount: 1 });
     expect(store.sidebar.recent).toHaveLength(0);
     await store.createProject({ name: "新项目", expectedExecutionScope: store.projectIntent!, workspaces: [{ id: "workspace-new", deviceId: "source", name: "新项目", kind: "local", rootUri: "amitia://workspace/@workspace-new/" }], primaryWorkspaceId: "workspace-new" });

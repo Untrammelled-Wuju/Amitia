@@ -8,6 +8,7 @@ import appSource from "../App.vue?raw";
 import backgroundSource from "../components/ApplicationBackground.vue?raw";
 import appShellSource from "../components/BuiltinAppShell.vue?raw";
 import titleBarSource from "../components/DesktopTitleBar.vue?raw";
+import elementOverridesSource from "../styles/element-overrides.css?raw";
 
 function installDesktopApi(platform: string) {
   (window as any).amitiaDesktop = {};
@@ -55,6 +56,9 @@ describe("跨端窗口导航控件", () => {
     expect(backgroundSource).toContain("position: absolute !important");
     expect(appSource).toContain("html.amitia-titlebar-shell .el-overlay {\n  top: 0 !important;");
     expect(appSource).toContain("z-index: 20000 !important;");
+    expect(appSource).toContain("html.amitia-titlebar-shell .el-popper {");
+    expect(appSource).toContain("z-index: 20001 !important;");
+    expect(elementOverridesSource).not.toContain(".el-popper { z-index: 30; }");
     expect(titleBarSource).toContain("class=\"window-drag-region\"");
     expect(titleBarSource).toContain("'is-overlay-blocked': windowLayerBlocked");
     expect(titleBarSource).not.toContain(":global(");

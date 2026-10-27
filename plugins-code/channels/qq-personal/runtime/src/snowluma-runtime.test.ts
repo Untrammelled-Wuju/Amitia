@@ -45,6 +45,7 @@ function writeFakeSnowLuma(root: string): void {
   fs.writeFileSync(path.join(root, "index.mjs"), [
     'import fs from "node:fs"',
     'import http from "node:http"',
+    'if (!process.env.SNOWLUMA_UPDATE_ROOT) throw new Error("SNOWLUMA_UPDATE_ROOT missing")',
     'fs.mkdirSync("config", { recursive: true })',
     'fs.writeFileSync("config/webui.json", JSON.stringify({ passwordHash: "0".repeat(128), passwordSalt: "0".repeat(32), mustChangePassword: true, generatedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }))',
     'process.stdout.write("initial credentials: user=admin password=TempPass!42\\n")',

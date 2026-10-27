@@ -279,7 +279,8 @@ export class AgentEventReducer {
         }
         return copy;
       });
-      if (terminalStatus === "failed" && String(event.payload?.userMessage || "").trim() && !items.some((item) => item.type === "error")) {
+      const failureMessage = String(event.payload?.userMessage || event.payload?.message || event.payload?.error || "").trim();
+      if (terminalStatus === "failed" && failureMessage && !items.some((item) => item.type === "error")) {
         items.push({
           id: `turn-error:${turnId}`,
           turnId,
@@ -288,7 +289,7 @@ export class AgentEventReducer {
           type: "error",
           status: "failed",
           revision: 1,
-          content: String(event.payload?.userMessage || ""),
+          content: failureMessage,
           resultJson: JSON.stringify(event.payload || {}),
           errorCode: String(event.payload?.errorCode || ""),
           createdAt: event.createdAt || "",

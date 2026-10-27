@@ -16,6 +16,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	platformprocess "github.com/u-ai/backend/internal/platform/process"
 )
 
 type hostCommandOutput struct {
@@ -151,13 +152,9 @@ func (s *BuiltinUtilityService) executeHostCommand(ctx context.Context, input js
 	shellArgs := []string(nil)
 	switch runtime.GOOS {
 	case "windows":
-		shellPath = "powershell.exe"
-		if resolved, lookupErr := exec.LookPath("pwsh.exe"); lookupErr == nil {
-			shellPath = resolved
-		} else if resolved, lookupErr := exec.LookPath("powershell.exe"); lookupErr == nil {
-			shellPath = resolved
-		} else {
-			return nil, fmt.Errorf("PowerShell executable unavailable: %w", lookupErr)
+		shellPath, err = platformprocess.ResolvePowerShell(os.Getenv("SystemRoot"))
+		if err != nil {
+			return nil, fmt.Errorf("PowerShell executable unavailable: %w", err)
 		}
 		shellArgs = []string{"-NoProfile", "-NonInteractive", "-Command", command}
 	case "linux", "darwin":

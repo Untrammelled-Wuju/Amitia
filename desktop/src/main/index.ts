@@ -18,7 +18,13 @@ import {
   stopCore,
   waitForCoreReadiness,
 } from "./core-manager";
-import { ensureAmitiaDataDir, getAmitiaDataDir, isDevMode } from "./path-manager";
+import {
+  configureElectronStorage,
+  ensureAmitiaDataDir,
+  getAmitiaDataDir,
+  getInstallDir,
+  isDevMode,
+} from "./path-manager";
 import { ensureDesktopInstanceID } from "./desktop-identity";
 import { registerAppProtocol } from "./app-protocol";
 import { registerUpdateManager, waitForStartupCheck } from "./update-manager";
@@ -32,6 +38,7 @@ import { DesktopDeploymentLifecycle } from "./deployment-lifecycle";
 import { registerRealtimeMediaHandlers } from "./realtime-media";
 import { installDesktopClientDiagnostics } from "./client-diagnostics";
 import { configureDesktopNotificationHost } from "./desktop-notification";
+import { ensureInstalledAppElevation } from "./windows-elevation";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -190,6 +197,10 @@ async function startDesktop(): Promise<void> {
   await enterMainApp();
   clearStartupTimer();
 }
+
+ensureInstalledAppElevation(getInstallDir());
+
+configureElectronStorage();
 
 configureDesktopNotificationHost();
 

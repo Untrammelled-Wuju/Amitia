@@ -1,6 +1,9 @@
 {
   "name": "@amitia/plugin-cli",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=26 <27"
+  },
   "description": "Amitia Extension CLI - create, develop, validate, build, pack, sign and publish Amitia extensions",
   "type": "module",
   "bin": {

@@ -291,8 +291,12 @@ function syncConversationActivityPolling() {
 }
 
 async function handleNewChat() {
-  await startDraftConversation();
-  await router.push({ path: "/chat" });
+  try {
+    await startDraftConversation();
+    await router.push({ path: "/chat" });
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "新建对话失败");
+  }
 }
 
 async function handleNewGroupChat() {
