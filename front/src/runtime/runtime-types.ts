@@ -190,6 +190,7 @@ export interface AmitiaDesktopAPI {
   ): () => void;
   onUpdateError(callback: (event: unknown, data: unknown) => void): () => void;
   getBackendAuthHeaders(target?: "local" | "business"): Promise<Record<string, string>>;
+  invalidateBackendSession?(): Promise<void>;
   getClientDiagnostics?(): Promise<DesktopClientError[]>;
   clearClientDiagnostics?(): Promise<void>;
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }>;

@@ -70,6 +70,8 @@ type ProcessExitObserver interface {
 }
 
 type ProcessSupervisor struct {
+	lifecycleMu        sync.Mutex
+	shuttingDown       bool
 	mu                 sync.Mutex
 	instances          map[string]*ServiceInstance
 	defs               map[string]*ServiceRuntimeDefinition
@@ -356,6 +358,11 @@ type StartResult struct {
 }
 
 func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*StartResult, error) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.shuttingDown {
+		return nil, errors.New("trusted_service: supervisor is shutting down")
+	}
 	if s.ownerStoreErr != nil {
 		return nil, fmt.Errorf("trusted_service: durable process owner store unavailable: %w", s.ownerStoreErr)
 	}
@@ -391,14 +398,40 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 		return nil, fmt.Errorf("%w: %s", ErrServiceQuarantined, req.ServiceID)
 	}
 	s.mu.Unlock()
+	exe, err := s.selector.Select(def)
+	if err != nil {
+		return nil, err
+	}
+	if s.ownerStore != nil {
+		if meta, ok := s.ownerStore.LookupByProcessInstanceID(req.ServiceID); ok {
+			if s.procMgr.IsAlive(meta.PID) {
+				hostID := s.GetHostInstanceID()
+				if hostID == "" || meta.HostInstanceID == "" || hostID != meta.HostInstanceID {
+					return nil, errors.New("trusted_service: cannot prove previous process belongs to this host")
+				}
+				if meta.Executable == "/usr/bin/sandbox-exec" {
+					expected := exe.Path
+					if !filepath.IsAbs(expected) && req.BasePath != "" {
+						expected = filepath.Join(req.BasePath, expected)
+					}
+					identity, identityErr := process.ReadProcessIdentity(meta.PID)
+					if identityErr == nil && filepath.IsAbs(expected) && process.SameProcessIdentity(expected, meta.ProcessStartID, identity) {
+						if err := s.ownerStore.refreshExecutable(meta.ProcessInstanceID, meta.Executable, meta.ProcessStartID, identity.Executable); err != nil {
+							return nil, fmt.Errorf("trusted_service: refresh previous process identity: %w", err)
+						}
+					}
+				}
+				if err := s.CleanupDurableOwnedProcess(ctx, meta.ProcessInstanceID, meta.PID, hostID); err != nil {
+					return nil, fmt.Errorf("trusted_service: clean previous service process: %w", err)
+				}
+			} else if err := s.ownerStore.RemoveOwnership(meta.ProcessInstanceID); err != nil {
+				return nil, fmt.Errorf("trusted_service: remove stale process ownership: %w", err)
+			}
+		}
+	}
 
 	if err := ValidateTrust(def, req.PublisherTrust); err != nil {
 		s.log("error", "trust validation failed", map[string]any{"service": req.ServiceID, "error": err.Error()})
-		return nil, err
-	}
-
-	exe, err := s.selector.Select(def)
-	if err != nil {
 		return nil, err
 	}
 
@@ -575,6 +608,25 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	s.mu.Unlock()
 
 	if s.ownerStore != nil {
+		if filepath.Clean(launchPath) == "/usr/bin/sandbox-exec" && filepath.IsAbs(fullExePath) {
+			deadline := time.Now().Add(2 * time.Second)
+			for {
+				identity, identityErr := process.ReadProcessIdentity(instance.PID)
+				if identityErr == nil && process.SameProcessIdentity(fullExePath, identity.StartIdentity, identity) {
+					break
+				}
+				if time.Now().After(deadline) {
+					instance.SetState(ServiceStateFailed)
+					return nil, errors.New("trusted_service: sandbox process identity did not reach expected executable")
+				}
+				select {
+				case <-time.After(25 * time.Millisecond):
+				case <-ctx.Done():
+					instance.SetState(ServiceStateFailed)
+					return nil, ctx.Err()
+				}
+			}
+		}
 		if _, err := s.ownerStore.RecordOwnership(instance, instance.HostInstanceID, instance.HostSessionID); err != nil {
 			s.ownerStoreErr = err
 			instance.SetState(ServiceStateFailed)
@@ -992,10 +1044,13 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 		inst.protocolSession.Close()
 	}
 
+	inst.mu.Lock()
 	handle := process.ProcessTreeHandle(inst.procHandle)
 	if handle != 0 {
 		process.CloseProcessTree(handle)
+		inst.procHandle = 0
 	}
+	inst.mu.Unlock()
 
 	stopped := inst.State_()
 	expected := stopped == ServiceStateStopping || stopped == ServiceStateStopped
@@ -1167,13 +1222,20 @@ type StopResult struct {
 }
 
 func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopResult, error) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	return s.stop(ctx, req)
+}
+
+func (s *ProcessSupervisor) stop(ctx context.Context, req StopRequest) (*StopResult, error) {
 	s.mu.Lock()
 	inst, exists := s.instances[req.ServiceID]
 	s.mu.Unlock()
 	if !exists {
 		return nil, ErrServiceNotFound
 	}
-	if inst.State_().IsTerminal() {
+	inst.cancelPendingRecovery()
+	if inst.State_() == ServiceStateStopped {
 		return &StopResult{ServiceID: req.ServiceID, State: inst.State_(), StoppedAt: time.Now().UTC()}, nil
 	}
 
@@ -1207,11 +1269,11 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 		inst.protocolSession.Close()
 	}
 
-	exited := s.waitForProcessExit(inst, grace)
+	exited := s.waitForProcessExit(stopCtx, inst, grace)
 
 	if !exited {
 		s.killProcessTree(inst)
-		exited = s.waitForProcessExit(inst, killTimeout)
+		exited = s.waitForProcessExit(stopCtx, inst, killTimeout)
 	}
 
 	if !exited && s.procMgr.IsAlive(inst.PID) {
@@ -1220,6 +1282,12 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 			"pid":     inst.PID,
 		})
 		return nil, fmt.Errorf("trusted_service: process %d for service %s still alive after kill", inst.PID, req.ServiceID)
+	}
+	inst.mu.Lock()
+	treeErr := process.TerminateRemainingProcessTree(inst.PID, process.ProcessTreeHandle(inst.procHandle))
+	inst.mu.Unlock()
+	if treeErr != nil {
+		return nil, fmt.Errorf("trusted_service: clean remaining process tree for service %s: %w", req.ServiceID, treeErr)
 	}
 
 	if def.Shutdown.RemoveTempDir {
@@ -1242,7 +1310,7 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 	return &StopResult{ServiceID: req.ServiceID, State: ServiceStateStopped, StoppedAt: time.Now().UTC()}, nil
 }
 
-func (s *ProcessSupervisor) waitForProcessExit(inst *ServiceInstance, timeout time.Duration) bool {
+func (s *ProcessSupervisor) waitForProcessExit(ctx context.Context, inst *ServiceInstance, timeout time.Duration) bool {
 	if timeout <= 0 {
 		return !s.procMgr.IsAlive(inst.PID)
 	}
@@ -1258,7 +1326,8 @@ func (s *ProcessSupervisor) waitForProcessExit(inst *ServiceInstance, timeout ti
 		}
 		select {
 		case <-ticker.C:
-		case <-time.After(50 * time.Millisecond):
+		case <-ctx.Done():
+			return false
 		}
 	}
 }
@@ -1386,7 +1455,10 @@ func (s *ProcessSupervisor) LookupDurableByPluginID(pluginID string) []ProcessOw
 	return s.ownerStore.LookupByPluginID(pluginID)
 }
 
-func (s *ProcessSupervisor) StopAll(ctx context.Context, reason string) {
+func (s *ProcessSupervisor) StopAll(ctx context.Context, reason string) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.shuttingDown = true
 	s.mu.Lock()
 	ids := make([]string, 0, len(s.instances))
 	for id := range s.instances {
@@ -1394,14 +1466,21 @@ func (s *ProcessSupervisor) StopAll(ctx context.Context, reason string) {
 	}
 	s.mu.Unlock()
 	var wg sync.WaitGroup
+	var failuresMu sync.Mutex
+	var failures []error
 	for _, id := range ids {
 		wg.Add(1)
 		go func(serviceID string) {
 			defer wg.Done()
-			_, _ = s.Stop(ctx, StopRequest{ServiceID: serviceID, Reason: reason, Force: false})
+			if _, err := s.stop(ctx, StopRequest{ServiceID: serviceID, Reason: reason, Force: false}); err != nil {
+				failuresMu.Lock()
+				failures = append(failures, fmt.Errorf("stop service %s: %w", serviceID, err))
+				failuresMu.Unlock()
+			}
 		}(id)
 	}
 	wg.Wait()
+	return errors.Join(failures...)
 }
 
 func (s *ProcessSupervisor) Quarantine(serviceID, reason string) error {

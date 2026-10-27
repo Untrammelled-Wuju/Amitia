@@ -182,3 +182,61 @@ func TestWorkerExecutionContinuityScopeRequiresLeaseContext(t *testing.T) {
 		t.Fatalf("trusted synchronous continuity scope rejected: called=%v err=%v", called, err)
 	}
 }
+
+func TestExecutionScopePreservesTrustedGroupRole(t *testing.T) {
+	engine, service, _, scope, _, _ := ownedWorkerFixture(t)
+	scope.ConversationRoleID = "group-owner-role"
+	called := false
+	if err := engine.WithExecutionScope(t.Context(), scope, func(context.Context) error {
+		called = true
+		return nil
+	}); !errors.Is(err, coordination.ErrScopeExpired) || called {
+		t.Fatalf("unbound group scope accepted: called=%v err=%v", called, err)
+	}
+	if err := engine.WithExecutionScope(coordination.WithScope(t.Context(), scope), scope, func(context.Context) error { return nil }); !errors.Is(err, coordination.ErrScopeExpired) {
+		t.Fatalf("group scope without authority accepted: %v", err)
+	}
+	ctx, _, finish, err := service.Begin(t.Context(), scope.SpaceID, scope.InitiatorDeviceID, scope.TargetDeviceID, scope.CoreID, scope.RoleID, scope.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finish()
+	ctx = coordination.WithScope(ctx, scope)
+	if err := engine.WithExecutionScope(ctx, scope, func(current context.Context) error {
+		actual, ok := coordination.FromContext(current)
+		if !ok || actual != scope {
+			t.Fatalf("group scope changed: %+v", actual)
+		}
+		called = true
+		return nil
+	}); err != nil || !called {
+		t.Fatalf("trusted group scope rejected: called=%v err=%v", called, err)
+	}
+}
+
+type groupScopeTestPort struct {
+	coordination.DataPort
+	state coordination.GroupState
+}
+
+func (p groupScopeTestPort) GroupState(_ context.Context, _ coordination.ExecutionScope, conversation string) (coordination.GroupState, error) {
+	if conversation != p.state.ConversationID {
+		return coordination.GroupState{}, coordination.ErrWrongOwner
+	}
+	return p.state, nil
+}
+
+func TestConversationExecutionScopeChecksGroupMembership(t *testing.T) {
+	engine, _, _, scope, _, _ := ownedWorkerFixture(t)
+	scope.ConversationRoleID = "group-owner-role"
+	port := groupScopeTestPort{DataPort: engine.data, state: coordination.GroupState{ConversationID: "chat", ConversationType: "group", ConversationRoleID: scope.ConversationRoleID, RoleOwnerID: scope.RoleOwnerID, Members: []coordination.GroupMember{{CharacterID: scope.RoleID, Status: coordination.GroupMemberStatusActive}}}}
+	engine.data = port
+	if err := engine.WithConversationExecutionScope(t.Context(), scope, "chat", func(context.Context) error { return nil }); err != nil {
+		t.Fatalf("valid group scope rejected: %v", err)
+	}
+	port.state.Members[0].Status = coordination.GroupMemberStatusLeft
+	engine.data = port
+	if err := engine.WithConversationExecutionScope(t.Context(), scope, "chat", func(context.Context) error { t.Fatal("inactive member accepted"); return nil }); !errors.Is(err, coordination.ErrWrongOwner) {
+		t.Fatalf("inactive member not rejected: %v", err)
+	}
+}

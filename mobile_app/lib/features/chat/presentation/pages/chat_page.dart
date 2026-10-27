@@ -2940,6 +2940,36 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 onPickVideo: _pickAndSendVideo,
                 onSendCode: _onSendCode,
                 onLoadAgentSkills: _loadAgentSkills,
+                onLoadAgentSkillsPage: (page, query) => ref
+                    .read(extensionServiceProvider)
+                    .agentSkills(page: page, pageSize: 50, query: query),
+                isGroup: _runtime.group != null,
+                groupMembers:
+                    _runtime.group?.activeMembers
+                        .map(
+                          (member) => {
+                            ...member.toJson(),
+                            'characterName': member.characterName,
+                          },
+                        )
+                        .toList() ??
+                    const [],
+                onGroupMention: (memberId) {
+                  final members =
+                      _runtime.group?.activeMembers ??
+                      const <OwnedGroupMember>[];
+                  final selected = memberId == null
+                      ? members
+                      : members.where((member) => member.memberId == memberId);
+                  final mentions = [..._runtime.groupMentions];
+                  for (final member in selected) {
+                    mentions.removeWhere(
+                      (mention) => mention['memberId'] == member.memberId,
+                    );
+                    mentions.add(member.toJson());
+                  }
+                  _runtime.setGroupMentions(mentions);
+                },
                 onStartVoiceRecording: _startRecordedVoice,
                 onFinishVoiceRecording: _finishRecordedVoice,
                 onCancelVoiceRecording: _cancelRecordedVoice,
@@ -3999,9 +4029,10 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTypography.body(
-                              context,
-                            ).copyWith(fontSize: 16, fontWeight: FontWeight.w500),
+                            style: AppTypography.body(context).copyWith(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),

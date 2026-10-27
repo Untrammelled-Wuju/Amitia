@@ -56,9 +56,9 @@ func (s *service) OwnedStateMutations(ctx context.Context, inference business.In
 		appraisal = &interaction.AppraisalResult{EventType: "chat"}
 	}
 	now := time.Now().UTC()
-	psycheState, psycheRevision := currentOwnedPsycheState(inference.Snapshot.Resources)
-	relationshipState, relationshipRevision := currentOwnedRelationshipState(inference.Snapshot.Resources)
-	needState, needRevision := currentOwnedNeedState(inference.Snapshot.Resources)
+	psycheState, psycheRevision := currentOwnedPsycheState(inference.Snapshot.Resources, inference.Scope.RoleID)
+	relationshipState, relationshipRevision := currentOwnedRelationshipState(inference.Snapshot.Resources, inference.Scope.RoleID)
+	needState, needRevision := currentOwnedNeedState(inference.Snapshot.Resources, inference.Scope.RoleID)
 	psycheState = nextOwnedPsycheState(psycheState, appraisal, now)
 	relationshipState = nextOwnedRelationshipState(relationshipState, appraisal, now)
 	needState = nextOwnedNeedState(needState, appraisal, now)
@@ -72,9 +72,9 @@ func (s *service) OwnedStateMutations(ctx context.Context, inference business.In
 		Revision int64
 		Body     any
 	}{
-		{Kind: coordination.RuntimeStateKindPsyche, ID: "role", Revision: psycheRevision, Body: ownedPsycheStateDocument{PsycheState: psycheState, UpdatedAt: updatedAt, SourceRequestID: requestID, SourceConversation: inference.ConversationID, SourceTurnID: turnID}},
-		{Kind: coordination.RuntimeStateKindRelationship, ID: "user_character", Revision: relationshipRevision, Body: ownedRelationshipStateDocument{RelationshipState: relationshipState, UpdatedAt: updatedAt, SourceRequestID: requestID, SourceConversation: inference.ConversationID, SourceTurnID: turnID}},
-		{Kind: coordination.RuntimeStateKindNeeds, ID: "role", Revision: needRevision, Body: ownedNeedStateDocument{NeedState: needState, UpdatedAt: updatedAt, SourceRequestID: requestID, SourceConversation: inference.ConversationID, SourceTurnID: turnID}},
+		{Kind: coordination.RuntimeStateKindPsyche, ID: coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, inference.Scope.RoleID), Revision: psycheRevision, Body: ownedPsycheStateDocument{PsycheState: psycheState, UpdatedAt: updatedAt, SourceRequestID: requestID, SourceConversation: inference.ConversationID, SourceTurnID: turnID}},
+		{Kind: coordination.RuntimeStateKindRelationship, ID: coordination.RoleRuntimeStateID(coordination.RuntimeStateKindRelationship, inference.Scope.RoleID), Revision: relationshipRevision, Body: ownedRelationshipStateDocument{RelationshipState: relationshipState, UpdatedAt: updatedAt, SourceRequestID: requestID, SourceConversation: inference.ConversationID, SourceTurnID: turnID}},
+		{Kind: coordination.RuntimeStateKindNeeds, ID: coordination.RoleRuntimeStateID(coordination.RuntimeStateKindNeeds, inference.Scope.RoleID), Revision: needRevision, Body: ownedNeedStateDocument{NeedState: needState, UpdatedAt: updatedAt, SourceRequestID: requestID, SourceConversation: inference.ConversationID, SourceTurnID: turnID}},
 	}
 	mutations := make([]coordination.Mutation, 0, len(documents))
 	for _, document := range documents {
@@ -87,49 +87,79 @@ func (s *service) OwnedStateMutations(ctx context.Context, inference business.In
 	return mutations, coordination.ValidateCurrent(ctx)
 }
 
-func currentOwnedPsycheState(resources []coordination.Resource) (interaction.PsycheState, int64) {
+func currentOwnedPsycheState(resources []coordination.Resource, roleID string) (interaction.PsycheState, int64) {
 	var value interaction.PsycheState
 	revision := int64(0)
+	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, roleID)
+	legacyID := coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindPsyche)
+	legacyFound := false
 	for _, resource := range resources {
-		if resource.Kind == coordination.RuntimeStateKindPsyche && resource.ID == "role" && !resource.Deleted {
+		if resource.Kind != coordination.RuntimeStateKindPsyche || resource.RoleID != roleID || resource.Deleted {
+			continue
+		}
+		if resource.ID == qualifiedID {
 			if json.Unmarshal(resource.Body, &value) == nil {
 				revision = resource.Revision
 			}
+			break
+		}
+		if resource.ID == legacyID && json.Unmarshal(resource.Body, &value) == nil {
+			legacyFound = true
 		}
 	}
 	if revision == 0 {
-		value = defaultOwnedPsycheState()
+		if !legacyFound {
+			value = defaultOwnedPsycheState()
+		}
 	}
 	return value, revision
 }
 
-func currentOwnedRelationshipState(resources []coordination.Resource) (interaction.RelationshipState, int64) {
+func currentOwnedRelationshipState(resources []coordination.Resource, roleID string) (interaction.RelationshipState, int64) {
 	var value interaction.RelationshipState
 	revision := int64(0)
+	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindRelationship, roleID)
+	legacyID := coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindRelationship)
 	for _, resource := range resources {
-		if resource.Kind == coordination.RuntimeStateKindRelationship && resource.ID == "user_character" && !resource.Deleted {
+		if resource.Kind != coordination.RuntimeStateKindRelationship || resource.RoleID != roleID || resource.Deleted {
+			continue
+		}
+		if resource.ID == qualifiedID {
 			if json.Unmarshal(resource.Body, &value) == nil {
 				revision = resource.Revision
 			}
+			break
+		}
+		if resource.ID == legacyID {
+			_ = json.Unmarshal(resource.Body, &value)
 		}
 	}
-	if revision == 0 || value == (interaction.RelationshipState{}) {
+	if value == (interaction.RelationshipState{}) {
 		value = interaction.RelationshipState{Trust: 0.5, Familiarity: 0, Security: 0.5, Tension: 0, RepairConfidence: 0.5, Boundary: 0.5}
 	}
 	return value, revision
 }
 
-func currentOwnedNeedState(resources []coordination.Resource) (interaction.NeedState, int64) {
+func currentOwnedNeedState(resources []coordination.Resource, roleID string) (interaction.NeedState, int64) {
 	var value interaction.NeedState
 	revision := int64(0)
+	qualifiedID := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindNeeds, roleID)
+	legacyID := coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindNeeds)
 	for _, resource := range resources {
-		if resource.Kind == coordination.RuntimeStateKindNeeds && resource.ID == "role" && !resource.Deleted {
+		if resource.Kind != coordination.RuntimeStateKindNeeds || resource.RoleID != roleID || resource.Deleted {
+			continue
+		}
+		if resource.ID == qualifiedID {
 			if json.Unmarshal(resource.Body, &value) == nil {
 				revision = resource.Revision
 			}
+			break
+		}
+		if resource.ID == legacyID {
+			_ = json.Unmarshal(resource.Body, &value)
 		}
 	}
-	if revision == 0 || value.Count == 0 {
+	if value.Count == 0 {
 		value = defaultOwnedNeedState(time.Now().UTC())
 	}
 	return value, revision

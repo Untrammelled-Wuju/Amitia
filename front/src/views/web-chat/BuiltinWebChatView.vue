@@ -87,6 +87,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           :actions="conversationHostActions"
           ref="msgAreaRef"
           :messages="messages"
+          :is-group="Boolean(group)"
           :device-owned="owned.enabled.value"
           :model-error="modelError"
           :history-messages="persistedMessages"
@@ -178,6 +179,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       :reply-target="replyTarget"
       :character-id="characterId"
       :conversation-id="convId"
+      :is-group="Boolean(group)"
+      :group-members="activeGroupMembers"
       :channel="chatExtensionContext.channel"
       :models="llmModels"
       :selected-model-id="selectedModelId"
@@ -274,7 +277,7 @@ import BuiltinConversationOverlay from "@/components/ui-runtime/BuiltinConversat
 import { provideConversationUIContext, readonlyMessages } from "@/ui-runtime/conversationContext";
 import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
 import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
-import type { OwnedGroupMember, OwnedGroupMention, OwnedGroupState } from "@/runtime/device-owned-chat";
+import type { OwnedGroupMember, OwnedGroupState } from "@/runtime/device-owned-chat";
 
 const router = useRouter();
 const route = useRoute();
@@ -350,7 +353,6 @@ const convId = ref(String(route.query.conversationId || ""));
 const convTitle = ref("");
 const characterId = ref("");
 const showGroupMembers = ref(false);
-const groupMentions = ref<OwnedGroupMention[]>([]);
 const messageContentLoading = ref(false);
 watch([convId, characterId], ([id, role]) => workbench.setConversation(id, role), { immediate: true });
 const cachedDef = (() => {
@@ -873,7 +875,6 @@ const {
   activeTurnId,
   beginPendingAssistant,
   failPendingAssistant,
-  groupMentions,
 );
 
 const {
@@ -1051,15 +1052,11 @@ function handleViewSummary() {
 
 function insertGroupMention(member: OwnedGroupMember) {
   inputRef.value?.insertText?.(`@${member.characterName} `);
-  if (!groupMentions.value.some((mention) => mention.memberId === member.memberId)) {
-    groupMentions.value = [...groupMentions.value, { memberId: member.memberId, characterId: member.characterId, roleOwnerId: member.roleOwnerId }];
-  }
   inputRef.value?.focus?.();
 }
 
 function insertAllGroupMentions() {
   inputRef.value?.insertText?.("@所有成员 ");
-  groupMentions.value = activeGroupMembers.value.map((member) => ({ memberId: member.memberId, characterId: member.characterId, roleOwnerId: member.roleOwnerId }));
   inputRef.value?.focus?.();
 }
 
@@ -1108,39 +1105,80 @@ onMounted(async () => {
   window.addEventListener("amitia:execution-scope-changed", handleScopeChanged);
   void loadLlmModels();
   let ownedInitialized = false;
+  let ownedInitializationPromise: Promise<void> | null = null;
   let ownedDataRefreshPending = false;
+  let ownedDataRefreshPromise: Promise<void> | null = null;
+  let ownedDataRetryAt = 0;
   let ownedLoadError = "";
   const reportOwnedLoadError = (error: unknown) => {
     ownedLoadError = error instanceof Error ? error.message : "聊天数据加载失败，请重试";
     modelError.value = ownedLoadError;
   };
+  const scheduleOwnedDataRetry = () => {
+    ownedDataRefreshPending = true;
+    ownedDataRetryAt = Date.now() + 15000;
+  };
   const clearOwnedLoadError = () => {
     if (ownedLoadError && modelError.value === ownedLoadError) modelError.value = "";
     ownedLoadError = "";
   };
+  const syncOwnedCharacters = () => {
+    const current = characters.value;
+    const next = owned.roles.value;
+    const unchanged = current.length === next.length && next.every((role, index) => {
+      const previous = current[index];
+      return previous?.id === role.id
+        && previous?.revision === role.revision
+        && previous?.name === role.name
+        && previous?.avatar === role.avatar;
+    });
+    if (!unchanged) characters.value = next;
+  };
+  const refreshOwnedData = async (preserve: boolean) => {
+    if (ownedDataRefreshPromise) return ownedDataRefreshPromise;
+    ownedDataRefreshPromise = (async () => {
+      const tasks: Promise<unknown>[] = [chatStore.fetchSidebar()];
+      if (convId.value) tasks.push(loadCharacterConversation({ preserve }));
+      const results = await Promise.allSettled(tasks);
+      const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failure) throw failure.reason;
+      ownedDataRefreshPending = false;
+      ownedDataRetryAt = 0;
+      clearOwnedLoadError();
+    })().finally(() => {
+      ownedDataRefreshPromise = null;
+    });
+    return ownedDataRefreshPromise;
+  };
   const initializeOwned = async () => {
-    characters.value = owned.roles.value;
-    const notificationOwner = String(route.query.ownerId || '');
-    if (notificationOwner && notificationOwner !== owned.coreId.value) {
-      disconnectAndResetConversation();
-      convId.value = '';
-      modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
-      return;
-    }
-    const notificationRole = String(route.query.characterId || '');
-    if (notificationRole && !characters.value.some((role) => role.id === notificationRole)) {
-      disconnectAndResetConversation();
-      convId.value = '';
-      modelError.value = '通知所属角色不可用，无法打开会话';
-      return;
-    }
-    const selectedId = owned.selectInitialRole(String(route.query.characterId || "") || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
-    const selected = characters.value.find((character) => character.id === selectedId);
-    if (selected) selectCharacter(selected);
-    else { characterId.value = ""; modelError.value = characters.value.length ? "请选择调用角色后发送消息" : "没有可用角色，拒绝调用"; }
-    if (characterId.value) { await chatStore.fetchSidebar(); await loadCharacterConversation(); await fetchConversations(); }
-    clearOwnedLoadError();
     ownedInitialized = true;
+    if (ownedInitializationPromise) return ownedInitializationPromise;
+    ownedInitializationPromise = (async () => {
+      syncOwnedCharacters();
+      const notificationOwner = String(route.query.ownerId || '');
+      if (notificationOwner && notificationOwner !== owned.coreId.value) {
+        disconnectAndResetConversation();
+        convId.value = '';
+        modelError.value = '通知所属核心与当前核心不同，请先切换至原核心后打开';
+        return;
+      }
+      const notificationRole = String(route.query.characterId || '');
+      if (notificationRole && !characters.value.some((role) => role.id === notificationRole)) {
+        disconnectAndResetConversation();
+        convId.value = '';
+        modelError.value = '通知所属角色不可用，无法打开会话';
+        return;
+      }
+      const selectedId = owned.selectInitialRole(String(route.query.characterId || "") || localStorage.getItem(`webchat-char-id:${owned.coreId.value}:${owned.roleOwnerId.value}`) || "");
+      const selected = characters.value.find((character) => character.id === selectedId);
+      if (selected) selectCharacter(selected);
+      else { characterId.value = ""; modelError.value = characters.value.length ? "请选择调用角色后发送消息" : "没有可用角色，拒绝调用"; }
+      if (characterId.value) await refreshOwnedData(false);
+      else clearOwnedLoadError();
+    })().finally(() => {
+      ownedInitializationPromise = null;
+    });
+    return ownedInitializationPromise;
   };
   const startOwnedPolling = () => {
     if (ownedDisposed || ownedPolicyTimer) return;
@@ -1151,7 +1189,7 @@ onMounted(async () => {
         const previousProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
         await pollOwnedChat(owned, async () => {
           if (!ownedInitialized) { await initializeOwned(); return; }
-          characters.value = owned.roles.value;
+          syncOwnedCharacters();
           const notificationOwner = String(route.query.ownerId || '');
           if (notificationOwner && notificationOwner !== owned.coreId.value) {
             disconnectAndResetConversation(); convId.value = '';
@@ -1159,14 +1197,19 @@ onMounted(async () => {
             return;
           }
           const currentProvider = `${owned.coreId.value}/${owned.policy.value?.providerEpoch}/${owned.policy.value?.modeRevision}/${owned.policy.value?.permissionRevision}`;
-          if (previousProvider !== currentProvider || ownedDataRefreshPending) {
-            await chatStore.fetchSidebar();
-            ownedDataRefreshPending = false;
-            clearOwnedLoadError();
+          const providerChanged = previousProvider !== currentProvider;
+          const shouldRefreshOwnedData = providerChanged || (ownedDataRefreshPending && Date.now() >= ownedDataRetryAt);
+          if (shouldRefreshOwnedData) {
+            try {
+              await refreshOwnedData(true);
+            } catch (error) {
+              scheduleOwnedDataRetry();
+              reportOwnedLoadError(error);
+            }
           }
           if (!characters.value.some((character) => character.id === characterId.value)) { characterId.value = ""; modelError.value = "当前角色已失效，请重新选择角色"; }
         }, (error) => {
-          ownedDataRefreshPending = true;
+          scheduleOwnedDataRetry();
           reportOwnedLoadError(error);
         }, () => ownedDisposed);
       } finally { ownedPolling = false; }
@@ -1177,6 +1220,7 @@ onMounted(async () => {
   catch (error) {
     if (ownedDisposed) return;
     if (!(error instanceof OwnedChatStateChangedError) && !owned.notice.value.includes("等待新服务批准")) owned.markUnavailable();
+    scheduleOwnedDataRetry();
     reportOwnedLoadError(error);
     startOwnedPolling();
     return;
@@ -1184,7 +1228,12 @@ onMounted(async () => {
   if (ownedDisposed) return;
   if (available) {
     try { await initializeOwned(); }
-    catch (error) { if (!ownedDisposed) reportOwnedLoadError(error); }
+    catch (error) {
+      if (!ownedDisposed) {
+        scheduleOwnedDataRetry();
+        reportOwnedLoadError(error);
+      }
+    }
     finally { startOwnedPolling(); }
     return;
   }
@@ -1251,7 +1300,7 @@ function handleScopeChanged() {
 .chat-header-region.is-titlebar :deep(.header-actions *) { -webkit-app-region: no-drag; }
 .chat-status-region { position: absolute; top: var(--chat-header-h, 44px); left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
 .composer-region { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; }
-.group-composer-members { display: flex; gap: 6px; padding: 0 14px 6px; overflow-x: auto; scrollbar-width: none; }
+.group-composer-members { display: flex; gap: 6px; width: min(760px, calc(100% - 48px)); margin: 0 auto; padding-bottom: 6px; overflow-x: auto; scrollbar-width: none; }
 .group-composer-members::-webkit-scrollbar { display: none; }
 .group-composer-members button { flex: 0 0 auto; min-height: 26px; padding: 2px 9px; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--bg-surface, var(--chat-surface-bg)); color: var(--text-secondary); cursor: pointer; font-size: 11px; }
 .group-composer-members button:hover, .group-composer-members button:focus-visible { border-color: var(--ac-color-primary); color: var(--text-primary); outline: none; }
@@ -1262,6 +1311,7 @@ function handleScopeChanged() {
 .chat-scroll-fade--bottom { bottom: 0; height: var(--chat-composer-h, 120px); background: linear-gradient(to top, color-mix(in srgb, var(--chat-surface-bg) 96%, transparent), color-mix(in srgb, var(--chat-surface-bg) 0%, transparent)); }
 .chat-surface--sidebar .chat-scroll-fade { right: min(320px, 32%); }
 @media (max-width: 768px) {
+  .group-composer-members { width: calc(100% - 16px); }
   .webchat-page {
     max-width: 100%;
   }

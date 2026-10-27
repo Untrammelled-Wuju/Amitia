@@ -214,6 +214,7 @@ type checkpoint struct {
 	Ingress        *Ingress                            `json:"ingress,omitempty"`
 	Runtime        *conversationstream.ActiveTurnState `json:"runtime,omitempty"`
 	Context        *ForwardedContext                   `json:"context,omitempty"`
+	Error          *RuntimeError                       `json:"error,omitempty"`
 	Hash           string                              `json:"hash"`
 	Status         string                              `json:"status"`
 	Response       *Response                           `json:"response,omitempty"`
@@ -824,6 +825,18 @@ func (e *Engine) runEventsLocked(ctx context.Context, request Request, emit func
 		payload := map[string]any{"saved": finalResponse.Saved}
 		if finalErr != nil {
 			payload["message"] = finalErr.Error()
+			runtimeError := DescribeRuntimeError(finalErr)
+			payload["errorCode"] = runtimeError.ErrorCode
+			payload["userMessage"] = runtimeError.UserMessage
+			payload["internalMessage"] = runtimeError.InternalMessage
+			payload["retryable"] = runtimeError.Retryable
+			payload["stage"] = runtimeError.Stage
+			if runtimeError.ToolName != "" {
+				payload["toolName"] = runtimeError.ToolName
+			}
+			if runtimeError.Provider != "" {
+				payload["provider"] = runtimeError.Provider
+			}
 		}
 		messageID := ""
 		if finalResponse.Saved && !inference.InternalWorker && !(inference.Ingress != nil && inference.Ingress.IsInternal) {

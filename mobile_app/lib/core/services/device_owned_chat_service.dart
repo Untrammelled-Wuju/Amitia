@@ -359,6 +359,42 @@ Stream<Map<String, dynamic>> decodeOwnedGroupChatStream(
             data['deliveries'] is! List) {
           throw StateError('群聊结果尚未确认保存');
         }
+        final completedConversation = (data['conversationId'] ?? '').toString();
+        final completedRound = (data['groupRoundId'] ?? '').toString();
+        if (completedConversation.isEmpty ||
+            completedRound.isEmpty ||
+            (conversationId != null &&
+                conversationId != completedConversation) ||
+            (roundId != null && roundId != completedRound)) {
+          throw StateError('群聊结果归属不一致');
+        }
+        final deliveryIds = <String>{};
+        for (final item in data['deliveries'] as List) {
+          if (item is! Map) throw StateError('群成员回复归属无效');
+          final delivery = Map<String, dynamic>.from(item);
+          final deliveryId = (delivery['deliveryId'] ?? '').toString();
+          final deliveryRequest = (delivery['requestId'] ?? '').toString();
+          final scope = delivery['executionScope'];
+          if (deliveryId.isEmpty ||
+              deliveryIds.contains(deliveryId) ||
+              delivery['saved'] != true ||
+              (delivery['conversationId'] ?? '').toString() !=
+                  completedConversation ||
+              (delivery['groupRoundId'] ?? '').toString() != completedRound ||
+              deliveryRequest.isEmpty ||
+              scope is! Map) {
+            throw StateError('群成员回复归属无效');
+          }
+          final current = _scopeStamp(
+            Map<String, dynamic>.from(scope),
+            deliveryRequest,
+          );
+          final expected = deliveryScopes[deliveryId];
+          if (expected != null && expected != current) {
+            throw StateError('群成员最终回复与流式投递身份不一致');
+          }
+          deliveryIds.add(deliveryId);
+        }
         completed = true;
         terminal = true;
         yield event;
@@ -390,10 +426,12 @@ Stream<Map<String, dynamic>> decodeOwnedGroupChatStream(
           throw StateError('群成员回复缺少投递身份');
         }
         final request = (scope['requestId'] ?? '').toString();
-        deliveryScopes[deliveryId] = _scopeStamp(
-          Map<String, dynamic>.from(scope),
-          request,
-        );
+        final current = _scopeStamp(Map<String, dynamic>.from(scope), request);
+        final expected = deliveryScopes[deliveryId];
+        if (expected != null && expected != current) {
+          throw StateError('群成员投递身份在流中发生变化');
+        }
+        deliveryScopes[deliveryId] = current;
       } else if (const {
         'delta',
         'transcribed',
@@ -849,7 +887,7 @@ class DeviceOwnedChatService {
             'memoryView': memoryViewForScope(expectedScope),
         },
       );
-      if (result?['resource'] is Map) {
+      if (result?['resource'] is Map && result?['executionScope'] is Map) {
         resource = Map<String, dynamic>.from(result!['resource'] as Map);
         resource['executionScope'] = _resourceScope(
           result['executionScope'] as Map,

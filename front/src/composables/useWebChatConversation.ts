@@ -96,8 +96,9 @@ export function useWebChatConversation(
     if (owned.enabled.value) await chatStore.fetchSidebar().catch(() => undefined);
   }
 
-  async function loadCharacterConversation() {
+  async function loadCharacterConversation(options: { preserve?: boolean } = {}) {
     const conversationID = String(convId.value || "").trim();
+    const preserve = options.preserve === true;
     const generation = ++conversationLoadGeneration;
     const loadingStartedAt = Date.now();
     disconnectSSE();
@@ -111,9 +112,9 @@ export function useWebChatConversation(
     convId.value = conversationID;
     const titleHint = knownConversationTitle(conversationID);
     if (titleHint) convTitle.value = titleHint;
-    messages.value = [];
+    if (!preserve) messages.value = [];
     hasMoreHistory.value = true;
-    conversationLoading.value = true;
+    if (!preserve) conversationLoading.value = true;
     try {
       if (owned.enabled.value) {
         const selectedRole = characterId.value;
@@ -140,7 +141,7 @@ export function useWebChatConversation(
       }
       throw new Error(owned.notice.value || "设备对话服务尚未就绪");
     } finally {
-      const remaining = minimumLoadingMs - (Date.now() - loadingStartedAt);
+      const remaining = preserve ? 0 : minimumLoadingMs - (Date.now() - loadingStartedAt);
       if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining));
       if (generation === conversationLoadGeneration && convId.value === conversationID) conversationLoading.value = false;
     }

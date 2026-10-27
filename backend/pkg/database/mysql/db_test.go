@@ -160,3 +160,81 @@ func closeSQLiteTestDB(db *gorm.DB, sqlDB *sql.DB) {
 		_ = pool.reader.Close()
 	}
 }
+
+type sqliteCodeError struct {
+	code int
+}
+
+func (e sqliteCodeError) Error() string {
+	return fmt.Sprintf("sqlite code %d", e.code)
+}
+
+func (e sqliteCodeError) Code() int {
+	return e.code
+}
+
+func TestSQLiteUnavailableRecognizesShortRead(t *testing.T) {
+	if !isSQLiteUnavailable(sqliteCodeError{code: 522}) {
+		t.Fatal("short read must be treated as an unavailable store")
+	}
+	if !isSQLiteUnavailable(sqliteCodeError{code: 11}) {
+		t.Fatal("corrupt image must be treated as an unavailable store")
+	}
+	if isSQLiteUnavailable(sqliteCodeError{code: 5}) {
+		t.Fatal("busy must not be treated as store corruption")
+	}
+}
+
+func TestSQLiteRoutingPoolDrainsStaleConnections(t *testing.T) {
+	db := NewSQLite(t.TempDir())
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	defer closeSQLiteTestDB(db, sqlDB)
+	pool, ok := db.ConnPool.(*sqliteRoutingPool)
+	if !ok {
+		t.Fatalf("connection pool type = %T", db.ConnPool)
+	}
+	writer := pool.writer
+	before := pool.generation.Load()
+	pool.recoverState(before)
+	if pool.generation.Load() <= before {
+		t.Fatal("connection pool generation was not advanced")
+	}
+	if pool.writer != writer || sqlDB != writer {
+		t.Fatal("stable sql.DB handle was replaced")
+	}
+	if err := db.Exec("CREATE TABLE recovery_probe (id INTEGER PRIMARY KEY)").Error; err != nil {
+		t.Fatalf("write after recovery: %v", err)
+	}
+	var count int64
+	if err := db.Table("recovery_probe").Count(&count).Error; err != nil {
+		t.Fatalf("read after recovery: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("recovery probe count = %d", count)
+	}
+}
+
+func TestSQLiteRecoveryCallbackDrainsConnectionsAfterShortRead(t *testing.T) {
+	db := NewSQLite(t.TempDir())
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	defer closeSQLiteTestDB(db, sqlDB)
+	pool, ok := db.ConnPool.(*sqliteRoutingPool)
+	if !ok {
+		t.Fatalf("connection pool type = %T", db.ConnPool)
+	}
+	before := pool.generation.Load()
+	scheduleSQLiteRecovery(pool, sqliteCodeError{code: 522})
+	deadline := time.Now().Add(2 * time.Second)
+	for pool.generation.Load() <= before && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if pool.generation.Load() <= before {
+		t.Fatal("short read did not trigger connection drain")
+	}
+}

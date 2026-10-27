@@ -26,6 +26,23 @@ describe("Owner聊天管理与控制", () => {
     expect(mocks.post.mock.calls[0][1].requestId).not.toBe(mocks.post.mock.calls[1][1].requestId);
   });
 
+  it("会话快照返回额外 conversationRoleId 时不误判归属变化", async () => {
+    const conversationScope = { ...scope, conversationRoleId: "role" };
+    mocks.post.mockResolvedValue({ data: { executionScope: conversationScope } });
+
+    await ownedChatRuntimeRequest("snapshot", { conversationId: "chat" });
+
+    expect(mocks.data).toHaveBeenCalledWith("working", "role");
+    expect(mocks.post.mock.calls[0][1].expectedExecutionScope).toEqual(scope);
+  });
+
+  it("明确绑定 conversationRoleId 后仍拒绝不同角色", async () => {
+    mocks.data.mockResolvedValueOnce({ executionScope: { ...scope, conversationRoleId: "expected-role" } });
+    mocks.post.mockResolvedValueOnce({ data: { executionScope: { ...scope, conversationRoleId: "other-role" } } });
+
+    await expect(ownedChatRuntimeRequest("snapshot", { conversationId: "chat" })).rejects.toThrow("结果已丢弃");
+  });
+
   it("清理预览归属变化时拒绝确认且不发出请求", async () => {
     await expect(ownedManagementRequest("cleanup/confirm", { expectedExecutionScope: { ...scope, providerEpoch: 2 } })).rejects.toThrow("重新预览");
     expect(mocks.post).not.toHaveBeenCalled();

@@ -172,6 +172,13 @@ func closeProcessTree(handle ProcessTreeHandle) {
 	}
 }
 
+func terminateRemainingProcessTree(_ int, handle ProcessTreeHandle) error {
+	if handle == 0 {
+		return nil
+	}
+	return windows.TerminateJobObject(windows.Handle(handle), 1)
+}
+
 func requestGracefulStopSupported() bool { return false }
 
 func processTreeSupported() bool { return true }

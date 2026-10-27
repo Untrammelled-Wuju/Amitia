@@ -34,6 +34,8 @@ func terminateProcessTree(pid int, _ ProcessTreeHandle) error {
 
 func closeProcessTree(ProcessTreeHandle) {}
 
+func terminateRemainingProcessTree(int, ProcessTreeHandle) error { return ErrProcessUnsupported }
+
 func requestGracefulStopSupported() bool { return false }
 
 func processTreeSupported() bool { return false }

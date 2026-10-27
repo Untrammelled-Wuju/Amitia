@@ -167,3 +167,81 @@ describe("会话切换加载状态", () => {
     }
   });
 });
+
+describe("保留式会话刷新", () => {
+  beforeEach(() => {
+    mocks.get.mockReset();
+    mocks.summary.mockReset();
+    mocks.query.mockReset();
+    mocks.messages.mockReset();
+    mocks.hasMore.mockReset();
+    mocks.markConversationRead.mockReset();
+    mocks.applySnapshotWorkspace.mockReset();
+    mocks.sidebar.pinned = [];
+    mocks.sidebar.recent = [];
+    mocks.sidebar.projects = [];
+    mocks.enabled.value = true;
+    mocks.hasMore.mockReturnValue(false);
+    mocks.markConversationRead.mockResolvedValue(undefined);
+    mocks.messages.mockImplementation((result) => result.rows);
+  });
+
+  it("刷新期间保留旧消息，并在成功后原子替换消息", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.query.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const messages = ref<any[]>([{ id: "old", role: "user", content: "旧消息" }]);
+    const api = useWebChatConversation(messages, ref("chat"), ref("role"), ref(""), ref(""), ref(""), ref(""), ref(false), vi.fn(), vi.fn(), undefined, 0);
+
+    const pending = api.loadCharacterConversation({ preserve: true });
+    expect(messages.value.map((message) => message.id)).toEqual(["old"]);
+    expect(api.conversationLoading.value).toBe(false);
+
+    finish({ rows: [{ id: "new", role: "assistant", content: "新消息" }], snapshot: { ownerId: "a", resources: [{ kind: "conversation", body: { id: "chat", title: "会话" } }] } });
+    await pending;
+    expect(messages.value.map((message) => message.id)).toEqual(["new"]);
+  });
+
+  it("刷新失败时保留旧消息并结束加载状态", async () => {
+    mocks.query.mockRejectedValue(new Error("刷新失败"));
+    const messages = ref<any[]>([{ id: "old", role: "user", content: "旧消息" }]);
+    const api = useWebChatConversation(messages, ref("chat"), ref("role"), ref(""), ref(""), ref(""), ref(""), ref(false), vi.fn(), vi.fn(), undefined, 0);
+
+    await expect(api.loadCharacterConversation({ preserve: true })).rejects.toThrow("刷新失败");
+    expect(messages.value).toEqual([{ id: "old", role: "user", content: "旧消息" }]);
+    expect(api.conversationLoading.value).toBe(false);
+  });
+
+  it("保留刷新覆盖普通加载时仍会结束加载状态", async () => {
+    let finishFirst!: (value: unknown) => void;
+    let finishPreserved!: (value: unknown) => void;
+    mocks.query
+      .mockReturnValueOnce(new Promise((resolve) => { finishFirst = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { finishPreserved = resolve; }));
+    const messages = ref<any[]>([{ id: "old", role: "user", content: "旧消息" }]);
+    const api = useWebChatConversation(messages, ref("chat"), ref("role"), ref(""), ref(""), ref(""), ref(""), ref(false), vi.fn(), vi.fn(), undefined, 0);
+
+    const firstLoad = api.loadCharacterConversation();
+    expect(api.conversationLoading.value).toBe(true);
+    const preservedLoad = api.loadCharacterConversation({ preserve: true });
+    finishPreserved({ rows: [{ id: "new", role: "assistant", content: "新消息" }], snapshot: { ownerId: "a", resources: [{ kind: "conversation", body: { id: "chat", title: "会话" } }] } });
+    await preservedLoad;
+    expect(api.conversationLoading.value).toBe(false);
+    expect(messages.value.map((message) => message.id)).toEqual(["new"]);
+
+    finishFirst({ rows: [{ id: "stale", role: "assistant", content: "旧请求" }], snapshot: { ownerId: "a", resources: [{ kind: "conversation", body: { id: "chat", title: "会话" } }] } });
+    await firstLoad;
+    expect(messages.value.map((message) => message.id)).toEqual(["new"]);
+  });
+
+  it("普通切换仍然先清空旧会话消息", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.query.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const messages = ref<any[]>([{ id: "old", role: "user", content: "旧消息" }]);
+    const api = useWebChatConversation(messages, ref("chat"), ref("role"), ref(""), ref(""), ref(""), ref(""), ref(false), vi.fn(), vi.fn(), undefined, 0);
+
+    const pending = api.loadCharacterConversation();
+    expect(messages.value).toEqual([]);
+    finish({ rows: [], snapshot: { ownerId: "a", resources: [{ kind: "conversation", body: { id: "chat", title: "会话" } }] } });
+    await pending;
+  });
+});

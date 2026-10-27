@@ -46,6 +46,7 @@ type BlockState struct {
 	CallID        string         `json:"callId,omitempty"`
 	Revision      int64          `json:"revision,omitempty"`
 	Content       string         `json:"content,omitempty"`
+	StartedAt     string         `json:"startedAt,omitempty"`
 	Payload       map[string]any `json:"payload,omitempty"`
 }
 
@@ -655,7 +656,7 @@ func reduceBlock(turn *ActiveTurnState, event AgentUIEvent) {
 	}
 	blockType := eventBlockType(event)
 	if index < 0 {
-		turn.Blocks = append(turn.Blocks, BlockState{BlockID: event.BlockID, BlockSequence: event.BlockSequence, Type: blockType, Status: event.Status, CallID: event.CallID, Revision: event.Revision, Payload: map[string]any{}})
+		turn.Blocks = append(turn.Blocks, BlockState{BlockID: event.BlockID, BlockSequence: event.BlockSequence, Type: blockType, Status: event.Status, CallID: event.CallID, Revision: event.Revision, StartedAt: event.CreatedAt, Payload: map[string]any{}})
 		index = len(turn.Blocks) - 1
 	}
 	block := turn.Blocks[index]
@@ -673,6 +674,9 @@ func reduceBlock(turn *ActiveTurnState, event AgentUIEvent) {
 	}
 	if event.Revision > 0 {
 		block.Revision = event.Revision
+	}
+	if block.StartedAt == "" {
+		block.StartedAt = event.CreatedAt
 	}
 	if block.Payload == nil {
 		block.Payload = map[string]any{}

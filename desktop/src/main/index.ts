@@ -81,10 +81,14 @@ function clearStartupTimer(): void {
   }
 }
 
-async function shutdownRuntime(): Promise<void> {
+async function shutdownRuntime(strict = false): Promise<void> {
   const task = deploymentLifecycle
-    ? deploymentLifecycle.shutdown()
-    : stopCore();
+    ? deploymentLifecycle.shutdown(strict)
+    : stopCore(strict);
+  if (strict) {
+    await task;
+    return;
+  }
   try {
     await Promise.race([
       task.catch(async (error) => {
@@ -109,9 +113,13 @@ async function prepareForUpdateInstall(): Promise<void> {
   shutdownInProgress = true;
   console.log("[AmitiaDesktop] 更新安装前停止运行时");
   try {
-    await shutdownRuntime();
-  } finally {
+    await shutdownRuntime(true);
     coreStopped = true;
+  } catch (error) {
+    updateInstallPrepared = false;
+    quitting = false;
+    shutdownInProgress = false;
+    throw error;
   }
 }
 

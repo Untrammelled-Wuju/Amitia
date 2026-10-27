@@ -4,6 +4,8 @@ const STATE_KEY = "emote-state";
 const MAX_SEND_RECORDS = 5000;
 const FILE_WRITE_CHUNK_CHARS = 256 * 1024;
 const MAX_IMPORT_FILE_BYTES = 32 * 1024 * 1024;
+const COMPOSER_UNGROUPED_GROUP_ID = "__ungrouped__";
+const COMPOSER_RECENT_GROUP_ID = "__recent__";
 
 const uploadSessions = new Map();
 let commandQueue = Promise.resolve();
@@ -300,6 +302,52 @@ function filterList(state, payload) {
   };
 }
 
+async function composerGroupTabs(host, state) {
+  const recentOrder = new Map();
+  for (const record of state.sendRecords) {
+    if (!record.emoteId) continue;
+    const value = Date.parse(record.createdAt || "") || 0;
+    recentOrder.set(record.emoteId, Math.max(recentOrder.get(record.emoteId) || 0, value));
+  }
+  const unassigned = state.emotes
+    .filter((item) => item.groupIds.length === 0)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const recent = [...state.emotes].sort(
+    (a, b) => (recentOrder.get(b.id) || 0) - (recentOrder.get(a.id) || 0),
+  );
+  const coverFor = async (item) => {
+    if (!item) return "";
+    const hydrated = await hydrateUrls(host, item);
+    return hydrated.thumbnailUrl || hydrated.assetUrl || "";
+  };
+  const groups = await Promise.all(
+    state.groups.map(async (group) => {
+      const members = state.emotes.filter((item) => item.groupIds.includes(group.id));
+      const cover =
+        members.find((item) => item.id === group.coverEmoteId) ||
+        members[0];
+      return {
+        id: group.id,
+        name: group.name,
+        cover: await coverFor(cover),
+      };
+    }),
+  );
+  return [
+    {
+      id: COMPOSER_UNGROUPED_GROUP_ID,
+      name: "未分组",
+      cover: await coverFor(unassigned[0]),
+    },
+    {
+      id: COMPOSER_RECENT_GROUP_ID,
+      name: "最近使用",
+      cover: await coverFor(recent[0]),
+    },
+    ...groups,
+  ];
+}
+
 async function sendEmote(host, payload, triggerType = "manual", enforceLimits = false) {
   const snapshot = await readState(host);
   const state = snapshot.state;
@@ -429,17 +477,26 @@ async function command(host, input) {
     }
     case "ui.composer": {
       const snapshot = await readState(host);
+      const activeGroupId =
+        text(payload.groupId) || COMPOSER_UNGROUPED_GROUP_ID;
+      const view =
+        activeGroupId === COMPOSER_UNGROUPED_GROUP_ID
+          ? "unassigned"
+          : activeGroupId === COMPOSER_RECENT_GROUP_ID
+            ? "recent"
+            : "";
       const page = filterList(snapshot.state, {
-        groupId: text(payload.groupId),
-        view: text(payload.groupId) === "recent" ? "recent" : "",
+        groupId: view ? "" : activeGroupId,
+        view,
         page: 1,
         pageSize: 200,
       });
       return {
         emotes: await Promise.all(page.items.map((item) => hydrateUrls(host, item))),
-        groups: snapshot.state.groups,
+        groups: await composerGroupTabs(host, snapshot.state),
+        activeGroupId,
         form_state: {
-          groupId: text(payload.groupId),
+          groupId: activeGroupId,
         },
       };
     }

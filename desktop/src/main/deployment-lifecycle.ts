@@ -289,7 +289,7 @@ export class DesktopDeploymentLifecycle {
     return this.businessCoreClient;
   }
 
-  async shutdown(): Promise<void> {
+  async shutdown(strict = false): Promise<void> {
     if (!this.shutdownPromise) {
       this.shuttingDown = true;
       this.shutdownPromise = (async () => {
@@ -301,9 +301,14 @@ export class DesktopDeploymentLifecycle {
         this.stopBusinessIntegrations();
         await this.stopLocalPetIntegrations();
         getMeshCoordinator(this.getMainWindow).stop();
-        await stopCore();
+        await stopCore(strict);
       })();
     }
-    await this.shutdownPromise;
+    try {
+      await this.shutdownPromise;
+    } catch (error) {
+      this.shutdownPromise = null;
+      throw error;
+    }
   }
 }

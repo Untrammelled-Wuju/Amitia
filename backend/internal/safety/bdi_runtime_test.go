@@ -79,6 +79,14 @@ func TestApplyEmotionDirectiveCaps(t *testing.T) {
 	if suppress.EmotionIntensity > 0.3001 {
 		t.Fatalf("display intensity not applied: %f", suppress.EmotionIntensity)
 	}
+
+	policy.BDI.EmotionExpression.DisplayMode = "show"
+	policy.BDI.EmotionExpression.DisplayIntensity = 0
+	runtime = BuildBdiRuntime(policy)
+	hidden := ApplyEmotionDirective(decision.ExpressionPlan{Tone: decision.ExpressionToneNeutral, EmotionIntensity: 0.9, Metadata: map[string]any{}}, runtime.Emotion)
+	if !hidden.Suppressed || hidden.EmotionIntensity != 0 {
+		t.Fatalf("zero display intensity must suppress expression: %+v", hidden)
+	}
 }
 
 func TestValidateBdiConfigRejectsUnknownValues(t *testing.T) {
@@ -91,6 +99,16 @@ func TestValidateBdiConfigRejectsUnknownValues(t *testing.T) {
 	config.CopingStrategy.Selected = "unknown"
 	if err := ValidateBdiConfig(config); err == nil {
 		t.Fatalf("expected coping validation error")
+	}
+	config = DefaultBdiConfig()
+	config.HardConstraints = []HardConstraint{{RuleID: "r1", CandidateKey: "chat_reply", Reason: "x", Severity: "unknown"}}
+	if err := ValidateBdiConfig(config); err == nil {
+		t.Fatalf("expected severity validation error")
+	}
+	config = DefaultBdiConfig()
+	config.EmotionExpression.DisplayMode = "unknown"
+	if err := ValidateBdiConfig(config); err == nil {
+		t.Fatalf("expected display mode validation error")
 	}
 }
 

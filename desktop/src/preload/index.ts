@@ -133,6 +133,9 @@ const api = {
       throw error;
     }
   },
+  async invalidateBackendSession(): Promise<void> {
+    await ipcRenderer.invoke(IPC_CHANNELS.invalidateBackendSession);
+  },
   getClientDiagnostics(): Promise<DesktopClientError[]> {
     return ipcRenderer.invoke(IPC_CHANNELS.getClientDiagnostics);
   },

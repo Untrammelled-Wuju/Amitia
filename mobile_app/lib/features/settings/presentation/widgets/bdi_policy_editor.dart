@@ -89,6 +89,8 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
   double _internalIntensity = 5;
   double _displayIntensity = 5;
   int _revision = 0;
+  int _ruleSequence = 0;
+  int _preferenceSequence = 0;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -170,6 +172,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
       for (final rule in rules) {
         if (rule is! Map) continue;
         _rules.add({
+          '_key': 'stored-rule-${_ruleSequence++}',
           'ruleId': (rule['ruleId'] ?? '').toString(),
           'candidateKey': (rule['candidateKey'] ?? '').toString(),
           'reason': (rule['reason'] ?? '').toString(),
@@ -184,12 +187,10 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
       for (final preference in preferences) {
         if (preference is! Map) continue;
         _preferences.add({
+          '_key': 'stored-preference-${_preferenceSequence++}',
           'dimension': (preference['dimension'] ?? '').toString(),
           'rawScore': _toDouble(preference['rawScore'], 5),
-          'normalizedWeight': _toDouble(
-            preference['normalizedWeight'],
-            0,
-          ),
+          'normalizedWeight': _toDouble(preference['normalizedWeight'], 0),
         });
       }
     }
@@ -212,12 +213,14 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
     if (emotion is Map) {
       final mode = (emotion['displayMode'] ?? 'show').toString();
       _displayMode = _displayModes.containsKey(mode) ? mode : 'show';
-      _internalIntensity = _toDouble(emotion['internalIntensity'], 5)
-          .clamp(0, 10);
-      _displayIntensity = _toDouble(emotion['displayIntensity'], 5).clamp(
-        0,
-        10,
-      );
+      _internalIntensity = _toDouble(
+        emotion['internalIntensity'],
+        5,
+      ).clamp(0, 10);
+      _displayIntensity = _toDouble(
+        emotion['displayIntensity'],
+        5,
+      ).clamp(0, 10);
       _overrideReason.text = (emotion['overrideReason'] ?? '').toString();
     }
   }
@@ -235,6 +238,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
   void _addRule() {
     setState(() {
       _rules.add({
+        '_key': 'new-rule-${_ruleSequence++}',
         'ruleId': 'rule-${DateTime.now().millisecondsSinceEpoch % 1000000}',
         'candidateKey': 'proactive_greet',
         'reason': '',
@@ -246,6 +250,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
   void _addPreference() {
     setState(() {
       _preferences.add({
+        '_key': 'new-preference-${_preferenceSequence++}',
         'dimension': 'chat_reply',
         'rawScore': 5.0,
         'normalizedWeight': 0.2,
@@ -277,7 +282,16 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
     setState(() => _saving = true);
     try {
       final updated = await ref.read(safetyServiceProvider).updateBdiConfig({
-        'hardConstraints': _rules,
+        'hardConstraints': _rules
+            .map(
+              (item) => {
+                'ruleId': item['ruleId'],
+                'candidateKey': item['candidateKey'],
+                'reason': item['reason'],
+                'severity': item['severity'],
+              },
+            )
+            .toList(),
         'softPreferences': _preferences
             .map(
               (item) => {
@@ -300,7 +314,8 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
         },
         'expectedRevision': _revision,
       });
-      _revision = int.tryParse('${updated?['revision'] ?? _revision + 1}') ??
+      _revision =
+          int.tryParse('${updated?['revision'] ?? _revision + 1}') ??
           _revision + 1;
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -312,7 +327,9 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -477,8 +494,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
                             child: const Text('添加'),
                           ),
                         ),
-                        if (_rules.isEmpty)
-                          _hint('暂无约束。阻断会移除候选，优先会保留候选并排到最前。'),
+                        if (_rules.isEmpty) _hint('暂无约束。阻断会移除候选，优先会保留候选并排到最前。'),
                         for (var index = 0; index < _rules.length; index++)
                           _ruleCard(index),
                         _section(
@@ -490,9 +506,11 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
                         ),
                         if (_preferences.isEmpty)
                           _hint('暂无软偏好。偏好只影响候选排序，不会阻断。'),
-                        for (var index = 0;
-                            index < _preferences.length;
-                            index++)
+                        for (
+                          var index = 0;
+                          index < _preferences.length;
+                          index++
+                        )
                           _preferenceCard(index),
                       ],
                     ),
@@ -532,9 +550,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
     padding: EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
     child: Row(
       children: [
-        Expanded(
-          child: Text(title, style: AppTypography.body(context)),
-        ),
+        Expanded(child: Text(title, style: AppTypography.body(context))),
         if (action != null) action,
       ],
     ),
@@ -557,13 +573,8 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
     children: [
       Row(
         children: [
-          Expanded(
-            child: Text(label, style: AppTypography.caption(context)),
-          ),
-          Text(
-            value.toStringAsFixed(1),
-            style: AppTypography.caption(context),
-          ),
+          Expanded(child: Text(label, style: AppTypography.caption(context))),
+          Text(value.toStringAsFixed(1), style: AppTypography.caption(context)),
         ],
       ),
       Slider(
@@ -580,6 +591,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
   Widget _ruleCard(int index) {
     final rule = _rules[index];
     return Card(
+      key: ValueKey(rule['_key']),
       margin: EdgeInsets.only(bottom: AppSpacing.sm),
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.sm),
@@ -618,6 +630,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
             ),
             SizedBox(height: AppSpacing.xs),
             TextFormField(
+              key: ValueKey('${rule['_key']}-id'),
               initialValue: '${rule['ruleId']}',
               decoration: const InputDecoration(
                 labelText: '规则 ID',
@@ -627,6 +640,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
             ),
             SizedBox(height: AppSpacing.xs),
             TextFormField(
+              key: ValueKey('${rule['_key']}-reason'),
               initialValue: '${rule['reason']}',
               decoration: const InputDecoration(
                 labelText: '原因 / 禁止话题',
@@ -659,11 +673,13 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
   Widget _preferenceCard(int index) {
     final preference = _preferences[index];
     final raw = _toDouble(preference['rawScore'], 5).clamp(0, 10).toDouble();
-    final weight = _toDouble(preference['normalizedWeight'], 0).clamp(-1, 1).toDouble();
-    final contribution = weight == 0
-        ? (raw - 5) / 5
-        : weight * ((raw - 5) / 5);
+    final weight = _toDouble(
+      preference['normalizedWeight'],
+      0,
+    ).clamp(-1, 1).toDouble();
+    final contribution = weight == 0 ? (raw - 5) / 5 : weight * ((raw - 5) / 5);
     return Card(
+      key: ValueKey(preference['_key']),
       margin: EdgeInsets.only(bottom: AppSpacing.sm),
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.sm),
@@ -673,9 +689,8 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    initialValue: _dimensions.containsKey(
-                      preference['dimension'],
-                    )
+                    initialValue:
+                        _dimensions.containsKey(preference['dimension'])
                         ? preference['dimension'] as String
                         : 'chat_reply',
                     decoration: const InputDecoration(
@@ -697,8 +712,7 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
                   ),
                 ),
                 IconButton(
-                  onPressed: () =>
-                      setState(() => _preferences.removeAt(index)),
+                  onPressed: () => setState(() => _preferences.removeAt(index)),
                   icon: const Icon(Icons.delete_outline),
                 ),
               ],
@@ -718,10 +732,11 @@ class _BdiPolicyDialogState extends ConsumerState<_BdiPolicyDialog> {
               min: -1,
               max: 1,
               divisions: 20,
-              onChanged: (value) => setState(() =>
-                  preference['normalizedWeight'] = double.parse(
-                    value.toStringAsFixed(2),
-                  )),
+              onChanged: (value) => setState(
+                () => preference['normalizedWeight'] = double.parse(
+                  value.toStringAsFixed(2),
+                ),
+              ),
             ),
             Align(
               alignment: Alignment.centerLeft,

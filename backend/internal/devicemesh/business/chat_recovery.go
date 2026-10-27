@@ -15,7 +15,7 @@ type OwnedTurnReconciliation struct {
 
 func (e *Engine) ReconcileOwnedTurn(ctx context.Context, expected coordination.ExecutionScope, conversation string) (OwnedTurnReconciliation, error) {
 	result := OwnedTurnReconciliation{}
-	err := e.WithExecutionScope(ctx, expected, func(current context.Context) error {
+	err := e.WithConversationExecutionScope(ctx, expected, conversation, func(current context.Context) error {
 		port, ok := e.data.(coordination.ResourcePort)
 		if !ok || conversation == "" || expected.RequestID == "" {
 			return coordination.ErrWrongOwner

@@ -13,6 +13,23 @@ type workerContext struct {
 }
 
 func (e *Engine) WithExecutionScope(ctx context.Context, expected coordination.ExecutionScope, run func(context.Context) error) error {
+	return e.withExecutionScope(ctx, expected, "", run)
+}
+
+func (e *Engine) WithConversationExecutionScope(ctx context.Context, expected coordination.ExecutionScope, conversationID string, run func(context.Context) error) error {
+	return e.withExecutionScope(ctx, expected, conversationID, run)
+}
+
+func (e *Engine) withExecutionScope(ctx context.Context, expected coordination.ExecutionScope, conversationID string, run func(context.Context) error) error {
+	if expected.ConversationRoleID != "" && conversationID == "" {
+		current, ok := coordination.FromContext(ctx)
+		if !ok || current != expected {
+			return coordination.ErrScopeExpired
+		}
+		if _, err := coordination.WithRequestAuthority(ctx, ctx); err != nil {
+			return err
+		}
+	}
 	ctx, scope, finish, err := e.coordination.Begin(ctx, expected.SpaceID, expected.InitiatorDeviceID, expected.TargetDeviceID, expected.CoreID, expected.RoleID, expected.RequestID)
 	if err != nil {
 		return err
@@ -30,6 +47,20 @@ func (e *Engine) WithExecutionScope(ctx context.Context, expected coordination.E
 	if err := coordination.ResolveMemoryScope(&scope, ""); err != nil {
 		return err
 	}
+	if expected.ConversationRoleID != "" && conversationID != "" {
+		port, ok := e.data.(coordination.GroupStatePort)
+		if !ok {
+			return coordination.ErrWrongOwner
+		}
+		group, err := port.GroupState(ctx, scope, conversationID)
+		if err != nil {
+			return err
+		}
+		_, active := group.ActiveMember(scope.RoleID)
+		if !group.IsGroup() || !active || group.ConversationRoleID != expected.ConversationRoleID || group.RoleOwnerID != scope.RoleOwnerID {
+			return coordination.ErrWrongOwner
+		}
+	}
 	if expected.ContinuityRoleID != "" {
 		if coordination.CommitLease(ctx) == nil {
 			return coordination.ErrWrongOwner
@@ -37,6 +68,7 @@ func (e *Engine) WithExecutionScope(ctx context.Context, expected coordination.E
 		scope.ContinuityRoleID = expected.ContinuityRoleID
 	}
 	scope.TurnID, scope.ExecutionID = expected.TurnID, expected.ExecutionID
+	scope.ConversationRoleID = expected.ConversationRoleID
 	if scope != expected {
 		return coordination.ErrScopeExpired
 	}

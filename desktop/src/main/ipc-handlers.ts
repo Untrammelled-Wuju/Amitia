@@ -20,7 +20,7 @@ import type { MeshPairingInput } from "./device-mesh/protocol";
 import { ConfigStore } from "./config-store";
 import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
-import { getDesktopAuthHeaders } from "./backend-session-client";
+import { getBackendSessionClient, getDesktopAuthHeaders } from "./backend-session-client";
 import { getCoreEndpoint } from "./core-endpoint";
 import { validCaptionColors } from "./window-chrome";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
@@ -535,6 +535,10 @@ export function registerIpcHandlers(
       }
       throw error;
     }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.invalidateBackendSession, () => {
+    getBackendSessionClient().invalidateSession();
   });
 
   ipcMain.handle(IPC_CHANNELS.getClientDiagnostics, () => getDesktopClientErrors());

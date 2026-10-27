@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/u-ai/backend/internal/conversationstream"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -58,13 +59,26 @@ func (e *Engine) persistOwnedRuntime(ctx context.Context, scope coordination.Exe
 		return nil
 	}
 	runtime := ownedRuntimeManager.RuntimeSnapshot(RuntimeKey(scope, conversation)).ActiveTurn
+	if turnErr != nil {
+		runtimeError := DescribeRuntimeError(turnErr)
+		saved.Error = &runtimeError
+		saved.Status = "failed"
+		if errors.Is(turnErr, ErrInterrupted) || errors.Is(turnErr, context.Canceled) {
+			saved.Status = "interrupted"
+		}
+	}
 	if runtime == nil || runtime.RequestID != scope.RequestID || runtime.TurnID != scope.TurnID || runtime.ExecutionID != scope.ExecutionID {
 		if turnErr == nil {
 			return coordination.ErrWrongOwner
 		}
-		saved.Status = "failed"
 	} else {
 		saved.Runtime = runtime
+		if turnErr != nil && saved.Status != "interrupted" {
+			saved.Runtime.Status = "failed"
+		}
+		if turnErr != nil && saved.Status == "interrupted" {
+			saved.Runtime.Status = "interrupted"
+		}
 		if runtime.Status == "failed" || runtime.Status == "interrupted" {
 			saved.Status = runtime.Status
 		}
@@ -186,7 +200,10 @@ func publishRuntime(ctx context.Context, inference Inference, event Event) error
 			typeName = "tool.started"
 		} else if event.Type == "tool-completed" {
 			typeName, status = "tool.completed", "completed"
-			if payload["error"] != nil {
+			toolStatus := strings.ToUpper(strings.TrimSpace(fmt.Sprint(payload["status"])))
+			errorCode, _ := payload["errorCode"].(string)
+			failedStatus := toolStatus == "FAILED" || toolStatus == "FAILURE" || toolStatus == "ERROR" || toolStatus == "DENIED" || toolStatus == "REJECTED" || toolStatus == "CANCELLED" || toolStatus == "CANCELED" || toolStatus == "TIMED_OUT" || toolStatus == "TIMEOUT" || toolStatus == "UNAVAILABLE" || toolStatus == "UNKNOWN" || toolStatus == "UNCERTAIN"
+			if payload["error"] != nil || strings.TrimSpace(errorCode) != "" || failedStatus {
 				typeName, status = "tool.failed", "failed"
 			}
 		}

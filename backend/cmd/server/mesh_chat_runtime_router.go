@@ -53,7 +53,7 @@ func registerMeshChatRuntimeRouter(mesh *gin.RouterGroup, services *AppServices,
 				c.JSON(409, gin.H{"message": "聊天数据归属已变化，请刷新"})
 				return
 			}
-			err := services.OwnedBusiness.WithExecutionScope(c.Request.Context(), *request.ExpectedScope, func(ctx context.Context) error {
+			err := services.OwnedBusiness.WithConversationExecutionScope(c.Request.Context(), *request.ExpectedScope, request.ConversationID, func(ctx context.Context) error {
 				if operation == "queue/status" {
 					status, err := services.OwnedBusiness.ResumeQueuedChat(ctx, *request.ExpectedScope, request.RequestID, request.ConversationID)
 					if err != nil {
@@ -238,6 +238,9 @@ func ownedRuntimeDocuments(view business.QueryResult, key string) ([]map[string]
 			raw, _ := json.Marshal(document["runtime"])
 			_ = json.Unmarshal(raw, &runtime)
 			items := ownedRuntimeItems(runtime, view.ConversationID, status)
+			if runtimeError, ok := document["error"].(map[string]any); ok && status == "failed" {
+				items = append(items, ownedRuntimeErrorItem(scope.TurnID, view.ConversationID, status, runtimeError))
+			}
 			turns = append(turns, map[string]any{"id": scope.TurnID, "conversationId": view.ConversationID, "characterId": view.Scope.RoleID, "requestId": id, "executionId": scope.ExecutionID, "userMessageId": id + "/user", "status": status, "createdAt": resource.UpdatedAt, "items": items})
 		}
 	}
@@ -448,4 +451,23 @@ func ownedRuntimeItems(runtime conversationstream.ActiveTurnState, conversation,
 		items = append(items, item)
 	}
 	return items
+}
+
+func ownedRuntimeErrorItem(turnID, conversation, status string, runtimeError map[string]any) map[string]any {
+	if status == "" {
+		status = "failed"
+	}
+	encoded, _ := json.Marshal(runtimeError)
+	return map[string]any{
+		"id":             "turn-error:" + turnID,
+		"turnId":         turnID,
+		"conversationId": conversation,
+		"sequence":       1 << 30,
+		"type":           "error",
+		"status":         status,
+		"revision":       1,
+		"content":        runtimeError["userMessage"],
+		"resultJson":     string(encoded),
+		"errorCode":      runtimeError["errorCode"],
+	}
 }

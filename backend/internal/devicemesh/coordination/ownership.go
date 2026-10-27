@@ -113,7 +113,7 @@ func (s *OwnershipStore) Apply(ctx context.Context, commit Commit) (Acknowledgem
 func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*sql.Tx) error) (Acknowledgement, error) {
 	scope := commit.Scope
 	if scope.ResourceOwnerID != s.ownerID || scope.RequestID == "" || scope.RoleID == "" || len(commit.Mutations) == 0 || len(commit.Mutations) > 256 {
-		return Acknowledgement{}, ErrWrongOwner
+		return Acknowledgement{}, fmt.Errorf("%w: commit scope owner=%q request=%q role=%q mutations=%d", ErrWrongOwner, scope.ResourceOwnerID, scope.RequestID, scope.RoleID, len(commit.Mutations))
 	}
 	payload, err := json.Marshal(commit)
 	if err != nil {
@@ -203,7 +203,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 	changedMessages := []changedMessage{}
 	deletedConversations := []string{}
 	keepConversationMemories := map[string]bool{}
-	for _, mutation := range commit.Mutations {
+	for index, mutation := range commit.Mutations {
 		if mutation.KeepConversationMemories && (mutation.Kind != "conversation" || !mutation.Deleted) {
 			return Acknowledgement{}, ErrWrongOwner
 		}
@@ -212,7 +212,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			expectedRole = commit.MemoryTransfer.ToRoleID
 		}
 		if !validKind(mutation.Kind) || mutation.ID == "" || mutation.RoleID != expectedRole || !json.Valid(mutation.Body) || mutation.ExpectedRevision < RevisionCurrent {
-			return Acknowledgement{}, ErrWrongOwner
+			return Acknowledgement{}, fmt.Errorf("%w: mutation[%d] kind=%q id=%q role=%q expected=%q revision=%d validBody=%t", ErrWrongOwner, index, mutation.Kind, mutation.ID, mutation.RoleID, expectedRole, mutation.ExpectedRevision, json.Valid(mutation.Body))
 		}
 		key := mutation.Kind + "/" + mutation.ID
 		if _, exists := ack.Versions[key]; exists {
@@ -226,7 +226,7 @@ func (s *OwnershipStore) apply(ctx context.Context, commit Commit, guard func(*s
 			return Acknowledgement{}, err
 		}
 		if err == nil && storedRole != StorageRole(scope, mutation.Kind) {
-			return Acknowledgement{}, ErrWrongOwner
+			return Acknowledgement{}, fmt.Errorf("%w: stored mutation[%d] kind=%q id=%q role=%q expected=%q", ErrWrongOwner, index, mutation.Kind, mutation.ID, storedRole, StorageRole(scope, mutation.Kind))
 		}
 		if mutation.ExpectedRevision == RevisionCurrent {
 			baseRequestID := strings.SplitN(scope.RequestID, "|", 2)[0]

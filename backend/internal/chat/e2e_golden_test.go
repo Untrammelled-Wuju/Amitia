@@ -95,15 +95,15 @@ func TestE2E_GoldenPath_CharacterPersonalityToPsycheRelationshipAndMindState(t *
 	if messages := f.messages(t); len(messages) != 2 || messages[0].ConversationID != "conversation" {
 		t.Fatalf("Owner messages missing: %+v", messages)
 	}
-	psycheState := f.runtimeState(t, "psyche", "role")
+	psycheState := f.runtimeState(t, "psyche", coordination.RoleRuntimeStateID("psyche", "role"))
 	if numberValue(psycheState["valence"]) == 0 && numberValue(psycheState["fatigue"]) == 0 {
 		t.Fatalf("psyche state not committed: %+v", psycheState)
 	}
-	relationshipState := f.runtimeState(t, "relationship", "user_character")
+	relationshipState := f.runtimeState(t, "relationship", coordination.RoleRuntimeStateID("relationship", "role"))
 	if numberValue(relationshipState["familiarity"]) <= 0 {
 		t.Fatalf("relationship state did not advance: %+v", relationshipState)
 	}
-	needState := f.runtimeState(t, "needs", "role")
+	needState := f.runtimeState(t, "needs", coordination.RoleRuntimeStateID("needs", "role"))
 	if values, ok := needState["needs"].([]any); !ok || len(values) != 7 {
 		t.Fatalf("need state missing: %+v", needState)
 	}
@@ -138,7 +138,7 @@ func TestE2E_MultipleInteractionsAccumulateRelationship(t *testing.T) {
 	previous := 0.0
 	for i := 0; i < 5; i++ {
 		f.run(t, fmt.Sprintf("multi-%d", i), fmt.Sprintf("消息%d", i))
-		current := numberValue(f.runtimeState(t, "relationship", "user_character")["familiarity"])
+		current := numberValue(f.runtimeState(t, "relationship", coordination.RoleRuntimeStateID("relationship", "role"))["familiarity"])
 		if current <= previous {
 			t.Fatalf("relationship failed to accumulate: %f <= %f", current, previous)
 		}
@@ -152,17 +152,17 @@ func TestE2E_MultipleInteractionsAccumulateRelationship(t *testing.T) {
 func TestE2E_MindStateReturnsCompleteData(t *testing.T) {
 	f := newGoldenOwnedFixture(t, `{"warmth":80,"sensitivity":60,"tolerance":70}`, true)
 	f.run(t, "mind", "今天过得怎么样啊")
-	psycheState := f.runtimeState(t, "psyche", "role")
+	psycheState := f.runtimeState(t, "psyche", coordination.RoleRuntimeStateID("psyche", "role"))
 	if numberValue(psycheState["stress"]) < 0 || numberValue(psycheState["stress"]) > 1 || numberValue(psycheState["fatigue"]) < 0 || numberValue(psycheState["fatigue"]) > 1 {
 		t.Fatalf("invalid mind state: %+v", psycheState)
 	}
-	relationshipState := f.runtimeState(t, "relationship", "user_character")
+	relationshipState := f.runtimeState(t, "relationship", coordination.RoleRuntimeStateID("relationship", "role"))
 	for _, name := range []string{"familiarity", "trust", "security"} {
 		if _, ok := relationshipState[name]; !ok {
 			t.Fatalf("missing relationship field %s", name)
 		}
 	}
-	needState := f.runtimeState(t, "needs", "role")
+	needState := f.runtimeState(t, "needs", coordination.RoleRuntimeStateID("needs", "role"))
 	if values, ok := needState["needs"].([]any); !ok || len(values) != 7 {
 		t.Fatalf("incomplete needs: %+v", needState)
 	}
@@ -171,11 +171,11 @@ func TestE2E_MindStateReturnsCompleteData(t *testing.T) {
 func TestE2E_ExtensionDisabledOwnedChatStillCommits(t *testing.T) {
 	f := newGoldenOwnedFixture(t, `{"warmth":50}`, false)
 	f.run(t, "disabled-emotion", "普通消息")
-	psycheState := f.runtimeState(t, "psyche", "role")
+	psycheState := f.runtimeState(t, "psyche", coordination.RoleRuntimeStateID("psyche", "role"))
 	if numberValue(psycheState["fatigue"]) <= 0 {
 		t.Fatalf("psyche base state not committed: %+v", psycheState)
 	}
-	relationshipState := f.runtimeState(t, "relationship", "user_character")
+	relationshipState := f.runtimeState(t, "relationship", coordination.RoleRuntimeStateID("relationship", "role"))
 	if numberValue(relationshipState["familiarity"]) <= 0 {
 		t.Fatalf("relationship state lost with emotion extension disabled: %+v", relationshipState)
 	}

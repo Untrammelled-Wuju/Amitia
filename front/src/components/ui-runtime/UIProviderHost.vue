@@ -140,8 +140,12 @@ const surfaceSlotId = computed(() => providerSlotId(props.capability));
 const rootEl = computed(() => activeRef.value?.rootEl ?? activeRef.value?.$el ?? slotBoundaryRef.value?.rootEl ?? slotBoundaryRef.value?.$el ?? null);
 function focus(...args: unknown[]) { return activeRef.value?.focus?.(...args) ?? slotBoundaryRef.value?.focus?.(...args); }
 function setText(...args: unknown[]) { return activeRef.value?.setText?.(...args) ?? slotBoundaryRef.value?.setText?.(...args); }
+function insertText(...args: unknown[]) {
+  const target = typeof activeRef.value?.insertText === "function" ? activeRef.value : slotBoundaryRef.value;
+  return target?.insertText?.(...args);
+}
 function clear(...args: unknown[]) { return activeRef.value?.clear?.(...args) ?? slotBoundaryRef.value?.clear?.(...args); }
-defineExpose({ rootEl, focus, setText, clear });
+defineExpose({ rootEl, focus, setText, insertText, clear });
 
 function advanceFallback(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);

@@ -27,6 +27,31 @@ func TestOwnedRuntimeDocumentsRestoreCheckpointBlocks(t *testing.T) {
 	}
 }
 
+func TestOwnedRuntimeDocumentsRestoreStructuredFailure(t *testing.T) {
+	scope := coordination.ExecutionScope{SpaceID: "space", ResourceOwnerID: "owner", RoleID: "role", CoreID: "core", TurnID: "turn"}
+	runtime := conversationstream.ActiveTurnState{TurnID: "turn", Status: "failed"}
+	raw, err := json.Marshal(map[string]any{
+		"conversationId": "conversation",
+		"status":         "failed",
+		"scope":          scope,
+		"runtime":        runtime,
+		"error": map[string]any{
+			"errorCode":   "browser_runtime_unavailable",
+			"userMessage": "浏览器运行时未启用或不可用。",
+			"retryable":   true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := business.QueryResult{Scope: scope, ConversationID: "conversation", Snapshot: coordination.DataSnapshot{Resources: []coordination.Resource{{Kind: "checkpoint", ID: "turn/request", UpdatedAt: "2026-10-18T01:00:00Z", Body: raw}}}}
+	turns, _, _ := ownedRuntimeDocuments(view, business.RuntimeKey(scope, "conversation"))
+	items := turns[0]["items"].([]map[string]any)
+	if len(items) != 1 || items[0]["type"] != "error" || items[0]["errorCode"] != "browser_runtime_unavailable" {
+		t.Fatalf("restored failure = %#v", items)
+	}
+}
+
 func TestOwnedRuntimeTurnSequenceDoesNotDependOnPage(t *testing.T) {
 	resource := func(id, stamp string) coordination.Resource {
 		return coordination.Resource{Kind: "checkpoint", ID: "turn/" + id, UpdatedAt: stamp, Body: json.RawMessage(`{"conversationId":"conversation","status":"completed","scope":{"turnId":"` + id + `"}}`)}

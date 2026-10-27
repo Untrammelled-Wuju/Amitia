@@ -65,4 +65,41 @@ describe("多角色群聊流", () => {
     const request = { requestId: "request", conversationId: "chat", characterId: "role-a", message: "你好", group: { expectedMembershipRevision: 1, expectedSettingsRevision: 1 }, mentions: [] } as OwnedGroupChatRequest;
     await expect(streamOwnedGroupChat(request, new AbortController().signal, () => undefined)).rejects.toThrow("投递身份");
   });
+
+  it("拒绝同一投递在流中更换执行范围", async () => {
+    vi.mocked(resolveApiUrl).mockResolvedValue("/messages");
+    vi.stubGlobal("fetch", vi.fn(async () => response([
+      { type: "started", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", executionScope: { ...base, requestId: "request/reply/a" } },
+      { type: "started", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", executionScope: { ...base, roleId: "role-b", requestId: "request/reply/a" } },
+    ].map((frame) => `data:${JSON.stringify(frame)}\n\n`).join(""))));
+    const request = { requestId: "request", conversationId: "chat", characterId: "role-a", message: "你好", group: { expectedMembershipRevision: 1, expectedSettingsRevision: 1 }, mentions: [] } as OwnedGroupChatRequest;
+    await expect(streamOwnedGroupChat(request, new AbortController().signal, () => undefined)).rejects.toThrow("投递身份");
+  });
+
+  it("拒绝最终回复冒充其他群聊轮次", async () => {
+    const scope = { ...base, requestId: "request/reply/a" };
+    vi.mocked(resolveApiUrl).mockResolvedValue("/messages");
+    vi.stubGlobal("fetch", vi.fn(async () => response([
+      { type: "started", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", executionScope: scope },
+      { type: "group.completed", data: { conversationId: "chat", requestId: "request", groupRoundId: "other-round", status: "completed", userMessageId: "request/user", saved: true, deliveries: [{ requestId: scope.requestId, conversationId: "chat", turnId: scope.turnId, executionId: scope.executionId, executionScope: scope, reply: "A 回复", saved: true, memoryStatus: "saved", groupRoundId: "other-round", deliveryId: "delivery-a" }] } },
+    ].map((frame) => `data:${JSON.stringify(frame)}\n\n`).join(""))));
+    const request = { requestId: "request", conversationId: "chat", characterId: "role-a", message: "你好", group: { expectedMembershipRevision: 1, expectedSettingsRevision: 1 }, mentions: [] } as OwnedGroupChatRequest;
+    await expect(streamOwnedGroupChat(request, new AbortController().signal, () => undefined)).rejects.toThrow("轮次归属");
+  });
+
+  it("传递群成员失败事件并确认最终轮次", async () => {
+    const scope = { ...base, requestId: "request/reply/a" };
+    vi.mocked(resolveApiUrl).mockResolvedValue("/messages");
+    vi.stubGlobal("fetch", vi.fn(async () => response([
+      { type: "started", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", characterId: "role-a", executionScope: scope },
+      { type: "group.delivery.failed", conversationId: "chat", groupRoundId: "round", deliveryId: "delivery-a", text: "生成失败", executionScope: scope },
+      { type: "group.completed", data: { conversationId: "chat", requestId: "request", groupRoundId: "round", status: "completed_with_errors", userMessageId: "request/user", saved: true, deliveries: [] } },
+    ].map((frame) => `data:${JSON.stringify(frame)}\n\n`).join(""))));
+    const request = { requestId: "request", conversationId: "chat", characterId: "role-a", message: "你好", group: { expectedMembershipRevision: 1, expectedSettingsRevision: 1 }, mentions: [] } as OwnedGroupChatRequest;
+    const seen: string[] = [];
+    const result = await streamOwnedGroupChat(request, new AbortController().signal, (event) => seen.push(event.type));
+    expect(seen).toEqual(["started", "group.delivery.failed", "group.completed"]);
+    expect(result.status).toBe("completed_with_errors");
+    expect(result.deliveries).toEqual([]);
+  });
 });

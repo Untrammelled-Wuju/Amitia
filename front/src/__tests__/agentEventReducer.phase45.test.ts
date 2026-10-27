@@ -109,6 +109,25 @@ describe("Phase 45 terminal and historical projection invariants", () => {
     expect(reducer.turn("turn-a")?.status).toBe("completed");
     expect(reducer.activeTurnId).toBe("");
   });
+
+  it("preserves the tool block start time from an active runtime snapshot", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([], 0, {
+      turnId: "turn-tool",
+      status: "running",
+      startedAt: "2026-10-16T10:00:00Z",
+      lastEventSequence: 0,
+      blocks: [{
+        blockId: "call-a",
+        blockSequence: 1,
+        type: "tool_call",
+        status: "running",
+        callId: "call-a",
+        startedAt: "2026-10-16T10:00:03Z",
+      }],
+    });
+    expect(reducer.turn("turn-tool")?.items[0].createdAt).toBe("2026-10-16T10:00:03Z");
+  });
 });
 
 describe("interrupted execution reconciliation", () => {
@@ -143,5 +162,24 @@ describe("interrupted execution reconciliation", () => {
     expect(reducer.apply({ ...event("turn.completed", 6), requestId: "request-a", executionId: "execution-a" })).toBe("stale");
     expect(reducer.apply(event("turn.completed", 7))).toBe("stale");
     expect(reducer.turn("turn-a")?.status).toBe("interrupted");
+  });
+});
+
+describe("structured task failures", () => {
+  it("projects the server-provided user message instead of a generic network error", () => {
+    const reducer = new AgentEventReducer();
+    reducer.reset([historic("running")], 5);
+    expect(reducer.apply({
+      ...event("turn.failed", 6),
+      payload: {
+        saved: false,
+        errorCode: "browser_runtime_unavailable",
+        userMessage: "浏览器运行时未启用或不可用，无法执行网页自动化任务。",
+        retryable: true,
+      },
+    })).toBe("applied");
+    const error = reducer.turn("turn-a")?.items.find((item) => item.type === "error");
+    expect(error?.content).toContain("浏览器运行时未启用");
+    expect(error?.errorCode).toBe("browser_runtime_unavailable");
   });
 });

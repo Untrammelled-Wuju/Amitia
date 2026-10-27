@@ -36,9 +36,6 @@ func migrateLegacyRuntimeState(ctx context.Context, db *gorm.DB, kernelDB *sql.D
 	if err != nil {
 		return err
 	}
-	if marker != nil && !marker.Deleted {
-		return nil
-	}
 	roleIDs, err := legacyRuntimeStateRoleIDs(db)
 	if err != nil {
 		return err
@@ -50,6 +47,9 @@ func migrateLegacyRuntimeState(ctx context.Context, db *gorm.DB, kernelDB *sql.D
 		if err := migrateLegacyRuntimeStateRole(ctx, db, store, spaceID, ownerID, roleID); err != nil {
 			return err
 		}
+	}
+	if marker != nil && !marker.Deleted {
+		return nil
 	}
 	encoded, err := json.Marshal(map[string]any{"ownerId": ownerID, "roles": len(roleIDs), "migratedAt": time.Now().UTC().Format(time.RFC3339Nano)})
 	if err != nil {
@@ -103,12 +103,25 @@ func migrateLegacyRuntimeStateRole(ctx context.Context, db *gorm.DB, store *coor
 		return err
 	}
 	if psycheFound {
-		existing, err := store.Get(ctx, coordination.RuntimeStateKindPsyche, "role")
+		id := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, roleID)
+		existing, err := store.Get(ctx, coordination.RuntimeStateKindPsyche, id)
 		if err != nil {
 			return err
 		}
-		if existing == nil || existing.RoleID != roleID {
-			mutations = append(mutations, coordination.Mutation{Kind: coordination.RuntimeStateKindPsyche, ID: "role", RoleID: roleID, Body: psycheBody})
+		if existing != nil {
+			if existing.RoleID != roleID {
+				return errors.New("角色心理状态资源归属冲突")
+			}
+		} else {
+			body := psycheBody
+			legacy, legacyErr := store.Get(ctx, coordination.RuntimeStateKindPsyche, coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindPsyche))
+			if legacyErr != nil {
+				return legacyErr
+			}
+			if legacy != nil && !legacy.Deleted && legacy.RoleID == roleID {
+				body = legacy.Body
+			}
+			mutations = append(mutations, coordination.Mutation{Kind: coordination.RuntimeStateKindPsyche, ID: id, RoleID: roleID, Body: body})
 		}
 	}
 	relationshipBody, relationshipFound, err := legacyRelationshipBody(db, roleID)
@@ -116,12 +129,25 @@ func migrateLegacyRuntimeStateRole(ctx context.Context, db *gorm.DB, store *coor
 		return err
 	}
 	if relationshipFound {
-		existing, err := store.Get(ctx, coordination.RuntimeStateKindRelationship, "user_character")
+		id := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindRelationship, roleID)
+		existing, err := store.Get(ctx, coordination.RuntimeStateKindRelationship, id)
 		if err != nil {
 			return err
 		}
-		if existing == nil || existing.RoleID != roleID {
-			mutations = append(mutations, coordination.Mutation{Kind: coordination.RuntimeStateKindRelationship, ID: "user_character", RoleID: roleID, Body: relationshipBody})
+		if existing != nil {
+			if existing.RoleID != roleID {
+				return errors.New("角色关系状态资源归属冲突")
+			}
+		} else {
+			body := relationshipBody
+			legacy, legacyErr := store.Get(ctx, coordination.RuntimeStateKindRelationship, coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindRelationship))
+			if legacyErr != nil {
+				return legacyErr
+			}
+			if legacy != nil && !legacy.Deleted && legacy.RoleID == roleID {
+				body = legacy.Body
+			}
+			mutations = append(mutations, coordination.Mutation{Kind: coordination.RuntimeStateKindRelationship, ID: id, RoleID: roleID, Body: body})
 		}
 	}
 	needBody, needFound, err := legacyNeedBody(db, roleID)
@@ -129,12 +155,25 @@ func migrateLegacyRuntimeStateRole(ctx context.Context, db *gorm.DB, store *coor
 		return err
 	}
 	if needFound {
-		existing, err := store.Get(ctx, coordination.RuntimeStateKindNeeds, "role")
+		id := coordination.RoleRuntimeStateID(coordination.RuntimeStateKindNeeds, roleID)
+		existing, err := store.Get(ctx, coordination.RuntimeStateKindNeeds, id)
 		if err != nil {
 			return err
 		}
-		if existing == nil || existing.RoleID != roleID {
-			mutations = append(mutations, coordination.Mutation{Kind: coordination.RuntimeStateKindNeeds, ID: "role", RoleID: roleID, Body: needBody})
+		if existing != nil {
+			if existing.RoleID != roleID {
+				return errors.New("角色需求状态资源归属冲突")
+			}
+		} else {
+			body := needBody
+			legacy, legacyErr := store.Get(ctx, coordination.RuntimeStateKindNeeds, coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindNeeds))
+			if legacyErr != nil {
+				return legacyErr
+			}
+			if legacy != nil && !legacy.Deleted && legacy.RoleID == roleID {
+				body = legacy.Body
+			}
+			mutations = append(mutations, coordination.Mutation{Kind: coordination.RuntimeStateKindNeeds, ID: id, RoleID: roleID, Body: body})
 		}
 	}
 	if len(mutations) == 0 {

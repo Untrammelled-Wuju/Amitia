@@ -73,6 +73,7 @@ func TestRestoredExecutionRetainsScopeAndIsCancelledByPolicyChanges(t *testing.T
 	saved.RoleRevision = 7
 	saved.TurnID = "turn"
 	saved.ExecutionID = "execution"
+	saved.ConversationRoleID = "group-owner-role"
 	roles := pendingRolePort{roles: []coordination.Role{{ID: "role", Revision: 7, Profile: []byte(`{}`)}}}
 	restored, release, err := service.Restore(t.Context(), saved, roles)
 	if err != nil {

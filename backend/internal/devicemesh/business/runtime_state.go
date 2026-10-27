@@ -105,8 +105,8 @@ func (e *Engine) RuntimeState(ctx context.Context, request Request) (RuntimeStat
 			return RuntimeStateView{}, err
 		}
 		result.OwnerID, result.RoleID, result.Execution = view.Snapshot.OwnerID, view.Snapshot.Role.ID, view.Scope
-		for _, resource := range view.Snapshot.Resources {
-			switch resource.Kind {
+		if resource, ok := preferredRuntimeStateResource(view.Snapshot.Resources, kind, view.Snapshot.Role.ID); ok {
+			switch kind {
 			case coordination.RuntimeStateKindPsyche:
 				var state struct {
 					RuntimePsycheState
@@ -186,17 +186,19 @@ func (e *Engine) ApplyRuntimeState(ctx context.Context, request Request, effect 
 	ctx = coordination.WithScope(ctx, scope)
 	snapshot := coordination.DataSnapshot{OwnerID: scope.ResourceOwnerID, Role: role}
 	if port, ok := e.data.(coordination.ResourcePort); ok {
-		for _, document := range []struct {
-			Kind string
-			ID   string
-		}{
-			{Kind: coordination.RuntimeStateKindPsyche, ID: "role"},
-			{Kind: coordination.RuntimeStateKindRelationship, ID: "user_character"},
-			{Kind: coordination.RuntimeStateKindNeeds, ID: "role"},
-		} {
-			resource, resourceErr := port.Resource(ctx, scope, document.Kind, document.ID)
+		for _, kind := range coordination.RuntimeStateKinds {
+			resource, resourceErr := port.Resource(ctx, scope, kind, coordination.RoleRuntimeStateID(kind, scope.RoleID))
 			if resourceErr != nil {
 				return resourceErr
+			}
+			if resource == nil || resource.Deleted {
+				legacy, legacyErr := port.Resource(ctx, scope, kind, coordination.LegacyRuntimeStateID(kind))
+				if legacyErr != nil {
+					return legacyErr
+				}
+				if legacy != nil && !legacy.Deleted && legacy.RoleID == scope.RoleID {
+					resource = legacy
+				}
 			}
 			if resource != nil && !resource.Deleted {
 				snapshot.Resources = append(snapshot.Resources, *resource)
@@ -234,4 +236,20 @@ func (e *Engine) ApplyRuntimeState(ctx context.Context, request Request, effect 
 		return err
 	}
 	return coordination.ValidateCurrent(ctx)
+}
+
+func preferredRuntimeStateResource(resources []coordination.Resource, kind, roleID string) (coordination.Resource, bool) {
+	qualifiedID := coordination.RoleRuntimeStateID(kind, roleID)
+	legacyID := coordination.LegacyRuntimeStateID(kind)
+	for _, resource := range resources {
+		if resource.Kind == kind && resource.RoleID == roleID && resource.ID == qualifiedID && !resource.Deleted {
+			return resource, true
+		}
+	}
+	for _, resource := range resources {
+		if resource.Kind == kind && resource.RoleID == roleID && resource.ID == legacyID && !resource.Deleted {
+			return resource, true
+		}
+	}
+	return coordination.Resource{}, false
 }

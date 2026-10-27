@@ -11,7 +11,8 @@ import { ownedImageAttachment, ownedAudioAttachment, ownedAudioURL, ownedFileAtt
 import { sameOwnedAuthority } from "@/runtime/owned-speech-result";
 import { parseConversationReference } from "@/runtime/device-owned-conversation-reference";
 import { ownedChatRuntimeRequest } from "@/runtime/owned-chat-management";
-import type { OwnedGroupChatResponse, OwnedGroupMention } from "@/runtime/device-owned-chat";
+import type { OwnedGroupChatResponse } from "@/runtime/device-owned-chat";
+import { resolveGroupMentions } from "./groupMentions";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -38,7 +39,6 @@ export function useWebChatSend(
   activeTurnId?: Ref<string>,
   beginPendingAssistant?: (requestId: string, characterId?: string) => void,
   failPendingAssistant?: (requestId: string) => void,
-  groupMentions?: Ref<OwnedGroupMention[]>,
 ) {
   const owned = useDeviceOwnedConversation();
   const { messageStyle } = useChatAppearancePreference();
@@ -197,10 +197,10 @@ export function useWebChatSend(
           const groupView = await owned.query(originalConversation, originalRole);
           expectedExecutionScope = groupView.executionScope;
           if (!sameOwnedAuthority(originalReply?.executionScope || expectedExecutionScope, expectedExecutionScope) && originalReply) throw new Error("引用消息的群会话权限已变化，请重新选择");
-          const activeMentions = (groupMentions?.value || []).filter((mention) => {
-            const member = group.members.find((item) => item.memberId === mention.memberId && item.status === "active");
-            return Boolean(member && sendContent.includes(`@${member.characterName}`));
-          });
+          const activeMentions = resolveGroupMentions(
+            sendContent,
+            group.members,
+          );
           let response: OwnedGroupChatResponse | undefined;
           response = await owned.sendGroup({
             requestId: requestEnvelope.requestId,
@@ -246,6 +246,10 @@ export function useWebChatSend(
               const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
               if (index >= 0) messages.value[index] = { ...messages.value[index], reasoningComplete: true, outputComplete: true };
             }
+            if (event.type === "group.delivery.failed" && event.deliveryId) {
+              const index = messages.value.findIndex((message) => message.uiKey === `group-delivery:${event.deliveryId}`);
+              if (index >= 0) messages.value[index] = { ...messages.value[index], content: messages.value[index].content || event.text || "生成失败", status: "failed", reasoningComplete: true, outputComplete: true };
+            }
             scrollToBottom(true);
           });
           if (convId.value !== activeConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，群聊回复已丢弃");
@@ -279,7 +283,6 @@ export function useWebChatSend(
             if (index >= 0) messages.value[index] = { ...messages.value[index], ...assistant };
             else messages.value.push(assistant);
           }
-          if (groupMentions) groupMentions.value = [];
           convId.value = response.conversationId;
           sending.value = false;
           if (response.status === "completed_with_errors") modelError.value = "部分群成员回复失败，可在成员面板查看后重新点名";
@@ -317,7 +320,7 @@ export function useWebChatSend(
           }
           if (index >= 0 && event.type === "reasoning-completed") messages.value[index] = { ...messages.value[index], reasoningComplete: true };
           if (index >= 0 && event.type === "output-completed") messages.value[index] = { ...messages.value[index], reasoningComplete: true, outputComplete: true };
-          if (index >= 0 && (event.type === "interrupted" || event.type === "failed")) messages.value[index] = { ...messages.value[index], status: "interrupted", saved: event.data?.saved === true };
+          if (index >= 0 && (event.type === "interrupted" || event.type === "failed")) messages.value[index] = { ...messages.value[index], status: event.type === "failed" ? "failed" : "interrupted", errorCode: event.errorCode, saved: event.data?.saved === true };
           scrollToBottom(true);
         });
         if (convId.value !== activeConversation || characterId.value !== originalRole) throw new Error("对话或角色已变化，原回复已丢弃");

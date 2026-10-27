@@ -22,6 +22,10 @@ func TerminateProcessTree(pid int, handle ProcessTreeHandle) error {
 	return terminateProcessTree(pid, handle)
 }
 
+func TerminateRemainingProcessTree(pid int, handle ProcessTreeHandle) error {
+	return terminateRemainingProcessTree(pid, handle)
+}
+
 func CloseProcessTree(handle ProcessTreeHandle) {
 	closeProcessTree(handle)
 }

@@ -479,6 +479,16 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				return
 			}
 			log.Info("system.shutdown.requested", "actor", actor.SpaceID, "method", actor.AuthMethod)
+			if services.KernelContainer != nil && services.KernelContainer.TrustedServiceSupervisor != nil {
+				stopCtx, cancel := context.WithTimeout(c.Request.Context(), 25*time.Second)
+				err := services.KernelContainer.TrustedServiceSupervisor.StopAll(stopCtx, "host_shutdown")
+				cancel()
+				if err != nil {
+					log.Error("插件服务关闭失败:", err)
+					c.JSON(503, gin.H{"code": 503, "msg": "插件服务未能完全停止"})
+					return
+				}
+			}
 			c.JSON(202, gin.H{"code": 202, "msg": "shutting down", "shutdownOperationId": generateShutdownOpID()})
 			go func() {
 				time.Sleep(300 * time.Millisecond)

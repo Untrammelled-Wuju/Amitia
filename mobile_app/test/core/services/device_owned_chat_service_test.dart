@@ -246,12 +246,16 @@ void main() {
             'deliveries': [
               {
                 'requestId': 'request/reply/a',
+                'conversationId': 'chat',
+                'groupRoundId': 'round',
                 'executionScope': first,
                 'saved': true,
                 'deliveryId': 'delivery-a',
               },
               {
                 'requestId': 'request/reply/b',
+                'conversationId': 'chat',
+                'groupRoundId': 'round',
                 'executionScope': second,
                 'saved': true,
                 'deliveryId': 'delivery-b',
@@ -299,6 +303,79 @@ void main() {
             'deliveryId': 'delivery-a',
             'executionScope': foreign,
             'text': '越权',
+          },
+        ]),
+        'request',
+      ).toList(),
+      throwsStateError,
+    );
+  });
+
+  test('群聊流拒绝同一投递更换执行范围', () async {
+    final first = {
+      ...scope(),
+      'requestId': 'request/reply/a',
+      'conversationRoleId': 'role-a',
+    };
+    final foreign = {...first, 'roleId': 'role-b'};
+    await expectLater(
+      decodeOwnedGroupChatStream(
+        bytes([
+          {
+            'type': 'started',
+            'conversationId': 'chat',
+            'groupRoundId': 'round',
+            'deliveryId': 'delivery-a',
+            'executionScope': first,
+          },
+          {
+            'type': 'started',
+            'conversationId': 'chat',
+            'groupRoundId': 'round',
+            'deliveryId': 'delivery-a',
+            'executionScope': foreign,
+          },
+        ]),
+        'request',
+      ).toList(),
+      throwsStateError,
+    );
+  });
+
+  test('群聊流拒绝最终回复冒充其他轮次', () async {
+    final first = {
+      ...scope(),
+      'requestId': 'request/reply/a',
+      'conversationRoleId': 'role-a',
+    };
+    await expectLater(
+      decodeOwnedGroupChatStream(
+        bytes([
+          {
+            'type': 'started',
+            'conversationId': 'chat',
+            'groupRoundId': 'round',
+            'deliveryId': 'delivery-a',
+            'executionScope': first,
+          },
+          {
+            'type': 'group.completed',
+            'data': {
+              'conversationId': 'chat',
+              'requestId': 'request',
+              'groupRoundId': 'other-round',
+              'saved': true,
+              'deliveries': [
+                {
+                  'requestId': 'request/reply/a',
+                  'conversationId': 'chat',
+                  'groupRoundId': 'other-round',
+                  'executionScope': first,
+                  'saved': true,
+                  'deliveryId': 'delivery-a',
+                },
+              ],
+            },
           },
         ]),
         'request',

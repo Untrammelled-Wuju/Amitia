@@ -78,6 +78,20 @@ test("installs a verified SnowLuma package with shared writable data", async () 
   assert.equal(fs.lstatSync(path.join(pointer.installDir, "config")).isSymbolicLink(), true)
   assert.equal(fs.readFileSync(path.join(allowedRoot, "snowluma", "shared", "config", "onebot.json"), "utf8"), "{\"networks\":{}}\n")
   assert.equal(fs.readFileSync(path.join(allowedRoot, "snowluma", "shared", "data", "10001", "messages.db"), "utf8"), "fixture\n")
+  const firstInstallDir = pointer.installDir
+  const reinstalled = await installer.install("", {
+    version: "2.2.0",
+    platform: "linux",
+    arch: "x64",
+    nodeVersion: "26.12.1",
+    fetchImpl: fetchImpl as typeof fetch,
+  })
+  assert.equal(reinstalled.phase, "completed")
+  const nextPointer = readInstallPointer(allowedRoot)
+  assert(nextPointer)
+  assert.notEqual(nextPointer.installDir, firstInstallDir)
+  assert.equal(fs.existsSync(path.join(firstInstallDir, "index.mjs")), true)
+  assert.equal(fs.existsSync(path.join(nextPointer.installDir, "index.mjs")), true)
 })
 
 test("installs a verified Windows ZIP package", async () => {

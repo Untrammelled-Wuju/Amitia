@@ -169,6 +169,11 @@ func (c *extensionKernelComponent) Stop(ctx context.Context) error {
 		if container.EventService != nil {
 			container.EventService.Stop()
 		}
+		if container.TrustedServiceSupervisor != nil {
+			if err := container.TrustedServiceSupervisor.StopAll(ctx, "host_shutdown"); err != nil {
+				return fmt.Errorf("stop extension services: %w", err)
+			}
+		}
 	}
 	if svc != nil && svc.Extension != nil {
 		_ = svc.Extension.Close(ctx)

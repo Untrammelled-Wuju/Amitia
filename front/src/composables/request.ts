@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import axios, {
   type AxiosInstance,
+  type AxiosRequestConfig,
   type AxiosResponse,
   type AxiosError,
 } from "axios";
@@ -39,6 +40,8 @@ export interface RequestError {
   action?: { label: string; handler: () => void };
   raw?: any;
 }
+
+const recentDisplayedErrors = new Map<string, number>();
 
 export function classifyError(
   body: ApiResponse | null,
@@ -143,6 +146,17 @@ export function setErrorBannerHandler(fn: (err: RequestError) => void) {
 }
 
 export function displayError(err: RequestError) {
+  const key = `${err.code}:${err.message}`;
+  const now = Date.now();
+  const previous = recentDisplayedErrors.get(key) || 0;
+  const dedupeWindow = err.code === 401 || err.code === 403 || err.code === 503 ? 15_000 : 2_000;
+  if (now - previous < dedupeWindow) return;
+  recentDisplayedErrors.set(key, now);
+  if (recentDisplayedErrors.size > 64) {
+    for (const [storedKey, storedAt] of recentDisplayedErrors) {
+      if (now - storedAt > 60_000) recentDisplayedErrors.delete(storedKey);
+    }
+  }
   switch (err.severity) {
     case "toast":
       if (err.action) {
@@ -164,6 +178,32 @@ export function displayError(err: RequestError) {
       break;
     case "fatal":
       break;
+  }
+}
+
+export type RetriableDesktopRequestConfig = AxiosRequestConfig & {
+  __amitiaDesktopAuthRetried?: boolean;
+  __amitiaDeviceLocal?: boolean;
+};
+
+export function isDesktopSessionAuthFailure(error: any, config?: RetriableDesktopRequestConfig): boolean {
+  if (typeof window === "undefined" || !window.amitiaDesktop || config?.__amitiaDesktopAuthRetried) return false;
+  const body = error?.response?.data as ApiResponse | undefined;
+  const message = String(body?.message || (body as any)?.msg || "");
+  const headers = config?.headers as any;
+  const sessionHeader = String(headers?.get ? headers.get("X-Amitia-Desktop-Session") : headers?.["X-Amitia-Desktop-Session"] || "");
+  return Number(error?.response?.status) === 401 && Boolean(sessionHeader) && /凭据无效|invalid session|missing session|invalid desktop/i.test(message);
+}
+
+export async function applyDesktopSessionRetry(config: RetriableDesktopRequestConfig): Promise<void> {
+  config.__amitiaDesktopAuthRetried = true;
+  await window.amitiaDesktop?.invalidateBackendSession?.();
+  const authHeaders = await getBackendAuthHeaders(config.__amitiaDeviceLocal ? "local" : "business");
+  const headers = config.headers as any;
+  for (const [key, value] of Object.entries(authHeaders)) {
+    if (!value) continue;
+    if (headers?.set) headers.set(key, value);
+    else headers[key] = value;
   }
 }
 
@@ -243,7 +283,12 @@ request.interceptors.response.use(
     }
     return response.data;
   },
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const requestConfig = error.config as RetriableDesktopRequestConfig | undefined;
+    if (isDesktopSessionAuthFailure(error, requestConfig) && requestConfig) {
+      await applyDesktopSessionRetry(requestConfig);
+      return request.request(requestConfig);
+    }
     const body = (error.response?.data as ApiResponse) || null;
     const webAccessExpired = notifyWebAccessExpired(error);
     const err = classifyError(body, error);

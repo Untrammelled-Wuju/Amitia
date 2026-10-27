@@ -173,6 +173,22 @@ func closeProcessTree(handle ProcessTreeHandle) {
 	}
 }
 
+func terminateRemainingProcessTree(pid int, handle ProcessTreeHandle) error {
+	if group := cgroupPathForHandle(handle); group != "" {
+		if err := writeCgroupValue(group, "cgroup.kill", "1"); err == nil {
+			return nil
+		}
+	}
+	if pid <= 0 {
+		return nil
+	}
+	err := syscall.Kill(-pid, syscall.SIGKILL)
+	if err == syscall.ESRCH {
+		return nil
+	}
+	return err
+}
+
 func requestGracefulStopSupported() bool { return true }
 
 func processTreeSupported() bool { return true }

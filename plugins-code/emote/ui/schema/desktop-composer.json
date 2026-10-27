@@ -26,54 +26,38 @@
       "type": "page",
       "children": [
         {
-          "id": "emote-composer-toolbar",
-          "type": "row",
-          "children": [
+          "id": "emote-composer-groups",
+          "type": "gallery",
+          "props": {
+            "variant": "groups",
+            "imageField": "cover",
+            "titleField": "name",
+            "minItemWidth": 66,
+            "emptyText": "暂无表情分组"
+          },
+          "bindings": [
             {
-              "id": "emote-composer-group",
-              "type": "select",
-              "props": {
-                "placeholder": "全部分组",
-                "clearable": true,
-                "options": [
-                  {
-                    "label": "最近使用",
-                    "value": "recent"
-                  }
-                ]
-              },
-              "bindings": [
-                {
-                  "path": "groupId",
-                  "source": "form",
-                  "default": ""
-                },
-                {
-                  "path": "options",
-                  "source": "state",
-                  "sourcePath": "composer.groups"
-                }
-              ]
+              "path": "items",
+              "source": "state",
+              "sourcePath": "composer.groups"
             },
             {
-              "id": "emote-composer-refresh",
-              "type": "button",
-              "props": {
-                "text": "刷新"
-              },
-              "actions": [
-                {
-                  "action_id": "command",
-                  "target": "tool",
-                  "input": {
-                    "action": "ui.composer",
-                    "payload": {
-                      "groupId": "$form.groupId"
-                    }
-                  },
-                  "statePath": "composer"
+              "path": "selectedId",
+              "source": "form",
+              "sourcePath": "groupId"
+            }
+          ],
+          "actions": [
+            {
+              "action_id": "command",
+              "target": "tool",
+              "input": {
+                "action": "ui.composer",
+                "payload": {
+                  "groupId": "$item.id"
                 }
-              ]
+              },
+              "statePath": "composer"
             }
           ]
         },
@@ -81,10 +65,13 @@
           "id": "emote-composer-gallery",
           "type": "gallery",
           "props": {
+            "variant": "stickers",
             "imageField": "thumbnailUrl",
             "titleField": "name",
             "subtitleField": "meaning",
-            "minItemWidth": 104,
+            "minItemWidth": 58,
+            "showTitle": false,
+            "showSubtitle": false,
             "emptyText": "暂无可发送表情"
           },
           "bindings": [

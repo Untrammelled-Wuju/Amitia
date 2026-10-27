@@ -28,10 +28,11 @@ type ProcessOwnerMetadata struct {
 }
 
 type ProcessOwnerStore struct {
-	mu       sync.RWMutex
-	metadata map[string]ProcessOwnerMetadata
-	dataDir  string
-	durable  bool
+	mu        sync.RWMutex
+	persistMu sync.Mutex
+	metadata  map[string]ProcessOwnerMetadata
+	dataDir   string
+	durable   bool
 }
 
 func NewProcessOwnerStore(dataDir string) *ProcessOwnerStore {
@@ -78,6 +79,19 @@ func (s *ProcessOwnerStore) RemoveOwnership(processInstanceID string) error {
 	return s.persist()
 }
 
+func (s *ProcessOwnerStore) refreshExecutable(processInstanceID, previousExecutable, startID, executable string) error {
+	s.mu.Lock()
+	meta, ok := s.metadata[processInstanceID]
+	if !ok || meta.Executable != previousExecutable || meta.ProcessStartID != startID {
+		s.mu.Unlock()
+		return fmt.Errorf("process ownership changed during identity refresh")
+	}
+	meta.Executable = executable
+	s.metadata[processInstanceID] = meta
+	s.mu.Unlock()
+	return s.persist()
+}
+
 func (s *ProcessOwnerStore) GetOwnedProcesses() []ProcessOwnerMetadata {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -120,6 +134,8 @@ func (s *ProcessOwnerStore) LookupByPluginID(pluginID string) []ProcessOwnerMeta
 }
 
 func (s *ProcessOwnerStore) persist() error {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
 	if !s.durable {
 		return nil
 	}

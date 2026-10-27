@@ -22,6 +22,7 @@ func (s *Service) Restore(ctx context.Context, expected ExecutionScope, roles Da
 	actual.MemoryRoleID = expected.MemoryRoleID
 	actual.MemoryViewAll = expected.MemoryViewAll
 	actual.ContinuityRoleID = expected.ContinuityRoleID
+	actual.ConversationRoleID = expected.ConversationRoleID
 	if actual != expected {
 		finish()
 		return ctx, nil, ErrScopeExpired

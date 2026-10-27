@@ -62,6 +62,14 @@ describe("device owned chat stream", () => {
     expect(response.reply).toBe("计算完成");
     expect(seen.map(event => event.type)).toEqual(["started", "tool-started", "tool-completed", "delta", "completed"]);
   });
+  it("keeps the server-provided task failure message and error code", async () => {
+    const seen: any[] = [];
+    await expect(consumeOwnedChatStream(stream([
+      { type: "started", executionScope: scope, conversationId: "conversation" },
+      { type: "failed", message: "浏览器运行时未启用或不可用，无法执行网页自动化任务。", errorCode: "browser_runtime_unavailable", retryable: true },
+    ]), "request", event => seen.push(event))).rejects.toThrow("浏览器运行时未启用或不");
+    expect(seen.at(-1)).toMatchObject({ type: "failed", errorCode: "browser_runtime_unavailable", retryable: true });
+  });
   it("rejects malformed, foreign or dishonest tool lifecycle events", async () => {
     const base = { type: "tool-started", executionScope: scope, conversationId: "conversation", progress: { toolCallId: "call-1", toolName: "calculate", arguments: "{\"expression\":\"1+1\"}", result: "", status: "", durationMs: 0 } };
     const changes = [

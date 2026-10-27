@@ -62,7 +62,7 @@ func TestManagerRetainsReconciliationWaitingStateForSnapshotAndReplay(t *testing
 			Type: "turn.started", Status: "running"},
 		{ConversationID: "recovery-conv", TurnID: "turn-1", ExecutionID: "exec-1",
 			Type: "tool.running", BlockID: "call-1", BlockSequence: 1, Status: "running",
-			Payload: map[string]any{"blockType": "tool_call"}},
+			Payload: map[string]any{"blockType": "tool_call"}, CreatedAt: "2026-10-27T10:00:00Z"},
 		{ConversationID: "recovery-conv", TurnID: "turn-1", ExecutionID: "exec-1",
 			Type: "turn.waiting", Status: "needs_reconciliation"},
 	} {
@@ -73,7 +73,9 @@ func TestManagerRetainsReconciliationWaitingStateForSnapshotAndReplay(t *testing
 	snapshot := manager.RuntimeSnapshot("recovery-conv")
 	if snapshot.ActiveTurn == nil || snapshot.ActiveTurn.TurnID != "turn-1" ||
 		snapshot.ActiveTurn.Status != "needs_reconciliation" ||
-		snapshot.ActiveTurn.ExecutionID != "exec-1" {
+		snapshot.ActiveTurn.ExecutionID != "exec-1" ||
+		len(snapshot.ActiveTurn.Blocks) != 1 ||
+		snapshot.ActiveTurn.Blocks[0].StartedAt != "2026-10-27T10:00:00Z" {
 		t.Fatalf("snapshot lost waiting original execution: %+v", snapshot)
 	}
 	_, replay, _, unsubscribe := manager.Subscribe("recovery-conv", "replay-waiting", 1)

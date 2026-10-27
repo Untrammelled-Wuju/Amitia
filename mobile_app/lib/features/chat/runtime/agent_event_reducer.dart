@@ -299,10 +299,11 @@ class AgentEventReducer {
       );
       if (type == 'turn.queued') nextStatus = 'queued';
       if (type == 'turn.started') nextStatus = 'running';
-      if (type == 'turn.waiting')
+      if (type == 'turn.waiting') {
         nextStatus = _normalizeStatus(
           event.status.isNotEmpty ? event.status : 'needs_reconciliation',
         );
+      }
       if (type == 'turn.cancelling') nextStatus = 'cancelling';
       if (type == 'approval.requested') nextStatus = 'waiting_approval';
       if (type == 'approval.approved' ||
@@ -625,7 +626,9 @@ class AgentEventReducer {
               (payload['durationMs'] as num?)?.toInt() ?? old?.durationMs ?? 0,
           isFinal: old?.isFinal ?? false,
           messageId: old?.messageId ?? '',
-          createdAt: old?.createdAt ?? (raw['startedAt'] ?? '').toString(),
+          createdAt:
+              (block['startedAt'] ?? old?.createdAt ?? raw['startedAt'] ?? '')
+                  .toString(),
           updatedAt: (raw['lastModifiedAt'] ?? old?.updatedAt ?? '').toString(),
         );
         if (index >= 0) {

@@ -616,4 +616,39 @@ void main() {
     controller.dispose();
     await events.close();
   });
+
+  test('群聊手动输入和粘贴的成员名称直接生成提及元数据', () {
+    final members = [
+      OwnedGroupMember.fromJson({
+        'memberId': 'member-a',
+        'characterId': 'role-a',
+        'roleOwnerId': 'owner',
+        'characterName': '角色甲',
+        'status': 'active',
+      }),
+      OwnedGroupMember.fromJson({
+        'memberId': 'member-b',
+        'characterId': 'role-b',
+        'roleOwnerId': 'owner',
+        'characterName': '角色乙',
+        'status': 'active',
+      }),
+      OwnedGroupMember.fromJson({
+        'memberId': 'member-left',
+        'characterId': 'role-left',
+        'roleOwnerId': 'owner',
+        'characterName': '已离开',
+        'status': 'left',
+      }),
+    ];
+
+    expect(groupMentionsFromText('请 @角色甲 和 @角色乙 一起回答', members), [
+      {'memberId': 'member-a', 'characterId': 'role-a', 'roleOwnerId': 'owner'},
+      {'memberId': 'member-b', 'characterId': 'role-b', 'roleOwnerId': 'owner'},
+    ]);
+    expect(groupMentionsFromText('@所有成员 你好', members), [
+      {'memberId': 'member-a', 'characterId': 'role-a', 'roleOwnerId': 'owner'},
+      {'memberId': 'member-b', 'characterId': 'role-b', 'roleOwnerId': 'owner'},
+    ]);
+  });
 }

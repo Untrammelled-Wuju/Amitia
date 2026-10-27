@@ -22,6 +22,43 @@ import '../../workbench/runtime/workbench_mobile_events.dart';
 import 'automation_status.dart';
 import 'conversation_message_ledger.dart';
 
+Set<String> groupMentionIds(String text, List<OwnedGroupMember> members) {
+  if (text.contains('@所有成员'))
+    return members.map((member) => member.memberId).toSet();
+  final sorted = [...members]
+    ..sort((a, b) => b.characterName.length.compareTo(a.characterName.length));
+  final result = <String>{};
+  for (var index = 0; index < text.length; index++) {
+    if (text[index] != '@') continue;
+    for (final member in sorted) {
+      final token = '@${member.characterName}';
+      if (!text.startsWith(token, index)) continue;
+      final end = index + token.length;
+      if (end < text.length &&
+          !RegExp(r'[\s，。！？、,.!?;；:：]').hasMatch(text[end]))
+        continue;
+      result.add(member.memberId);
+      index = end - 1;
+      break;
+    }
+  }
+  return result;
+}
+
+List<Map<String, dynamic>> groupMentionsFromText(
+  String text,
+  List<OwnedGroupMember> members,
+) {
+  final active = members
+      .where((member) => member.status == 'active')
+      .toList(growable: false);
+  final ids = groupMentionIds(text, active);
+  return active
+      .where((member) => ids.contains(member.memberId))
+      .map((member) => member.toJson())
+      .toList(growable: false);
+}
+
 class ConversationRuntimeController extends ChangeNotifier {
   ConversationRuntimeController(
     this._chatService, {
@@ -862,14 +899,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _sending = true;
     _ownedRequestId = requestId;
     _lastError = null;
-    final mentions = _groupMentions
-        .where((mention) {
-          final member = group.activeMembers
-              .where((item) => item.memberId == mention['memberId'])
-              .firstOrNull;
-          return member != null && message.contains('@${member.characterName}');
-        })
-        .toList(growable: false);
+    final mentions = groupMentionsFromText(message, group.activeMembers);
     var completed = false;
     String sourceConversationId = conversationId;
     Map<String, dynamic> expectedScope = <String, dynamic>{};
@@ -986,6 +1016,23 @@ class ConversationRuntimeController extends ChangeNotifier {
             );
           }
           notifyListeners();
+        } else if (type == 'group.delivery.failed') {
+          final deliveryId = (event['deliveryId'] ?? '').toString();
+          final current = _messages.messages
+              .where((item) => item.deliveryId == deliveryId)
+              .firstOrNull;
+          if (current != null) {
+            _messages.upsert(
+              _cloneMessage(
+                current,
+                content: current.content.isEmpty
+                    ? (event['text'] ?? '生成失败').toString()
+                    : current.content,
+                status: MessageStatus.error,
+              ),
+            );
+            notifyListeners();
+          }
         } else if (type == 'group.completed') {
           final result = event['data'];
           if (result is! Map) continue;

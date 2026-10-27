@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/u-ai/backend/internal/browser"
 	_ "github.com/u-ai/backend/internal/browseragent"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
-func registerBrowserAgentTool(ctx context.Context, registry *capability.ToolRegistry) error {
-	if registry == nil {
+func registerBrowserAgentTool(ctx context.Context, registry *capability.ToolRegistry, provider browser.BrowserProvider) error {
+	if registry == nil || !browserAgentAvailable(provider) {
 		return nil
 	}
 	definition := capability.ToolDefinition{
@@ -96,4 +97,12 @@ func registerBrowserAgentTool(ctx context.Context, registry *capability.ToolRegi
 		},
 	}
 	return registry.Register(ctx, definition)
+}
+
+func browserAgentAvailable(provider browser.BrowserProvider) bool {
+	if provider == nil {
+		return false
+	}
+	capabilities := provider.BrowserCapabilities()
+	return capabilities.SupportsNavigation && capabilities.SupportsDOM && capabilities.SupportsInteraction
 }

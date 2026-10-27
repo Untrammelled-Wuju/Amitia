@@ -17,7 +17,7 @@
           @click="toggleToolStream(item)"
         >
           <span class="turn-chev">{{ isToolStreamExpanded(item) ? "⌄" : "›" }}</span>
-          <strong>工具执行流</strong>
+          <strong>执行过程</strong>
           <span class="turn-tool-stream-summary">{{ toolStreamSummary(item.items) }}</span>
           <span class="turn-tool-stream-toggle">{{ isToolStreamExpanded(item) ? "收起" : "展开" }}</span>
         </button>
@@ -28,7 +28,7 @@
                 <span class="turn-tool-dot"></span>
                 <span class="turn-tool-name">{{ toolDisplayName(entry.call.toolName, "工具调用") }}</span>
                 <span class="turn-tool-subject">{{ toolSubject(entry.call) }}</span>
-                <span class="turn-tool-state">{{ toolStateLabel(entry.call) }}</span>
+                <span class="turn-tool-state">{{ toolStateLabel(entry.call, entry.result) }}</span>
                 <button
                   type="button"
                   class="turn-tool-expand"
@@ -40,7 +40,7 @@
               <div v-if="expandedToolEntries.has(entry.key)" class="turn-tool-details">
                 <div class="turn-tool-detail">
                   <strong>调用工具</strong>
-                  <pre>{{ toolDisplayName(entry.call.toolName, "工具调用") }}</pre>
+                  <pre>{{ entry.call.toolName || "工具调用" }}</pre>
                 </div>
                 <div class="turn-tool-detail">
                   <strong>调用参数</strong>
@@ -72,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import type {
   AssistantTurnData,
   AssistantTurnItem,
@@ -107,6 +107,8 @@ interface TimelineToolEntry {
 
 const expandedToolEntries = reactive(new Set<string>());
 const toolStreamOverrides = reactive(new Map<string, boolean>());
+const durationClock = ref(Date.now());
+let durationTimer: ReturnType<typeof setInterval> | undefined;
 
 const orderedItems = computed(() => {
   const items = [...(props.turn.items || [])].sort((left, right) => left.sequence - right.sequence);
@@ -126,6 +128,26 @@ const orderedItems = computed(() => {
     result.push(item);
   }
   return result;
+});
+
+watch(
+  () => orderedItems.value.some((item) => item.type === "tool_group" && hasRunningTool(item.items)),
+  (running) => {
+    if (durationTimer) {
+      clearInterval(durationTimer);
+      durationTimer = undefined;
+    }
+    if (!running) return;
+    durationTimer = setInterval(() => {
+      durationClock.value = Date.now();
+    }, 250);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (durationTimer) clearInterval(durationTimer);
+  durationTimer = undefined;
 });
 
 function toggleToolEntry(id: string) {
@@ -161,9 +183,12 @@ function toolStreamSummary(items?: AssistantTurnItem[]): string {
   const counted = calls.length > 0 ? calls : results;
   const failed = counted.filter((item) => statusClass(item.status) === "failed").length;
   if (failed > 0) return `${counted.length} 个工具 · ${failed} 个失败`;
-  if (counted.some((item) => statusClass(item.status) === "running")) {
+  const running = counted.find((item) => statusClass(item.status) === "running");
+  if (running) {
     const completed = counted.filter((item) => statusClass(item.status) === "completed").length;
-    return `执行中 · ${completed}/${counted.length} 完成`;
+    const duration = formatDuration(toolDurationMs(running));
+    const count = counted.length > 1 ? ` · ${completed}/${counted.length} 完成` : "";
+    return `${toolDisplayName(running.toolName)}${duration ? ` · ${duration}` : ""}${count}`;
   }
   return `${counted.length} 个工具 · 已完成`;
 }
@@ -267,9 +292,19 @@ function timelineItemKey(item: AssistantTurnItem & { type: string }): string {
 }
 
 function toolDisplayName(name?: string, fallback = "工具调用"): string {
-  const value = String(name || "").trim();
+  const value = String(name || "").trim().toLowerCase();
   if (!value) return fallback;
-  return value;
+  if (value.includes("multi_agent")) return "协调子任务";
+  if (value.includes("browser") || value.includes("navigate") || value.includes("screenshot")) return "操作浏览器";
+  if (value.includes("web") && value.includes("search")) return "搜索网页";
+  if (value.includes("memory") && (value.includes("search") || value.includes("recall"))) return "检索记忆";
+  if (value.includes("command") || value.includes("shell") || value.includes("terminal") || value.includes("exec") || value.includes("bash")) return "运行命令";
+  if (value.includes("write") || value.includes("patch") || value.includes("replace") || value.includes("edit")) return "修改文件";
+  if (value.includes("read") || value.includes("cat") || value.includes("open_file")) return "读取文件";
+  if (value.includes("search") || value.includes("grep") || value.includes("find")) return "搜索内容";
+  if (value.includes("list") || value.includes("glob") || value.includes("directory")) return "浏览文件";
+  if (value.includes("invite")) return "邀请角色";
+  return String(name || "").trim();
 }
 
 function toolSubject(item: AssistantTurnItem): string {
@@ -290,14 +325,36 @@ function toolSubject(item: AssistantTurnItem): string {
   return text.length > 72 ? `${text.slice(0, 72)}…` : text;
 }
 
-function toolStateLabel(item: AssistantTurnItem): string {
-  const status = statusClass(item.status);
-  const duration = Number(item.durationMs || 0);
-  const suffix = duration > 0 ? ` · ${duration} ms` : "";
+function toolStateLabel(item: AssistantTurnItem, result?: AssistantTurnItem): string {
+  const statusSource = statusClass(item.status) === "running" && result ? result.status : item.status;
+  const status = statusClass(statusSource);
+  const duration = formatDuration(toolDurationMs(item, result));
+  const suffix = duration ? ` · ${duration}` : "";
   if (status === "completed") return `完成${suffix}`;
   if (status === "failed") return `失败${suffix}`;
-  if (status === "interrupted") return "已中断";
+  if (status === "interrupted") return `已中断${suffix}`;
   return `运行中${suffix}`;
+}
+
+function toolDurationMs(item: AssistantTurnItem, result?: AssistantTurnItem): number {
+  const recorded = Number(item.durationMs || 0);
+  if (Number.isFinite(recorded) && recorded > 0) return recorded;
+  const resultDuration = Number(result?.durationMs || 0);
+  if (Number.isFinite(resultDuration) && resultDuration > 0) return resultDuration;
+  const startedAt = Date.parse(String(item.createdAt || ""));
+  if (!Number.isFinite(startedAt)) return 0;
+  const status = result && !isStreamingStatus(result.status) ? result.status : item.status;
+  if (isStreamingStatus(status)) return Math.max(0, durationClock.value - startedAt);
+  const finishedAt = Date.parse(String(result?.updatedAt || item.updatedAt || ""));
+  return Number.isFinite(finishedAt) ? Math.max(0, finishedAt - startedAt) : 0;
+}
+
+function formatDuration(milliseconds: number): string {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return "";
+  if (milliseconds < 1000) return `${Math.max(1, Math.round(milliseconds))}ms`;
+  if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(milliseconds < 10_000 ? 1 : 0)}s`;
+  const seconds = Math.round(milliseconds / 1000);
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
 function resultText(item: AssistantTurnItem): string {

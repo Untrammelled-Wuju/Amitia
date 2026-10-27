@@ -368,10 +368,9 @@ export class SnowLumaInstaller {
       this.status = { ...this.status, phase: "validating", percent: 95, message: "正在校验 SnowLuma 文件" }
       options.onProgress?.(this.installState())
       const versionsRoot = path.join(root, "versions")
-      const installName = `v${version}-${platform}-${arch}`
+      const installName = `v${version}-${platform}-${arch}-${jobId.slice(0, 8)}`
       const installDir = path.join(versionsRoot, installName)
       fs.mkdirSync(versionsRoot, { recursive: true, mode: 0o700 })
-      fs.rmSync(installDir, { recursive: true, force: true })
       fs.renameSync(packageRoot, installDir)
       const pointerBefore = readInstallPointer(this.allowedRoot)
       this.status = { ...this.status, phase: "migrating", percent: 97, message: "正在迁移配置与账号数据" }

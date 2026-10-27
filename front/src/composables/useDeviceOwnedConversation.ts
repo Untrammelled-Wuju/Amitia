@@ -630,7 +630,7 @@ export function useDeviceOwnedConversation() {
   async function retryGroupDelivery(conversationId: string, characterId: string, roundId: string, deliveryId: string) {
     const origin = parseConversationReference(conversationId);
     const requestId = crypto.randomUUID();
-    const result = unwrap<OwnedGroupChatResponse>(await apiClient.post(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/group-rounds/${encodeURIComponent(roundId)}/retry`, { requestId, characterId, deliveryId }));
+    const result = unwrap<OwnedGroupChatResponse>(await apiClient.post(`/api/device-mesh/v1/business/conversations/${encodeURIComponent(origin?.id || conversationId)}/group-rounds/retry?roundId=${encodeURIComponent(roundId)}`, { requestId, characterId, deliveryId }));
     if (!result.saved) throw new Error("群成员重试尚未获得数据所有者确认");
     invalidateWithoutInterrupt();
     return result;
@@ -638,10 +638,17 @@ export function useDeviceOwnedConversation() {
 
   async function failedGroupDeliveries(conversationId: string, characterId: string): Promise<OwnedGroupDelivery[]> {
     const result = await query(conversationId, characterId);
-    const rounds = result.snapshot.resources.filter((resource) => resource.kind === "group-round" && resource.body && !resource.deleted).sort((left, right) => String(right.body.updatedAt || "").localeCompare(String(left.body.updatedAt || "")));
-    const latest = rounds[0]?.body;
-    if (!latest || !Array.isArray(latest.deliveries)) return [];
-    return latest.deliveries.filter((delivery: OwnedGroupDelivery) => delivery.status === "failed");
+    const rounds = result.snapshot.resources.filter((resource) => resource.kind === "group-round" && resource.body && !resource.deleted);
+    const superseded = new Set<string>();
+    for (const round of rounds) {
+      for (const delivery of Array.isArray(round.body.deliveries) ? round.body.deliveries as OwnedGroupDelivery[] : []) {
+        if (delivery.source.startsWith("retry:")) superseded.add(delivery.source.slice("retry:".length));
+      }
+    }
+    return rounds
+      .flatMap((round) => Array.isArray(round.body.deliveries) ? round.body.deliveries as OwnedGroupDelivery[] : [])
+      .filter((delivery) => delivery.status === "failed" && !superseded.has(delivery.deliveryId))
+      .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
   }
 
   async function interrupt() {

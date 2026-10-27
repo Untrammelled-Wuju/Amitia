@@ -156,9 +156,7 @@ func buildEmotionDirective(policy RuntimePolicy) EmotionDirective {
 		expression := policy.BDI.EmotionExpression
 		directive.Mode = NormalizeDisplayMode(expression.DisplayMode)
 		directive.InternalIntensity = clampUnit(float64(expression.InternalIntensity) / 10)
-		if expression.DisplayIntensity > 0 {
-			directive.DisplayIntensity = clampUnit(float64(expression.DisplayIntensity) / 10)
-		}
+		directive.DisplayIntensity = clampUnit(float64(expression.DisplayIntensity) / 10)
 		directive.OverrideReason = strings.TrimSpace(expression.OverrideReason)
 	}
 	directive.NegativeCap = clampUnit(float64(policy.Config.NegativeEmotionCap) / 10)
@@ -249,6 +247,10 @@ func ApplyEmotionDirective(plan decision.ExpressionPlan, directive EmotionDirect
 	case EmotionDisplayReframe:
 		plan.Metadata["emotionExpressMode"] = EmotionDisplayReframe
 	}
+	if directive.DisplayIntensity == 0 {
+		display = 0
+		plan.Suppressed = true
+	}
 	if plan.Tone == decision.ExpressionToneConcerned && display > directive.NegativeCap {
 		display = directive.NegativeCap
 		plan.Metadata["negativeEmotionCapped"] = true
@@ -322,10 +324,15 @@ func ValidateBdiConfig(bdi BdiConfig) error {
 			reasons = append(reasons, "硬约束指向未知行为候选: "+strings.TrimSpace(rule.CandidateKey))
 		}
 		severity := strings.ToLower(strings.TrimSpace(rule.Severity))
-		if severity != ConstraintSeverityBlock && severity != ConstraintSeverityOverride && severity != "" {
+		severityValid := severity == "" ||
+			severity == ConstraintSeverityBlock ||
+			severity == ConstraintSeverityOverride ||
+			severity == "prefer" ||
+			severity == "priority"
+		if !severityValid {
 			reasons = append(reasons, "未知约束强度: "+rule.Severity)
 		}
-		if severity == ConstraintSeverityBlock && strings.TrimSpace(rule.Reason) == "" {
+		if severity != ConstraintSeverityOverride && severity != "prefer" && severity != "priority" && strings.TrimSpace(rule.Reason) == "" {
 			reasons = append(reasons, "阻断约束必须填写原因: "+ruleID)
 		}
 	}
@@ -363,7 +370,14 @@ func ValidateBdiConfig(bdi BdiConfig) error {
 			reasons = append(reasons, "外在表达强度超出 0-10")
 		}
 		mode := strings.ToLower(strings.TrimSpace(bdi.EmotionExpression.DisplayMode))
-		if mode != "" && mode != EmotionDisplayShow && mode != EmotionDisplaySuppress && mode != EmotionDisplayReframe {
+		modeValid := mode == "" ||
+			mode == EmotionDisplayShow ||
+			mode == EmotionDisplaySuppress ||
+			mode == EmotionDisplayReframe ||
+			mode == "hidden" ||
+			mode == "hide" ||
+			mode == "reframing"
+		if !modeValid {
 			reasons = append(reasons, "未知表达模式: "+bdi.EmotionExpression.DisplayMode)
 		}
 	}

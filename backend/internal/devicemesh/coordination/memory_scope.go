@@ -20,6 +20,28 @@ var RuntimeStateKinds = []string{
 	RuntimeStateKindNeeds,
 }
 
+func RoleRuntimeStateID(kind, roleID string) string {
+	switch kind {
+	case RuntimeStateKindPsyche, RuntimeStateKindNeeds:
+		return "role/" + roleID
+	case RuntimeStateKindRelationship:
+		return "user_character/" + roleID
+	default:
+		return roleID
+	}
+}
+
+func LegacyRuntimeStateID(kind string) string {
+	switch kind {
+	case RuntimeStateKindPsyche, RuntimeStateKindNeeds:
+		return "role"
+	case RuntimeStateKindRelationship:
+		return "user_character"
+	default:
+		return ""
+	}
+}
+
 func RuntimeStateKind(kind string) bool {
 	switch kind {
 	case RuntimeStateKindPsyche, RuntimeStateKindRelationship, RuntimeStateKindNeeds:

@@ -37,24 +37,74 @@ AgentUIEvent _event({
 }
 
 void main() {
+  test('运行中的工具恢复后保留各自开始时间', () {
+    final reducer = AgentEventReducer();
+    reducer.reset(
+      turns: const [],
+      lastEventSequence: 0,
+      activeTurn: const {
+        'turnId': 'turn-tool',
+        'status': 'running',
+        'startedAt': '2026-10-16T10:00:00Z',
+        'lastEventSequence': 0,
+        'blocks': [
+          {
+            'blockId': 'call-a',
+            'blockSequence': 1,
+            'type': 'tool_call',
+            'status': 'running',
+            'callId': 'call-a',
+            'startedAt': '2026-10-16T10:00:03Z',
+          },
+        ],
+      },
+    );
+    expect(
+      reducer.turn('turn-tool')!.items.single.createdAt,
+      '2026-10-16T10:00:03Z',
+    );
+  });
 
   test('崩溃恢复等待对账状态不能被工具增量覆盖或误报完成', () {
     final reducer = AgentEventReducer();
     reducer.reset(turns: const [], lastEventSequence: 0);
-    reducer.apply(_event(sequence: 1, id: 'recovery-start', type: 'turn.started', status: 'running'));
-    reducer.apply(_event(
-      sequence: 2, id: 'recovery-unknown', type: 'turn.waiting', status: 'needs_reconciliation',
-      payload: const <String, dynamic>{'errorCode': 'tool_requires_reconciliation'},
-    ));
+    reducer.apply(
+      _event(
+        sequence: 1,
+        id: 'recovery-start',
+        type: 'turn.started',
+        status: 'running',
+      ),
+    );
+    reducer.apply(
+      _event(
+        sequence: 2,
+        id: 'recovery-unknown',
+        type: 'turn.waiting',
+        status: 'needs_reconciliation',
+        payload: const <String, dynamic>{
+          'errorCode': 'tool_requires_reconciliation',
+        },
+      ),
+    );
     expect(reducer.turn('turn-1')!.status, 'needs_reconciliation');
-    reducer.apply(_event(
-      sequence: 3, id: 'recovery-tool', type: 'tool.running', blockId: 'tool-1',
-      blockSequence: 1, status: 'running',
-      payload: const <String, dynamic>{'blockType': 'tool_call'},
-    ));
+    reducer.apply(
+      _event(
+        sequence: 3,
+        id: 'recovery-tool',
+        type: 'tool.running',
+        blockId: 'tool-1',
+        blockSequence: 1,
+        status: 'running',
+        payload: const <String, dynamic>{'blockType': 'tool_call'},
+      ),
+    );
     expect(reducer.turn('turn-1')!.status, 'needs_reconciliation');
     final reloaded = AgentEventReducer();
-    reloaded.reset(turns: reducer.turns, lastEventSequence: reducer.lastEventSequence);
+    reloaded.reset(
+      turns: reducer.turns,
+      lastEventSequence: reducer.lastEventSequence,
+    );
     expect(reloaded.turn('turn-1')!.status, 'needs_reconciliation');
     expect(reloaded.activeTurnId, 'turn-1');
   });
@@ -63,7 +113,9 @@ void main() {
     reducer.reset(turns: const [], lastEventSequence: 0);
 
     expect(
-      reducer.apply(_event(sequence: 1, id: 'evt-1', type: 'turn.queued', status: 'queued')),
+      reducer.apply(
+        _event(sequence: 1, id: 'evt-1', type: 'turn.queued', status: 'queued'),
+      ),
       AgentEventApplyResult.applied,
     );
     expect(reducer.activeTurnId, 'turn-1');
@@ -126,7 +178,12 @@ void main() {
   test('重复事件只应用一次', () {
     final reducer = AgentEventReducer();
     reducer.reset(turns: const [], lastEventSequence: 0);
-    final event = _event(sequence: 1, id: 'evt-1', type: 'turn.queued', status: 'queued');
+    final event = _event(
+      sequence: 1,
+      id: 'evt-1',
+      type: 'turn.queued',
+      status: 'queued',
+    );
 
     expect(reducer.apply(event), AgentEventApplyResult.applied);
     expect(reducer.apply(event), AgentEventApplyResult.duplicate);
@@ -146,10 +203,26 @@ void main() {
   test('approval expired 恢复 Turn 运行状态', () {
     final reducer = AgentEventReducer();
     reducer.reset(turns: const [], lastEventSequence: 0);
-    reducer.apply(_event(sequence: 1, id: 'evt-1', type: 'turn.started', status: 'running'));
-    reducer.apply(_event(sequence: 2, id: 'evt-2', type: 'approval.requested', status: 'waiting_approval'));
+    reducer.apply(
+      _event(sequence: 1, id: 'evt-1', type: 'turn.started', status: 'running'),
+    );
+    reducer.apply(
+      _event(
+        sequence: 2,
+        id: 'evt-2',
+        type: 'approval.requested',
+        status: 'waiting_approval',
+      ),
+    );
     expect(reducer.turn('turn-1')!.status, 'waiting_approval');
-    reducer.apply(_event(sequence: 3, id: 'evt-3', type: 'approval.expired', status: 'running'));
+    reducer.apply(
+      _event(
+        sequence: 3,
+        id: 'evt-3',
+        type: 'approval.expired',
+        status: 'running',
+      ),
+    );
     expect(reducer.turn('turn-1')!.status, 'running');
   });
 
@@ -178,7 +251,10 @@ void main() {
           blockId: 'block-text',
           blockSequence: 1,
           revision: 4,
-          payload: const <String, dynamic>{'blockType': 'text', 'content': 'old'},
+          payload: const <String, dynamic>{
+            'blockType': 'text',
+            'content': 'old',
+          },
         ),
       ),
       AgentEventApplyResult.stale,

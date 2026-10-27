@@ -15,7 +15,7 @@ import {
 } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
-import { classifyError, displayError } from "./request";
+import { applyDesktopSessionRetry, classifyError, displayError, isDesktopSessionAuthFailure, type RetriableDesktopRequestConfig } from "./request";
 import { signWebAuthenticatedFetch } from "@/runtime/web-device-mesh";
 import { recordClientError } from "@/runtime/client-error-tracker";
 
@@ -141,16 +141,19 @@ apiClient.interceptors.response.use(
     }
     return response;
   },
-  (error) => {
+  async (error) => {
     if (error && typeof error === "object" && "severity" in error) {
       return Promise.reject(error);
     }
     const requestConfig = error?.config as
-      | (AxiosRequestConfig & {
+      | (RetriableDesktopRequestConfig & {
           __amitiaPublic?: boolean;
-          __amitiaDeviceLocal?: boolean;
         })
       | undefined;
+    if (isDesktopSessionAuthFailure(error, requestConfig) && requestConfig) {
+      await applyDesktopSessionRetry(requestConfig);
+      return apiClient.request(requestConfig);
+    }
     const body = (error.response?.data as ApiResponse) || null;
     const webAccessExpired = notifyWebAccessExpired(error);
     const err = classifyError(body, error as AxiosError);

@@ -28,7 +28,7 @@
 | pinia | ^2.1.0 | https://github.com/vuejs/pinia | MIT | front/package.json | No known extra NOTICE | Direct dependency |
 | vue | ^3.4.0 | https://github.com/vuejs/core | MIT | front/package.json | No known extra NOTICE | Direct dependency |
 | vue-router | ^4.3.0 | https://github.com/vuejs/router | MIT | front/package.json | No known extra NOTICE | Direct dependency |
-| extract-zip | ^2.0.1 | https://github.com/maxogden/extract-zip | BSD-2-Clause | plugins-code/channels/qq-personal/runtime/package.json | Preserve license | Direct dependency |
+| fflate | 0.8.2 | https://github.com/101arrowz/fflate | MIT | plugins-code/channels/qq-personal/runtime/package.json | Preserve license | Direct dependency |
 | tar | ^7.5.22 | https://github.com/isaacs/node-tar | ISC | plugins-code/channels/qq-personal/runtime/package.json | Preserve license | Direct dependency |
 
 ## Python Packages

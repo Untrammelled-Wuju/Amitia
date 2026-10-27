@@ -39,6 +39,26 @@ func TestRuntimeToolLifecycleRestoresArgumentsAndResult(t *testing.T) {
 	}
 }
 
+func TestRuntimeToolFailureStatusDoesNotPublishAsCompleted(t *testing.T) {
+	inference := Inference{ConversationID: t.Name(), Scope: coordination.ExecutionScope{TurnID: "turn", RequestID: "request"}}
+	for _, event := range []Event{
+		{Type: "tool-started", Progress: json.RawMessage(`{"toolCallId":"call","toolName":"browser.agent.run","arguments":"{}"}`)},
+		{Type: "tool-completed", Progress: json.RawMessage(`{"toolCallId":"call","toolName":"browser.agent.run","status":"FAILED","errorCode":"browser_agent_failed","result":"typed browser tool is unavailable: browser_session_create"}`)},
+	} {
+		if err := publishRuntime(context.Background(), inference, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime := RuntimeManager().RuntimeSnapshot(RuntimeKey(inference.Scope, inference.ConversationID))
+	if runtime.ActiveTurn == nil || len(runtime.ActiveTurn.Blocks) != 1 {
+		t.Fatalf("missing tool block: %#v", runtime.ActiveTurn)
+	}
+	block := runtime.ActiveTurn.Blocks[0]
+	if block.Status != "failed" || block.Payload["errorCode"] != "browser_agent_failed" {
+		t.Fatalf("tool failure was projected as success: %#v", block)
+	}
+}
+
 func TestRuntimeKeySeparatesOwnerRoleAndCore(t *testing.T) {
 	base := coordination.ExecutionScope{SpaceID: "space", ResourceOwnerID: "owner", CoreID: "core", RoleID: "role"}
 	key := RuntimeKey(base, "conversation")

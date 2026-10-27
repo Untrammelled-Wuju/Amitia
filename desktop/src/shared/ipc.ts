@@ -32,6 +32,7 @@ export const IPC_CHANNELS = {
   externalWebUIRelease: "amitia:external-web-ui:release",
   externalWebUIClear: "amitia:external-web-ui:clear",
   getBackendAuthHeaders: "amitia:backend-auth:get-headers",
+  invalidateBackendSession: "amitia:backend-auth:invalidate-session",
   getClientDiagnostics: "amitia:client-diagnostics:get",
   clearClientDiagnostics: "amitia:client-diagnostics:clear",
   publishLocalVoiceASRFinal: "amitia:workflow:voice-asr-final",

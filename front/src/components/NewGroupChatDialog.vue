@@ -23,8 +23,8 @@
             :class="{ 'is-selected': baseRoleId === character.id }"
             @click="selectBaseRole(character.id)"
           >
-            <el-avatar :size="34" :src="character.avatar || undefined">{{ character.name.slice(0, 1) }}</el-avatar>
-            <span>{{ character.name }}</span>
+            <el-avatar :size="34" :src="character.avatar || undefined" fit="cover">{{ character.name.slice(0, 1) }}</el-avatar>
+            <span class="role-name">{{ character.name }}</span>
             <el-icon v-if="baseRoleId === character.id" class="selection-check"><Check /></el-icon>
           </button>
         </div>
@@ -43,8 +43,8 @@
             :class="{ 'is-selected': selected.has(character.id) }"
             @click="toggleCharacter(character.id)"
           >
-            <el-avatar :size="34" :src="character.avatar || undefined">{{ character.name.slice(0, 1) }}</el-avatar>
-            <span>{{ character.name }}</span>
+            <el-avatar :size="34" :src="character.avatar || undefined" fit="cover">{{ character.name.slice(0, 1) }}</el-avatar>
+            <span class="role-name">{{ character.name }}</span>
             <el-icon v-if="selected.has(character.id)" class="selection-check"><Check /></el-icon>
           </button>
         </div>
@@ -134,7 +134,8 @@ async function create() {
 .role-option { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 52px; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-bg-elevated); color: var(--text-secondary); cursor: pointer; text-align: left; }
 .role-option:hover, .role-option:focus-visible { border-color: var(--ac-color-primary); color: var(--text-primary); outline: none; }
 .role-option.is-selected { border-color: var(--ac-color-primary); background: color-mix(in srgb, var(--ac-color-primary) 10%, var(--surface-bg-elevated)); color: var(--text-primary); }
-.role-option span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-option :deep(.el-avatar) { flex: 0 0 34px; }
+.role-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selection-check { flex: 0 0 auto; color: var(--ac-color-primary); }
 @media (max-width: 560px) { .role-grid { grid-template-columns: 1fr; } }
 </style>

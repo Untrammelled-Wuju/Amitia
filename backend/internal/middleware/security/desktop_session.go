@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -35,6 +36,11 @@ const (
 	RotationStageCredentialSwitched = "credential_switched"
 	RotationStageSessionsRevoked    = "sessions_revoked"
 	RotationStageCompleted          = "completed"
+)
+
+var (
+	ErrDesktopSessionInvalid          = errors.New("desktop session invalid")
+	ErrDesktopSessionStoreUnavailable = errors.New("desktop session store unavailable")
 )
 
 type RotationJournal struct {
@@ -174,6 +180,7 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 	tokenHashStr := base64.RawURLEncoding.EncodeToString(tokenHash[:])
 
 	now := time.Now()
+	_ = s.pruneStaleSessions(now)
 	session := &DesktopSession{
 		ID:                generateSessionID(),
 		SpaceID:           string(actor.SpaceID),
@@ -196,9 +203,19 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 	})
 }
 
+func (s *DesktopSessionService) pruneStaleSessions(now time.Time) error {
+	if s == nil || s.db == nil {
+		return errors.New("database is nil")
+	}
+	return s.db.Model(&DesktopSession{}).Where("status = ? AND (datetime(expires_at) <= datetime(?) OR datetime(created_at) < datetime(?))", DesktopSessionStatusActive, now, now.Add(-24*time.Hour)).Updates(map[string]interface{}{
+		"status":     DesktopSessionStatusRevoked,
+		"revoked_at": now,
+	}).Error
+}
+
 func (s *DesktopSessionService) ValidateSessionWithContext(ctx context.Context, sessionToken string) (*DesktopSession, error) {
 	if sessionToken == "" {
-		return nil, errors.New("empty session token")
+		return nil, ErrDesktopSessionInvalid
 	}
 
 	hash := sha256.Sum256([]byte(sessionToken))
@@ -207,14 +224,14 @@ func (s *DesktopSessionService) ValidateSessionWithContext(ctx context.Context, 
 	var session DesktopSession
 	if err := s.db.WithContext(ctx).Where("token_hash = ? AND status = ?", hashStr, DesktopSessionStatusActive).First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("session not found")
+			return nil, ErrDesktopSessionInvalid
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrDesktopSessionStoreUnavailable, err)
 	}
 
 	if time.Now().After(session.ExpiresAt) {
 		_ = s.revokeSessionWithContext(ctx, &session)
-		return nil, errors.New("session expired")
+		return nil, ErrDesktopSessionInvalid
 	}
 
 	return &session, nil
@@ -250,10 +267,10 @@ func (s *DesktopSessionService) ValidateSessionWithInstance(ctx context.Context,
 		return nil, err
 	}
 	if instanceID == "" {
-		return nil, errors.New("instance header required")
+		return nil, ErrDesktopSessionInvalid
 	}
 	if session.DesktopInstanceID != instanceID {
-		return nil, errors.New("instance mismatch")
+		return nil, ErrDesktopSessionInvalid
 	}
 	return session, nil
 }
@@ -539,6 +556,11 @@ func DesktopSessionAuthMiddleware(sessionSvc *DesktopSessionService) gin.Handler
 
 		session, err := sessionSvc.ValidateSessionWithContext(c.Request.Context(), sessionToken)
 		if err != nil {
+			if errors.Is(err, ErrDesktopSessionStoreUnavailable) {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "本地会话存储暂时不可用", "retryable": true})
+				c.Abort()
+				return
+			}
 			c.JSON(401, gin.H{"code": 401, "msg": "invalid session"})
 			c.Abort()
 			return

@@ -2,12 +2,15 @@ package migration
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/pkg/database/mysql"
+	"github.com/u-ai/backend/pkg/database/sqlitebackup"
 	"gorm.io/gorm"
 )
 
@@ -105,15 +108,15 @@ func TestRunnerCreatesPreMigrationSQLiteBackup(t *testing.T) {
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.ID != records[0].ID || manifest.BackupPath != records[0].BackupPath || len(manifest.Components) != 3 {
+	if manifest.ID != records[0].ID || manifest.BackupPath != records[0].BackupPath || len(manifest.Components) != 1 {
 		t.Fatalf("backup manifest is not restorable metadata: %#v", manifest)
 	}
 	var contentRoles []string
 	if err := db.Raw("SELECT table_name FROM backup_contents ORDER BY table_name").Scan(&contentRoles).Error; err != nil {
 		t.Fatal(err)
 	}
-	if len(contentRoles) != 4 {
-		t.Fatalf("expected main, metadata, wal and shm content records, got %#v", contentRoles)
+	if len(contentRoles) != 2 {
+		t.Fatalf("expected main and metadata content records, got %#v", contentRoles)
 	}
 
 	if err := runner.Apply(migrations); err != nil {
@@ -128,77 +131,58 @@ func TestRunnerCreatesPreMigrationSQLiteBackup(t *testing.T) {
 	}
 }
 
-func TestCopySQLiteBackupFilesIncludesExistingWALAndSHM(t *testing.T) {
-	dir := t.TempDir()
-	sourcePath := filepath.Join(dir, "app.db")
-	backupPath := filepath.Join(dir, "backup.db")
-	if err := os.WriteFile(sourcePath, []byte("main"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(sourcePath+"-wal", []byte("wal"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(sourcePath+"-shm", []byte("shm"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	components, err := copySQLiteBackupFiles(sourcePath, backupPath)
+func TestPreMigrationBackupIsConsistentDuringConcurrentWrites(t *testing.T) {
+	db := mysql.NewSQLite(t.TempDir())
+	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(components) != 3 {
-		t.Fatalf("expected three components, got %d", len(components))
-	}
-	for _, item := range []struct {
-		path string
-		want string
-	}{
-		{backupPath, "main"},
-		{backupPath + "-wal", "wal"},
-		{backupPath + "-shm", "shm"},
-	} {
-		got, err := os.ReadFile(item.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(got) != item.want {
-			t.Fatalf("unexpected backup content for %s: %q", item.path, string(got))
-		}
-	}
-	for _, component := range components {
-		if !component.SourceExists || component.Size <= 0 || component.Checksum == "" {
-			t.Fatalf("component metadata not restorable: %#v", component)
-		}
-	}
-}
-
-func TestCopySQLiteBackupFilesRecordsMissingOptionalWALAndSHM(t *testing.T) {
-	dir := t.TempDir()
-	sourcePath := filepath.Join(dir, "app.db")
-	backupPath := filepath.Join(dir, "backup.db")
-	if err := os.WriteFile(sourcePath, []byte("main"), 0644); err != nil {
+	defer sqlDB.Close()
+	if err := db.Exec("CREATE TABLE live_events (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)").Error; err != nil {
 		t.Fatal(err)
 	}
-
-	components, err := copySQLiteBackupFiles(sourcePath, backupPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(components) != 3 {
-		t.Fatalf("expected three components, got %d", len(components))
-	}
-	if _, err := os.Stat(backupPath + "-wal"); !os.IsNotExist(err) {
-		t.Fatalf("missing wal should not create backup file: %v", err)
-	}
-	if _, err := os.Stat(backupPath + "-shm"); !os.IsNotExist(err) {
-		t.Fatalf("missing shm should not create backup file: %v", err)
-	}
-	for _, component := range components {
-		if component.Role == "wal" || component.Role == "shm" {
-			if component.SourceExists {
-				t.Fatalf("missing optional component marked present: %#v", component)
+	stop := make(chan struct{})
+	writerErr := make(chan error, 1)
+	go func() {
+		for index := 0; ; index++ {
+			select {
+			case <-stop:
+				writerErr <- nil
+				return
+			default:
 			}
+			if err := db.Exec("INSERT INTO live_events(payload) VALUES (?)", fmt.Sprintf("event-%d", index)).Error; err != nil {
+				writerErr <- err
+				return
+			}
+			time.Sleep(2 * time.Millisecond)
 		}
+	}()
+	backupDir := filepath.Join(t.TempDir(), "backups")
+	runner := Runner{DB: db, BackupDir: backupDir}
+	err = runner.CreatePreMigrationBackup()
+	close(stop)
+	writeErr := <-writerErr
+	if err != nil {
+		t.Fatal(err)
+	}
+	if writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	var record struct {
+		BackupPath string `gorm:"column:backup_path"`
+	}
+	if err := db.Raw("SELECT backup_path FROM backup_records WHERE status = 'completed' ORDER BY started_at DESC LIMIT 1").Scan(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlitebackup.VerifySnapshot(t.Context(), record.BackupPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(record.BackupPath + "-wal"); !os.IsNotExist(err) {
+		t.Fatalf("consistent snapshot must not carry a WAL sidecar: %v", err)
+	}
+	if _, err := os.Stat(record.BackupPath + "-shm"); !os.IsNotExist(err) {
+		t.Fatalf("consistent snapshot must not carry an SHM sidecar: %v", err)
 	}
 }
 

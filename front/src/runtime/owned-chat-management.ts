@@ -26,7 +26,11 @@ async function ownedChatRequest<T>(group: string, operation: string, body: Recor
   const path = `/api/device-mesh/v1/business/${group}/${operation}`;
   const response = await apiClient.post(path, payload);
   const result = response.data?.code === 200 && response.data.data !== undefined ? response.data.data : response.data;
-  if (!result?.executionScope || owned.coreId.value !== expected.coreId || !sameOwnedAuthority(expected, result.executionScope)) throw new Error("服务或数据归属已变化，管理结果已丢弃");
+  const resultScope = result?.executionScope;
+  const comparableScope = resultScope && expected.conversationRoleId === undefined
+    ? { ...resultScope, conversationRoleId: undefined }
+    : resultScope;
+  if (!resultScope || owned.coreId.value !== expected.coreId || !sameOwnedAuthority(expected, comparableScope)) throw new Error("服务或数据归属已变化，管理结果已丢弃");
   return result as T;
 }
 

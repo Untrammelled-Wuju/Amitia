@@ -315,6 +315,13 @@ const galleryItems = computed<Array<Record<string, unknown>>>(() => {
   });
 });
 
+function galleryItemPlaceholder(item: Record<string, unknown>) {
+  if (mergedProps.value.variant === "groups") {
+    return toText(item.name ?? item.label ?? item.id).slice(0, 1) || "组";
+  }
+  return mergedProps.value.placeholder ?? "无预览";
+}
+
 const resourceLinkActive = computed(() => {
   const href = toText(mergedProps.value.href).trim();
   const route = toText(props.context.route).trim();
@@ -896,7 +903,12 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     <div
       v-else-if="nodeType === 'gallery'"
       class="schema-ui-gallery schema-ui-node"
-      :class="{ 'schema-ui-gallery--assets': mergedProps.variant === 'assets', 'schema-ui-gallery--collections': mergedProps.variant === 'collections' }"
+      :class="{
+        'schema-ui-gallery--assets': mergedProps.variant === 'assets',
+        'schema-ui-gallery--collections': mergedProps.variant === 'collections',
+        'schema-ui-gallery--groups': mergedProps.variant === 'groups',
+        'schema-ui-gallery--stickers': mergedProps.variant === 'stickers',
+      }"
       :data-amitia-ui="semanticTarget"
       :data-amitia-node-target="nodeTarget"
       :data-node-id="node.id"
@@ -925,8 +937,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
           :alt="toText(item[toText(mergedProps.titleField) || 'title'] ?? item.name ?? item.label)"
           loading="lazy"
         />
-        <div v-else class="schema-ui-gallery__placeholder">{{ mergedProps.placeholder ?? "无预览" }}</div>
-        <span class="schema-ui-gallery__title">
+        <div v-else class="schema-ui-gallery__placeholder">{{ galleryItemPlaceholder(item) }}</div>
+        <span v-if="mergedProps.showTitle !== false" class="schema-ui-gallery__title">
           {{ item[toText(mergedProps.titleField) || "title"] ?? item.name ?? item.label ?? item.id }}
         </span>
         <span v-if="mergedProps.showSubtitle !== false && (item[toText(mergedProps.subtitleField) || 'subtitle'] ?? item.meaning ?? item.description)" class="schema-ui-gallery__subtitle">
@@ -1476,6 +1488,69 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   background: var(--control-hover-bg, rgba(127, 127, 127, 0.08));
   border-color: var(--ac-color-primary);
 }
+
+.schema-ui-gallery--groups {
+  display: flex;
+  gap: 4px;
+  padding: 2px 0 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.schema-ui-gallery--groups .schema-ui-gallery__item {
+  width: 66px;
+  flex: 0 0 66px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-color: transparent;
+  background: transparent;
+  text-align: center;
+}
+
+.schema-ui-gallery--groups .schema-ui-gallery__image,
+.schema-ui-gallery--groups .schema-ui-gallery__placeholder {
+  width: 46px;
+  height: 46px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.schema-ui-gallery--groups .schema-ui-gallery__placeholder {
+  background: var(--ac-color-bg-secondary);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.schema-ui-gallery--groups .schema-ui-gallery__title {
+  width: 100%;
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.schema-ui-gallery--stickers {
+  gap: 4px;
+}
+
+.schema-ui-gallery--stickers .schema-ui-gallery__item {
+  padding: 3px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.schema-ui-gallery--stickers .schema-ui-gallery__item:hover {
+  background: var(--surface-hover);
+  border-color: transparent;
+}
+
+.schema-ui-gallery--stickers .schema-ui-gallery__image,
+.schema-ui-gallery--stickers .schema-ui-gallery__placeholder {
+  border-radius: 7px;
+}
+
 .schema-ui-gallery__item:focus-visible {
   outline: 2px solid var(--ac-color-primary);
   outline-offset: 2px;

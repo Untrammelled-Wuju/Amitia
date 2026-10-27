@@ -1,16 +1,16 @@
 package migration
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/u-ai/backend/pkg/database/sqlitebackup"
 	"gorm.io/gorm"
 )
 
@@ -94,13 +94,23 @@ func (r Runner) CreatePreMigrationBackup() error {
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
 		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
-	if err := r.DB.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
+	if err := sqlitebackup.CreateConsistentSnapshot(context.Background(), r.DB, backupPath); err != nil {
 		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
-	components, err := copySQLiteBackupFiles(sourcePath, backupPath)
+	mainSize, mainChecksum, err := sqlitebackup.Inspect(backupPath)
 	if err != nil {
 		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
+	components := []backupComponent{{
+		Role:         "main",
+		SourcePath:   sourcePath,
+		BackupPath:   backupPath,
+		RestorePath:  sourcePath,
+		Size:         mainSize,
+		Checksum:     mainChecksum,
+		Optional:     false,
+		SourceExists: true,
+	}}
 	manifestPath := filepath.Join(backupDir, id+".json")
 	if err := writeBackupManifest(manifestPath, backupManifest{
 		ID:         id,
@@ -111,7 +121,7 @@ func (r Runner) CreatePreMigrationBackup() error {
 	}); err != nil {
 		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
-	metadataSize, metadataChecksum, err := fileSizeAndChecksum(manifestPath)
+	metadataSize, metadataChecksum, err := sqlitebackup.Inspect(manifestPath)
 	if err != nil {
 		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
@@ -125,10 +135,6 @@ func (r Runner) CreatePreMigrationBackup() error {
 		Optional:     false,
 		SourceExists: true,
 	})
-	mainSize, mainChecksum, err := fileSizeAndChecksum(backupPath)
-	if err != nil {
-		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
-	}
 	finishedAt := now().UTC().Format(time.RFC3339)
 	if err := insertBackupRecord(r.DB, id, backupPath, mainSize, mainChecksum, "completed", startedAt, finishedAt, ""); err != nil {
 		return err
@@ -139,39 +145,14 @@ func (r Runner) CreatePreMigrationBackup() error {
 			return err
 		}
 	}
+	deleted, pruneErr := sqlitebackup.PruneBackups(backupDir, backupPath, sqlitebackup.DefaultRetention)
+	if pruneErr != nil {
+		log.Printf("migration backup retention failed: %v", pruneErr)
+	}
+	if len(deleted) > 0 {
+		log.Printf("migration backup retention removed %d expired snapshots", len(deleted))
+	}
 	return nil
-}
-
-func copySQLiteBackupFiles(sourcePath, backupPath string) ([]backupComponent, error) {
-	entries := []backupComponent{
-		{Role: "main", SourcePath: sourcePath, BackupPath: backupPath, RestorePath: sourcePath},
-		{Role: "wal", SourcePath: sourcePath + "-wal", BackupPath: backupPath + "-wal", RestorePath: sourcePath + "-wal", Optional: true},
-		{Role: "shm", SourcePath: sourcePath + "-shm", BackupPath: backupPath + "-shm", RestorePath: sourcePath + "-shm", Optional: true},
-	}
-	components := make([]backupComponent, 0, len(entries))
-	for _, entry := range entries {
-		exists, err := fileExists(entry.SourcePath)
-		if err != nil {
-			return nil, err
-		}
-		if !exists && entry.Optional {
-			entry.SourceExists = false
-			components = append(components, entry)
-			continue
-		}
-		if !exists {
-			return nil, os.ErrNotExist
-		}
-		size, checksum, err := copyFileWithChecksum(entry.SourcePath, entry.BackupPath)
-		if err != nil {
-			return nil, err
-		}
-		entry.Size = size
-		entry.Checksum = checksum
-		entry.SourceExists = true
-		components = append(components, entry)
-	}
-	return components, nil
 }
 
 func writeBackupManifest(path string, manifest backupManifest) error {
@@ -184,39 +165,6 @@ func writeBackupManifest(path string, manifest backupManifest) error {
 		return err
 	}
 	return nil
-}
-
-func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
-}
-
-func copyFileWithChecksum(sourcePath, backupPath string) (int64, string, error) {
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return 0, "", err
-	}
-	defer source.Close()
-	target, err := os.OpenFile(backupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return 0, "", err
-	}
-	defer target.Close()
-	h := sha256.New()
-	size, err := io.Copy(io.MultiWriter(target, h), source)
-	if err != nil {
-		return 0, "", err
-	}
-	if err := target.Sync(); err != nil {
-		return 0, "", err
-	}
-	return size, hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func ensureBackupTables(db *gorm.DB) error {
@@ -240,20 +188,6 @@ func sqliteMainPath(db *gorm.DB) (string, error) {
 		}
 	}
 	return "", errors.New("main sqlite database not found")
-}
-
-func fileSizeAndChecksum(path string) (int64, string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, "", err
-	}
-	defer file.Close()
-	h := sha256.New()
-	size, err := io.Copy(h, file)
-	if err != nil {
-		return 0, "", err
-	}
-	return size, hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func insertBackupRecord(db *gorm.DB, id, backupPath string, size int64, checksum, status, startedAt, finishedAt, errorMessage string) error {

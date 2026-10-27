@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/coordination"
@@ -33,6 +34,7 @@ const (
 
 var (
 	ErrGroupMemberChanged   = errors.New("群成员已变化，请刷新后重试")
+	ErrGroupSettingsChanged = errors.New("群设置已变化，请刷新后重试")
 	ErrGroupTargetInvalid   = errors.New("目标角色不在当前群聊中或不可执行")
 	ErrGroupBudgetExhausted = errors.New("本轮角色接话已达到上限，可手动继续")
 )
@@ -91,6 +93,7 @@ type GroupRound struct {
 	RoundID            string            `json:"roundId"`
 	ConversationID     string            `json:"conversationId"`
 	RootRequestID      string            `json:"rootRequestId"`
+	RequestFingerprint string            `json:"requestFingerprint,omitempty"`
 	TriggerMessageID   string            `json:"triggerMessageId"`
 	TriggerMessage     string            `json:"triggerMessage"`
 	TriggerSequence    int64             `json:"triggerSequence"`
@@ -196,7 +199,7 @@ type GroupMutationResponse struct {
 }
 
 func (e *Engine) CreateGroupConversation(ctx context.Context, request Request, input CreateGroupConversationInput) (GroupMutationResponse, error) {
-	request.RequestID = input.RequestID
+	request.RequestID = strings.TrimSpace(input.RequestID)
 	request.RoleID = input.CharacterID
 	request.TargetDeviceID = input.TargetDeviceID
 	if request.RequestID == "" || len(input.Members) == 0 {
@@ -312,6 +315,10 @@ func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	mutations := make([]coordination.Mutation, 0)
 	seen := make(map[string]bool)
+	deliveryMembers := make(map[string]bool, len(round.Deliveries))
+	for _, delivery := range round.Deliveries {
+		deliveryMembers[delivery.MemberID] = true
+	}
 	for _, invitation := range round.Invitations {
 		seen[invitation.SourceMessageID+"\x00"+invitation.TargetMemberID] = true
 	}
@@ -325,6 +332,9 @@ func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference
 			continue
 		}
 		seen[key] = true
+		if deliveryMembers[member.MemberID] {
+			continue
+		}
 		if round.AutoReplyCount >= inference.Group.State.Settings.MaxAutoReplies {
 			round.Invitations = append(round.Invitations, GroupInvitation{InvitationID: uuid.NewString(), ConversationID: round.ConversationID, RoundID: round.RoundID, SourceMessageID: sourceMessageID, SourceDeliveryID: inference.Group.Delivery.DeliveryID, SourceCharacterID: inference.Scope.RoleID, TargetMemberID: member.MemberID, TargetCharacterID: member.CharacterID, TargetCharacterName: member.CharacterName, Status: "rejected", CreatedAt: now})
 			continue
@@ -334,6 +344,7 @@ func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference
 		round.Invitations = append(round.Invitations, invitation)
 		delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: round.RoundID, ChildRequestID: round.RootRequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterAvatar: member.CharacterAvatar, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "character", Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
 		round.Deliveries = append(round.Deliveries, delivery)
+		deliveryMembers[member.MemberID] = true
 		encodedInvitation, err := json.Marshal(invitation)
 		if err != nil {
 			return err
@@ -358,7 +369,13 @@ func (e *Engine) AcceptGroupInvitations(ctx context.Context, inference Inference
 
 func groupRoundID(spaceID, deviceID, requestID string) string {
 	digest := sha256.Sum256([]byte(spaceID + "\x00" + deviceID + "\x00" + requestID))
-	return "round/" + hex.EncodeToString(digest[:])
+	return "round_" + hex.EncodeToString(digest[:])
+}
+
+func groupRequestFingerprint(request Request) string {
+	data := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "characterId": request.RoleID, "mentions": request.Mentions, "group": request.Group, "attachments": request.Attachments}
+	digest := sha256.Sum256(body(data))
+	return hex.EncodeToString(digest[:])
 }
 
 func normalizeGroupMention(member coordination.GroupMember) GroupMention {
@@ -498,7 +515,7 @@ func (e *Engine) commitGroupConversation(ctx context.Context, scope coordination
 
 func (e *Engine) InviteGroupMembers(ctx context.Context, request Request, input GroupMembersInput) (GroupMutationResponse, error) {
 	if request.RequestID == "" {
-		request.RequestID = input.RequestID
+		request.RequestID = strings.TrimSpace(input.RequestID)
 	}
 	request.ConversationID = strings.TrimSpace(request.ConversationID)
 	request.RoleID = input.CharacterID
@@ -541,20 +558,29 @@ func (e *Engine) InviteGroupMembers(ctx context.Context, request Request, input 
 		state.SettingsRevision = 1
 	}
 	activeCount := 0
+	nextOrder := 0
 	activeRoles := make(map[string]bool)
 	for _, member := range members {
 		if member.Status == coordination.GroupMemberStatusActive {
 			activeCount++
 			activeRoles[member.CharacterID] = true
 		}
+		if member.OrderIndex >= nextOrder {
+			nextOrder = member.OrderIndex + 1
+		}
 	}
+	added := false
 	for _, inputMember := range input.Members {
-		role, found := roleByID[strings.TrimSpace(inputMember.CharacterID)]
-		if !found || role.Disabled {
+		characterID := strings.TrimSpace(inputMember.CharacterID)
+		if characterID == "" {
 			return GroupMutationResponse{}, ErrGroupTargetInvalid
 		}
-		if activeRoles[role.ID] {
+		if activeRoles[characterID] {
 			continue
+		}
+		role, found := roleByID[characterID]
+		if !found || role.Disabled {
+			return GroupMutationResponse{}, ErrGroupTargetInvalid
 		}
 		if activeCount >= coordination.GroupMaxMembers {
 			return GroupMutationResponse{}, errors.New("群聊最多支持 8 个角色")
@@ -563,12 +589,17 @@ func (e *Engine) InviteGroupMembers(ctx context.Context, request Request, input 
 		if !inputMember.ShareHistory {
 			historyStart = state.LastMessageSequence + 1
 		}
-		members = append(members, coordination.GroupMember{MemberID: "member-" + uuid.NewString(), CharacterID: role.ID, RoleOwnerID: scope.RoleOwnerID, CharacterName: role.Name, CharacterAvatar: role.Avatar, CharacterRevision: role.Revision, Status: coordination.GroupMemberStatusActive, OrderIndex: activeCount, JoinedSequence: state.LastMessageSequence + 1, HistoryStart: historyStart})
+		members = append(members, coordination.GroupMember{MemberID: "member-" + uuid.NewString(), CharacterID: role.ID, RoleOwnerID: scope.RoleOwnerID, CharacterName: role.Name, CharacterAvatar: role.Avatar, CharacterRevision: role.Revision, Status: coordination.GroupMemberStatusActive, OrderIndex: nextOrder, JoinedSequence: state.LastMessageSequence + 1, HistoryStart: historyStart})
 		activeCount++
+		nextOrder++
 		activeRoles[role.ID] = true
+		added = true
 	}
 	if len(activeRoles) < 2 {
 		return GroupMutationResponse{}, errors.New("至少需要邀请一个有效角色")
+	}
+	if !added {
+		return GroupMutationResponse{Group: state, Saved: true}, nil
 	}
 	resource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "conversation", state.ConversationID)
 	if err != nil {
@@ -589,7 +620,7 @@ func (e *Engine) InviteGroupMembers(ctx context.Context, request Request, input 
 }
 
 func (e *Engine) RemoveGroupMember(ctx context.Context, request Request, input GroupMemberRemoveInput) (GroupMutationResponse, error) {
-	request.RequestID = input.RequestID
+	request.RequestID = strings.TrimSpace(input.RequestID)
 	request.RoleID = input.CharacterID
 	request.TargetDeviceID = input.TargetDeviceID
 	ctx, scope, finish, _, state, err := e.beginGroupScope(ctx, request)
@@ -613,6 +644,15 @@ func (e *Engine) RemoveGroupMember(ctx context.Context, request Request, input G
 func (e *Engine) removeGroupMember(ctx context.Context, scope coordination.ExecutionScope, state coordination.GroupState, expected *int64, memberID string) (GroupMutationResponse, error) {
 	if expected != nil && state.MembershipRevision != *expected {
 		return GroupMutationResponse{}, ErrGroupMemberChanged
+	}
+	active := 0
+	for _, member := range state.Members {
+		if member.Status == coordination.GroupMemberStatusActive {
+			active++
+		}
+	}
+	if active <= 1 {
+		return GroupMutationResponse{}, errors.New("群聊至少需要保留一个有效成员")
 	}
 	found := false
 	for index := range state.Members {
@@ -648,7 +688,7 @@ func (e *Engine) removeGroupMember(ctx context.Context, scope coordination.Execu
 }
 
 func (e *Engine) UpdateGroupSettings(ctx context.Context, request Request, input GroupSettingsInput) (GroupMutationResponse, error) {
-	request.RequestID = input.RequestID
+	request.RequestID = strings.TrimSpace(input.RequestID)
 	request.RoleID = input.CharacterID
 	request.TargetDeviceID = input.TargetDeviceID
 	ctx, scope, finish, _, state, err := e.beginGroupScope(ctx, request)
@@ -660,7 +700,7 @@ func (e *Engine) UpdateGroupSettings(ctx context.Context, request Request, input
 		return GroupMutationResponse{}, errors.New("当前会话不是群聊")
 	}
 	if input.ExpectedSettingsRevision != nil && state.SettingsRevision != *input.ExpectedSettingsRevision {
-		return GroupMutationResponse{}, coordination.ErrResourceVersion
+		return GroupMutationResponse{}, ErrGroupSettingsChanged
 	}
 	resource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "conversation", state.ConversationID)
 	if err != nil {
@@ -670,27 +710,60 @@ func (e *Engine) UpdateGroupSettings(ctx context.Context, request Request, input
 	if err != nil {
 		return GroupMutationResponse{}, err
 	}
+	changed := false
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
-		if name == "" || len(name) > 128 {
+		if name == "" || utf8.RuneCountInString(name) > 128 {
 			return GroupMutationResponse{}, errors.New("群名称无效")
 		}
-		document["title"] = name
-		state.Title = name
+		if name != state.Title {
+			document["title"] = name
+			state.Title = name
+			changed = true
+		}
 	}
 	if input.AllowCharacterMentions != nil {
-		state.Settings.AllowCharacterMentions = *input.AllowCharacterMentions
+		if state.Settings.AllowCharacterMentions != *input.AllowCharacterMentions {
+			state.Settings.AllowCharacterMentions = *input.AllowCharacterMentions
+			changed = true
+		}
 	}
 	if input.MaxAutoReplies != nil {
 		if *input.MaxAutoReplies < 0 || *input.MaxAutoReplies > coordination.GroupDefaultAutoReplies {
 			return GroupMutationResponse{}, errors.New("自动接话上限无效")
 		}
-		state.Settings.MaxAutoReplies = *input.MaxAutoReplies
+		if state.Settings.MaxAutoReplies != *input.MaxAutoReplies {
+			state.Settings.MaxAutoReplies = *input.MaxAutoReplies
+			changed = true
+		}
 	}
 	if len(input.MemberOrder) > 0 {
 		order := make(map[string]int, len(input.MemberOrder))
+		activeMembers := make(map[string]bool)
+		for _, member := range state.Members {
+			if member.Status == coordination.GroupMemberStatusActive {
+				activeMembers[member.MemberID] = true
+			}
+		}
 		for index, memberID := range input.MemberOrder {
+			memberID = strings.TrimSpace(memberID)
+			if memberID == "" || !activeMembers[memberID] {
+				return GroupMutationResponse{}, ErrGroupTargetInvalid
+			}
+			if _, duplicate := order[memberID]; duplicate {
+				return GroupMutationResponse{}, ErrGroupTargetInvalid
+			}
 			order[memberID] = index
+		}
+		if len(order) != len(activeMembers) {
+			return GroupMutationResponse{}, errors.New("成员排序必须包含全部有效成员")
+		}
+		orderChanged := false
+		for _, member := range state.Members {
+			if member.Status == coordination.GroupMemberStatusActive && member.OrderIndex != order[member.MemberID] {
+				orderChanged = true
+				break
+			}
 		}
 		sort.SliceStable(state.Members, func(i, j int) bool {
 			left, lok := order[state.Members[i].MemberID]
@@ -704,8 +777,16 @@ func (e *Engine) UpdateGroupSettings(ctx context.Context, request Request, input
 			return state.Members[i].OrderIndex < state.Members[j].OrderIndex
 		})
 		for index := range state.Members {
-			state.Members[index].OrderIndex = index
+			if state.Members[index].Status == coordination.GroupMemberStatusActive {
+				state.Members[index].OrderIndex = order[state.Members[index].MemberID]
+			}
 		}
+		if orderChanged {
+			changed = true
+		}
+	}
+	if !changed {
+		return GroupMutationResponse{Group: state, Saved: true}, nil
 	}
 	state.SettingsRevision++
 	ack, err := e.commitGroupConversation(ctx, scope, scope.RequestID, "group-settings", state, document)
@@ -717,8 +798,13 @@ func (e *Engine) UpdateGroupSettings(ctx context.Context, request Request, input
 }
 
 func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(Event) error) (GroupResponse, error) {
+	request.Message = strings.TrimSpace(request.Message)
+	request.RequestID = strings.TrimSpace(request.RequestID)
 	if request.ConversationID == "" || request.RequestID == "" || request.Group == nil {
 		return GroupResponse{}, errors.New("群聊请求缺少会话、请求编号或能力声明")
+	}
+	if len(request.RequestID) > 128 || request.Message == "" || len(request.Message) > 128<<10 {
+		return GroupResponse{}, errors.New("请求编号和消息内容无效")
 	}
 	if request.TargetDeviceID == "" {
 		request.TargetDeviceID = request.DeviceID
@@ -744,16 +830,7 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	if !state.IsGroup() {
 		return GroupResponse{}, errors.New("当前会话不是群聊")
 	}
-	if request.Group.ExpectedMembershipRevision != nil && state.MembershipRevision != *request.Group.ExpectedMembershipRevision {
-		return GroupResponse{}, ErrGroupMemberChanged
-	}
-	if request.Group.ExpectedSettingsRevision != nil && state.SettingsRevision != *request.Group.ExpectedSettingsRevision {
-		return GroupResponse{}, coordination.ErrResourceVersion
-	}
-	targets, err := resolveGroupTargets(state, request.Mentions, false)
-	if err != nil {
-		return GroupResponse{}, err
-	}
+	fingerprint := groupRequestFingerprint(request)
 	roundID := groupRoundID(scope.SpaceID, scope.InitiatorDeviceID, request.RequestID)
 	roundResource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "group-round", roundID)
 	if err != nil {
@@ -764,7 +841,20 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 		if json.Unmarshal(roundResource.Body, &existing) != nil || existing.RootRequestID != request.RequestID {
 			return GroupResponse{}, coordination.ErrRequestConflict
 		}
+		if existing.RequestFingerprint != "" && existing.RequestFingerprint != fingerprint {
+			return GroupResponse{}, coordination.ErrRequestConflict
+		}
 		return e.executeGroupRound(ctx, scope, state, existing, emit)
+	}
+	if request.Group.ExpectedMembershipRevision != nil && state.MembershipRevision != *request.Group.ExpectedMembershipRevision {
+		return GroupResponse{}, ErrGroupMemberChanged
+	}
+	if request.Group.ExpectedSettingsRevision != nil && state.SettingsRevision != *request.Group.ExpectedSettingsRevision {
+		return GroupResponse{}, ErrGroupSettingsChanged
+	}
+	targets, err := resolveGroupTargets(state, request.Mentions, false)
+	if err != nil {
+		return GroupResponse{}, err
 	}
 	conversationResource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "conversation", state.ConversationID)
 	if err != nil {
@@ -800,7 +890,7 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 	conversation["updatedAt"] = now
 	conversation["lastMessageSequence"] = userSequence
 	conversation["characterId"] = state.ConversationRoleID
-	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, TriggerMessageID: userMessageID, TriggerMessage: request.Message, TriggerSequence: userSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now, Deliveries: deliveries}
+	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: userMessageID, TriggerMessage: request.Message, TriggerSequence: userSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now, Deliveries: deliveries}
 	roundBody, err := json.Marshal(round)
 	if err != nil {
 		return GroupResponse{}, err
@@ -813,9 +903,7 @@ func (e *Engine) RunGroupEvents(ctx context.Context, request Request, emit func(
 		}
 		mutations = append(mutations, coordination.Mutation{Kind: "group-delivery", ID: delivery.DeliveryID, RoleID: coordination.StorageRole(scope, "group-delivery"), Body: encoded})
 	}
-	fingerprintData := map[string]any{"conversationId": request.ConversationID, "message": request.Message, "characterId": scope.RoleID, "mentions": request.Mentions, "group": request.Group, "attachments": request.Attachments}
-	digest := sha256.Sum256(body(fingerprintData))
-	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, hex.EncodeToString(digest[:]), request.ConversationID)
+	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, fingerprint, request.ConversationID)
 	if err != nil {
 		if errors.Is(err, coordination.ErrScopeExpired) && location.State == "started" {
 			return GroupResponse{}, ErrUncertainExecution
@@ -835,7 +923,8 @@ func (e *Engine) CreateGroupReplyRequest(ctx context.Context, request Request, i
 	request.RequestID = input.RequestID
 	request.RoleID = input.CharacterID
 	request.TargetDeviceID = input.TargetDeviceID
-	if request.RequestID == "" || request.ConversationID == "" || strings.TrimSpace(input.SourceMessageID) == "" || len(input.Members) == 0 {
+	request.RequestID = strings.TrimSpace(request.RequestID)
+	if request.RequestID == "" || len(request.RequestID) > 128 || request.ConversationID == "" || strings.TrimSpace(input.SourceMessageID) == "" || len(input.Members) == 0 {
 		return GroupResponse{}, errors.New("点名回复参数无效")
 	}
 	if request.TargetDeviceID == "" {
@@ -850,6 +939,24 @@ func (e *Engine) CreateGroupReplyRequest(ctx context.Context, request Request, i
 	defer finish()
 	if !state.IsGroup() {
 		return GroupResponse{}, errors.New("当前会话不是群聊")
+	}
+	fingerprintData := map[string]any{"conversationId": state.ConversationID, "sourceMessageId": input.SourceMessageID, "mentions": input.Members, "characterId": request.RoleID, "operation": "reply-request"}
+	digest := sha256.Sum256(body(fingerprintData))
+	fingerprint := hex.EncodeToString(digest[:])
+	roundID := groupRoundID(scope.SpaceID, scope.InitiatorDeviceID, request.RequestID)
+	roundResource, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "group-round", roundID)
+	if err != nil {
+		return GroupResponse{}, err
+	}
+	if roundResource != nil {
+		var existing GroupRound
+		if json.Unmarshal(roundResource.Body, &existing) != nil || existing.RootRequestID != request.RequestID {
+			return GroupResponse{}, coordination.ErrRequestConflict
+		}
+		if existing.RequestFingerprint != "" && existing.RequestFingerprint != fingerprint {
+			return GroupResponse{}, coordination.ErrRequestConflict
+		}
+		return e.executeGroupRound(ctx, scope, state, existing, nil)
 	}
 	source, err := e.data.(coordination.ResourcePort).Resource(ctx, scope, "message", input.SourceMessageID)
 	if err != nil || source == nil || source.Deleted {
@@ -869,9 +976,8 @@ func (e *Engine) CreateGroupReplyRequest(ctx context.Context, request Request, i
 	if err != nil || len(targets) == 0 {
 		return GroupResponse{}, ErrGroupTargetInvalid
 	}
-	roundID := groupRoundID(scope.SpaceID, scope.InitiatorDeviceID, request.RequestID)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, TriggerMessageID: input.SourceMessageID, TriggerMessage: userMessage.Content, TriggerSequence: userMessage.Sequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now}
+	round := GroupRound{RoundID: roundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: input.SourceMessageID, TriggerMessage: userMessage.Content, TriggerSequence: userMessage.Sequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now}
 	mutations := make([]coordination.Mutation, 0, len(targets)+1)
 	for _, member := range targets {
 		delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: roundID, ChildRequestID: request.RequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterAvatar: member.CharacterAvatar, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "user", Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
@@ -887,9 +993,7 @@ func (e *Engine) CreateGroupReplyRequest(ctx context.Context, request Request, i
 		return GroupResponse{}, err
 	}
 	mutations = append(mutations, coordination.Mutation{Kind: "group-round", ID: roundID, RoleID: coordination.StorageRole(scope, "group-round"), Body: encodedRound})
-	fingerprintData := map[string]any{"conversationId": state.ConversationID, "sourceMessageId": input.SourceMessageID, "mentions": input.Members}
-	digest := sha256.Sum256(body(fingerprintData))
-	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, hex.EncodeToString(digest[:]), state.ConversationID)
+	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, fingerprint, state.ConversationID)
 	if err != nil {
 		if errors.Is(err, coordination.ErrScopeExpired) && location.State == "started" {
 			return GroupResponse{}, ErrUncertainExecution
@@ -909,7 +1013,8 @@ func (e *Engine) RetryGroupDelivery(ctx context.Context, request Request, roundI
 	request.RequestID = input.RequestID
 	request.RoleID = input.CharacterID
 	request.TargetDeviceID = input.TargetDeviceID
-	if request.RequestID == "" || request.ConversationID == "" || strings.TrimSpace(roundID) == "" || strings.TrimSpace(input.DeliveryID) == "" {
+	request.RequestID = strings.TrimSpace(request.RequestID)
+	if request.RequestID == "" || len(request.RequestID) > 128 || request.ConversationID == "" || strings.TrimSpace(roundID) == "" || strings.TrimSpace(input.DeliveryID) == "" {
 		return GroupResponse{}, errors.New("重试参数无效")
 	}
 	if request.TargetDeviceID == "" {
@@ -926,6 +1031,37 @@ func (e *Engine) RetryGroupDelivery(ctx context.Context, request Request, roundI
 		return GroupResponse{}, errors.New("当前会话不是群聊")
 	}
 	port := e.data.(coordination.ResourcePort)
+	retryRoundID := groupRoundID(scope.SpaceID, scope.InitiatorDeviceID, request.RequestID)
+	fingerprintData := map[string]any{"conversationId": state.ConversationID, "roundId": roundID, "deliveryId": input.DeliveryID, "characterId": request.RoleID, "operation": "retry-group-delivery"}
+	digest := sha256.Sum256(body(fingerprintData))
+	fingerprint := hex.EncodeToString(digest[:])
+	location, firstRequest, err := e.coordination.RegisterRequest(ctx, scope, fingerprint, state.ConversationID)
+	if err != nil {
+		if errors.Is(err, coordination.ErrScopeExpired) && location.State == "started" {
+			return GroupResponse{}, ErrUncertainExecution
+		}
+		return GroupResponse{}, err
+	}
+	retryResource, err := port.Resource(ctx, scope, "group-round", retryRoundID)
+	if err != nil {
+		return GroupResponse{}, err
+	}
+	if retryResource != nil {
+		var existing GroupRound
+		if json.Unmarshal(retryResource.Body, &existing) != nil ||
+			existing.RoundID != retryRoundID ||
+			existing.ConversationID != state.ConversationID ||
+			existing.RootRequestID != request.RequestID ||
+			len(existing.Deliveries) != 1 ||
+			existing.Deliveries[0].Source != "retry:"+input.DeliveryID ||
+			existing.RequestFingerprint != "" && existing.RequestFingerprint != fingerprint {
+			return GroupResponse{}, coordination.ErrRequestConflict
+		}
+		return e.executeGroupRound(ctx, scope, state, existing, nil)
+	}
+	if !firstRequest {
+		return GroupResponse{}, ErrUncertainExecution
+	}
 	originalResource, err := port.Resource(ctx, scope, "group-round", roundID)
 	if err != nil || originalResource == nil || originalResource.Deleted {
 		return GroupResponse{}, coordination.ErrResourceVersion
@@ -948,10 +1084,9 @@ func (e *Engine) RetryGroupDelivery(ctx context.Context, request Request, roundI
 	if !active || member.MemberID != failed.MemberID {
 		return GroupResponse{}, ErrGroupTargetInvalid
 	}
-	retryRoundID := groupRoundID(scope.SpaceID, scope.InitiatorDeviceID, request.RequestID)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	delivery := GroupDelivery{DeliveryID: uuid.NewString(), GroupRoundID: retryRoundID, ChildRequestID: request.RequestID + "/reply/" + uuid.NewString(), MemberID: member.MemberID, CharacterID: member.CharacterID, RoleOwnerID: member.RoleOwnerID, CharacterName: member.CharacterName, CharacterAvatar: member.CharacterAvatar, CharacterRevision: member.CharacterRevision, OrderIndex: member.OrderIndex, Source: "retry:" + failed.DeliveryID, Status: GroupDeliveryQueued, CreatedAt: now, UpdatedAt: now}
-	round := GroupRound{RoundID: retryRoundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, TriggerMessageID: original.TriggerMessageID, TriggerMessage: original.TriggerMessage, TriggerSequence: original.TriggerSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now, Deliveries: []GroupDelivery{delivery}}
+	round := GroupRound{RoundID: retryRoundID, ConversationID: state.ConversationID, RootRequestID: request.RequestID, RequestFingerprint: fingerprint, TriggerMessageID: original.TriggerMessageID, TriggerMessage: original.TriggerMessage, TriggerSequence: original.TriggerSequence, Status: GroupRoundQueued, MembershipRevision: state.MembershipRevision, SettingsRevision: state.SettingsRevision, CreatedAt: now, UpdatedAt: now, Deliveries: []GroupDelivery{delivery}}
 	encodedDelivery, err := json.Marshal(delivery)
 	if err != nil {
 		return GroupResponse{}, err
@@ -967,10 +1102,27 @@ func (e *Engine) RetryGroupDelivery(ctx context.Context, request Request, roundI
 }
 
 func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.ExecutionScope, state coordination.GroupState, round GroupRound, emit func(Event) error) (GroupResponse, error) {
-	result := GroupResponse{ConversationID: round.ConversationID, RequestID: round.RootRequestID, GroupRoundID: round.RoundID, UserMessageID: round.TriggerMessageID, Saved: true}
+	result := GroupResponse{ConversationID: round.ConversationID, RequestID: round.RootRequestID, GroupRoundID: round.RoundID, UserMessageID: round.TriggerMessageID, Deliveries: []Response{}, Saved: true}
+	if round.Status == GroupRoundCompleted || round.Status == GroupRoundCompletedWithErrors || round.Status == GroupRoundCancelled {
+		terminal := true
+		for _, delivery := range round.Deliveries {
+			if delivery.Status != GroupDeliveryCompleted && delivery.Status != GroupDeliveryFailed && delivery.Status != GroupDeliveryCancelled {
+				terminal = false
+				break
+			}
+		}
+		if terminal {
+			if err := e.coordination.CompleteRequest(context.WithoutCancel(ctx), scope); err != nil {
+				return result, err
+			}
+			result.Status = round.Status
+			return result, nil
+		}
+	}
 	round.Status = GroupRoundRunning
 	failed := false
-	for index := range round.Deliveries {
+	cancelled := false
+	for index := 0; index < len(round.Deliveries); index++ {
 		delivery := &round.Deliveries[index]
 		if delivery.Status == GroupDeliveryCompleted || delivery.Status == GroupDeliveryCancelled {
 			continue
@@ -981,7 +1133,7 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 			if err := e.updateGroupDelivery(ctx, scope, round, *delivery); err != nil {
 				return result, err
 			}
-			failed = true
+			cancelled = true
 			continue
 		}
 		if delivery.Source == "character" {
@@ -1007,9 +1159,13 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 			return result, err
 		}
 		if emit != nil {
-			if err := emit(Event{Type: "group.delivery.started", GroupRoundID: round.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, CharacterAvatar: delivery.CharacterAvatar, RoleOwnerID: delivery.RoleOwnerID}); err != nil {
+			if err := emit(Event{Type: "group.delivery.started", ConversationID: round.ConversationID, Scope: scope, GroupRoundID: round.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, CharacterAvatar: delivery.CharacterAvatar, RoleOwnerID: delivery.RoleOwnerID}); err != nil {
 				failed = true
 				delivery.Status, delivery.Error = GroupDeliveryFailed, err.Error()
+				delivery.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+				if updateErr := e.updateGroupDelivery(ctx, scope, round, *delivery); updateErr != nil {
+					return result, updateErr
+				}
 				continue
 			}
 		}
@@ -1036,10 +1192,17 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 			}
 		}
 		response, runErr := e.runEventsLocked(ctx, request, childEmit)
-		if runErr != nil {
+		if cause := context.Cause(ctx); runErr != nil && cause != nil {
+			cancelled = true
+			delivery.Status, delivery.Error = GroupDeliveryCancelled, cause.Error()
+			delivery.TurnID, delivery.ExecutionID = response.TurnID, response.ExecutionID
+		} else if runErr != nil {
 			failed = true
 			delivery.Status, delivery.Error = GroupDeliveryFailed, runErr.Error()
 			delivery.TurnID, delivery.ExecutionID = response.TurnID, response.ExecutionID
+			if emit != nil {
+				_ = emit(Event{Type: "group.delivery.failed", ConversationID: round.ConversationID, Scope: scope, GroupRoundID: round.RoundID, DeliveryID: delivery.DeliveryID, DeliveryIndex: index, CharacterID: delivery.CharacterID, CharacterName: delivery.CharacterName, CharacterAvatar: delivery.CharacterAvatar, RoleOwnerID: delivery.RoleOwnerID, Text: DescribeRuntimeError(runErr).UserMessage})
+			}
 		} else {
 			delivery.Status, delivery.MessageID = GroupDeliveryCompleted, response.RequestID+"/assistant"
 			delivery.TurnID, delivery.ExecutionID = response.TurnID, response.ExecutionID
@@ -1053,11 +1216,22 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 		if latestResource, latestErr := e.data.(coordination.ResourcePort).Resource(ctx, scope, "group-round", round.RoundID); latestErr == nil && latestResource != nil {
 			var latest GroupRound
 			if json.Unmarshal(latestResource.Body, &latest) == nil && latest.RoundID == round.RoundID {
+				current := make(map[string]GroupDelivery, len(round.Deliveries))
+				for _, item := range round.Deliveries {
+					current[item.DeliveryID] = item
+				}
+				for latestIndex := range latest.Deliveries {
+					if item, ok := current[latest.Deliveries[latestIndex].DeliveryID]; ok {
+						latest.Deliveries[latestIndex] = item
+					}
+				}
 				round = latest
 			}
 		}
 	}
-	if failed {
+	if cancelled {
+		round.Status = GroupRoundCancelled
+	} else if failed {
 		round.Status = GroupRoundCompletedWithErrors
 	} else {
 		round.Status = GroupRoundCompleted
@@ -1071,7 +1245,10 @@ func (e *Engine) executeGroupRound(ctx context.Context, scope coordination.Execu
 	}
 	result.Status = round.Status
 	if emit != nil {
-		_ = emit(Event{Type: "group.round.completed", GroupRoundID: round.RoundID})
+		_ = emit(Event{Type: "group.round.completed", ConversationID: round.ConversationID, Scope: scope, GroupRoundID: round.RoundID})
+	}
+	if cause := context.Cause(ctx); cause != nil {
+		return result, cause
 	}
 	return result, nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -487,8 +488,13 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 			groupResponse, groupErr := services.OwnedBusiness.RunGroupEvents(messageContext, request, emit)
 			if groupErr != nil {
+				runtimeError := business.DescribeRuntimeError(groupErr)
 				if streaming && c.Writer.Written() {
-					c.SSEvent("message", gin.H{"type": "failed", "message": groupErr.Error()})
+					eventType := "failed"
+					if errors.Is(groupErr, business.ErrInterrupted) || errors.Is(groupErr, context.Canceled) {
+						eventType = "interrupted"
+					}
+					c.SSEvent("message", gin.H{"type": eventType, "message": runtimeError.UserMessage, "errorCode": runtimeError.ErrorCode, "internalMessage": runtimeError.InternalMessage, "retryable": runtimeError.Retryable, "data": groupResponse})
 					c.Writer.Flush()
 					return
 				}
@@ -496,7 +502,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				if errors.Is(groupErr, coordination.ErrCapabilityGrant) {
 					status = http.StatusForbidden
 				}
-				c.JSON(status, gin.H{"code": "mesh.group_failed", "message": groupErr.Error()})
+				c.JSON(status, gin.H{"code": "mesh.group_failed", "errorCode": runtimeError.ErrorCode, "message": runtimeError.UserMessage, "internalMessage": runtimeError.InternalMessage, "retryable": runtimeError.Retryable})
 				return
 			}
 			if streaming {
@@ -515,12 +521,20 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 			}
 		}
 		if err != nil {
+			runtimeError := business.DescribeRuntimeError(err)
 			if streaming && c.Writer.Written() {
 				eventType := "failed"
 				if response.Interrupted {
 					eventType = "interrupted"
 				}
-				c.SSEvent("message", gin.H{"type": eventType, "message": err.Error(), "data": response})
+				c.SSEvent("message", gin.H{
+					"type":            eventType,
+					"message":         runtimeError.UserMessage,
+					"errorCode":       runtimeError.ErrorCode,
+					"internalMessage": runtimeError.InternalMessage,
+					"retryable":       runtimeError.Retryable,
+					"data":            response,
+				})
 				c.Writer.Flush()
 				return
 			}
@@ -549,7 +563,7 @@ func registerMeshBusinessRouter(group *gin.RouterGroup, services *AppServices, c
 				status = 409
 				code = "mesh.request_conflict"
 			}
-			c.JSON(status, gin.H{"code": code, "message": err.Error(), "data": response})
+			c.JSON(status, gin.H{"code": code, "errorCode": runtimeError.ErrorCode, "message": runtimeError.UserMessage, "internalMessage": runtimeError.InternalMessage, "retryable": runtimeError.Retryable, "data": response})
 			return
 		}
 		if streaming {

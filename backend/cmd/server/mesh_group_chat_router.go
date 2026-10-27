@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/devicemesh/business"
@@ -117,7 +118,7 @@ func registerMeshGroupChatRouter(group *gin.RouterGroup, services *AppServices, 
 		}
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": result})
 	})
-	group.POST("/conversations/:conversationId/group-rounds/:roundId/retry", func(c *gin.Context) {
+	retryDelivery := func(c *gin.Context) {
 		if security.GetActor(c) == nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
@@ -128,11 +129,17 @@ func registerMeshGroupChatRouter(group *gin.RouterGroup, services *AppServices, 
 			c.JSON(http.StatusBadRequest, gin.H{"message": "群成员重试参数无效"})
 			return
 		}
-		result, err := services.OwnedBusiness.RetryGroupDelivery(c.Request.Context(), requestFor(c, input.CharacterID, input.TargetDeviceID, input.RequestID, c.Param("conversationId")), c.Param("roundId"), input)
+		roundID := strings.TrimSpace(c.Query("roundId"))
+		if roundID == "" {
+			roundID = c.Param("roundId")
+		}
+		result, err := services.OwnedBusiness.RetryGroupDelivery(c.Request.Context(), requestFor(c, input.CharacterID, input.TargetDeviceID, input.RequestID, c.Param("conversationId")), roundID, input)
 		if err != nil {
 			c.JSON(http.StatusConflict, gin.H{"code": "mesh.group_retry_failed", "message": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"code": 200, "data": result})
-	})
+	}
+	group.POST("/conversations/:conversationId/group-rounds/retry", retryDelivery)
+	group.POST("/conversations/:conversationId/group-rounds/:roundId/retry", retryDelivery)
 }

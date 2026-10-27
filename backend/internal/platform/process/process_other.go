@@ -46,6 +46,17 @@ func terminateProcessTree(pid int, _ ProcessTreeHandle) error {
 
 func closeProcessTree(ProcessTreeHandle) {}
 
+func terminateRemainingProcessTree(pid int, _ ProcessTreeHandle) error {
+	if pid <= 0 {
+		return nil
+	}
+	err := syscall.Kill(-pid, syscall.SIGKILL)
+	if err == syscall.ESRCH {
+		return nil
+	}
+	return err
+}
+
 func requestGracefulStopSupported() bool { return true }
 
 func processTreeSupported() bool { return true }

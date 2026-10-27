@@ -218,6 +218,7 @@ const props = defineProps<{
   showImportDetail?: boolean;
   modelError?: string;
   deviceOwned?: boolean;
+  isGroup?: boolean;
   extensionContext?: Record<string, unknown>;
   providerActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
 }>();
@@ -285,14 +286,14 @@ type FlowItem =
 
 function turnErrorDetail(turn: any): string {
   const item = [...(turn?.items || [])].reverse().find((candidate) => candidate?.type === "error");
-  if (!item) return "网络错误";
+  if (!item) return props.modelError?.trim() || "任务执行失败，未返回具体原因";
   let payload: Record<string, unknown>;
   try {
     const parsed = JSON.parse(String(item.resultJson || "{}"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.errorCode || "网络错误";
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
     payload = parsed as Record<string, unknown>;
   } catch {
-    return String(item.errorCode || "网络错误");
+    return String(item.errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因");
   }
   const toText = (value: unknown): string => {
     if (value === undefined || value === null) return "";
@@ -307,7 +308,7 @@ function turnErrorDetail(turn: any): string {
   const userMessage = toText(payload.userMessage);
   const errorCode = toText(payload.errorCode) || String(item.errorCode || "").trim();
   const provider = toText(payload.provider);
-  const message = internalMessage || userMessage || errorCode || "网络错误";
+  const message = userMessage || internalMessage || errorCode || props.modelError?.trim() || "任务执行失败，未返回具体原因";
   return [provider, errorCode, message].filter(Boolean).join(" · ");
 }
 
@@ -349,7 +350,7 @@ const flowItems = computed<FlowItem[]>(() => {
     item.isAssistantContinuation =
       item.message?.role === "assistant" &&
       item.showAssistantIdentity === false;
-    item.showRoleSwitchDivider = shouldShowRoleSwitch(
+    item.showRoleSwitchDivider = !props.isGroup && shouldShowRoleSwitch(
       previousMessage,
       item.message,
     );
@@ -448,6 +449,7 @@ function roleSwitchName(characterId: unknown) {
 }
 
 const pendingRoleSwitchName = computed(() => {
+  if (props.isGroup) return "";
   const lastMessage = visibleMessages.value[visibleMessages.value.length - 1];
   if (!lastMessage || !props.characterId) return "";
   if (!shouldShowRoleSwitch(lastMessage, { characterId: props.characterId })) {

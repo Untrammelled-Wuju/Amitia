@@ -173,7 +173,7 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 			return coordination.ErrRequestConflict
 		}
 	} else if p.services.Chat != nil {
-		psycheResource, err := p.store.Get(ctx, coordination.RuntimeStateKindPsyche, "role")
+		psycheResource, err := p.ownedMoodPsycheResource(ctx, scope)
 		if err != nil {
 			return err
 		}
@@ -218,4 +218,16 @@ func (p *meshLocalDataPort) commitOwnedChatEffectsLocked(ctx context.Context, sc
 	receiptScope.RequestID += "|effects"
 	_, err = p.store.Apply(ctx, coordination.Commit{Scope: receiptScope, Mutations: []coordination.Mutation{{Kind: "checkpoint", ID: receiptID, RoleID: scope.RoleID, Body: encoded}}})
 	return err
+}
+
+func (p *meshLocalDataPort) ownedMoodPsycheResource(ctx context.Context, scope coordination.ExecutionScope) (*coordination.Resource, error) {
+	resource, err := p.store.Get(ctx, coordination.RuntimeStateKindPsyche, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, scope.RoleID))
+	if err != nil || resource != nil {
+		return resource, err
+	}
+	legacy, err := p.store.Get(ctx, coordination.RuntimeStateKindPsyche, coordination.LegacyRuntimeStateID(coordination.RuntimeStateKindPsyche))
+	if err != nil || legacy == nil || legacy.RoleID != scope.RoleID {
+		return nil, err
+	}
+	return legacy, nil
 }

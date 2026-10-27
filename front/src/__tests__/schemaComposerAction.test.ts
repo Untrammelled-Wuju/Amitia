@@ -51,7 +51,7 @@ describe("schema composer action panel", () => {
     expect(wrapper.find(".test-schema").exists()).toBe(!compact);
   });
 
-  it("keeps the full schema outside the composer and mounts it only after opening", async () => {
+  it("mounts the full schema only after opening in the shared composer surface", async () => {
     const wrapper = create();
     expect(document.querySelector(".test-schema")).toBeNull();
     const trigger = wrapper.get('button[aria-label="发送表情"]');
@@ -59,8 +59,8 @@ describe("schema composer action panel", () => {
     await trigger.trigger("click");
     await vi.waitFor(() => expect(trigger.attributes("data-open")).toBe("true"));
     expect(trigger.attributes("data-open")).toBe("true");
-    expect(wrapper.find(".test-schema").exists()).toBe(false);
-    expect(document.querySelector('.schema-composer-action-popper [role="dialog"]')?.textContent).toContain("chat-a");
+    expect(wrapper.find(".test-schema").exists()).toBe(true);
+    expect(document.querySelector('.schema-composer-action-panel[role="dialog"]')?.textContent).toContain("chat-a");
     document.querySelector<HTMLButtonElement>('button[aria-label="关闭面板"]')!.click();
     await flushPromises();
     expect(document.querySelector(".test-schema")).toBeNull();
@@ -87,6 +87,21 @@ describe("schema composer action panel", () => {
     document.querySelector(".schema-composer-action-panel")!.dispatchEvent(event);
     await flushPromises();
     expect(event.defaultPrevented).toBe(true);
+    expect(document.querySelector(".test-schema")).toBeNull();
+  });
+
+  it("closes on an outside pointer and reuses the composer floating surface", async () => {
+    const wrapper = create();
+    const trigger = wrapper.get(".schema-composer-action-trigger");
+    expect(trigger.attributes()).toHaveProperty("data-composer-picker-trigger");
+    await trigger.trigger("click");
+    await vi.waitFor(() => expect(document.querySelector(".test-schema")).not.toBeNull());
+    const panel = document.querySelector(".schema-composer-action-panel");
+    expect(panel?.classList.contains("composer-picker")).toBe(true);
+    document.body.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true }),
+    );
+    await flushPromises();
     expect(document.querySelector(".test-schema")).toBeNull();
   });
 });

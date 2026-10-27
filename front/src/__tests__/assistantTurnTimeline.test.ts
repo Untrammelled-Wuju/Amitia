@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { nextTick } from "vue";
+import { describe, expect, it, vi } from "vitest";
 import AssistantTurnTimeline from "../conversation/rendering/AssistantTurnTimeline.vue";
 
 describe("AssistantTurnTimeline", () => {
@@ -42,6 +43,7 @@ describe("AssistantTurnTimeline", () => {
               callId: "call-1",
               toolName: "read_file",
               argumentsJson: "{\"path\":\"a.go\"}",
+              durationMs: 1200,
             },
             {
               id: "thinking-1",
@@ -66,6 +68,8 @@ describe("AssistantTurnTimeline", () => {
     expect(wrapper.find(".turn-tool-line").exists()).toBe(false);
     await wrapper.find(".turn-tool-stream-head").trigger("click");
     expect(wrapper.find(".turn-tool-line").exists()).toBe(true);
+    expect(wrapper.find(".turn-tool-name").text()).toBe("读取文件");
+    expect(wrapper.find(".turn-tool-state").text()).toBe("完成 · 1.2s");
     expect(wrapper.find(".turn-tool-result").exists()).toBe(false);
     expect(wrapper.find(".turn-tool-details").exists()).toBe(false);
 
@@ -300,7 +304,7 @@ describe("AssistantTurnTimeline", () => {
       },
     });
 
-    expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("执行中 · 1/3 完成");
+    expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("修改文件 · 1/3 完成");
   });
 
   it("deduplicates legacy results without call records", () => {
@@ -348,5 +352,41 @@ describe("AssistantTurnTimeline", () => {
     });
 
     expect(wrapper.find(".turn-tool-stream-summary").text()).toBe("2 个工具 · 已完成");
+  });
+
+  it("shows a semantic tool label and live duration while running", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-27T10:00:02.500Z"));
+    const wrapper = mount(AssistantTurnTimeline, {
+      props: {
+        turn: {
+          id: "turn-live",
+          conversationId: "conv-1",
+          sequence: 6,
+          status: "running",
+          items: [
+            {
+              id: "call-live",
+              turnId: "turn-live",
+              conversationId: "conv-1",
+              sequence: 1,
+              type: "tool_call",
+              status: "running",
+              callId: "call-live",
+              toolName: "workspace.read",
+              argumentsJson: "{\"path\":\"src/main.go\"}",
+              createdAt: "2026-10-27T10:00:00.000Z",
+            },
+          ],
+        },
+      },
+    });
+    expect(wrapper.find(".turn-tool-name").text()).toBe("读取文件");
+    expect(wrapper.find(".turn-tool-state").text()).toBe("运行中 · 2.5s");
+    vi.advanceTimersByTime(1000);
+    await nextTick();
+    expect(wrapper.find(".turn-tool-state").text()).toBe("运行中 · 3.5s");
+    wrapper.unmount();
+    vi.useRealTimers();
   });
 });

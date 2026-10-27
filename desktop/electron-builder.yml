@@ -63,7 +63,7 @@ linux:
       X-GNOME-UsesNotifications: "true"
 
 releaseInfo:
-  releaseName: Amitia 26.2.0-beta.17
+  releaseName: Amitia 26.2.0-beta.18
   releaseNotesFile: release-notes.md
 
 publish:

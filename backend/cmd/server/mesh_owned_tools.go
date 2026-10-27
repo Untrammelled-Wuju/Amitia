@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat"
@@ -153,11 +154,19 @@ func (r *meshOwnedToolRuntime) Tools(ctx context.Context, inference business.Inf
 }
 
 func (r *meshOwnedToolRuntime) Execute(ctx context.Context, inference business.Inference, call, name string, input json.RawMessage) (output chat.ToolResult, executionErr error) {
-	if err := emitOwnedToolEvent(inference, "tool-started", call, name, input, chat.ToolResult{}, nil); err != nil {
+	startedAt := time.Now()
+	if err := emitOwnedToolEvent(inference, "tool-started", call, name, input, chat.ToolResult{}, nil, startedAt); err != nil {
 		return chat.ToolResult{}, err
 	}
 	defer func() {
-		if err := emitOwnedToolEvent(inference, "tool-completed", call, name, input, output, executionErr); err != nil {
+		elapsed := time.Since(startedAt).Milliseconds()
+		if elapsed < 1 {
+			elapsed = 1
+		}
+		if output.DurationMS < elapsed {
+			output.DurationMS = elapsed
+		}
+		if err := emitOwnedToolEvent(inference, "tool-completed", call, name, input, output, executionErr, startedAt); err != nil {
 			executionErr = errors.Join(executionErr, err)
 		}
 	}()
@@ -251,7 +260,7 @@ func (r *meshOwnedToolRuntime) takeGroupInvites(executionID string) []business.G
 	return proposals
 }
 
-func emitOwnedToolEvent(inference business.Inference, eventType, call, name string, input json.RawMessage, result chat.ToolResult, executionErr error) error {
+func emitOwnedToolEvent(inference business.Inference, eventType, call, name string, input json.RawMessage, result chat.ToolResult, executionErr error, startedAt time.Time) error {
 	if inference.Emit == nil {
 		return nil
 	}
@@ -259,7 +268,20 @@ func emitOwnedToolEvent(inference business.Inference, eventType, call, name stri
 	if len(result.Output) > 0 {
 		content = string(result.Output)
 	}
-	payload := map[string]any{"toolCallId": call, "toolName": name, "arguments": string(input), "result": content, "durationMs": result.DurationMS, "status": result.Status, "forceVoice": result.ForceVoice}
+	durationMS := result.DurationMS
+	if eventType == "tool-completed" && !startedAt.IsZero() {
+		elapsed := time.Since(startedAt).Milliseconds()
+		if elapsed < 1 {
+			elapsed = 1
+		}
+		if durationMS < elapsed {
+			durationMS = elapsed
+		}
+	}
+	payload := map[string]any{"toolCallId": call, "toolName": name, "arguments": string(input), "result": content, "durationMs": durationMS, "status": result.Status, "forceVoice": result.ForceVoice}
+	if !startedAt.IsZero() {
+		payload["startedAt"] = startedAt.UTC().Format(time.RFC3339Nano)
+	}
 	if result.Error != nil {
 		payload["errorCode"], payload["error"] = result.Error.Code, result.Error.Message
 	}

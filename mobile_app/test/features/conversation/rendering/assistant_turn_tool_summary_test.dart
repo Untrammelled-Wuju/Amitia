@@ -123,7 +123,35 @@ void main() {
       ),
     );
 
-    expect(find.text('执行中 · 1/3 完成'), findsOneWidget);
+    expect(find.text('修改文件 · 1/3 完成'), findsOneWidget);
+  });
+
+  testWidgets('工具行显示动作和持续时间', (tester) async {
+    await _pumpTurn(
+      tester,
+      const AssistantTurnDto(
+        id: 'turn-duration',
+        conversationId: 'conversation-1',
+        status: 'completed',
+        items: [
+          AssistantTurnItemDto(
+            id: 'call-1',
+            turnId: 'turn-duration',
+            sequence: 1,
+            type: 'tool_call',
+            status: 'completed',
+            callId: 'call-1',
+            toolName: 'workspace.read',
+            argumentsJson: '{"path":"main.go"}',
+            durationMs: 1234,
+          ),
+        ],
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('tool-stream-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('读取文件'), findsOneWidget);
+    expect(find.text('完成 · 1.2s'), findsOneWidget);
   });
 
   testWidgets('旧工具结果按调用去重计数', (tester) async {
@@ -169,6 +197,8 @@ void main() {
   });
 
   testWidgets('调用结果不单独渲染为工具条目', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await _pumpTurn(
       tester,
       const AssistantTurnDto(
@@ -183,8 +213,7 @@ void main() {
             type: 'tool_call',
             status: 'completed',
             callId: 'call-1',
-            toolName:
-                'read_file_with_a_very_long_tool_name_that_must_be_trimmed',
+            toolName: 'unknown_tool_with_a_very_long_name_that_must_be_trimmed',
             argumentsJson: '{"path":"a.txt"}',
           ),
           AssistantTurnItemDto(
@@ -226,11 +255,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final toolName = tester.widget<Text>(
-      find.text('read_file_with_a_very_long_tool_name_that_must_be_trimmed'),
+      find.text('unknown_tool_with_a_very_long_name_that_must_be_trimmed'),
     );
     expect(toolName.maxLines, 1);
     expect(toolName.overflow, TextOverflow.ellipsis);
-    expect(find.text('write_file'), findsOneWidget);
+    expect(find.text('修改文件'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('tool-call-expand-call-1')),
       findsOneWidget,
@@ -250,6 +279,9 @@ void main() {
     expect(find.text('调用结果'), findsOneWidget);
     expect(find.textContaining('"path": "a.txt"'), findsOneWidget);
     expect(find.textContaining('"content": "ok"'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('tool-call-expand-call-2')));
+    await tester.pumpAndSettle();
+    expect(find.text('write_file'), findsOneWidget);
   });
 
   testWidgets('工具执行流上下间距一致', (tester) async {

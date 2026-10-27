@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1344,9 +1345,91 @@ String _turnJSONText(dynamic value) {
 }
 
 String _turnToolDisplayName(String raw, {String fallback = '工具调用'}) {
-  final value = raw.trim();
+  final value = raw.trim().toLowerCase();
   if (value.isEmpty) return fallback;
-  return value;
+  if (value.contains('multi_agent')) return '协调子任务';
+  if (value.contains('browser') ||
+      value.contains('navigate') ||
+      value.contains('screenshot')) {
+    return '操作浏览器';
+  }
+  if (value.contains('web') && value.contains('search')) return '搜索网页';
+  if (value.contains('memory') &&
+      (value.contains('search') || value.contains('recall'))) {
+    return '检索记忆';
+  }
+  if (value.contains('command') ||
+      value.contains('shell') ||
+      value.contains('terminal') ||
+      value.contains('exec') ||
+      value.contains('bash')) {
+    return '运行命令';
+  }
+  if (value.contains('write') ||
+      value.contains('patch') ||
+      value.contains('replace') ||
+      value.contains('edit')) {
+    return '修改文件';
+  }
+  if (value.contains('read') ||
+      value.contains('cat') ||
+      value.contains('open_file')) {
+    return '读取文件';
+  }
+  if (value.contains('search') ||
+      value.contains('grep') ||
+      value.contains('find')) {
+    return '搜索内容';
+  }
+  if (value.contains('list') ||
+      value.contains('glob') ||
+      value.contains('directory')) {
+    return '浏览文件';
+  }
+  if (value.contains('invite')) return '邀请角色';
+  return raw.trim();
+}
+
+String _turnToolDurationText(
+  AssistantTurnItemDto item, {
+  AssistantTurnItemDto? result,
+  DateTime? currentTime,
+}) {
+  if (item.durationMs > 0) return _formatTurnDuration(item.durationMs);
+  if ((result?.durationMs ?? 0) > 0) {
+    return _formatTurnDuration(result!.durationMs);
+  }
+  final startedAt = DateTime.tryParse(item.createdAt);
+  if (startedAt == null) return '';
+  final status = result != null && !_isTurnStreaming(result.status)
+      ? result.status
+      : item.status;
+  if (_isTurnStreaming(status)) {
+    final elapsed = (currentTime ?? DateTime.now())
+        .toUtc()
+        .difference(startedAt.toUtc())
+        .inMilliseconds;
+    return elapsed > 0 ? _formatTurnDuration(elapsed) : '';
+  }
+  final finishedAt = DateTime.tryParse(result?.updatedAt ?? item.updatedAt);
+  if (finishedAt == null) return '';
+  final elapsed = finishedAt
+      .toUtc()
+      .difference(startedAt.toUtc())
+      .inMilliseconds;
+  return elapsed > 0 ? _formatTurnDuration(elapsed) : '';
+}
+
+String _formatTurnDuration(int milliseconds) {
+  if (milliseconds < 1000) return '${milliseconds < 1 ? 1 : milliseconds}ms';
+  if (milliseconds < 60000) {
+    final seconds = milliseconds / 1000;
+    return '${seconds.toStringAsFixed(seconds < 10 ? 1 : 0)}s';
+  }
+  final totalSeconds = (milliseconds / 1000).round();
+  final minutes = totalSeconds ~/ 60;
+  final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+  return '${minutes}m ${seconds}s';
 }
 
 String _turnToolSubject(AssistantTurnItemDto item) {
@@ -1475,6 +1558,19 @@ class _TurnToolStreamState extends State<_TurnToolStream>
       final completed = counted
           .where((item) => item.status.trim().toLowerCase() == 'completed')
           .length;
+      AssistantTurnItemDto? active;
+      for (final item in counted) {
+        if (_isTurnStreaming(item.status)) {
+          active = item;
+          break;
+        }
+      }
+      if (active != null) {
+        final duration = _turnToolDurationText(active);
+        final durationSuffix = duration.isEmpty ? '' : ' · $duration';
+        final count = total > 1 ? ' · $completed/$total 完成' : '';
+        return '${_turnToolDisplayName(active.toolName)}$durationSuffix$count';
+      }
       return '执行中 · $completed/$total 完成';
     }
     return '$total 个工具 · 已完成';
@@ -1547,7 +1643,7 @@ class _TurnToolStreamState extends State<_TurnToolStream>
           Semantics(
             button: true,
             expanded: _expanded,
-            label: '工具执行流，${_summary()}',
+            label: '执行过程，${_summary()}',
             child: InkWell(
               key: const ValueKey('tool-stream-toggle'),
               onTap: () {
@@ -1572,7 +1668,7 @@ class _TurnToolStreamState extends State<_TurnToolStream>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '工具执行流',
+                      '执行过程',
                       style: TextStyle(
                         color: tokens.text,
                         fontSize: 12,
@@ -1648,14 +1744,43 @@ class _TurnToolCallRow extends StatefulWidget {
 
 class _TurnToolCallRowState extends State<_TurnToolCallRow> {
   bool _expanded = false;
+  Timer? _durationTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncDurationTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TurnToolCallRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncDurationTimer();
+  }
+
+  @override
+  void dispose() {
+    _durationTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncDurationTimer() {
+    if (_isTurnStreaming(widget.item.status)) {
+      _durationTimer ??= Timer.periodic(const Duration(milliseconds: 250), (_) {
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+    _durationTimer?.cancel();
+    _durationTimer = null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = AmitiaMessageTheme.of(context);
     final subject = _turnToolSubject(widget.item);
-    final duration = widget.item.durationMs > 0
-        ? ' · ${widget.item.durationMs} ms'
-        : '';
+    final duration = _turnToolDurationText(widget.item, result: widget.result);
+    final durationSuffix = duration.isEmpty ? '' : ' · $duration';
     final arguments = _turnJSONText(
       _decodeTurnJSON(widget.item.argumentsJson),
     ).trim();
@@ -1712,7 +1837,7 @@ class _TurnToolCallRowState extends State<_TurnToolCallRow> {
                 ],
                 const SizedBox(width: 8),
                 Text(
-                  '${_turnStatusLabel(widget.item.status)}$duration',
+                  '${_turnStatusLabel(widget.item.status)}$durationSuffix',
                   style: TextStyle(
                     color: widget.item.status.toLowerCase().contains('fail')
                         ? tokens.danger
@@ -1756,7 +1881,9 @@ class _TurnToolCallRowState extends State<_TurnToolCallRow> {
                 children: [
                   _TurnToolDetailSection(
                     title: '调用工具',
-                    content: _turnToolDisplayName(widget.item.toolName),
+                    content: widget.item.toolName.trim().isEmpty
+                        ? '工具调用'
+                        : widget.item.toolName,
                   ),
                   const SizedBox(height: 9),
                   _TurnToolDetailSection(

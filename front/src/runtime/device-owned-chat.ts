@@ -65,7 +65,7 @@ export interface OwnedChatToolProgress {
 }
 
 export interface OwnedChatEvent {
-  type: "started" | "transcribed" | "delta" | "task" | "tool-started" | "tool-completed" | "reasoning-completed" | "output-completed" | "group.delivery.started" | "group.round.completed" | "group.completed" | "completed" | "interrupted" | "failed";
+  type: "started" | "transcribed" | "delta" | "task" | "tool-started" | "tool-completed" | "reasoning-completed" | "output-completed" | "group.delivery.started" | "group.delivery.failed" | "group.round.completed" | "group.completed" | "completed" | "interrupted" | "failed";
   task?: { coordinationId: string; status: string };
   progress?: OwnedChatToolProgress;
   executionScope?: OwnedExecutionScope;
@@ -73,6 +73,9 @@ export interface OwnedChatEvent {
   text?: string;
   reasoning?: boolean;
   message?: string;
+  errorCode?: string;
+  internalMessage?: string;
+  retryable?: boolean;
   data?: OwnedChatResponse;
   groupRoundId?: string;
   deliveryId?: string;
@@ -295,7 +298,7 @@ export async function consumeOwnedChatStream(
       terminal = true;
     }
     onEvent(event);
-    if (event.type === "interrupted" || event.type === "failed") throw new Error(event.message || "当前回复已中断");
+    if (event.type === "interrupted" || event.type === "failed") throw new Error(event.message || (event.type === "interrupted" ? "当前回复已停止" : "任务执行失败，未返回具体原因"));
   };
   try {
     for (;;) {
@@ -372,6 +375,17 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
     if (event.type === "group.completed") {
       const data = event.data as unknown as OwnedGroupChatResponse;
       if (!data || data.saved !== true || data.requestId !== request.requestId || !data.groupRoundId || !Array.isArray(data.deliveries)) throw new Error("群聊结果尚未确认保存");
+      if (conversationId && data.conversationId !== conversationId) throw new Error("群聊结果与会话归属不一致");
+      if (roundId && data.groupRoundId !== roundId) throw new Error("群聊结果与轮次归属不一致");
+      const deliveryIDs = new Set<string>();
+      for (const delivery of data.deliveries) {
+        const deliveryId = String(delivery?.deliveryId || "").trim();
+        if (!deliveryId || deliveryIDs.has(deliveryId) || delivery.saved !== true || delivery.groupRoundId !== data.groupRoundId || delivery.conversationId !== data.conversationId || !delivery.requestId) throw new Error("群成员回复归属无效");
+        const scope = validateScope(delivery.executionScope, delivery.requestId);
+        const knownScope = scopes.get(deliveryId);
+        if (knownScope && knownScope !== scopeFingerprint(scope)) throw new Error("群成员最终回复与流式投递身份不一致");
+        deliveryIDs.add(deliveryId);
+      }
       completed = data;
       terminal = true;
       onEvent(event);
@@ -393,7 +407,10 @@ export async function streamOwnedGroupChat(request: OwnedGroupChatRequest, signa
     if (event.type === "started") {
       if (!event.deliveryId || !event.executionScope) throw new Error("群成员回复缺少投递身份");
       const scope = validateScope(event.executionScope, event.executionScope.requestId);
-      scopes.set(event.deliveryId, scopeFingerprint(scope));
+      const fingerprint = scopeFingerprint(scope);
+      const known = scopes.get(event.deliveryId);
+      if (known && known !== fingerprint) throw new Error("群成员投递身份在流中发生变化");
+      scopes.set(event.deliveryId, fingerprint);
     } else if (event.type === "delta" || event.type === "transcribed" || event.type === "task" || event.type === "tool-started" || event.type === "tool-completed" || event.type === "reasoning-completed" || event.type === "output-completed") {
       if (!event.deliveryId || !event.executionScope || !scopes.get(event.deliveryId) || scopes.get(event.deliveryId) !== scopeFingerprint(validateScope(event.executionScope, event.executionScope.requestId))) throw new Error("群成员流事件与投递身份不一致");
     }

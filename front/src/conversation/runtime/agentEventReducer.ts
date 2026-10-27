@@ -33,6 +33,7 @@ export interface RuntimeBlockSnapshot {
   callId?: string;
   revision?: number;
   content?: string;
+  startedAt?: string;
   payload?: Record<string, any>;
 }
 
@@ -486,7 +487,7 @@ export class AgentEventReducer {
         resultJson: payload.result === undefined ? current?.resultJson || "" : (typeof payload.result === "string" ? payload.result : JSON.stringify(payload.result)),
         errorCode: payload.errorCode === undefined ? current?.errorCode : String(payload.errorCode || ""),
         durationMs: typeof payload.durationMs === "number" ? Number(payload.durationMs) : current?.durationMs,
-        createdAt: current?.createdAt || raw.startedAt || "",
+        createdAt: block.startedAt || current?.createdAt || raw.startedAt || "",
         updatedAt: raw.lastModifiedAt || raw.startedAt || current?.updatedAt || "",
       };
       if (currentIndex >= 0) turn.items[currentIndex] = item;

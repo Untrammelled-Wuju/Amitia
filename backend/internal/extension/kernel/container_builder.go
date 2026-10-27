@@ -1481,7 +1481,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := registerAndroidUIAgentTool(ctx, toolRegistry); err != nil {
 		return nil, fmt.Errorf("kernel: register android ui agent tool: %w", err)
 	}
-	if err := registerBrowserAgentTool(ctx, toolRegistry); err != nil {
+	if err := registerBrowserAgentTool(ctx, toolRegistry, b.browserProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register browser agent tool: %w", err)
 	}
 	if err := registerAgentAdminTools(ctx, toolRegistry, agentAdminTools); err != nil {

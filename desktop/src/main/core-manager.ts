@@ -534,7 +534,7 @@ export function startCore(profile: BundledCoreProfile): void {
   });
 }
 
-export async function stopCore(): Promise<void> {
+export async function stopCore(strict = false): Promise<void> {
   if (coreProcess && !coreProcess.killed) {
     const currentGeneration = coreGeneration;
     const dataDir = getAmitiaDataDir();
@@ -542,16 +542,16 @@ export async function stopCore(): Promise<void> {
     const pid = coreProcess.pid ?? 0;
     const shutdownBaseURL = getCoreBaseURL();
     const endpointPid = coreChildPid;
-    invalidateCoreEndpoint();
-    removeCoreEndpoint(dataDir, endpointPid || undefined);
 
     try {
       const success = await gracefulShutdown(pid, shutdownBaseURL);
       if (!success) {
+        if (strict) throw new Error("核心未能确认插件服务已停止，更新安装已中止");
         console.warn("[CoreManager] 优雅关闭超时，回退到强制终止");
         await forceStopRunner();
       }
     } catch (err) {
+      if (strict) throw err;
       console.error("[CoreManager] 优雅关闭异常，强制终止:", err);
       await forceStopRunner();
     }
@@ -564,6 +564,9 @@ export async function stopCore(): Promise<void> {
       invalidateCoreEndpoint();
     }
     return;
+  }
+  if (strict) {
+    throw new Error("本地核心不可用，无法确认插件服务已停止，更新安装已中止");
   }
   coreChildPid = 0;
   coreProcess = null;
@@ -645,7 +648,7 @@ async function gracefulShutdown(pid: number, baseURL: string): Promise<boolean> 
   }
 
   console.log("[CoreManager] 尝试优雅关闭核心服务...");
-  const shutdownOk = await httpShutdown(`${baseURL}/api/local/admin/shutdown`, 3000, getLocalAdminHeaders());
+  const shutdownOk = await httpShutdown(`${baseURL}/api/local/admin/shutdown`, 30000, getLocalAdminHeaders());
   if (!shutdownOk) {
     console.warn("[CoreManager] 优雅关闭请求失败");
     return false;

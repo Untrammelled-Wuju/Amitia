@@ -192,7 +192,9 @@ func (m *managedTrustedService) Stop(ctx context.Context, reason runtime_supervi
 		Reason:    string(reason),
 		Force:     force,
 	})
-	m.started = false
+	if err == nil {
+		m.started = false
+	}
 	return err
 }
 

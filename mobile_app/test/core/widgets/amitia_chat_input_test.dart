@@ -716,4 +716,35 @@ void main() {
       findsNothing,
     );
   });
+  testWidgets('群聊点名面板悬浮并插入选择的成员', (tester) async {
+    final controller = TextEditingController();
+    final mentions = <String?>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Align(alignment: Alignment.bottomCenter, child: AmitiaChatInput(
+      controller: controller,
+      onSend: (_) {},
+      isGroup: true,
+      groupMembers: const [{'memberId': 'a', 'characterName': '小鱼'}, {'memberId': 'b', 'characterName': '小鱼副本'}],
+      onGroupMention: mentions.add,
+    )))));
+    await tester.enterText(find.byType(TextField), '@');
+    await tester.pumpAndSettle();
+    expect(find.text('@所有成员'), findsOneWidget);
+    expect(find.text('@小鱼副本'), findsOneWidget);
+    final composerTop = tester.getTopLeft(find.byKey(const ValueKey('chat-composer-surface'))).dy;
+    final menuBottom = tester.getBottomLeft(find.byKey(const ValueKey('composer-slash-skill-menu'))).dy;
+    expect(menuBottom, lessThanOrEqualTo(composerTop));
+    await tester.tap(find.text('@小鱼副本'));
+    await tester.pumpAndSettle();
+    expect(controller.text, '@小鱼副本 ');
+    expect(mentions, ['b']);
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
+  testWidgets('单聊输入 @ 不打开群成员面板', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: AmitiaChatInput(onSend: (_) {}))));
+    await tester.enterText(find.byType(TextField), '@');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('composer-slash-skill-menu')), findsNothing);
+  });
 }

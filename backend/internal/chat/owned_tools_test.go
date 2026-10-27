@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -30,6 +32,10 @@ func (r *ownedToolTestRuntime) Execute(ctx context.Context, inference business.I
 
 func ownedToolCall(name string) []map[string]interface{} {
 	return []map[string]interface{}{{"id": "call-one", "type": "function", "function": map[string]interface{}{"name": name, "arguments": "{}"}}}
+}
+
+func ownedToolCallWithID(id, name string) []map[string]interface{} {
+	return []map[string]interface{}{{"id": id, "type": "function", "function": map[string]interface{}{"name": name, "arguments": "{}"}}}
 }
 
 func TestOwnedToolLoopUsesCoreModelAndKeepsAuthoritativeTargetScope(t *testing.T) {
@@ -124,5 +130,73 @@ func TestOwnedToolExecutionErrorReturnsToModel(t *testing.T) {
 	result, err := s.generateOwnedWithTools(t.Context(), business.Inference{}, &ModelConfig{}, nil, &ownedReplySink{})
 	if err != nil || result.Text != "工具没有权限，但对话可以继续" || runtime.calls != 1 {
 		t.Fatalf("result=%+v err=%v calls=%d", result, err, runtime.calls)
+	}
+}
+
+func TestWorkspaceAgentStreamsToolRoundTextAsVisibleProgress(t *testing.T) {
+	runtime := &ownedToolTestRuntime{}
+	s := &service{ownedToolRuntime: runtime}
+	var rounds int
+	s.llmWithTools = func(_ context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		rounds++
+		if rounds == 1 {
+			return "先检查当前设备环境。", "", ownedToolCall("device_action"), 1, nil
+		}
+		return "任务处理完成。", "", nil, 1, nil
+	}
+	var events []business.Event
+	inference := business.Inference{
+		Workspaces: []business.ProjectWorkspace{{ID: "workspace", Name: "Workspace", RootURI: "amitia://workspace"}},
+		Emit: func(event business.Event) error {
+			events = append(events, event)
+			return nil
+		},
+	}
+	result, err := s.generateOwnedWithTools(t.Context(), inference, &ModelConfig{}, []map[string]interface{}{{"role": "user", "content": "执行"}}, &ownedReplySink{inference: inference})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Text != "任务处理完成。" {
+		t.Fatalf("final text = %q", result.Text)
+	}
+	var progress strings.Builder
+	for _, event := range events {
+		if event.Type == "delta" && !event.Reasoning {
+			progress.WriteString(event.Text)
+		}
+	}
+	if progress.String() != "先检查当前设备环境。\n\n任务处理完成。" {
+		t.Fatalf("visible progress = %q", progress.String())
+	}
+}
+
+func TestOwnedToolLoopDoesNotInjectCounterProgress(t *testing.T) {
+	runtime := &ownedToolTestRuntime{}
+	s := &service{ownedToolRuntime: runtime}
+	rounds := 0
+	s.llmWithTools = func(_ context.Context, _ *ModelConfig, _ []map[string]interface{}, _ []tool.Tool) (string, string, []map[string]interface{}, int, error) {
+		rounds++
+		if rounds <= 16 {
+			return "", "", ownedToolCallWithID(fmt.Sprintf("call-%d", rounds), "device_action"), 1, nil
+		}
+		return "处理完成", "", nil, 1, nil
+	}
+	var events []business.Event
+	inference := business.Inference{Emit: func(event business.Event) error {
+		events = append(events, event)
+		return nil
+	}}
+	result, err := s.generateOwnedWithTools(t.Context(), inference, &ModelConfig{}, []map[string]interface{}{{"role": "user", "content": "执行"}}, &ownedReplySink{inference: inference})
+	if err != nil || result.Text != "处理完成" || runtime.calls != 16 {
+		t.Fatalf("result=%+v err=%v calls=%d", result, err, runtime.calls)
+	}
+	var visible strings.Builder
+	for _, event := range events {
+		if event.Type == "delta" && !event.Reasoning {
+			visible.WriteString(event.Text)
+		}
+	}
+	if strings.Contains(visible.String(), "已执行") || strings.Contains(visible.String(), "正在核对结果") {
+		t.Fatalf("synthetic counter progress leaked into chat: %q", visible.String())
 	}
 }

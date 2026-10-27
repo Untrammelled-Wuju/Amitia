@@ -32,7 +32,7 @@ func (a *AffectAdapter) getOwnedAffectSnapshot(ctx context.Context, characterID 
 	var updatedAt string
 	var err error
 	for _, owner := range a.owners {
-		err = a.db.QueryRowContext(ctx, `SELECT CAST(body AS BLOB),updated_at FROM kernel_device_owned_resources WHERE owner_id=? AND kind='psyche' AND resource_id='role' AND role_id=? AND deleted=0`, owner, characterID).Scan(&body, &updatedAt)
+		err = a.db.QueryRowContext(ctx, `SELECT CAST(body AS BLOB),updated_at FROM kernel_device_owned_resources WHERE owner_id=? AND kind='psyche' AND role_id=? AND deleted=0 AND resource_id IN (?,?) ORDER BY CASE WHEN resource_id=? THEN 0 ELSE 1 END LIMIT 1`, owner, characterID, "role/"+characterID, "role", "role/"+characterID).Scan(&body, &updatedAt)
 		if err == nil {
 			break
 		}

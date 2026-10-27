@@ -4,12 +4,189 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 )
+
+func TestLifecyclePortProcess(t *testing.T) {
+	if os.Getenv("AMITIA_LIFECYCLE_PORT") == "" {
+		return
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:"+os.Getenv("AMITIA_LIFECYCLE_PORT"))
+	if err != nil {
+		os.Exit(3)
+	}
+	defer listener.Close()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		conn.Close()
+	}
+}
+
+func TestLifecycleStopReleasesPortAndBlocksRestart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX process fixture")
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	listener.Close()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path, hash := writeLifecycleExecutable(t, dir, "port-service", fmt.Sprintf("AMITIA_LIFECYCLE_PORT=%s exec %q -test.run=^TestLifecyclePortProcess$", strconv.Itoa(port), executable))
+	s := NewProcessSupervisor(filepath.Join(dir, "supervisor"))
+	def := lifecycleDefinition("runtime/port-service", path, hash)
+	if err := s.Register(def); err != nil {
+		t.Fatal(err)
+	}
+	req := StartRequest{ServiceID: def.ServiceID, InstanceID: def.ServiceID, RuntimeID: "runtime", PublisherTrust: TrustLevelTrusted, WorkingDir: dir}
+	if _, err := s.Start(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 100*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("service did not open port")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := s.Stop(context.Background(), StopRequest{ServiceID: def.ServiceID, Reason: "update"}); err != nil {
+		t.Fatal(err)
+	}
+	listener, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Fatalf("port still occupied after update stop: %v", err)
+	}
+	listener.Close()
+	if _, err := s.Start(context.Background(), req); err != nil {
+		t.Fatalf("new generation failed to start: %v", err)
+	}
+	if err := s.StopAll(context.Background(), "host_shutdown"); err != nil {
+		t.Fatal(err)
+	}
+	listener, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Fatalf("port still occupied: %v", err)
+	}
+	listener.Close()
+	if _, err := s.Start(context.Background(), req); err == nil {
+		t.Fatal("start accepted after shutdown")
+	}
+}
+
+type lifecycleHostIdentity struct{}
+
+func (lifecycleHostIdentity) GetHostInstanceID() string { return "test-host" }
+func (lifecycleHostIdentity) GetHostSessionID() string  { return "test-session" }
+
+type foreignLifecycleHostIdentity struct{}
+
+func (foreignLifecycleHostIdentity) GetHostInstanceID() string { return "other-host" }
+func (foreignLifecycleHostIdentity) GetHostSessionID() string  { return "other-session" }
+
+func TestLifecycleRecoversOwnedProcessBeforeStarting(t *testing.T) {
+	dir := t.TempDir()
+	path, hash := writeLifecycleExecutable(t, dir, "recover-service", "/bin/sleep 30")
+	root := filepath.Join(dir, "supervisor")
+	def := lifecycleDefinition("runtime/recover-service", path, hash)
+	def.Recovery.MaxRestarts = 0
+	req := StartRequest{ServiceID: def.ServiceID, InstanceID: def.ServiceID, RuntimeID: "runtime", PublisherTrust: TrustLevelTrusted, WorkingDir: dir}
+	old := NewProcessSupervisor(root)
+	old.SetHostIdentityProvider(lifecycleHostIdentity{})
+	if err := old.Register(def); err != nil {
+		t.Fatal(err)
+	}
+	first, err := old.Start(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = old.Stop(context.Background(), StopRequest{ServiceID: def.ServiceID, Force: true}) })
+	next := NewProcessSupervisor(root)
+	next.SetHostIdentityProvider(foreignLifecycleHostIdentity{})
+	if err := next.Register(def); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := next.Start(context.Background(), req); err == nil || !procIsAlive(first.PID) {
+		t.Fatal("foreign process was not protected")
+	}
+	next.SetHostIdentityProvider(lifecycleHostIdentity{})
+	second, err := next.Start(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = next.StopAll(context.Background(), "test") })
+	if procIsAlive(first.PID) || !procIsAlive(second.PID) {
+		t.Fatalf("old pid %d or new pid %d has unexpected state", first.PID, second.PID)
+	}
+}
+
+func TestLifecycleStopRemovesChildrenAfterParentExits(t *testing.T) {
+	dir := t.TempDir()
+	unrelated := exec.Command("/bin/sleep", "30")
+	if err := unrelated.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = unrelated.Process.Kill(); _ = unrelated.Wait() })
+	childFile := filepath.Join(dir, "child.pid")
+	path, hash := writeLifecycleExecutable(t, dir, "child-service", fmt.Sprintf("/bin/sleep 30 &\nprintf '%%s' \"$!\" > %q\n/bin/sleep 0.4", childFile))
+	s := NewProcessSupervisor(filepath.Join(dir, "supervisor"))
+	def := lifecycleDefinition("runtime/child-service", path, hash)
+	def.Shutdown.GracePeriod = time.Second
+	if err := s.Register(def); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Start(context.Background(), StartRequest{ServiceID: def.ServiceID, InstanceID: def.ServiceID, RuntimeID: "runtime", PublisherTrust: TrustLevelTrusted, WorkingDir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	var childPID int
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(childFile); err == nil {
+			childPID, _ = strconv.Atoi(string(b))
+			if childPID > 0 {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if childPID == 0 {
+		t.Fatal("child process did not start")
+	}
+	t.Cleanup(func() {
+		if p, err := os.FindProcess(childPID); err == nil {
+			_ = p.Kill()
+		}
+	})
+	if _, err := s.Stop(context.Background(), StopRequest{ServiceID: def.ServiceID, Reason: "update"}); err != nil {
+		t.Fatal(err)
+	}
+	if procIsAlive(childPID) {
+		t.Fatal("child survived parent exit")
+	}
+	if !procIsAlive(unrelated.Process.Pid) {
+		t.Fatal("unrelated process was terminated")
+	}
+}
 
 func writeLifecycleExecutable(t *testing.T, dir, name, body string) (string, string) {
 	t.Helper()

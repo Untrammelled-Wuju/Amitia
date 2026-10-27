@@ -14,6 +14,11 @@ import (
 	applog "github.com/u-ai/backend/log"
 )
 
+const (
+	ownedToolFailureLimit     = 3
+	ownedToolProgressMaxRunes = 1200
+)
+
 type OwnedToolRuntime interface {
 	Tools(context.Context, business.Inference) ([]tool.Tool, error)
 	Execute(context.Context, business.Inference, string, string, json.RawMessage) (ToolResult, error)
@@ -92,6 +97,8 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 	totalTokens := 0
 	forceVoice := false
 	var outputs []MessageOutput
+	lastFailureKey := ""
+	lastFailureCount := 0
 	partial := func(err error) (business.Generation, error) {
 		return business.Generation{Text: sink.text.String(), Reasoning: sink.reasoning.String(), ReasoningDurationMS: sink.reasoningDurationMS(), Tokens: totalTokens, Partial: true}, err
 	}
@@ -195,6 +202,11 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 		if len(calls) > 16 || s.ownedToolRuntime == nil {
 			return partial(errors.New("设备能力调用超出授权范围或数量上限"))
 		}
+		if bufferNativeOutput && strings.TrimSpace(text) != "" {
+			if err := emitOwnedProgressText(ctx, inference, text); err != nil {
+				return partial(err)
+			}
+		}
 		messages = append(messages, map[string]interface{}{"role": "assistant", "content": text, "tool_calls": calls})
 		batch := map[string]bool{}
 		for _, raw := range calls {
@@ -284,10 +296,39 @@ func (s *service) generateOwnedWithTools(ctx context.Context, inference business
 			}
 			if outcome.HasError {
 				output = toolResultContent(modelName, outcome)
+				failureKey := modelName + "\x00" + call.Function.Arguments + "\x00" + outcome.ErrorCode
+				if failureKey == lastFailureKey {
+					lastFailureCount++
+				} else {
+					lastFailureKey = failureKey
+					lastFailureCount = 1
+				}
+				if lastFailureCount >= ownedToolFailureLimit {
+					return partial(fmt.Errorf("tool loop repeated tool failure: %s returned %s %d times", modelName, outcome.ErrorCode, lastFailureCount))
+				}
+			} else {
+				lastFailureKey = ""
+				lastFailureCount = 0
 			}
 			messages = append(messages, map[string]interface{}{"role": "tool", "tool_call_id": call.ID, "content": output})
 		}
 	}
+}
+
+func emitOwnedProgressText(ctx context.Context, inference business.Inference, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	runes := []rune(text)
+	if len(runes) > ownedToolProgressMaxRunes {
+		text = strings.TrimSpace(string(runes[:ownedToolProgressMaxRunes])) + "…"
+	}
+	if !strings.HasSuffix(text, "\n\n") {
+		text += "\n\n"
+	}
+	progressSink := &ownedReplySink{inference: inference}
+	return progressSink.Emit(ctx, ModelEvent{Type: ModelEventTextDelta, TextDelta: text})
 }
 
 func ownedNativeTaskTool(name string) bool {

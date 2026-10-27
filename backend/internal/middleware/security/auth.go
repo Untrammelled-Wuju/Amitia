@@ -295,6 +295,9 @@ func handleLocalAuth(c *gin.Context, cfg AuthConfig) {
 			actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
 			applyActorToContext(c, actor)
 			return
+		} else if errors.Is(err, ErrDesktopSessionStoreUnavailable) {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "本地会话存储暂时不可用", "retryable": true})
+			return
 		}
 	}
 	token := strings.TrimSpace(c.GetHeader("X-Amitia-Local-Token"))

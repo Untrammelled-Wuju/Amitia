@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1494,6 +1495,11 @@ class AmitiaChatInput extends StatefulWidget {
   final FutureOr<void> Function(bool camera)? onPickVideo;
   final void Function(String lang, String code)? onSendCode;
   final Future<List<Map<String, dynamic>>> Function()? onLoadAgentSkills;
+  final Future<List<Map<String, dynamic>>> Function(int page, String query)?
+  onLoadAgentSkillsPage;
+  final bool isGroup;
+  final List<Map<String, dynamic>> groupMembers;
+  final ValueChanged<String?>? onGroupMention;
   final FutureOr<void> Function()? onStartVoiceRecording;
   final FutureOr<void> Function({required bool transcribe})?
   onFinishVoiceRecording;
@@ -1536,6 +1542,10 @@ class AmitiaChatInput extends StatefulWidget {
     this.onPickVideo,
     this.onSendCode,
     this.onLoadAgentSkills,
+    this.onLoadAgentSkillsPage,
+    this.isGroup = false,
+    this.groupMembers = const [],
+    this.onGroupMention,
     this.onStartVoiceRecording,
     this.onFinishVoiceRecording,
     this.onCancelVoiceRecording,
@@ -1571,6 +1581,14 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   _VoiceGestureIntent _voiceIntent = _VoiceGestureIntent.send;
   final List<String> _selectedSkillNames = <String>[];
   final ScrollController _slashMenuScrollController = ScrollController();
+  final OverlayPortalController _pickerOverlay = OverlayPortalController();
+  final LayerLink _pickerLink = LayerLink();
+  String _pickerMode = 'skill';
+  int _skillsPage = 0;
+  bool _skillsHasMore = true;
+  String _skillsQuery = '';
+  Timer? _skillSearchTimer;
+  int _skillsRequest = 0;
   List<Map<String, dynamic>> _agentSkills = const <Map<String, dynamic>>[];
   bool _skillsLoading = false;
   bool _skillsLoaded = false;
@@ -1595,6 +1613,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       widget.reasoningEffort,
     ).toDouble();
     _controller.addListener(_syncControllerText);
+    _slashMenuScrollController.addListener(_loadMoreSkillsOnScroll);
     _inputFocusNode.onKeyEvent = _handleComposerKey;
     _inputFocusNode.addListener(_syncInputFocus);
   }
@@ -1668,20 +1687,34 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     if (!mounted) return;
     final hasText = _controller.text.trim().isNotEmpty;
     final slashCommand = _detectSlashCommand();
+    final mode = slashCommand?.mode ?? 'skill';
     final slashChanged =
         (slashCommand != null) != _slashMenuOpen ||
         (slashCommand?.query ?? '') != _slashQuery ||
+        mode != _pickerMode ||
         slashCommand?.range != _slashRange;
     if (hasText == _hasText && !slashChanged) return;
     setState(() {
       _hasText = hasText;
       _slashMenuOpen = slashCommand != null;
+      _pickerMode = mode;
       _slashQuery = slashCommand?.query ?? '';
       _slashRange = slashCommand?.range;
       _slashActiveIndex = 0;
     });
+    _syncPickerOverlay();
     if (slashCommand != null && !_skillsLoaded) {
       unawaited(_loadAgentSkills());
+    }
+    if (slashCommand != null &&
+        mode == 'skill' &&
+        widget.onLoadAgentSkillsPage != null) {
+      _skillSearchTimer?.cancel();
+      final query = slashCommand.query.trim();
+      _skillSearchTimer = Timer(
+        const Duration(milliseconds: 180),
+        () => unawaited(_loadAgentSkills(force: true, query: query)),
+      );
     }
   }
 
@@ -1711,31 +1744,67 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
               .where((value) => value != null)
               .any((value) => value.toString().toLowerCase().contains(query));
         })
-        .take(6)
         .toList(growable: false);
+  }
+
+  void _syncPickerOverlay() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_slashMenuOpen && !_voiceMode) {
+        if (!_pickerOverlay.isShowing) _pickerOverlay.show();
+      } else if (_pickerOverlay.isShowing) {
+        _pickerOverlay.hide();
+      }
+    });
+  }
+
+  void _loadMoreSkillsOnScroll() {
+    if (_slashMenuScrollController.hasClients &&
+        _slashMenuScrollController.position.extentAfter < 60 &&
+        _skillsHasMore &&
+        !_skillsLoading &&
+        _pickerMode != 'mention') {
+      unawaited(_loadAgentSkills(more: true));
+    }
   }
 
   Future<void> _loadAgentSkills({
     bool force = false,
     bool showError = false,
+    bool more = false,
+    String query = '',
   }) async {
     final loader = widget.onLoadAgentSkills;
-    if (loader == null) {
+    if (loader == null && widget.onLoadAgentSkillsPage == null) {
       if (mounted) setState(() => _skillsLoaded = true);
       return;
     }
-    if (_skillsLoading || (_skillsLoaded && !force)) return;
+    if ((more && _skillsLoading) || (_skillsLoaded && !force && !more)) return;
+    final request = more ? _skillsRequest : ++_skillsRequest;
+    if (!more) _skillsQuery = query;
     setState(() => _skillsLoading = true);
     try {
-      final loaded = await loader();
-      if (!mounted) return;
+      final page = more ? _skillsPage + 1 : 1;
+      final loaded = widget.onLoadAgentSkillsPage != null
+          ? await widget.onLoadAgentSkillsPage!(page, _skillsQuery)
+          : await loader!();
+      if (!mounted || request != _skillsRequest) return;
       setState(() {
-        _agentSkills = loaded
+        final items = loaded
             .map((skill) => Map<String, dynamic>.from(skill))
             .where(_skillUsable)
             .toList(growable: false);
+        _agentSkills = more ? [..._agentSkills, ...items] : items;
+        _skillsPage = page;
+        _skillsHasMore =
+            widget.onLoadAgentSkillsPage != null && loaded.length == 50;
         _skillsLoaded = true;
       });
+      if (_agentSkills.isEmpty && _skillsHasMore) {
+        scheduleMicrotask(() {
+          if (mounted && request == _skillsRequest) unawaited(_loadAgentSkills(more: true));
+        });
+      }
     } catch (error) {
       if (showError && mounted) {
         ScaffoldMessenger.of(
@@ -1743,11 +1812,12 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
         ).showSnackBar(SnackBar(content: Text('加载 Agent Skill 失败：$error')));
       }
     } finally {
-      if (mounted) setState(() => _skillsLoading = false);
+      if (mounted && request == _skillsRequest)
+        setState(() => _skillsLoading = false);
     }
   }
 
-  ({String query, TextRange range})? _detectSlashCommand() {
+  ({String query, TextRange range, String mode})? _detectSlashCommand() {
     final value = _controller.value;
     final selection = value.selection;
     if (!selection.isValid ||
@@ -1757,17 +1827,21 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       return null;
     }
     final beforeCaret = value.text.substring(0, selection.start);
-    final match = RegExp(r'(^|\s)/([^\s/]*)$').firstMatch(beforeCaret);
+    final match = RegExp(r'(^|\s)([/@])([^\n/@]*)$').firstMatch(beforeCaret);
     if (match == null) return null;
+    if (match.group(2) == '@' && !widget.isGroup) return null;
     final slashStart = match.start + (match.group(1)?.length ?? 0);
     return (
-      query: match.group(2) ?? '',
+      query: match.group(3) ?? '',
       range: TextRange(start: slashStart, end: selection.start),
+      mode: match.group(2) == '@' ? 'mention' : 'skill',
     );
   }
 
   void _moveSlashSelection(int delta) {
-    final count = _filteredSlashSkills.length;
+    final count = _pickerMode == 'mention'
+        ? _mentionOptions.length
+        : _filteredSlashSkills.length;
     if (count == 0) return;
     final next = (_slashActiveIndex + delta) % count;
     setState(() => _slashActiveIndex = next < 0 ? next + count : next);
@@ -1785,11 +1859,35 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
   }
 
   void _selectActiveSlashSkill() {
+    if (_pickerMode == 'mention') {
+      final options = _mentionOptions;
+      if (options.isNotEmpty)
+        _selectGroupMention(
+          options[_slashActiveIndex.clamp(0, options.length - 1)],
+        );
+      return;
+    }
     final skills = _filteredSlashSkills;
     if (skills.isEmpty) return;
     final index = _slashActiveIndex.clamp(0, skills.length - 1);
-    _selectSlashSkill((skills[index]['name'] ?? '').toString());
+    final name = (skills[index]['name'] ?? '').toString();
+    if (_pickerMode == 'add') {
+      if (!_selectedSkillNames.contains(name)) _selectedSkillNames.add(name);
+      _closeSlashMenu();
+    } else {
+      _selectSlashSkill(name);
+    }
   }
+
+  List<Map<String, dynamic>?> get _mentionOptions => [
+    if (_slashQuery.isEmpty || '所有成员'.contains(_slashQuery)) null,
+    ...widget.groupMembers.where(
+      (member) => (member['characterName'] ?? '')
+          .toString()
+          .toLowerCase()
+          .contains(_slashQuery.toLowerCase()),
+    ),
+  ];
 
   void _selectSlashSkill(String name) {
     final range = _slashRange;
@@ -1822,6 +1920,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       return;
     }
     setState(_closeSlashMenuState);
+    _syncPickerOverlay();
   }
 
   void _toggleVoiceMode() {
@@ -1898,6 +1997,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
 
   @override
   void dispose() {
+    _skillSearchTimer?.cancel();
     _controller.removeListener(_syncControllerText);
     _inputFocusNode.removeListener(_syncInputFocus);
     _inputFocusNode.dispose();
@@ -1921,136 +2021,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
       _selectedSkillNames.clear();
       _closeSlashMenuState();
     });
-  }
-
-  void _showFileSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('添加文件', style: AppTypography.pageTitle(context)),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: _sheetIcon(
-                  context,
-                  Icons.folder_open_outlined,
-                  context.accentPrimary,
-                ),
-                title: const Text('从本机选择'),
-                subtitle: const Text('上传后作为真实 Artifact 发送'),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  widget.onPickFile?.call();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showImagePicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('添加图片', style: AppTypography.pageTitle(context)),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: _sheetIcon(
-                  context,
-                  Icons.photo_library_outlined,
-                  context.accentPrimary,
-                ),
-                title: const Text('从相册选择'),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  widget.onPickImage?.call(false);
-                },
-              ),
-              ListTile(
-                leading: _sheetIcon(
-                  context,
-                  Icons.photo_camera_outlined,
-                  context.accentPrimary,
-                ),
-                title: const Text('拍照'),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  widget.onPickImage?.call(true);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showVideoPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('添加视频', style: AppTypography.pageTitle(context)),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: _sheetIcon(
-                  context,
-                  Icons.video_library_outlined,
-                  context.accentPrimary,
-                ),
-                title: const Text('从相册选择'),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  widget.onPickVideo?.call(false);
-                },
-              ),
-              ListTile(
-                leading: _sheetIcon(
-                  context,
-                  Icons.videocam_outlined,
-                  context.accentPrimary,
-                ),
-                title: const Text('拍摄视频'),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  widget.onPickVideo?.call(true);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   void _showCodeDialog() {
@@ -2153,170 +2123,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     );
   }
 
-  Future<void> _showAgentSkillPicker() async {
-    final loader = widget.onLoadAgentSkills;
-    if (loader == null) return;
-    _closeSlashMenu();
-    await _loadAgentSkills(force: true, showError: true);
-    if (!mounted) return;
-    final usable = _agentSkills;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * 0.62,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '本次消息使用 Agent Skill',
-                          style: AppTypography.pageTitle(sheetContext),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(sheetContext),
-                        icon: const AmitiaIcon(AmitiaIconGlyph.close),
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(height: 1, color: sheetContext.borderSecondary),
-                Expanded(
-                  child: usable.isEmpty
-                      ? Center(
-                          child: Text(
-                            '暂无已启用且兼容的 Agent Skill',
-                            style: AppTypography.caption(sheetContext),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: usable.length,
-                          itemBuilder: (_, index) {
-                            final skill = usable[index];
-                            final name = (skill['name'] ?? '').toString();
-                            final displayName = (skill['displayName'] ?? name)
-                                .toString();
-                            final selected = _selectedSkillNames.contains(name);
-                            return CheckboxListTile(
-                              value: selected,
-                              title: Text(displayName),
-                              subtitle: Text(
-                                (skill['shortDescription'] ??
-                                        skill['description'] ??
-                                        '')
-                                    .toString(),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onChanged: name.isEmpty
-                                  ? null
-                                  : (value) {
-                                      setState(() {
-                                        if (value == true) {
-                                          if (!_selectedSkillNames.contains(
-                                            name,
-                                          ))
-                                            _selectedSkillNames.add(name);
-                                        } else {
-                                          _selectedSkillNames.remove(name);
-                                        }
-                                      });
-                                      setSheetState(() {});
-                                    },
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sheetIcon(BuildContext context, IconData icon, Color color) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: AppRadius.brSmall,
-      ),
-      child: AmitiaIcon.adaptive(icon, size: 20, color: color),
-    );
-  }
-
   void _showComposerTools() {
-    _closeSlashMenu();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ComposerTool(
-                icon: Icons.photo_library_outlined,
-                label: '添加图片',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showImagePicker();
-                },
-              ),
-              _ComposerTool(
-                icon: Icons.video_library_outlined,
-                label: '添加视频',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showVideoPicker();
-                },
-              ),
-              _ComposerTool(
-                icon: Icons.attach_file_outlined,
-                label: '添加文件',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showFileSheet();
-                },
-              ),
-              _ComposerTool(
-                icon: Icons.code,
-                label: '插入代码',
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _showCodeDialog();
-                },
-              ),
-              if (widget.onLoadAgentSkills != null)
-                _ComposerTool(
-                  icon: Icons.auto_awesome_outlined,
-                  label: '使用 Agent Skill',
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _showAgentSkillPicker();
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+    setState(() {
+      _pickerMode = 'add';
+      _slashQuery = '';
+      _slashRange = null;
+      _slashMenuOpen = true;
+    });
+    _syncPickerOverlay();
+    unawaited(_loadAgentSkills(force: _skillsQuery.isNotEmpty));
   }
 
   void _showPermissionPicker() {
@@ -2391,195 +2206,139 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
     );
   }
 
+  void _selectGroupMention(Map<String, dynamic>? member) {
+    final range = _slashRange;
+    if (range == null) return;
+    final name = member == null
+        ? '所有成员'
+        : (member['characterName'] ?? '').toString();
+    if (name.isEmpty) return;
+    final insert = '@$name ';
+    _controller.value = TextEditingValue(
+      text: _controller.text.replaceRange(range.start, range.end, insert),
+      selection: TextSelection.collapsed(offset: range.start + insert.length),
+    );
+    widget.onGroupMention?.call(member?['memberId']?.toString());
+    _closeSlashMenu();
+    _inputFocusNode.requestFocus();
+  }
+
   Widget _buildSlashSkillMenu(BuildContext context) {
     final skills = _filteredSlashSkills;
-    final menuWidth = math.min(MediaQuery.sizeOf(context).width - 20, 420.0);
+    final members = widget.groupMembers
+        .where(
+          (member) => (member['characterName'] ?? '')
+              .toString()
+              .toLowerCase()
+              .contains(_slashQuery.toLowerCase()),
+        )
+        .toList();
     return TapRegion(
       groupId: 'chat-composer',
-      child: SizedBox(
-        width: menuWidth,
-        child: Material(
-          key: const ValueKey('composer-slash-skill-menu'),
-          color: context.surfacePrimary,
-          elevation: 0,
-          borderRadius: AppRadius.brLarge,
+      child: ClipRRect(
+        key: const ValueKey('composer-slash-skill-menu'),
+        borderRadius: AppRadius.brLarge,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: context.surfacePrimary,
+              color: context.surfacePrimary.withValues(alpha: 0.84),
               borderRadius: AppRadius.brLarge,
-              border: Border.all(color: context.borderPrimary, width: 0.8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: Theme.of(context).brightness == Brightness.dark
-                        ? 0.24
-                        : 0.09,
-                  ),
-                  blurRadius: 18,
-                  offset: const Offset(0, -4),
-                ),
-              ],
+              border: Border.all(color: context.borderPrimary),
             ),
-            child: ClipRRect(
-              borderRadius: AppRadius.brLarge,
+            child: Material(
+              color: Colors.transparent,
               child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '使用技能',
-                            style: AppTypography.label(
-                              context,
-                            ).copyWith(color: context.textPrimary),
-                          ),
-                        ),
-                        Text(
-                          '/$_slashQuery',
-                          style: AppTypography.caption(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Divider(height: 1, color: context.borderSecondary),
-                  if (_skillsLoading && skills.isEmpty)
-                    SizedBox(
-                      height: 78,
-                      child: Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              '正在加载技能...',
-                              style: AppTypography.caption(context),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else if (skills.isEmpty)
-                    SizedBox(
-                      height: 78,
-                      child: Center(
-                        child: Text(
-                          _agentSkills.isEmpty ? '暂无技能' : '没有匹配的技能',
-                          style: AppTypography.caption(context),
-                        ),
-                      ),
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: math.min(skills.length, 6) * 58,
-                      ),
-                      child: ListView.builder(
-                        controller: _slashMenuScrollController,
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemExtent: 58,
-                        itemCount: skills.length,
-                        itemBuilder: (context, index) {
-                          final skill = skills[index];
-                          final name = (skill['name'] ?? '').toString();
-                          final displayName = (skill['displayName'] ?? name)
-                              .toString();
-                          final description =
-                              (skill['shortDescription'] ??
-                                      skill['description'] ??
-                                      '')
-                                  .toString();
-                          final selected = _selectedSkillNames.contains(name);
-                          final active = index == _slashActiveIndex;
-                          return Semantics(
-                            key: ValueKey('composer-slash-skill-$index'),
-                            button: true,
-                            selected: selected,
-                            label: '使用技能 $displayName',
-                            child: InkWell(
-                              onTap: name.isEmpty
-                                  ? null
-                                  : () => _selectSlashSkill(name),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 120),
-                                curve: Curves.easeOut,
-                                color: active
-                                    ? context.accentSoft
-                                    : Colors.transparent,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 7,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        color: context.accentSoft,
-                                        borderRadius: AppRadius.brSmall,
-                                      ),
-                                      child: Icon(
-                                        Icons.auto_awesome_outlined,
-                                        size: 17,
-                                        color: context.accentPrimary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            displayName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style:
-                                                AppTypography.bodySmall(
-                                                  context,
-                                                ).copyWith(
-                                                  color: context.textPrimary,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                          ),
-                                          if (description.trim().isNotEmpty)
-                                            Text(
-                                              description,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: AppTypography.caption(
-                                                context,
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (selected)
-                                      Icon(
-                                        Icons.check_rounded,
-                                        size: 18,
-                                        color: context.accentPrimary,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_pickerMode == 'add') ...[
+                  ListTile(dense: true, leading: const Icon(Icons.attach_file_outlined), title: const Text('上传文件'), onTap: () { _closeSlashMenu(); widget.onPickFile?.call(); }),
+                  ListTile(dense: true, leading: const Icon(Icons.code), title: const Text('插入代码'), onTap: () { _closeSlashMenu(); _showCodeDialog(); }),
                 ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _pickerMode == 'mention' ? '群成员' : '使用技能',
+                          style: AppTypography.label(context),
+                        ),
+                      ),
+                      Text(
+                        '${_pickerMode == 'mention' ? '@' : '/'}$_slashQuery',
+                        style: AppTypography.caption(context),
+                      ),
+                    ],
+                  ),
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 280),
+                  child: _pickerMode == 'mention'
+                      ? ListView(
+                          shrinkWrap: true,
+                          children: [
+                            if (_slashQuery.isEmpty ||
+                                '所有成员'.contains(_slashQuery))
+                              ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.groups_outlined),
+                                title: const Text('@所有成员'),
+                                onTap: () => _selectGroupMention(null),
+                              ),
+                            for (final member in members)
+                              ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.person_outline),
+                                title: Text('@${member['characterName']}'),
+                                onTap: () => _selectGroupMention(member),
+                              ),
+                          ],
+                        )
+                      : ListView.builder(
+                          controller: _slashMenuScrollController,
+                          shrinkWrap: true,
+                          itemCount: skills.length,
+                          itemBuilder: (context, index) {
+                            final skill = skills[index];
+                            final name = (skill['name'] ?? '').toString();
+                            return ListTile(
+                              key: ValueKey('composer-slash-skill-$index'),
+                              dense: true,
+                              leading: const Icon(Icons.auto_awesome_outlined),
+                              selected: index == _slashActiveIndex,
+                              title: Text(
+                                (skill['displayName'] ?? name).toString(),
+                              ),
+                              subtitle: Text(
+                                (skill['shortDescription'] ??
+                                        skill['description'] ??
+                                        '')
+                                    .toString(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () {
+                                if (_pickerMode == 'add') {
+                                  setState(() {
+                                    if (!_selectedSkillNames.contains(name))
+                                      _selectedSkillNames.add(name);
+                                  });
+                                  _closeSlashMenu();
+                                } else {
+                                  _selectSlashSkill(name);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                ),
+                if (_skillsLoading && _pickerMode != 'mention')
+                  const LinearProgressIndicator(),
+              ],
               ),
             ),
           ),
@@ -2612,360 +2371,410 @@ class _AmitiaChatInputState extends State<AmitiaChatInput>
           ).copyWith(color: placeholderColor, fontSize: _composerTextSize),
         )
         .copyWith(color: placeholderColor);
-    return SafeArea(
-      top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_slashMenuOpen && !_voiceMode)
-            Padding(
-              key: const ValueKey('composer-slash-menu-slot'),
-              padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
-              child: _buildSlashSkillMenu(context),
-            ),
-          Padding(
-            key: const ValueKey('composer-main-slot'),
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-            child: Container(
-              key: const ValueKey('chat-composer-surface'),
-              constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
-              decoration: surfaceStyle.applyBoxDecoration(
-                BoxDecoration(
-                  color: context.surfacePrimary,
-                  borderRadius: BorderRadius.circular(23),
-                  border: Border.all(color: context.borderPrimary, width: 0.8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(
-                        alpha: Theme.of(context).brightness == Brightness.dark
-                            ? 0.16
-                            : 0.045,
+    return OverlayPortal(
+      controller: _pickerOverlay,
+      overlayChildBuilder: (context) => Align(
+        alignment: Alignment.topLeft,
+        child: CompositedTransformFollower(
+          link: _pickerLink,
+          targetAnchor: Alignment.topLeft,
+          followerAnchor: Alignment.bottomLeft,
+          offset: const Offset(10, -4),
+          showWhenUnlinked: false,
+          child: SizedBox(
+            width: MediaQuery.sizeOf(context).width - 20,
+            child: _buildSlashSkillMenu(context),
+          ),
+        ),
+      ),
+      child: CompositedTransformTarget(
+        link: _pickerLink,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                key: const ValueKey('composer-main-slot'),
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                child: Container(
+                  key: const ValueKey('chat-composer-surface'),
+                  constraints: const BoxConstraints(
+                    minHeight: 98,
+                    maxHeight: 170,
+                  ),
+                  decoration: surfaceStyle.applyBoxDecoration(
+                    BoxDecoration(
+                      color: context.surfacePrimary,
+                      borderRadius: BorderRadius.circular(23),
+                      border: Border.all(
+                        color: context.borderPrimary,
+                        width: 0.8,
                       ),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? 0.16
+                                : 0.045,
+                          ),
+                          blurRadius: 18,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if ((widget.replyPreview ?? '').trim().isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: context.surfaceSecondary,
-                        borderRadius: AppRadius.brSmall,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.format_quote_rounded,
-                            size: 16,
-                            color: context.accentPrimary,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if ((widget.replyPreview ?? '').trim().isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
                           ),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Text(
-                              widget.replyPreview!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.caption(context),
-                            ),
+                          decoration: BoxDecoration(
+                            color: context.surfaceSecondary,
+                            borderRadius: AppRadius.brSmall,
                           ),
-                          GestureDetector(
-                            onTap: widget.onCancelReply,
-                            child: Icon(
-                              Icons.close,
-                              size: 17,
-                              color: context.textTertiary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  if (_selectedSkillNames.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: _selectedSkillNames
-                            .map(
-                              (name) => InputChip(
-                                visualDensity: VisualDensity.compact,
-                                avatar: const Icon(
-                                  Icons.auto_awesome_outlined,
-                                  size: 14,
-                                ),
-                                label: Text('\$$name'),
-                                onDeleted: () => setState(
-                                  () => _selectedSkillNames.remove(name),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.format_quote_rounded,
+                                size: 16,
+                                color: context.accentPrimary,
+                              ),
+                              const SizedBox(width: 7),
+                              Expanded(
+                                child: Text(
+                                  widget.replyPreview!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.caption(context),
                                 ),
                               ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                  if (_voiceMode)
-                    SizedBox(
-                      height: _composerInputHeight,
-                      child: _buildHoldToTalkButton(context),
-                    )
-                  else
-                    SizedBox(
-                      height: _composerInputHeight,
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: TapRegion(
-                            groupId: 'chat-composer',
-                            onTapOutside: (_) {
-                              _closeSlashMenu();
-                              _inputFocusNode.unfocus();
-                            },
-                            child: TextField(
-                              controller: _controller,
-                              focusNode: _inputFocusNode,
-                              minLines: 1,
-                              maxLines: 2,
-                              textAlignVertical: TextAlignVertical.center,
-                              textCapitalization: TextCapitalization.sentences,
-                              keyboardType: TextInputType.multiline,
-                              textInputAction: widget.sendOnEnter
-                                  ? TextInputAction.send
-                                  : TextInputAction.newline,
-                              onSubmitted: (_) {
-                                if (_slashMenuOpen) {
-                                  _selectActiveSlashSkill();
-                                  return;
-                                }
-                                if (widget.sendOnEnter &&
-                                    !widget.generating &&
-                                    _controller.value.composing.isCollapsed)
-                                  _send();
-                              },
-                              style: inputStyle.applyTextStyle(
-                                AppTypography.bodySmall(
-                                  context,
-                                ).copyWith(fontSize: _composerTextSize),
+                              GestureDetector(
+                                onTap: widget.onCancelReply,
+                                child: Icon(
+                                  Icons.close,
+                                  size: 17,
+                                  color: context.textTertiary,
+                                ),
                               ),
-                              decoration: InputDecoration(
-                                hintText: recipient.isEmpty
-                                    ? '发消息…'
-                                    : '给 $recipient 发消息…',
-                                hintStyle: hintStyle,
-                                isDense: true,
-                                contentPadding:
-                                    inputStyle.edgeInsets('padding') ??
-                                    const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                                filled:
-                                    inputStyle.color('backgroundColor') != null,
-                                border: _composerInputBorder(inputStyle),
-                                enabledBorder: _composerInputBorder(inputStyle),
-                                focusedBorder: _composerInputBorder(
-                                  inputStyle,
-                                  focused: true,
+                            ],
+                          ),
+                        ),
+                      if (_selectedSkillNames.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: _selectedSkillNames
+                                .map(
+                                  (name) => InputChip(
+                                    visualDensity: VisualDensity.compact,
+                                    avatar: const Icon(
+                                      Icons.auto_awesome_outlined,
+                                      size: 14,
+                                    ),
+                                    label: Text('\$$name'),
+                                    onDeleted: () => setState(
+                                      () => _selectedSkillNames.remove(name),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      if (_voiceMode)
+                        SizedBox(
+                          height: _composerInputHeight,
+                          child: _buildHoldToTalkButton(context),
+                        )
+                      else
+                        SizedBox(
+                          height: _composerInputHeight,
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: TapRegion(
+                                groupId: 'chat-composer',
+                                onTapOutside: (_) {
+                                  _closeSlashMenu();
+                                  _inputFocusNode.unfocus();
+                                },
+                                child: TextField(
+                                  controller: _controller,
+                                  focusNode: _inputFocusNode,
+                                  minLines: 1,
+                                  maxLines: 2,
+                                  textAlignVertical: TextAlignVertical.center,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  keyboardType: TextInputType.multiline,
+                                  textInputAction: widget.sendOnEnter
+                                      ? TextInputAction.send
+                                      : TextInputAction.newline,
+                                  onSubmitted: (_) {
+                                    if (_slashMenuOpen) {
+                                      _selectActiveSlashSkill();
+                                      return;
+                                    }
+                                    if (widget.sendOnEnter &&
+                                        !widget.generating &&
+                                        _controller.value.composing.isCollapsed)
+                                      _send();
+                                  },
+                                  style: inputStyle.applyTextStyle(
+                                    AppTypography.bodySmall(
+                                      context,
+                                    ).copyWith(fontSize: _composerTextSize),
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: recipient.isEmpty
+                                        ? '发消息…'
+                                        : '给 $recipient 发消息…',
+                                    hintStyle: hintStyle,
+                                    isDense: true,
+                                    contentPadding:
+                                        inputStyle.edgeInsets('padding') ??
+                                        const EdgeInsets.fromLTRB(
+                                          16,
+                                          10,
+                                          16,
+                                          10,
+                                        ),
+                                    filled:
+                                        inputStyle.color('backgroundColor') !=
+                                        null,
+                                    border: _composerInputBorder(inputStyle),
+                                    enabledBorder: _composerInputBorder(
+                                      inputStyle,
+                                    ),
+                                    focusedBorder: _composerInputBorder(
+                                      inputStyle,
+                                      focused: true,
+                                    ),
+                                    disabledBorder: _composerInputBorder(
+                                      inputStyle,
+                                    ),
+                                    errorBorder: _composerInputBorder(
+                                      inputStyle,
+                                    ),
+                                    focusedErrorBorder: _composerInputBorder(
+                                      inputStyle,
+                                      focused: true,
+                                    ),
+                                    fillColor:
+                                        inputStyle.color('backgroundColor') ??
+                                        Colors.transparent,
+                                    focusColor: Colors.transparent,
+                                    hoverColor: Colors.transparent,
+                                  ),
                                 ),
-                                disabledBorder: _composerInputBorder(
-                                  inputStyle,
-                                ),
-                                errorBorder: _composerInputBorder(inputStyle),
-                                focusedErrorBorder: _composerInputBorder(
-                                  inputStyle,
-                                  focused: true,
-                                ),
-                                fillColor:
-                                    inputStyle.color('backgroundColor') ??
-                                    Colors.transparent,
-                                focusColor: Colors.transparent,
-                                hoverColor: Colors.transparent,
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
-                    child: SizedBox(
-                      height: 44,
-                      child: Row(
-                        children: [
-                          if (widget.extensionActions != null) ...[
-                            widget.extensionActions!,
-                            const SizedBox(width: 4),
-                          ],
-                          _ComposerRoundButton(
-                            key: const ValueKey('composer-add-button'),
-                            icon: Icons.add_rounded,
-                            tooltip: '添加内容',
-                            onTap: _showComposerTools,
-                            styleTarget: 'chat.composer.add',
-                          ),
-                          if (widget.extensionAttachments != null) ...[
-                            const SizedBox(width: 4),
-                            widget.extensionAttachments!,
-                          ],
-                          const SizedBox(width: 4),
-                          Semantics(
-                            button: true,
-                            label: widget.permissionMode == 'full_access'
-                                ? '完全访问'
-                                : '请求批准',
-                            child: _ComposerRoundButton(
-                              key: const ValueKey('composer-permission-button'),
-                              icon: widget.permissionMode == 'full_access'
-                                  ? Icons.lock_open_rounded
-                                  : Icons.lock_outline_rounded,
-                              iconSize: 16,
-                              tooltip: widget.permissionMode == 'full_access'
-                                  ? '完全访问'
-                                  : '请求批准',
-                              onTap: _showPermissionPicker,
-                              styleTarget: 'chat.composer.permission',
-                            ),
-                          ),
-                          if (widget.workspaceSelector != null) ...[
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Align(
-                                key: const ValueKey(
-                                  'composer-workspace-selector',
-                                ),
-                                alignment: Alignment.centerLeft,
-                                child: widget.workspaceSelector!,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
+                        child: SizedBox(
+                          height: 44,
+                          child: Row(
+                            children: [
+                              if (widget.extensionActions != null) ...[
+                                widget.extensionActions!,
+                                const SizedBox(width: 4),
+                              ],
+                              _ComposerRoundButton(
+                                key: const ValueKey('composer-add-button'),
+                                icon: Icons.add_rounded,
+                                tooltip: '添加内容',
+                                onTap: _showComposerTools,
+                                styleTarget: 'chat.composer.add',
                               ),
-                            ),
-                          ] else
-                            const Spacer(),
-                          MouseRegion(
-                            onEnter: (_) =>
-                                setState(() => _modelMenuTriggerHovered = true),
-                            onExit: (_) => setState(
-                              () => _modelMenuTriggerHovered = false,
-                            ),
-                            child: GestureDetector(
-                              onTap: _showModelMenu,
-                              child: AnimatedContainer(
-                                key: const ValueKey('composer-model-trigger'),
-                                duration: const Duration(milliseconds: 160),
-                                curve: Curves.easeOut,
-                                constraints: const BoxConstraints(
-                                  minWidth: 44,
-                                  maxWidth: 64,
-                                ),
-                                height: 31,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                ),
-                                decoration: modelStyle.applyBoxDecoration(
-                                  BoxDecoration(
-                                    border: Border.all(
-                                      color: _modelMenuTriggerHovered
-                                          ? context.borderPrimary
-                                          : Colors.transparent,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  _reasoningLabel(),
+                              if (widget.extensionAttachments != null) ...[
+                                const SizedBox(width: 4),
+                                widget.extensionAttachments!,
+                              ],
+                              const SizedBox(width: 4),
+                              Semantics(
+                                button: true,
+                                label: widget.permissionMode == 'full_access'
+                                    ? '完全访问'
+                                    : '请求批准',
+                                child: _ComposerRoundButton(
                                   key: const ValueKey(
-                                    'composer-reasoning-label',
+                                    'composer-permission-button',
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: modelStyle.applyTextStyle(
-                                    AppTypography.label(context).copyWith(
-                                      fontSize: 14,
-                                      color: context.textSecondary,
+                                  icon: widget.permissionMode == 'full_access'
+                                      ? Icons.lock_open_rounded
+                                      : Icons.lock_outline_rounded,
+                                  iconSize: 16,
+                                  tooltip:
+                                      widget.permissionMode == 'full_access'
+                                      ? '完全访问'
+                                      : '请求批准',
+                                  onTap: _showPermissionPicker,
+                                  styleTarget: 'chat.composer.permission',
+                                ),
+                              ),
+                              if (widget.workspaceSelector != null) ...[
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Align(
+                                    key: const ValueKey(
+                                      'composer-workspace-selector',
+                                    ),
+                                    alignment: Alignment.centerLeft,
+                                    child: widget.workspaceSelector!,
+                                  ),
+                                ),
+                              ] else
+                                const Spacer(),
+                              MouseRegion(
+                                onEnter: (_) => setState(
+                                  () => _modelMenuTriggerHovered = true,
+                                ),
+                                onExit: (_) => setState(
+                                  () => _modelMenuTriggerHovered = false,
+                                ),
+                                child: GestureDetector(
+                                  onTap: _showModelMenu,
+                                  child: AnimatedContainer(
+                                    key: const ValueKey(
+                                      'composer-model-trigger',
+                                    ),
+                                    duration: const Duration(milliseconds: 160),
+                                    curve: Curves.easeOut,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 44,
+                                      maxWidth: 64,
+                                    ),
+                                    height: 31,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                    ),
+                                    decoration: modelStyle.applyBoxDecoration(
+                                      BoxDecoration(
+                                        border: Border.all(
+                                          color: _modelMenuTriggerHovered
+                                              ? context.borderPrimary
+                                              : Colors.transparent,
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      _reasoningLabel(),
+                                      key: const ValueKey(
+                                        'composer-reasoning-label',
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: modelStyle.applyTextStyle(
+                                        AppTypography.label(context).copyWith(
+                                          fontSize: 14,
+                                          color: context.textSecondary,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 4),
+                              if (!_voiceMode &&
+                                  (_hasText || _selectedSkillNames.isNotEmpty))
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _send,
+                                  child: Tooltip(
+                                    message: '发送消息',
+                                    child: Container(
+                                      key: const ValueKey(
+                                        'composer-send-button',
+                                      ),
+                                      width: 31,
+                                      height: 31,
+                                      decoration: sendStyle.applyBoxDecoration(
+                                        BoxDecoration(
+                                          color: context.accentPrimary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: AmitiaIcon(
+                                        AmitiaIconGlyph.send,
+                                        size: 18,
+                                        color:
+                                            sendStyle.color(
+                                              'foregroundColor',
+                                            ) ??
+                                            Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else if (widget.generating)
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => widget.onStop?.call(),
+                                  child: Tooltip(
+                                    message: '停止生成',
+                                    child: Container(
+                                      key: const ValueKey(
+                                        'composer-stop-button',
+                                      ),
+                                      width: 31,
+                                      height: 31,
+                                      decoration: BoxDecoration(
+                                        color: context.error,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        width: 11,
+                                        height: 11,
+                                        decoration: BoxDecoration(
+                                          color: context.surfacePrimary,
+                                          borderRadius: BorderRadius.circular(
+                                            2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                _ComposerRoundButton(
+                                  key: const ValueKey(
+                                    'composer-trailing-button',
+                                  ),
+                                  icon: _voiceMode
+                                      ? Icons.keyboard_outlined
+                                      : Icons.mic_none_outlined,
+                                  tooltip: _voiceMode ? '切换到键盘输入' : '按住说话',
+                                  onTap: _toggleVoiceMode,
+                                ),
+                            ],
                           ),
-                          const SizedBox(width: 4),
-                          if (!_voiceMode &&
-                              (_hasText || _selectedSkillNames.isNotEmpty))
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: _send,
-                              child: Tooltip(
-                                message: '发送消息',
-                                child: Container(
-                                  key: const ValueKey('composer-send-button'),
-                                  width: 31,
-                                  height: 31,
-                                  decoration: sendStyle.applyBoxDecoration(
-                                    BoxDecoration(
-                                      color: context.accentPrimary,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: AmitiaIcon(
-                                    AmitiaIconGlyph.send,
-                                    size: 18,
-                                    color:
-                                        sendStyle.color('foregroundColor') ??
-                                        Theme.of(context).colorScheme.onPrimary,
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (widget.generating)
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => widget.onStop?.call(),
-                              child: Tooltip(
-                                message: '停止生成',
-                                child: Container(
-                                  key: const ValueKey('composer-stop-button'),
-                                  width: 31,
-                                  height: 31,
-                                  decoration: BoxDecoration(
-                                    color: context.error,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Container(
-                                    width: 11,
-                                    height: 11,
-                                    decoration: BoxDecoration(
-                                      color: context.surfacePrimary,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                          else
-                            _ComposerRoundButton(
-                              key: const ValueKey('composer-trailing-button'),
-                              icon: _voiceMode
-                                  ? Icons.keyboard_outlined
-                                  : Icons.mic_none_outlined,
-                              tooltip: _voiceMode ? '切换到键盘输入' : '按住说话',
-                              onTap: _toggleVoiceMode,
-                            ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -3761,36 +3570,6 @@ class _ComposerRoundButton extends StatelessWidget {
                 ),
           alignment: Alignment.center,
           child: AmitiaIcon.adaptive(icon, size: iconSize, color: color),
-        ),
-      ),
-    );
-  }
-}
-
-class _ComposerTool extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _ComposerTool({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        height: 52,
-        child: Row(
-          children: [
-            AmitiaIcon.adaptive(icon, size: 22, color: context.textPrimary),
-            const SizedBox(width: 16),
-            Text(label, style: AppTypography.body(context)),
-          ],
         ),
       ),
     );

@@ -4,18 +4,17 @@ package migration
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/pkg/database/sqlitebackup"
 	"gorm.io/gorm"
 )
 
@@ -49,7 +48,17 @@ type domainMigrationBackupPort struct {
 }
 
 func NewDomainMigrationBackupPort(db *gorm.DB, backupDir string) BackupPort {
-	return &domainMigrationBackupPort{db: db, backupDir: backupDir}
+	port := &domainMigrationBackupPort{db: db, backupDir: backupDir}
+	if backupDir != "" {
+		deleted, err := sqlitebackup.PruneBackups(backupDir, "", sqlitebackup.DefaultRetention)
+		if err != nil {
+			log.Printf("migration backup retention failed: %v", err)
+		}
+		if len(deleted) > 0 {
+			log.Printf("migration backup retention removed %d expired snapshots", len(deleted))
+		}
+	}
+	return port
 }
 
 func (p *domainMigrationBackupPort) CreateBackup(ctx context.Context) (string, error) {
@@ -79,14 +88,19 @@ func (p *domainMigrationBackupPort) CreateBackup(ctx context.Context) (string, e
 		return "", p.failBackup(backupID, backupPath, startedAt, err)
 	}
 
-	if err := p.db.WithContext(ctx).Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
+	if err := sqlitebackup.CreateConsistentSnapshot(ctx, p.db, backupPath); err != nil {
 		return "", p.failBackup(backupID, backupPath, startedAt, err)
 	}
-
-	components, err := p.copySQLiteBackupFiles(backupPath)
+	mainSize, mainChecksum, err := sqlitebackup.Inspect(backupPath)
 	if err != nil {
 		return "", p.failBackup(backupID, backupPath, startedAt, err)
 	}
+	components := []backupPortComponent{{
+		Role:       "main",
+		BackupPath: backupPath,
+		Size:       mainSize,
+		Checksum:   mainChecksum,
+	}}
 
 	manifestPath := filepath.Join(backupDir, backupID+".json")
 	manifest := backupPortManifest{
@@ -103,17 +117,19 @@ func (p *domainMigrationBackupPort) CreateBackup(ctx context.Context) (string, e
 		return "", p.failBackup(backupID, backupPath, startedAt, err)
 	}
 
-	mainSize, mainChecksum, err := p.fileSizeAndChecksum(backupPath)
-	if err != nil {
-		return "", p.failBackup(backupID, backupPath, startedAt, err)
-	}
-
 	finishedAt := time.Now().UTC().Format(time.RFC3339)
 	if err := p.db.WithContext(ctx).Exec(
 		"INSERT OR REPLACE INTO backup_records (id, backup_path, backup_size, checksum, status, started_at, finished_at, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		backupID, backupPath, mainSize, mainChecksum, "completed", startedAt, finishedAt, "",
 	).Error; err != nil {
 		return "", fmt.Errorf("insert backup record: %w", err)
+	}
+	deleted, pruneErr := sqlitebackup.PruneBackups(backupDir, backupPath, sqlitebackup.DefaultRetention)
+	if pruneErr != nil {
+		log.Printf("migration backup retention failed: %v", pruneErr)
+	}
+	if len(deleted) > 0 {
+		log.Printf("migration backup retention removed %d expired snapshots", len(deleted))
 	}
 
 	return backupID, nil
@@ -136,7 +152,7 @@ func (p *domainMigrationBackupPort) BackupExists(ctx context.Context, backupID s
 	if record.BackupPath == "" {
 		return false, nil
 	}
-	mainSize, mainChecksum, err := p.fileSizeAndChecksum(record.BackupPath)
+	mainSize, mainChecksum, err := sqlitebackup.Inspect(record.BackupPath)
 	if err != nil || mainSize != record.BackupSize || !strings.EqualFold(mainChecksum, record.Checksum) {
 		return false, nil
 	}
@@ -154,7 +170,7 @@ func (p *domainMigrationBackupPort) BackupExists(ctx context.Context, backupID s
 		return false, nil
 	}
 	for _, component := range manifest.Components {
-		size, checksum, err := p.fileSizeAndChecksum(component.BackupPath)
+		size, checksum, err := sqlitebackup.Inspect(component.BackupPath)
 		if err != nil || size != component.Size || !strings.EqualFold(checksum, component.Checksum) {
 			return false, nil
 		}
@@ -188,94 +204,6 @@ func (p *domainMigrationBackupPort) sqliteMainPath() (string, error) {
 		}
 	}
 	return "", errors.New("main sqlite database not found")
-}
-
-func (p *domainMigrationBackupPort) copySQLiteBackupFiles(backupPath string) ([]backupPortComponent, error) {
-	sourcePath, err := p.sqliteMainPath()
-	if err != nil {
-		return nil, err
-	}
-	entries := []struct {
-		role     string
-		src      string
-		dst      string
-		optional bool
-	}{
-		{"main", sourcePath, backupPath, false},
-		{"wal", sourcePath + "-wal", backupPath + "-wal", true},
-		{"shm", sourcePath + "-shm", backupPath + "-shm", true},
-	}
-	components := make([]backupPortComponent, 0, len(entries))
-	for _, e := range entries {
-		exists, err := fileExists(e.src)
-		if err != nil {
-			return nil, err
-		}
-		if !exists && e.optional {
-			continue
-		}
-		if !exists {
-			return nil, fmt.Errorf("source file not found: %s", e.src)
-		}
-		size, checksum, err := copyFileWithChecksum(e.src, e.dst)
-		if err != nil {
-			return nil, err
-		}
-		components = append(components, backupPortComponent{
-			Role:       e.role,
-			BackupPath: e.dst,
-			Size:       size,
-			Checksum:   checksum,
-		})
-	}
-	return components, nil
-}
-
-func (p *domainMigrationBackupPort) fileSizeAndChecksum(path string) (int64, string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, "", err
-	}
-	defer file.Close()
-	h := sha256.New()
-	size, err := io.Copy(h, file)
-	if err != nil {
-		return 0, "", err
-	}
-	return size, hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
-}
-
-func copyFileWithChecksum(sourcePath, backupPath string) (int64, string, error) {
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return 0, "", err
-	}
-	defer source.Close()
-	target, err := os.OpenFile(backupPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return 0, "", err
-	}
-	defer target.Close()
-	h := sha256.New()
-	size, err := io.Copy(io.MultiWriter(target, h), source)
-	if err != nil {
-		return 0, "", err
-	}
-	if err := target.Sync(); err != nil {
-		return 0, "", err
-	}
-	return size, hex.EncodeToString(h.Sum(nil)), nil
 }
 
 var _ BackupPort = (*domainMigrationBackupPort)(nil)

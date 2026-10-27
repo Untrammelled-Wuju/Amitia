@@ -43,13 +43,23 @@ func TestMigrateLegacyRuntimeStateIsOwnerScopedAndIdempotent(t *testing.T) {
 	if err := kernelsqlite.Migrate(t.Context(), kernelDB); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 2; i++ {
-		if err := migrateLegacyRuntimeState(t.Context(), appDB, kernelDB, "space", "device"); err != nil {
+	if err := migrateLegacyRuntimeState(t.Context(), appDB, kernelDB, "space", "device"); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO psyche_states(character_id,version,state_version,emotion,mood,stress,energy,created_at,updated_at) VALUES('role-two','legacy',1,'{"valence":0.3,"arousal":0.4,"dominance":0.6}','{"moodValence":0.4,"moodArousal":0.3}',0.3,0.7,'2026-10-21T00:00:00Z','2026-10-21T00:00:00Z')`,
+		`INSERT INTO relationship_states(id,character_id,space_id,channel,relation_type,relation_data,created_at,updated_at) VALUES('rel-two','role-two','space','*','user_character','{"trust":0.8,"familiarity":0.5,"security":0.7,"tension":0.1,"repairConfidence":0.5,"boundary":0.5}','2026-10-21T00:00:00Z','2026-10-21T00:00:00Z')`,
+		`INSERT INTO need_states(id,character_id,need_key,current_value,baseline,trend,saturated,created_at,updated_at) VALUES('need-two','role-two','connection',0.75,0.34,0,0,'2026-10-21T00:00:00Z','2026-10-21T00:00:00Z')`,
+	} {
+		if err := appDB.Exec(statement).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := migrateLegacyRuntimeState(t.Context(), appDB, kernelDB, "space", "device"); err != nil {
+		t.Fatal(err)
+	}
 	owned := coordination.NewOwnershipStore(kernelDB, "device")
-	psycheResource, err := owned.Get(t.Context(), coordination.RuntimeStateKindPsyche, "role")
+	psycheResource, err := owned.Get(t.Context(), coordination.RuntimeStateKindPsyche, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, "role"))
 	if err != nil || psycheResource == nil || psycheResource.RoleID != "role" || psycheResource.Revision != 1 {
 		t.Fatalf("psyche migration failed: %+v %v", psycheResource, err)
 	}
@@ -60,19 +70,31 @@ func TestMigrateLegacyRuntimeStateIsOwnerScopedAndIdempotent(t *testing.T) {
 	if migratedPsyche["valence"].(float64) != 0.72 {
 		t.Fatalf("psyche value lost: %+v", migratedPsyche)
 	}
-	relationshipResource, err := owned.Get(t.Context(), coordination.RuntimeStateKindRelationship, "user_character")
+	relationshipResource, err := owned.Get(t.Context(), coordination.RuntimeStateKindRelationship, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindRelationship, "role"))
 	if err != nil || relationshipResource == nil || relationshipResource.RoleID != "role" {
 		t.Fatalf("relationship migration failed: %+v %v", relationshipResource, err)
 	}
-	needResource, err := owned.Get(t.Context(), coordination.RuntimeStateKindNeeds, "role")
+	needResource, err := owned.Get(t.Context(), coordination.RuntimeStateKindNeeds, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindNeeds, "role"))
 	if err != nil || needResource == nil || needResource.RoleID != "role" {
 		t.Fatalf("need migration failed: %+v %v", needResource, err)
+	}
+	secondPsyche, err := owned.Get(t.Context(), coordination.RuntimeStateKindPsyche, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindPsyche, "role-two"))
+	if err != nil || secondPsyche == nil || secondPsyche.RoleID != "role-two" {
+		t.Fatalf("second role psyche migration failed: %+v %v", secondPsyche, err)
+	}
+	secondRelationship, err := owned.Get(t.Context(), coordination.RuntimeStateKindRelationship, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindRelationship, "role-two"))
+	if err != nil || secondRelationship == nil || secondRelationship.RoleID != "role-two" {
+		t.Fatalf("second role relationship migration failed: %+v %v", secondRelationship, err)
+	}
+	secondNeeds, err := owned.Get(t.Context(), coordination.RuntimeStateKindNeeds, coordination.RoleRuntimeStateID(coordination.RuntimeStateKindNeeds, "role-two"))
+	if err != nil || secondNeeds == nil || secondNeeds.RoleID != "role-two" {
+		t.Fatalf("second role need migration failed: %+v %v", secondNeeds, err)
 	}
 	var count int
 	if err := kernelDB.QueryRow(`SELECT COUNT(*) FROM kernel_device_owned_resources WHERE owner_id='device' AND kind IN ('psyche','relationship','needs')`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 3 {
+	if count != 6 {
 		t.Fatalf("migrated resources=%d", count)
 	}
 }

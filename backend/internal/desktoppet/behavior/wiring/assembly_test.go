@@ -219,7 +219,11 @@ func TestAffectAdapter_WithState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-		"device", "psyche", "role", "char-1", "", 1, 0, `{"valence":0.8,"arousal":0.7,"dominance":0.5,"stress":0.2}`, "2026-10-21T00:00:00Z").Error; err != nil {
+		"device", "psyche", "role", "char-1", "", 1, 0, `{"valence":0.1,"arousal":0.2,"dominance":0.5,"stress":0.8}`, "2026-10-20T00:00:00Z").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO kernel_device_owned_resources(owner_id,kind,resource_id,role_id,source_id,revision,deleted,body,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+		"device", "psyche", "role/char-1", "char-1", "", 2, 0, `{"valence":0.8,"arousal":0.7,"dominance":0.5,"stress":0.2}`, "2026-10-21T00:00:00Z").Error; err != nil {
 		t.Fatal(err)
 	}
 	sqlDB, err := db.DB()
@@ -242,6 +246,16 @@ func TestAffectAdapter_WithState(t *testing.T) {
 	}
 	if snapshot.Label != "happy" {
 		t.Fatalf("expected label happy for valence>0.3 and arousal>0.3, got %s", snapshot.Label)
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM kernel_device_owned_resources WHERE resource_id='role/char-1'`); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = adapter.GetAffectSnapshot(ctx, "user-1", "char-1")
+	if err != nil {
+		t.Fatalf("legacy GetAffectSnapshot failed: %v", err)
+	}
+	if snapshot.Valence != 0.1 || snapshot.Stress != 0.8 {
+		t.Fatalf("legacy fallback mismatch: %+v", snapshot)
 	}
 }
 
