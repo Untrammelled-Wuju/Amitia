@@ -116,140 +116,16 @@
             },
             {
               "id": "qq-personal-metrics",
-              "type": "grid",
+              "type": "key_value",
               "props": {
                 "columns": 2,
-                "gap": 10,
-                "childAspectRatio": 4
+                "bordered": false
               },
-              "children": [
+              "bindings": [
                 {
-                  "id": "metric-account",
-                  "type": "stack",
-                  "props": {
-                    "gap": 2
-                  },
-                  "children": [
-                    {
-                      "id": "metric-account-label",
-                      "type": "text",
-                      "props": {
-                        "text": "QQ 号",
-                        "variant": "caption"
-                      }
-                    },
-                    {
-                      "id": "metric-account-value",
-                      "type": "text",
-                      "props": {
-                        "text": "未连接",
-                        "variant": "body"
-                      },
-                      "bindings": [
-                        {
-                          "path": "text",
-                          "source": "state",
-                          "sourcePath": "status.displayStatus.qqAccount"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "id": "metric-clients",
-                  "type": "stack",
-                  "props": {
-                    "gap": 2
-                  },
-                  "children": [
-                    {
-                      "id": "metric-clients-label",
-                      "type": "text",
-                      "props": {
-                        "text": "客户端",
-                        "variant": "caption"
-                      }
-                    },
-                    {
-                      "id": "metric-clients-value",
-                      "type": "text",
-                      "props": {
-                        "text": "0",
-                        "variant": "body"
-                      },
-                      "bindings": [
-                        {
-                          "path": "text",
-                          "source": "state",
-                          "sourcePath": "status.displayStatus.clients"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "id": "metric-received",
-                  "type": "stack",
-                  "props": {
-                    "gap": 2
-                  },
-                  "children": [
-                    {
-                      "id": "metric-received-label",
-                      "type": "text",
-                      "props": {
-                        "text": "接收",
-                        "variant": "caption"
-                      }
-                    },
-                    {
-                      "id": "metric-received-value",
-                      "type": "text",
-                      "props": {
-                        "text": "0",
-                        "variant": "body"
-                      },
-                      "bindings": [
-                        {
-                          "path": "text",
-                          "source": "state",
-                          "sourcePath": "status.displayStatus.received"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "id": "metric-replies",
-                  "type": "stack",
-                  "props": {
-                    "gap": 2
-                  },
-                  "children": [
-                    {
-                      "id": "metric-replies-label",
-                      "type": "text",
-                      "props": {
-                        "text": "回复",
-                        "variant": "caption"
-                      }
-                    },
-                    {
-                      "id": "metric-replies-value",
-                      "type": "text",
-                      "props": {
-                        "text": "0",
-                        "variant": "body"
-                      },
-                      "bindings": [
-                        {
-                          "path": "text",
-                          "source": "state",
-                          "sourcePath": "status.displayStatus.replies"
-                        }
-                      ]
-                    }
-                  ]
+                  "path": "items",
+                  "source": "state",
+                  "sourcePath": "status.displayMetrics"
                 }
               ]
             }
@@ -366,6 +242,14 @@
                         "channelId": "qq_personal"
                       },
                       "statePath": "status"
+                    }
+                  ],
+                  "bindings": [
+                    {
+                      "path": "disabled",
+                      "source": "state",
+                      "sourcePath": "status.mobileRuntimeSummary.running",
+                      "default": false
                     }
                   ]
                 },

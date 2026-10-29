@@ -3,6 +3,13 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import net from "node:net"
 import { randomBytes } from "node:crypto"
+import { fileURLToPath } from "node:url"
+
+const identityCompatLibrary = path.join(path.dirname(fileURLToPath(import.meta.url)), "native", "libamitia-identity.so")
+
+export function mobileVncArguments(display: string, passwordFile: string): string[] {
+  return ["-display", display, "-passwdfile", `rm:${passwordFile}`, "-localhost", "-rfbport", "5900", "-forever", "-shared", "-noshm"]
+}
 
 export class MobileDesktop {
   private children: ChildProcess[] = []
@@ -29,6 +36,13 @@ export class MobileDesktop {
     }
   }
 
+  private displayEnvironment(): NodeJS.ProcessEnv {
+    return {
+      ...this.environment(),
+      LD_PRELOAD: [identityCompatLibrary, process.env.LD_PRELOAD].filter(Boolean).join(":"),
+    }
+  }
+
   credentials(): string { return this.password }
 
   error(): string { return this.failure }
@@ -46,19 +60,16 @@ export class MobileDesktop {
     const passwordFile = path.join(home, ".vnc-password")
     try {
       const vnc = path.join(prefix, "usr/bin/x11vnc")
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn(vnc, ["-storepasswd", this.password, passwordFile], { env: this.environment(), stdio: "ignore" })
-        child.once("error", reject)
-        child.once("exit", code => code === 0 ? resolve() : reject(new Error("创建手机 QQ 桌面凭据失败")))
-      })
-      await fs.chmod(passwordFile, 0o600)
+      await fs.writeFile(passwordFile, `${this.password}\n`, { mode: 0o600 })
+      await this.verifyProcessIdentity(prefix)
+      await this.verifyKeyboard(prefix, home)
       const displayNumber = await this.launchDisplayServer(path.join(prefix, "usr/bin/Xvfb"))
       this.display = `:${displayNumber}`
       await this.waitForFile(`/tmp/.X11-unix/X${displayNumber}`)
       const fluxboxConfig = path.join(home, "fluxbox-init")
       await fs.writeFile(fluxboxConfig, "session.screen0.toolbar.visible: false\nsession.screen0.workspaces: 1\n", { mode: 0o600 })
       this.launch(path.join(prefix, "usr/bin/fluxbox"), ["-display", this.display, "-rc", fluxboxConfig])
-      this.launch(vnc, ["-display", this.display, "-rfbauth", passwordFile, "-localhost", "-rfbport", "5900", "-forever", "-shared"])
+      this.launch(vnc, mobileVncArguments(this.display, passwordFile))
       await this.waitForPort(5900)
       this.launch(path.join(prefix, "usr/bin/python3"), [path.join(prefix, "usr/bin/websockify"), "--web", path.join(prefix, "usr/share/novnc"), `127.0.0.1:${port}`, "127.0.0.1:5900"])
       await this.waitForPort(port)
@@ -71,9 +82,53 @@ export class MobileDesktop {
     }
   }
 
-  private launch(command: string, args: string[], recordStdout = true): ChildProcess {
+  private async verifyProcessIdentity(prefix: string): Promise<void> {
+    const script = [
+      "import os",
+      "print(f'before uid={os.getuid()} euid={os.geteuid()} gid={os.getgid()} egid={os.getegid()}')",
+      "os.setgid(os.getgid())",
+      "os.setuid(os.getuid())",
+      "print(f'after uid={os.getuid()} euid={os.geteuid()} gid={os.getgid()} egid={os.getegid()}')",
+    ].join("\n")
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(path.join(prefix, "usr/bin/python3"), ["-c", script], { env: this.displayEnvironment(), stdio: ["ignore", "pipe", "pipe"] })
+      let detail = ""
+      const record = (data: unknown) => { detail = `${detail}${String(data || "")}`.trim().slice(-4000) }
+      child.stdout?.on("data", record)
+      child.stderr?.on("data", record)
+      const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`进程身份检查超时：${detail}`)) }, 15000)
+      child.once("error", error => { clearTimeout(timer); reject(error) })
+      child.once("exit", code => {
+        clearTimeout(timer)
+        if (code === 0) resolve()
+        else reject(new Error(`进程身份切换失败（${code}）：${detail}`))
+      })
+    })
+  }
+
+  private async verifyKeyboard(prefix: string, home: string): Promise<void> {
+    const source = path.join(home, "keyboard.xkb")
+    const output = path.join(home, "keyboard.xkm")
+    await fs.writeFile(source, 'xkb_keymap { xkb_keycodes { include "evdev+aliases(qwerty)" }; xkb_types { include "complete" }; xkb_compatibility { include "complete" }; xkb_symbols { include "pc+us+inet(evdev)" }; xkb_geometry { include "pc(pc105)" }; };', { mode: 0o600 })
+    const keymap = await fs.readFile(source)
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn("/bin/sh", ["-c", 'exec "$1" -w 1 "-R$2" -xkm - "$3"', "amitia-xkb-check", "/usr/bin/xkbcomp", path.join(prefix, "usr/share/X11/xkb"), output], { env: this.environment(), stdio: ["pipe", "pipe", "pipe"] })
+      child.stdin?.on("error", () => {})
+      child.stdin?.end(keymap)
+      let detail = ""
+      const record = (data: unknown) => { detail = `${detail}${String(data || "")}`.slice(-4000) }
+      child.stdout?.on("data", record)
+      child.stderr?.on("data", record)
+      const timer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error("键盘映射编译检查超时")) }, 15000)
+      child.once("error", error => { clearTimeout(timer); reject(error) })
+      child.once("exit", code => { clearTimeout(timer); if (code === 0) resolve(); else reject(new Error(`键盘映射编译失败（${code}）：${detail}`)) })
+    })
+    await fs.access(output)
+  }
+
+  private launch(command: string, args: string[], recordStdout = true, environment = this.environment()): ChildProcess {
     const label = path.basename(command)
-    const child = spawn(command, args, { env: this.environment(), stdio: ["ignore", "pipe", "pipe"] })
+    const child = spawn(command, args, { env: environment, stdio: ["ignore", "pipe", "pipe"] })
     const record = (source: string) => (data: unknown) => {
       const text = String(data || "").trim()
       if (text) this.failure = `${this.failure}\n${label} ${source}: ${text}`.trim().slice(-6000)
@@ -89,7 +144,7 @@ export class MobileDesktop {
   }
 
   private launchDisplayServer(command: string): Promise<number> {
-    const child = this.launch(command, ["-xkbdir", path.join(this.root, "root/usr/share/X11/xkb"), "-displayfd", "1", "-screen", "0", "960x720x24", "-nolisten", "tcp"], false)
+    const child = this.launch(command, ["-xkbdir", path.join(this.root, "root/usr/share/X11/xkb"), "-displayfd", "1", "-screen", "0", "960x720x24", "-nolisten", "tcp"], false, this.displayEnvironment())
     return new Promise((resolve, reject) => {
       let output = ""
       let settled = false
@@ -99,7 +154,7 @@ export class MobileDesktop {
         clearTimeout(timer)
         child.stdout?.removeListener("data", onData)
         if (error) reject(error)
-        else resolve(display || 1)
+        else resolve(display ?? 1)
       }
       const onData = (data: unknown) => {
         output = `${output}${String(data || "")}`.slice(-2000)

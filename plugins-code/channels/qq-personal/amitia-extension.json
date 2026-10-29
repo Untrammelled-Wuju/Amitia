@@ -9,7 +9,7 @@
     "description": {
       "default": "通过 OneBot 11 反向 WebSocket 将 SnowLuma 个人 QQ 协议端接入 Amitia，支持 Windows、Linux 原生运行及 Docker 部署。"
     },
-    "version": "0.2.48",
+    "version": "0.2.57",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -654,21 +654,21 @@
             "entries": {
               "electron_linux": {
                 "type": "external_web_ui",
-                "url": "http://127.0.0.1:6081/",
+                "url": "http://127.0.0.1:6081/vnc.html",
                 "allowedOrigins": [
                   "http://127.0.0.1:6081"
                 ]
               },
               "electron_macos": {
                 "type": "external_web_ui",
-                "url": "http://127.0.0.1:6081/",
+                "url": "http://127.0.0.1:6081/vnc.html",
                 "allowedOrigins": [
                   "http://127.0.0.1:6081"
                 ]
               },
               "electron_windows": {
                 "type": "external_web_ui",
-                "url": "http://127.0.0.1:6081/",
+                "url": "http://127.0.0.1:6081/vnc.html",
                 "allowedOrigins": [
                   "http://127.0.0.1:6081"
                 ]
@@ -750,7 +750,7 @@
             "entries": {
               "mobile": {
                 "type": "external_web_ui",
-                "url": "http://127.0.0.1:6081/",
+                "url": "http://127.0.0.1:6081/vnc.html",
                 "allowedOrigins": [
                   "http://127.0.0.1:6081"
                 ]

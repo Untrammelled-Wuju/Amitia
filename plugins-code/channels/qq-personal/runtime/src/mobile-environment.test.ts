@@ -5,6 +5,7 @@ import path from "node:path"
 import test from "node:test"
 import {
   mobileAptOptions,
+  mobileEnvironmentReady,
   mobileRuntimePackages,
   prepareMobileEnvironment,
   runWithReceipt,
@@ -70,4 +71,19 @@ test("mobile preparation extracts dependencies and QQ without dpkg-deb extract",
   assert.equal(commands.filter(command => command[0] === "/usr/bin/apt-get").length, 2)
   const options = mobileAptOptions(directory)
   assert.ok(options.includes(path.join(directory, "apt", "config")))
+})
+
+test("prepared runtime is reusable only with its required keyboard files", async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "qq-prepared-"))
+  t.after(() => fs.rm(directory, { recursive: true, force: true }))
+  await fs.writeFile(path.join(directory, "prepared.json"), JSON.stringify({ schemaVersion: 1 }))
+  assert.equal(await mobileEnvironmentReady(directory), false)
+  for (const relative of ["root/opt/QQ/qq", "root/usr/bin/Xvfb", "root/usr/bin/x11vnc", "root/usr/bin/xkbcomp", "root/usr/share/X11/xkb/rules/evdev", "root/usr/share/X11/xkb/symbols/us"]) {
+    const file = path.join(directory, relative)
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, "test")
+  }
+  assert.equal(await mobileEnvironmentReady(directory), true)
+  await fs.rm(path.join(directory, "root/usr/bin/xkbcomp"))
+  assert.equal(await mobileEnvironmentReady(directory), false)
 })

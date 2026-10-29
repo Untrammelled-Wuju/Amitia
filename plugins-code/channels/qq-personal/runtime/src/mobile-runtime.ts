@@ -2,7 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import type { QQPersonalConfig } from "./config.js"
 import { MobileDesktop } from "./mobile-desktop.js"
-import { prepareMobileEnvironment } from "./mobile-environment.js"
+import { prepareMobileEnvironment, mobileEnvironmentReady } from "./mobile-environment.js"
 import type { SnowLumaRuntimeManager } from "./snowluma-runtime.js"
 import { linkMobileEnvironment } from "./mobile-links.js"
 
@@ -83,9 +83,11 @@ export class MobileQQRuntime {
   private async performInstall(config: QQPersonalConfig): Promise<void> {
     await this.snowluma.stop()
     await this.desktop.stop()
-    await prepareMobileEnvironment(this.root, (phase, detail) => {
-      this.setState({ running: true, phase, detail, error: "" })
-    })
+    if (!await mobileEnvironmentReady(this.root)) {
+      await prepareMobileEnvironment(this.root, (phase, detail) => {
+        this.setState({ running: true, phase, detail, error: "" })
+      })
+    }
     await linkMobileEnvironment(this.root)
     fs.writeFileSync(path.join(this.root, "prepared.json"), JSON.stringify({ schemaVersion: 1 }), { mode: 0o600 })
     await this.ensureDesktop(config)

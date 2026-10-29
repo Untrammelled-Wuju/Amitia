@@ -105,7 +105,9 @@ SnowLuma 只保存密码哈希，不能反推出已修改的密码。插件支�
 ## 打包
 
 ```bash
-AmitiaData/node/bin/node plugins-code/channels/qq-personal/scripts/build-package.mjs
+AMITIA_ZIG=/path/to/zig AmitiaData/node/bin/node plugins-code/channels/qq-personal/scripts/build-package.mjs
 ```
+
+构建需要 Zig 0.15 或更高版本交叉编译 Linux ARM64 兼容层；也可将 Zig 加入 `PATH` 后省略 `AMITIA_ZIG`。
 
 产物：仓库根目录 `plugin/com.amitia.channel-qq-personal-<版本>.amitiax`。

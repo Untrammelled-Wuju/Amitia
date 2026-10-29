@@ -76,4 +76,11 @@ test("desktop and mobile workspace tabs share the same provider package", () => 
     assert.ok(platforms.includes("electron_windows"))
     assert.ok(platforms.includes("mobile"))
   }
+  for (const tab of workspaceTabs) {
+    const spec = tab.spec as Record<string, unknown>
+    if ((spec.metadata as Record<string, unknown>).tabId !== "novnc-desktop") continue
+    for (const entry of Object.values(spec.entries as Record<string, Record<string, unknown>>)) {
+      assert.match(String(entry.url), /\/vnc\.html$/)
+    }
+  }
 })

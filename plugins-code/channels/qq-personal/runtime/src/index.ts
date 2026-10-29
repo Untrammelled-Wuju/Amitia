@@ -200,6 +200,12 @@ function statusPayload() {
       snowluma: runtimeManager.status(),
       snowlumaInstall: runtimeManager.installState(),
       mobileRuntimeSummary: mobile,
+      displayMetrics: [
+        { label: "QQ 号", value: status.accountIds[0] || "未连接" },
+        { label: "客户端", value: String(status.clients) },
+        { label: "接收", value: String(messageCount) },
+        { label: "回复", value: String(replyCount) },
+      ],
       displayStatus: {
         connectionLabel,
         connectionVariant,

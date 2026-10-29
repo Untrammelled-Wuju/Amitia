@@ -1,5 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
+import { execFileSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { createRequire } from "node:module"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { buildChannelPackage } from "../../scripts/build-channel-package.mjs"
@@ -32,6 +34,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, "amitia-extension.js
 
 fs.rmSync(stagingRoot, { recursive: true, force: true })
 fs.mkdirSync(path.join(stagingRoot, "modules", "qq-personal-service"), { recursive: true })
+fs.mkdirSync(path.join(stagingRoot, "modules", "qq-personal-service", "native"), { recursive: true })
 fs.mkdirSync(path.join(stagingRoot, "modules", "qq-personal-ui", "desktop"), { recursive: true })
 fs.mkdirSync(path.join(stagingRoot, "modules", "qq-personal-ui", "mobile"), { recursive: true })
 
@@ -48,6 +51,32 @@ await buildRuntime({
 
 fs.copyFileSync(path.join(runtimeRoot, "launcher.mjs"), path.join(stagingRoot, "modules/qq-personal-service/launcher.mjs"))
 fs.writeFileSync(path.join(stagingRoot, "modules/qq-personal-service/package.json"), `${JSON.stringify({ type: "module" }, null, 2)}\n`)
+execFileSync(process.env.AMITIA_ZIG || "zig", [
+  "cc",
+  "-target",
+  "aarch64-linux-gnu",
+  "-Os",
+  "-fPIC",
+  "-shared",
+  "-nostdlib",
+  "-Wl,-z,defs",
+  "-Wl,-z,noexecstack",
+  "-Wl,-soname,libamitia-identity.so",
+  "-o",
+  path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-identity.so"),
+  path.join(root, "native/linux-arm64/current-identity-compat.c"),
+], { stdio: "inherit" })
+const serviceModule = manifest.modules.find((module) => module.id === "qq-personal-service")
+const identityLibrary = path.join(stagingRoot, "modules/qq-personal-service/native/libamitia-identity.so")
+const identityHash = createHash("sha256").update(fs.readFileSync(identityLibrary)).digest("hex")
+serviceModule.runtime.nativeCompanions = [{
+  id: "current-identity-compat",
+  platform: "linux",
+  architecture: "arm64",
+  path: "native/libamitia-identity.so",
+  sha256: identityHash,
+  executable: false,
+}]
 fs.copyFileSync(path.join(uiRoot, "mobile", "schema.json"), path.join(stagingRoot, "modules/qq-personal-ui/mobile/schema.json"))
 
 await build({
