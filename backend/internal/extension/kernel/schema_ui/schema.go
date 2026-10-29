@@ -115,9 +115,10 @@ type SchemaUIActionBinding struct {
 }
 
 type SchemaUILifecycle struct {
-	OnMount   []SchemaUIActionBinding `json:"onMount,omitempty"`
-	OnRefresh []SchemaUIActionBinding `json:"onRefresh,omitempty"`
-	OnSuccess []SchemaUIActionBinding `json:"onSuccess,omitempty"`
+	RefreshIntervalMs int                     `json:"refreshIntervalMs,omitempty"`
+	OnMount           []SchemaUIActionBinding `json:"onMount,omitempty"`
+	OnRefresh         []SchemaUIActionBinding `json:"onRefresh,omitempty"`
+	OnSuccess         []SchemaUIActionBinding `json:"onSuccess,omitempty"`
 }
 
 type UICondition struct {
@@ -378,6 +379,9 @@ func (v *Validator) Validate(doc *SchemaUIDocument) *ValidationResult {
 		}
 	}
 	if doc.Lifecycle != nil {
+		if interval := doc.Lifecycle.RefreshIntervalMs; interval != 0 && (interval < 1000 || interval > 60000) {
+			result.Errors = append(result.Errors, "lifecycle.refreshIntervalMs must be zero or between 1000 and 60000")
+		}
 		for _, action := range doc.Lifecycle.OnMount {
 			validateAction("lifecycle.onMount", action)
 		}

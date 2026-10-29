@@ -52,16 +52,21 @@ test("mobile preparation extracts dependencies and QQ without dpkg-deb extract",
   }
   const extract: ExtractDebPackage = async () => {}
   const qqArchive = path.join(directory, "qq.deb")
+  const progress: string[] = []
   const output = await prepareMobileEnvironment(
     directory,
-    () => {},
+    (_phase, detail) => { progress.push(detail) },
     run,
-    async () => qqArchive,
+    async (_directory, _signal, onProgress) => {
+      onProgress?.(1048576, 2097152)
+      return qqArchive
+    },
     extract,
     "linux",
     "arm64",
   )
   assert.equal(output, prefix)
+  assert.ok(progress.some(detail => detail.includes("1.0 MB / 2.0 MB") && detail.includes("50%")))
   assert.equal(commands.filter(command => command[0] === "/usr/bin/apt-get").length, 2)
   const options = mobileAptOptions(directory)
   assert.ok(options.includes(path.join(directory, "apt", "config")))

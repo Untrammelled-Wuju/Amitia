@@ -71,27 +71,46 @@
           "children": [
             {
               "id": "qq-personal-connection-state",
-              "type": "runtime_status",
+              "type": "stack",
               "props": {
-                "label": "QQ 个人号桥接",
-                "status": "等待状态",
-                "message": "正在读取连接状态"
+                "gap": 4
               },
-              "bindings": [
+              "children": [
                 {
-                  "path": "status",
-                  "source": "state",
-                  "sourcePath": "status.displayStatus.connectionVariant"
+                  "id": "qq-personal-connection-state-heading",
+                  "type": "text",
+                  "props": {
+                    "text": "QQ 个人号",
+                    "variant": "caption"
+                  }
                 },
                 {
-                  "path": "statusText",
-                  "source": "state",
-                  "sourcePath": "status.displayStatus.connectionLabel"
+                  "id": "qq-personal-connection-state-label",
+                  "type": "text",
+                  "props": {
+                    "variant": "title"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "status.displayStatus.connectionLabel"
+                    }
+                  ]
                 },
                 {
-                  "path": "message",
-                  "source": "state",
-                  "sourcePath": "status.displayStatus.lastActivity"
+                  "id": "qq-personal-connection-state-detail",
+                  "type": "text",
+                  "props": {
+                    "variant": "caption"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "status.displayStatus.lastActivity"
+                    }
+                  ]
                 }
               ]
             },
@@ -101,7 +120,7 @@
               "props": {
                 "columns": 2,
                 "gap": 10,
-                "childAspectRatio": 3.0
+                "childAspectRatio": 4
               },
               "children": [
                 {
@@ -245,27 +264,46 @@
           "children": [
             {
               "id": "qq-personal-mobile-state",
-              "type": "runtime_status",
+              "type": "stack",
               "props": {
-                "label": "手机运行环境",
-                "status": "未准备",
-                "message": "点击安装后，在手机 Linux 环境准备 QQ 与图形桌面"
+                "gap": 4
               },
-              "bindings": [
+              "children": [
                 {
-                  "path": "status",
-                  "source": "state",
-                  "sourcePath": "status.displayStatus.mobileVariant"
+                  "id": "qq-personal-mobile-state-heading",
+                  "type": "text",
+                  "props": {
+                    "text": "QQ 与 SnowLuma 运行环境",
+                    "variant": "caption"
+                  }
                 },
                 {
-                  "path": "statusText",
-                  "source": "state",
-                  "sourcePath": "status.displayStatus.mobileLabel"
+                  "id": "qq-personal-mobile-state-label",
+                  "type": "text",
+                  "props": {
+                    "variant": "title"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "status.displayStatus.mobileLabel"
+                    }
+                  ]
                 },
                 {
-                  "path": "message",
-                  "source": "state",
-                  "sourcePath": "status.displayStatus.mobileDetail"
+                  "id": "qq-personal-mobile-state-detail",
+                  "type": "text",
+                  "props": {
+                    "variant": "caption"
+                  },
+                  "bindings": [
+                    {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "status.displayStatus.mobileDetail"
+                    }
+                  ]
                 }
               ]
             },

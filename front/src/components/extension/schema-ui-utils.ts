@@ -115,6 +115,7 @@ export interface SchemaUIDocument {
   root?: SchemaUINode;
   children?: SchemaUINode[];
   lifecycle?: {
+    refreshIntervalMs?: number;
     onMount?: SchemaUIActionBinding[];
     onRefresh?: SchemaUIActionBinding[];
     onSuccess?: SchemaUIActionBinding[];

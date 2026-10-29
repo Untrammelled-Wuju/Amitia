@@ -159,7 +159,11 @@ export async function prepareMobileEnvironment(
     await extract(path.join(archives, file), prefix)
   }
   progress("qq", "下载并校验 QQ ARM64 安装包")
-  const qq = await download(path.join(root, "downloads"))
+  const qq = await download(path.join(root, "downloads"), undefined, (received, total) => {
+    const amount = `${(received / 1048576).toFixed(1)} MB`
+    const detail = total > 0 ? `${amount} / ${(total / 1048576).toFixed(1)} MB · ${Math.floor(received * 100 / total)}%` : amount
+    progress("qq", `正在下载 QQ：${detail}`)
+  })
   progress("qq", "解包 QQ")
   await extract(qq, prefix)
   await Promise.all([

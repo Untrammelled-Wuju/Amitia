@@ -164,3 +164,32 @@ func TestSchemaDocumentDefaultsMatchClientContracts(t *testing.T) {
 		t.Fatalf("unexpected default version: %q", doc.effectiveVersion())
 	}
 }
+
+func TestSchemaLifecycleRefreshSurvivesCompilationAndSerialization(t *testing.T) {
+	var doc SchemaUIDocument
+	raw := []byte(`{"schemaVersion":"schema-ui/1","type":"document","children":[{"id":"body","type":"text","props":{"text":"ok"}}],"actions":[{"actionId":"status","target":"host_command"}],"lifecycle":{"refreshIntervalMs":1500,"onMount":[{"action_id":"status","target":"host_command"}],"onRefresh":[{"action_id":"status","target":"host_command","statePath":"status"}]}}`)
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := Compile(&doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(compiled.Document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded SchemaUIDocument
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Lifecycle.RefreshIntervalMs != 1500 || len(decoded.Lifecycle.OnRefresh) != 1 || decoded.Lifecycle.OnRefresh[0].StatePath != "status" {
+		t.Fatalf("refresh lifecycle was lost: %s", encoded)
+	}
+	for _, interval := range []int{-1, 999, 60001} {
+		doc.Lifecycle.RefreshIntervalMs = interval
+		if result := NewValidator().Validate(&doc); result.Valid {
+			t.Fatalf("invalid refresh interval accepted: %d", interval)
+		}
+	}
+}
