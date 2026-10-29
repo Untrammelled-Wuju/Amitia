@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import fs from "node:fs/promises"
+import type { FileHandle } from "node:fs/promises"
 import path from "node:path"
 import net from "node:net"
 import { randomBytes } from "node:crypto"
@@ -14,6 +15,36 @@ export function snowlumaHookRuntimeDirectory(uid = process.geteuid?.() ?? 0): st
 
 export interface MobileDesktopOptions {
   snowlumaHookLibrary?: string
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+export function mobileQQWrapperScript(realBinary: string, loaderLibrary: string, hookLibrary: string, runtimeDirectory: string): string {
+  return [
+    "#!/bin/sh",
+    "set -eu",
+    'if [ "${AMITIA_SNOWLUMA_WRAPPER_DISABLE:-0}" = "1" ]; then',
+    "  unset LD_PRELOAD AMITIA_SNOWLUMA_HOOK_LIBRARY AMITIA_SNOWLUMA_QQ_REAL_PATH AMITIA_SNOWLUMA_QQ_WRAPPER_PATH",
+    `  exec ${shellQuote(realBinary)} "$@"`,
+    "fi",
+    `export AMITIA_SNOWLUMA_HOOK_LIBRARY=${shellQuote(hookLibrary)}`,
+    `export SNOWLUMA_HOOK_RUNTIME_DIR=${shellQuote(runtimeDirectory)}`,
+    `export AMITIA_SNOWLUMA_QQ_REAL_PATH=${shellQuote(realBinary)}`,
+    `export AMITIA_SNOWLUMA_QQ_WRAPPER_PATH=${shellQuote(`${realBinary.slice(0, -".amitia-real".length)}`)}`,
+    `if [ -n "\${LD_PRELOAD:-}" ]; then export LD_PRELOAD=${shellQuote(loaderLibrary)}:"$LD_PRELOAD"; else export LD_PRELOAD=${shellQuote(loaderLibrary)}; fi`,
+    `exec ${shellQuote(realBinary)} "$@"`,
+    "",
+  ].join("\n")
+}
+
+export function isMobileQQWrapper(content: string): boolean {
+  return content.startsWith("#!/bin/sh") && content.includes("AMITIA_SNOWLUMA_HOOK_LIBRARY")
+}
+
+export function isMobileQQMainCommandLine(cmdline: string): boolean {
+  return cmdline.includes("/opt/QQ/qq") && !cmdline.includes("--type=")
 }
 
 export function mobileVncArguments(display: string, password: string): string[] {
@@ -54,20 +85,26 @@ export class MobileDesktop {
     }
   }
 
-  private qqEnvironment(): NodeJS.ProcessEnv {
-    const environment = this.environment()
-    if (!this.snowlumaHookLibrary) return environment
-    return {
-      ...environment,
-      LD_PRELOAD: [snowlumaHookLoaderLibrary, process.env.LD_PRELOAD].filter(Boolean).join(":"),
-      AMITIA_SNOWLUMA_HOOK_LIBRARY: this.snowlumaHookLibrary,
-      AMITIA_SNOWLUMA_HOOK_PARENT_PID: String(process.pid),
-    }
-  }
-
   credentials(): string { return this.password }
 
   error(): string { return this.failure }
+
+  async hookProcessIds(): Promise<number[]> {
+    if (!this.snowlumaHookLibrary) return []
+    const entries = await fs.readdir("/proc").catch(() => [])
+    const runtime = snowlumaHookRuntimeDirectory()
+    const pids: number[] = []
+    for (const entry of entries) {
+      if (!/^\d+$/.test(entry)) continue
+      const cmdline = await fs.readFile(`/proc/${entry}/cmdline`, "utf8").catch(() => "")
+      if (!isMobileQQMainCommandLine(cmdline)) continue
+      try {
+        await fs.access(path.join(runtime, `mojo.${entry}.control.sock`))
+        pids.push(Number(entry))
+      } catch {}
+    }
+    return pids.sort((left, right) => left - right)
+  }
 
   async start(port: number, options: MobileDesktopOptions = {}): Promise<void> {
     if (this.children.length) return
@@ -94,7 +131,14 @@ export class MobileDesktop {
       await this.waitForPort(5900)
       this.launch(path.join(prefix, "usr/bin/python3"), [path.join(prefix, "usr/bin/websockify"), "--web", path.join(prefix, "usr/share/novnc"), `127.0.0.1:${port}`, "127.0.0.1:5900"])
       await this.waitForPort(port)
-      const qq = this.launch(path.join(prefix, "opt/QQ/qq"), ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"], true, this.qqEnvironment())
+      const qqBinary = path.join(prefix, "opt/QQ/qq")
+      const wrapped = isMobileQQWrapper(await this.readExecutableHead(qqBinary))
+      const qqExecutable = this.snowlumaHookLibrary || wrapped
+        ? await this.prepareQQWrapper(qqBinary)
+        : qqBinary
+      const qqEnvironment = this.environment()
+      if (!this.snowlumaHookLibrary) qqEnvironment.AMITIA_SNOWLUMA_WRAPPER_DISABLE = "1"
+      const qq = this.launch(qqExecutable, ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"], true, qqEnvironment)
       if (this.snowlumaHookLibrary) {
         if (!qq.pid) throw new Error("手机 QQ 进程启动失败")
         await this.waitForHookSocket(qq.pid)
@@ -234,6 +278,34 @@ export class MobileDesktop {
       await new Promise(resolve => setTimeout(resolve, 200))
     }
     throw new Error(`SnowLuma Hook 启动超时：${this.failure || socket}`)
+  }
+
+  private async prepareQQWrapper(qqBinary: string): Promise<string> {
+    const realBinary = `${qqBinary}.amitia-real`
+    const content = await this.readExecutableHead(qqBinary)
+    if (!isMobileQQWrapper(content)) {
+      await fs.copyFile(qqBinary, realBinary)
+      const source = await fs.stat(qqBinary)
+      await fs.chmod(realBinary, source.mode & 0o777)
+    }
+    const temporary = `${qqBinary}.amitia-tmp`
+    await fs.writeFile(temporary, mobileQQWrapperScript(realBinary, snowlumaHookLoaderLibrary, this.snowlumaHookLibrary, snowlumaHookRuntimeDirectory()), { mode: 0o700 })
+    await fs.rename(temporary, qqBinary)
+    return qqBinary
+  }
+
+  private async readExecutableHead(file: string): Promise<string> {
+    let handle: FileHandle | undefined
+    try {
+      handle = await fs.open(file, "r")
+      const buffer = Buffer.alloc(256)
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+      return buffer.subarray(0, bytesRead).toString("utf8")
+    } catch {
+      return ""
+    } finally {
+      await handle?.close().catch(() => {})
+    }
   }
 
   private assertAlive(): void {

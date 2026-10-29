@@ -246,6 +246,12 @@
                   ],
                   "bindings": [
                     {
+                      "path": "text",
+                      "source": "state",
+                      "sourcePath": "status.displayStatus.installActionLabel",
+                      "default": "开始安装 QQ 与 SnowLuma"
+                    },
+                    {
                       "path": "disabled",
                       "source": "state",
                       "sourcePath": "status.mobileRuntimeSummary.running",

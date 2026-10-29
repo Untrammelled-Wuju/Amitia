@@ -78,4 +78,5 @@ test("SnowLuma hook is attached only after SnowLuma is running", async t => {
   runtime.markWaitingLogin()
   assert.equal(runtime.status().phase, "waiting_login")
   assert.equal(runtime.status().error, "")
+  assert.match(runtime.status().detail, /Hook 已预加载/)
 })

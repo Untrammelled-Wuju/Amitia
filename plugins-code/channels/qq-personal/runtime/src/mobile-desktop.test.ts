@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import test from "node:test"
-import { MobileDesktop, mobileVncArguments, snowlumaHookRuntimeDirectory } from "./mobile-desktop.js"
+import { MobileDesktop, isMobileQQMainCommandLine, isMobileQQWrapper, mobileQQWrapperScript, mobileVncArguments, snowlumaHookRuntimeDirectory } from "./mobile-desktop.js"
 
 test("mobile VNC disables unavailable shared memory transport", () => {
   const args = mobileVncArguments(":0", "12345678")
@@ -18,20 +18,28 @@ test("Xvfb receives the current identity compatibility layer", () => {
   assert.match(String(environment.displayEnvironment().LD_PRELOAD), /native\/libamitia-identity\.so/)
 })
 
-test("QQ receives the SnowLuma startup hook environment without changing Xvfb", () => {
-  const desktop = new MobileDesktop("/tmp/qq-display-env")
-  const internals = desktop as unknown as {
-    snowlumaHookLibrary: string
-    qqEnvironment(): NodeJS.ProcessEnv
-    displayEnvironment(): NodeJS.ProcessEnv
-  }
-  internals.snowlumaHookLibrary = "/opt/snowluma/native/snowluma-linux-arm64.so"
-  const environment = internals.qqEnvironment()
-  assert.match(String(environment.LD_PRELOAD), /native\/libamitia-snowluma-loader\.so/)
-  assert.equal(environment.AMITIA_SNOWLUMA_HOOK_LIBRARY, internals.snowlumaHookLibrary)
-  assert.equal(environment.AMITIA_SNOWLUMA_HOOK_PARENT_PID, String(process.pid))
-  assert.match(String(environment.SNOWLUMA_HOOK_RUNTIME_DIR), /^\/tmp\/snowluma-\d+$/)
-  assert.doesNotMatch(String(internals.displayEnvironment().LD_PRELOAD), /libamitia-snowluma-loader/)
+test("QQ wrapper reloads the SnowLuma hook for every client process", () => {
+  const script = mobileQQWrapperScript(
+    "/opt/QQ/qq.amitia-real",
+    "/service/native/libamitia-snowluma-loader.so",
+    "/service/snowluma/native/snowluma-linux-arm64.so",
+    "/tmp/snowluma-10233",
+  )
+  assert.match(script, /export LD_PRELOAD='\/service\/native\/libamitia-snowluma-loader\.so'/)
+  assert.match(script, /export AMITIA_SNOWLUMA_HOOK_LIBRARY='\/service\/snowluma\/native\/snowluma-linux-arm64\.so'/)
+  assert.match(script, /export SNOWLUMA_HOOK_RUNTIME_DIR='\/tmp\/snowluma-10233'/)
+  assert.match(script, /export AMITIA_SNOWLUMA_QQ_REAL_PATH='\/opt\/QQ\/qq\.amitia-real'/)
+  assert.match(script, /export AMITIA_SNOWLUMA_QQ_WRAPPER_PATH='\/opt\/QQ\/qq'/)
+  assert.match(script, /AMITIA_SNOWLUMA_WRAPPER_DISABLE:-0/)
+  assert.match(script, /exec '\/opt\/QQ\/qq\.amitia-real' "\$@"/)
+  assert.equal(isMobileQQWrapper(script), true)
+  assert.equal(isMobileQQWrapper("\u007fELF"), false)
+})
+
+test("QQ hook detection ignores Electron child processes", () => {
+  assert.equal(isMobileQQMainCommandLine("/opt/QQ/qq\u0000--no-sandbox\u0000"), true)
+  assert.equal(isMobileQQMainCommandLine("/opt/QQ/qq\u0000--type=gpu-process\u0000"), false)
+  assert.equal(isMobileQQMainCommandLine("/usr/bin/not-qq\u0000"), false)
 })
 
 test("SnowLuma hook socket path is scoped to the runtime user", () => {

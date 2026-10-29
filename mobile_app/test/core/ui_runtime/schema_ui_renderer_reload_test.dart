@@ -1,3 +1,4 @@
+import 'package:amitia_app/core/widgets/amitia_misc.dart';
 import 'package:amitia_app/features/extensions/schema_ui/models/schema_ui_types.dart';
 import 'package:amitia_app/features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import 'package:flutter/material.dart';
@@ -92,5 +93,68 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(reloadCount, 1);
+  });
+
+  testWidgets('button_group resolves child button bindings', (tester) async {
+    final document = SchemaUIDocument(
+      children: const <SchemaUINode>[
+        SchemaUINode(
+          id: 'actions',
+          type: SchemaUI.nodeButtonGroup,
+          children: <SchemaUINode>[
+            SchemaUINode(
+              id: 'install',
+              type: SchemaUI.nodeButton,
+              props: <String, dynamic>{'text': '开始安装'},
+              bindings: <SchemaUIBinding>[
+                SchemaUIBinding(
+                  path: 'text',
+                  source: 'state',
+                  sourcePath: 'status.installLabel',
+                ),
+                SchemaUIBinding(
+                  path: 'disabled',
+                  source: 'state',
+                  sourcePath: 'status.installing',
+                ),
+              ],
+              actions: <SchemaUIActionBinding>[
+                SchemaUIActionBinding(
+                  actionId: 'install',
+                  target: 'host_command',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SchemaUIRenderer(
+            document: document,
+            extensionId: 'extension.test',
+            contributionId: 'contribution.test',
+            embedded: true,
+            initialContext: <String, dynamic>{
+              'localState': <String, dynamic>{
+                'status': <String, dynamic>{
+                  'installLabel': '重新安装 QQ 与 SnowLuma',
+                  'installing': true,
+                },
+              },
+            },
+            onActionDispatch: (_) async => <String, dynamic>{},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('重新安装 QQ 与 SnowLuma'), findsOneWidget);
+    final button = tester.widget<AmitiaButton>(find.byType(AmitiaButton));
+    expect(button.onPressed, isNull);
   });
 }

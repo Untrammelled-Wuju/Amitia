@@ -2308,13 +2308,15 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     return Wrap(
       spacing: AppSpacing.sm,
       children: node.children.map((child) {
-        if (child.type == SchemaUI.nodeButton)
+        final renderedChild = _withResolvedBindings(child);
+        if (renderedChild.type == SchemaUI.nodeButton) {
           return _buildButton(
             context,
-            child,
-            styleTarget: _styleTargetForNode(child),
+            renderedChild,
+            styleTarget: _styleTargetForNode(renderedChild),
           );
-        return _buildNode(context, child, 0);
+        }
+        return _buildNode(context, renderedChild, 0);
       }).toList(),
     );
   }

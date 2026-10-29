@@ -4,10 +4,12 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 struct hook_start_request {
@@ -56,14 +58,66 @@ static void *start_hook(void *opaque) {
   return NULL;
 }
 
+static int has_process_type(char *const argv[]) {
+  if (!argv) return 0;
+  for (size_t index = 1; argv[index]; index++) {
+    if (strncmp(argv[index], "--type=", 7) == 0) return 1;
+  }
+  return 0;
+}
+
+static const char *redirect_main_path(const char *path, char *const argv[]) {
+  const char *real = getenv("AMITIA_SNOWLUMA_QQ_REAL_PATH");
+  const char *wrapper = getenv("AMITIA_SNOWLUMA_QQ_WRAPPER_PATH");
+  if (!path || !real || !wrapper || has_process_type(argv)) return path;
+  if (strcmp(path, real) == 0) return wrapper;
+  const char *base = strrchr(path, '/');
+  base = base ? base + 1 : path;
+  return strcmp(base, "qq.amitia-real") == 0 ? wrapper : path;
+}
+
+static void *next_symbol(const char *name) {
+  return dlsym(RTLD_NEXT, name);
+}
+
+int execve(const char *path, char *const argv[], char *const envp[]) {
+  path = redirect_main_path(path, argv);
+  return (int)syscall(SYS_execve, path, argv, envp);
+}
+
+int execv(const char *path, char *const argv[]) {
+  return (int)syscall(SYS_execve, redirect_main_path(path, argv), argv, environ);
+}
+
+int execvp(const char *file, char *const argv[]) {
+  if (redirect_main_path(file, argv) != file) {
+    return (int)syscall(SYS_execve, redirect_main_path(file, argv), argv, environ);
+  }
+  int (*next)(const char *, char *const[]) = next_symbol("execvp");
+  return next ? next(file, argv) : -1;
+}
+
+int execvpe(const char *file, char *const argv[], char *const envp[]) {
+  if (redirect_main_path(file, argv) != file) {
+    return (int)syscall(SYS_execve, redirect_main_path(file, argv), argv, envp);
+  }
+  int (*next)(const char *, char *const[], char *const[]) = next_symbol("execvpe");
+  return next ? next(file, argv, envp) : -1;
+}
+
+int posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attributes, char *const argv[], char *const envp[]) {
+  int (*next)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]) = next_symbol("posix_spawn");
+  return next ? next(pid, redirect_main_path(path, argv), actions, attributes, argv, envp) : -1;
+}
+
+int posix_spawnp(pid_t *pid, const char *file, const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attributes, char *const argv[], char *const envp[]) {
+  int (*next)(pid_t *, const char *, const posix_spawn_file_actions_t *, const posix_spawnattr_t *, char *const[], char *const[]) = next_symbol("posix_spawnp");
+  return next ? next(pid, redirect_main_path(file, argv), actions, attributes, argv, envp) : -1;
+}
+
 __attribute__((constructor)) static void prepare_snowluma_hook(void) {
   const char *library = getenv("AMITIA_SNOWLUMA_HOOK_LIBRARY");
   if (!library || library[0] != '/') return;
-  const char *expectedParent = getenv("AMITIA_SNOWLUMA_HOOK_PARENT_PID");
-  char parent[32];
-  snprintf(parent, sizeof(parent), "%ld", (long)getppid());
-  if (!expectedParent || strcmp(expectedParent, parent) != 0) return;
-  unsetenv("AMITIA_SNOWLUMA_HOOK_PARENT_PID");
   unsetenv("AMITIA_SNOWLUMA_HOOK_LIBRARY");
   unsetenv("LD_PRELOAD");
   if (!getenv("SNOWLUMA_HOOK_RUNTIME_DIR")) {

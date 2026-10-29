@@ -166,6 +166,9 @@ async function publicConfig() {
 function statusPayload() {
   const status = bridge.status()
   const mobile = mobileRuntime.summary()
+  const snowlumaInstall = runtimeManager.installState()
+  const snowluma = runtimeManager.status()
+  const fullyInstalled = mobile.installed && (snowlumaInstall.installed || snowluma.running)
   const connectionLabel = status.connected ? "QQ 已连接" : config.enabled ? "等待 QQ 登录" : "桥接已停用"
   const connectionVariant = status.connected ? "success" : config.enabled ? "warning" : "neutral"
   const mobileLabels: Record<string, string> = {
@@ -197,8 +200,8 @@ function statusPayload() {
       messageCount,
       replyCount,
       lastError,
-      snowluma: runtimeManager.status(),
-      snowlumaInstall: runtimeManager.installState(),
+      snowluma,
+      snowlumaInstall,
       mobileRuntimeSummary: mobile,
       displayMetrics: [
         { label: "QQ 号", value: status.accountIds[0] || "未连接" },
@@ -217,6 +220,7 @@ function statusPayload() {
         mobileLabel: mobileLabels[mobile.phase] || mobile.phase,
         mobileVariant: mobile.phase === "waiting_login" ? "success" : mobile.phase === "failed" || mobile.phase === "interrupted" ? "error" : mobile.running ? "warning" : "neutral",
         mobileDetail: mobile.error || mobile.detail || "尚未开始安装",
+        installActionLabel: fullyInstalled ? "重新安装 QQ 与 SnowLuma" : "开始安装 QQ 与 SnowLuma",
       },
     },
   }
@@ -245,7 +249,24 @@ function deliveryFingerprint(body: Record<string, unknown>, target: { kind: stri
   })
 }
 
-app.get("/api/health", async () => ({ success: true, bridgeReady: true, qqOnline: bridge.status().connected }))
+app.get("/api/health", async () => {
+  const mobile = mobileRuntime.summary()
+  const snowluma = runtimeManager.status()
+  const snowlumaInstall = runtimeManager.installState()
+  const fullyInstalled = mobile.installed && (snowlumaInstall.installed || snowluma.running)
+  const hookPids = await mobileRuntime.hookProcessIds()
+  return {
+    success: true,
+    bridgeReady: true,
+    qqOnline: bridge.status().connected,
+    qqRuntimeInstalled: mobile.installed,
+    snowlumaInstalled: snowlumaInstall.installed,
+    snowlumaRunning: snowluma.running,
+    hookReady: hookPids.length > 0,
+    hookProcessIds: hookPids,
+    installActionLabel: fullyInstalled ? "重新安装 QQ 与 SnowLuma" : "开始安装 QQ 与 SnowLuma",
+  }
+})
 app.get("/api/status", async () => statusPayload())
 app.get("/api/config", async () => publicConfig())
 

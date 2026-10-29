@@ -62,7 +62,12 @@ export class MobileQQRuntime {
       updatedAt: this.state.updatedAt,
       desktopPassword: this.desktop.credentials(),
       desktopError: this.desktop.error(),
+      desktopHooked: this.desktop.usesSnowLumaHook(),
     }
+  }
+
+  async hookProcessIds(): Promise<number[]> {
+    return this.desktop.hookProcessIds()
   }
 
   install(config: QQPersonalConfig): void {
@@ -103,7 +108,7 @@ export class MobileQQRuntime {
           await response.body?.cancel()
           if (response.ok || response.status === 401 || response.status === 403) {
             await this.attachSnowLumaHook(config)
-            this.setState({ running: false, phase: "waiting_login", detail: "运行环境已启动，请打开 QQ 桌面登录", error: "" })
+            this.markWaitingLogin()
             return
           }
         } catch {}
@@ -130,7 +135,10 @@ export class MobileQQRuntime {
   }
 
   markWaitingLogin(): void {
-    this.setState({ running: false, phase: "waiting_login", detail: "运行环境已启动，请打开 QQ 桌面登录", error: "" })
+    const detail = this.desktop.usesSnowLumaHook()
+      ? "Hook 已预加载，请打开 QQ 桌面登录；SnowLuma 加载按钮将直接重连"
+      : "运行环境已启动，请打开 QQ 桌面登录"
+    this.setState({ running: false, phase: "waiting_login", detail, error: "" })
   }
 
   private snowlumaHookLibrary(config: QQPersonalConfig): string {

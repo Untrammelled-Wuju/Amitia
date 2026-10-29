@@ -36,6 +36,7 @@ test("mobile schema binds host command results without an extra data envelope", 
     .map(binding => binding.sourcePath)
   assert.ok(bindings.includes("status.displayStatus.mobileDetail"))
   assert.ok(bindings.includes("status.mobileRuntimeSummary.running"))
+  assert.ok(bindings.includes("status.displayStatus.installActionLabel"))
   assert.ok(Number(schema.lifecycle.refreshIntervalMs) >= 1000)
   assert.equal(schema.lifecycle.onRefresh[0].statePath, "status")
   assert.ok(bindings.includes("status.displayStatus.connectionLabel"))
